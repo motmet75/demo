@@ -2,8 +2,10 @@ package com.demo.demo;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.ComponentScan;
 
 @SpringBootApplication
+@ComponentScan(basePackages = {"com.demo", "controller"})
 public class DemoApplication {
 
 	public static void main(String[] args) {
