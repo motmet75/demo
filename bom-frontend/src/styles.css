@@ -1,0 +1,4 @@
+body { font-family: Inter, Arial, sans-serif; }
+table { border-collapse: collapse; width: 100%; }
+th, td { border: 1px solid #ddd; padding: 8px; }
+th { background: #f7f7f7; }
