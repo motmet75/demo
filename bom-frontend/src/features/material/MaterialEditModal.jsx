@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
@@ -10,43 +10,32 @@ import PropTypes from 'prop-types'
 import Autocomplete from '@mui/material/Autocomplete'
 
 /**
- * Reusable modal for editing a Material.
+ * MaterialEditModal
+ *
  * Props:
  * - open: boolean
  * - material: object (may be null)
  * - onClose: () => void
  * - onSave: (updatedMaterial) => void
+ * - saving: boolean (parent saving flag)
  */
 export default function MaterialEditModal({ open, material, onClose, onSave, saving: parentSaving }) {
-  const [form, setForm] = useState({
-    materialCode: '',
-    materialName: '',
-    materialType: '',
-    unit: '',
-    price: '',
-    description: ''
+  const makeInitialForm = (m) => ({
+    materialCode: m?.materialCode ?? '',
+    materialName: m?.materialName ?? '',
+    materialType: m?.materialType ?? 'RAW',
+    unit: m?.unit ?? '',
+    price: m?.price != null ? String(m.price) : '',
+    description: m?.description ?? ''
   })
+
+  // Initialize form from props. Component will be remounted when dialog `key` changes
+  const [form, setForm] = useState(() => makeInitialForm(material))
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
 
-  // Initialize form when modal opens or material changes
-  useEffect(() => {
-    if (material) {
-      setForm({
-        materialCode: material.materialCode ?? '',
-        materialName: material.materialName ?? '',
-        materialType: material.materialType ?? '',
-        unit: material.unit ?? '',
-        price: material.price != null ? String(material.price) : '',
-        description: material.description ?? ''
-      })
-    } else {
-      setForm({ materialCode: '', materialName: '', materialType: 'RAW', unit: '', price: '', description: '' })
-    }
-    // clear previous error when modal opens/closes
-    setErrorMessage('')
-    setIsSubmitting(false)
-  }, [material, open])
+  // Note: removed useEffect that called setForm synchronously to satisfy react-hooks/set-state-in-effect.
+  // We rely on remounting (see Dialog `key`) to reset local state when opening with a different material.
 
   const handleChange = (field) => (e) => {
     const value = e?.target ? e.target.value : e
@@ -59,9 +48,9 @@ export default function MaterialEditModal({ open, material, onClose, onSave, sav
     setErrorMessage('')
     setIsSubmitting(true)
 
-    // Prepare payload
+    // Build payload only from form values. Include id only when editing an existing material.
     const payload = {
-      ...material,
+      ...(material && material.id ? { id: material.id } : {}),
       materialCode: form.materialCode,
       materialName: form.materialName,
       materialType: form.materialType,
@@ -99,8 +88,11 @@ export default function MaterialEditModal({ open, material, onClose, onSave, sav
 
   const materialTypeOptions = ['RAW', 'SEMI', 'FINISHED']
 
+  // Use a key so the dialog (and local state) is remounted when opening for a different material or when closed
+  const dialogKey = open ? (material && (material.id ?? material.materialCode) ? String(material.id ?? material.materialCode) : 'new') : 'closed'
+
   return (
-    <Dialog open={!!open} onClose={isBusy ? undefined : onClose} fullWidth maxWidth="sm">
+    <Dialog key={dialogKey} open={!!open} onClose={isBusy ? undefined : onClose} fullWidth maxWidth="sm">
       <DialogTitle>{material ? 'Edit Material' : 'New Material'}</DialogTitle>
       <form onSubmit={handleSubmit}>
         <DialogContent>

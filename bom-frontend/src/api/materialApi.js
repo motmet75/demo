@@ -4,7 +4,7 @@ export async function fetchMaterials() {
   let data = null
   try {
     data = text ? JSON.parse(text) : null
-  } catch (err) {
+  } catch {
     // not JSON; return empty array or raw text wrapped
     console.warn('fetchMaterials: server returned non-JSON response', text)
     return []
@@ -43,7 +43,7 @@ export async function updateMaterial(id, payload) {
   let data = null
   try {
     data = text ? JSON.parse(text) : null
-  } catch (err) {
+  } catch {
     // not JSON, keep raw text
     data = text
   }
@@ -69,7 +69,7 @@ export async function deleteMaterial(id) {
   let data = null
   try {
     data = text ? JSON.parse(text) : null
-  } catch (err) {
+  } catch {
     data = text
   }
 

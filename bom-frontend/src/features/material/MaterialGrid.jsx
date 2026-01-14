@@ -14,6 +14,7 @@ export default function MaterialGrid() {
   const [selected, setSelected] = useState(null) // selected material object for editing
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState(null) // id currently being deleted
+  const [modalKey, setModalKey] = useState(0) // key to force remount of modal when opening
 
   // Pagination: controlled model so records-per-page is adjustable and persisted
   const [paginationModel, setPaginationModel] = useState(() => {
@@ -23,8 +24,8 @@ export default function MaterialGrid() {
         const saved = parseInt(localStorage.getItem('materials_page_size'), 10)
         if (Number.isFinite(saved) && saved > 0) return { pageSize: saved, page: 0 }
       }
-    } catch (e) {
-      // ignore and fall back to default
+    } catch {
+      /* ignore and fall back to default */ void 0
     }
     return { pageSize: defaultSize, page: 0 }
   })
@@ -57,7 +58,9 @@ export default function MaterialGrid() {
       // Show a basic error to the user
       try {
         alert('Failed to load materials: ' + (e && e.message ? e.message : 'Unknown error'))
-      } catch (ignored) {}
+      } catch {
+        /* ignore alert failures */ void 0
+      }
       setRows([])
     } finally {
       setLoading(false)
@@ -69,8 +72,9 @@ export default function MaterialGrid() {
   }, [load])
 
   const handleOpenEdit = (row) => {
-    // open modal with a cloned object to keep immutability
-    setSelected({ ...row })
+    // open modal with a deep-cloned object to avoid binding/mutation of the original row
+    setSelected(JSON.parse(JSON.stringify(row)))
+    setModalKey(k => k + 1)
     setEditOpen(true)
   }
 
@@ -137,8 +141,8 @@ export default function MaterialGrid() {
       if (typeof window !== 'undefined' && window.localStorage && model && model.pageSize) {
         localStorage.setItem('materials_page_size', String(model.pageSize))
       }
-    } catch (e) {
-      // ignore storage errors
+    } catch {
+      /* ignore storage errors */ void 0
     }
   }
 
@@ -225,6 +229,7 @@ export default function MaterialGrid() {
 
       {/* Edit modal integrated */}
       <MaterialEditModal
+        key={modalKey}
         open={editOpen}
         material={selected}
         onClose={handleCloseEdit}

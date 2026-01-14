@@ -105,6 +105,9 @@ export default function MaterialImport() {
         onSave={handleSaveAdd}
         saving={adding}
       />
+
+      {/* show add error if present (fixes ESLint unused var) */}
+      {addError ? <div style={{ color: 'red', marginTop: 8 }}>{addError}</div> : null}
     </div>
   )
 }
