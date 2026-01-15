@@ -3,9 +3,9 @@ package com.ams.bomcore.controller.inventory;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotNull;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -40,15 +40,28 @@ public class InventoryController {
     }
 
     /**
-     * Add stock by materialCode + warehouseCode
+     * Add stock by materialCode + warehouseCode OR by materialId + warehouseId
      * Body: { "materialCode": "M-001", "warehouseCode": "WH-1", "quantity": 10 }
+     * Or:   { "materialId": "<uuid>", "warehouseId": "<uuid>", "quantity": 10 }
      */
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> addStock(@Valid @RequestBody Map<String, Object> body) {
         try {
+            BigDecimal qty = new BigDecimal(String.valueOf(body.get("quantity")));
+
+            // prefer ids when provided
+            Object mid = body.get("materialId");
+            Object wid = body.get("warehouseId");
+            if (mid != null && wid != null) {
+                UUID materialId = UUID.fromString(String.valueOf(mid));
+                UUID warehouseId = UUID.fromString(String.valueOf(wid));
+                InventoryEntity saved = inventoryService.addStockByIds(materialId, warehouseId, qty);
+                return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+            }
+
+            // fallback to codes for backward compatibility
             String materialCode = (String) body.get("materialCode");
             String warehouseCode = (String) body.get("warehouseCode");
-            BigDecimal qty = new BigDecimal(String.valueOf(body.get("quantity")));
             InventoryEntity saved = inventoryService.addStock(materialCode, warehouseCode, qty);
             return ResponseEntity.status(HttpStatus.CREATED).body(saved);
         } catch (InventoryException ex) {

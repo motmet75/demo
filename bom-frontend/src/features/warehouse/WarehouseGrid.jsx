@@ -2,10 +2,10 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { DataGrid, GridActionsCellItem } from '@mui/x-data-grid'
 import EditIcon from '@mui/icons-material/Edit'
 import DeleteIcon from '@mui/icons-material/Delete'
-import { fetchSuppliers, createSupplier, updateSupplier, deleteSupplier } from '../../api/supplierApi'
-import SupplierEditModal from './SupplierEditModal'
+import { fetchWarehouses, createWarehouse, updateWarehouse, deleteWarehouse } from '../../api/warehouseApi'
+import WarehouseEditModal from './WarehouseEditModal'
 
-export default function SupplierGrid() {
+export default function WarehouseGrid() {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
@@ -17,23 +17,23 @@ export default function SupplierGrid() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await fetchSuppliers()
+      const data = await fetchWarehouses()
       if (Array.isArray(data)) {
         setRows(data.map(r => ({
+          // ensure id and uuid are strings for DataGrid and downstream logic
           id: r.id != null ? String(r.id) : '',
           uuid: r.id != null ? String(r.id) : '',
-          code: r.code ?? r.supplierCode ?? '',
-          name: r.name ?? r.supplierName ?? '',
-          contactName: r.contactName ?? '',
-          phone: r.phone ?? '',
-          email: r.email ?? '',
+          code: (r.code ?? r.warehouseCode ?? r.warehouseCode) || '',
+          name: (r.name ?? r.warehouseName ?? r.warehouseName) || '',
+          location: r.location ?? '',
+          isActive: (r.isActive !== undefined ? r.isActive : (r.active !== undefined ? r.active : true)),
           __raw: r
         })))
       } else {
         setRows([])
       }
     } catch (e) {
-      console.error('Failed to load suppliers', e)
+      console.error('Failed to load warehouses', e)
       setRows([])
     } finally {
       setLoading(false)
@@ -53,9 +53,9 @@ export default function SupplierGrid() {
     try {
       let res
       if (payload.id) {
-        res = await updateSupplier(payload.id, payload)
+        res = await updateWarehouse(payload.id, payload)
       } else {
-        res = await createSupplier(payload)
+        res = await createWarehouse(payload)
       }
 
       const generatedId = (res && res.id) ? String(res.id) : (payload.id ? String(payload.id) : makeTempId())
@@ -63,11 +63,11 @@ export default function SupplierGrid() {
       const newRow = {
         id: generatedId,
         uuid: generatedId,
-        code: res && (res.code || res.supplierCode) ? (res.code || res.supplierCode) : payload.code,
-        name: res && (res.name || res.supplierName) ? (res.name || res.supplierName) : payload.name,
-        contactName: res && (res.contactName) ? res.contactName : payload.contactName,
-        phone: res && res.phone ? res.phone : payload.phone,
-        email: res && res.email ? res.email : payload.email
+        code: res && (res.code || res.code) ? (res.code || res.code) : payload.code,
+        name: res && (res.name || res.name) ? (res.name || res.name) : payload.name,
+        location: res && res.location ? res.location : payload.location,
+        // avoid mixing logical operators with '??' — use a simple conditional for clarity
+        isActive: (res && res.isActive !== undefined) ? res.isActive : payload.isActive
       }
 
       setRows(prev => {
@@ -89,12 +89,12 @@ export default function SupplierGrid() {
 
   const handleDelete = async (id) => {
     if (deletingId) return
-    if (!window.confirm('Delete this supplier?')) return
+    if (!window.confirm('Delete this warehouse?')) return
     setDeletingId(id)
     try {
-      await deleteSupplier(id)
+      await deleteWarehouse(id)
       setRows(prev => prev.filter(r => r.id !== id))
-      alert('Supplier deleted')
+      alert('Warehouse deleted')
     } catch (err) {
       console.error('Delete failed', err)
       alert(err.message || 'Delete failed')
@@ -107,9 +107,8 @@ export default function SupplierGrid() {
     { field: 'uuid', headerName: 'UUID', width: 220, hide: true },
     { field: 'code', headerName: 'Code', width: 150 },
     { field: 'name', headerName: 'Name', flex: 1 },
-    { field: 'contactName', headerName: 'Contact', width: 200 },
-    { field: 'phone', headerName: 'Phone', width: 140 },
-    { field: 'email', headerName: 'Email', width: 200 },
+    { field: 'location', headerName: 'Location', width: 200 },
+    { field: 'isActive', headerName: 'Active', width: 100 },
     { field: 'actions', type: 'actions', headerName: 'Actions', width: 140, getActions: (params) => [
       <GridActionsCellItem icon={<EditIcon/>} label="Edit" onClick={() => handleOpenEdit(params.row)} showInMenu={false} disabled={!!saving || !!deletingId} />,
       <GridActionsCellItem icon={<DeleteIcon/>} label="Delete" onClick={() => handleDelete(params.id)} showInMenu={false} disabled={!!deletingId || !!saving} />
@@ -119,14 +118,14 @@ export default function SupplierGrid() {
   return (
     <div style={{ height: 520, width: '100%' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 8 }}>
-        <h3>Suppliers</h3>
+        <h3>Warehouses</h3>
         <div>
-          <button onClick={() => { setSelected(null); setModalKey(k => k + 1); setEditOpen(true) }} disabled={saving}>Add Supplier</button>
+          <button onClick={() => { setSelected(null); setModalKey(k => k + 1); setEditOpen(true) }} disabled={saving}>Add Warehouse</button>
         </div>
       </div>
       <DataGrid rows={rows} columns={columns} loading={loading} pageSizeOptions={[10,25,50]} checkboxSelection={false} />
 
-      <SupplierEditModal key={modalKey} open={editOpen} supplier={selected} onClose={handleCloseEdit} onSave={handleSave} saving={saving} />
+      <WarehouseEditModal key={modalKey} open={editOpen} warehouse={selected} onClose={handleCloseEdit} onSave={handleSave} saving={saving} />
     </div>
   )
 }

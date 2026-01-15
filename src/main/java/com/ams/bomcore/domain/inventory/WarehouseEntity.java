@@ -1,5 +1,6 @@
 package com.ams.bomcore.domain.inventory;
 
+import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -25,6 +26,15 @@ public class WarehouseEntity {
 
     @Column(name = "name", nullable = false, columnDefinition = "TEXT")
     private String name;
+
+    @Column(name = "location", length = 200)
+    private String location;
+
+    @Column(name = "is_active")
+    private Boolean isActive;
+
+    @Column(name = "created_at")
+    private Instant createdAt;
 
     public WarehouseEntity() {
     }
@@ -53,10 +63,49 @@ public class WarehouseEntity {
         this.name = name;
     }
 
+    public String getLocation() {
+        return location;
+    }
+
+    public void setLocation(String location) {
+        this.location = location;
+    }
+
+    public Boolean getIsActive() {
+        return isActive;
+    }
+
+    public void setIsActive(Boolean isActive) {
+        this.isActive = isActive;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(Instant createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    // Convenience getters matching frontend naming
+    public String getWarehouseCode() {
+        return this.code;
+    }
+
+    public String getWarehouseName() {
+        return this.name;
+    }
+
     @PrePersist
     private void prePersist() {
         if (id == null) {
             id = UUID.randomUUID();
+        }
+        if (createdAt == null) {
+            createdAt = Instant.now();
+        }
+        if (isActive == null) {
+            isActive = Boolean.TRUE;
         }
     }
 
@@ -79,6 +128,9 @@ public class WarehouseEntity {
                 "id=" + id +
                 ", code='" + code + '\'' +
                 ", name='" + name + '\'' +
+                ", location='" + location + '\'' +
+                ", isActive=" + isActive +
+                ", createdAt=" + createdAt +
                 '}';
     }
 }

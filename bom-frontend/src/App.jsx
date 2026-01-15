@@ -5,6 +5,7 @@ import MaterialPage from './features/material/MaterialPage'
 import ModelPage from './features/model/ModelPage'
 import InventoryPage from './features/inventory/InventoryPage'
 import SupplierPage from './features/supplier/SupplierPage'
+import WarehousePage from './features/warehouse/WarehousePage'
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
           <Link to="/materials" style={{ marginRight: 12 }}>Materials</Link>
           <Link to="/models" style={{ marginRight: 12 }}>Models</Link>
           <Link to="/inventory" style={{ marginRight: 12 }}>Inventory</Link>
+          <Link to="/warehouses" style={{ marginRight: 12 }}>Warehouses</Link>
           <Link to="/suppliers">Suppliers</Link>
         </nav>
 
@@ -25,6 +27,7 @@ export default function App() {
           <Route path="/materials" element={<MaterialPage />} />
           <Route path="/models" element={<ModelPage />} />
           <Route path="/inventory" element={<InventoryPage />} />
+          <Route path="/warehouses" element={<WarehousePage />} />
           <Route path="/suppliers" element={<SupplierPage />} />
         </Routes>
       </div>

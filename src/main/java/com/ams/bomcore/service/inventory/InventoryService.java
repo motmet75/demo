@@ -3,6 +3,7 @@ package com.ams.bomcore.service.inventory;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -56,6 +57,34 @@ public class InventoryService {
         }
 
         // prevent negative - adding cannot create negative but keep check
+        if (inv.getQuantityOnHand().compareTo(BigDecimal.ZERO) < 0) {
+            throw new InventoryException("Resulting quantity would be negative");
+        }
+
+        return inventoryRepository.save(inv);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public InventoryEntity addStockByIds(UUID materialId, UUID warehouseId, BigDecimal qty) {
+        if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) throw new InventoryException("Quantity to add must be positive");
+
+        Material m = materialRepository.findById(materialId).orElseThrow(() -> new InventoryException("Material not found: " + materialId));
+        WarehouseEntity w = warehouseRepository.findById(warehouseId).orElseThrow(() -> new InventoryException("Warehouse not found: " + warehouseId));
+
+        // reuse repository method that finds by material and warehouse code
+        Optional<InventoryEntity> existing = inventoryRepository.findByMaterialAndWarehouseCode(m, w.getCode());
+        InventoryEntity inv;
+        if (existing.isPresent()) {
+            inv = existing.get();
+            inv.setQuantityOnHand(inv.getQuantityOnHand().add(qty));
+        } else {
+            inv = new InventoryEntity();
+            inv.setMaterial(m);
+            inv.setWarehouse(w);
+            inv.setQuantityOnHand(qty);
+            inv.setQuantityLocked(BigDecimal.ZERO);
+        }
+
         if (inv.getQuantityOnHand().compareTo(BigDecimal.ZERO) < 0) {
             throw new InventoryException("Resulting quantity would be negative");
         }

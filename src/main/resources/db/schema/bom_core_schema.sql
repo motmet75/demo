@@ -44,7 +44,10 @@ CREATE TABLE supplier (
 CREATE TABLE warehouse (
     id      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     code    VARCHAR(50) UNIQUE NOT NULL,
-    name    TEXT NOT NULL
+    name    TEXT NOT NULL,
+    location VARCHAR(200),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT now()
 );
 
 -- =========================================

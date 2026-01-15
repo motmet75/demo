@@ -69,7 +69,7 @@ export default function ModelGrid({ reloadSignal }) {
       const data = await fetchModels()
       let list = Array.isArray(data) ? data : (data && (data.data || data.items || data.content)) || []
       if (!Array.isArray(list)) list = []
-      setRows(list.map(r => ({ id: r.id == null ? '' : String(r.id), modelCode: r.modelCode, modelName: r.modelName, isActive: r.isActive })) )
+      setRows(list.map(r => ({ id: r.id == null ? '' : String(r.id), uuid: r.id == null ? '' : String(r.id), modelCode: r.modelCode, modelName: r.modelName, isActive: r.isActive })) )
     } catch {
       console.error('Failed to load models')
       setRows([])
@@ -99,6 +99,7 @@ export default function ModelGrid({ reloadSignal }) {
 
       const newRow = {
         id: (res && res.id) || updatedModel.id,
+        uuid: (res && res.id) || updatedModel.id,
         modelCode: (res && res.modelCode) ?? updatedModel.modelCode,
         modelName: (res && res.modelName) ?? updatedModel.modelName,
         isActive: (res && (res.isActive !== undefined ? res.isActive : undefined)) ?? updatedModel.isActive
@@ -128,6 +129,7 @@ export default function ModelGrid({ reloadSignal }) {
   const closeBom = () => { setBomOpen(false); setBomModel(null) }
 
   const columns = [
+    { field: 'uuid', headerName: 'UUID', width: 220, hide: true },
     { field: 'modelCode', headerName: 'Code', width: 150 },
     { field: 'modelName', headerName: 'Name', flex: 1 },
     { field: 'isActive', headerName: 'Active', width: 120 },

@@ -15,11 +15,42 @@ export default function InventoryGrid() {
   const [saving, setSaving] = useState(false)
   const [modalKey, setModalKey] = useState(0)
 
+  // Normalize incoming inventory objects for the grid
+  const normalizeInventory = (item) => {
+    if (!item || typeof item !== 'object') return item
+    const id = item.id ?? item.uuid ?? item._id ?? null
+    const material = item.material ?? {}
+    const warehouse = item.warehouse ?? {}
+
+    const materialId = material.id ?? material.uuid ?? material._id ?? item.materialId ?? item.material_id ?? null
+    const materialCode = material.materialCode ?? material.code ?? item.materialCode ?? item.material_code ?? null
+
+    const warehouseId = warehouse.id ?? warehouse.uuid ?? warehouse._id ?? item.warehouseId ?? item.warehouse_id ?? null
+    const warehouseCode = warehouse.code ?? warehouse.warehouseCode ?? item.warehouseCode ?? item.warehouse_code ?? null
+
+    const quantityOnHand = item.quantityOnHand ?? item.quantity ?? 0
+    const quantityReserved = item.quantityLocked ?? item.quantityReserved ?? item.quantity_locked ?? 0
+
+    return {
+      // original id for DataGrid; stringify if present
+      id: id != null ? String(id) : id,
+      uuid: id != null ? String(id) : id,
+      materialId: materialId != null ? String(materialId) : materialId,
+      materialCode,
+      warehouseId: warehouseId != null ? String(warehouseId) : warehouseId,
+      warehouseCode,
+      quantityOnHand,
+      quantityReserved,
+      // keep original item for reference
+      __raw: item
+    }
+  }
+
   const load = useCallback(async () => {
     setLoading(true)
     try {
       const data = await fetchInventory()
-      setRows(Array.isArray(data) ? data : [])
+      setRows(Array.isArray(data) ? data.map(normalizeInventory) : [])
     } catch (e) {
       console.error('Failed to load inventory', e)
       setRows([])
@@ -44,12 +75,17 @@ export default function InventoryGrid() {
         res = await addStock(payload)
       }
 
+      // Normalize the response into the grid shape
+      const norm = normalizeInventory(res)
       const newRow = {
-        id: res.id,
-        materialCode: res.material ? res.material.materialCode : payload.materialCode,
-        warehouseCode: res.warehouse ? res.warehouse.code : payload.warehouseCode,
-        quantityOnHand: res.quantityOnHand || payload.quantity,
-        quantityReserved: res.quantityLocked || 0
+        id: norm.id ?? (payload.id ? String(payload.id) : undefined),
+        uuid: norm.id ?? (payload.id ? String(payload.id) : undefined),
+        materialId: norm.materialId ?? (payload.materialId ? String(payload.materialId) : (payload.material ? String(payload.material.id) : undefined)),
+        materialCode: norm.materialCode ?? payload.materialCode ?? (payload.material ? payload.material.materialCode || payload.material.code : undefined),
+        warehouseId: norm.warehouseId ?? (payload.warehouseId ? String(payload.warehouseId) : (payload.warehouse ? String(payload.warehouse.id) : undefined)),
+        warehouseCode: norm.warehouseCode ?? payload.warehouseCode ?? (payload.warehouse ? payload.warehouse.code || payload.warehouse.warehouseCode : undefined),
+        quantityOnHand: norm.quantityOnHand ?? res.quantityOnHand ?? payload.quantity ?? 0,
+        quantityReserved: norm.quantityReserved ?? res.quantityLocked ?? 0
       }
 
       setRows(prev => {
@@ -94,7 +130,10 @@ export default function InventoryGrid() {
   }
 
   const columns = [
+    { field: 'uuid', headerName: 'UUID', width: 220, hide: true },
+    { field: 'materialId', headerName: 'Material ID', width: 220 },
     { field: 'materialCode', headerName: 'Material', width: 200 },
+    { field: 'warehouseId', headerName: 'Warehouse ID', width: 220 },
     { field: 'warehouseCode', headerName: 'Warehouse', width: 140 },
     { field: 'quantityOnHand', headerName: 'Qty On Hand', width: 160 },
     { field: 'quantityReserved', headerName: 'Qty Reserved', width: 160 },
