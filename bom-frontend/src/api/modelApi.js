@@ -78,3 +78,34 @@ export async function deleteModel(id) {
 
   return data
 }
+
+export async function importModelBoms(file) {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch('/bom/api/models/import-bom', { method: 'POST', body: form })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(text || 'Upload failed')
+  }
+  return res.json()
+}
+
+export async function fetchModelBoms() {
+  const res = await fetch('/bom/api/model-boms')
+  const text = await res.text()
+  let data = null
+  try {
+    data = text ? JSON.parse(text) : null
+  } catch {
+    console.warn('fetchModelBoms: server returned non-JSON response', text)
+    return []
+  }
+
+  if (Array.isArray(data)) return data
+  if (data && typeof data === 'object') {
+    if (Array.isArray(data.data)) return data.data
+    if (Array.isArray(data.items)) return data.items
+    if (Array.isArray(data.content)) return data.content
+  }
+  return []
+}
