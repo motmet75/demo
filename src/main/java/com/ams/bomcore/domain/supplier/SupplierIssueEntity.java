@@ -29,7 +29,7 @@ public class SupplierIssueEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "supplier_id", nullable = false)
-    private SupplierEntity supplier;
+    private Supplier supplier;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "material_id", nullable = false)
@@ -58,11 +58,11 @@ public class SupplierIssueEntity {
         this.id = id;
     }
 
-    public SupplierEntity getSupplier() {
+    public Supplier getSupplier() {
         return supplier;
     }
 
-    public void setSupplier(SupplierEntity supplier) {
+    public void setSupplier(Supplier supplier) {
         this.supplier = supplier;
     }
 

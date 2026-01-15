@@ -16,6 +16,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.Transient;
 
 /**
  * Entity mapping for table `inventory`.
@@ -107,6 +108,37 @@ public class InventoryEntity {
         if (quantityLocked == null) {
             quantityLocked = BigDecimal.ZERO;
         }
+    }
+
+    // Convenience aliases requested by UI/other code
+    /**
+     * Alias for quantityLocked expressed as quantityReserved per request.
+     */
+    public BigDecimal getQuantityReserved() {
+        return this.quantityLocked;
+    }
+
+    public void setQuantityReserved(BigDecimal qty) {
+        this.quantityLocked = qty;
+    }
+
+    /**
+     * Derived warehouse code from the related WarehouseEntity (may be null).
+     */
+    @Transient
+    public String getWarehouseCode() {
+        return warehouse == null ? null : warehouse.getCode();
+    }
+
+    /**
+     * Alias for updatedAt as lastUpdated
+     */
+    public Instant getLastUpdated() {
+        return this.updatedAt;
+    }
+
+    public void setLastUpdated(Instant ts) {
+        this.updatedAt = ts;
     }
 
     @Override

@@ -29,9 +29,15 @@ CREATE TABLE model (
 
 -- ---------- Supplier ----------
 CREATE TABLE supplier (
-    id      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    code    VARCHAR(50) UNIQUE,
-    name    TEXT NOT NULL
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    code            VARCHAR(50) UNIQUE,
+    supplier_code   VARCHAR(50) UNIQUE NOT NULL,
+    supplier_name   TEXT NOT NULL,
+    contact_name    VARCHAR(100),
+    phone           VARCHAR(30),
+    email           VARCHAR(100),
+    is_active       BOOLEAN DEFAULT TRUE,
+    created_at      TIMESTAMP DEFAULT now()
 );
 
 -- ---------- Warehouse ----------
