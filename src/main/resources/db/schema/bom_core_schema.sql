@@ -18,6 +18,15 @@ CREATE TABLE material (
     created_at      TIMESTAMP DEFAULT now()
 );
 
+-- ---------- Model ----------
+CREATE TABLE model (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    model_code      VARCHAR(50) UNIQUE NOT NULL,
+    model_name      TEXT NOT NULL,
+    is_active       BOOLEAN DEFAULT TRUE,
+    created_at      TIMESTAMP DEFAULT now()
+);
+
 -- ---------- Supplier ----------
 CREATE TABLE supplier (
     id      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -54,6 +63,15 @@ CREATE TABLE bom_item (
     material_id     UUID NOT NULL REFERENCES material(id),
     quantity        NUMERIC(12,4) NOT NULL,
     level           INTEGER NOT NULL
+);
+
+-- ---------- Model BOM (Material consumption per Model unit) ----------
+-- Links a Model to a Material with the quantity required per one Model unit.
+CREATE TABLE model_bom (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    model_id        UUID NOT NULL REFERENCES model(id) ON DELETE CASCADE,
+    material_id     UUID NOT NULL REFERENCES material(id) ON DELETE RESTRICT,
+    qty_per_unit    NUMERIC(14,4) NOT NULL
 );
 
 -- =========================================

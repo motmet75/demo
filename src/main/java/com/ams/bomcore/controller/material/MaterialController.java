@@ -2,15 +2,24 @@ package com.ams.bomcore.controller.material;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.Optional;
 
 import jakarta.validation.Valid;
 
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +34,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import com.ams.bomcore.domain.material.Material;
 import com.ams.bomcore.repository.MaterialRepository;
@@ -45,10 +55,13 @@ public class MaterialController {
 
     private final MaterialService materialService;
     private final MaterialRepository materialRepository;
+    private final ObjectMapper objectMapper;
 
-    public MaterialController(MaterialService materialService, MaterialRepository materialRepository) {
+    public MaterialController(MaterialService materialService, MaterialRepository materialRepository, Optional<ObjectMapper> objectMapperOptional) {
         this.materialService = materialService;
         this.materialRepository = materialRepository;
+        // If Spring provides an ObjectMapper bean, use it; otherwise fall back to a plain one.
+        this.objectMapper = (objectMapperOptional != null && objectMapperOptional.isPresent()) ? objectMapperOptional.get() : new ObjectMapper();
     }
 
     @GetMapping
@@ -147,6 +160,75 @@ public class MaterialController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ImportResult.error("Failed to parse file: " + e.getMessage()));
         }
+    }
+
+    @PostMapping(path = "/export", consumes = MediaType.APPLICATION_JSON_VALUE, produces = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    public ResponseEntity<StreamingResponseBody> exportToExcel(@RequestBody(required = false) List<String> ids) {
+        // Accept a JSON array of id strings. If null or empty, produce an empty sheet with headers.
+        List<String> incoming = ids == null ? new ArrayList<>() : new ArrayList<>(ids);
+
+        // Trim and keep only valid UUID strings
+        List<UUID> uuidList = new ArrayList<>();
+        if (incoming != null) {
+            for (String s : incoming) {
+                if (s == null) continue;
+                try {
+                    uuidList.add(UUID.fromString(s.trim()));
+                } catch (Exception ex) {
+                    // skip invalid UUID strings
+                }
+            }
+        }
+
+        // find materials by ids (if none, we'll produce an empty sheet with just headers)
+        List<Material> list = uuidList.isEmpty() ? new ArrayList<>() : materialRepository.findAllById(uuidList);
+
+        StreamingResponseBody stream = (OutputStream os) -> {
+            try (XSSFWorkbook workbook = new XSSFWorkbook()) {
+                Sheet sheet = workbook.createSheet("Materials");
+                int rownum = 0;
+                // header
+                Row header = sheet.createRow(rownum++);
+                String[] headers = new String[] { "ID", "Code", "Name", "Unit", "Type", "Price", "Description", "Active", "CreatedAt" };
+                for (int i = 0; i < headers.length; i++) {
+                    Cell c = header.createCell(i);
+                    c.setCellValue(headers[i]);
+                }
+
+                DateTimeFormatter dtf = DateTimeFormatter.ISO_INSTANT;
+
+                for (Material m : list) {
+                    Row r = sheet.createRow(rownum++);
+                    r.createCell(0).setCellValue(m.getId() == null ? "" : m.getId().toString());
+                    r.createCell(1).setCellValue(m.getMaterialCode() == null ? "" : m.getMaterialCode());
+                    r.createCell(2).setCellValue(m.getMaterialName() == null ? "" : m.getMaterialName());
+                    r.createCell(3).setCellValue(m.getUnit() == null ? "" : m.getUnit());
+                    r.createCell(4).setCellValue(m.getMaterialType() == null ? "" : m.getMaterialType());
+                    if (m.getPrice() != null) {
+                        r.createCell(5).setCellValue(m.getPrice().doubleValue());
+                    } else {
+                        r.createCell(5).setCellValue("");
+                    }
+                    r.createCell(6).setCellValue(m.getDescription() == null ? "" : m.getDescription());
+                    r.createCell(7).setCellValue(m.getIsActive() == null ? "" : m.getIsActive().toString());
+                    r.createCell(8).setCellValue(m.getCreatedAt() == null ? "" : dtf.format(m.getCreatedAt()));
+                }
+
+                // auto-size columns for small datasets
+                for (int i = 0; i < headers.length; i++) {
+                    sheet.autoSizeColumn(i);
+                }
+
+                workbook.write(os);
+                os.flush();
+            }
+        };
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.add(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=materials_selected_export.xlsx");
+        headers.add(HttpHeaders.CONTENT_TYPE, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+
+        return ResponseEntity.ok().headers(headers).body(stream);
     }
 
     public static class ImportResult {

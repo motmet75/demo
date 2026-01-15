@@ -17,10 +17,12 @@ import com.ams.bomcore.domain.bom.BomCalculationItemEntity;
 import com.ams.bomcore.domain.bom.BomEntity;
 import com.ams.bomcore.domain.bom.BomItemEntity;
 import com.ams.bomcore.domain.material.Material;
+import com.ams.bomcore.domain.model.Model;
 import com.ams.bomcore.repository.BomCalculationRepository;
 import com.ams.bomcore.repository.BomItemRepository;
 import com.ams.bomcore.repository.BomRepository;
 import com.ams.bomcore.repository.InventoryRepository;
+import com.ams.bomcore.repository.ModelRepository;
 
 /**
  * Service responsible for BOM calculation: load active BOM, explode it, aggregate materials,
@@ -35,15 +37,18 @@ public class BomCalculationService {
     private final BomItemRepository bomItemRepository;
     private final InventoryRepository inventoryRepository;
     private final BomCalculationRepository bomCalculationRepository;
+    private final ModelRepository modelRepository;
 
     public BomCalculationService(BomRepository bomRepository,
                                  BomItemRepository bomItemRepository,
                                  InventoryRepository inventoryRepository,
-                                 BomCalculationRepository bomCalculationRepository) {
+                                 BomCalculationRepository bomCalculationRepository,
+                                 ModelRepository modelRepository) {
         this.bomRepository = bomRepository;
         this.bomItemRepository = bomItemRepository;
         this.inventoryRepository = inventoryRepository;
         this.bomCalculationRepository = bomCalculationRepository;
+        this.modelRepository = modelRepository;
     }
 
     /**
@@ -109,6 +114,57 @@ public class BomCalculationService {
 
         // Save calculation (cascade will persist items)
         return bomCalculationRepository.save(calculation);
+    }
+
+    /**
+     * Check availability for a model and target quantity. Delegates to calculate(...) then maps
+     * the persisted calculation items into DTOs for controller consumption.
+     * This method keeps all business logic inside the service layer.
+     */
+    @Transactional
+    public List<BomCheckResult> checkAvailability(String modelCode, BigDecimal targetQty) {
+        // Resolve modelCode -> modelName
+        Model model = modelRepository.findByModelCode(modelCode)
+                .orElseThrow(() -> new IllegalArgumentException("Model not found for code: " + modelCode));
+        String modelName = model.getModelName();
+
+        BomCalculationEntity calc = calculate(modelName, targetQty);
+        List<BomCheckResult> out = new ArrayList<>();
+        if (calc.getItems() != null) {
+            for (BomCalculationItemEntity item : calc.getItems()) {
+                BomCheckResult r = new BomCheckResult();
+                r.setMaterialId(item.getMaterial().getId());
+                r.setMaterialCode(item.getMaterial().getMaterialCode());
+                r.setMaterialName(item.getMaterial().getMaterialName());
+                r.setRequiredQty(item.getRequiredQty());
+                r.setAvailableQty(item.getAvailableQty());
+                r.setShortageQty(item.getShortageQty());
+                out.add(r);
+            }
+        }
+        return out;
+    }
+
+    public static class BomCheckResult {
+        private UUID materialId;
+        private String materialCode;
+        private String materialName;
+        private BigDecimal requiredQty;
+        private BigDecimal availableQty;
+        private BigDecimal shortageQty;
+
+        public UUID getMaterialId() { return materialId; }
+        public void setMaterialId(UUID materialId) { this.materialId = materialId; }
+        public String getMaterialCode() { return materialCode; }
+        public void setMaterialCode(String materialCode) { this.materialCode = materialCode; }
+        public String getMaterialName() { return materialName; }
+        public void setMaterialName(String materialName) { this.materialName = materialName; }
+        public BigDecimal getRequiredQty() { return requiredQty; }
+        public void setRequiredQty(BigDecimal requiredQty) { this.requiredQty = requiredQty; }
+        public BigDecimal getAvailableQty() { return availableQty; }
+        public void setAvailableQty(BigDecimal availableQty) { this.availableQty = availableQty; }
+        public BigDecimal getShortageQty() { return shortageQty; }
+        public void setShortageQty(BigDecimal shortageQty) { this.shortageQty = shortageQty; }
     }
 
     private void traverseAndAccumulate(BomItemEntity node, BigDecimal multiplier,

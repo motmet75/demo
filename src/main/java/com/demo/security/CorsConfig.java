@@ -13,7 +13,7 @@ public class CorsConfig {
         return new WebMvcConfigurer() {
             @Override
             public void addCorsMappings(CorsRegistry registry) {
-                registry.addMapping("/bom/**")
+                registry.addMapping("/bom/api**")
                         .allowedOrigins("http://localhost:5173")
                         .allowedMethods("*");
             }
