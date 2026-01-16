@@ -54,8 +54,8 @@ export default function WarehouseGrid() {
       } else {
         setRows([])
       }
-    } catch (e) {
-      console.error('Failed to load warehouses', e)
+    } catch {
+      console.error('Failed to load warehouses')
       setRows([])
     } finally {
       setLoading(false)

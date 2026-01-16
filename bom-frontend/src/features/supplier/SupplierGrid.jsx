@@ -54,8 +54,8 @@ export default function SupplierGrid() {
       } else {
         setRows([])
       }
-    } catch (e) {
-      console.error('Failed to load suppliers', e)
+    } catch {
+      console.error('Failed to load suppliers')
       setRows([])
     } finally {
       setLoading(false)

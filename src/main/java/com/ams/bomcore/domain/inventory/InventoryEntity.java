@@ -10,6 +10,7 @@ import com.ams.bomcore.domain.material.Material;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.ForeignKey;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
@@ -22,26 +23,42 @@ import jakarta.persistence.Transient;
  * Entity mapping for table `inventory`.
  */
 @Entity
-@Table(name = "inventory", uniqueConstraints = @UniqueConstraint(columnNames = {"material_id", "warehouse_id"}))
+@Table(name = "inventory", uniqueConstraints = @UniqueConstraint(columnNames = {"material_id", "warehouse_id", "batch_no"}))
 public class InventoryEntity {
 
     @Id
     @Column(name = "id", nullable = false)
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "material_id", nullable = false)
+    // Use relationship to Material (no duplicated material code/name stored here)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "material_id", referencedColumnName = "id", nullable = false,
+            foreignKey = @ForeignKey(name = "fk_inventory_material"))
     private Material material;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "warehouse_id", nullable = false)
+    // Use relationship to WarehouseEntity (no duplicated warehouse code/name stored here)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "warehouse_id", referencedColumnName = "id", nullable = false,
+            foreignKey = @ForeignKey(name = "fk_inventory_warehouse"))
     private WarehouseEntity warehouse;
+
+    @Column(name = "batch_no", nullable = false, length = 255)
+    private String batchNo;
 
     @Column(name = "quantity_on_hand", nullable = false, precision = 14, scale = 4)
     private BigDecimal quantityOnHand;
 
     @Column(name = "quantity_locked", precision = 14, scale = 4)
     private BigDecimal quantityLocked;
+
+    @Column(name = "expiration_date")
+    private Instant expirationDateTime;
+
+    @Column(name = "production_date")
+    private Instant productionDateTime;
+
+    @Column(name = "created_at")
+    private Instant createdAt;
 
     @Column(name = "updated_at")
     private Instant updatedAt;
@@ -73,6 +90,14 @@ public class InventoryEntity {
         this.warehouse = warehouse;
     }
 
+    public String getBatchNo() {
+        return batchNo;
+    }
+
+    public void setBatchNo(String batchNo) {
+        this.batchNo = batchNo;
+    }
+
     public BigDecimal getQuantityOnHand() {
         return quantityOnHand;
     }
@@ -89,6 +114,30 @@ public class InventoryEntity {
         this.quantityLocked = quantityLocked;
     }
 
+    public Instant getExpirationDateTime() {
+        return expirationDateTime;
+    }
+
+    public void setExpirationDateTime(Instant expirationDateTime) {
+        this.expirationDateTime = expirationDateTime;
+    }
+
+    public Instant getProductionDateTime() {
+        return productionDateTime;
+    }
+
+    public void setProductionDateTime(Instant productionDateTime) {
+        this.productionDateTime = productionDateTime;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(Instant createdAt) {
+        this.createdAt = createdAt;
+    }
+
     public Instant getUpdatedAt() {
         return updatedAt;
     }
@@ -101,6 +150,9 @@ public class InventoryEntity {
     private void prePersist() {
         if (id == null) {
             id = UUID.randomUUID();
+        }
+        if (createdAt == null) {
+            createdAt = Instant.now();
         }
         if (updatedAt == null) {
             updatedAt = Instant.now();
@@ -128,6 +180,14 @@ public class InventoryEntity {
     @Transient
     public String getWarehouseCode() {
         return warehouse == null ? null : warehouse.getCode();
+    }
+
+    /**
+     * Derived material code from the related Material (may be null).
+     */
+    @Transient
+    public String getMaterialCode() {
+        return material == null ? null : material.getMaterialCode();
     }
 
     /**
@@ -160,8 +220,12 @@ public class InventoryEntity {
                 "id=" + id +
                 ", material=" + (material != null ? material.getId() : null) +
                 ", warehouse=" + (warehouse != null ? warehouse.getId() : null) +
+                ", batchNo=" + batchNo +
                 ", quantityOnHand=" + quantityOnHand +
                 ", quantityLocked=" + quantityLocked +
+                ", expirationDateTime=" + expirationDateTime +
+                ", productionDateTime=" + productionDateTime +
+                ", createdAt=" + createdAt +
                 ", updatedAt=" + updatedAt +
                 '}';
     }

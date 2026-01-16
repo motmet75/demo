@@ -1,26 +1,72 @@
 import React, { useEffect, useState, useCallback } from 'react'
-import { DataGrid, GridActionsCellItem } from '@mui/x-data-grid'
+import { DataGrid, GridActionsCellItem, useGridApiRef } from '@mui/x-data-grid'
 import EditIcon from '@mui/icons-material/Edit'
 import LocalHospitalIcon from '@mui/icons-material/LocalHospital'
 import CallReceivedIcon from '@mui/icons-material/CallReceived'
-import { fetchInventory, addStock, updateInventory, reserveInventory, releaseInventory } from '../../api/inventoryApi'
+import { fetchInventoryView, addStock, updateInventory, reserveInventory, releaseInventory } from '../../api/inventoryApi'
 import InventoryEditModal from './InventoryEditModal'
+import * as XLSX from 'xlsx'
 
 export default function InventoryGrid() {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(false)
+
+  const [filterMaterial, setFilterMaterial] = useState('')
+  const [filterWarehouse, setFilterWarehouse] = useState('')
 
   const [editOpen, setEditOpen] = useState(false)
   const [selected, setSelected] = useState(null)
   const [saving, setSaving] = useState(false)
   const [modalKey, setModalKey] = useState(0)
 
+  const apiRef = useGridApiRef()
+
+  // selection for export
+  const [selectionModel, setSelectionModel] = useState([])
+
+  // normalize selection shapes (MUI versions return different shapes)
+  const normalizeSelection = (sel) => {
+    if (sel == null) return []
+    try {
+      if (Array.isArray(sel)) return sel.map(s => {
+        if (s == null) return ''
+        if (typeof s === 'object') {
+          // objects may have id or rowId
+          if ('id' in s) return String(s.id)
+          if ('rowId' in s) return String(s.rowId)
+          // maybe [id, ...] tuple
+          if (Array.isArray(s) && s.length > 0) return String(s[0])
+          try { return String(s.toString()) } catch { return JSON.stringify(s) }
+        }
+        return String(s)
+      })
+      // Map -> take keys
+      if (sel instanceof Map) return Array.from(sel.keys()).map(k => String(k))
+      // plain object map { id: true }
+      if (typeof sel === 'object' && !sel[Symbol.iterator]) {
+        return Object.keys(sel).filter(k => !!sel[k]).map(String)
+      }
+      // iterable (Set of ids, or entries)
+      if (typeof sel === 'object' && sel[Symbol.iterator]) {
+        const arr = Array.from(sel)
+        // entries like [[id, true], [id2, true]] -> take first element
+        if (arr.length > 0 && Array.isArray(arr[0]) && arr[0].length >= 1) {
+          return arr.map(e => String(e[0]))
+        }
+        return arr.map(s => String(s))
+      }
+      return [String(sel)]
+    } catch {
+      return Array.isArray(sel) ? sel.map(s => String(s)) : [String(sel)]
+    }
+  }
+
   // grid height control: when `auto` grid fills remaining viewport, otherwise uses px value
   const [manualHeight, setManualHeight] = useState(() => {
     try {
       const v = localStorage.getItem('inventory_manual_height')
       return v === null ? false : v === 'true'
-    } catch (e) {
+    } catch {
       return false
     }
   })
@@ -29,7 +75,7 @@ export default function InventoryGrid() {
       const v = localStorage.getItem('inventory_grid_height')
       const n = v == null ? 520 : Number.parseInt(v, 10)
       return Number.isFinite(n) && n > 0 ? n : 520
-    } catch (e) {
+    } catch {
       return 520
     }
   }) // px when manual
@@ -39,38 +85,45 @@ export default function InventoryGrid() {
     try {
       localStorage.setItem('inventory_manual_height', String(manualHeight))
       localStorage.setItem('inventory_grid_height', String(gridHeight))
-    } catch (e) {
+    } catch {
       // ignore storage errors
     }
   }, [manualHeight, gridHeight])
 
-  // Normalize incoming inventory objects for the grid
-  const normalizeInventory = (item) => {
+  // Normalize incoming inventory view DTOs for the grid
+  const normalizeInventoryView = (item) => {
     if (!item || typeof item !== 'object') return item
-    const id = item.id ?? item.uuid ?? item._id ?? null
-    const material = item.material ?? {}
-    const warehouse = item.warehouse ?? {}
 
-    const materialId = material.id ?? material.uuid ?? material._id ?? item.materialId ?? item.material_id ?? null
-    const materialCode = material.materialCode ?? material.code ?? item.materialCode ?? item.material_code ?? null
+    const inventoryId = item.inventoryId ?? item.id ?? null
+    const materialId = item.materialId ?? null
+    const materialCode = item.materialCode ?? item.material_code ?? ''
+    const materialName = item.materialName ?? item.materialName ?? ''
 
-    const warehouseId = warehouse.id ?? warehouse.uuid ?? warehouse._id ?? item.warehouseId ?? item.warehouse_id ?? null
-    const warehouseCode = warehouse.code ?? warehouse.warehouseCode ?? item.warehouseCode ?? item.warehouse_code ?? null
+    const warehouseId = item.warehouseId ?? null
+    const warehouseCode = item.warehouseCode ?? item.warehouse_code ?? ''
+    const warehouseName = item.warehouseName ?? item.warehouseName ?? ''
 
-    const quantityOnHand = item.quantityOnHand ?? item.quantity ?? 0
-    const quantityReserved = item.quantityLocked ?? item.quantityReserved ?? item.quantity_locked ?? 0
+    const quantityOnHand = item.quantityOnHand ?? 0
+    const quantityReserved = item.quantityReserved ?? item.quantityLocked ?? 0
 
     return {
-      // original id for DataGrid; stringify if present
-      id: id != null ? String(id) : id,
-      uuid: id != null ? String(id) : id,
-      materialId: materialId != null ? String(materialId) : materialId,
+      id: inventoryId != null ? String(inventoryId) : undefined,
+      inventoryId: inventoryId != null ? String(inventoryId) : undefined,
+      materialId: materialId != null ? String(materialId) : undefined,
+      materialUuid: item.material && (item.material.id ?? item.material.uuid) ? String(item.material.id ?? item.material.uuid) : (item.materialId ? String(item.materialId) : undefined),
       materialCode,
-      warehouseId: warehouseId != null ? String(warehouseId) : warehouseId,
+      materialName,
+      warehouseId: warehouseId != null ? String(warehouseId) : undefined,
+      warehouseUuid: item.warehouse && (item.warehouse.id ?? item.warehouse.uuid) ? String(item.warehouse.id ?? item.warehouse.uuid) : (item.warehouseId ? String(item.warehouseId) : undefined),
       warehouseCode,
+      warehouseName,
       quantityOnHand,
       quantityReserved,
-      // keep original item for reference
+      availableQuantity: Number(quantityOnHand) - Number(quantityReserved),
+      batchNo: item.batchNo || item.batch_no || '',
+      expirationDateTime: item.expirationDateTime || item.expiration_date || null,
+      productionDateTime: item.productionDateTime || item.production_date || null,
+      createdAt: item.createdAt || null,
       __raw: item
     }
   }
@@ -78,10 +131,11 @@ export default function InventoryGrid() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await fetchInventory()
-      setRows(Array.isArray(data) ? data.map(normalizeInventory) : [])
-    } catch (e) {
-      console.error('Failed to load inventory', e)
+      const data = await fetchInventoryView()
+      const list = Array.isArray(data) ? data.map(normalizeInventoryView) : []
+      setRows(list)
+    } catch {
+      console.error('Failed to load inventory view')
       setRows([])
     } finally {
       setLoading(false)
@@ -98,33 +152,25 @@ export default function InventoryGrid() {
     setSaving(true)
     try {
       let res
-      if (payload.id) {
+      // If editing existing record but material/warehouse changed, call addStock (POST)
+      const isEdit = payload.id
+      const materialChanged = isEdit && selected && ((payload.materialId && String(payload.materialId) !== String(selected.materialId)) || (payload.materialCode && payload.materialCode !== selected.materialCode))
+      const warehouseChanged = isEdit && selected && ((payload.warehouseId && String(payload.warehouseId) !== String(selected.warehouseId)) || (payload.warehouseCode && payload.warehouseCode !== selected.warehouseCode))
+
+      if (isEdit && (materialChanged || warehouseChanged)) {
+        const toPost = { ...payload }
+        delete toPost.id
+        res = await addStock(toPost)
+      } else if (payload.id) {
         res = await updateInventory(payload.id, payload)
       } else {
         res = await addStock(payload)
       }
 
-      // Normalize the response into the grid shape
-      const norm = normalizeInventory(res)
-      const newRow = {
-        id: norm.id ?? (payload.id ? String(payload.id) : undefined),
-        uuid: norm.id ?? (payload.id ? String(payload.id) : undefined),
-        materialId: norm.materialId ?? (payload.materialId ? String(payload.materialId) : (payload.material ? String(payload.material.id) : undefined)),
-        materialCode: norm.materialCode ?? payload.materialCode ?? (payload.material ? payload.material.materialCode || payload.material.code : undefined),
-        warehouseId: norm.warehouseId ?? (payload.warehouseId ? String(payload.warehouseId) : (payload.warehouse ? String(payload.warehouse.id) : undefined)),
-        warehouseCode: norm.warehouseCode ?? payload.warehouseCode ?? (payload.warehouse ? payload.warehouse.code || payload.warehouse.warehouseCode : undefined),
-        quantityOnHand: norm.quantityOnHand ?? res.quantityOnHand ?? payload.quantity ?? 0,
-        quantityReserved: norm.quantityReserved ?? res.quantityLocked ?? 0
-      }
-
-      setRows(prev => {
-        const exists = prev.some(r => r.id === newRow.id)
-        if (exists) return prev.map(r => (r.id === newRow.id ? newRow : r))
-        return [newRow, ...prev]
-      })
-
+      // normalize response by reloading grid projection to reflect joins
+      await load()
       setEditOpen(false)
-      return newRow
+      return res
     } catch (err) {
       console.error('Save failed', err)
       alert(err.message || 'Save failed')
@@ -140,10 +186,10 @@ export default function InventoryGrid() {
     const num = Number(qty)
     if (!Number.isFinite(num) || num <= 0) { alert('Invalid quantity'); return }
     try {
-      const res = await reserveInventory(id, num)
-      setRows(prev => prev.map(r => (r.id === res.id ? ({ ...r, quantityReserved: res.quantityLocked, quantityOnHand: res.quantityOnHand }) : r)))
+      await reserveInventory(id, num)
+      await load()
       alert('Reserved')
-    } catch (e) { alert('Reserve failed: ' + (e && e.message ? e.message : 'Unknown')) }
+    } catch { alert('Reserve failed') }
   }
 
   const handleRelease = async (id) => {
@@ -152,26 +198,150 @@ export default function InventoryGrid() {
     const num = Number(qty)
     if (!Number.isFinite(num) || num <= 0) { alert('Invalid quantity'); return }
     try {
-      const res = await releaseInventory(id, num)
-      setRows(prev => prev.map(r => (r.id === res.id ? ({ ...r, quantityReserved: res.quantityLocked, quantityOnHand: res.quantityOnHand }) : r)))
+      await releaseInventory(id, num)
+      await load()
       alert('Released')
-    } catch (e) { alert('Release failed: ' + (e && e.message ? e.message : 'Unknown')) }
+    } catch { alert('Release failed') }
+  }
+
+  const exportRows = async (selectedIds, format = 'xlsx') => {
+    try {
+      // Build rowsToExport and payloadIds (UUIDs)
+      let rowsToExport = []
+      let payloadIds = []
+
+      // 1) If an apiRef is available, try to resolve the selected rows from the grid API (returns a Map of selected rows)
+      try {
+        if (apiRef && apiRef.current && typeof apiRef.current.getSelectedRows === 'function') {
+          const selectedMap = apiRef.current.getSelectedRows()
+          if (selectedMap && selectedMap.size > 0) {
+            const arr = Array.from(selectedMap.values())
+            rowsToExport = arr
+            payloadIds = arr.map(r => (r && (r.inventoryId || r.id) ? String(r.inventoryId || r.id) : undefined)).filter(Boolean)
+          }
+        }
+      } catch {
+        // ignore and continue to other fallbacks
+      }
+
+      // 2) if not resolved via apiRef, use provided selectedIds (e.g., from selectionModel) to filter
+      if ((!payloadIds || payloadIds.length === 0)) {
+        if (selectedIds && selectedIds.length > 0) {
+          console.debug('exportRows: using selectedIds fallback', selectedIds)
+          rowsToExport = rows.filter(r => selectedIds.includes(r.id) || selectedIds.includes(r.inventoryId) || selectedIds.includes(r.materialUuid) || selectedIds.includes(r.warehouseUuid))
+        } else {
+          rowsToExport = rows
+        }
+        payloadIds = rowsToExport.map(r => r.inventoryId).filter(Boolean)
+      }
+
+      // Try server-side export if backend supports it
+      try {
+        const res = await fetch('/bom/api/inventory/export', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payloadIds)
+        })
+        if (!res.ok) {
+          const text = await res.text()
+          throw new Error(text || 'Export failed')
+        }
+        const blob = await res.blob()
+        const cd = res.headers.get('Content-Disposition') || res.headers.get('content-disposition')
+        let filename = 'inventory_export.xlsx'
+        if (cd) {
+          const match = /filename="?([^";]+)"?/.exec(cd)
+          if (match && match[1]) filename = match[1]
+        }
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        URL.revokeObjectURL(url)
+        return
+      } catch {
+        // server export failed or not available -> fallback to client-side generation
+        console.warn('Server export failed, falling back to client-side generation')
+      }
+
+      // client-side generation using XLSX
+      const data = rowsToExport.map(r => ({
+        InventoryId: r.inventoryId,
+        MaterialUUID: r.materialUuid,
+        MaterialCode: r.materialCode,
+        MaterialName: r.materialName,
+        WarehouseUUID: r.warehouseUuid,
+        WarehouseCode: r.warehouseCode,
+        WarehouseName: r.warehouseName,
+        Batch: r.batchNo,
+        QuantityOnHand: r.quantityOnHand,
+        QuantityReserved: r.quantityReserved,
+        Available: r.availableQuantity,
+        Expiration: r.expirationDateTime,
+        Production: r.productionDateTime
+      }))
+
+      const worksheet = XLSX.utils.json_to_sheet(data)
+      if (format === 'csv') {
+        const csv = XLSX.utils.sheet_to_csv(worksheet)
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = 'inventory_export.csv'
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        URL.revokeObjectURL(url)
+        return
+      }
+
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, worksheet, 'Inventory')
+      const wbout = XLSX.write(wb, { bookType: format === 'csv' ? 'csv' : 'xlsx', type: 'array' })
+      const blob = new Blob([wbout], { type: 'application/octet-stream' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = format === 'csv' ? 'inventory_export.csv' : 'inventory_export.xlsx'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      console.error('Export failed', e)
+      alert('Export failed: ' + (e && e.message ? e.message : 'Unknown error'))
+    }
   }
 
   const columns = [
-    { field: 'uuid', headerName: 'UUID', width: 220, hide: true },
-    { field: 'materialId', headerName: 'Material ID', width: 220 },
-    { field: 'materialCode', headerName: 'Material', width: 200 },
-    { field: 'warehouseId', headerName: 'Warehouse ID', width: 220 },
-    { field: 'warehouseCode', headerName: 'Warehouse', width: 140 },
-    { field: 'quantityOnHand', headerName: 'Qty On Hand', width: 160 },
-    { field: 'quantityReserved', headerName: 'Qty Reserved', width: 160 },
+    { field: 'inventoryId', headerName: 'Inventory ID', width: 240, hide: true },
+    { field: 'materialUuid', headerName: 'Material UUID', width: 240 },
+    { field: 'materialCode', headerName: 'Material Code', width: 180 },
+    { field: 'materialName', headerName: 'Material Name', width: 220, flex: 1 },
+    { field: 'warehouseUuid', headerName: 'Warehouse UUID', width: 240 },
+    { field: 'warehouseCode', headerName: 'Warehouse Code', width: 160 },
+    { field: 'warehouseName', headerName: 'Warehouse Name', width: 200 },
+    { field: 'quantityOnHand', headerName: 'Qty On Hand', width: 140 },
+    { field: 'quantityReserved', headerName: 'Qty Reserved', width: 140 },
+    { field: 'availableQuantity', headerName: 'Available', width: 140 },
+    { field: 'batchNo', headerName: 'Batch', width: 180 },
+    { field: 'expirationDateTime', headerName: 'Expiration', width: 200 },
+    { field: 'productionDateTime', headerName: 'Production', width: 200 },
     { field: 'actions', type: 'actions', headerName: 'Actions', width: 220, getActions: (params) => [
       <GridActionsCellItem icon={<EditIcon/>} label="Edit" onClick={() => openEdit(params.row)} showInMenu={false} disabled={!!saving} />,
       <GridActionsCellItem icon={<LocalHospitalIcon/>} label="Reserve" onClick={() => handleReserve(params.id)} showInMenu={true} disabled={!!saving} />,
       <GridActionsCellItem icon={<CallReceivedIcon/>} label="Release" onClick={() => handleRelease(params.id)} showInMenu={true} disabled={!!saving} />
     ] }
   ]
+
+  // apply simple client-side filters
+  const filteredRows = rows.filter(r => {
+    if (filterMaterial && filterMaterial.trim() !== '' && !(r.materialCode || '').toLowerCase().includes(filterMaterial.trim().toLowerCase())) return false
+    if (filterWarehouse && filterWarehouse.trim() !== '' && !(r.warehouseCode || '').toLowerCase().includes(filterWarehouse.trim().toLowerCase())) return false
+    return true
+  })
 
   return (
     // top-level flex column so grid can flex-grow to fill available space when auto
@@ -180,6 +350,17 @@ export default function InventoryGrid() {
         <h2 style={{ margin: 0 }}>Inventory</h2>
         <div>
           <button onClick={() => { setSelected(null); setModalKey(k => k + 1); setEditOpen(true) }} disabled={saving}>Add Inventory</button>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 12, padding: '0 8px 8px 8px' }}>
+        <div>
+          <label style={{ fontSize: 12 }}>Filter Material:</label><br />
+          <input value={filterMaterial} onChange={e => setFilterMaterial(e.target.value)} />
+        </div>
+        <div>
+          <label style={{ fontSize: 12 }}>Filter Warehouse:</label><br />
+          <input value={filterWarehouse} onChange={e => setFilterWarehouse(e.target.value)} />
         </div>
       </div>
 
@@ -211,18 +392,37 @@ export default function InventoryGrid() {
         </div>
       </div>
 
+      {/* Export controls and top small toolbar */}
+      <div style={{ padding: '0 8px 8px 8px' }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+          <button type="button" onClick={() => exportRows(filteredRows.map(r => r.id), 'xlsx')}>Export Filtered XLSX</button>
+          <button type="button" onClick={() => exportRows(filteredRows.map(r => r.id), 'csv')}>Export Filtered CSV</button>
+          <button type="button" onClick={() => exportRows(selectionModel, 'xlsx')} disabled={(selectionModel?.length || 0) === 0}>Export Selected XLSX</button>
+          <button type="button" onClick={() => exportRows(selectionModel, 'csv')} disabled={(selectionModel?.length || 0) === 0}>Export Selected CSV</button>
+          <div style={{ color: '#333', fontSize: 13 }}>
+            Selected: {selectionModel ? selectionModel.length : 0}
+          </div>
+        </div>
+      </div>
+
       {/* Grid container: flex-grow when auto height, fixed px when manual */}
       <div style={{ flex: manualHeight ? 'none' : 1, height: manualHeight ? `${gridHeight}px` : 'auto', minHeight: 0 }}>
         <div style={{ height: manualHeight ? '100%' : '100%', width: '100%' }}>
           <DataGrid
-            rows={rows}
-            columns={columns}
-            loading={loading}
-            pageSizeOptions={[10,25,50]}
-            sx={{ height: '100%' }}
-          />
-        </div>
-      </div>
+             rows={filteredRows}
+             columns={columns}
+             loading={loading}
+             pageSizeOptions={[10,25,50]}
+             sx={{ height: '100%' }}
+             checkboxSelection={true}
+             apiRef={apiRef}
+             // controlled selectionModel with normalization to handle different DataGrid shapes
+             selectionModel={selectionModel}
+             onRowSelectionModelChange={(newSel) => { const norm = normalizeSelection(newSel); console.debug('onRowSelectionModelChange ->', newSel, 'normalized ->', norm); setSelectionModel(norm) }}
+             onSelectionModelChange={(newSel) => { const norm = normalizeSelection(newSel); console.debug('onSelectionModelChange ->', newSel, 'normalized ->', norm); setSelectionModel(norm) }}
+           />
+         </div>
+       </div>
 
       <InventoryEditModal key={modalKey} open={editOpen} inventory={selected} onClose={closeEdit} onSave={handleSave} saving={saving} />
     </div>

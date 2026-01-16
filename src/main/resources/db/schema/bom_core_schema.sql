@@ -92,10 +92,14 @@ CREATE TABLE inventory (
     id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     material_id         UUID NOT NULL REFERENCES material(id),
     warehouse_id        UUID NOT NULL REFERENCES warehouse(id),
+    batch_no            VARCHAR(255) NOT NULL,
     quantity_on_hand    NUMERIC(14,4) NOT NULL,
     quantity_locked     NUMERIC(14,4) DEFAULT 0,
+    expiration_date     TIMESTAMP,
+    production_date     TIMESTAMP,
+    created_at          TIMESTAMP DEFAULT now(),
     updated_at          TIMESTAMP DEFAULT now(),
-    UNIQUE (material_id, warehouse_id)
+    CONSTRAINT uq_inventory_material_warehouse_batch UNIQUE (material_id, warehouse_id, batch_no)
 );
 
 -- =========================================

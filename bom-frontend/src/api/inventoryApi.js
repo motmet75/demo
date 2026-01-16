@@ -18,6 +18,14 @@ export async function fetchInventory() {
   return []
 }
 
+export async function fetchInventoryView() {
+  const res = await fetch('/bom/api/inventory/view')
+  const text = await res.text()
+  let data = null
+  try { data = text ? JSON.parse(text) : null } catch { console.warn('fetchInventoryView: server returned non-JSON', text); return [] }
+  return Array.isArray(data) ? data : (data && Array.isArray(data.data) ? data.data : [])
+}
+
 export async function addStock(payload) {
   const res = await fetch('/bom/api/inventory', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
   if (!res.ok) {
@@ -61,4 +69,15 @@ export async function releaseInventory(id, qty) {
     throw new Error(text || 'Release failed')
   }
   try { return JSON.parse(text) } catch { return text }
+}
+
+export async function importInventory(file) {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch('/bom/api/inventory/import', { method: 'POST', body: form })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(text || 'Upload failed')
+  }
+  return res.json()
 }

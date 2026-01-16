@@ -1,0 +1,132 @@
+https://chatgpt.com/g/g-p-691925dba0908191a40d9458c4cb61ef/c/6951fb96-f548-8320-9166-668e9f0630a3
+
+npm install react-router-dom
+
+
+
+
+-- ---------- Model ----------
+CREATE TABLE model (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    model_code      VARCHAR(50) UNIQUE NOT NULL,
+    model_name      TEXT NOT NULL,
+    is_active       BOOLEAN DEFAULT TRUE,
+    created_at      TIMESTAMP DEFAULT now()
+);
+
+
+-- ---------- Model BOM (Material consumption per Model unit) ----------
+-- Links a Model to a Material with the quantity required per one Model unit.
+CREATE TABLE model_bom (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    model_id        UUID NOT NULL REFERENCES model(id) ON DELETE CASCADE,
+    material_id     UUID NOT NULL REFERENCES material(id) ON DELETE RESTRICT,
+    qty_per_unit    NUMERIC(14,4) NOT NULL
+);
+
+
+
+
+
+
+ALTER TABLE supplier
+ADD COLUMN supplier_code VARCHAR(50),
+ADD COLUMN supplier_name TEXT,
+ADD COLUMN contact_name VARCHAR(100),
+ADD COLUMN phone VARCHAR(30),
+ADD COLUMN email VARCHAR(100),
+ADD COLUMN is_active BOOLEAN DEFAULT TRUE,
+ADD COLUMN created_at TIMESTAMP DEFAULT now();
+
+
+
+ALTER TABLE supplier
+ALTER COLUMN supplier_code SET NOT NULL,
+ALTER COLUMN supplier_name SET NOT NULL;
+
+ALTER TABLE supplier
+ADD CONSTRAINT uq_supplier_supplier_code UNIQUE (supplier_code);
+
+
+
+
+ALTER TABLE supplier DROP COLUMN name;
+
+
+
+
+ALTER TABLE warehouse
+ADD COLUMN warehouse_code VARCHAR(50),
+ADD COLUMN warehouse_name TEXT,
+ADD COLUMN contact_name VARCHAR(100),
+ADD COLUMN phone VARCHAR(30),
+ADD COLUMN email VARCHAR(100),
+ADD COLUMN capacity NUMERIC(18,2),
+ADD COLUMN note TEXT;
+
+
+-- Migrate existing data
+UPDATE warehouse
+SET warehouse_code = code
+WHERE warehouse_code IS NULL;
+
+UPDATE warehouse
+SET warehouse_name = name
+WHERE warehouse_name IS NULL;
+
+-- Apply NOT NULL + UNIQUE
+ALTER TABLE warehouse
+ALTER COLUMN warehouse_code SET NOT NULL,
+ALTER COLUMN warehouse_name SET NOT NULL;
+
+ALTER TABLE warehouse
+ADD CONSTRAINT uq_warehouse_warehouse_code UNIQUE (warehouse_code);
+
+
+
+dsd
+
+
+ALTER TABLE inventory
+ADD COLUMN IF NOT EXISTS material_id UUID,
+ADD COLUMN IF NOT EXISTS material_code VARCHAR(50),
+ADD COLUMN IF NOT EXISTS material_name TEXT;
+
+ALTER TABLE inventory
+ADD COLUMN IF NOT EXISTS warehouse_id UUID,
+ADD COLUMN IF NOT EXISTS warehouse_code VARCHAR(50),
+ADD COLUMN IF NOT EXISTS warehouse_name TEXT;
+
+ALTER TABLE inventory
+ADD COLUMN IF NOT EXISTS quantity_on_hand NUMERIC(18,4) DEFAULT 0,
+ADD COLUMN IF NOT EXISTS quantity_reserved NUMERIC(18,4) DEFAULT 0;
+
+ALTER TABLE inventory
+ADD COLUMN IF NOT EXISTS batch_no VARCHAR(100),
+ADD COLUMN IF NOT EXISTS expiration_date_time TIMESTAMP,
+ADD COLUMN IF NOT EXISTS production_date_time TIMESTAMP;
+
+ALTER TABLE inventory
+ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT now();
+
+ALTER TABLE inventory
+ADD CONSTRAINT fk_inventory_material
+FOREIGN KEY (material_id) REFERENCES material(id);
+
+ALTER TABLE inventory
+ADD CONSTRAINT fk_inventory_warehouse
+FOREIGN KEY (warehouse_id) REFERENCES warehouse(id);
+
+
+
+ALTER TABLE inventory
+ADD CONSTRAINT chk_quantity_non_negative
+CHECK (quantity_on_hand >= 0 AND quantity_reserved >= 0);
+
+ALTER TABLE inventory
+ADD CONSTRAINT chk_reserved_not_exceed_onhand
+CHECK (quantity_reserved <= quantity_on_hand);
+
+ALTER TABLE inventory
+ADD CONSTRAINT uq_inventory_material_warehouse_batch
+UNIQUE (material_id, warehouse_id, batch_no);

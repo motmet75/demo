@@ -12,14 +12,27 @@ import { fetchMaterials } from '../../api/materialApi'
 import { fetchWarehouses } from '../../api/warehouseApi'
 
 export default function InventoryEditModal({ open, inventory, onClose, onSave, saving }) {
+  const isoToLocalDatetime = (iso) => {
+    if (!iso) return ''
+    const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return ''
+    const pad = (n) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  }
+
   const makeInitial = (i) => ({
     // prefer explicit ids when present (editing existing row)
     materialId: i?.materialId ?? (i?.material ? (i.material.id ?? i.material.uuid ?? i.material._id) : undefined),
     materialCode: i?.material?.materialCode ?? (i?.materialCode ?? ''),
+    materialName: i?.materialName ?? (i?.material?.materialName ?? ''),
     warehouseId: i?.warehouseId ?? (i?.warehouse ? (i.warehouse.id ?? i.warehouse.uuid ?? i.warehouse._id) : undefined),
     warehouseCode: i?.warehouseCode ?? (i?.warehouse?.code ?? ''),
     quantityOnHand: i?.quantityOnHand ?? '',
-    quantityReserved: i?.quantityReserved ?? (i?.quantityLocked ?? '')
+    quantityReserved: i?.quantityReserved ?? (i?.quantityLocked ?? ''),
+    batchNo: i?.batchNo ?? '',
+    expirationLocal: i?.expirationDateTime ? isoToLocalDatetime(i.expirationDateTime) : (i?.expiration_date ? isoToLocalDatetime(i.expiration_date) : ''),
+    productionLocal: i?.productionDateTime ? isoToLocalDatetime(i.productionDateTime) : (i?.production_date ? isoToLocalDatetime(i.production_date) : ''),
+    createdAt: i?.createdAt ?? null
   })
 
   const [form, setForm] = useState(() => makeInitial(inventory))
@@ -155,15 +168,50 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
     if (!validateNumber(form.quantityOnHand)) { setErrorMessage('quantityOnHand must be numeric'); return }
     if (form.quantityReserved !== '' && !validateNumber(form.quantityReserved)) { setErrorMessage('quantityReserved must be numeric'); return }
 
+    // validate batchNo required
+    if (!form.batchNo || String(form.batchNo).trim() === '') { setErrorMessage('batchNo is required'); return }
+
+    // validate expiration date if provided: must be future
+    if (form.expirationLocal && String(form.expirationLocal).trim() !== '') {
+      const expDate = new Date(form.expirationLocal)
+      if (Number.isNaN(expDate.getTime())) { setErrorMessage('Invalid expiration date'); return }
+      const now = new Date()
+      if (expDate <= now) { setErrorMessage('Expiration date must be in the future'); return }
+    }
+
     setIsSubmitting(true)
+
+    // convert local datetime-local to ISO strings for backend Instant.parse
+    const toIso = (local) => {
+      if (!local) return null
+      try {
+        const dt = new Date(local)
+        if (Number.isNaN(dt.getTime())) return null
+        return dt.toISOString()
+      } catch {
+        return null
+      }
+    }
+
+    // coerce numeric fields to numbers when possible so backend receives proper types
+    const coerceNumber = (v) => {
+      if (v === '' || v === null || v === undefined) return undefined
+      const n = Number(v)
+      return Number.isNaN(n) ? v : n
+    }
+
     const payload = {
-      ...(inventory && inventory.id ? { id: inventory.id } : {}),
+      ...(inventory && (inventory.id || inventory.inventoryId) ? { id: (inventory.id ?? inventory.inventoryId) } : {}),
       // include ids when available (edit flow). If creating new, backend may resolve by code.
       ...(form.materialId != null && form.materialId !== '' ? { materialId: form.materialId } : {}),
       ...(form.warehouseId != null && form.warehouseId !== '' ? { warehouseId: form.warehouseId } : {}),
       materialCode: form.materialCode,
       warehouseCode: form.warehouseCode,
-      quantity: form.quantityOnHand
+      quantity: coerceNumber(form.quantityOnHand),
+      quantityReserved: coerceNumber(form.quantityReserved),
+      batchNo: form.batchNo,
+      expirationDateTime: toIso(form.expirationLocal),
+      productionDateTime: toIso(form.productionLocal)
     }
 
     try {
@@ -200,7 +248,7 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
               }}
               onInputChange={handleMaterialInputChange}
               onChange={handleMaterialChange}
-              renderInput={(params) => <TextField {...params} label="Material Code" disabled={isSubmitting} required />}
+              renderInput={(params) => <TextField {...params} label="Material Code" disabled={isSubmitting || !!(inventory && (inventory.inventoryId || inventory.id))} required />}
             />
 
             <Autocomplete
@@ -216,11 +264,34 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
               }}
               onInputChange={handleWarehouseInputChange}
               onChange={handleWarehouseChange}
-              renderInput={(params) => <TextField {...params} label="Warehouse Code" disabled={isSubmitting} required />}
+              renderInput={(params) => <TextField {...params} label="Warehouse Code" disabled={isSubmitting || !!(inventory && (inventory.inventoryId || inventory.id))} required />}
             />
 
-            <TextField label="Quantity On Hand" value={form.quantityOnHand} onChange={handleChange('quantityOnHand')} disabled={isSubmitting} required />
-            <TextField label="Quantity Reserved" value={form.quantityReserved} onChange={handleChange('quantityReserved')} disabled={isSubmitting} />
+            <TextField label="Batch No" value={form.batchNo} onChange={handleChange('batchNo')} disabled={isSubmitting} required />
+
+            <TextField label="Quantity On Hand" type="number" value={form.quantityOnHand} onChange={handleChange('quantityOnHand')} disabled={isSubmitting} required />
+            <TextField label="Quantity Reserved" type="number" value={form.quantityReserved} onChange={handleChange('quantityReserved')} disabled={isSubmitting} />
+
+            <TextField
+              label="Expiration Date"
+              type="datetime-local"
+              value={form.expirationLocal}
+              onChange={handleChange('expirationLocal')}
+              InputLabelProps={{ shrink: true }}
+              disabled={isSubmitting}
+            />
+
+            <TextField
+              label="Production Date"
+              type="datetime-local"
+              value={form.productionLocal}
+              onChange={handleChange('productionLocal')}
+              InputLabelProps={{ shrink: true }}
+              disabled={isSubmitting}
+            />
+
+            {form.createdAt ? <div>Created At: {String(form.createdAt)}</div> : null}
+
             {errorMessage ? <div style={{ color: 'red' }}>{errorMessage}</div> : null}
           </Box>
         </DialogContent>
