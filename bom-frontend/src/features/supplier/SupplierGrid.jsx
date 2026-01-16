@@ -14,6 +14,28 @@ export default function SupplierGrid() {
   const [deletingId, setDeletingId] = useState(null)
   const [modalKey, setModalKey] = useState(0)
 
+  // grid height controls
+  const [manualHeight, setManualHeight] = useState(() => {
+    try {
+      const v = localStorage.getItem('suppliers_manual_height')
+      return v === null ? false : v === 'true'
+    } catch (e) { return false }
+  })
+  const [gridHeight, setGridHeight] = useState(() => {
+    try {
+      const v = localStorage.getItem('suppliers_grid_height')
+      const n = v == null ? 520 : Number.parseInt(v, 10)
+      return Number.isFinite(n) && n > 0 ? n : 520
+    } catch (e) { return 520 }
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('suppliers_manual_height', String(manualHeight))
+      localStorage.setItem('suppliers_grid_height', String(gridHeight))
+    } catch (e) { /* ignore */ }
+  }, [manualHeight, gridHeight])
+
   const load = useCallback(async () => {
     setLoading(true)
     try {
@@ -117,14 +139,49 @@ export default function SupplierGrid() {
   ]
 
   return (
-    <div style={{ height: 520, width: '100%' }}>
+    // top-level flex column so grid can flex-grow to fill available space when auto
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100%' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 8 }}>
         <h3>Suppliers</h3>
         <div>
           <button onClick={() => { setSelected(null); setModalKey(k => k + 1); setEditOpen(true) }} disabled={saving}>Add Supplier</button>
         </div>
       </div>
-      <DataGrid rows={rows} columns={columns} loading={loading} pageSizeOptions={[10,25,50]} checkboxSelection={false} />
+
+      {/* Height control: toggle auto/manual and slider/number for manual px height */}
+      <div style={{ padding: '0 8px 8px 8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input type="checkbox" checked={!manualHeight} onChange={(e) => setManualHeight(!e.target.checked)} /> Auto height
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 12 }}>Manual height (px):</span>
+            <input
+              type="range"
+              min={200}
+              max={1200}
+              step={10}
+              value={gridHeight}
+              onChange={(e) => setGridHeight(Number(e.target.value))}
+              disabled={!manualHeight}
+            />
+            <input
+              type="number"
+              value={gridHeight}
+              onChange={(e) => setGridHeight(Number(e.target.value || 0))}
+              disabled={!manualHeight}
+              style={{ width: 80 }}
+            />
+          </label>
+        </div>
+      </div>
+
+      {/* Grid container: flex-grow when auto height, fixed px when manual */}
+      <div style={{ flex: manualHeight ? 'none' : 1, height: manualHeight ? `${gridHeight}px` : 'auto', minHeight: 0 }}>
+        <div style={{ height: manualHeight ? '100%' : '100%', width: '100%' }}>
+          <DataGrid rows={rows} columns={columns} loading={loading} pageSizeOptions={[10,25,50]} checkboxSelection={false} sx={{ height: '100%' }} />
+        </div>
+      </div>
 
       <SupplierEditModal key={modalKey} open={editOpen} supplier={selected} onClose={handleCloseEdit} onSave={handleSave} saving={saving} />
     </div>
