@@ -3,6 +3,7 @@ package com.ams.bomcore.domain.inventory;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
+import java.math.BigDecimal;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -35,6 +36,22 @@ public class WarehouseEntity {
 
     @Column(name = "created_at")
     private Instant createdAt;
+
+    // new fields
+    @Column(name = "contact_name", length = 100)
+    private String contactName;
+
+    @Column(name = "phone", length = 30)
+    private String phone;
+
+    @Column(name = "email", length = 100)
+    private String email;
+
+    @Column(name = "capacity", precision = 18, scale = 2)
+    private BigDecimal capacity;
+
+    @Column(name = "note", columnDefinition = "TEXT")
+    private String note;
 
     public WarehouseEntity() {
     }
@@ -87,6 +104,47 @@ public class WarehouseEntity {
         this.createdAt = createdAt;
     }
 
+    // new getters/setters
+    public String getContactName() {
+        return contactName;
+    }
+
+    public void setContactName(String contactName) {
+        this.contactName = contactName;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public BigDecimal getCapacity() {
+        return capacity;
+    }
+
+    public void setCapacity(BigDecimal capacity) {
+        this.capacity = capacity;
+    }
+
+    public String getNote() {
+        return note;
+    }
+
+    public void setNote(String note) {
+        this.note = note;
+    }
+
     // Convenience getters matching frontend naming
     public String getWarehouseCode() {
         return this.code;
@@ -126,11 +184,16 @@ public class WarehouseEntity {
     public String toString() {
         return "WarehouseEntity{" +
                 "id=" + id +
-                ", code='" + code + '\'' +
-                ", name='" + name + '\'' +
-                ", location='" + location + '\'' +
+                ", code='" + code + "'" +
+                ", name='" + name + "'" +
+                ", location='" + location + "'" +
                 ", isActive=" + isActive +
                 ", createdAt=" + createdAt +
+                ", contactName='" + contactName + "'" +
+                ", phone='" + phone + "'" +
+                ", email='" + email + "'" +
+                ", capacity=" + capacity +
+                ", note='" + note + "'" +
                 '}';
     }
 }

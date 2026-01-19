@@ -1,5 +1,8 @@
 https://chatgpt.com/g/g-p-691925dba0908191a40d9458c4cb61ef/c/6951fb96-f548-8320-9166-668e9f0630a3
 
+install mui --
+
+install react-router-dom
 npm install react-router-dom
 
 
@@ -56,8 +59,6 @@ ALTER TABLE supplier DROP COLUMN name;
 
 
 ALTER TABLE warehouse
-ADD COLUMN warehouse_code VARCHAR(50),
-ADD COLUMN warehouse_name TEXT,
 ADD COLUMN contact_name VARCHAR(100),
 ADD COLUMN phone VARCHAR(30),
 ADD COLUMN email VARCHAR(100),
@@ -130,3 +131,7 @@ CHECK (quantity_reserved <= quantity_on_hand);
 ALTER TABLE inventory
 ADD CONSTRAINT uq_inventory_material_warehouse_batch
 UNIQUE (material_id, warehouse_id, batch_no);
+
+ALTER TABLE inventory
+ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT now();
+

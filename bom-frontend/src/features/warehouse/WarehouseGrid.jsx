@@ -19,21 +19,21 @@ export default function WarehouseGrid() {
     try {
       const v = localStorage.getItem('warehouses_manual_height')
       return v === null ? false : v === 'true'
-    } catch (e) { return false }
+    } catch { return false }
   })
   const [gridHeight, setGridHeight] = useState(() => {
     try {
       const v = localStorage.getItem('warehouses_grid_height')
       const n = v == null ? 520 : Number.parseInt(v, 10)
       return Number.isFinite(n) && n > 0 ? n : 520
-    } catch (e) { return 520 }
+    } catch { return 520 }
   })
 
   useEffect(() => {
     try {
       localStorage.setItem('warehouses_manual_height', String(manualHeight))
       localStorage.setItem('warehouses_grid_height', String(gridHeight))
-    } catch (e) { /* ignore */ }
+    } catch { /* ignore */ }
   }, [manualHeight, gridHeight])
 
   const load = useCallback(async () => {
@@ -49,6 +49,11 @@ export default function WarehouseGrid() {
           name: (r.name ?? r.warehouseName ?? r.warehouseName) || '',
           location: r.location ?? '',
           isActive: (r.isActive !== undefined ? r.isActive : (r.active !== undefined ? r.active : true)),
+          contactName: r.contactName ?? r.contact_name ?? '',
+          phone: r.phone ?? '',
+          email: r.email ?? '',
+          capacity: r.capacity != null ? r.capacity : null,
+          note: r.note ?? '',
           __raw: r
         })))
       } else {
@@ -89,7 +94,12 @@ export default function WarehouseGrid() {
         name: res && (res.name || res.name) ? (res.name || res.name) : payload.name,
         location: res && res.location ? res.location : payload.location,
         // avoid mixing logical operators with '??' — use a simple conditional for clarity
-        isActive: (res && res.isActive !== undefined) ? res.isActive : payload.isActive
+        isActive: (res && res.isActive !== undefined) ? res.isActive : payload.isActive,
+        contactName: res && (res.contactName ?? res.contact_name) ? (res.contactName ?? res.contact_name) : payload.contactName,
+        phone: res && res.phone ? res.phone : payload.phone,
+        email: res && res.email ? res.email : payload.email,
+        capacity: res && (res.capacity !== undefined) ? res.capacity : payload.capacity,
+        note: res && res.note ? res.note : payload.note
       }
 
       setRows(prev => {
@@ -130,6 +140,11 @@ export default function WarehouseGrid() {
     { field: 'code', headerName: 'Code', width: 150 },
     { field: 'name', headerName: 'Name', flex: 1 },
     { field: 'location', headerName: 'Location', width: 200 },
+    { field: 'contactName', headerName: 'Contact', width: 180 },
+    { field: 'phone', headerName: 'Phone', width: 150 },
+    { field: 'email', headerName: 'Email', width: 220 },
+    { field: 'capacity', headerName: 'Capacity', width: 120 },
+    { field: 'note', headerName: 'Note', width: 220, hide: true },
     { field: 'isActive', headerName: 'Active', width: 100 },
     { field: 'actions', type: 'actions', headerName: 'Actions', width: 140, getActions: (params) => [
       <GridActionsCellItem icon={<EditIcon/>} label="Edit" onClick={() => handleOpenEdit(params.row)} showInMenu={false} disabled={!!saving || !!deletingId} />,

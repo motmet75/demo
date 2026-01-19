@@ -20,6 +20,12 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
   }
 
+  const localNow = () => {
+    const d = new Date()
+    const pad = (n) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  }
+
   const makeInitial = (i) => ({
     // prefer explicit ids when present (editing existing row)
     materialId: i?.materialId ?? (i?.material ? (i.material.id ?? i.material.uuid ?? i.material._id) : undefined),
@@ -30,9 +36,11 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
     quantityOnHand: i?.quantityOnHand ?? '',
     quantityReserved: i?.quantityReserved ?? (i?.quantityLocked ?? ''),
     batchNo: i?.batchNo ?? '',
-    expirationLocal: i?.expirationDateTime ? isoToLocalDatetime(i.expirationDateTime) : (i?.expiration_date ? isoToLocalDatetime(i.expiration_date) : ''),
-    productionLocal: i?.productionDateTime ? isoToLocalDatetime(i.productionDateTime) : (i?.production_date ? isoToLocalDatetime(i.production_date) : ''),
-    createdAt: i?.createdAt ?? null
+    expirationLocal: i?.expirationDateTime ? isoToLocalDatetime(i.expirationDateTime) : (i?.expiration_date ? isoToLocalDatetime(i.expiration_date) : localNow()),
+    // default production date to now for new inventory; keep existing value when editing
+    productionLocal: i?.productionDateTime ? isoToLocalDatetime(i.productionDateTime) : (i?.production_date ? isoToLocalDatetime(i.production_date) : localNow()),
+    // default createdAt to now when creating, otherwise show existing createdAt
+    createdAt: i?.createdAt ? isoToLocalDatetime(i.createdAt) : localNow()
   })
 
   const [form, setForm] = useState(() => makeInitial(inventory))
@@ -176,7 +184,7 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
       const expDate = new Date(form.expirationLocal)
       if (Number.isNaN(expDate.getTime())) { setErrorMessage('Invalid expiration date'); return }
       const now = new Date()
-      if (expDate <= now) { setErrorMessage('Expiration date must be in the future'); return }
+      if (expDate < now) { setErrorMessage('Expiration date must be in the future or now'); return }
     }
 
     setIsSubmitting(true)
