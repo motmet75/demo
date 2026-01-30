@@ -27,6 +27,9 @@ public class SupplierIssueEntity {
     @Column(name = "id", nullable = false)
     private UUID id;
 
+    @Column(name = "tenant_id", nullable = false, length = 100)
+    private String tenantId;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "supplier_id", nullable = false)
     private Supplier supplier;
@@ -56,6 +59,14 @@ public class SupplierIssueEntity {
 
     public void setId(UUID id) {
         this.id = id;
+    }
+
+    public String getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(String tenantId) {
+        this.tenantId = tenantId;
     }
 
     public Supplier getSupplier() {
@@ -133,6 +144,7 @@ public class SupplierIssueEntity {
     public String toString() {
         return "SupplierIssueEntity{" +
                 "id=" + id +
+                ", tenantId='" + tenantId + '\'' +
                 ", supplier=" + (supplier != null ? supplier.getId() : null) +
                 ", material=" + (material != null ? material.getId() : null) +
                 ", quantity=" + quantity +

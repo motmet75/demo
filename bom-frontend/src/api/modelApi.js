@@ -1,14 +1,8 @@
+import { apiFetch, apiFetchJson } from './client'
+
 export async function fetchModels() {
-  const res = await fetch('/bom/api/models')
-  const text = await res.text()
-  let data = null
-  try {
-    data = text ? JSON.parse(text) : null
-  } catch {
-    // not JSON; return empty array or raw text wrapped
-    console.warn('fetchModels: server returned non-JSON response', text)
-    return []
-  }
+  const { res, data } = await apiFetchJson('/bom/api/models')
+  if (!res.ok) return []
 
   // If the API returns an array directly
   if (Array.isArray(data)) return data
@@ -20,30 +14,32 @@ export async function fetchModels() {
     if (Array.isArray(data.content)) return data.content
   }
 
-  // fallback: return empty array
   return []
 }
 
 export async function createModel(payload) {
-  const res = await fetch('/bom/api/models', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-  return res.json()
+  const { res, data } = await apiFetchJson('/bom/api/models', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+  if (!res.ok) {
+    const message = (data && data.message) || (typeof data === 'string' ? data : res.statusText) || `Request failed with status ${res.status}`
+    const error = new Error(message)
+    error.status = res.status
+    error.response = data
+    throw error
+  }
+  return data
 }
 
 export async function updateModel(id, payload) {
   const url = `/bom/api/models/${encodeURIComponent(id)}`
-  const res = await fetch(url, {
+  const { res, data } = await apiFetchJson(url, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   })
-
-  const text = await res.text()
-  let data = null
-  try {
-    data = text ? JSON.parse(text) : null
-  } catch {
-    data = text
-  }
 
   if (!res.ok) {
     const message = (data && data.message) || (typeof data === 'string' ? data : res.statusText) || `Request failed with status ${res.status}`
@@ -58,8 +54,7 @@ export async function updateModel(id, payload) {
 
 export async function deleteModel(id) {
   const url = `/bom/api/models/${encodeURIComponent(id)}`
-  const res = await fetch(url, { method: 'DELETE' })
-
+  const res = await apiFetch(url, { method: 'DELETE' })
   const text = await res.text()
   let data = null
   try {
@@ -82,7 +77,7 @@ export async function deleteModel(id) {
 export async function importModelBoms(file) {
   const form = new FormData()
   form.append('file', file)
-  const res = await fetch('/bom/api/models/import-bom', { method: 'POST', body: form })
+  const res = await apiFetch('/bom/api/models/import-bom', { method: 'POST', body: form })
   if (!res.ok) {
     const text = await res.text()
     throw new Error(text || 'Upload failed')
@@ -91,15 +86,8 @@ export async function importModelBoms(file) {
 }
 
 export async function fetchModelBoms() {
-  const res = await fetch('/bom/api/model-boms')
-  const text = await res.text()
-  let data = null
-  try {
-    data = text ? JSON.parse(text) : null
-  } catch {
-    console.warn('fetchModelBoms: server returned non-JSON response', text)
-    return []
-  }
+  const { res, data } = await apiFetchJson('/bom/api/model-boms')
+  if (!res.ok) return []
 
   if (Array.isArray(data)) return data
   if (data && typeof data === 'object') {

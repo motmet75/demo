@@ -17,13 +17,19 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.ams.bomcore.domain.supplier.Supplier;
 import com.ams.bomcore.repository.SupplierRepository;
 import com.ams.bomcore.repository.SupplierIssueRepository;
 import com.ams.bomcore.service.supplier.SupplierService;
+import com.ams.bomcore.repository.TenantRepository;
+import com.ams.bomcore.repository.CompanyRepository;
+import com.ams.bomcore.domain.tenant.Tenant;
+import com.ams.bomcore.domain.company.Company;
 
 @CrossOrigin(origins = "http://localhost:5173")
 @RestController
@@ -33,21 +39,74 @@ public class SupplierController {
     private final SupplierService supplierService;
     private final SupplierRepository supplierRepository;
     private final SupplierIssueRepository supplierIssueRepository;
+    private final TenantRepository tenantRepository;
+    private final CompanyRepository companyRepository;
 
-    public SupplierController(SupplierService supplierService, SupplierRepository supplierRepository, SupplierIssueRepository supplierIssueRepository) {
+    public SupplierController(SupplierService supplierService, SupplierRepository supplierRepository, SupplierIssueRepository supplierIssueRepository, TenantRepository tenantRepository, CompanyRepository companyRepository) {
         this.supplierService = supplierService;
         this.supplierRepository = supplierRepository;
         this.supplierIssueRepository = supplierIssueRepository;
+        this.tenantRepository = tenantRepository;
+        this.companyRepository = companyRepository;
+    }
+
+    private java.util.UUID resolveTenant(java.util.UUID tenantId, String headerTenantId) {
+        if (headerTenantId != null && !headerTenantId.isBlank()) {
+            try { return java.util.UUID.fromString(headerTenantId); } catch (Exception e) { }
+        }
+        return tenantId;
+    }
+
+    private java.util.UUID resolveCompany(java.util.UUID companyId, String headerCompanyId) {
+        if (headerCompanyId != null && !headerCompanyId.isBlank()) {
+            try { return java.util.UUID.fromString(headerCompanyId); } catch (Exception e) { }
+        }
+        return companyId;
     }
 
     @GetMapping
-    public List<Supplier> list() {
-        return supplierService.findAll();
+    public List<Supplier> list(@RequestParam(value = "tenantId", required = false) UUID tenantId,
+                               @RequestParam(value = "companyId", required = false) UUID companyId,
+                               @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId,
+                               @RequestHeader(value = "X-Company-Id", required = false) String headerCompanyId) {
+        tenantId = resolveTenant(tenantId, headerTenantId);
+        companyId = resolveCompany(companyId, headerCompanyId);
+
+        if (tenantId == null || companyId == null) {
+            throw new IllegalArgumentException("tenantId and companyId are required");
+        }
+
+        Tenant tenant = tenantRepository.findById(tenantId).orElseThrow(() -> new IllegalArgumentException("tenant not found"));
+        Company company = companyRepository.findById(companyId).orElseThrow(() -> new IllegalArgumentException("company not found"));
+        if (company.getTenant() == null || !company.getTenant().getId().equals(tenant.getId())) {
+            throw new IllegalArgumentException("company does not belong to tenant");
+        }
+
+        return supplierRepository.findAllByTenantIdAndCompanyId(tenant.getId(), company.getId());
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<?> create(@Valid @RequestBody Supplier supplier) {
+    public ResponseEntity<?> create(@Valid @RequestBody Supplier supplier,
+                                    @RequestParam(value = "tenantId", required = false) UUID tenantId,
+                                    @RequestParam(value = "companyId", required = false) UUID companyId,
+                                    @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId,
+                                    @RequestHeader(value = "X-Company-Id", required = false) String headerCompanyId) {
         try {
+            tenantId = resolveTenant(tenantId, headerTenantId);
+            companyId = resolveCompany(companyId, headerCompanyId);
+
+            if (tenantId == null || companyId == null) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Collections.singletonMap("message", "tenantId and companyId are required"));
+
+            Tenant tenant = tenantRepository.findById(tenantId).orElseThrow(() -> new IllegalArgumentException("tenant not found"));
+            Company company = companyRepository.findById(companyId).orElseThrow(() -> new IllegalArgumentException("company not found"));
+            if (company.getTenant() == null || !company.getTenant().getId().equals(tenant.getId())) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Collections.singletonMap("message", "company does not belong to tenant"));
+            }
+
+            // set tenant/company on supplier (now stored as UUIDs)
+            supplier.setTenantId(tenant.getId());
+            supplier.setCompanyId(company.getId());
+
             Supplier saved = supplierService.create(supplier);
             return ResponseEntity.status(HttpStatus.CREATED).body(saved);
         } catch (IllegalArgumentException ex) {
@@ -62,11 +121,27 @@ public class SupplierController {
     }
 
     @PutMapping(path = "/{id}", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<?> update(@PathVariable("id") UUID id, @Valid @RequestBody Supplier supplier) {
+    public ResponseEntity<?> update(@PathVariable("id") UUID id, @Valid @RequestBody Supplier supplier,
+                                    @RequestParam(value = "tenantId", required = false) UUID tenantId,
+                                    @RequestParam(value = "companyId", required = false) UUID companyId,
+                                    @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId,
+                                    @RequestHeader(value = "X-Company-Id", required = false) String headerCompanyId) {
         try {
             if (!supplierRepository.existsById(id)) {
                 return ResponseEntity.notFound().build();
             }
+            tenantId = resolveTenant(tenantId, headerTenantId);
+            companyId = resolveCompany(companyId, headerCompanyId);
+            if (tenantId == null || companyId == null) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Collections.singletonMap("message", "tenantId and companyId are required"));
+
+            Tenant tenant = tenantRepository.findById(tenantId).orElseThrow(() -> new IllegalArgumentException("tenant not found"));
+            Company company = companyRepository.findById(companyId).orElseThrow(() -> new IllegalArgumentException("company not found"));
+            if (company.getTenant() == null || !company.getTenant().getId().equals(tenant.getId())) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Collections.singletonMap("message", "company does not belong to tenant"));
+            }
+
+            supplier.setTenantId(tenant.getId());
+            supplier.setCompanyId(company.getId());
             Supplier saved = supplierService.update(id, supplier);
             return ResponseEntity.ok(saved);
         } catch (IllegalArgumentException ex) {

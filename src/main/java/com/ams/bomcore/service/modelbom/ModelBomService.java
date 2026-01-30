@@ -78,7 +78,7 @@ public class ModelBomService {
      * - Detect existing duplicate ModelBom records in DB and fail to avoid silent merges
      */
     @Transactional(rollbackFor = Exception.class)
-    public ImportResult importFromParsedRows(List<ModelBomCsvRow> rows) {
+    public ImportResult importFromParsedRows(List<ModelBomCsvRow> rows, String tenantId) {
         ImportResult result = new ImportResult();
         if (rows == null || rows.isEmpty()) return result;
 
@@ -115,7 +115,8 @@ public class ModelBomService {
         Set<String> modelCodes = byModel.keySet();
         Map<String, Model> existingModels = new HashMap<>();
         for (String mc : modelCodes) {
-            modelRepository.findByModelCode(mc).ifPresent(m -> existingModels.put(mc, m));
+            // tenant-aware model lookup
+            modelRepository.findByModelCodeAndTenantId(mc, tenantId).ifPresent(m -> existingModels.put(mc, m));
         }
 
         for (Map.Entry<String, List<ModelBomCsvRow>> e : byModel.entrySet()) {
@@ -139,8 +140,8 @@ public class ModelBomService {
             String modelCode = e.getKey();
             List<ModelBomCsvRow> modelRows = e.getValue();
 
-            // find existing model
-            Model model = modelRepository.findByModelCode(modelCode).orElse(null);
+            // find existing model (tenant-scoped)
+            Model model = modelRepository.findByModelCodeAndTenantId(modelCode, tenantId).orElse(null);
             boolean createdModel = false;
             if (model == null) {
                 // create new model
@@ -149,12 +150,14 @@ public class ModelBomService {
                     ModelBomCsvRow first = modelRows.get(0);
                     newModel.setModelCode(first.getModelCode());
                     newModel.setModelName(first.getModelName());
+                    newModel.setTenantId(tenantId);
                     // Do NOT preserve client-provided modelId here - backend must generate UUIDs via JPA @PrePersist
                 } else {
                     newModel.setModelCode(modelCode);
                     newModel.setModelName(modelCode);
+                    newModel.setTenantId(tenantId);
                 }
-                model = modelService.create(newModel);
+                model = modelService.createForTenant(newModel, tenantId);
                 createdModel = true;
                 result.setModelsCreated(result.getModelsCreated() + 1);
             }
@@ -176,6 +179,8 @@ public class ModelBomService {
                     BigDecimal oldNormalized = oldQty == null ? null : oldQty.setScale(4, RoundingMode.HALF_UP);
                     if (oldNormalized == null || (normalizedQty != null && oldNormalized.compareTo(normalizedQty) != 0)) {
                         existing.setQtyPerUnit(normalizedQty);
+                        // ensure tenantId on existing record
+                        existing.setTenantId(tenantId);
                         modelBomRepository.save(existing);
                         result.setModelBomsUpdated(result.getModelBomsUpdated() + 1);
                     }
@@ -184,6 +189,7 @@ public class ModelBomService {
                     mb.setModel(model);
                     mb.setMaterial(material);
                     mb.setQtyPerUnit(normalizedQty);
+                    mb.setTenantId(tenantId);
                     modelBomRepository.save(mb);
                     result.setModelBomsCreated(result.getModelBomsCreated() + 1);
                 }

@@ -15,6 +15,9 @@ public class BomCheckRequest {
     @DecimalMin(value = "0.0001")
     private BigDecimal quantity;
 
+    // optional tenant id; if omitted, service should resolve tenant from context
+    private String tenantId;
+
     public String getModelCode() {
         return modelCode;
     }
@@ -29,5 +32,13 @@ public class BomCheckRequest {
 
     public void setQuantity(BigDecimal quantity) {
         this.quantity = quantity;
+    }
+
+    public String getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(String tenantId) {
+        this.tenantId = tenantId;
     }
 }

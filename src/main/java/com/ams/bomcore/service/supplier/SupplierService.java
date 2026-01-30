@@ -30,7 +30,18 @@ public class SupplierService {
             throw new IllegalArgumentException("supplier code is required");
         }
 
-        if (supplierRepository.existsBySupplierCode(code)) {
+        // enforce uniqueness per tenant/company if provided on the entity
+        UUID tenantId = supplier.getTenantId();
+        UUID companyId = supplier.getCompanyId();
+        boolean exists;
+        if (tenantId != null && companyId != null) {
+            exists = supplierRepository.existsBySupplierCodeAndTenantIdAndCompanyId(code, tenantId, companyId);
+        } else if (tenantId != null) {
+            exists = supplierRepository.existsBySupplierCodeAndTenantId(code, tenantId);
+        } else {
+            exists = supplierRepository.existsBySupplierCode(code);
+        }
+        if (exists) {
             throw new IllegalArgumentException("supplier code already exists: " + code);
         }
 
@@ -55,7 +66,17 @@ public class SupplierService {
             throw new IllegalArgumentException("supplier code is required");
         }
 
-        Optional<Supplier> byCode = supplierRepository.findBySupplierCode(code);
+        // uniqueness per tenant/company when provided
+        UUID tenantId = supplier.getTenantId();
+        UUID companyId = supplier.getCompanyId();
+        Optional<Supplier> byCode;
+        if (tenantId != null && companyId != null) {
+            byCode = supplierRepository.findBySupplierCodeAndTenantIdAndCompanyId(code, tenantId, companyId);
+        } else if (tenantId != null) {
+            byCode = supplierRepository.findBySupplierCodeAndTenantId(code, tenantId);
+        } else {
+            byCode = supplierRepository.findBySupplierCode(code);
+        }
         if (byCode.isPresent() && !byCode.get().getId().equals(id)) {
             throw new IllegalArgumentException("supplier code already exists: " + code);
         }

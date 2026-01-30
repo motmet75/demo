@@ -33,6 +33,10 @@ public class BomCalculationEntity {
     @JoinColumn(name = "bom_id", nullable = false)
     private BomEntity bom;
 
+    // tenant for calculation - copied from BOM for isolation and easier queries
+    @Column(name = "tenant_id", nullable = false, length = 100)
+    private String tenantId;
+
     @Column(name = "model_name", nullable = false, length = 100)
     private String modelName;
 
@@ -66,6 +70,14 @@ public class BomCalculationEntity {
 
     public void setBom(BomEntity bom) {
         this.bom = bom;
+    }
+
+    public String getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(String tenantId) {
+        this.tenantId = tenantId;
     }
 
     public String getModelName() {
@@ -136,6 +148,7 @@ public class BomCalculationEntity {
         return "BomCalculationEntity{" +
                 "id=" + id +
                 ", bom=" + (bom != null ? bom.getId() : null) +
+                ", tenantId='" + tenantId + '\'' +
                 ", modelName='" + modelName + '\'' +
                 ", targetQty=" + targetQty +
                 ", status='" + status + '\'' +

@@ -8,6 +8,7 @@ import Button from '@mui/material/Button'
 import Box from '@mui/material/Box'
 import PropTypes from 'prop-types'
 import Autocomplete from '@mui/material/Autocomplete'
+import { useAppContext } from '../../context/AppContext'
 
 /**
  * MaterialEditModal
@@ -33,6 +34,8 @@ export default function MaterialEditModal({ open, material, onClose, onSave, sav
   const [form, setForm] = useState(() => makeInitialForm(material))
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  // Get tenant and company context
+  const { tenantId, companyId } = useAppContext()
 
   // Note: removed useEffect that called setForm synchronously to satisfy react-hooks/set-state-in-effect.
   // We rely on remounting (see Dialog `key`) to reset local state when opening with a different material.
@@ -57,6 +60,9 @@ export default function MaterialEditModal({ open, material, onClose, onSave, sav
       unit: form.unit,
       price: form.price === '' ? null : Number(form.price),
       description: form.description
+      // attach tenant & company from context when available
+      , ...(tenantId ? { tenantId } : {}),
+      ...(companyId ? { companyId } : {})
     }
 
     try {

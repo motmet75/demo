@@ -11,6 +11,8 @@ import java.util.UUID;
 public class InventoryViewDTO {
 
     private UUID inventoryId;
+    private UUID tenantId;
+    private UUID companyId;
     private UUID materialId;
     private String materialCode;
     private String materialName;
@@ -24,11 +26,21 @@ public class InventoryViewDTO {
     private Instant productionDateTime;
     private Instant createdAt;
 
-    public InventoryViewDTO(UUID inventoryId, UUID materialId, String materialCode, String materialName,
+    public InventoryViewDTO(UUID inventoryId, String tenantIdStr, String companyIdStr, UUID materialId, String materialCode, String materialName,
                             UUID warehouseId, String warehouseCode, String warehouseName,
                             BigDecimal quantityOnHand, BigDecimal quantityReserved, String batchNo,
                             Instant expirationDateTime, Instant productionDateTime, Instant createdAt) {
         this.inventoryId = inventoryId;
+        try {
+            this.tenantId = tenantIdStr == null ? null : UUID.fromString(tenantIdStr);
+        } catch (Exception e) {
+            this.tenantId = null;
+        }
+        try {
+            this.companyId = companyIdStr == null ? null : UUID.fromString(companyIdStr);
+        } catch (Exception e) {
+            this.companyId = null;
+        }
         this.materialId = materialId;
         this.materialCode = materialCode;
         this.materialName = materialName;
@@ -45,6 +57,8 @@ public class InventoryViewDTO {
 
     // Getters
     public UUID getInventoryId() { return inventoryId; }
+    public UUID getTenantId() { return tenantId; }
+    public UUID getCompanyId() { return companyId; }
     public UUID getMaterialId() { return materialId; }
     public String getMaterialCode() { return materialCode; }
     public String getMaterialName() { return materialName; }

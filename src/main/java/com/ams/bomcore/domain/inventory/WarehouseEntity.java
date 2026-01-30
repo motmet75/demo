@@ -22,6 +22,9 @@ public class WarehouseEntity {
     @Column(name = "id", nullable = false)
     private UUID id;
 
+    @Column(name = "tenant_id", nullable = false, length = 100)
+    private String tenantId;
+
     @Column(name = "code", nullable = false, unique = true, length = 50)
     private String code;
 
@@ -62,6 +65,14 @@ public class WarehouseEntity {
 
     public void setId(UUID id) {
         this.id = id;
+    }
+
+    public String getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(String tenantId) {
+        this.tenantId = tenantId;
     }
 
     public String getCode() {
@@ -184,6 +195,7 @@ public class WarehouseEntity {
     public String toString() {
         return "WarehouseEntity{" +
                 "id=" + id +
+                ", tenantId='" + tenantId + '\'' +
                 ", code='" + code + "'" +
                 ", name='" + name + "'" +
                 ", location='" + location + "'" +

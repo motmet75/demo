@@ -4,8 +4,11 @@ import EditIcon from '@mui/icons-material/Edit'
 import DeleteIcon from '@mui/icons-material/Delete'
 import { fetchSuppliers, createSupplier, updateSupplier, deleteSupplier } from '../../api/supplierApi'
 import SupplierEditModal from './SupplierEditModal'
+import { useAppContext } from '../../context/AppContext'
 
 export default function SupplierGrid() {
+  const { tenantId, companyId } = useAppContext()
+
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
@@ -39,7 +42,7 @@ export default function SupplierGrid() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await fetchSuppliers()
+      const data = await fetchSuppliers({ tenantId, companyId })
       if (Array.isArray(data)) {
         setRows(data.map(r => ({
           id: r.id != null ? String(r.id) : '',
@@ -60,7 +63,7 @@ export default function SupplierGrid() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [tenantId, companyId])
 
   useEffect(() => { load() }, [load])
 
@@ -71,13 +74,22 @@ export default function SupplierGrid() {
 
   const handleSave = async (payload) => {
     if (saving) return
+
+    // require tenant and company context
+    if (!tenantId || !companyId) {
+      const msg = 'Please select Tenant and Company before saving a supplier.'
+      console.warn(msg)
+      alert(msg)
+      throw new Error(msg)
+    }
+
     setSaving(true)
     try {
       let res
       if (payload.id) {
-        res = await updateSupplier(payload.id, payload)
+        res = await updateSupplier(payload.id, payload, { tenantId, companyId })
       } else {
-        res = await createSupplier(payload)
+        res = await createSupplier(payload, { tenantId, companyId })
       }
 
       const generatedId = (res && res.id) ? String(res.id) : (payload.id ? String(payload.id) : makeTempId())
@@ -114,7 +126,7 @@ export default function SupplierGrid() {
     if (!window.confirm('Delete this supplier?')) return
     setDeletingId(id)
     try {
-      await deleteSupplier(id)
+      await deleteSupplier(id, { tenantId, companyId })
       setRows(prev => prev.filter(r => r.id !== id))
       alert('Supplier deleted')
     } catch (err) {

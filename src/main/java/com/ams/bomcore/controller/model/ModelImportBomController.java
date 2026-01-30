@@ -8,6 +8,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -18,6 +19,8 @@ import com.ams.bomcore.controller.modelbom.ModelBomCsvParser.ParseResult;
 import com.ams.bomcore.controller.modelbom.dto.ModelBomCsvRow;
 import com.ams.bomcore.service.modelbom.ModelBomService;
 import com.ams.bomcore.service.modelbom.ModelBomService.ImportResult;
+import com.ams.bomcore.repository.TenantRepository;
+import com.ams.bomcore.domain.tenant.Tenant;
 
 @CrossOrigin(origins = "http://localhost:5173")
 @RestController
@@ -25,9 +28,18 @@ import com.ams.bomcore.service.modelbom.ModelBomService.ImportResult;
 public class ModelImportBomController {
 
     private final ModelBomService modelBomService;
+    private final TenantRepository tenantRepository;
 
-    public ModelImportBomController(ModelBomService modelBomService) {
+    public ModelImportBomController(ModelBomService modelBomService, TenantRepository tenantRepository) {
         this.modelBomService = modelBomService;
+        this.tenantRepository = tenantRepository;
+    }
+
+    private java.util.UUID resolveTenant(java.util.UUID tenantId, String headerTenantId) {
+        if (headerTenantId != null && !headerTenantId.isBlank()) {
+            try { return java.util.UUID.fromString(headerTenantId); } catch (Exception e) { }
+        }
+        return tenantId;
     }
 
     /**
@@ -36,7 +48,16 @@ public class ModelImportBomController {
      * Accepts multipart/form-data with `file` field.
      */
     @PostMapping(path = "/import-bom", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<ImportResponse> importBom(@RequestParam("file") MultipartFile file) {
+    public ResponseEntity<ImportResponse> importBom(@RequestParam("file") MultipartFile file,
+                                                    @RequestParam(value = "tenantId", required = false) java.util.UUID tenantId,
+                                                    @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId) {
+        tenantId = resolveTenant(tenantId, headerTenantId);
+        if (tenantId == null) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ImportResponse.error("tenantId is required"));
+        }
+
+        Tenant tenant = tenantRepository.findById(tenantId).orElseThrow(() -> new IllegalArgumentException("tenant not found"));
+
         String filename = file.getOriginalFilename() != null ? file.getOriginalFilename() : "";
         if (!filename.toLowerCase().endsWith(".csv")) {
             return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE).body(ImportResponse.error("Only CSV files are supported currently"));
@@ -56,7 +77,7 @@ public class ModelImportBomController {
         List<ModelBomCsvRow> rows = parse.getRows();
 
         try {
-            ImportResult svcResult = modelBomService.importFromParsedRows(rows);
+            ImportResult svcResult = modelBomService.importFromParsedRows(rows, tenant.getId().toString());
             if (svcResult.hasErrors()) {
                 // service-level validation failed (e.g., missing materials) -> report as bad request
                 ImportResponse resp = new ImportResponse();

@@ -1,3 +1,5 @@
+import { apiFetch, apiFetchJson } from './client'
+
 export function normalizeWarehouse(obj) {
   if (!obj || typeof obj !== 'object') return obj
 
@@ -66,15 +68,8 @@ export function sanitizePayload(payload) {
 }
 
 export async function fetchWarehouses() {
-  const res = await fetch('/bom/api/warehouses')
-  const text = await res.text()
-  let data = null
-  try {
-    data = text ? JSON.parse(text) : null
-  } catch {
-    console.warn('fetchWarehouses: server returned non-JSON response', text)
-    return []
-  }
+  const { res, data } = await apiFetchJson('/bom/api/warehouses')
+  if (!res.ok) return []
 
   if (Array.isArray(data)) return data.map(normalizeWarehouse)
   if (data && typeof data === 'object') {
@@ -82,9 +77,6 @@ export async function fetchWarehouses() {
     if (Array.isArray(data.items)) return data.items.map(normalizeWarehouse)
     if (Array.isArray(data.content)) return data.content.map(normalizeWarehouse)
 
-    // If the server returned a single object (not array), wrap it into an array
-    // or return a single normalized object depending on prior behavior. The frontend
-    // expects an array here, so return a single-element array for consistency.
     return [normalizeWarehouse(data)]
   }
   return []
@@ -92,10 +84,7 @@ export async function fetchWarehouses() {
 
 export async function createWarehouse(payload) {
   const body = sanitizePayload(payload)
-  const res = await fetch('/bom/api/warehouses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-  const text = await res.text()
-  let data = null
-  try { data = text ? JSON.parse(text) : null } catch { data = text }
+  const { res, data } = await apiFetchJson('/bom/api/warehouses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
   if (!res.ok) {
     const message = (data && data.message) || (typeof data === 'string' ? data : res.statusText) || `Request failed with status ${res.status}`
     const error = new Error(message)
@@ -109,10 +98,7 @@ export async function createWarehouse(payload) {
 export async function updateWarehouse(id, payload) {
   const body = sanitizePayload(payload)
   const url = `/bom/api/warehouses/${encodeURIComponent(id)}`
-  const res = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-  const text = await res.text()
-  let data = null
-  try { data = text ? JSON.parse(text) : null } catch { data = text }
+  const { res, data } = await apiFetchJson(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
   if (!res.ok) {
     const message = (data && data.message) || (typeof data === 'string' ? data : res.statusText) || `Request failed with status ${res.status}`
     const error = new Error(message)
@@ -125,7 +111,7 @@ export async function updateWarehouse(id, payload) {
 
 export async function deleteWarehouse(id) {
   const url = `/bom/api/warehouses/${encodeURIComponent(id)}`
-  const res = await fetch(url, { method: 'DELETE' })
+  const res = await apiFetch(url, { method: 'DELETE' })
   const text = await res.text()
   let data = null
   try { data = text ? JSON.parse(text) : null } catch { data = text }

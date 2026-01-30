@@ -1,5 +1,6 @@
 package com.ams.bomcore.repository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -14,5 +15,12 @@ public interface WarehouseRepository extends JpaRepository<WarehouseEntity, UUID
     Optional<WarehouseEntity> findByCode(String code);
 
     boolean existsByCode(String code);
+
+    // Tenant-scoped queries
+    List<WarehouseEntity> findAllByTenantId(String tenantId);
+
+    Optional<WarehouseEntity> findByCodeAndTenantId(String code, String tenantId);
+
+    boolean existsByCodeAndTenantId(String code, String tenantId);
 
 }

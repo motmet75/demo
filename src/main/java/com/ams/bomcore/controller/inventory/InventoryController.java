@@ -17,7 +17,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.ams.bomcore.controller.inventory.dto.InventoryViewDTO;
@@ -36,25 +38,66 @@ public class InventoryController {
         this.inventoryService = inventoryService;
     }
 
+    private UUID resolveTenant(UUID tenantId, String headerTenantId) {
+        if (headerTenantId != null && !headerTenantId.isBlank()) {
+            try { return UUID.fromString(headerTenantId); } catch (Exception e) { }
+        }
+        return tenantId;
+    }
+
+    private UUID resolveCompany(UUID companyId, String headerCompanyId) {
+        if (headerCompanyId != null && !headerCompanyId.isBlank()) {
+            try { return UUID.fromString(headerCompanyId); } catch (Exception e) { }
+        }
+        return companyId;
+    }
+
     @GetMapping
-    public List<InventoryEntity> list() {
-        return inventoryService.listAll();
+    public List<InventoryEntity> list(@RequestParam(value = "tenantId", required = false) UUID tenantId,
+                                      @RequestParam(value = "companyId", required = false) UUID companyId,
+                                      @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId,
+                                      @RequestHeader(value = "X-Company-Id", required = false) String headerCompanyId) {
+        tenantId = resolveTenant(tenantId, headerTenantId);
+        companyId = resolveCompany(companyId, headerCompanyId);
+
+        if (tenantId == null || companyId == null) {
+            throw new IllegalArgumentException("tenantId and companyId are required");
+        }
+
+        return inventoryService.listAllByTenantAndCompany(tenantId.toString(), companyId.toString());
     }
 
     // New view endpoint for grid display — returns DTO projection to avoid N+1 and lazy issues
     @GetMapping(path = "/view", produces = MediaType.APPLICATION_JSON_VALUE)
-    public List<InventoryViewDTO> listView() {
-        return inventoryService.listInventoryView();
+    public List<InventoryViewDTO> listView(@RequestParam(value = "tenantId", required = false) UUID tenantId,
+                                           @RequestParam(value = "companyId", required = false) UUID companyId,
+                                           @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId,
+                                           @RequestHeader(value = "X-Company-Id", required = false) String headerCompanyId) {
+        tenantId = resolveTenant(tenantId, headerTenantId);
+        companyId = resolveCompany(companyId, headerCompanyId);
+
+        if (tenantId == null || companyId == null) {
+            throw new IllegalArgumentException("tenantId and companyId are required");
+        }
+
+        return inventoryService.listInventoryViewByTenantAndCompany(tenantId.toString(), companyId.toString());
     }
 
     /**
      * Add stock by materialCode + warehouseCode OR by materialId + warehouseId
-     * Body: { "materialCode": "M-001", "warehouseCode": "WH-1", "quantity": 10, "batchNo": "B1", "expirationDateTime": "2026-12-31T00:00:00Z" }
-     * Or:   { "materialId": "<uuid>", "warehouseId": "<uuid>", "quantity": 10, "batchNo": "B1" }
      */
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<?> addStock(@Valid @RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> addStock(@Valid @RequestBody Map<String, Object> body,
+                                      @RequestParam(value = "tenantId", required = false) UUID tenantId,
+                                      @RequestParam(value = "companyId", required = false) UUID companyId,
+                                      @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId,
+                                      @RequestHeader(value = "X-Company-Id", required = false) String headerCompanyId) {
         try {
+            tenantId = resolveTenant(tenantId, headerTenantId);
+            companyId = resolveCompany(companyId, headerCompanyId);
+
+            if (tenantId == null || companyId == null) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+
             BigDecimal qty = new BigDecimal(String.valueOf(body.get("quantity")));
 
             String batchNo = body.get("batchNo") == null ? null : String.valueOf(body.get("batchNo"));
@@ -69,17 +112,17 @@ public class InventoryController {
             // prefer ids when provided
             Object mid = body.get("materialId");
             Object wid = body.get("warehouseId");
+            InventoryEntity saved;
             if (mid != null && wid != null) {
                 UUID materialId = UUID.fromString(String.valueOf(mid));
                 UUID warehouseId = UUID.fromString(String.valueOf(wid));
-                InventoryEntity saved = inventoryService.addStockByIds(materialId, warehouseId, qty, batchNo, expirationDateTime, productionDateTime, quantityReserved);
-                return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+                saved = inventoryService.addStockByIds(materialId, warehouseId, qty, batchNo, expirationDateTime, productionDateTime, quantityReserved, tenantId.toString(), companyId.toString());
+            } else {
+                // fallback to codes for backward compatibility
+                String materialCode = (String) body.get("materialCode");
+                String warehouseCode = (String) body.get("warehouseCode");
+                saved = inventoryService.addStock(materialCode, warehouseCode, qty, batchNo, expirationDateTime, productionDateTime, quantityReserved, tenantId.toString(), companyId.toString());
             }
-
-            // fallback to codes for backward compatibility
-            String materialCode = (String) body.get("materialCode");
-            String warehouseCode = (String) body.get("warehouseCode");
-            InventoryEntity saved = inventoryService.addStock(materialCode, warehouseCode, qty, batchNo, expirationDateTime, productionDateTime, quantityReserved);
             return ResponseEntity.status(HttpStatus.CREATED).body(saved);
         } catch (InventoryException ex) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
@@ -90,11 +133,18 @@ public class InventoryController {
 
     /**
      * Update stock by inventory id
-     * Body: { "quantity": 12, "batchNo": "B1", "expirationDateTime": "2026-12-31T00:00:00Z" }
      */
     @PutMapping(path = "/{id}", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<?> updateStock(@PathVariable("id") String id, @Valid @RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> updateStock(@PathVariable("id") String id, @Valid @RequestBody Map<String, Object> body,
+                                         @RequestParam(value = "tenantId", required = false) UUID tenantId,
+                                         @RequestParam(value = "companyId", required = false) UUID companyId,
+                                         @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId,
+                                         @RequestHeader(value = "X-Company-Id", required = false) String headerCompanyId) {
         try {
+            tenantId = resolveTenant(tenantId, headerTenantId);
+            companyId = resolveCompany(companyId, headerCompanyId);
+            if (tenantId == null || companyId == null) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+
             BigDecimal qty = new BigDecimal(String.valueOf(body.get("quantity")));
             String batchNo = body.get("batchNo") == null ? null : String.valueOf(body.get("batchNo"));
             String exp = body.get("expirationDateTime") == null ? null : String.valueOf(body.get("expirationDateTime"));
@@ -105,7 +155,7 @@ public class InventoryController {
             Instant productionDateTime = prod == null || prod.trim().isEmpty() ? null : Instant.parse(prod);
             BigDecimal quantityReserved = qres == null || qres.trim().isEmpty() ? null : new BigDecimal(qres);
 
-            InventoryEntity updated = inventoryService.updateStock(id, qty, batchNo, expirationDateTime, productionDateTime, quantityReserved);
+            InventoryEntity updated = inventoryService.updateStock(id, qty, batchNo, expirationDateTime, productionDateTime, quantityReserved, tenantId.toString(), companyId.toString());
             return ResponseEntity.ok(updated);
         } catch (InventoryException ex) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
@@ -116,13 +166,20 @@ public class InventoryController {
 
     /**
      * Reserve quantity on an inventory record
-     * Body: { "quantity": 5 }
      */
     @PostMapping(path = "/{id}/reserve", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<?> reserve(@PathVariable("id") String id, @Valid @RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> reserve(@PathVariable("id") String id, @Valid @RequestBody Map<String, Object> body,
+                                     @RequestParam(value = "tenantId", required = false) UUID tenantId,
+                                     @RequestParam(value = "companyId", required = false) UUID companyId,
+                                     @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId,
+                                     @RequestHeader(value = "X-Company-Id", required = false) String headerCompanyId) {
         try {
+            tenantId = resolveTenant(tenantId, headerTenantId);
+            companyId = resolveCompany(companyId, headerCompanyId);
+            if (tenantId == null || companyId == null) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+
             BigDecimal qty = new BigDecimal(String.valueOf(body.get("quantity")));
-            InventoryEntity updated = inventoryService.reserveById(id, qty);
+            InventoryEntity updated = inventoryService.reserveById(id, qty, tenantId.toString(), companyId.toString());
             return ResponseEntity.ok(updated);
         } catch (InventoryException ex) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
@@ -133,13 +190,20 @@ public class InventoryController {
 
     /**
      * Release quantity on an inventory record
-     * Body: { "quantity": 5 }
      */
     @PostMapping(path = "/{id}/release", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<?> release(@PathVariable("id") String id, @Valid @RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> release(@PathVariable("id") String id, @Valid @RequestBody Map<String, Object> body,
+                                     @RequestParam(value = "tenantId", required = false) UUID tenantId,
+                                     @RequestParam(value = "companyId", required = false) UUID companyId,
+                                     @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId,
+                                     @RequestHeader(value = "X-Company-Id", required = false) String headerCompanyId) {
         try {
+            tenantId = resolveTenant(tenantId, headerTenantId);
+            companyId = resolveCompany(companyId, headerCompanyId);
+            if (tenantId == null || companyId == null) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+
             BigDecimal qty = new BigDecimal(String.valueOf(body.get("quantity")));
-            InventoryEntity updated = inventoryService.releaseById(id, qty);
+            InventoryEntity updated = inventoryService.releaseById(id, qty, tenantId.toString(), companyId.toString());
             return ResponseEntity.ok(updated);
         } catch (InventoryException ex) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());

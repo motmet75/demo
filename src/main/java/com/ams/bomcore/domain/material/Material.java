@@ -8,8 +8,13 @@ import java.math.BigDecimal;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+
+import com.ams.bomcore.domain.company.Company;
+import com.ams.bomcore.domain.tenant.Tenant;
 
 /**
  * JPA entity mapping for table `material` in bom_core_schema.sql
@@ -22,7 +27,15 @@ public class Material {
     @Column(name = "id", nullable = false)
     private UUID id;
 
-    @Column(name = "material_code", nullable = false, unique = true, length = 50)
+    @ManyToOne
+    @JoinColumn(name = "tenant_id", nullable = false)
+    private Tenant tenant;
+
+    @ManyToOne
+    @JoinColumn(name = "company_id", nullable = false)
+    private Company company;
+
+    @Column(name = "material_code", nullable = false, length = 50)
     private String materialCode;
 
     @Column(name = "material_name", nullable = false, columnDefinition = "TEXT")
@@ -57,6 +70,17 @@ public class Material {
 
     public void setId(UUID id) {
         this.id = id;
+    }
+
+    public Tenant getTenant() { return tenant; }
+    public void setTenant(Tenant tenant) { this.tenant = tenant; }
+
+    public Company getCompany() {
+        return company;
+    }
+
+    public void setCompany(Company company) {
+        this.company = company;
     }
 
     public String getMaterialCode() {
@@ -153,6 +177,8 @@ public class Material {
     public String toString() {
         return "Material{" +
                 "id=" + id +
+                ", tenant=" + (tenant != null ? tenant.getId() : null) +
+                ", company=" + (company != null ? company.getId() : null) +
                 ", materialCode='" + materialCode + '\'' +
                 ", materialName='" + materialName + '\'' +
                 ", unit='" + unit + '\'' +

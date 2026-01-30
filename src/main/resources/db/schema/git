@@ -1,0 +1,2 @@
+--reset --hard HEAD latest
+git pull --rebase -X ours origin

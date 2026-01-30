@@ -30,7 +30,7 @@ public class BomCheckController {
 
     @PostMapping(path = "/check", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<List<BomCalculationService.BomCheckResult>> checkAvailability(@Valid @RequestBody BomCheckRequest req) {
-        List<BomCalculationService.BomCheckResult> result = bomCalculationService.checkAvailability(req.getModelCode(), req.getQuantity());
+        List<BomCalculationService.BomCheckResult> result = bomCalculationService.checkAvailability(req.getModelCode(), req.getQuantity(), req.getTenantId());
         return ResponseEntity.ok(result);
     }
 }

@@ -30,6 +30,9 @@ public class MaterialForecastEntity {
     @Column(name = "id", nullable = false)
     private UUID id;
 
+    @Column(name = "tenant_id", nullable = false, length = 100)
+    private String tenantId;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "material_id", nullable = false)
     private Material material;
@@ -56,6 +59,14 @@ public class MaterialForecastEntity {
 
     public void setId(UUID id) {
         this.id = id;
+    }
+
+    public String getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(String tenantId) {
+        this.tenantId = tenantId;
     }
 
     public Material getMaterial() {
@@ -122,6 +133,7 @@ public class MaterialForecastEntity {
     public String toString() {
         return "MaterialForecastEntity{" +
                 "id=" + id +
+                ", tenantId='" + tenantId + '\'' +
                 ", material=" + (material != null ? material.getId() : null) +
                 ", warehouse=" + (warehouse != null ? warehouse.getId() : null) +
                 ", forecastDate=" + forecastDate +

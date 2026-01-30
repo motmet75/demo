@@ -32,17 +32,22 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import com.ams.bomcore.domain.material.Material;
+import com.ams.bomcore.domain.company.Company;
+import com.ams.bomcore.domain.tenant.Tenant;
 import com.ams.bomcore.repository.MaterialRepository;
+import com.ams.bomcore.repository.CompanyRepository;
+import com.ams.bomcore.repository.TenantRepository;
 import com.ams.bomcore.service.material.MaterialService;
 
 /*
  * Controller for Material CRUD and import endpoint.
- * - GET /api/materials
+ * - GET /api/materials?tenantId=&companyId=
  * - POST /api/materials
  * - PUT /api/materials/{id}
  * - DELETE /api/materials/{id}
@@ -55,34 +60,110 @@ public class MaterialController {
 
     private final MaterialService materialService;
     private final MaterialRepository materialRepository;
+    private final CompanyRepository companyRepository;
+    private final TenantRepository tenantRepository;
     private final ObjectMapper objectMapper;
 
-    public MaterialController(MaterialService materialService, MaterialRepository materialRepository, Optional<ObjectMapper> objectMapperOptional) {
+    public MaterialController(MaterialService materialService, MaterialRepository materialRepository, CompanyRepository companyRepository, TenantRepository tenantRepository, Optional<ObjectMapper> objectMapperOptional) {
         this.materialService = materialService;
         this.materialRepository = materialRepository;
+        this.companyRepository = companyRepository;
+        this.tenantRepository = tenantRepository;
         // If Spring provides an ObjectMapper bean, use it; otherwise fall back to a plain one.
         this.objectMapper = (objectMapperOptional != null && objectMapperOptional.isPresent()) ? objectMapperOptional.get() : new ObjectMapper();
     }
 
+    private UUID resolveTenant(UUID tenantId, String headerTenantId) {
+        if (headerTenantId != null && !headerTenantId.isBlank()) {
+            try { return UUID.fromString(headerTenantId); } catch (Exception e) { }
+        }
+        return tenantId;
+    }
+
+    private UUID resolveCompany(UUID companyId, String headerCompanyId) {
+        if (headerCompanyId != null && !headerCompanyId.isBlank()) {
+            try { return UUID.fromString(headerCompanyId); } catch (Exception e) { }
+        }
+        return companyId;
+    }
+
     @GetMapping
-    public List<Material> list() {
-        return materialService.findAll();
+    public List<Material> list(@RequestParam(value = "tenantId", required = false) UUID tenantId,
+                               @RequestParam(value = "companyId", required = false) UUID companyId,
+                               @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId,
+                               @RequestHeader(value = "X-Company-Id", required = false) String headerCompanyId) {
+        // prefer headers
+        tenantId = resolveTenant(tenantId, headerTenantId);
+        companyId = resolveCompany(companyId, headerCompanyId);
+
+        if (tenantId == null || companyId == null) {
+            throw new IllegalArgumentException("tenantId and companyId are required");
+        }
+
+        Tenant tenant = tenantRepository.findById(tenantId).orElseThrow(() -> new IllegalArgumentException("tenant not found"));
+        Company company = companyRepository.findById(companyId).orElseThrow(() -> new IllegalArgumentException("company not found"));
+
+        // confirm company belongs to tenant
+        if (company.getTenant() == null || !company.getTenant().getId().equals(tenant.getId())) {
+            throw new IllegalArgumentException("company does not belong to tenant");
+        }
+
+        return materialService.findAllByCompany(company);
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<Material> create(@Valid @RequestBody Material material) {
-        Material saved = materialService.create(material);
+    public ResponseEntity<?> create(@Valid @RequestBody Material material,
+                                    @RequestParam(value = "tenantId", required = false) UUID tenantId,
+                                    @RequestParam(value = "companyId", required = false) UUID companyId,
+                                    @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId,
+                                    @RequestHeader(value = "X-Company-Id", required = false) String headerCompanyId) {
+        tenantId = resolveTenant(tenantId, headerTenantId);
+        companyId = resolveCompany(companyId, headerCompanyId);
+
+        if (tenantId == null || companyId == null) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+
+        Tenant tenant = tenantRepository.findById(tenantId).orElseThrow(() -> new IllegalArgumentException("tenant not found"));
+        Company company = companyRepository.findById(companyId).orElseThrow(() -> new IllegalArgumentException("company not found"));
+
+        if (company.getTenant() == null || !company.getTenant().getId().equals(tenant.getId())) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("company does not belong to tenant");
+        }
+
+        // uniqueness per company
+        var existing = materialRepository.findByMaterialCodeAndCompany(material.getMaterialCode(), company);
+        if (existing.isPresent()) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("material code already exists for this company");
+
+        Material saved = materialService.createForCompany(material, company, tenant);
         return ResponseEntity.status(HttpStatus.CREATED).body(saved);
     }
 
     @PutMapping(path = "/{id}", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<Material> update(@PathVariable("id") UUID id, @Valid @RequestBody Material material) {
-        // ensure id is set and exists
-        material.setId(id);
+    public ResponseEntity<?> update(@PathVariable("id") UUID id,
+                                    @Valid @RequestBody Material material,
+                                    @RequestParam(value = "tenantId", required = false) UUID tenantId,
+                                    @RequestParam(value = "companyId", required = false) UUID companyId,
+                                    @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId,
+                                    @RequestHeader(value = "X-Company-Id", required = false) String headerCompanyId) {
+        // prefer headers
+        tenantId = resolveTenant(tenantId, headerTenantId);
+        companyId = resolveCompany(companyId, headerCompanyId);
+
+        if (tenantId == null || companyId == null) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+
         if (!materialRepository.existsById(id)) {
             return ResponseEntity.notFound().build();
         }
-        Material saved = materialRepository.save(material);
+
+        Tenant tenant = tenantRepository.findById(tenantId).orElseThrow(() -> new IllegalArgumentException("tenant not found"));
+        Company company = companyRepository.findById(companyId).orElseThrow(() -> new IllegalArgumentException("company not found"));
+
+        if (company.getTenant() == null || !company.getTenant().getId().equals(tenant.getId())) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("company does not belong to tenant");
+        }
+
+        // ensure id is set on incoming object and update scoping
+        material.setId(id);
+        Material saved = materialService.updateForCompany(material, company, tenant);
         return ResponseEntity.ok(saved);
     }
 
@@ -101,7 +182,21 @@ public class MaterialController {
      * It will parse rows, validate minimal fields, and perform batch save.
      */
     @PostMapping(path = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<ImportResult> importCsv(@RequestParam("file") MultipartFile file) {
+    public ResponseEntity<ImportResult> importCsv(@RequestParam("file") MultipartFile file,
+                                                  @RequestParam(value = "tenantId", required = false) UUID tenantId,
+                                                  @RequestParam(value = "companyId", required = false) UUID companyId,
+                                                  @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId,
+                                                  @RequestHeader(value = "X-Company-Id", required = false) String headerCompanyId) {
+        tenantId = resolveTenant(tenantId, headerTenantId);
+        companyId = resolveCompany(companyId, headerCompanyId);
+
+        if (companyId == null) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ImportResult.error("companyId is required for import"));
+        }
+
+        Tenant tenant = tenantRepository.findById(tenantId).orElseThrow(() -> new IllegalArgumentException("tenant not found"));
+        Company company = companyRepository.findById(companyId).orElseThrow(() -> new IllegalArgumentException("company not found"));
+
         String filename = file.getOriginalFilename() != null ? file.getOriginalFilename() : "";
         // Only accept CSV for now
         if (!filename.toLowerCase().endsWith(".csv")) {
@@ -136,9 +231,9 @@ public class MaterialController {
                     errors.add("Row " + row + ": missing required fields");
                     continue;
                 }
-                // skip duplicates in DB by code
-                if (materialRepository.findByMaterialCode(code).isPresent()) {
-                    errors.add("Row " + row + ": material_code already exists: " + code);
+                // skip duplicates in DB by code within company
+                if (materialRepository.findByMaterialCodeAndCompany(code, company).isPresent()) {
+                    errors.add("Row " + row + ": material_code already exists for company: " + code);
                     continue;
                 }
                 Material m = new Material();
@@ -146,6 +241,8 @@ public class MaterialController {
                 m.setMaterialName(name);
                 m.setUnit(unit);
                 m.setMaterialType(type);
+                m.setCompany(company);
+                m.setTenant(tenant);
                 toSave.add(m);
             }
 

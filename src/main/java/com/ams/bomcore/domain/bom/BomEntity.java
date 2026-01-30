@@ -4,9 +4,13 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
+import com.ams.bomcore.domain.model.Model;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
@@ -15,15 +19,24 @@ import jakarta.persistence.UniqueConstraint;
  * Entity mapping for the `bom` table.
  */
 @Entity
-@Table(name = "bom", uniqueConstraints = @UniqueConstraint(columnNames = {"model_name", "version"}))
+@Table(name = "bom", uniqueConstraints = @UniqueConstraint(columnNames = {"tenant_id", "model_id", "version"}))
 public class BomEntity {
 
     @Id
     @Column(name = "id", nullable = false)
     private UUID id;
 
-    @Column(name = "model_name", nullable = false, length = 100)
-    private String modelName;
+    // tenant isolation key (string to match TenantContext usage elsewhere)
+    @Column(name = "tenant_id", nullable = false, length = 100)
+    private String tenantId;
+
+    // company scope for BOM (nullable if BOM is tenant-wide)
+    @Column(name = "company_id", length = 100)
+    private String companyId;
+
+    @ManyToOne
+    @JoinColumn(name = "model_id", nullable = false)
+    private Model model;
 
     @Column(name = "version", nullable = false)
     private Integer version;
@@ -45,12 +58,28 @@ public class BomEntity {
         this.id = id;
     }
 
-    public String getModelName() {
-        return modelName;
+    public String getTenantId() {
+        return tenantId;
     }
 
-    public void setModelName(String modelName) {
-        this.modelName = modelName;
+    public void setTenantId(String tenantId) {
+        this.tenantId = tenantId;
+    }
+
+    public String getCompanyId() {
+        return companyId;
+    }
+
+    public void setCompanyId(String companyId) {
+        this.companyId = companyId;
+    }
+
+    public Model getModel() {
+        return model;
+    }
+
+    public void setModel(Model model) {
+        this.model = model;
     }
 
     public Integer getVersion() {
@@ -104,7 +133,9 @@ public class BomEntity {
     public String toString() {
         return "BomEntity{" +
                 "id=" + id +
-                ", modelName='" + modelName + '\'' +
+                ", tenantId='" + tenantId + '\'' +
+                ", companyId='" + companyId + '\'' +
+                ", model=" + (model != null ? model.getId() : null) +
                 ", version=" + version +
                 ", status='" + status + '\'' +
                 ", createdAt=" + createdAt +

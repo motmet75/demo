@@ -21,6 +21,9 @@ public class Supplier {
     @Column(name = "id", nullable = false)
     private UUID id;
 
+    @Column(name = "tenant_id", nullable = false)
+    private UUID tenantId;
+
     // Map to existing legacy `code` column so inserts fill the table consistently
     @Column(name = "supplier_code", nullable = false, unique = true, length = 50)
     private String supplierCode;
@@ -38,6 +41,9 @@ public class Supplier {
     @Column(name = "email", length = 100)
     private String email;
 
+    @Column(name = "company_id")
+    private UUID companyId;
+
     @Column(name = "is_active")
     private Boolean isActive;
 
@@ -54,6 +60,14 @@ public class Supplier {
 
     public void setId(UUID id) {
         this.id = id;
+    }
+
+    public UUID getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(UUID tenantId) {
+        this.tenantId = tenantId;
     }
 
     public String getSupplierCode() {
@@ -94,6 +108,14 @@ public class Supplier {
 
     public void setEmail(String email) {
         this.email = email;
+    }
+
+    public UUID getCompanyId() {
+        return companyId;
+    }
+
+    public void setCompanyId(UUID companyId) {
+        this.companyId = companyId;
     }
 
     public Boolean getIsActive() {
@@ -142,6 +164,8 @@ public class Supplier {
     public String toString() {
         return "Supplier{" +
                 "id=" + id +
+                ", tenantId='" + tenantId + '\'' +
+                ", companyId='" + companyId + '\'' +
                 ", supplierCode='" + supplierCode + '\'' +
                 ", supplierName='" + supplierName + '\'' +
                 ", contactName='" + contactName + '\'' +

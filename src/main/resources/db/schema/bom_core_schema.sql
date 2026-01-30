@@ -10,7 +10,9 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- ---------- Material ----------
 CREATE TABLE material (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    material_code   VARCHAR(50) UNIQUE NOT NULL,
+    tenant_id       VARCHAR(100) NOT NULL,
+    company_id      UUID,
+    material_code   VARCHAR(50) NOT NULL,
     material_name   TEXT NOT NULL,
     unit            VARCHAR(20) NOT NULL,      -- PCS, KG, M
     material_type   VARCHAR(30) NOT NULL,      -- RAW, SEMI, FINISHED
@@ -18,9 +20,14 @@ CREATE TABLE material (
     created_at      TIMESTAMP DEFAULT now()
 );
 
+-- enforce uniqueness per tenant + company + code
+ALTER TABLE material
+  ADD CONSTRAINT uq_material_tenant_company_code UNIQUE (tenant_id, company_id, material_code);
+
 -- ---------- Model ----------
 CREATE TABLE model (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id       VARCHAR(100) NOT NULL,
     model_code      VARCHAR(50) UNIQUE NOT NULL,
     model_name      TEXT NOT NULL,
     is_active       BOOLEAN DEFAULT TRUE,
@@ -30,6 +37,7 @@ CREATE TABLE model (
 -- ---------- Supplier ----------
 CREATE TABLE supplier (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id       VARCHAR(100) NOT NULL,
     code            VARCHAR(50) UNIQUE,
     supplier_code   VARCHAR(50) UNIQUE NOT NULL,
     supplier_name   TEXT NOT NULL,
@@ -43,6 +51,7 @@ CREATE TABLE supplier (
 -- ---------- Warehouse ----------
 CREATE TABLE warehouse (
     id      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id       VARCHAR(100) NOT NULL,
     code    VARCHAR(50) UNIQUE NOT NULL,
     name    TEXT NOT NULL,
     location VARCHAR(200),
@@ -57,16 +66,18 @@ CREATE TABLE warehouse (
 -- ---------- BOM Header ----------
 CREATE TABLE bom (
     id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id       VARCHAR(100) NOT NULL,
     model_name  VARCHAR(100) NOT NULL,
     version     INTEGER NOT NULL,
     status      VARCHAR(20) NOT NULL,           -- DRAFT, ACTIVE, ARCHIVED
     created_at  TIMESTAMP DEFAULT now(),
-    UNIQUE (model_name, version)
+    UNIQUE (tenant_id, model_name, version)
 );
 
 -- ---------- BOM Items (Tree Structure) ----------
 CREATE TABLE bom_item (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id       VARCHAR(100) NOT NULL,
     bom_id          UUID NOT NULL REFERENCES bom(id) ON DELETE CASCADE,
     parent_item_id  UUID REFERENCES bom_item(id),
     material_id     UUID NOT NULL REFERENCES material(id),
@@ -78,6 +89,7 @@ CREATE TABLE bom_item (
 -- Links a Model to a Material with the quantity required per one Model unit.
 CREATE TABLE model_bom (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id       VARCHAR(100) NOT NULL,
     model_id        UUID NOT NULL REFERENCES model(id) ON DELETE CASCADE,
     material_id     UUID NOT NULL REFERENCES material(id) ON DELETE RESTRICT,
     qty_per_unit    NUMERIC(14,4) NOT NULL
@@ -90,6 +102,8 @@ CREATE TABLE model_bom (
 -- ---------- Inventory Balance ----------
 CREATE TABLE inventory (
     id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id           UUID NOT NULL,
+    company_id          UUID NOT NULL,
     material_id         UUID NOT NULL REFERENCES material(id),
     warehouse_id        UUID NOT NULL REFERENCES warehouse(id),
     batch_no            VARCHAR(255) NOT NULL,
@@ -99,7 +113,7 @@ CREATE TABLE inventory (
     production_date     TIMESTAMP,
     created_at          TIMESTAMP DEFAULT now(),
     updated_at          TIMESTAMP DEFAULT now(),
-    CONSTRAINT uq_inventory_material_warehouse_batch UNIQUE (material_id, warehouse_id, batch_no)
+    CONSTRAINT uq_inventory_material_warehouse_batch UNIQUE (tenant_id, material_id, warehouse_id, batch_no)
 );
 
 -- =========================================
@@ -109,6 +123,7 @@ CREATE TABLE inventory (
 -- ---------- Inventory Lock ----------
 CREATE TABLE inventory_lock (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id       VARCHAR(100) NOT NULL,
     material_id     UUID NOT NULL REFERENCES material(id),
     warehouse_id    UUID NOT NULL REFERENCES warehouse(id),
     lock_type       VARCHAR(30) NOT NULL,       -- BOM_ALLOCATION, DEFECTIVE, SUPPLIER_HOLD
@@ -126,6 +141,7 @@ CREATE TABLE inventory_lock (
 -- ---------- Material Defect ----------
 CREATE TABLE material_defect (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id       VARCHAR(100) NOT NULL,
     material_id     UUID NOT NULL REFERENCES material(id),
     warehouse_id    UUID NOT NULL REFERENCES warehouse(id),
     quantity        NUMERIC(14,4) NOT NULL,
@@ -141,6 +157,7 @@ CREATE TABLE material_defect (
 -- ---------- Supplier Issue ----------
 CREATE TABLE supplier_issue (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id       VARCHAR(100) NOT NULL,
     supplier_id     UUID NOT NULL REFERENCES supplier(id),
     material_id     UUID NOT NULL REFERENCES material(id),
     quantity        NUMERIC(14,4),
@@ -156,6 +173,7 @@ CREATE TABLE supplier_issue (
 -- ---------- BOM Calculation Task ----------
 CREATE TABLE bom_calculation (
     id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id       VARCHAR(100) NOT NULL,
     bom_id      UUID NOT NULL REFERENCES bom(id),
     model_name  VARCHAR(100) NOT NULL,
     target_qty  NUMERIC(14,4) NOT NULL,
@@ -166,6 +184,7 @@ CREATE TABLE bom_calculation (
 -- ---------- BOM Calculation Result ----------
 CREATE TABLE bom_calculation_item (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id       VARCHAR(100) NOT NULL,
     calculation_id  UUID NOT NULL REFERENCES bom_calculation(id) ON DELETE CASCADE,
     material_id     UUID NOT NULL REFERENCES material(id),
     required_qty    NUMERIC(14,4) NOT NULL,
@@ -180,6 +199,7 @@ CREATE TABLE bom_calculation_item (
 -- ---------- Inventory History (Snapshots) ----------
 CREATE TABLE inventory_history (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id       VARCHAR(100) NOT NULL,
     material_id     UUID NOT NULL REFERENCES material(id),
     warehouse_id    UUID NOT NULL REFERENCES warehouse(id),
     quantity        NUMERIC(14,4) NOT NULL,
@@ -189,6 +209,7 @@ CREATE TABLE inventory_history (
 -- ---------- Material Consumption ----------
 CREATE TABLE material_consumption (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id       VARCHAR(100) NOT NULL,
     material_id     UUID NOT NULL REFERENCES material(id),
     quantity        NUMERIC(14,4) NOT NULL,
     source          VARCHAR(30) NOT NULL,       -- BOM, SCRAP, ADJUSTMENT
@@ -198,6 +219,7 @@ CREATE TABLE material_consumption (
 -- ---------- Material Forecast ----------
 CREATE TABLE material_forecast (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id       VARCHAR(100) NOT NULL,
     material_id     UUID NOT NULL REFERENCES material(id),
     warehouse_id    UUID NOT NULL REFERENCES warehouse(id),
     forecast_date   DATE NOT NULL,

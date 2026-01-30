@@ -12,6 +12,7 @@ import com.ams.bomcore.repository.ModelRepository;
 
 /**
  * Simple single-responsibility service for Model CRUD. Now deletes related ModelBom rows when deleting a Model.
+ * Added tenant-scoped create/find/update helpers.
  */
 @Service
 public class ModelService {
@@ -30,6 +31,42 @@ public class ModelService {
 
     public List<Model> findAll() {
         return modelRepository.findAll();
+    }
+
+    // New: create model scoped to a tenant
+    public Model createForTenant(Model model, String tenantId) {
+        model.setTenantId(tenantId);
+        return modelRepository.save(model);
+    }
+
+    // New: find by tenant
+    public List<Model> findAllByTenantId(String tenantId) {
+        return modelRepository.findAllByTenantId(tenantId);
+    }
+
+    // New: update model scoped to tenant - ensures tenantId is set
+    public Model updateForTenant(Model model, String tenantId) {
+        model.setTenantId(tenantId);
+        return modelRepository.save(model);
+    }
+
+    // New: create model scoped to tenant+company
+    public Model createForTenantAndCompany(Model model, String tenantId, String companyId) {
+        model.setTenantId(tenantId);
+        model.setCompanyId(companyId);
+        return modelRepository.save(model);
+    }
+
+    // New: find all by tenant and company
+    public List<Model> findAllByTenantAndCompany(String tenantId, String companyId) {
+        return modelRepository.findAllByTenantIdAndCompanyId(tenantId, companyId);
+    }
+
+    // New: update model scoped to tenant+company
+    public Model updateForTenantAndCompany(Model model, String tenantId, String companyId) {
+        model.setTenantId(tenantId);
+        model.setCompanyId(companyId);
+        return modelRepository.save(model);
     }
 
     @Transactional(rollbackFor = Exception.class)

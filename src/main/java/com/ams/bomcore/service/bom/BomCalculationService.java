@@ -1,12 +1,10 @@
 package com.ams.bomcore.service.bom;
 
 import java.math.BigDecimal;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Queue;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -53,23 +51,24 @@ public class BomCalculationService {
 
     /**
      * Calculate required materials for an ACTIVE BOM model and persist a BomCalculation record.
-     * @param modelName BOM model name
+     * @param model Model entity
+     * @param tenantId tenant isolation identifier
      * @param targetQty desired target quantity (finished good count)
      * @return saved BomCalculationEntity containing calculation items
      */
     @Transactional
-    public BomCalculationEntity calculate(String modelName, BigDecimal targetQty) {
-        BomEntity bom = bomRepository.findByModelNameAndStatus(modelName, "ACTIVE")
-                .orElseThrow(() -> new IllegalArgumentException("No ACTIVE BOM found for model: " + modelName));
+    public BomCalculationEntity calculate(Model model, String tenantId, BigDecimal targetQty) {
+        if (model == null) throw new IllegalArgumentException("Model is required");
+
+        BomEntity bom = bomRepository.findByModelAndTenantIdAndStatus(model, tenantId, "ACTIVE")
+                .orElseThrow(() -> new IllegalArgumentException("No ACTIVE BOM found for model: " + model.getModelName() + " tenant: " + tenantId));
 
         List<BomItemEntity> items = bomItemRepository.findByBom(bom);
 
         // Build children map for tree traversal
         Map<UUID, List<BomItemEntity>> children = new HashMap<>();
-        Map<UUID, BomItemEntity> byId = new HashMap<>();
         List<BomItemEntity> roots = new ArrayList<>();
         for (BomItemEntity it : items) {
-            byId.put(it.getId(), it);
             if (it.getParentItem() == null) {
                 roots.add(it);
             } else {
@@ -89,7 +88,8 @@ public class BomCalculationService {
         // Persist BomCalculation and items
         BomCalculationEntity calculation = new BomCalculationEntity();
         calculation.setBom(bom);
-        calculation.setModelName(modelName);
+        calculation.setModelName(model.getModelName());
+        calculation.setTenantId(bom.getTenantId());
         calculation.setTargetQty(targetQty);
         calculation.setStatus("COMPLETED");
 
@@ -123,12 +123,17 @@ public class BomCalculationService {
      */
     @Transactional
     public List<BomCheckResult> checkAvailability(String modelCode, BigDecimal targetQty) {
-        // Resolve modelCode -> modelName
+        // delegate with empty tenantId (caller should prefer overload that provides tenant)
+        return checkAvailability(modelCode, targetQty, "");
+    }
+
+    @Transactional
+    public List<BomCheckResult> checkAvailability(String modelCode, BigDecimal targetQty, String tenantId) {
+        // Resolve modelCode -> model
         Model model = modelRepository.findByModelCode(modelCode)
                 .orElseThrow(() -> new IllegalArgumentException("Model not found for code: " + modelCode));
-        String modelName = model.getModelName();
 
-        BomCalculationEntity calc = calculate(modelName, targetQty);
+        BomCalculationEntity calc = calculate(model, tenantId, targetQty);
         List<BomCheckResult> out = new ArrayList<>();
         if (calc.getItems() != null) {
             for (BomCalculationItemEntity item : calc.getItems()) {

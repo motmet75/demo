@@ -5,11 +5,13 @@ import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 
+import com.ams.bomcore.domain.company.Company;
 import com.ams.bomcore.domain.material.Material;
+import com.ams.bomcore.domain.tenant.Tenant;
 import com.ams.bomcore.repository.MaterialRepository;
 
 /**
- * Simple single-responsibility service for Material CRUD. No BOM logic here.
+ * Service for Material CRUD. Material operations are scoped to a Company.
  */
 @Service
 public class MaterialService {
@@ -20,13 +22,24 @@ public class MaterialService {
         this.materialRepository = materialRepository;
     }
 
-    public Material create(Material material) {
-        // validation could be added here (e.g., unique code)
+    public Material createForCompany(Material material, Company company, Tenant tenant) {
+        // assign company and persist
+        material.setCompany(company);
+        material.setTenant(tenant);
         return materialRepository.save(material);
     }
 
-    public List<Material> findAll() {
-        return materialRepository.findAll();
+    /**
+     * Update an existing material ensuring it is scoped to the provided company and tenant.
+     */
+    public Material updateForCompany(Material material, Company company, Tenant tenant) {
+        material.setCompany(company);
+        material.setTenant(tenant);
+        return materialRepository.save(material);
+    }
+
+    public List<Material> findAllByCompany(Company company) {
+        return materialRepository.findAllByCompany(company);
     }
 
     public void delete(UUID id) {

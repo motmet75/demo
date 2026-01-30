@@ -27,6 +27,9 @@ public class ModelBom {
     @Column(name = "id", nullable = false)
     private UUID id;
 
+    @Column(name = "tenant_id", nullable = false, length = 100)
+    private String tenantId;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "model_id", nullable = false)
     private Model model;
@@ -48,6 +51,14 @@ public class ModelBom {
 
     public void setId(UUID id) {
         this.id = id;
+    }
+
+    public String getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(String tenantId) {
+        this.tenantId = tenantId;
     }
 
     public Model getModel() {
@@ -98,6 +109,7 @@ public class ModelBom {
     public String toString() {
         return "ModelBom{" +
                 "id=" + id +
+                ", tenantId='" + tenantId + '\'' +
                 ", model=" + (model != null ? model.getId() : null) +
                 ", material=" + (material != null ? material.getId() : null) +
                 ", qtyPerUnit=" + qtyPerUnit +

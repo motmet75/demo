@@ -1,12 +1,26 @@
+Tenant (Agent / Platform Owner)
+ └── Client / Company (Warehouse owner)
+      ├── Warehouse
+      │    └── Inventory
+      │
+      ├── Model
+      │    └── BOM (bom_id)
+      │          └── BOM_ITEM
+      │                └── Material
+      │
+      ├── Supplier
+      └── Forecast / History
+      
+
+
 https://chatgpt.com/g/g-p-691925dba0908191a40d9458c4cb61ef/c/6951fb96-f548-8320-9166-668e9f0630a3
 
 install mui --
-
-install react-router-dom
+npm install @mui/material @emotion/react @emotion/styled
 npm install react-router-dom
-
-
-
+npm install xlsx
+npm install @mui/x-data-grid
+npm install @mui/icons-material
 
 -- ---------- Model ----------
 CREATE TABLE model (
@@ -44,16 +58,8 @@ ADD COLUMN created_at TIMESTAMP DEFAULT now();
 
 
 ALTER TABLE supplier
-ALTER COLUMN supplier_code SET NOT NULL,
-ALTER COLUMN supplier_name SET NOT NULL;
-
-ALTER TABLE supplier
 ADD CONSTRAINT uq_supplier_supplier_code UNIQUE (supplier_code);
 
-
-
-
-ALTER TABLE supplier DROP COLUMN name;
 
 
 
@@ -68,12 +74,8 @@ ADD COLUMN note TEXT;
 
 -- Migrate existing data
 UPDATE warehouse
-SET warehouse_code = code
-WHERE warehouse_code IS NULL;
 
 UPDATE warehouse
-SET warehouse_name = name
-WHERE warehouse_name IS NULL;
 
 -- Apply NOT NULL + UNIQUE
 ALTER TABLE warehouse
@@ -135,3 +137,364 @@ UNIQUE (material_id, warehouse_id, batch_no);
 ALTER TABLE inventory
 ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT now();
 
+
+--- add tenant_id to existing tables ---
+
+-- MATERIAL
+ALTER TABLE material ADD COLUMN IF NOT EXISTS tenant_id varchar(100);
+UPDATE material SET tenant_id = 'anhmedia.vn' WHERE tenant_id IS NULL;
+ALTER TABLE material ALTER COLUMN tenant_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_material_tenant_id ON material(tenant_id);
+
+-- MODEL
+ALTER TABLE model ADD COLUMN IF NOT EXISTS tenant_id varchar(100);
+UPDATE model SET tenant_id = 'anhmedia.vn' WHERE tenant_id IS NULL;
+ALTER TABLE model ALTER COLUMN tenant_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_model_tenant_id ON model(tenant_id);
+
+-- MODEL_BOM
+ALTER TABLE model_bom ADD COLUMN IF NOT EXISTS tenant_id varchar(100);
+UPDATE model_bom SET tenant_id = 'anhmedia.vn' WHERE tenant_id IS NULL;
+ALTER TABLE model_bom ALTER COLUMN tenant_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_model_bom_tenant_id ON model_bom(tenant_id);
+
+-- BOM
+ALTER TABLE bom ADD COLUMN IF NOT EXISTS tenant_id varchar(100);
+UPDATE bom SET tenant_id = 'anhmedia.vn' WHERE tenant_id IS NULL;
+ALTER TABLE bom ALTER COLUMN tenant_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_bom_tenant_id ON bom(tenant_id);
+
+-- BOM_ITEM
+ALTER TABLE bom_item ADD COLUMN IF NOT EXISTS tenant_id varchar(100);
+UPDATE bom_item SET tenant_id = 'anhmedia.vn' WHERE tenant_id IS NULL;
+ALTER TABLE bom_item ALTER COLUMN tenant_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_bom_item_tenant_id ON bom_item(tenant_id);
+
+-- BOM_CALCULATION
+ALTER TABLE bom_calculation ADD COLUMN IF NOT EXISTS tenant_id varchar(100);
+UPDATE bom_calculation SET tenant_id = 'anhmedia.vn' WHERE tenant_id IS NULL;
+ALTER TABLE bom_calculation ALTER COLUMN tenant_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_bom_calculation_tenant_id ON bom_calculation(tenant_id);
+
+-- BOM_CALCULATION_ITEM
+ALTER TABLE bom_calculation_item ADD COLUMN IF NOT EXISTS tenant_id varchar(100);
+UPDATE bom_calculation_item SET tenant_id = 'anhmedia.vn' WHERE tenant_id IS NULL;
+ALTER TABLE bom_calculation_item ALTER COLUMN tenant_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_bom_calc_item_tenant_id ON bom_calculation_item(tenant_id);
+
+-- INVENTORY
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS tenant_id varchar(100);
+UPDATE inventory SET tenant_id = 'anhmedia.vn' WHERE tenant_id IS NULL;
+ALTER TABLE inventory ALTER COLUMN tenant_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_inventory_tenant_id ON inventory(tenant_id);
+
+-- INVENTORY_LOCK
+ALTER TABLE inventory_lock ADD COLUMN IF NOT EXISTS tenant_id varchar(100);
+UPDATE inventory_lock SET tenant_id = 'anhmedia.vn' WHERE tenant_id IS NULL;
+ALTER TABLE inventory_lock ALTER COLUMN tenant_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_inventory_lock_tenant_id ON inventory_lock(tenant_id);
+
+-- MATERIAL_DEFECT
+ALTER TABLE material_defect ADD COLUMN IF NOT EXISTS tenant_id varchar(100);
+UPDATE material_defect SET tenant_id = 'anhmedia.vn' WHERE tenant_id IS NULL;
+ALTER TABLE material_defect ALTER COLUMN tenant_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_material_defect_tenant_id ON material_defect(tenant_id);
+
+-- WAREHOUSE
+ALTER TABLE warehouse ADD COLUMN IF NOT EXISTS tenant_id varchar(100);
+UPDATE warehouse SET tenant_id = 'anhmedia.vn' WHERE tenant_id IS NULL;
+ALTER TABLE warehouse ALTER COLUMN tenant_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_warehouse_tenant_id ON warehouse(tenant_id);
+
+-- SUPPLIER
+ALTER TABLE supplier ADD COLUMN IF NOT EXISTS tenant_id varchar(100);
+UPDATE supplier SET tenant_id = 'anhmedia.vn' WHERE tenant_id IS NULL;
+ALTER TABLE supplier ALTER COLUMN tenant_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_supplier_tenant_id ON supplier(tenant_id);
+
+-- SUPPLIER_ISSUE
+ALTER TABLE supplier_issue ADD COLUMN IF NOT EXISTS tenant_id varchar(100);
+UPDATE supplier_issue SET tenant_id = 'anhmedia.vn' WHERE tenant_id IS NULL;
+ALTER TABLE supplier_issue ALTER COLUMN tenant_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_supplier_issue_tenant_id ON supplier_issue(tenant_id);
+
+-- MATERIAL_FORECAST
+ALTER TABLE material_forecast ADD COLUMN IF NOT EXISTS tenant_id varchar(100);
+UPDATE material_forecast SET tenant_id = 'anhmedia.vn' WHERE tenant_id IS NULL;
+ALTER TABLE material_forecast ALTER COLUMN tenant_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_material_forecast_tenant_id ON material_forecast(tenant_id);
+
+-- MATERIAL_CONSUMPTION
+ALTER TABLE material_consumption ADD COLUMN IF NOT EXISTS tenant_id varchar(100);
+UPDATE material_consumption SET tenant_id = 'anhmedia.vn' WHERE tenant_id IS NULL;
+ALTER TABLE material_consumption ALTER COLUMN tenant_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_material_consumption_tenant_id ON material_consumption(tenant_id);
+
+-- INVENTORY_HISTORY
+ALTER TABLE inventory_history ADD COLUMN IF NOT EXISTS tenant_id varchar(100);
+UPDATE inventory_history SET tenant_id = 'anhmedia.vn' WHERE tenant_id IS NULL;
+ALTER TABLE inventory_history ALTER COLUMN tenant_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_inventory_history_tenant_id ON inventory_history(tenant_id);
+
+
+
+
+
+--create uuid_v7 function for each schema that does not have it
+CREATE OR REPLACE FUNCTION public.uuid_v7()
+RETURNS uuid
+LANGUAGE plpgsql
+VOLATILE
+AS $$
+DECLARE
+    ts_ms bigint;
+    rand_a int;
+    rand_b bigint;
+BEGIN
+    -- milliseconds since Unix epoch
+    ts_ms := floor(extract(epoch FROM clock_timestamp()) * 1000);
+
+    -- 12 bits + 62 bits randomness
+    rand_a := floor(random() * 4096);                 -- 12 bits
+    rand_b := floor(random() * 4611686018427387904);  -- 62 bits
+
+    RETURN (
+        lpad(to_hex(ts_ms), 12, '0') ||                -- 48 bits time
+        '7' ||                                         -- version 7
+        lpad(to_hex(rand_a), 3, '0') ||
+        lpad(to_hex(rand_b), 16, '0')
+    )::uuid;
+END;
+$$;
+
+
+alter to uuid_v7 function for each schema that does not have it
+DO $$
+DECLARE r RECORD;
+BEGIN
+  FOR r IN
+    SELECT table_schema, table_name, column_name
+    FROM information_schema.columns
+    WHERE data_type = 'uuid'
+      AND column_default IS NOT NULL
+  LOOP
+    EXECUTE format(
+      'ALTER TABLE %I.%I ALTER COLUMN %I SET DEFAULT public.uuid_v7()',
+      r.table_schema, r.table_name, r.column_name
+    );
+  END LOOP;
+END $$;
+
+update tenant set tenant_id = 'anhmedia.vn' where tenant_id is null;
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN
+        SELECT table_schema, table_name
+        FROM information_schema.columns
+        WHERE column_name = 'tenant_id'
+    LOOP
+        EXECUTE format(
+            'UPDATE %I.%I SET tenant_id = %L WHERE tenant_id IS NULL OR tenant_id <> %L',
+            r.table_schema,
+            r.table_name,
+            'anhmedia',
+            'anhmedia'
+        );
+    END LOOP;
+END $$;
+
+
+CREATE TABLE tenant (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  tenant_code VARCHAR(100) NOT NULL,
+  tenant_name TEXT NOT NULL,
+  tenant_type VARCHAR(50),
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- unique constraint on tenant_code
+CREATE UNIQUE INDEX ux_tenant_tenant_code ON tenant (tenant_code);
+
+-- helpful index for queries ordered/filtered by creation time
+CREATE INDEX idx_tenant_created_at ON tenant (created_at);
+
+
+---
+-- Use the exact zero-UUID you requested as default
+-- Example for each table:
+
+-- MATERIAL
+ALTER TABLE material
+  ADD COLUMN IF NOT EXISTS company_id UUID DEFAULT '00000000-0000-0000-0000-000000000000';
+UPDATE material SET company_id = '00000000-0000-0000-0000-000000000000' WHERE company_id IS NULL;
+ALTER TABLE material ALTER COLUMN company_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_material_company_id ON material(company_id);
+
+-- MODEL
+ALTER TABLE model
+  ADD COLUMN IF NOT EXISTS company_id UUID DEFAULT '00000000-0000-0000-0000-000000000000';
+UPDATE model SET company_id = '00000000-0000-0000-0000-000000000000' WHERE company_id IS NULL;
+ALTER TABLE model ALTER COLUMN company_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_model_company_id ON model(company_id);
+
+-- SUPPLIER
+ALTER TABLE supplier
+  ADD COLUMN IF NOT EXISTS company_id UUID DEFAULT '00000000-0000-0000-0000-000000000000';
+UPDATE supplier SET company_id = '00000000-0000-0000-0000-000000000000' WHERE company_id IS NULL;
+ALTER TABLE supplier ALTER COLUMN company_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_supplier_company_id ON supplier(company_id);
+
+-- WAREHOUSE
+ALTER TABLE warehouse
+  ADD COLUMN IF NOT EXISTS company_id UUID DEFAULT '00000000-0000-0000-0000-000000000000';
+UPDATE warehouse SET company_id = '00000000-0000-0000-0000-000000000000' WHERE company_id IS NULL;
+ALTER TABLE warehouse ALTER COLUMN company_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_warehouse_company_id ON warehouse(company_id);
+
+-- BOM (header)
+ALTER TABLE bom
+  ADD COLUMN IF NOT EXISTS company_id UUID DEFAULT '00000000-0000-0000-0000-000000000000';
+UPDATE bom SET company_id = '00000000-0000-0000-0000-000000000000' WHERE company_id IS NULL;
+ALTER TABLE bom ALTER COLUMN company_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_bom_company_id ON bom(company_id);
+
+-- BOM_ITEM
+ALTER TABLE bom_item
+  ADD COLUMN IF NOT EXISTS company_id UUID DEFAULT '00000000-0000-0000-0000-000000000000';
+UPDATE bom_item SET company_id = '00000000-0000-0000-0000-000000000000' WHERE company_id IS NULL;
+ALTER TABLE bom_item ALTER COLUMN company_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_bom_item_company_id ON bom_item(company_id);
+
+-- MODEL_BOM
+ALTER TABLE model_bom
+  ADD COLUMN IF NOT EXISTS company_id UUID DEFAULT '00000000-0000-0000-0000-000000000000';
+UPDATE model_bom SET company_id = '00000000-0000-0000-0000-000000000000' WHERE company_id IS NULL;
+ALTER TABLE model_bom ALTER COLUMN company_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_model_bom_company_id ON model_bom(company_id);
+
+-- INVENTORY
+ALTER TABLE inventory
+  ADD COLUMN IF NOT EXISTS company_id UUID DEFAULT '00000000-0000-0000-0000-000000000000';
+UPDATE inventory SET company_id = '00000000-0000-0000-0000-000000000000' WHERE company_id IS NULL;
+ALTER TABLE inventory ALTER COLUMN company_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_inventory_company_id ON inventory(company_id);
+
+-- INVENTORY_LOCK
+ALTER TABLE inventory_lock
+  ADD COLUMN IF NOT EXISTS company_id UUID DEFAULT '00000000-0000-0000-0000-000000000000';
+UPDATE inventory_lock SET company_id = '00000000-0000-0000-0000-000000000000' WHERE company_id IS NULL;
+ALTER TABLE inventory_lock ALTER COLUMN company_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_inventory_lock_company_id ON inventory_lock(company_id);
+
+-- MATERIAL_DEFECT
+ALTER TABLE material_defect
+  ADD COLUMN IF NOT EXISTS company_id UUID DEFAULT '00000000-0000-0000-0000-000000000000';
+UPDATE material_defect SET company_id = '00000000-0000-0000-0000-000000000000' WHERE company_id IS NULL;
+ALTER TABLE material_defect ALTER COLUMN company_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_material_defect_company_id ON material_defect(company_id);
+
+-- SUPPLIER_ISSUE
+ALTER TABLE supplier_issue
+  ADD COLUMN IF NOT EXISTS company_id UUID DEFAULT '00000000-0000-0000-0000-000000000000';
+UPDATE supplier_issue SET company_id = '00000000-0000-0000-0000-000000000000' WHERE company_id IS NULL;
+ALTER TABLE supplier_issue ALTER COLUMN company_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_supplier_issue_company_id ON supplier_issue(company_id);
+
+-- BOM_CALCULATION
+ALTER TABLE bom_calculation
+  ADD COLUMN IF NOT EXISTS company_id UUID DEFAULT '00000000-0000-0000-0000-000000000000';
+UPDATE bom_calculation SET company_id = '00000000-0000-0000-0000-000000000000' WHERE company_id IS NULL;
+ALTER TABLE bom_calculation ALTER COLUMN company_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_bom_calculation_company_id ON bom_calculation(company_id);
+
+-- BOM_CALCULATION_ITEM
+ALTER TABLE bom_calculation_item
+  ADD COLUMN IF NOT EXISTS company_id UUID DEFAULT '00000000-0000-0000-0000-000000000000';
+UPDATE bom_calculation_item SET company_id = '00000000-0000-0000-0000-000000000000' WHERE company_id IS NULL;
+ALTER TABLE bom_calculation_item ALTER COLUMN company_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_bom_calc_item_company_id ON bom_calculation_item(company_id);
+
+-- INVENTORY_HISTORY
+ALTER TABLE inventory_history
+  ADD COLUMN IF NOT EXISTS company_id UUID DEFAULT '00000000-0000-0000-0000-000000000000';
+UPDATE inventory_history SET company_id = '00000000-0000-0000-0000-000000000000' WHERE company_id IS NULL;
+ALTER TABLE inventory_history ALTER COLUMN company_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_inventory_history_company_id ON inventory_history(company_id);
+
+-- MATERIAL_CONSUMPTION
+ALTER TABLE material_consumption
+  ADD COLUMN IF NOT EXISTS company_id UUID DEFAULT '00000000-0000-0000-0000-000000000000';
+UPDATE material_consumption SET company_id = '00000000-0000-0000-0000-000000000000' WHERE company_id IS NULL;
+ALTER TABLE material_consumption ALTER COLUMN company_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_material_consumption_company_id ON material_consumption(company_id);
+
+-- MATERIAL_FORECAST
+ALTER TABLE material_forecast
+  ADD COLUMN IF NOT EXISTS company_id UUID DEFAULT '00000000-0000-0000-0000-000000000000';
+UPDATE material_forecast SET company_id = '00000000-0000-0000-0000-000000000000' WHERE company_id IS NULL;
+ALTER TABLE material_forecast ALTER COLUMN company_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_material_forecast_company_id ON material_forecast(company_id);
+
+-- Ensure material has company_id and composite unique constraint (tenant_id, company_id, material_code)
+ALTER TABLE material
+  ADD COLUMN IF NOT EXISTS company_id UUID DEFAULT '00000000-0000-0000-0000-000000000000';
+UPDATE material SET company_id = '00000000-0000-0000-0000-000000000000' WHERE company_id IS NULL;
+ALTER TABLE material ALTER COLUMN company_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_material_company_id ON material(company_id);
+
+-- Drop any existing single-column unique constraint/index on material_code
+DO $$
+DECLARE
+  c RECORD;
+BEGIN
+  FOR c IN
+    SELECT con.oid::regclass::text AS constraint_name
+    FROM pg_constraint con
+    JOIN pg_class rel ON rel.oid = con.conrelid
+    JOIN pg_attribute att ON att.attrelid = rel.oid
+    WHERE rel.relname = 'material'
+      AND con.contype = 'u'
+      AND con.conkey = ARRAY[att.attnum]
+      AND att.attname = 'material_code'
+  LOOP
+    EXECUTE format('ALTER TABLE material DROP CONSTRAINT IF EXISTS %I', c.constraint_name);
+  END LOOP;
+
+  -- Also drop any unique index directly on material_code (created by UNIQUE in some setups)
+  PERFORM pg_try_advisory_lock(1);
+  FOR c IN
+    SELECT indexname AS constraint_name FROM pg_indexes WHERE tablename = 'material' AND indexdef LIKE '%(material_code)%' AND indexdef LIKE '%UNIQUE%'
+  LOOP
+    EXECUTE format('DROP INDEX IF EXISTS %I', c.constraint_name);
+  END LOOP;
+  PERFORM pg_advisory_unlock(1);
+END
+$$;
+
+-- Add composite unique constraint if not exists
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint con
+    JOIN pg_class rel ON rel.oid = con.conrelid
+    WHERE rel.relname = 'material'
+      AND con.contype = 'u'
+      AND (SELECT array_agg(att.attname ORDER BY i) FROM (
+            SELECT unnest(con.conkey) WITH ORDINALITY AS a(attnum, i)
+            JOIN pg_attribute att ON att.attnum = a.attnum AND att.attrelid = rel.oid
+          ) sub(attname, i)
+         ) = ARRAY['tenant_id','company_id','material_code']
+  ) THEN
+    ALTER TABLE material
+      ADD CONSTRAINT uq_material_tenant_company_code UNIQUE (tenant_id, company_id, material_code);
+  END IF;
+END
+$$;
+
+-- Optionally create an index to support lookups
+CREATE INDEX IF NOT EXISTS idx_material_tenant_company_code ON material(tenant_id, company_id, material_code);
+
+-- ...existing update steps continue ...

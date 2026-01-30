@@ -21,6 +21,13 @@ public class Model {
     @Column(name = "id", nullable = false)
     private UUID id;
 
+    @Column(name = "tenant_id", nullable = false, length = 100)
+    private String tenantId;
+
+    // New: company id stored as string to avoid forcing a join/foreign key change
+    @Column(name = "company_id", length = 100)
+    private String companyId;
+
     @Column(name = "model_code", nullable = false, unique = true, length = 50)
     private String modelCode;
 
@@ -43,6 +50,22 @@ public class Model {
 
     public void setId(UUID id) {
         this.id = id;
+    }
+
+    public String getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(String tenantId) {
+        this.tenantId = tenantId;
+    }
+
+    public String getCompanyId() {
+        return companyId;
+    }
+
+    public void setCompanyId(String companyId) {
+        this.companyId = companyId;
     }
 
     public String getModelCode() {
@@ -107,6 +130,8 @@ public class Model {
     public String toString() {
         return "Model{" +
                 "id=" + id +
+                ", tenantId='" + tenantId + '\'' +
+                ", companyId='" + companyId + '\'' +
                 ", modelCode='" + modelCode + '\'' +
                 ", modelName='" + modelName + '\'' +
                 ", isActive=" + isActive +
