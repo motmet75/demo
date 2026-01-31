@@ -34,36 +34,36 @@ public class ModelService {
     }
 
     // New: create model scoped to a tenant
-    public Model createForTenant(Model model, String tenantId) {
+    public Model createForTenant(Model model, UUID tenantId) {
         model.setTenantId(tenantId);
         return modelRepository.save(model);
     }
 
     // New: find by tenant
-    public List<Model> findAllByTenantId(String tenantId) {
+    public List<Model> findAllByTenantId(UUID tenantId) {
         return modelRepository.findAllByTenantId(tenantId);
     }
 
     // New: update model scoped to tenant - ensures tenantId is set
-    public Model updateForTenant(Model model, String tenantId) {
+    public Model updateForTenant(Model model, UUID tenantId) {
         model.setTenantId(tenantId);
         return modelRepository.save(model);
     }
 
     // New: create model scoped to tenant+company
-    public Model createForTenantAndCompany(Model model, String tenantId, String companyId) {
+    public Model createForTenantAndCompany(Model model, UUID tenantId, UUID companyId) {
         model.setTenantId(tenantId);
         model.setCompanyId(companyId);
         return modelRepository.save(model);
     }
 
     // New: find all by tenant and company
-    public List<Model> findAllByTenantAndCompany(String tenantId, String companyId) {
+    public List<Model> findAllByTenantAndCompany(UUID tenantId, UUID companyId) {
         return modelRepository.findAllByTenantIdAndCompanyId(tenantId, companyId);
     }
 
     // New: update model scoped to tenant+company
-    public Model updateForTenantAndCompany(Model model, String tenantId, String companyId) {
+    public Model updateForTenantAndCompany(Model model, UUID tenantId, UUID companyId) {
         model.setTenantId(tenantId);
         model.setCompanyId(companyId);
         return modelRepository.save(model);

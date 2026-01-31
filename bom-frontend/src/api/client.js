@@ -1,7 +1,7 @@
 // Lightweight fetch wrapper that attaches tenant/company headers from localStorage
 const STORAGE_KEY = 'bom_app_context_v1'
 
-function getContextHeaders() {
+export function getContextHeaders() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return {}
@@ -10,7 +10,7 @@ function getContextHeaders() {
     if (parsed.tenantId) headers['X-Tenant-Id'] = parsed.tenantId
     if (parsed.companyId) headers['X-Company-Id'] = parsed.companyId
     return headers
-  } catch (e) {
+  } catch {
     return {}
   }
 }
@@ -27,7 +27,7 @@ export async function apiFetchJson(url, opts = {}) {
   let data = null
   try {
     data = text ? JSON.parse(text) : null
-  } catch (e) {
+  } catch {
     // not JSON
     data = text
   }

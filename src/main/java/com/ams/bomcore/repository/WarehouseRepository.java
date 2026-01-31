@@ -17,10 +17,13 @@ public interface WarehouseRepository extends JpaRepository<WarehouseEntity, UUID
     boolean existsByCode(String code);
 
     // Tenant-scoped queries
-    List<WarehouseEntity> findAllByTenantId(String tenantId);
+    List<WarehouseEntity> findAllByTenantId(UUID tenantId);
 
-    Optional<WarehouseEntity> findByCodeAndTenantId(String code, String tenantId);
+    // Tenant + company scoped query
+    List<WarehouseEntity> findAllByTenantIdAndCompanyId(UUID tenantId, UUID companyId);
 
-    boolean existsByCodeAndTenantId(String code, String tenantId);
+    Optional<WarehouseEntity> findByCodeAndTenantId(String code, UUID tenantId);
+
+    boolean existsByCodeAndTenantId(String code, UUID tenantId);
 
 }

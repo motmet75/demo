@@ -13,12 +13,12 @@ import com.ams.bomcore.domain.model.Model;
 @Repository
 public interface BomRepository extends JpaRepository<BomEntity, UUID> {
 
-    Optional<BomEntity> findByModelAndTenantIdAndStatus(Model model, String tenantId, String status);
+    Optional<BomEntity> findByModelAndTenantIdAndStatus(Model model, UUID tenantId, String status);
 
-    Optional<BomEntity> findByModelAndTenantIdAndVersion(Model model, String tenantId, Integer version);
+    Optional<BomEntity> findByModelAndTenantIdAndVersion(Model model, UUID tenantId, Integer version);
 
-    List<BomEntity> findAllByModelAndTenantId(Model model, String tenantId);
+    List<BomEntity> findAllByModelAndTenantId(Model model, UUID tenantId);
 
-    List<BomEntity> findAllByTenantIdAndCompanyId(String tenantId, String companyId);
+    List<BomEntity> findAllByTenantIdAndCompanyId(UUID tenantId, UUID companyId);
 
 }

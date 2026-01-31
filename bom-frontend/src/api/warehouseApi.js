@@ -1,4 +1,4 @@
-import { apiFetch, apiFetchJson } from './client'
+import { apiFetch, apiFetchJson, getContextHeaders } from './client'
 
 export function normalizeWarehouse(obj) {
   if (!obj || typeof obj !== 'object') return obj
@@ -67,6 +67,15 @@ export function sanitizePayload(payload) {
   return out
 }
 
+function injectContextToBody(body) {
+  const headers = getContextHeaders() || {}
+  const out = Object.assign({}, body || {})
+  // headers use X-Tenant-Id and X-Company-Id; prefer existing body values if present
+  if (!out.tenantId && headers['X-Tenant-Id']) out.tenantId = headers['X-Tenant-Id']
+  if (!out.companyId && headers['X-Company-Id']) out.companyId = headers['X-Company-Id']
+  return out
+}
+
 export async function fetchWarehouses() {
   const { res, data } = await apiFetchJson('/bom/api/warehouses')
   if (!res.ok) return []
@@ -83,7 +92,8 @@ export async function fetchWarehouses() {
 }
 
 export async function createWarehouse(payload) {
-  const body = sanitizePayload(payload)
+  const bodyWithCtx = injectContextToBody(payload)
+  const body = sanitizePayload(bodyWithCtx)
   const { res, data } = await apiFetchJson('/bom/api/warehouses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
   if (!res.ok) {
     const message = (data && data.message) || (typeof data === 'string' ? data : res.statusText) || `Request failed with status ${res.status}`
@@ -96,7 +106,8 @@ export async function createWarehouse(payload) {
 }
 
 export async function updateWarehouse(id, payload) {
-  const body = sanitizePayload(payload)
+  const bodyWithCtx = injectContextToBody(payload)
+  const body = sanitizePayload(bodyWithCtx)
   const url = `/bom/api/warehouses/${encodeURIComponent(id)}`
   const { res, data } = await apiFetchJson(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
   if (!res.ok) {

@@ -50,13 +50,11 @@ public class ModelImportBomController {
     @PostMapping(path = "/import-bom", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ImportResponse> importBom(@RequestParam("file") MultipartFile file,
                                                     @RequestParam(value = "tenantId", required = false) java.util.UUID tenantId,
+                                                    @RequestParam(value = "companyId", required = false) java.util.UUID companyId,
+                                                    @RequestParam(value = "bomId", required = false) java.util.UUID bomId,
                                                     @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId) {
+        // resolve tenant from header or param
         tenantId = resolveTenant(tenantId, headerTenantId);
-        if (tenantId == null) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ImportResponse.error("tenantId is required"));
-        }
-
-        Tenant tenant = tenantRepository.findById(tenantId).orElseThrow(() -> new IllegalArgumentException("tenant not found"));
 
         String filename = file.getOriginalFilename() != null ? file.getOriginalFilename() : "";
         if (!filename.toLowerCase().endsWith(".csv")) {
@@ -76,8 +74,60 @@ public class ModelImportBomController {
 
         List<ModelBomCsvRow> rows = parse.getRows();
 
+        // Determine tenantId/companyId: prefer explicit request params; otherwise infer from CSV rows if all rows agree
+        java.util.UUID inferredTenant = null;
+        java.util.UUID inferredCompany = null;
+        for (ModelBomCsvRow r : rows) {
+            if (r.getTenantId() != null) {
+                if (inferredTenant == null) inferredTenant = r.getTenantId();
+                else if (!inferredTenant.equals(r.getTenantId())) {
+                    ImportResponse resp = new ImportResponse();
+                    resp.success = false;
+                    resp.message = "Inconsistent tenantId values across CSV rows";
+                    resp.errors.add("Different tenantId values found in CSV");
+                    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(resp);
+                }
+            }
+            if (r.getCompanyId() != null) {
+                if (inferredCompany == null) inferredCompany = r.getCompanyId();
+                else if (!inferredCompany.equals(r.getCompanyId())) {
+                    ImportResponse resp = new ImportResponse();
+                    resp.success = false;
+                    resp.message = "Inconsistent companyId values across CSV rows";
+                    resp.errors.add("Different companyId values found in CSV");
+                    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(resp);
+                }
+            }
+        }
+
+        // If request param tenantId missing, try to use inferredTenant
+        if (tenantId == null && inferredTenant != null) {
+            tenantId = inferredTenant;
+        }
+
+        // Validate tenantId presence now
+        if (tenantId == null) {
+            ImportResponse resp = ImportResponse.error("tenantId is required either as request param, X-Tenant-Id header, or CSV column");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(resp);
+        }
+
+        // If request param companyId missing, try to use inferredCompany
+        if (companyId == null && inferredCompany != null) {
+            companyId = inferredCompany;
+        }
+
+        // verify tenant exists
+        Tenant tenant = tenantRepository.findById(tenantId).orElseThrow(() -> new IllegalArgumentException("tenant not found"));
+
         try {
-            ImportResult svcResult = modelBomService.importFromParsedRows(rows, tenant.getId().toString());
+            ImportResult svcResult;
+            if (bomId != null) {
+                // import into existing model (bomId is the model id)
+                svcResult = modelBomService.importIntoModel(rows, tenant.getId(), companyId, bomId);
+            } else {
+                svcResult = modelBomService.importFromParsedRows(rows, tenant.getId(), companyId);
+            }
+
             if (svcResult.hasErrors()) {
                 // service-level validation failed (e.g., missing materials) -> report as bad request
                 ImportResponse resp = new ImportResponse();

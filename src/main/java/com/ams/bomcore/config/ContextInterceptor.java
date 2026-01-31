@@ -69,7 +69,14 @@ public class ContextInterceptor implements HandlerInterceptor {
                 response.sendError(HttpStatus.BAD_REQUEST.value(), "Company has no tenant");
                 return false;
             }
-            if (!tenant.getId().toString().equals(tenantHeader)) {
+            UUID tenantUuid;
+            try {
+                tenantUuid = UUID.fromString(tenantHeader);
+            } catch (IllegalArgumentException ex) {
+                response.sendError(HttpStatus.BAD_REQUEST.value(), "Invalid UUID in tenant header");
+                return false;
+            }
+            if (!tenant.getId().equals(tenantUuid)) {
                 response.sendError(HttpStatus.BAD_REQUEST.value(), "Company does not belong to tenant");
                 return false;
             }

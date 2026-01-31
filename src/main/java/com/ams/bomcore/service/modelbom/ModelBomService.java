@@ -78,7 +78,7 @@ public class ModelBomService {
      * - Detect existing duplicate ModelBom records in DB and fail to avoid silent merges
      */
     @Transactional(rollbackFor = Exception.class)
-    public ImportResult importFromParsedRows(List<ModelBomCsvRow> rows, String tenantId) {
+    public ImportResult importFromParsedRows(List<ModelBomCsvRow> rows, UUID tenantId, UUID companyId) {
         ImportResult result = new ImportResult();
         if (rows == null || rows.isEmpty()) return result;
 
@@ -99,7 +99,11 @@ public class ModelBomService {
         Set<String> materialCodes = rows.stream().map(r -> r.getMaterialCode().trim()).collect(Collectors.toSet());
         Map<String, Material> materialByCode = new HashMap<>();
         for (String mc : materialCodes) {
-            materialRepository.findByMaterialCode(mc).ifPresent(m -> materialByCode.put(mc, m));
+            if (companyId != null) {
+                materialRepository.findByMaterialCodeAndTenantIdAndCompanyId(mc, tenantId, companyId).ifPresent(m -> materialByCode.put(mc, m));
+            } else {
+              //  materialRepository.findByMaterialCode(mc).ifPresent(m -> materialByCode.put(mc, m));
+            }
         }
         List<String> missingMaterials = materialCodes.stream().filter(mc -> !materialByCode.containsKey(mc)).collect(Collectors.toList());
         if (!missingMaterials.isEmpty()) {
@@ -115,8 +119,12 @@ public class ModelBomService {
         Set<String> modelCodes = byModel.keySet();
         Map<String, Model> existingModels = new HashMap<>();
         for (String mc : modelCodes) {
-            // tenant-aware model lookup
-            modelRepository.findByModelCodeAndTenantId(mc, tenantId).ifPresent(m -> existingModels.put(mc, m));
+            // tenant-aware model lookup; if companyId provided prefer tenant+company lookup
+            if (companyId != null) {
+                modelRepository.findByModelCodeAndTenantIdAndCompanyId(mc, tenantId, companyId).ifPresent(m -> existingModels.put(mc, m));
+            } else {
+               // modelRepository.findByModelCodeAndTenantId(mc, tenantId).ifPresent(m -> existingModels.put(mc, m));
+            }
         }
 
         for (Map.Entry<String, List<ModelBomCsvRow>> e : byModel.entrySet()) {
@@ -141,7 +149,12 @@ public class ModelBomService {
             List<ModelBomCsvRow> modelRows = e.getValue();
 
             // find existing model (tenant-scoped)
-            Model model = modelRepository.findByModelCodeAndTenantId(modelCode, tenantId).orElse(null);
+            Model model = null;
+            if (companyId != null) {
+                model = modelRepository.findByModelCodeAndTenantIdAndCompanyId(modelCode, tenantId, companyId).orElse(null);
+            } else {
+                model = modelRepository.findByModelCodeAndTenantId(modelCode, tenantId).orElse(null);
+            }
             boolean createdModel = false;
             if (model == null) {
                 // create new model
@@ -151,11 +164,13 @@ public class ModelBomService {
                     newModel.setModelCode(first.getModelCode());
                     newModel.setModelName(first.getModelName());
                     newModel.setTenantId(tenantId);
+                    if (companyId != null) newModel.setCompanyId(companyId);
                     // Do NOT preserve client-provided modelId here - backend must generate UUIDs via JPA @PrePersist
                 } else {
                     newModel.setModelCode(modelCode);
                     newModel.setModelName(modelCode);
                     newModel.setTenantId(tenantId);
+                    if (companyId != null) newModel.setCompanyId(companyId);
                 }
                 model = modelService.createForTenant(newModel, tenantId);
                 createdModel = true;
@@ -190,9 +205,105 @@ public class ModelBomService {
                     mb.setMaterial(material);
                     mb.setQtyPerUnit(normalizedQty);
                     mb.setTenantId(tenantId);
+                    mb.setCompanyId(companyId);
                     modelBomRepository.save(mb);
                     result.setModelBomsCreated(result.getModelBomsCreated() + 1);
                 }
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * Import parsed rows into an existing Model specified by modelId (bomId). This method
+     * validates materials exist, ensures model belongs to tenant, then creates/updates ModelBom
+     * records for the provided rows (rows' modelCode values are ignored and modelId is used).
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ImportResult importIntoModel(List<ModelBomCsvRow> rows, UUID tenantId, UUID companyId, UUID modelId) {
+        ImportResult result = new ImportResult();
+        if (rows == null || rows.isEmpty()) return result;
+
+        // Validate tenant and model existence
+        Model model = modelRepository.findById(modelId).orElse(null);
+        if (model == null) {
+            result.getErrors().add("Model with id " + modelId + " not found");
+            return result;
+        }
+        if (model.getTenantId() == null || !model.getTenantId().equals(tenantId)) {
+            result.getErrors().add("Model does not belong to the specified tenant");
+            return result;
+        }
+        if (companyId != null && model.getCompanyId() != null && !model.getCompanyId().equals(companyId)) {
+            result.getErrors().add("Model does not belong to the specified company");
+            return result;
+        }
+
+        // Validate duplicate material codes in input
+        Set<String> seenMaterials = new HashSet<>();
+        for (int i = 0; i < rows.size(); i++) {
+            String mcode = rows.get(i).getMaterialCode() == null ? "" : rows.get(i).getMaterialCode().trim();
+            if (seenMaterials.contains(mcode)) {
+                result.getErrors().add("Duplicate materialCode in input at row " + (i + 1) + ": " + mcode);
+            } else {
+                seenMaterials.add(mcode);
+            }
+        }
+        if (result.hasErrors()) return result;
+
+        // Gather distinct material codes and verify they exist
+        Set<String> materialCodes = rows.stream().map(r -> r.getMaterialCode().trim()).collect(Collectors.toSet());
+        Map<String, Material> materialByCode = new HashMap<>();
+        for (String mc : materialCodes) {
+            if (companyId != null) {
+                materialRepository.findByMaterialCodeAndTenantIdAndCompanyId(mc, tenantId, companyId).ifPresent(m -> materialByCode.put(mc, m));
+            } else {
+              //  materialRepository.findByMaterialCode(mc).ifPresent(m -> materialByCode.put(mc, m));
+            }
+        }
+        List<String> missingMaterials = materialCodes.stream().filter(mc -> !materialByCode.containsKey(mc)).collect(Collectors.toList());
+        if (!missingMaterials.isEmpty()) {
+            result.getErrors().add("Missing materials: " + String.join(", ", missingMaterials));
+            return result;
+        }
+
+        // Pre-check DB duplicates for material within this model
+        for (String mc : materialCodes) {
+            Material mat = materialByCode.get(mc);
+            List<ModelBom> existingList = modelBomRepository.findAllByModelAndMaterial(model, mat);
+            if (existingList != null && existingList.size() > 1) {
+                result.getErrors().add("Database contains duplicate ModelBom records for modelId='" + modelId + "' and materialCode='" + mc + "' -- clean DB first");
+            }
+        }
+        if (result.hasErrors()) return result;
+
+        // Now create/update records
+        for (ModelBomCsvRow row : rows) {
+            String mcode = row.getMaterialCode().trim();
+            Material material = materialByCode.get(mcode);
+            BigDecimal normalizedQty = row.getQtyPerUnit() == null ? null : row.getQtyPerUnit().setScale(4, RoundingMode.HALF_UP);
+
+            List<ModelBom> existingList = modelBomRepository.findAllByModelAndMaterial(model, material);
+            ModelBom existing = (existingList != null && !existingList.isEmpty()) ? existingList.get(0) : null;
+            if (existing != null) {
+                BigDecimal oldQty = existing.getQtyPerUnit();
+                BigDecimal oldNormalized = oldQty == null ? null : oldQty.setScale(4, RoundingMode.HALF_UP);
+                if (oldNormalized == null || (normalizedQty != null && oldNormalized.compareTo(normalizedQty) != 0)) {
+                    existing.setQtyPerUnit(normalizedQty);
+                    existing.setTenantId(tenantId);
+                    modelBomRepository.save(existing);
+                    result.setModelBomsUpdated(result.getModelBomsUpdated() + 1);
+                }
+            } else {
+                ModelBom mb = new ModelBom();
+                mb.setModel(model);
+                mb.setMaterial(material);
+                mb.setQtyPerUnit(normalizedQty);
+                mb.setTenantId(tenantId);
+                mb.setCompanyId(companyId);
+                modelBomRepository.save(mb);
+                result.setModelBomsCreated(result.getModelBomsCreated() + 1);
             }
         }
 

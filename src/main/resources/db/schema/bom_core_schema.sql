@@ -37,7 +37,7 @@ CREATE TABLE model (
 -- ---------- Supplier ----------
 CREATE TABLE supplier (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    tenant_id       VARCHAR(100) NOT NULL,
+    tenant_id       UUID NOT NULL,
     code            VARCHAR(50) UNIQUE,
     supplier_code   VARCHAR(50) UNIQUE NOT NULL,
     supplier_name   TEXT NOT NULL,
@@ -51,7 +51,8 @@ CREATE TABLE supplier (
 -- ---------- Warehouse ----------
 CREATE TABLE warehouse (
     id      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    tenant_id       VARCHAR(100) NOT NULL,
+    tenant_id       UUID NOT NULL,
+    company_id      UUID NOT NULL,
     code    VARCHAR(50) UNIQUE NOT NULL,
     name    TEXT NOT NULL,
     location VARCHAR(200),
@@ -66,7 +67,8 @@ CREATE TABLE warehouse (
 -- ---------- BOM Header ----------
 CREATE TABLE bom (
     id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    tenant_id       VARCHAR(100) NOT NULL,
+    tenant_id   UUID NOT NULL,
+    company_id      UUID NOT NULL,
     model_name  VARCHAR(100) NOT NULL,
     version     INTEGER NOT NULL,
     status      VARCHAR(20) NOT NULL,           -- DRAFT, ACTIVE, ARCHIVED
@@ -77,7 +79,8 @@ CREATE TABLE bom (
 -- ---------- BOM Items (Tree Structure) ----------
 CREATE TABLE bom_item (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    tenant_id       VARCHAR(100) NOT NULL,
+    tenant_id       UUID NOT NULL,
+    company_id      UUID NOT NULL,
     bom_id          UUID NOT NULL REFERENCES bom(id) ON DELETE CASCADE,
     parent_item_id  UUID REFERENCES bom_item(id),
     material_id     UUID NOT NULL REFERENCES material(id),
@@ -89,7 +92,8 @@ CREATE TABLE bom_item (
 -- Links a Model to a Material with the quantity required per one Model unit.
 CREATE TABLE model_bom (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    tenant_id       VARCHAR(100) NOT NULL,
+    tenant_id       UUID NOT NULL,
+    company_id      UUID NOT NULL,
     model_id        UUID NOT NULL REFERENCES model(id) ON DELETE CASCADE,
     material_id     UUID NOT NULL REFERENCES material(id) ON DELETE RESTRICT,
     qty_per_unit    NUMERIC(14,4) NOT NULL

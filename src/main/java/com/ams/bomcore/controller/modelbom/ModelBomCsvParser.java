@@ -17,7 +17,7 @@ import org.springframework.web.multipart.MultipartFile;
  * with basic validation applied. This does not perform any database writes.
  *
  * Expected CSV columns (in order):
- * modelCode,modelName,materialCode,qtyPerUnit
+ * modelCode,modelName,materialCode,qtyPerUnit[,modelId][,tenantId][,companyId]
  *
  * Header row is allowed and will be skipped when detected.
  */
@@ -75,7 +75,7 @@ public class ModelBomCsvParser {
                 }
 
                 if (cols.length < 4) {
-                    result.getErrors().add("Row " + row + ": expected 4 columns (modelCode,modelName,materialCode,qtyPerUnit)");
+                    result.getErrors().add("Row " + row + ": expected at least 4 columns (modelCode,modelName,materialCode,qtyPerUnit)");
                     continue;
                 }
 
@@ -127,6 +127,32 @@ public class ModelBomCsvParser {
                         } catch (Exception ignored) {
                             // invalid uuid in optional column -> collect warning but continue
                             result.getErrors().add("Row " + row + ": invalid model UUID, ignoring: '" + idText + "'");
+                        }
+                    }
+                }
+
+                // optional tenantId in 6th column
+                if (cols.length >= 6) {
+                    String tText = cols[5].trim();
+                    if (!tText.isEmpty()) {
+                        try {
+                            UUID tid = UUID.fromString(tText);
+                            dto.setTenantId(tid);
+                        } catch (Exception ignored) {
+                            result.getErrors().add("Row " + row + ": invalid tenant UUID, ignoring: '" + tText + "'");
+                        }
+                    }
+                }
+
+                // optional companyId in 7th column
+                if (cols.length >= 7) {
+                    String cText = cols[6].trim();
+                    if (!cText.isEmpty()) {
+                        try {
+                            UUID cid = UUID.fromString(cText);
+                            dto.setCompanyId(cid);
+                        } catch (Exception ignored) {
+                            result.getErrors().add("Row " + row + ": invalid company UUID, ignoring: '" + cText + "'");
                         }
                     }
                 }

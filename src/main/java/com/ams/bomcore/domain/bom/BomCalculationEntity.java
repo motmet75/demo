@@ -34,8 +34,8 @@ public class BomCalculationEntity {
     private BomEntity bom;
 
     // tenant for calculation - copied from BOM for isolation and easier queries
-    @Column(name = "tenant_id", nullable = false, length = 100)
-    private String tenantId;
+    @Column(name = "tenant_id", nullable = false)
+    private UUID tenantId;
 
     @Column(name = "model_name", nullable = false, length = 100)
     private String modelName;
@@ -72,11 +72,11 @@ public class BomCalculationEntity {
         this.bom = bom;
     }
 
-    public String getTenantId() {
+    public UUID getTenantId() {
         return tenantId;
     }
 
-    public void setTenantId(String tenantId) {
+    public void setTenantId(UUID tenantId) {
         this.tenantId = tenantId;
     }
 
@@ -148,7 +148,7 @@ public class BomCalculationEntity {
         return "BomCalculationEntity{" +
                 "id=" + id +
                 ", bom=" + (bom != null ? bom.getId() : null) +
-                ", tenantId='" + tenantId + '\'' +
+                ", tenantId=" + tenantId +
                 ", modelName='" + modelName + '\'' +
                 ", targetQty=" + targetQty +
                 ", status='" + status + '\'' +

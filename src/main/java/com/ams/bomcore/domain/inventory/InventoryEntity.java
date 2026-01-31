@@ -30,11 +30,11 @@ public class InventoryEntity {
     @Column(name = "id", nullable = false)
     private UUID id;
 
-    @Column(name = "tenant_id", nullable = false, length = 100)
-    private String tenantId;
+    @Column(name = "tenant_id", nullable = false)
+    private UUID tenantId;
 
-    @Column(name = "company_id", length = 100)
-    private String companyId;
+    @Column(name = "company_id")
+    private UUID companyId;
 
     // Use relationship to Material (no duplicated material code/name stored here)
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -80,19 +80,19 @@ public class InventoryEntity {
         this.id = id;
     }
 
-    public String getTenantId() {
+    public UUID getTenantId() {
         return tenantId;
     }
 
-    public void setTenantId(String tenantId) {
+    public void setTenantId(UUID tenantId) {
         this.tenantId = tenantId;
     }
 
-    public String getCompanyId() {
+    public UUID getCompanyId() {
         return companyId;
     }
 
-    public void setCompanyId(String companyId) {
+    public void setCompanyId(UUID companyId) {
         this.companyId = companyId;
     }
 
@@ -240,8 +240,8 @@ public class InventoryEntity {
     public String toString() {
         return "InventoryEntity{" +
                 "id=" + id +
-                ", tenantId='" + tenantId + '\'' +
-                ", companyId='" + companyId + '\'' +
+                ", tenantId=" + tenantId +
+                ", companyId=" + companyId +
                 ", material=" + (material != null ? material.getId() : null) +
                 ", warehouse=" + (warehouse != null ? warehouse.getId() : null) +
                 ", batchNo=" + batchNo +

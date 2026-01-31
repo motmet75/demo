@@ -1,6 +1,7 @@
 package com.ams.bomcore.controller.bom;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
@@ -16,7 +17,7 @@ public class BomCheckRequest {
     private BigDecimal quantity;
 
     // optional tenant id; if omitted, service should resolve tenant from context
-    private String tenantId;
+    private UUID tenantId;
 
     public String getModelCode() {
         return modelCode;
@@ -34,11 +35,11 @@ public class BomCheckRequest {
         this.quantity = quantity;
     }
 
-    public String getTenantId() {
+    public UUID getTenantId() {
         return tenantId;
     }
 
-    public void setTenantId(String tenantId) {
+    public void setTenantId(UUID tenantId) {
         this.tenantId = tenantId;
     }
 }

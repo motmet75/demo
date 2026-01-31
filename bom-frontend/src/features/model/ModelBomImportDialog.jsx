@@ -1,11 +1,13 @@
 import React, { useState } from 'react'
 import { importModelBoms } from '../../api/modelApi'
+import { useAppContext } from '../../context/AppContext'
 
 // Minimal modal dialog - keeps UI inline with existing project patterns
 export default function ModelBomImportDialog({ open, onClose, onSuccess }) {
   const [file, setFile] = useState(null)
   const [result, setResult] = useState(null)
   const [uploading, setUploading] = useState(false)
+  const { tenantId, companyId } = useAppContext()
 
   if (!open) return null
 
@@ -14,7 +16,7 @@ export default function ModelBomImportDialog({ open, onClose, onSuccess }) {
     if (!file) return alert('Choose a file')
     setUploading(true)
     try {
-      const res = await importModelBoms(file)
+      const res = await importModelBoms(file, { tenantId, companyId })
       setResult(res)
       if (res && res.success) {
         // notify parent to refresh

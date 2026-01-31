@@ -26,8 +26,8 @@ public class BomCalculationItemEntity {
     @Column(name = "id", nullable = false)
     private UUID id;
 
-    @Column(name = "tenant_id", nullable = false, length = 100)
-    private String tenantId;
+    @Column(name = "tenant_id", nullable = false)
+    private UUID tenantId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "calculation_id", nullable = false)
@@ -57,11 +57,11 @@ public class BomCalculationItemEntity {
         this.id = id;
     }
 
-    public String getTenantId() {
+    public UUID getTenantId() {
         return tenantId;
     }
 
-    public void setTenantId(String tenantId) {
+    public void setTenantId(UUID tenantId) {
         this.tenantId = tenantId;
     }
 
@@ -129,7 +129,7 @@ public class BomCalculationItemEntity {
     public String toString() {
         return "BomCalculationItemEntity{" +
                 "id=" + id +
-                ", tenantId='" + tenantId + '\'' +
+                ", tenantId=" + tenantId +
                 ", calculation=" + (calculation != null ? calculation.getId() : null) +
                 ", material=" + (material != null ? material.getId() : null) +
                 ", requiredQty=" + requiredQty +

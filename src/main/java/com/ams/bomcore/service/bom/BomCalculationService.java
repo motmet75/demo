@@ -57,7 +57,7 @@ public class BomCalculationService {
      * @return saved BomCalculationEntity containing calculation items
      */
     @Transactional
-    public BomCalculationEntity calculate(Model model, String tenantId, BigDecimal targetQty) {
+    public BomCalculationEntity calculate(Model model, UUID tenantId, BigDecimal targetQty) {
         if (model == null) throw new IllegalArgumentException("Model is required");
 
         BomEntity bom = bomRepository.findByModelAndTenantIdAndStatus(model, tenantId, "ACTIVE")
@@ -107,6 +107,8 @@ public class BomCalculationService {
             ci.setRequiredQty(required);
             ci.setAvailableQty(available);
             ci.setShortageQty(shortage);
+            // set tenant id on item for easier querying later
+            ci.setTenantId(calculation.getTenantId());
             calcItems.add(ci);
         }
 
@@ -124,11 +126,11 @@ public class BomCalculationService {
     @Transactional
     public List<BomCheckResult> checkAvailability(String modelCode, BigDecimal targetQty) {
         // delegate with empty tenantId (caller should prefer overload that provides tenant)
-        return checkAvailability(modelCode, targetQty, "");
+        return checkAvailability(modelCode, targetQty, null);
     }
 
     @Transactional
-    public List<BomCheckResult> checkAvailability(String modelCode, BigDecimal targetQty, String tenantId) {
+    public List<BomCheckResult> checkAvailability(String modelCode, BigDecimal targetQty, UUID tenantId) {
         // Resolve modelCode -> model
         Model model = modelRepository.findByModelCode(modelCode)
                 .orElseThrow(() -> new IllegalArgumentException("Model not found for code: " + modelCode));

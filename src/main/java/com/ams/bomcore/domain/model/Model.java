@@ -21,12 +21,12 @@ public class Model {
     @Column(name = "id", nullable = false)
     private UUID id;
 
-    @Column(name = "tenant_id", nullable = false, length = 100)
-    private String tenantId;
+    @Column(name = "tenant_id", nullable = false)
+    private UUID tenantId;
 
-    // New: company id stored as string to avoid forcing a join/foreign key change
-    @Column(name = "company_id", length = 100)
-    private String companyId;
+    // company id as UUID
+    @Column(name = "company_id")
+    private UUID companyId;
 
     @Column(name = "model_code", nullable = false, unique = true, length = 50)
     private String modelCode;
@@ -52,19 +52,19 @@ public class Model {
         this.id = id;
     }
 
-    public String getTenantId() {
+    public UUID getTenantId() {
         return tenantId;
     }
 
-    public void setTenantId(String tenantId) {
+    public void setTenantId(UUID tenantId) {
         this.tenantId = tenantId;
     }
 
-    public String getCompanyId() {
+    public UUID getCompanyId() {
         return companyId;
     }
 
-    public void setCompanyId(String companyId) {
+    public void setCompanyId(UUID companyId) {
         this.companyId = companyId;
     }
 

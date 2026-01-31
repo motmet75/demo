@@ -37,7 +37,7 @@ public interface InventoryRepository extends JpaRepository<InventoryEntity, UUID
 
     // New: find all inventory entries for tenant + company
     @Query("SELECT i FROM InventoryEntity i WHERE i.tenantId = :tenantId AND i.companyId = :companyId")
-    List<InventoryEntity> findByTenantIdAndCompanyId(@Param("tenantId") String tenantId, @Param("companyId") String companyId);
+    List<InventoryEntity> findByTenantIdAndCompanyId(@Param("tenantId") UUID tenantId, @Param("companyId") UUID companyId);
 
     // Projection for grid display: join Inventory -> Material -> Warehouse in one query to avoid N+1
     @Query("SELECT new com.ams.bomcore.controller.inventory.dto.InventoryViewDTO("
@@ -47,7 +47,7 @@ public interface InventoryRepository extends JpaRepository<InventoryEntity, UUID
             + "JOIN i.material m "
             + "JOIN i.warehouse w "
             + "WHERE i.tenantId = :tenantId AND i.companyId = :companyId")
-    List<InventoryViewDTO> findAllInventoryView(@Param("tenantId") String tenantId, @Param("companyId") String companyId);
+    List<InventoryViewDTO> findAllInventoryView(@Param("tenantId") UUID tenantId, @Param("companyId") UUID companyId);
 
     // New: projection for tenant+company-scoped inventory view
     @Query("SELECT new com.ams.bomcore.controller.inventory.dto.InventoryViewDTO("
@@ -57,7 +57,7 @@ public interface InventoryRepository extends JpaRepository<InventoryEntity, UUID
             + "JOIN i.material m "
             + "JOIN i.warehouse w "
             + "WHERE i.tenantId = :tenantId AND i.companyId = :companyId")
-    List<InventoryViewDTO> findInventoryViewByTenantAndCompany(@Param("tenantId") String tenantId, @Param("companyId") String companyId);
+    List<InventoryViewDTO> findInventoryViewByTenantAndCompany(@Param("tenantId") UUID tenantId, @Param("companyId") UUID companyId);
 
     // New: projection filtered by companyId only
     @Query("SELECT new com.ams.bomcore.controller.inventory.dto.InventoryViewDTO("
@@ -67,6 +67,6 @@ public interface InventoryRepository extends JpaRepository<InventoryEntity, UUID
             + "JOIN i.material m "
             + "JOIN i.warehouse w "
             + "WHERE i.companyId = :companyId")
-    List<InventoryViewDTO> findInventoryViewByCompanyId(@Param("companyId") String companyId);
+    List<InventoryViewDTO> findInventoryViewByCompanyId(@Param("companyId") UUID companyId);
 
 }

@@ -26,21 +26,13 @@ public class InventoryViewDTO {
     private Instant productionDateTime;
     private Instant createdAt;
 
-    public InventoryViewDTO(UUID inventoryId, String tenantIdStr, String companyIdStr, UUID materialId, String materialCode, String materialName,
+    public InventoryViewDTO(UUID inventoryId, UUID tenantId, UUID companyId, UUID materialId, String materialCode, String materialName,
                             UUID warehouseId, String warehouseCode, String warehouseName,
                             BigDecimal quantityOnHand, BigDecimal quantityReserved, String batchNo,
                             Instant expirationDateTime, Instant productionDateTime, Instant createdAt) {
         this.inventoryId = inventoryId;
-        try {
-            this.tenantId = tenantIdStr == null ? null : UUID.fromString(tenantIdStr);
-        } catch (Exception e) {
-            this.tenantId = null;
-        }
-        try {
-            this.companyId = companyIdStr == null ? null : UUID.fromString(companyIdStr);
-        } catch (Exception e) {
-            this.companyId = null;
-        }
+        this.tenantId = tenantId;
+        this.companyId = companyId;
         this.materialId = materialId;
         this.materialCode = materialCode;
         this.materialName = materialName;

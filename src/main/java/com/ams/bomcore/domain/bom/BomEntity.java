@@ -26,13 +26,13 @@ public class BomEntity {
     @Column(name = "id", nullable = false)
     private UUID id;
 
-    // tenant isolation key (string to match TenantContext usage elsewhere)
-    @Column(name = "tenant_id", nullable = false, length = 100)
-    private String tenantId;
+    // tenant isolation key (stored as UUID)
+    @Column(name = "tenant_id", nullable = false)
+    private UUID tenantId;
 
     // company scope for BOM (nullable if BOM is tenant-wide)
-    @Column(name = "company_id", length = 100)
-    private String companyId;
+    @Column(name = "company_id")
+    private UUID companyId;
 
     @ManyToOne
     @JoinColumn(name = "model_id", nullable = false)
@@ -58,19 +58,19 @@ public class BomEntity {
         this.id = id;
     }
 
-    public String getTenantId() {
+    public UUID getTenantId() {
         return tenantId;
     }
 
-    public void setTenantId(String tenantId) {
+    public void setTenantId(UUID tenantId) {
         this.tenantId = tenantId;
     }
 
-    public String getCompanyId() {
+    public UUID getCompanyId() {
         return companyId;
     }
 
-    public void setCompanyId(String companyId) {
+    public void setCompanyId(UUID companyId) {
         this.companyId = companyId;
     }
 
@@ -133,8 +133,8 @@ public class BomEntity {
     public String toString() {
         return "BomEntity{" +
                 "id=" + id +
-                ", tenantId='" + tenantId + '\'' +
-                ", companyId='" + companyId + '\'' +
+                ", tenantId=" + tenantId +
+                ", companyId=" + companyId +
                 ", model=" + (model != null ? model.getId() : null) +
                 ", version=" + version +
                 ", status='" + status + '\'' +

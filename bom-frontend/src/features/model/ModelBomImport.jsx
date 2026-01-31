@@ -1,17 +1,19 @@
 import React, { useState } from 'react'
 import { importModelBoms } from '../../api/modelApi'
+import { useAppContext } from '../../context/AppContext'
 
 export default function ModelBomImport() {
   const [file, setFile] = useState(null)
   const [result, setResult] = useState(null)
   const [uploading, setUploading] = useState(false)
+  const { tenantId, companyId } = useAppContext()
 
   async function onSubmit(e) {
     e.preventDefault()
     if (!file) return alert('Choose a file')
     setUploading(true)
     try {
-      const res = await importModelBoms(file)
+      const res = await importModelBoms(file, { tenantId, companyId })
       setResult(res)
     } catch (err) {
       setResult({ success: false, message: err.message || 'Upload failed' })

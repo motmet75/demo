@@ -35,6 +35,10 @@ public class ModelBomCsvRow {
     // Optional: if CSV provides UUID for model (preserve when provided)
     private UUID modelId;
 
+    // Optional tenantId and companyId parsed from CSV (if present)
+    private UUID tenantId;
+    private UUID companyId;
+
     public ModelBomCsvRow() {
     }
 
@@ -78,6 +82,22 @@ public class ModelBomCsvRow {
         this.modelId = modelId;
     }
 
+    public UUID getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(UUID tenantId) {
+        this.tenantId = tenantId;
+    }
+
+    public UUID getCompanyId() {
+        return companyId;
+    }
+
+    public void setCompanyId(UUID companyId) {
+        this.companyId = companyId;
+    }
+
     @Override
     public String toString() {
         return "ModelBomCsvRow{" +
@@ -86,6 +106,8 @@ public class ModelBomCsvRow {
                 ", materialCode='" + materialCode + '\'' +
                 ", qtyPerUnit=" + qtyPerUnit +
                 ", modelId=" + modelId +
+                ", tenantId=" + tenantId +
+                ", companyId=" + companyId +
                 '}';
     }
 }

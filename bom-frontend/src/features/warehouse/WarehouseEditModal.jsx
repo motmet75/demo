@@ -77,11 +77,23 @@ export default function WarehouseEditModal({ open, warehouse, onClose, onSave, s
 
   const handleChange = (field) => (e) => setForm(prev => ({ ...prev, [field]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
 
+  const readAppContext = () => {
+    try {
+      const raw = localStorage.getItem('bom_app_context_v1')
+      if (!raw) return {}
+      return JSON.parse(raw) || {}
+    } catch {
+      return {}
+    }
+  }
+
   const handleSubmit = async (e) => {
     if (e && e.preventDefault) e.preventDefault()
     if (isSubmitting || saving) return
     setErrorMessage('')
     setIsSubmitting(true)
+
+    const appCtx = readAppContext()
 
     const payload = {
       ...(warehouse && warehouse.id ? { id: warehouse.id } : (form.id ? { id: form.id } : {})),
@@ -94,7 +106,10 @@ export default function WarehouseEditModal({ open, warehouse, onClose, onSave, s
       phone: form.phone || null,
       email: form.email || null,
       capacity: (form.capacity === '' || form.capacity == null) ? null : form.capacity,
-      note: form.note || null
+      note: form.note || null,
+      // include tenant/company from local storage context when available so backend can persist tenant_id/company_id
+      ...(appCtx.tenantId ? { tenantId: appCtx.tenantId } : {}),
+      ...(appCtx.companyId ? { companyId: appCtx.companyId } : {})
     }
 
     try {

@@ -27,8 +27,12 @@ public class ModelBom {
     @Column(name = "id", nullable = false)
     private UUID id;
 
-    @Column(name = "tenant_id", nullable = false, length = 100)
-    private String tenantId;
+    @Column(name = "tenant_id", nullable = false)
+    private UUID tenantId;
+
+    // company_id column to scope ModelBom to a company when applicable
+    @Column(name = "company_id")
+    private UUID companyId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "model_id", nullable = false)
@@ -53,12 +57,20 @@ public class ModelBom {
         this.id = id;
     }
 
-    public String getTenantId() {
+    public UUID getTenantId() {
         return tenantId;
     }
 
-    public void setTenantId(String tenantId) {
+    public void setTenantId(UUID tenantId) {
         this.tenantId = tenantId;
+    }
+
+    public UUID getCompanyId() {
+        return companyId;
+    }
+
+    public void setCompanyId(UUID companyId) {
+        this.companyId = companyId;
     }
 
     public Model getModel() {
@@ -109,7 +121,8 @@ public class ModelBom {
     public String toString() {
         return "ModelBom{" +
                 "id=" + id +
-                ", tenantId='" + tenantId + '\'' +
+                ", tenantId=" + tenantId +
+                ", companyId=" + companyId +
                 ", model=" + (model != null ? model.getId() : null) +
                 ", material=" + (material != null ? material.getId() : null) +
                 ", qtyPerUnit=" + qtyPerUnit +

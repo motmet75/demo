@@ -84,8 +84,8 @@ public class ModelController {
             throw new IllegalArgumentException("company does not belong to tenant");
         }
 
-        // Model stores tenantId and companyId as strings
-        return modelService.findAllByTenantAndCompany(tenant.getId().toString(), company.getId().toString());
+        // Model stores tenantId and companyId as UUIDs
+        return modelService.findAllByTenantAndCompany(tenant.getId(), company.getId());
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -107,12 +107,12 @@ public class ModelController {
         }
 
         // uniqueness per company
-        var existing = modelRepository.findByModelCodeAndTenantIdAndCompanyId(model.getModelCode(), tenant.getId().toString(), company.getId().toString());
+        var existing = modelRepository.findByModelCodeAndTenantIdAndCompanyId(model.getModelCode(), tenant.getId(), company.getId());
         if (existing.isPresent()) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("model code already exists for this company");
 
-        model.setTenantId(tenant.getId().toString());
-        model.setCompanyId(company.getId().toString());
-        Model saved = modelService.createForTenantAndCompany(model, tenant.getId().toString(), company.getId().toString());
+        model.setTenantId(tenant.getId());
+        model.setCompanyId(company.getId());
+        Model saved = modelService.createForTenantAndCompany(model, tenant.getId(), company.getId());
         return ResponseEntity.status(HttpStatus.CREATED).body(saved);
     }
 
@@ -142,9 +142,9 @@ public class ModelController {
         }
 
         // ensure id/company/tenant are set on incoming object and update scoping
-        model.setTenantId(tenant.getId().toString());
-        model.setCompanyId(company.getId().toString());
-        Model saved = modelService.updateForTenantAndCompany(model, tenant.getId().toString(), company.getId().toString());
+        model.setTenantId(tenant.getId());
+        model.setCompanyId(company.getId());
+        Model saved = modelService.updateForTenantAndCompany(model, tenant.getId(), company.getId());
         return ResponseEntity.ok(saved);
     }
 

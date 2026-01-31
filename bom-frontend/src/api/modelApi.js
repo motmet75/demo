@@ -74,10 +74,19 @@ export async function deleteModel(id) {
   return data
 }
 
-export async function importModelBoms(file) {
+export async function importModelBoms(file, options = {}) {
+  // options: { tenantId, companyId, bomId }
   const form = new FormData()
   form.append('file', file)
-  const res = await apiFetch('/bom/api/models/import-bom', { method: 'POST', body: form })
+  if (options.tenantId) form.append('tenantId', options.tenantId)
+  if (options.companyId) form.append('companyId', options.companyId)
+  if (options.bomId) form.append('bomId', options.bomId)
+
+  const headers = {}
+  // include X-Tenant-Id header for server-side tenant resolution if provided
+  if (options.tenantId) headers['X-Tenant-Id'] = options.tenantId
+
+  const res = await apiFetch('/bom/api/models/import-bom', { method: 'POST', body: form, headers })
   if (!res.ok) {
     const text = await res.text()
     throw new Error(text || 'Upload failed')
@@ -89,6 +98,27 @@ export async function fetchModelBoms() {
   const { res, data } = await apiFetchJson('/bom/api/model-boms')
   if (!res.ok) return []
 
+  if (Array.isArray(data)) return data
+  if (data && typeof data === 'object') {
+    if (Array.isArray(data.data)) return data.data
+    if (Array.isArray(data.items)) return data.items
+    if (Array.isArray(data.content)) return data.content
+  }
+  return []
+}
+
+export async function fetchModelBomsByModel(modelId, options = {}) {
+  // options: { tenantId, companyId }
+  if (!modelId) return []
+  const params = new URLSearchParams()
+  if (options.tenantId) params.set('tenantId', options.tenantId)
+  if (options.companyId) params.set('companyId', options.companyId)
+  const qs = params.toString()
+  const url = `/bom/api/model-boms/by-model/${encodeURIComponent(modelId)}${qs ? '?' + qs : ''}`
+  const headers = {}
+  if (options.tenantId) headers['X-Tenant-Id'] = options.tenantId
+  const { res, data } = await apiFetchJson(url, { headers })
+  if (!res.ok) return []
   if (Array.isArray(data)) return data
   if (data && typeof data === 'object') {
     if (Array.isArray(data.data)) return data.data

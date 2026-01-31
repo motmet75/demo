@@ -36,7 +36,20 @@ public class BomController {
 
         if (tenantId == null || companyId == null) throw new IllegalArgumentException("tenantId and companyId are required");
 
-        List<BomEntity> list = bomRepository.findAllByTenantIdAndCompanyId(tenantId, companyId);
+        UUID tenantUuid;
+        UUID companyUuid;
+        try {
+            tenantUuid = UUID.fromString(tenantId);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Invalid tenantId UUID: " + tenantId);
+        }
+        try {
+            companyUuid = UUID.fromString(companyId);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Invalid companyId UUID: " + companyId);
+        }
+
+        List<BomEntity> list = bomRepository.findAllByTenantIdAndCompanyId(tenantUuid, companyUuid);
         return list.stream().map(b -> new BomDto(b.getId(), b.getModel() != null ? b.getModel().getId() : null, b.getModel() != null ? b.getModel().getModelName() : null, b.getVersion(), b.getStatus())).collect(Collectors.toList());
     }
 
