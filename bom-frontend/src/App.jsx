@@ -15,6 +15,7 @@ import CompanySelector from './components/CompanySelector'
 import BomSelector from './components/BomSelector'
 import RequireContext from './components/RequireContext'
 import TenantList from './components/TenantList'
+import ContractPage from './features/contract/ContractPage'
 
 export default function App() {
   return (
@@ -38,6 +39,7 @@ export default function App() {
             <Link to="/inventory" style={{ marginRight: 12 }}>Inventory</Link>
             <Link to="/warehouses" style={{ marginRight: 12 }}>Warehouses</Link>
             <Link to="/suppliers" style={{ marginRight: 12 }}>Suppliers</Link>
+            <Link to="/contracts" style={{ marginRight: 12 }}>Contracts</Link>
             <Link to="/tenants" style={{ marginLeft: 12 }}>Tenants</Link>
             <Link to="/companies" style={{ marginLeft: 12 }}>Companies</Link>
           </nav>
@@ -52,6 +54,8 @@ export default function App() {
             {/* Tenant management is public (no tenant context required) */}
             <Route path="/tenants" element={<TenantList />} />
             <Route path="/companies" element={<CompanyPage />} />
+
+            <Route path="/contracts" element={<RequireContext><ContractPage /></RequireContext>} />
           </Routes>
         </div>
       </BrowserRouter>

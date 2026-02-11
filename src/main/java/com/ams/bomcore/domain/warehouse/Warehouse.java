@@ -26,7 +26,7 @@ public class Warehouse {
     @JoinColumn(name = "company_id", nullable = false)
     private Company company;
 
-    @Column(name = "name", nullable = false, unique = true, length = 100)
+    @Column(name = "name", nullable = false, length = 100)
     private String warehouseCode;
 
     @Column(name = "code", nullable = false, columnDefinition = "TEXT")

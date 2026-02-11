@@ -26,7 +26,18 @@ public class WarehouseService {
         if (warehouse == null) throw new IllegalArgumentException("Warehouse is required");
         String code = warehouse.getCode() == null ? null : warehouse.getCode().trim();
         if (code == null || code.isEmpty()) throw new IllegalArgumentException("warehouse code is required");
-        if (warehouseRepository.existsByCode(code)) throw new IllegalArgumentException("warehouse code already exists: " + code);
+        // prefer tenant+company scoped uniqueness when tenantId/companyId present
+        UUID tenantId = warehouse.getTenantId();
+        UUID companyId = warehouse.getCompanyId();
+        boolean exists;
+        if (tenantId != null && companyId != null) {
+            exists = warehouseRepository.existsByCodeAndTenantIdAndCompanyId(code, tenantId, companyId);
+        } else if (tenantId != null) {
+            exists = warehouseRepository.existsByCodeAndTenantId(code, tenantId);
+        } else {
+            exists = warehouseRepository.existsByCode(code);
+        }
+        if (exists) throw new IllegalArgumentException("warehouse code already exists: " + code);
         return warehouseRepository.save(warehouse);
     }
 
@@ -43,7 +54,18 @@ public class WarehouseService {
         String code = warehouse.getCode() == null ? null : warehouse.getCode().trim();
         if (code == null || code.isEmpty()) throw new IllegalArgumentException("warehouse code is required");
 
-        Optional<WarehouseEntity> byCode = warehouseRepository.findByCode(code);
+        // Use tenant+company scoped lookup if possible to ensure uniqueness within scope
+        UUID tenantId = warehouse.getTenantId();
+        UUID companyId = warehouse.getCompanyId();
+        Optional<WarehouseEntity> byCode = Optional.empty();
+        if (tenantId != null && companyId != null) {
+            byCode = warehouseRepository.findByCodeAndTenantIdAndCompanyId(code, tenantId, companyId);
+        } else if (tenantId != null) {
+            byCode = warehouseRepository.findByCodeAndTenantId(code, tenantId);
+        } else {
+            byCode = warehouseRepository.findByCode(code);
+        }
+
         if (byCode.isPresent() && !byCode.get().getId().equals(id)) {
             throw new IllegalArgumentException("warehouse code already exists: " + code);
         }

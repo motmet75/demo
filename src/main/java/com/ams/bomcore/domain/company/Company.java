@@ -29,7 +29,7 @@ public class Company {
     @JoinColumn(name = "tenant_id", nullable = false)
     private Tenant tenant;
 
-    @Column(name = "company_code", nullable = false, unique = true, length = 100)
+    @Column(name = "company_code", nullable = false, length = 100)
     private String companyCode;
 
     @Column(name = "company_name", nullable = false, columnDefinition = "TEXT")

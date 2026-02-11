@@ -26,4 +26,9 @@ public interface WarehouseRepository extends JpaRepository<WarehouseEntity, UUID
 
     boolean existsByCodeAndTenantId(String code, UUID tenantId);
 
+    // Added: tenant+company scoped lookup and existence checks
+    Optional<WarehouseEntity> findByCodeAndTenantIdAndCompanyId(String code, UUID tenantId, UUID companyId);
+
+    boolean existsByCodeAndTenantIdAndCompanyId(String code, UUID tenantId, UUID companyId);
+
 }

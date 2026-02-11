@@ -17,4 +17,7 @@ public interface CompanyRepository extends JpaRepository<Company, UUID> {
 
     Optional<Company> findByCompanyCode(String companyCode);
 
+    // Added: tenant-scoped lookup using tenant id for uniqueness checks
+    Optional<Company> findByCompanyCodeAndTenantId(String companyCode, UUID tenantId);
+
 }

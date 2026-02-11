@@ -498,3 +498,43 @@ $$;
 CREATE INDEX IF NOT EXISTS idx_material_tenant_company_code ON material(tenant_id, company_id, material_code);
 
 -- ...existing update steps continue ...
+
+--select all constraints of supplier table
+SELECT 
+    tc.constraint_name,
+    tc.constraint_type,
+    kcu.column_name,
+    cc.check_clause,                     -- only filled for CHECK constraints
+    tc.is_deferrable,
+    tc.initially_deferred
+FROM information_schema.table_constraints tc
+LEFT JOIN information_schema.key_column_usage kcu
+    ON tc.constraint_catalog = kcu.constraint_catalog
+    AND tc.constraint_schema  = kcu.constraint_schema
+    AND tc.constraint_name    = kcu.constraint_name
+LEFT JOIN information_schema.check_constraints cc
+    ON tc.constraint_catalog = cc.constraint_catalog
+    AND tc.constraint_schema  = cc.constraint_schema
+    AND tc.constraint_name    = cc.constraint_name
+WHERE tc.table_schema = 'public'          -- ← change if your table is in another schema
+  AND tc.table_name   = 'supplier'
+ORDER BY tc.constraint_type, tc.constraint_name;
+
+-- Drop the first one (auto-generated name)
+ALTER TABLE supplier
+    DROP CONSTRAINT supplier_code_key;
+
+-- Drop the second one (custom name)
+ALTER TABLE supplier
+    DROP CONSTRAINT uq_supplier_supplier_code;
+    
+    ALTER TABLE company
+    DROP CONSTRAINT uki2jcjcejgnwuafxofwmgosd13;
+    
+      ALTER TABLE company
+    DROP CONSTRAINT ;
+    DROP INDEX ux_company_code;
+    
+    ALTER TABLE company
+    ADD CONSTRAINT ux_company_tenant_code 
+    UNIQUE (tenant_id, company_code);

@@ -25,7 +25,7 @@ public class Supplier {
     private UUID tenantId;
 
     // Map to existing legacy `code` column so inserts fill the table consistently
-    @Column(name = "supplier_code", nullable = false, unique = true, length = 50)
+    @Column(name = "supplier_code", nullable = false, length = 50)
     private String supplierCode;
 
     // Map to legacy `name` column (NOT NULL in schema)

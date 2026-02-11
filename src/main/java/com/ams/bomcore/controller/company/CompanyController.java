@@ -59,8 +59,8 @@ public class CompanyController {
         Tenant tenant = tenantRepository.findById(tenantId).orElseThrow(() -> new IllegalArgumentException("tenant not found"));
 
         // unique code check
-        var existing = companyRepository.findByCompanyCode(dto.companyCode);
-        if (existing.isPresent()) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorDto("companyCode already exists"));
+        var existing = companyRepository.findByCompanyCodeAndTenantId(dto.companyCode, tenant.getId());
+        if (existing.isPresent()) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorDto("companyCode already exists for tenant"));
 
         Company c = new Company();
         c.setTenant(tenant);
@@ -76,9 +76,11 @@ public class CompanyController {
         if (opt.isEmpty()) return ResponseEntity.notFound().build();
         var c = opt.get();
         if (dto.companyCode != null && !dto.companyCode.equals(c.getCompanyCode())) {
-            var conflict = companyRepository.findByCompanyCode(dto.companyCode);
+            // determine tenant id to scope uniqueness check (use dto.tenantId if changing tenant)
+            UUID scopeTenantId = dto.tenantId != null ? dto.tenantId : (c.getTenant() != null ? c.getTenant().getId() : null);
+            var conflict = scopeTenantId != null ? companyRepository.findByCompanyCodeAndTenantId(dto.companyCode, scopeTenantId) : companyRepository.findByCompanyCode(dto.companyCode);
             if (conflict.isPresent() && !conflict.get().getId().equals(id)) {
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorDto("companyCode already exists"));
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorDto("companyCode already exists for tenant"));
             }
             c.setCompanyCode(dto.companyCode);
         }
