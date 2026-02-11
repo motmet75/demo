@@ -48,26 +48,105 @@ public class InventoryEntity {
             foreignKey = @ForeignKey(name = "fk_inventory_warehouse"))
     private WarehouseEntity warehouse;
 
+    // No FK - store contract_id as UUID only (lookup by code during import)
+    @Column(name = "contract_id")
+    private UUID contractId;
+
+    // Denormalized codes for quick reference/display
+    @Column(name = "material_code", length = 50)
+    private String materialCodeDenorm;
+
+    @Column(name = "warehouse_code", length = 50)
+    private String warehouseCodeDenorm;
+
+    @Column(name = "contract_code", length = 50)
+    private String contractCode;
+
     @Column(name = "batch_no", nullable = false, length = 255)
     private String batchNo;
 
-    @Column(name = "quantity_on_hand", nullable = false, precision = 14, scale = 4)
+    @Column(name = "order_to_deduction", length = 100)
+    private String orderToDeduction;
+
+    @Column(name = "user_name", nullable = false, length = 100)
+    private String userName = "system";
+
+    @Column(name = "unit", nullable = false, length = 20)
+    private String unit = "pcs";
+
+    @Column(name = "unit_price", precision = 18, scale = 4)
+    private BigDecimal unitPrice = BigDecimal.ZERO;
+
+    @Column(name = "currency", length = 3)
+    private String currency = "USD";
+
+    @Column(name = "hs_code", length = 20)
+    private String hsCode;
+
+    @Column(name = "origin_type", length = 50)
+    private String originType;
+
+    @Column(name = "origin_country", length = 2)
+    private String originCountry;
+
+    @Column(name = "xform_no", length = 50)
+    private String xformNo;
+
+    @Column(name = "cds_no", length = 50)
+    private String cdsNo;
+
+    @Column(name = "purchase_no", length = 50)
+    private String purchaseNo;
+
+    @Column(name = "quantity_on_hand", nullable = false, precision = 18, scale = 3)
     private BigDecimal quantityOnHand;
 
-    @Column(name = "quantity_locked", precision = 14, scale = 4)
+    @Column(name = "quantity_reserved", precision = 18, scale = 3)
+    private BigDecimal quantityReserved;
+
+    @Column(name = "quantity_locked", precision = 18, scale = 3)
     private BigDecimal quantityLocked;
 
-    @Column(name = "expiration_date")
-    private Instant expirationDateTime;
+    @Column(name = "material_quota", precision = 18, scale = 3)
+    private BigDecimal materialQuota;
 
-    @Column(name = "production_date")
+    @Column(name = "material_quota_percentage", precision = 8, scale = 5)
+    private BigDecimal materialQuotaPercentage;
+
+    // Dates & timestamps
+    @Column(name = "xform_date")
+    private java.time.LocalDate xformDate;
+
+    @Column(name = "purchase_date_time")
+    private Instant purchaseDateTime;
+
+    @Column(name = "cds_date_time")
+    private Instant cdsDateTime;
+
+    @Column(name = "production_date_time")
     private Instant productionDateTime;
+
+    @Column(name = "expiration_date_time")
+    private Instant expirationDateTime;
 
     @Column(name = "created_at")
     private Instant createdAt;
 
+    @Column(name = "modified_time")
+    private Instant modifiedTime;
+
     @Column(name = "updated_at")
     private Instant updatedAt;
+
+    // Status flags
+    @Column(name = "visible", nullable = false)
+    private Boolean visible = true;
+
+    @Column(name = "approved", nullable = false)
+    private Boolean approved = false;
+
+    @Column(name = "locked", nullable = false)
+    private Boolean locked = false;
 
     public InventoryEntity() {
     }
@@ -136,6 +215,206 @@ public class InventoryEntity {
         this.quantityLocked = quantityLocked;
     }
 
+    public UUID getContractId() {
+        return contractId;
+    }
+
+    public void setContractId(UUID contractId) {
+        this.contractId = contractId;
+    }
+
+    public String getMaterialCodeDenorm() {
+        return materialCodeDenorm;
+    }
+
+    public void setMaterialCodeDenorm(String materialCodeDenorm) {
+        this.materialCodeDenorm = materialCodeDenorm;
+    }
+
+    public String getWarehouseCodeDenorm() {
+        return warehouseCodeDenorm;
+    }
+
+    public void setWarehouseCodeDenorm(String warehouseCodeDenorm) {
+        this.warehouseCodeDenorm = warehouseCodeDenorm;
+    }
+
+    public String getContractCode() {
+        return contractCode;
+    }
+
+    public void setContractCode(String contractCode) {
+        this.contractCode = contractCode;
+    }
+
+    public String getOrderToDeduction() {
+        return orderToDeduction;
+    }
+
+    public void setOrderToDeduction(String orderToDeduction) {
+        this.orderToDeduction = orderToDeduction;
+    }
+
+    public String getUserName() {
+        return userName;
+    }
+
+    public void setUserName(String userName) {
+        this.userName = userName;
+    }
+
+    public String getUnit() {
+        return unit;
+    }
+
+    public void setUnit(String unit) {
+        this.unit = unit;
+    }
+
+    public BigDecimal getUnitPrice() {
+        return unitPrice;
+    }
+
+    public void setUnitPrice(BigDecimal unitPrice) {
+        this.unitPrice = unitPrice;
+    }
+
+    public String getCurrency() {
+        return currency;
+    }
+
+    public void setCurrency(String currency) {
+        this.currency = currency;
+    }
+
+    public String getHsCode() {
+        return hsCode;
+    }
+
+    public void setHsCode(String hsCode) {
+        this.hsCode = hsCode;
+    }
+
+    public String getOriginType() {
+        return originType;
+    }
+
+    public void setOriginType(String originType) {
+        this.originType = originType;
+    }
+
+    public String getOriginCountry() {
+        return originCountry;
+    }
+
+    public void setOriginCountry(String originCountry) {
+        this.originCountry = originCountry;
+    }
+
+    public String getXformNo() {
+        return xformNo;
+    }
+
+    public void setXformNo(String xformNo) {
+        this.xformNo = xformNo;
+    }
+
+    public String getCdsNo() {
+        return cdsNo;
+    }
+
+    public void setCdsNo(String cdsNo) {
+        this.cdsNo = cdsNo;
+    }
+
+    public String getPurchaseNo() {
+        return purchaseNo;
+    }
+
+    public void setPurchaseNo(String purchaseNo) {
+        this.purchaseNo = purchaseNo;
+    }
+
+    public BigDecimal getQuantityReserved() {
+        return quantityReserved;
+    }
+
+    public void setQuantityReserved(BigDecimal quantityReserved) {
+        this.quantityReserved = quantityReserved;
+    }
+
+    public BigDecimal getMaterialQuota() {
+        return materialQuota;
+    }
+
+    public void setMaterialQuota(BigDecimal materialQuota) {
+        this.materialQuota = materialQuota;
+    }
+
+    public BigDecimal getMaterialQuotaPercentage() {
+        return materialQuotaPercentage;
+    }
+
+    public void setMaterialQuotaPercentage(BigDecimal materialQuotaPercentage) {
+        this.materialQuotaPercentage = materialQuotaPercentage;
+    }
+
+    public java.time.LocalDate getXformDate() {
+        return xformDate;
+    }
+
+    public void setXformDate(java.time.LocalDate xformDate) {
+        this.xformDate = xformDate;
+    }
+
+    public Instant getPurchaseDateTime() {
+        return purchaseDateTime;
+    }
+
+    public void setPurchaseDateTime(Instant purchaseDateTime) {
+        this.purchaseDateTime = purchaseDateTime;
+    }
+
+    public Instant getCdsDateTime() {
+        return cdsDateTime;
+    }
+
+    public void setCdsDateTime(Instant cdsDateTime) {
+        this.cdsDateTime = cdsDateTime;
+    }
+
+    public Instant getModifiedTime() {
+        return modifiedTime;
+    }
+
+    public void setModifiedTime(Instant modifiedTime) {
+        this.modifiedTime = modifiedTime;
+    }
+
+    public Boolean getVisible() {
+        return visible;
+    }
+
+    public void setVisible(Boolean visible) {
+        this.visible = visible;
+    }
+
+    public Boolean getApproved() {
+        return approved;
+    }
+
+    public void setApproved(Boolean approved) {
+        this.approved = approved;
+    }
+
+    public Boolean getLocked() {
+        return locked;
+    }
+
+    public void setLocked(Boolean locked) {
+        this.locked = locked;
+    }
+
     public Instant getExpirationDateTime() {
         return expirationDateTime;
     }
@@ -182,20 +461,43 @@ public class InventoryEntity {
         if (quantityLocked == null) {
             quantityLocked = BigDecimal.ZERO;
         }
+        if (quantityReserved == null) {
+            quantityReserved = BigDecimal.ZERO;
+        }
+        if (quantityOnHand == null) {
+            quantityOnHand = BigDecimal.ZERO;
+        }
+        if (unitPrice == null) {
+            unitPrice = BigDecimal.ZERO;
+        }
+        if (visible == null) {
+            visible = true;
+        }
+        if (approved == null) {
+            approved = false;
+        }
+        if (locked == null) {
+            locked = false;
+        }
+        if (userName == null || userName.trim().isEmpty()) {
+            userName = "system";
+        }
+        if (unit == null || unit.trim().isEmpty()) {
+            unit = "pcs";
+        }
+        if (currency == null || currency.trim().isEmpty()) {
+            currency = "USD";
+        }
+        // Sync denormalized codes
+        if (material != null && materialCodeDenorm == null) {
+            materialCodeDenorm = material.getMaterialCode();
+        }
+        if (warehouse != null && warehouseCodeDenorm == null) {
+            warehouseCodeDenorm = warehouse.getCode();
+        }
     }
 
     // Convenience aliases requested by UI/other code
-    /**
-     * Alias for quantityLocked expressed as quantityReserved per request.
-     */
-    public BigDecimal getQuantityReserved() {
-        return this.quantityLocked;
-    }
-
-    public void setQuantityReserved(BigDecimal qty) {
-        this.quantityLocked = qty;
-    }
-
     /**
      * Derived warehouse code from the related WarehouseEntity (may be null).
      */

@@ -21,6 +21,9 @@ public interface ContractRepository extends JpaRepository<Contract, UUID> {
     // Find by contract number within a company to enforce uniqueness per company
     Optional<Contract> findByContractNumberAndCompany(String contractNumber, Company company);
 
+    // Tenant+company scoped lookup by contract number
+    Optional<Contract> findByContractNumberAndTenant_IdAndCompany_Id(String contractNumber, UUID tenantId, UUID companyId);
+
     // Keep purchasing company query for backwards compatibility or specific use cases
     List<Contract> findAllByPurchasingCompany(Company purchasingCompany);
 }

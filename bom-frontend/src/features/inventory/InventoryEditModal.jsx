@@ -34,13 +34,26 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
     warehouseId: i?.warehouseId ?? (i?.warehouse ? (i.warehouse.id ?? i.warehouse.uuid ?? i.warehouse._id) : undefined),
     warehouseCode: i?.warehouseCode ?? (i?.warehouse?.code ?? ''),
     quantityOnHand: i?.quantityOnHand ?? '',
-    quantityReserved: i?.quantityReserved ?? (i?.quantityLocked ?? ''),
+    quantityReserved: i?.quantityReserved ?? '',
+    quantityLocked: i?.quantityLocked ?? '',
     batchNo: i?.batchNo ?? '',
+    contractCode: i?.contractCode ?? '',
+    unit: i?.unit ?? 'pcs',
+    unitPrice: i?.unitPrice ?? '0',
+    currency: i?.currency ?? 'USD',
+    hsCode: i?.hsCode ?? '',
+    originType: i?.originType ?? '',
+    originCountry: i?.originCountry ?? '',
+    orderToDeduction: i?.orderToDeduction ?? '',
+    userName: i?.userName ?? 'system',
     expirationLocal: i?.expirationDateTime ? isoToLocalDatetime(i.expirationDateTime) : (i?.expiration_date ? isoToLocalDatetime(i.expiration_date) : localNow()),
     // default production date to now for new inventory; keep existing value when editing
     productionLocal: i?.productionDateTime ? isoToLocalDatetime(i.productionDateTime) : (i?.production_date ? isoToLocalDatetime(i.production_date) : localNow()),
     // default createdAt to now when creating, otherwise show existing createdAt
-    createdAt: i?.createdAt ? isoToLocalDatetime(i.createdAt) : localNow()
+    createdAt: i?.createdAt ? isoToLocalDatetime(i.createdAt) : localNow(),
+    visible: i?.visible ?? true,
+    approved: i?.approved ?? false,
+    locked: i?.locked ?? false
   })
 
   const [form, setForm] = useState(() => makeInitial(inventory))
@@ -217,7 +230,16 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
       warehouseCode: form.warehouseCode,
       quantity: coerceNumber(form.quantityOnHand),
       quantityReserved: coerceNumber(form.quantityReserved),
+      quantityLocked: coerceNumber(form.quantityLocked),
       batchNo: form.batchNo,
+      contractCode: form.contractCode || null,
+      unit: form.unit || 'pcs',
+      unitPrice: coerceNumber(form.unitPrice) || 0,
+      currency: form.currency || 'USD',
+      hsCode: form.hsCode || null,
+      originType: form.originType || null,
+      originCountry: form.originCountry || null,
+      orderToDeduction: form.orderToDeduction || null,
       expirationDateTime: toIso(form.expirationLocal),
       productionDateTime: toIso(form.productionLocal)
     }
@@ -279,6 +301,17 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
 
             <TextField label="Quantity On Hand" type="number" value={form.quantityOnHand} onChange={handleChange('quantityOnHand')} disabled={isSubmitting} required />
             <TextField label="Quantity Reserved" type="number" value={form.quantityReserved} onChange={handleChange('quantityReserved')} disabled={isSubmitting} />
+            <TextField label="Quantity Locked" type="number" value={form.quantityLocked} onChange={handleChange('quantityLocked')} disabled={isSubmitting} />
+
+            <TextField label="Contract Code" value={form.contractCode} onChange={handleChange('contractCode')} disabled={isSubmitting} />
+            <TextField label="Unit" value={form.unit} onChange={handleChange('unit')} disabled={isSubmitting} />
+            <TextField label="Unit Price" type="number" value={form.unitPrice} onChange={handleChange('unitPrice')} disabled={isSubmitting} />
+            <TextField label="Currency" value={form.currency} onChange={handleChange('currency')} disabled={isSubmitting} />
+
+            <TextField label="HS Code" value={form.hsCode} onChange={handleChange('hsCode')} disabled={isSubmitting} />
+            <TextField label="Origin Type" value={form.originType} onChange={handleChange('originType')} disabled={isSubmitting} />
+            <TextField label="Origin Country" value={form.originCountry} onChange={handleChange('originCountry')} disabled={isSubmitting} />
+            <TextField label="Order/Deduction" value={form.orderToDeduction} onChange={handleChange('orderToDeduction')} disabled={isSubmitting} />
 
             <TextField
               label="Expiration Date"

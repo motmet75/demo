@@ -21,15 +21,25 @@ public class InventoryViewDTO {
     private String warehouseName;
     private BigDecimal quantityOnHand;
     private BigDecimal quantityReserved;
+    private BigDecimal quantityLocked;
     private String batchNo;
+    private String contractCode;
+    private String unit;
+    private BigDecimal unitPrice;
+    private String currency;
     private Instant expirationDateTime;
     private Instant productionDateTime;
     private Instant createdAt;
+    private Boolean visible;
+    private Boolean approved;
+    private Boolean locked;
 
     public InventoryViewDTO(UUID inventoryId, UUID tenantId, UUID companyId, UUID materialId, String materialCode, String materialName,
                             UUID warehouseId, String warehouseCode, String warehouseName,
-                            BigDecimal quantityOnHand, BigDecimal quantityReserved, String batchNo,
-                            Instant expirationDateTime, Instant productionDateTime, Instant createdAt) {
+                            BigDecimal quantityOnHand, BigDecimal quantityReserved, BigDecimal quantityLocked, String batchNo,
+                            String contractCode, String unit, BigDecimal unitPrice, String currency,
+                            Instant expirationDateTime, Instant productionDateTime, Instant createdAt,
+                            Boolean visible, Boolean approved, Boolean locked) {
         this.inventoryId = inventoryId;
         this.tenantId = tenantId;
         this.companyId = companyId;
@@ -41,10 +51,18 @@ public class InventoryViewDTO {
         this.warehouseName = warehouseName;
         this.quantityOnHand = quantityOnHand;
         this.quantityReserved = quantityReserved;
+        this.quantityLocked = quantityLocked;
         this.batchNo = batchNo;
+        this.contractCode = contractCode;
+        this.unit = unit;
+        this.unitPrice = unitPrice;
+        this.currency = currency;
         this.expirationDateTime = expirationDateTime;
         this.productionDateTime = productionDateTime;
         this.createdAt = createdAt;
+        this.visible = visible;
+        this.approved = approved;
+        this.locked = locked;
     }
 
     // Getters
@@ -59,8 +77,16 @@ public class InventoryViewDTO {
     public String getWarehouseName() { return warehouseName; }
     public BigDecimal getQuantityOnHand() { return quantityOnHand; }
     public BigDecimal getQuantityReserved() { return quantityReserved; }
+    public BigDecimal getQuantityLocked() { return quantityLocked; }
     public String getBatchNo() { return batchNo; }
+    public String getContractCode() { return contractCode; }
+    public String getUnit() { return unit; }
+    public BigDecimal getUnitPrice() { return unitPrice; }
+    public String getCurrency() { return currency; }
     public Instant getExpirationDateTime() { return expirationDateTime; }
     public Instant getProductionDateTime() { return productionDateTime; }
     public Instant getCreatedAt() { return createdAt; }
+    public Boolean getVisible() { return visible; }
+    public Boolean getApproved() { return approved; }
+    public Boolean getLocked() { return locked; }
 }

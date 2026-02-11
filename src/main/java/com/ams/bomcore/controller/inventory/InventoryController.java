@@ -21,10 +21,12 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.ams.bomcore.controller.inventory.dto.InventoryViewDTO;
 import com.ams.bomcore.domain.inventory.InventoryEntity;
 import com.ams.bomcore.service.inventory.InventoryException;
+import com.ams.bomcore.service.inventory.InventoryImportService;
 import com.ams.bomcore.service.inventory.InventoryService;
 
 @CrossOrigin(origins = "http://localhost:5173")
@@ -33,9 +35,11 @@ import com.ams.bomcore.service.inventory.InventoryService;
 public class InventoryController {
 
     private final InventoryService inventoryService;
+    private final InventoryImportService inventoryImportService;
 
-    public InventoryController(InventoryService inventoryService) {
+    public InventoryController(InventoryService inventoryService, InventoryImportService inventoryImportService) {
         this.inventoryService = inventoryService;
+        this.inventoryImportService = inventoryImportService;
     }
 
     private UUID resolveTenant(UUID tenantId, String headerTenantId) {
@@ -209,6 +213,37 @@ public class InventoryController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
         } catch (Exception ex) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ex.getMessage());
+        }
+    }
+
+    /**
+     * Import inventory from CSV file
+     */
+    @PostMapping(path = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<?> importCsv(@RequestParam("file") MultipartFile file,
+                                       @RequestParam(value = "tenantId", required = false) UUID tenantId,
+                                       @RequestParam(value = "companyId", required = false) UUID companyId,
+                                       @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId,
+                                       @RequestHeader(value = "X-Company-Id", required = false) String headerCompanyId) {
+        try {
+            tenantId = resolveTenant(tenantId, headerTenantId);
+            companyId = resolveCompany(companyId, headerCompanyId);
+            if (tenantId == null || companyId == null) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+            }
+
+            InventoryImportService.ImportResult result = inventoryImportService.importFromCsv(file, tenantId, companyId);
+            
+            if (result.isSuccess()) {
+                return ResponseEntity.ok(result);
+            } else {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(result);
+            }
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+                "success", false,
+                "message", "Import failed: " + ex.getMessage()
+            ));
         }
     }
 }

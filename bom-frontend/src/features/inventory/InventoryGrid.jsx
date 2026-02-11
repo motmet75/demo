@@ -5,6 +5,7 @@ import LocalHospitalIcon from '@mui/icons-material/LocalHospital'
 import CallReceivedIcon from '@mui/icons-material/CallReceived'
 import { fetchInventoryView, addStock, updateInventory, reserveInventory, releaseInventory } from '../../api/inventoryApi'
 import InventoryEditModal from './InventoryEditModal'
+import InventoryImport from './InventoryImport'
 import * as XLSX from 'xlsx'
 
 export default function InventoryGrid() {
@@ -13,11 +14,14 @@ export default function InventoryGrid() {
 
   const [filterMaterial, setFilterMaterial] = useState('')
   const [filterWarehouse, setFilterWarehouse] = useState('')
+  const [filterInventoryUuid, setFilterInventoryUuid] = useState('')
 
   const [editOpen, setEditOpen] = useState(false)
   const [selected, setSelected] = useState(null)
   const [saving, setSaving] = useState(false)
   const [modalKey, setModalKey] = useState(0)
+
+  const [importOpen, setImportOpen] = useState(false)
 
   const apiRef = useGridApiRef()
 
@@ -104,7 +108,8 @@ export default function InventoryGrid() {
     const warehouseName = item.warehouseName ?? item.warehouseName ?? ''
 
     const quantityOnHand = item.quantityOnHand ?? 0
-    const quantityReserved = item.quantityReserved ?? item.quantityLocked ?? 0
+    const quantityReserved = item.quantityReserved ?? 0
+    const quantityLocked = item.quantityLocked ?? 0
 
     return {
       id: inventoryId != null ? String(inventoryId) : undefined,
@@ -119,11 +124,34 @@ export default function InventoryGrid() {
       warehouseName,
       quantityOnHand,
       quantityReserved,
-      availableQuantity: Number(quantityOnHand) - Number(quantityReserved),
+      quantityLocked,
+      availableQuantity: Number(quantityOnHand) - Number(quantityLocked),
       batchNo: item.batchNo || item.batch_no || '',
+      contractCode: item.contractCode || '',
+      orderToDeduction: item.orderToDeduction || '',
+      userName: item.userName || '',
+      unit: item.unit || 'pcs',
+      unitPrice: item.unitPrice ?? 0,
+      currency: item.currency || 'USD',
+      hsCode: item.hsCode || '',
+      originType: item.originType || '',
+      originCountry: item.originCountry || '',
+      xformNo: item.xformNo || '',
+      cdsNo: item.cdsNo || '',
+      purchaseNo: item.purchaseNo || '',
+      materialQuota: item.materialQuota ?? 0,
+      materialQuotaPercentage: item.materialQuotaPercentage ?? 0,
+      xformDate: item.xformDate || null,
+      purchaseDateTime: item.purchaseDateTime || null,
+      cdsDateTime: item.cdsDateTime || null,
       expirationDateTime: item.expirationDateTime || item.expiration_date || null,
       productionDateTime: item.productionDateTime || item.production_date || null,
       createdAt: item.createdAt || null,
+      modifiedTime: item.modifiedTime || null,
+      updatedAt: item.updatedAt || null,
+      visible: item.visible ?? true,
+      approved: item.approved ?? false,
+      locked: item.locked ?? false,
       __raw: item
     }
   }
@@ -152,24 +180,24 @@ export default function InventoryGrid() {
     setSaving(true)
     try {
       let res
-      // If editing existing record but material/warehouse changed, call addStock (POST)
-      const isEdit = payload.id
-      const materialChanged = isEdit && selected && ((payload.materialId && String(payload.materialId) !== String(selected.materialId)) || (payload.materialCode && payload.materialCode !== selected.materialCode))
-      const warehouseChanged = isEdit && selected && ((payload.warehouseId && String(payload.warehouseId) !== String(selected.warehouseId)) || (payload.warehouseCode && payload.warehouseCode !== selected.warehouseCode))
-
-      if (isEdit && (materialChanged || warehouseChanged)) {
-        const toPost = { ...payload }
-        delete toPost.id
-        res = await addStock(toPost)
-      } else if (payload.id) {
+      const isEdit = !!(payload.id)
+      
+      if (isEdit) {
+        // Edit existing inventory - use PUT which REPLACES quantity (not adds)
         res = await updateInventory(payload.id, payload)
       } else {
+        // Add new inventory - use POST which creates or adds to existing batch
         res = await addStock(payload)
       }
 
-      // normalize response by reloading grid projection to reflect joins
+      // Reload grid data to reflect the saved changes
       await load()
+      
+      // Close ALL dialogs after successful save and grid refresh
       setEditOpen(false)
+      setSelected(null)
+      setImportOpen(false)
+      
       return res
     } catch (err) {
       console.error('Save failed', err)
@@ -277,9 +305,33 @@ export default function InventoryGrid() {
         Batch: r.batchNo,
         QuantityOnHand: r.quantityOnHand,
         QuantityReserved: r.quantityReserved,
+        QuantityLocked: r.quantityLocked,
         Available: r.availableQuantity,
+        ContractCode: r.contractCode,
+        OrderToDeduction: r.orderToDeduction,
+        UserName: r.userName,
+        Unit: r.unit,
+        UnitPrice: r.unitPrice,
+        Currency: r.currency,
+        HSCode: r.hsCode,
+        OriginType: r.originType,
+        OriginCountry: r.originCountry,
+        XformNo: r.xformNo,
+        CDSNo: r.cdsNo,
+        PurchaseNo: r.purchaseNo,
+        MaterialQuota: r.materialQuota,
+        MaterialQuotaPercentage: r.materialQuotaPercentage,
+        XformDate: r.xformDate,
+        PurchaseDateTime: r.purchaseDateTime,
+        CDSDateTime: r.cdsDateTime,
         Expiration: r.expirationDateTime,
-        Production: r.productionDateTime
+        Production: r.productionDateTime,
+        CreatedAt: r.createdAt,
+        ModifiedTime: r.modifiedTime,
+        UpdatedAt: r.updatedAt,
+        Visible: r.visible,
+        Approved: r.approved,
+        Locked: r.locked
       }))
 
       const worksheet = XLSX.utils.json_to_sheet(data)
@@ -316,30 +368,55 @@ export default function InventoryGrid() {
   }
 
   const columns = [
-    { field: 'inventoryId', headerName: 'Inventory ID', width: 240, hide: true },
+    { field: 'inventoryId', headerName: 'Inventory UUID', width: 280, hide: false },
+    { field: 'actions', type: 'actions', headerName: 'Actions', width: 220, getActions: (params) => [
+      <GridActionsCellItem icon={<EditIcon/>} label="Edit" onClick={() => openEdit(params.row)} showInMenu={false} disabled={!!saving} />,
+      <GridActionsCellItem icon={<LocalHospitalIcon/>} label="Reserve" onClick={() => handleReserve(params.id)} showInMenu={true} disabled={!!saving} />,
+      <GridActionsCellItem icon={<CallReceivedIcon/>} label="Release" onClick={() => handleRelease(params.id)} showInMenu={true} disabled={!!saving} />
+    ] },
+    { field: 'modifiedTime', headerName: 'Modified Time', width: 180 },
+    { field: 'visible', headerName: 'Visible', width: 100, type: 'boolean' },
+    { field: 'approved', headerName: 'Approved', width: 100, type: 'boolean' },
+    { field: 'locked', headerName: 'Locked', width: 100, type: 'boolean' },
     { field: 'materialUuid', headerName: 'Material UUID', width: 240 },
     { field: 'materialCode', headerName: 'Material Code', width: 180 },
     { field: 'materialName', headerName: 'Material Name', width: 220, flex: 1 },
     { field: 'warehouseUuid', headerName: 'Warehouse UUID', width: 240 },
     { field: 'warehouseCode', headerName: 'Warehouse Code', width: 160 },
     { field: 'warehouseName', headerName: 'Warehouse Name', width: 200 },
-    { field: 'quantityOnHand', headerName: 'Qty On Hand', width: 140 },
-    { field: 'quantityReserved', headerName: 'Qty Reserved', width: 140 },
-    { field: 'availableQuantity', headerName: 'Available', width: 140 },
+    { field: 'quantityOnHand', headerName: 'Qty On Hand', width: 140, type: 'number' },
+    { field: 'quantityReserved', headerName: 'Qty Reserved', width: 140, type: 'number' },
+    { field: 'quantityLocked', headerName: 'Qty Locked', width: 140, type: 'number' },
+    { field: 'availableQuantity', headerName: 'Available', width: 140, type: 'number' },
     { field: 'batchNo', headerName: 'Batch', width: 180 },
-    { field: 'expirationDateTime', headerName: 'Expiration', width: 200 },
-    { field: 'productionDateTime', headerName: 'Production', width: 200 },
-    { field: 'actions', type: 'actions', headerName: 'Actions', width: 220, getActions: (params) => [
-      <GridActionsCellItem icon={<EditIcon/>} label="Edit" onClick={() => openEdit(params.row)} showInMenu={false} disabled={!!saving} />,
-      <GridActionsCellItem icon={<LocalHospitalIcon/>} label="Reserve" onClick={() => handleReserve(params.id)} showInMenu={true} disabled={!!saving} />,
-      <GridActionsCellItem icon={<CallReceivedIcon/>} label="Release" onClick={() => handleRelease(params.id)} showInMenu={true} disabled={!!saving} />
-    ] }
+    { field: 'contractCode', headerName: 'Contract', width: 150 },
+    { field: 'orderToDeduction', headerName: 'Order To Deduction', width: 150 },
+    { field: 'userName', headerName: 'User Name', width: 120 },
+    { field: 'unit', headerName: 'Unit', width: 100 },
+    { field: 'unitPrice', headerName: 'Unit Price', width: 120, type: 'number' },
+    { field: 'currency', headerName: 'Currency', width: 100 },
+    { field: 'hsCode', headerName: 'HS Code', width: 120 },
+    { field: 'originType', headerName: 'Origin Type', width: 120 },
+    { field: 'originCountry', headerName: 'Origin Country', width: 130 },
+    { field: 'xformNo', headerName: 'Xform No', width: 120 },
+    { field: 'cdsNo', headerName: 'CDS No', width: 120 },
+    { field: 'purchaseNo', headerName: 'Purchase No', width: 120 },
+    { field: 'materialQuota', headerName: 'Material Quota', width: 140, type: 'number' },
+    { field: 'materialQuotaPercentage', headerName: 'Quota %', width: 120, type: 'number' },
+    { field: 'xformDate', headerName: 'Xform Date', width: 150 },
+    { field: 'purchaseDateTime', headerName: 'Purchase Date', width: 180 },
+    { field: 'cdsDateTime', headerName: 'CDS Date', width: 180 },
+    { field: 'expirationDateTime', headerName: 'Expiration', width: 180 },
+    { field: 'productionDateTime', headerName: 'Production', width: 180 },
+    { field: 'createdAt', headerName: 'Created At', width: 180 },
+    { field: 'updatedAt', headerName: 'Updated At', width: 180 }
   ]
 
   // apply simple client-side filters
   const filteredRows = rows.filter(r => {
     if (filterMaterial && filterMaterial.trim() !== '' && !(r.materialCode || '').toLowerCase().includes(filterMaterial.trim().toLowerCase())) return false
     if (filterWarehouse && filterWarehouse.trim() !== '' && !(r.warehouseCode || '').toLowerCase().includes(filterWarehouse.trim().toLowerCase())) return false
+    if (filterInventoryUuid && filterInventoryUuid.trim() !== '' && !(r.inventoryId || '').toLowerCase().includes(filterInventoryUuid.trim().toLowerCase())) return false
     return true
   })
 
@@ -349,12 +426,27 @@ export default function InventoryGrid() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={() => { setSelected(null); setModalKey(k => k + 1); setEditOpen(true) }} disabled={saving}>Add Inventory</button>
+          <button onClick={() => setImportOpen(true)} disabled={saving}>Import Inventory</button>
           <h2 style={{ margin: 0 }}>Inventory</h2>
         </div>
         <div />
       </div>
 
+      {/* Import section - show when importOpen is true */}
+      {importOpen && (
+        <div style={{ padding: '8px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <InventoryImport onImportComplete={() => { load(); setImportOpen(false) }} />
+            <button onClick={() => setImportOpen(false)} style={{ marginLeft: 8 }}>Close</button>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: 12, padding: '0 8px 8px 8px' }}>
+        <div>
+          <label style={{ fontSize: 12 }}>Filter Inventory UUID:</label><br />
+          <input value={filterInventoryUuid} onChange={e => setFilterInventoryUuid(e.target.value)} style={{ width: 280 }} />
+        </div>
         <div>
           <label style={{ fontSize: 12 }}>Filter Material:</label><br />
           <input value={filterMaterial} onChange={e => setFilterMaterial(e.target.value)} />
@@ -417,6 +509,9 @@ export default function InventoryGrid() {
              sx={{ height: '100%' }}
              checkboxSelection={true}
              apiRef={apiRef}
+             initialState={{
+               pinnedColumns: { left: ['inventoryId'] }
+             }}
              // controlled selectionModel with normalization to handle different DataGrid shapes
              selectionModel={selectionModel}
              onRowSelectionModelChange={(newSel) => { const norm = normalizeSelection(newSel); console.debug('onRowSelectionModelChange ->', newSel, 'normalized ->', norm); setSelectionModel(norm) }}

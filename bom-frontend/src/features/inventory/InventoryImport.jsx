@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { importInventory } from '../../api/inventoryApi'
 
-export default function InventoryImport() {
+export default function InventoryImport({ onImportComplete }) {
   const [file, setFile] = useState(null)
   const [result, setResult] = useState(null)
   const [uploading, setUploading] = useState(false)
@@ -13,6 +13,10 @@ export default function InventoryImport() {
     try {
       const res = await importInventory(file)
       setResult(res)
+      // Call callback on success to refresh grid
+      if (res.success && onImportComplete) {
+        setTimeout(() => onImportComplete(), 1500)
+      }
     } catch (err) {
       setResult({ success: false, message: err.message || 'Upload failed' })
     } finally {
@@ -43,6 +47,26 @@ export default function InventoryImport() {
           <div><strong>Success:</strong> {String(result.success)}</div>
           {result.message && <div><strong>Message:</strong> {result.message}</div>}
           <div><strong>Created:</strong> {result.created || 0}</div>
+          <div><strong>Updated:</strong> {result.updated || 0}</div>
+          
+          {result.missingMaterials && result.missingMaterials.length > 0 && (
+            <div style={{ marginTop: 8, color: 'red' }}>
+              <strong>Missing Materials (not found in system):</strong>
+              <ul>
+                {result.missingMaterials.map((code, i) => <li key={i}>{code}</li>)}
+              </ul>
+            </div>
+          )}
+          
+          {result.missingWarehouses && result.missingWarehouses.length > 0 && (
+            <div style={{ marginTop: 8, color: 'red' }}>
+              <strong>Missing Warehouses (not found in system):</strong>
+              <ul>
+                {result.missingWarehouses.map((code, i) => <li key={i}>{code}</li>)}
+              </ul>
+            </div>
+          )}
+          
           {result.errors && result.errors.length > 0 && (
             <div style={{ marginTop: 8 }}>
               <strong>Errors:</strong>

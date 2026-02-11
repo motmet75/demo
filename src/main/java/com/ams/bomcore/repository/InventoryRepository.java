@@ -35,6 +35,10 @@ public interface InventoryRepository extends JpaRepository<InventoryEntity, UUID
     @Query("SELECT i FROM InventoryEntity i WHERE i.material = :material AND i.warehouse.code = :warehouseCode AND i.batchNo = :batchNo")
     Optional<InventoryEntity> findByMaterialAndWarehouseCodeAndBatchNo(@Param("material") Material material, @Param("warehouseCode") String warehouseCode, @Param("batchNo") String batchNo);
 
+    // Find inventory by material + warehouse code + batchNo + tenantId + companyId (tenant-scoped business key)
+    @Query("SELECT i FROM InventoryEntity i WHERE i.material = :material AND i.warehouse.code = :warehouseCode AND i.batchNo = :batchNo AND i.tenantId = :tenantId AND i.companyId = :companyId")
+    Optional<InventoryEntity> findByMaterialAndWarehouseCodeAndBatchNoAndTenantIdAndCompanyId(@Param("material") Material material, @Param("warehouseCode") String warehouseCode, @Param("batchNo") String batchNo, @Param("tenantId") UUID tenantId, @Param("companyId") UUID companyId);
+
     // New: find all inventory entries for tenant + company
     @Query("SELECT i FROM InventoryEntity i WHERE i.tenantId = :tenantId AND i.companyId = :companyId")
     List<InventoryEntity> findByTenantIdAndCompanyId(@Param("tenantId") UUID tenantId, @Param("companyId") UUID companyId);
@@ -42,7 +46,8 @@ public interface InventoryRepository extends JpaRepository<InventoryEntity, UUID
     // Projection for grid display: join Inventory -> Material -> Warehouse in one query to avoid N+1
     @Query("SELECT new com.ams.bomcore.controller.inventory.dto.InventoryViewDTO("
             + "i.id, i.tenantId, i.companyId, m.id, m.materialCode, m.materialName, w.id, w.code, w.name, "
-            + "i.quantityOnHand, i.quantityLocked, i.batchNo, i.expirationDateTime, i.productionDateTime, i.createdAt) "
+            + "i.quantityOnHand, i.quantityReserved, i.quantityLocked, i.batchNo, i.contractCode, i.unit, i.unitPrice, i.currency, "
+            + "i.expirationDateTime, i.productionDateTime, i.createdAt, i.visible, i.approved, i.locked) "
             + "FROM InventoryEntity i "
             + "JOIN i.material m "
             + "JOIN i.warehouse w "
@@ -52,7 +57,8 @@ public interface InventoryRepository extends JpaRepository<InventoryEntity, UUID
     // New: projection for tenant+company-scoped inventory view
     @Query("SELECT new com.ams.bomcore.controller.inventory.dto.InventoryViewDTO("
             + "i.id, i.tenantId, i.companyId, m.id, m.materialCode, m.materialName, w.id, w.code, w.name, "
-            + "i.quantityOnHand, i.quantityLocked, i.batchNo, i.expirationDateTime, i.productionDateTime, i.createdAt) "
+            + "i.quantityOnHand, i.quantityReserved, i.quantityLocked, i.batchNo, i.contractCode, i.unit, i.unitPrice, i.currency, "
+            + "i.expirationDateTime, i.productionDateTime, i.createdAt, i.visible, i.approved, i.locked) "
             + "FROM InventoryEntity i "
             + "JOIN i.material m "
             + "JOIN i.warehouse w "
@@ -62,7 +68,8 @@ public interface InventoryRepository extends JpaRepository<InventoryEntity, UUID
     // New: projection filtered by companyId only
     @Query("SELECT new com.ams.bomcore.controller.inventory.dto.InventoryViewDTO("
             + "i.id, i.tenantId, i.companyId, m.id, m.materialCode, m.materialName, w.id, w.code, w.name, "
-            + "i.quantityOnHand, i.quantityLocked, i.batchNo, i.expirationDateTime, i.productionDateTime, i.createdAt) "
+            + "i.quantityOnHand, i.quantityReserved, i.quantityLocked, i.batchNo, i.contractCode, i.unit, i.unitPrice, i.currency, "
+            + "i.expirationDateTime, i.productionDateTime, i.createdAt, i.visible, i.approved, i.locked) "
             + "FROM InventoryEntity i "
             + "JOIN i.material m "
             + "JOIN i.warehouse w "
