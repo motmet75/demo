@@ -27,11 +27,16 @@ public class InventoryService {
     private final InventoryRepository inventoryRepository;
     private final MaterialRepository materialRepository;
     private final WarehouseRepository warehouseRepository;
+    private final InventoryMovementService movementService;
 
-    public InventoryService(InventoryRepository inventoryRepository, MaterialRepository materialRepository, WarehouseRepository warehouseRepository) {
+    public InventoryService(InventoryRepository inventoryRepository,
+                            MaterialRepository materialRepository,
+                            WarehouseRepository warehouseRepository,
+                            InventoryMovementService movementService) {
         this.inventoryRepository = inventoryRepository;
         this.materialRepository = materialRepository;
         this.warehouseRepository = warehouseRepository;
+        this.movementService = movementService;
     }
 
     public List<InventoryEntity> listAll() {
@@ -54,6 +59,22 @@ public class InventoryService {
 
     @Transactional(rollbackFor = Exception.class)
     public InventoryEntity addStock(String materialCode, String warehouseCode, BigDecimal qty, String batchNo, Instant expirationDateTime, Instant productionDateTime, BigDecimal quantityReserved, UUID tenantId, UUID companyId) {
+        return addStock(materialCode, warehouseCode, qty, batchNo, expirationDateTime, productionDateTime, quantityReserved, tenantId, companyId, "Manual add stock", "system", null);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public InventoryEntity addStock(String materialCode, String warehouseCode, BigDecimal qty, String batchNo,
+                                     Instant expirationDateTime, Instant productionDateTime, BigDecimal quantityReserved,
+                                     UUID tenantId, UUID companyId, String reason, String createdBy, String notes) {
+        return addStock(materialCode, warehouseCode, qty, batchNo, expirationDateTime, productionDateTime,
+                quantityReserved, tenantId, companyId, reason, createdBy, notes, null);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public InventoryEntity addStock(String materialCode, String warehouseCode, BigDecimal qty, String batchNo,
+                                     Instant expirationDateTime, Instant productionDateTime, BigDecimal quantityReserved,
+                                     UUID tenantId, UUID companyId, String reason, String createdBy, String notes,
+                                     UUID invoiceId) {
         if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) throw new InventoryException("Quantity to add must be positive");
         if (batchNo == null || batchNo.trim().isEmpty()) throw new InventoryException("batchNo is required");
 
@@ -62,7 +83,6 @@ public class InventoryService {
         WarehouseEntity w = warehouseRepository.findByCode(warehouseCode)
                 .orElseThrow(() -> new InventoryException("Warehouse not found: " + warehouseCode));
 
-        // Validate tenant/company ownership where possible
         if (m.getTenant() == null || !m.getTenant().getId().equals(tenantId)) {
             throw new InventoryException("material does not belong to tenant");
         }
@@ -75,7 +95,6 @@ public class InventoryService {
         if (existing.isPresent()) {
             inv = existing.get();
             inv.setQuantityOnHand(inv.getQuantityOnHand().add(qty));
-            // if quantityReserved provided, update locked
             if (quantityReserved != null) {
                 if (quantityReserved.compareTo(inv.getQuantityOnHand()) > 0) throw new InventoryException("Reserved quantity cannot exceed on-hand quantity");
                 inv.setQuantityLocked(quantityReserved);
@@ -90,26 +109,61 @@ public class InventoryService {
             if (inv.getQuantityLocked().compareTo(inv.getQuantityOnHand()) > 0) throw new InventoryException("Reserved quantity cannot exceed on-hand quantity");
             inv.setExpirationDateTime(expirationDateTime);
             inv.setProductionDateTime(productionDateTime);
-            // set tenant/company for record scoping
             inv.setTenantId(tenantId);
             inv.setCompanyId(companyId);
         }
 
-        // prevent negative - adding cannot create negative but keep check
         if (inv.getQuantityOnHand().compareTo(BigDecimal.ZERO) < 0) {
             throw new InventoryException("Resulting quantity would be negative");
         }
 
-        return inventoryRepository.save(inv);
+        InventoryEntity saved = inventoryRepository.save(inv);
+
+        // Record IN movement — inventoryId = this row, referenceId = invoice (if provided)
+        movementService.recordInMovement(
+                m.getId(), w.getId(), qty,
+                m.getUnit() != null ? m.getUnit() : "pcs",
+                batchNo,
+                reason != null ? reason : "Manual add stock",
+                createdBy != null ? createdBy : "system",
+                invoiceId != null ? "INVOICE" : "INVENTORY",
+                invoiceId != null ? invoiceId : saved.getId(),
+                saved.getId(),
+                notes,
+                tenantId, companyId);
+
+        return saved;
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public InventoryEntity addStockByIds(UUID materialId, UUID warehouseId, BigDecimal qty, String batchNo, Instant expirationDateTime, Instant productionDateTime, BigDecimal quantityReserved, UUID tenantId, UUID companyId) {
+    public InventoryEntity addStockByIds(UUID materialId, UUID warehouseId, BigDecimal qty, String batchNo,
+                                          Instant expirationDateTime, Instant productionDateTime,
+                                          BigDecimal quantityReserved, UUID tenantId, UUID companyId) {
+        return addStockByIds(materialId, warehouseId, qty, batchNo, expirationDateTime, productionDateTime,
+                quantityReserved, tenantId, companyId, "Manual add stock", "system", null);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public InventoryEntity addStockByIds(UUID materialId, UUID warehouseId, BigDecimal qty, String batchNo,
+                                          Instant expirationDateTime, Instant productionDateTime,
+                                          BigDecimal quantityReserved, UUID tenantId, UUID companyId,
+                                          String reason, String createdBy, String notes) {
+        return addStockByIds(materialId, warehouseId, qty, batchNo, expirationDateTime, productionDateTime,
+                quantityReserved, tenantId, companyId, reason, createdBy, notes, null);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public InventoryEntity addStockByIds(UUID materialId, UUID warehouseId, BigDecimal qty, String batchNo,
+                                          Instant expirationDateTime, Instant productionDateTime,
+                                          BigDecimal quantityReserved, UUID tenantId, UUID companyId,
+                                          String reason, String createdBy, String notes, UUID invoiceId) {
         if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) throw new InventoryException("Quantity to add must be positive");
         if (batchNo == null || batchNo.trim().isEmpty()) throw new InventoryException("batchNo is required");
 
-        Material m = materialRepository.findById(materialId).orElseThrow(() -> new InventoryException("Material not found: " + materialId));
-        WarehouseEntity w = warehouseRepository.findById(warehouseId).orElseThrow(() -> new InventoryException("Warehouse not found: " + warehouseId));
+        Material m = materialRepository.findById(materialId)
+                .orElseThrow(() -> new InventoryException("Material not found: " + materialId));
+        WarehouseEntity w = warehouseRepository.findById(warehouseId)
+                .orElseThrow(() -> new InventoryException("Warehouse not found: " + warehouseId));
 
         if (m.getTenant() == null || !m.getTenant().getId().equals(tenantId)) {
             throw new InventoryException("material does not belong to tenant");
@@ -145,32 +199,77 @@ public class InventoryService {
             throw new InventoryException("Resulting quantity would be negative");
         }
 
-        return inventoryRepository.save(inv);
+        InventoryEntity savedById = inventoryRepository.save(inv);
+
+        // Record IN movement — inventoryId = this row, referenceId = invoice (if provided)
+        movementService.recordInMovement(
+                m.getId(), w.getId(), qty,
+                m.getUnit() != null ? m.getUnit() : "pcs",
+                batchNo,
+                reason != null ? reason : "Manual add stock",
+                createdBy != null ? createdBy : "system",
+                invoiceId != null ? "INVOICE" : "INVENTORY",
+                invoiceId != null ? invoiceId : savedById.getId(),
+                savedById.getId(),
+                notes,
+                tenantId, companyId);
+
+        return savedById;
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public InventoryEntity updateStock(UUID inventoryId, BigDecimal newQuantityOnHand, String batchNo, Instant expirationDateTime, Instant productionDateTime, BigDecimal quantityReserved, UUID tenantId, UUID companyId) {
+    public InventoryEntity updateStock(UUID inventoryId, BigDecimal newQuantityOnHand, String batchNo,
+                                        Instant expirationDateTime, Instant productionDateTime,
+                                        BigDecimal quantityReserved, UUID tenantId, UUID companyId) {
+        return updateStock(inventoryId, newQuantityOnHand, batchNo, expirationDateTime, productionDateTime,
+                quantityReserved, tenantId, companyId, "Manual update stock", "system", null);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public InventoryEntity updateStock(UUID inventoryId, BigDecimal newQuantityOnHand, String batchNo,
+                                        Instant expirationDateTime, Instant productionDateTime,
+                                        BigDecimal quantityReserved, UUID tenantId, UUID companyId,
+                                        String reason, String createdBy, String notes) {
         if (newQuantityOnHand == null || newQuantityOnHand.compareTo(BigDecimal.ZERO) < 0) throw new InventoryException("Quantity must be non-negative");
 
-        InventoryEntity inv = inventoryRepository.findById(inventoryId).orElseThrow(() -> new InventoryException("Inventory not found: " + inventoryId));
+        InventoryEntity inv = inventoryRepository.findById(inventoryId)
+                .orElseThrow(() -> new InventoryException("Inventory not found: " + inventoryId));
 
-        // tenant/company check: ensure inventory belongs to tenant/company
         if (inv.getTenantId() == null || !inv.getTenantId().equals(tenantId)) throw new InventoryException("inventory does not belong to tenant");
         if (inv.getCompanyId() == null || !inv.getCompanyId().equals(companyId)) throw new InventoryException("inventory does not belong to company");
 
-        // cannot set total less than reserved/locked quantity unless reserved is also being changed
         BigDecimal locked = inv.getQuantityLocked() == null ? BigDecimal.ZERO : inv.getQuantityLocked();
         BigDecimal newLocked = quantityReserved == null ? locked : quantityReserved;
         if (newQuantityOnHand.compareTo(newLocked) < 0) {
             throw new InventoryException("New quantity cannot be less than reserved quantity");
         }
 
+        // Capture old quantity for adjustment delta
+        BigDecimal oldQty = inv.getQuantityOnHand() == null ? BigDecimal.ZERO : inv.getQuantityOnHand();
+        BigDecimal delta  = newQuantityOnHand.subtract(oldQty);
+
         inv.setQuantityOnHand(newQuantityOnHand);
         if (batchNo != null) inv.setBatchNo(batchNo);
         if (expirationDateTime != null) inv.setExpirationDateTime(expirationDateTime);
         if (productionDateTime != null) inv.setProductionDateTime(productionDateTime);
         if (quantityReserved != null) inv.setQuantityLocked(quantityReserved);
-        return inventoryRepository.save(inv);
+        InventoryEntity updated = inventoryRepository.save(inv);
+
+        // Only record a movement when the quantity actually changed
+        if (delta.compareTo(BigDecimal.ZERO) != 0 && inv.getMaterial() != null && inv.getWarehouse() != null) {
+            movementService.recordAdjustmentMovement(
+                    inv.getMaterial().getId(),
+                    inv.getWarehouse().getId(),
+                    delta,
+                    inv.getMaterial().getUnit() != null ? inv.getMaterial().getUnit() : "pcs",
+                    inv.getBatchNo(),
+                    reason != null ? reason : "Manual update stock",
+                    createdBy != null ? createdBy : "system",
+                    notes,
+                    tenantId, companyId);
+        }
+
+        return updated;
     }
 
     // Keep previous signature for backward compatibility by delegating (optional)

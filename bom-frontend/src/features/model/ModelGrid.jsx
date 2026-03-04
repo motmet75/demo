@@ -69,7 +69,7 @@ export default function ModelGrid({ reloadSignal }) {
       const data = await fetchModels()
       let list = Array.isArray(data) ? data : (data && (data.data || data.items || data.content)) || []
       if (!Array.isArray(list)) list = []
-      setRows(list.map(r => ({ id: r.id == null ? '' : String(r.id), uuid: r.id == null ? '' : String(r.id), modelCode: r.modelCode, modelName: r.modelName, isActive: r.isActive })) )
+      setRows(list.map(r => ({ id: r.id == null ? '' : String(r.id), uuid: r.id == null ? '' : String(r.id), modelCode: r.modelCode, modelName: r.modelName, isActive: r.isActive, hsCode: r.hsCode ?? '', coCriteria: r.coCriteria ?? '' })) )
     } catch {
       console.error('Failed to load models')
       setRows([])
@@ -102,7 +102,9 @@ export default function ModelGrid({ reloadSignal }) {
         uuid: (res && res.id) || updatedModel.id,
         modelCode: (res && res.modelCode) ?? updatedModel.modelCode,
         modelName: (res && res.modelName) ?? updatedModel.modelName,
-        isActive: (res && (res.isActive !== undefined ? res.isActive : undefined)) ?? updatedModel.isActive
+        isActive: (res && (res.isActive !== undefined ? res.isActive : undefined)) ?? updatedModel.isActive,
+        hsCode: (res && res.hsCode) ?? updatedModel.hsCode ?? '',
+        coCriteria: (res && res.coCriteria) ?? updatedModel.coCriteria ?? ''
       }
 
       // if it's a new row, append; otherwise replace
@@ -132,11 +134,13 @@ export default function ModelGrid({ reloadSignal }) {
     { field: 'uuid', headerName: 'UUID', width: 220, hide: true },
     { field: 'modelCode', headerName: 'Code', width: 150 },
     { field: 'modelName', headerName: 'Name', flex: 1 },
-    { field: 'isActive', headerName: 'Active', width: 120 },
+    { field: 'hsCode', headerName: 'HS Code', width: 120 },
+    { field: 'coCriteria', headerName: 'CO Criteria', width: 120 },
+    { field: 'isActive', headerName: 'Active', width: 90 },
     { field: 'actions', type: 'actions', headerName: 'Actions', width: 180, getActions: (params) => [
       <GridActionsCellItem icon={<EditIcon/>} label="Edit" onClick={() => handleOpenEdit(params.row)} showInMenu={false} disabled={!!saving || !!deletingId} />,
       <GridActionsCellItem icon={<DeleteIcon/>} label="Delete" onClick={() => onDelete(params.id)} showInMenu={false} disabled={!!deletingId || !!saving} />,
-      <GridActionsCellItem icon={<span style={{padding:4,border:'1px solid #ccc',borderRadius:4}}>BOM</span>} label="View BOM" onClick={() => openBomForModel(params.row)} showInMenu={false} disabled={!!saving || !!deletingId} />
+      <GridActionsCellItem icon={<span style={{padding:4,border:'1px solid #ccc',borderRadius:4,fontSize:11}}>BOM</span>} label="View BOM" onClick={() => openBomForModel(params.row)} showInMenu={false} disabled={!!saving || !!deletingId} />
     ] }
   ]
 

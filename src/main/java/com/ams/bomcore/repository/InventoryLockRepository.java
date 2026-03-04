@@ -13,4 +13,9 @@ public interface InventoryLockRepository extends JpaRepository<InventoryLockEnti
 
     List<InventoryLockEntity> findByMaterial_IdAndStatus(UUID materialId, String status);
 
+    List<InventoryLockEntity> findByTenantIdAndCompanyId(UUID tenantId, UUID companyId);
+
+    List<InventoryLockEntity> findByTenantIdAndCompanyIdAndStatus(UUID tenantId, UUID companyId, String status);
+
+    List<InventoryLockEntity> findByReferenceTypeAndReferenceId(String referenceType, UUID referenceId);
 }

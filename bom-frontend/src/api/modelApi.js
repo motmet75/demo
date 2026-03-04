@@ -127,3 +127,38 @@ export async function fetchModelBomsByModel(modelId, options = {}) {
   }
   return []
 }
+
+export async function createModelBom(payload, options = {}) {
+  // payload: { modelId, materialId, qtyPerUnit }
+  const params = new URLSearchParams()
+  if (options.tenantId) params.set('tenantId', options.tenantId)
+  if (options.companyId) params.set('companyId', options.companyId)
+  const qs = params.toString()
+  const url = `/bom/api/model-boms${qs ? '?' + qs : ''}`
+  const headers = { 'Content-Type': 'application/json' }
+  if (options.tenantId) headers['X-Tenant-Id'] = options.tenantId
+  if (options.companyId) headers['X-Company-Id'] = options.companyId
+  const { res, data } = await apiFetchJson(url, { method: 'POST', headers, body: JSON.stringify(payload) })
+  if (!res.ok) throw new Error((typeof data === 'string' ? data : data?.message) || 'Failed to create BOM item')
+  return data
+}
+
+export async function updateModelBom(id, payload, options = {}) {
+  // payload: { materialId?, qtyPerUnit? }
+  const params = new URLSearchParams()
+  if (options.tenantId) params.set('tenantId', options.tenantId)
+  if (options.companyId) params.set('companyId', options.companyId)
+  const qs = params.toString()
+  const url = `/bom/api/model-boms/${encodeURIComponent(id)}${qs ? '?' + qs : ''}`
+  const headers = { 'Content-Type': 'application/json' }
+  if (options.tenantId) headers['X-Tenant-Id'] = options.tenantId
+  if (options.companyId) headers['X-Company-Id'] = options.companyId
+  const { res, data } = await apiFetchJson(url, { method: 'PUT', headers, body: JSON.stringify(payload) })
+  if (!res.ok) throw new Error((typeof data === 'string' ? data : data?.message) || 'Failed to update BOM item')
+  return data
+}
+
+export async function deleteModelBom(id) {
+  const res = await apiFetch(`/bom/api/model-boms/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Failed to delete BOM item')
+}

@@ -39,6 +39,10 @@ public class ModelBomCsvRow {
     private UUID tenantId;
     private UUID companyId;
 
+    // Optional new model fields from SQL schema
+    private String hsCode;
+    private String coCriteria;
+
     public ModelBomCsvRow() {
     }
 
@@ -98,6 +102,22 @@ public class ModelBomCsvRow {
         this.companyId = companyId;
     }
 
+    public String getHsCode() {
+        return hsCode;
+    }
+
+    public void setHsCode(String hsCode) {
+        this.hsCode = hsCode;
+    }
+
+    public String getCoCriteria() {
+        return coCriteria;
+    }
+
+    public void setCoCriteria(String coCriteria) {
+        this.coCriteria = coCriteria;
+    }
+
     @Override
     public String toString() {
         return "ModelBomCsvRow{" +
@@ -108,6 +128,8 @@ public class ModelBomCsvRow {
                 ", modelId=" + modelId +
                 ", tenantId=" + tenantId +
                 ", companyId=" + companyId +
+                ", hsCode='" + hsCode + '\'' +
+                ", coCriteria='" + coCriteria + '\'' +
                 '}';
     }
 }

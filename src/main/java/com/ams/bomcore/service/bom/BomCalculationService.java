@@ -58,6 +58,11 @@ public class BomCalculationService {
      */
     @Transactional
     public BomCalculationEntity calculate(Model model, UUID tenantId, BigDecimal targetQty) {
+        return calculate(model, tenantId, model.getCompanyId(), targetQty);
+    }
+
+    @Transactional
+    public BomCalculationEntity calculate(Model model, UUID tenantId, UUID companyId, BigDecimal targetQty) {
         if (model == null) throw new IllegalArgumentException("Model is required");
 
         BomEntity bom = bomRepository.findByModelAndTenantIdAndStatus(model, tenantId, "ACTIVE")
@@ -81,7 +86,6 @@ public class BomCalculationService {
 
         // For each root item, traverse and compute multipliers
         for (BomItemEntity root : roots) {
-            // root multiplier: targetQty * root.quantity
             traverseAndAccumulate(root, targetQty.multiply(root.getQuantity()), children, aggregate);
         }
 
@@ -90,6 +94,7 @@ public class BomCalculationService {
         calculation.setBom(bom);
         calculation.setModelName(model.getModelName());
         calculation.setTenantId(bom.getTenantId());
+        calculation.setCompanyId(companyId != null ? companyId : bom.getCompanyId());
         calculation.setTargetQty(targetQty);
         calculation.setStatus("COMPLETED");
 
@@ -107,8 +112,8 @@ public class BomCalculationService {
             ci.setRequiredQty(required);
             ci.setAvailableQty(available);
             ci.setShortageQty(shortage);
-            // set tenant id on item for easier querying later
             ci.setTenantId(calculation.getTenantId());
+            ci.setCompanyId(calculation.getCompanyId());
             calcItems.add(ci);
         }
 

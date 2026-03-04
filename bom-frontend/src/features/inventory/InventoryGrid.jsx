@@ -368,7 +368,7 @@ export default function InventoryGrid() {
   }
 
   const columns = [
-    { field: 'inventoryId', headerName: 'Inventory UUID', width: 280, hide: false },
+    { field: 'inventoryId', headerName: 'Inventory UUID', width: 280, hide: false , flex:1},
     { field: 'actions', type: 'actions', headerName: 'Actions', width: 220, getActions: (params) => [
       <GridActionsCellItem icon={<EditIcon/>} label="Edit" onClick={() => openEdit(params.row)} showInMenu={false} disabled={!!saving} />,
       <GridActionsCellItem icon={<LocalHospitalIcon/>} label="Reserve" onClick={() => handleReserve(params.id)} showInMenu={true} disabled={!!saving} />,
@@ -378,10 +378,10 @@ export default function InventoryGrid() {
     { field: 'visible', headerName: 'Visible', width: 100, type: 'boolean' },
     { field: 'approved', headerName: 'Approved', width: 100, type: 'boolean' },
     { field: 'locked', headerName: 'Locked', width: 100, type: 'boolean' },
-    { field: 'materialUuid', headerName: 'Material UUID', width: 240 },
+    { field: 'materialUuid', headerName: 'Material UUID', width: 240, flex:1 },
     { field: 'materialCode', headerName: 'Material Code', width: 180 },
-    { field: 'materialName', headerName: 'Material Name', width: 220, flex: 1 },
-    { field: 'warehouseUuid', headerName: 'Warehouse UUID', width: 240 },
+    { field: 'materialName', headerName: 'Material Name', width: 220},
+    { field: 'warehouseUuid', headerName: 'Warehouse UUID', width: 240, flex:1 },
     { field: 'warehouseCode', headerName: 'Warehouse Code', width: 160 },
     { field: 'warehouseName', headerName: 'Warehouse Name', width: 200 },
     { field: 'quantityOnHand', headerName: 'Qty On Hand', width: 140, type: 'number' },

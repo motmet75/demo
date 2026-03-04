@@ -12,7 +12,9 @@ export default function ModelEditModal({ open, model, onClose, onSave, saving: p
   const makeInitialForm = (m) => ({
     modelCode: m?.modelCode ?? '',
     modelName: m?.modelName ?? '',
-    isActive: m?.isActive ?? true
+    isActive: m?.isActive ?? true,
+    hsCode: m?.hsCode ?? '',
+    coCriteria: m?.coCriteria ?? ''
   })
 
   const [form, setForm] = useState(() => makeInitialForm(model))
@@ -34,7 +36,9 @@ export default function ModelEditModal({ open, model, onClose, onSave, saving: p
       ...(model && model.id ? { id: model.id } : {}),
       modelCode: form.modelCode,
       modelName: form.modelName,
-      isActive: form.isActive
+      isActive: form.isActive,
+      hsCode: form.hsCode || null,
+      coCriteria: form.coCriteria || null
     }
 
     try {
@@ -77,6 +81,24 @@ export default function ModelEditModal({ open, model, onClose, onSave, saving: p
               fullWidth
               disabled={isBusy}
               required
+            />
+
+            <TextField
+              label="HS Code"
+              value={form.hsCode}
+              onChange={handleChange('hsCode')}
+              fullWidth
+              disabled={isBusy}
+              placeholder="e.g. 8471.30"
+            />
+
+            <TextField
+              label="CO Criteria"
+              value={form.coCriteria}
+              onChange={handleChange('coCriteria')}
+              fullWidth
+              disabled={isBusy}
+              placeholder="e.g. WO, CTH"
             />
 
             <label>

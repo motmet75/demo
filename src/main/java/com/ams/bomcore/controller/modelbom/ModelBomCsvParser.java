@@ -157,6 +157,22 @@ public class ModelBomCsvParser {
                     }
                 }
 
+                // optional hs_code in 8th column
+                if (cols.length >= 8) {
+                    String hs = cols[7].trim();
+                    if (!hs.isEmpty()) {
+                        dto.setHsCode(hs);
+                    }
+                }
+
+                // optional co_criteria in 9th column
+                if (cols.length >= 9) {
+                    String co = cols[8].trim();
+                    if (!co.isEmpty()) {
+                        dto.setCoCriteria(co);
+                    }
+                }
+
                 result.getRows().add(dto);
             }
         } catch (Exception e) {

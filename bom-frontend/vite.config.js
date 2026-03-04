@@ -8,6 +8,14 @@ export default defineConfig({
       '/bom/api': {
         target: 'http://localhost:8080',
         changeOrigin: true
+      },
+      '/api/viettelpost': {
+        target: 'http://localhost:8080',
+        changeOrigin: true
+      },
+      '/api/orders': {
+        target: 'http://localhost:8080',
+        changeOrigin: true
       }
     }
   }

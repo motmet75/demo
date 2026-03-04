@@ -1,6 +1,7 @@
 package com.ams.bomcore.domain.bom;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -26,8 +27,11 @@ public class BomItemEntity {
     @Column(name = "id", nullable = false)
     private UUID id;
 
-    @Column(name = "tenant_id", nullable = false, length = 100)
-    private String tenantId;
+    @Column(name = "tenant_id", nullable = false)
+    private UUID tenantId;
+
+    @Column(name = "company_id", nullable = false)
+    private UUID companyId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "bom_id", nullable = false)
@@ -47,6 +51,9 @@ public class BomItemEntity {
     @Column(name = "level", nullable = false)
     private Integer level;
 
+    @Column(name = "created_at")
+    private Instant createdAt;
+
     public BomItemEntity() {
     }
 
@@ -58,12 +65,20 @@ public class BomItemEntity {
         this.id = id;
     }
 
-    public String getTenantId() {
+    public UUID getTenantId() {
         return tenantId;
     }
 
-    public void setTenantId(String tenantId) {
+    public void setTenantId(UUID tenantId) {
         this.tenantId = tenantId;
+    }
+
+    public UUID getCompanyId() {
+        return companyId;
+    }
+
+    public void setCompanyId(UUID companyId) {
+        this.companyId = companyId;
     }
 
     public BomEntity getBom() {
@@ -106,10 +121,21 @@ public class BomItemEntity {
         this.level = level;
     }
 
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(Instant createdAt) {
+        this.createdAt = createdAt;
+    }
+
     @PrePersist
     private void prePersist() {
         if (id == null) {
             id = UUID.randomUUID();
+        }
+        if (createdAt == null) {
+            createdAt = Instant.now();
         }
     }
 

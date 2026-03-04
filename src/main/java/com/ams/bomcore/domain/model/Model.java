@@ -37,6 +37,12 @@ public class Model {
     @Column(name = "is_active")
     private Boolean isActive;
 
+    @Column(name = "hs_code", length = 20)
+    private String hsCode;
+
+    @Column(name = "co_criteria", length = 100)
+    private String coCriteria;
+
     @Column(name = "created_at")
     private Instant createdAt;
 
@@ -92,6 +98,22 @@ public class Model {
         this.isActive = isActive;
     }
 
+    public String getHsCode() {
+        return hsCode;
+    }
+
+    public void setHsCode(String hsCode) {
+        this.hsCode = hsCode;
+    }
+
+    public String getCoCriteria() {
+        return coCriteria;
+    }
+
+    public void setCoCriteria(String coCriteria) {
+        this.coCriteria = coCriteria;
+    }
+
     public Instant getCreatedAt() {
         return createdAt;
     }
@@ -134,6 +156,8 @@ public class Model {
                 ", companyId='" + companyId + '\'' +
                 ", modelCode='" + modelCode + '\'' +
                 ", modelName='" + modelName + '\'' +
+                ", hsCode='" + hsCode + '\'' +
+                ", coCriteria='" + coCriteria + '\'' +
                 ", isActive=" + isActive +
                 ", createdAt=" + createdAt +
                 '}';

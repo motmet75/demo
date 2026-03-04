@@ -10,8 +10,11 @@ import PropTypes from 'prop-types'
 import Autocomplete from '@mui/material/Autocomplete'
 import { fetchMaterials } from '../../api/materialApi'
 import { fetchWarehouses } from '../../api/warehouseApi'
+import { fetchAllInvoices } from '../../api/invoiceApi'
+import { useAppContext } from '../../context/AppContext'
 
 export default function InventoryEditModal({ open, inventory, onClose, onSave, saving }) {
+  const { tenantId, companyId } = useAppContext()
   const isoToLocalDatetime = (iso) => {
     if (!iso) return ''
     const d = new Date(iso)
@@ -46,14 +49,16 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
     originCountry: i?.originCountry ?? '',
     orderToDeduction: i?.orderToDeduction ?? '',
     userName: i?.userName ?? 'system',
+    reason: i ? 'Manual update stock' : 'Manual add stock',
+    createdBy: i?.userName ?? 'system',
+    notes: '',
     expirationLocal: i?.expirationDateTime ? isoToLocalDatetime(i.expirationDateTime) : (i?.expiration_date ? isoToLocalDatetime(i.expiration_date) : localNow()),
-    // default production date to now for new inventory; keep existing value when editing
     productionLocal: i?.productionDateTime ? isoToLocalDatetime(i.productionDateTime) : (i?.production_date ? isoToLocalDatetime(i.production_date) : localNow()),
-    // default createdAt to now when creating, otherwise show existing createdAt
     createdAt: i?.createdAt ? isoToLocalDatetime(i.createdAt) : localNow(),
     visible: i?.visible ?? true,
     approved: i?.approved ?? false,
-    locked: i?.locked ?? false
+    locked: i?.locked ?? false,
+    invoiceId: ''
   })
 
   const [form, setForm] = useState(() => makeInitial(inventory))
@@ -61,6 +66,7 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
   const [errorMessage, setErrorMessage] = useState('')
   const [materials, setMaterials] = useState([])
   const [warehouses, setWarehouses] = useState([])
+  const [invoices, setInvoices] = useState([])
 
   // reset form whenever the modal opens or the inventory prop changes
   useEffect(() => {
@@ -113,8 +119,16 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
         setWarehouses([])
       }
     })()
+    ;(async () => {
+      try {
+        if (!tenantId || !companyId) return
+        const inv = await fetchAllInvoices({ tenantId, companyId })
+        if (!mounted) return
+        setInvoices(Array.isArray(inv) ? inv : [])
+      } catch (e) { setInvoices([]) }
+    })()
     return () => { mounted = false }
-  }, [])
+  }, [tenantId, companyId])
 
   const handleChange = (field) => (e) => setForm(prev => ({ ...prev, [field]: e.target.value }))
 
@@ -223,7 +237,6 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
 
     const payload = {
       ...(inventory && (inventory.id || inventory.inventoryId) ? { id: (inventory.id ?? inventory.inventoryId) } : {}),
-      // include ids when available (edit flow). If creating new, backend may resolve by code.
       ...(form.materialId != null && form.materialId !== '' ? { materialId: form.materialId } : {}),
       ...(form.warehouseId != null && form.warehouseId !== '' ? { warehouseId: form.warehouseId } : {}),
       materialCode: form.materialCode,
@@ -241,7 +254,11 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
       originCountry: form.originCountry || null,
       orderToDeduction: form.orderToDeduction || null,
       expirationDateTime: toIso(form.expirationLocal),
-      productionDateTime: toIso(form.productionLocal)
+      productionDateTime: toIso(form.productionLocal),
+      reason: form.reason || (inventory ? 'Manual update stock' : 'Manual add stock'),
+      createdBy: form.createdBy || 'system',
+      notes: form.notes || null,
+      ...((!inventory && form.invoiceId) ? { invoiceId: form.invoiceId } : {})
     }
 
     try {
@@ -330,6 +347,31 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
               InputLabelProps={{ shrink: true }}
               disabled={isSubmitting}
             />
+
+            {/* Movement audit fields */}
+            <TextField label="Reason" value={form.reason} onChange={handleChange('reason')} disabled={isSubmitting}
+              helperText="Recorded in Inventory Movements log" />
+            <TextField label="Created By" value={form.createdBy} onChange={handleChange('createdBy')} disabled={isSubmitting} />
+            <TextField label="Notes" value={form.notes} onChange={handleChange('notes')} disabled={isSubmitting}
+              multiline minRows={2} />
+
+            {/* Invoice picker — only relevant when adding new stock */}
+            {!inventory && (
+              <Autocomplete
+                options={invoices}
+                getOptionLabel={inv => inv.invoiceNumber
+                  ? `${inv.invoiceNumber} — ${inv.invoiceType} — ${inv.partyName || ''}`
+                  : ''}
+                value={invoices.find(inv => inv.id === form.invoiceId) || null}
+                onChange={(_, val) => setForm(f => ({ ...f, invoiceId: val ? val.id : '' }))}
+                renderInput={(params) => (
+                  <TextField {...params} label="Link to Invoice (optional)"
+                    placeholder="Select purchase/sale invoice…" size="small" />
+                )}
+                isOptionEqualToValue={(opt, val) => opt.id === val.id}
+                disabled={isSubmitting}
+              />
+            )}
 
             {form.createdAt ? <div>Created At: {String(form.createdAt)}</div> : null}
 

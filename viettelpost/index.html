@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Viettel Post Shipment Calculator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #E30B17 0%, #C50915 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .section {
+            margin-bottom: 30px;
+            padding: 25px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            border-left: 4px solid #E30B17;
+        }
+
+        .section.hidden {
+            display: none;
+        }
+
+        .section h2 {
+            color: #E30B17;
+            margin-bottom: 20px;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: #E30B17;
+            box-shadow: 0 0 0 3px rgba(227, 11, 23, 0.1);
+        }
+
+        button {
+            background: linear-gradient(135deg, #E30B17 0%, #C50915 100%);
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+            width: 100%;
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(227, 11, 23, 0.3);
+        }
+
+        button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .status {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 13px;
+            display: none;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            display: block;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            display: block;
+        }
+
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+            display: block;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .results {
+            margin-top: 30px;
+        }
+
+        .shipment-option {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 15px;
+            border: 2px solid #e0e0e0;
+            transition: all 0.3s;
+        }
+
+        .shipment-option:hover {
+            border-color: #E30B17;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .shipment-option h3 {
+            color: #E30B17;
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+
+        .price {
+            font-size: 28px;
+            font-weight: bold;
+            color: #E30B17;
+            margin: 10px 0;
+        }
+
+        .details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #e0e0e0;
+            font-size: 13px;
+        }
+
+        .detail-item {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .detail-label {
+            color: #666;
+        }
+
+        .detail-value {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #E30B17;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+            display: none;
+        }
+
+        .loader.active {
+            display: block;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .token-info {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            color: #856404;
+            margin-bottom: 15px;
+            word-break: break-all;
+        }
+
+        .server-info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 13px;
+            color: #0c5460;
+        }
+
+        .server-info h3 {
+            margin-bottom: 10px;
+            font-size: 15px;
+        }
+
+        .server-info code {
+            background: #fff;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+
+        @media (max-width: 768px) {
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+            
+            .details {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚚 Viettel Post Shipment Calculator</h1>
+            <p>Calculate shipping costs for your packages</p>
+        </div>
+
+        <div class="content">
+            <!-- Server Info -->
+            <div class="server-info">
+                <h3>📡 Server Configuration</h3>
+                <p>Make sure your Node.js server is running on <code id="serverUrl">http://localhost:3000</code></p>
+                <p style="margin-top: 5px; font-size: 12px;">If using a different port, update the API_URL in the script below.</p>
+            </div>
+
+            <!-- Login Section -->
+            <div class="section" id="loginSection">
+                <h2>🔐 Login to Viettel Post</h2>
+                <div id="loginStatus" class="status"></div>
+                
+                <div class="form-group">
+                    <label for="username">Phone Number (Username)</label>
+                    <input type="text" id="username" placeholder="Enter your phone number" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" placeholder="Enter your password" required>
+                </div>
+
+                <button onclick="login()" id="loginBtn">Login & Get Token</button>
+            </div>
+
+            <!-- Shipment Calculator Section -->
+            <div class="section hidden" id="calculatorSection">
+                <h2>📦 Calculate Shipping Costs</h2>
+                <div id="calculatorStatus" class="status"></div>
+                
+                <div class="token-info" id="tokenInfo"></div>
+
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label for="senderProvince">Sender Province</label>
+                        <select id="senderProvince" onchange="loadSenderDistricts()">
+                            <option value="">Select Province</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="senderDistrict">Sender District</label>
+                        <select id="senderDistrict">
+                            <option value="">Select District</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label for="receiverProvince">Receiver Province</label>
+                        <select id="receiverProvince" onchange="loadReceiverDistricts()">
+                            <option value="">Select Province</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="receiverDistrict">Receiver District</label>
+                        <select id="receiverDistrict">
+                            <option value="">Select District</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label for="productWeight">Package Weight (grams)</label>
+                        <input type="number" id="productWeight" placeholder="e.g., 1000" value="1000" min="1">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="productPrice">Product Value (VND)</label>
+                        <input type="number" id="productPrice" placeholder="e.g., 500000" value="500000" min="0">
+                    </div>
+                </div>
+
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label for="moneyCollection">COD Amount (VND)</label>
+                        <input type="number" id="moneyCollection" placeholder="e.g., 500000" value="500000" min="0">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="productType">Product Type</label>
+                        <select id="productType">
+                            <option value="HH">Hàng hóa (HH)</option>
+                            <option value="TT">Tài liệu (TT)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button onclick="calculateShipping()" id="calculateBtn">Calculate Shipping Costs</button>
+
+                <div class="loader" id="loader"></div>
+
+                <!-- Results Section -->
+                <div class="results hidden" id="resultsSection">
+                    <h3 style="color: #E30B17; margin-bottom: 20px;">Available Shipping Options</h3>
+                    <div id="shipmentOptions"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // API Configuration - Change this if your server runs on a different port
+        const API_URL = 'http://localhost:3000/api';
+        
+        let token = null;
+        let sessionId = null;
+
+        // Login function
+        async function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const loginBtn = document.getElementById('loginBtn');
+
+            if (!username || !password) {
+                showStatus('loginStatus', 'Please enter both username and password', 'error');
+                return;
+            }
+
+            loginBtn.disabled = true;
+            showStatus('loginStatus', 'Logging in...', 'info');
+
+            try {
+                const response = await fetch(`${API_URL}/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        username: username,
+                        password: password
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success && data.token) {
+                    token = data.token;
+                    sessionId = data.sessionId;
+                    
+                    showStatus('loginStatus', 'Login successful! Loading provinces...', 'success');
+                    document.getElementById('tokenInfo').textContent = `Token: ${token.substring(0, 50)}...`;
+                    
+                    // Load provinces
+                    await loadProvinces();
+                    
+                    // Show calculator section
+                    document.getElementById('loginSection').classList.add('hidden');
+                    document.getElementById('calculatorSection').classList.remove('hidden');
+                } else {
+                    showStatus('loginStatus', 'Login failed: ' + (data.message || 'Invalid credentials'), 'error');
+                    loginBtn.disabled = false;
+                }
+            } catch (error) {
+                showStatus('loginStatus', 'Error: ' + error.message + '. Make sure the Node.js server is running!', 'error');
+                loginBtn.disabled = false;
+                console.error('Login error:', error);
+            }
+        }
+
+        // Load provinces
+        async function loadProvinces() {
+            try {
+                const response = await fetch(`${API_URL}/provinces`, {
+                    headers: {
+                        'Authorization': token
+                    }
+                });
+
+                const data = await response.json();
+
+                if (data.status === 200 && data.data) {
+                    const senderSelect = document.getElementById('senderProvince');
+                    const receiverSelect = document.getElementById('receiverProvince');
+
+                    data.data.forEach(province => {
+                        const option1 = new Option(province.PROVINCE_NAME, province.PROVINCE_ID);
+                        const option2 = new Option(province.PROVINCE_NAME, province.PROVINCE_ID);
+                        senderSelect.add(option1);
+                        receiverSelect.add(option2);
+                    });
+
+                    showStatus('calculatorStatus', 'Provinces loaded successfully!', 'success');
+                    setTimeout(() => {
+                        document.getElementById('calculatorStatus').style.display = 'none';
+                    }, 3000);
+                }
+            } catch (error) {
+                showStatus('calculatorStatus', 'Error loading provinces: ' + error.message, 'error');
+            }
+        }
+
+        // Load sender districts
+        async function loadSenderDistricts() {
+            const provinceId = document.getElementById('senderProvince').value;
+            if (!provinceId) return;
+
+            try {
+                const response = await fetch(`${API_URL}/districts/${provinceId}`, {
+                    headers: {
+                        'Authorization': token
+                    }
+                });
+
+                const data = await response.json();
+
+                if (data.status === 200 && data.data) {
+                    const select = document.getElementById('senderDistrict');
+                    select.innerHTML = '<option value="">Select District</option>';
+                    
+                    data.data.forEach(district => {
+                        const option = new Option(district.DISTRICT_NAME, district.DISTRICT_ID);
+                        select.add(option);
+                    });
+                }
+            } catch (error) {
+                showStatus('calculatorStatus', 'Error loading districts: ' + error.message, 'error');
+            }
+        }
+
+        // Load receiver districts
+        async function loadReceiverDistricts() {
+            const provinceId = document.getElementById('receiverProvince').value;
+            if (!provinceId) return;
+
+            try {
+                const response = await fetch(`${API_URL}/districts/${provinceId}`, {
+                    headers: {
+                        'Authorization': token
+                    }
+                });
+
+                const data = await response.json();
+
+                if (data.status === 200 && data.data) {
+                    const select = document.getElementById('receiverDistrict');
+                    select.innerHTML = '<option value="">Select District</option>';
+                    
+                    data.data.forEach(district => {
+                        const option = new Option(district.DISTRICT_NAME, district.DISTRICT_ID);
+                        select.add(option);
+                    });
+                }
+            } catch (error) {
+                showStatus('calculatorStatus', 'Error loading districts: ' + error.message, 'error');
+            }
+        }
+
+        // Calculate shipping costs
+        async function calculateShipping() {
+            const senderProvince = document.getElementById('senderProvince').value;
+            const senderDistrict = document.getElementById('senderDistrict').value;
+            const receiverProvince = document.getElementById('receiverProvince').value;
+            const receiverDistrict = document.getElementById('receiverDistrict').value;
+            const productWeight = document.getElementById('productWeight').value;
+            const productPrice = document.getElementById('productPrice').value;
+            const moneyCollection = document.getElementById('moneyCollection').value;
+            const productType = document.getElementById('productType').value;
+            const calculateBtn = document.getElementById('calculateBtn');
+
+            if (!senderProvince || !senderDistrict || !receiverProvince || !receiverDistrict) {
+                showStatus('calculatorStatus', 'Please select all locations', 'error');
+                return;
+            }
+
+            if (!productWeight || !productPrice) {
+                showStatus('calculatorStatus', 'Please enter weight and price', 'error');
+                return;
+            }
+
+            calculateBtn.disabled = true;
+            document.getElementById('loader').classList.add('active');
+            showStatus('calculatorStatus', 'Calculating shipping costs...', 'info');
+
+            try {
+                const response = await fetch(`${API_URL}/calculate-price`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': token
+                    },
+                    body: JSON.stringify({
+                        PRODUCT_WEIGHT: parseInt(productWeight),
+                        PRODUCT_PRICE: parseInt(productPrice),
+                        MONEY_COLLECTION: parseInt(moneyCollection),
+                        SENDER_PROVINCE: parseInt(senderProvince),
+                        SENDER_DISTRICT: parseInt(senderDistrict),
+                        RECEIVER_PROVINCE: parseInt(receiverProvince),
+                        RECEIVER_DISTRICT: parseInt(receiverDistrict),
+                        PRODUCT_TYPE: productType,
+                        NATIONAL_TYPE: 1
+                    })
+                });
+
+                const data = await response.json();
+                document.getElementById('loader').classList.remove('active');
+                calculateBtn.disabled = false;
+
+                if (data.status === 200 && data.data) {
+                    displayResults(data.data);
+                    showStatus('calculatorStatus', 'Shipping costs calculated successfully!', 'success');
+                    setTimeout(() => {
+                        document.getElementById('calculatorStatus').style.display = 'none';
+                    }, 3000);
+                } else {
+                    showStatus('calculatorStatus', 'Error: ' + (data.message || 'Failed to calculate shipping costs'), 'error');
+                }
+            } catch (error) {
+                document.getElementById('loader').classList.remove('active');
+                calculateBtn.disabled = false;
+                showStatus('calculatorStatus', 'Error: ' + error.message, 'error');
+            }
+        }
+
+        // Display results
+        function displayResults(services) {
+            const resultsSection = document.getElementById('resultsSection');
+            const optionsContainer = document.getElementById('shipmentOptions');
+            
+            optionsContainer.innerHTML = '';
+
+            if (Array.isArray(services) && services.length > 0) {
+                services.forEach(service => {
+                    const optionDiv = document.createElement('div');
+                    optionDiv.className = 'shipment-option';
+                    
+                    optionDiv.innerHTML = `
+                        <h3>${service.TEN_DICHVU || service.MA_DV_CHINH || 'Standard Service'}</h3>
+                        <div class="price">${formatCurrency(service.GIA_CUOC || 0)} VND</div>
+                        <div class="details">
+                            <div class="detail-item">
+                                <span class="detail-label">Service Code:</span>
+                                <span class="detail-value">${service.MA_DV_CHINH || 'N/A'}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Delivery Time:</span>
+                                <span class="detail-value">${service.THOI_GIAN || 'N/A'}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Extra Services:</span>
+                                <span class="detail-value">${formatCurrency(service.GIA_CUOC_DV_CON || 0)} VND</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Insurance:</span>
+                                <span class="detail-value">${formatCurrency(service.PHI_BAO_HIEM || 0)} VND</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Remote Fee:</span>
+                                <span class="detail-value">${formatCurrency(service.PHI_XA_TRAM || 0)} VND</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Total Price:</span>
+                                <span class="detail-value" style="color: #E30B17; font-size: 16px;">${formatCurrency(service.TONG_CUOC || 0)} VND</span>
+                            </div>
+                        </div>
+                    `;
+                    
+                    optionsContainer.appendChild(optionDiv);
+                });
+                
+                resultsSection.classList.remove('hidden');
+            } else {
+                showStatus('calculatorStatus', 'No shipping options available for this route', 'error');
+            }
+        }
+
+        // Helper function to format currency
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('vi-VN').format(amount);
+        }
+
+        // Helper function to show status messages
+        function showStatus(elementId, message, type) {
+            const statusElement = document.getElementById(elementId);
+            statusElement.textContent = message;
+            statusElement.className = 'status ' + type;
+        }
+
+        // Update server URL display
+        document.getElementById('serverUrl').textContent = API_URL.replace('/api', '');
+    </script>
+</body>
+</html>

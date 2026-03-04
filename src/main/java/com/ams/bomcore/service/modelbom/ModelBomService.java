@@ -22,6 +22,7 @@ import com.ams.bomcore.repository.MaterialRepository;
 import com.ams.bomcore.repository.ModelBomRepository;
 import com.ams.bomcore.repository.ModelRepository;
 import com.ams.bomcore.service.model.ModelService;
+import com.ams.bomcore.service.bom.BomService;
 
 @Service
 public class ModelBomService {
@@ -30,12 +31,18 @@ public class ModelBomService {
     private final ModelRepository modelRepository;
     private final MaterialRepository materialRepository;
     private final ModelService modelService;
+    private BomService bomService; // setter-injected to avoid circular dependency
 
     public ModelBomService(ModelBomRepository modelBomRepository, ModelRepository modelRepository, MaterialRepository materialRepository, ModelService modelService) {
         this.modelBomRepository = modelBomRepository;
         this.modelRepository = modelRepository;
         this.materialRepository = materialRepository;
         this.modelService = modelService;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setBomService(BomService bomService) {
+        this.bomService = bomService;
     }
 
     public ModelBom create(ModelBom modelBom) {
@@ -48,6 +55,95 @@ public class ModelBomService {
 
     public void delete(UUID id) {
         modelBomRepository.deleteById(id);
+    }
+
+    /**
+     * Find all model BOMs by model ID.
+     */
+    public List<ModelBom> findAllByModelId(UUID modelId) {
+        return modelBomRepository.findAllByModelId(modelId);
+    }
+
+    /**
+     * Find all model BOMs by model ID with tenant/company scope.
+     */
+    public List<ModelBom> findAllByModelIdAndTenantAndCompany(UUID modelId, UUID tenantId, UUID companyId) {
+        return modelBomRepository.findAllByModelIdAndTenantIdAndCompanyId(modelId, tenantId, companyId);
+    }
+
+    /**
+     * Find all model BOMs by tenant and company.
+     */
+    public List<ModelBom> findAllByTenantAndCompany(UUID tenantId, UUID companyId) {
+        return modelBomRepository.findAllByTenantIdAndCompanyId(tenantId, companyId);
+    }
+
+    /**
+     * Get a model BOM by ID.
+     */
+    public java.util.Optional<ModelBom> getById(UUID id) {
+        return modelBomRepository.findById(id);
+    }
+
+    /**
+     * Create a new model BOM entry.
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ModelBom createModelBom(UUID modelId, UUID materialId, java.math.BigDecimal qtyPerUnit, UUID tenantId, UUID companyId) {
+        Model model = modelRepository.findById(modelId)
+                .orElseThrow(() -> new IllegalArgumentException("Model not found: " + modelId));
+        Material material = materialRepository.findById(materialId)
+                .orElseThrow(() -> new IllegalArgumentException("Material not found: " + materialId));
+
+        // Check if already exists
+        java.util.Optional<ModelBom> existing = modelBomRepository.findByModelAndMaterialAndTenantIdAndCompanyId(model, material, tenantId, companyId);
+        if (existing.isPresent()) {
+            throw new IllegalArgumentException("ModelBom already exists for this model and material");
+        }
+
+        ModelBom modelBom = new ModelBom();
+        modelBom.setModel(model);
+        modelBom.setMaterial(material);
+        modelBom.setQtyPerUnit(qtyPerUnit);
+        modelBom.setTenantId(tenantId);
+        modelBom.setCompanyId(companyId);
+
+        return modelBomRepository.save(modelBom);
+    }
+
+    /**
+     * Update an existing model BOM entry.
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ModelBom updateModelBom(UUID id, UUID materialId, java.math.BigDecimal qtyPerUnit, UUID tenantId, UUID companyId) {
+        ModelBom modelBom = modelBomRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("ModelBom not found: " + id));
+
+        if (materialId != null) {
+            Material material = materialRepository.findById(materialId)
+                    .orElseThrow(() -> new IllegalArgumentException("Material not found: " + materialId));
+            modelBom.setMaterial(material);
+        }
+
+        if (qtyPerUnit != null) {
+            modelBom.setQtyPerUnit(qtyPerUnit);
+        }
+
+        modelBom.setTenantId(tenantId);
+        modelBom.setCompanyId(companyId);
+
+        return modelBomRepository.save(modelBom);
+    }
+
+    /**
+     * Delete all model BOMs for a model.
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteAllByModelId(UUID modelId) {
+        Model model = modelRepository.findById(modelId).orElse(null);
+        if (model != null) {
+            modelBomRepository.deleteAllByModel(model);
+        }
     }
 
     public static class ImportResult {
@@ -165,7 +261,9 @@ public class ModelBomService {
                     newModel.setModelName(first.getModelName());
                     newModel.setTenantId(tenantId);
                     if (companyId != null) newModel.setCompanyId(companyId);
-                    // Do NOT preserve client-provided modelId here - backend must generate UUIDs via JPA @PrePersist
+                    // Apply new fields from SQL schema
+                    if (first.getHsCode() != null) newModel.setHsCode(first.getHsCode());
+                    if (first.getCoCriteria() != null) newModel.setCoCriteria(first.getCoCriteria());
                 } else {
                     newModel.setModelCode(modelCode);
                     newModel.setModelName(modelCode);
@@ -208,6 +306,15 @@ public class ModelBomService {
                     mb.setCompanyId(companyId);
                     modelBomRepository.save(mb);
                     result.setModelBomsCreated(result.getModelBomsCreated() + 1);
+                }
+            }
+            // After all rows for this model are written, auto-sync the BOM
+            if (bomService != null) {
+                try {
+                    bomService.syncBomFromModelBoms(model.getId(), tenantId, companyId);
+                } catch (Exception ex) {
+                    // Non-fatal: log and continue. BOM can be manually synced later.
+                    result.getErrors().add("BOM auto-sync warning for model '" + modelCode + "': " + ex.getMessage());
                 }
             }
         }
@@ -304,6 +411,15 @@ public class ModelBomService {
                 mb.setCompanyId(companyId);
                 modelBomRepository.save(mb);
                 result.setModelBomsCreated(result.getModelBomsCreated() + 1);
+            }
+        }
+
+        // Auto-sync BOM for this model after import
+        if (bomService != null) {
+            try {
+                bomService.syncBomFromModelBoms(modelId, tenantId, companyId);
+            } catch (Exception ex) {
+                result.getErrors().add("BOM auto-sync warning: " + ex.getMessage());
             }
         }
 

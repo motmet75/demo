@@ -29,6 +29,9 @@ public class BomCalculationItemEntity {
     @Column(name = "tenant_id", nullable = false)
     private UUID tenantId;
 
+    @Column(name = "company_id", nullable = false)
+    private UUID companyId;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "calculation_id", nullable = false)
     private BomCalculationEntity calculation;
@@ -63,6 +66,14 @@ public class BomCalculationItemEntity {
 
     public void setTenantId(UUID tenantId) {
         this.tenantId = tenantId;
+    }
+
+    public UUID getCompanyId() {
+        return companyId;
+    }
+
+    public void setCompanyId(UUID companyId) {
+        this.companyId = companyId;
     }
 
     public BomCalculationEntity getCalculation() {

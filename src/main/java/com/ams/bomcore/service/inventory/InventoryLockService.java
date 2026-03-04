@@ -38,6 +38,13 @@ public class InventoryLockService {
     @Transactional
     public InventoryLockEntity createLock(UUID materialId, UUID warehouseId, String lockType,
                                           BigDecimal quantity, String referenceType, UUID referenceId) {
+        return createLock(materialId, warehouseId, lockType, quantity, referenceType, referenceId, null, null);
+    }
+
+    @Transactional
+    public InventoryLockEntity createLock(UUID materialId, UUID warehouseId, String lockType,
+                                          BigDecimal quantity, String referenceType, UUID referenceId,
+                                          UUID tenantId, UUID companyId) {
         Material m = materialRepository.findById(materialId)
                 .orElseThrow(() -> new IllegalArgumentException("Material not found: " + materialId));
         WarehouseEntity w = warehouseRepository.findById(warehouseId)
@@ -51,7 +58,17 @@ public class InventoryLockService {
         lock.setReferenceType(referenceType);
         lock.setReferenceId(referenceId);
         lock.setStatus("ACTIVE");
-        // createdAt handled by entity prePersist
+        // Use provided tenantId/companyId; fall back to material's tenant/company if not supplied
+        if (tenantId != null) {
+            lock.setTenantId(tenantId);
+        } else if (m.getTenant() != null) {
+            lock.setTenantId(m.getTenant().getId());
+        }
+        if (companyId != null) {
+            lock.setCompanyId(companyId);
+        } else if (m.getCompany() != null) {
+            lock.setCompanyId(m.getCompany().getId());
+        }
         return inventoryLockRepository.save(lock);
     }
 

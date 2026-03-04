@@ -91,9 +91,16 @@ public class ModelBomController {
         List<ModelBom> list = modelBomRepository.findAllByModel(model);
         if (list == null) list = java.util.Collections.emptyList();
 
+        // capture final refs for lambda
+        final com.ams.bomcore.domain.model.Model finalModel = model;
         List<ModelBomView> views = list.stream().map(mb -> {
             ModelBomView v = new ModelBomView();
             v.setId(mb.getId());
+            v.setModelId(finalModel.getId());
+            v.setModelCode(finalModel.getModelCode());
+            v.setModelName(finalModel.getModelName());
+            v.setHsCode(finalModel.getHsCode());
+            v.setCoCriteria(finalModel.getCoCriteria());
             if (mb.getMaterial() != null) {
                 v.setMaterialId(mb.getMaterial().getId());
                 v.setMaterialCode(mb.getMaterial().getMaterialCode());
@@ -106,36 +113,114 @@ public class ModelBomController {
         return ResponseEntity.ok(views);
     }
 
-    @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<ModelBom> create(@Valid @RequestBody ModelBom modelBom,
-                                           @RequestParam(value = "tenantId", required = false) UUID tenantId,
-                                           @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId) {
-        tenantId = resolveTenant(tenantId, headerTenantId);
-        if (tenantId == null) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(null);
-        Tenant tenant = tenantRepository.findById(tenantId).orElseThrow(() -> new IllegalArgumentException("tenant not found"));
-
-        modelBom.setTenantId(tenant.getId());
-        ModelBom saved = modelBomService.create(modelBom);
-        return ResponseEntity.status(HttpStatus.CREATED).body(saved);
-    }
-
-    @PutMapping(path = "/{id}", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<ModelBom> update(@PathVariable("id") UUID id, @Valid @RequestBody ModelBom modelBom,
-                                          @RequestParam(value = "tenantId", required = false) UUID tenantId,
-                                          @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId) {
-        tenantId = resolveTenant(tenantId, headerTenantId);
-        if (tenantId == null) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(null);
-
-        modelBom.setId(id);
-        if (!modelBomRepository.existsById(id)) {
-            return ResponseEntity.notFound().build();
+    private UUID resolveCompany(UUID companyId, String headerCompanyId) {
+        if (headerCompanyId != null && !headerCompanyId.isBlank()) {
+            try { return UUID.fromString(headerCompanyId); } catch (Exception e) { }
         }
-        Tenant tenant = tenantRepository.findById(tenantId).orElseThrow(() -> new IllegalArgumentException("tenant not found"));
-        modelBom.setTenantId(tenant.getId());
-        ModelBom saved = modelBomRepository.save(modelBom);
-        return ResponseEntity.ok(saved);
+        return companyId;
     }
 
+    /**
+     * Create a new ModelBom entry with full tenant/company scope.
+     */
+    @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> create(@Valid @RequestBody java.util.Map<String, Object> body,
+                                    @RequestParam(value = "tenantId", required = false) UUID tenantId,
+                                    @RequestParam(value = "companyId", required = false) UUID companyId,
+                                    @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId,
+                                    @RequestHeader(value = "X-Company-Id", required = false) String headerCompanyId) {
+        try {
+            tenantId = resolveTenant(tenantId, headerTenantId);
+            companyId = resolveCompany(companyId, headerCompanyId);
+
+            if (tenantId == null || companyId == null) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+            }
+
+            UUID modelId = UUID.fromString(String.valueOf(body.get("modelId")));
+            UUID materialId = UUID.fromString(String.valueOf(body.get("materialId")));
+            java.math.BigDecimal qtyPerUnit = new java.math.BigDecimal(String.valueOf(body.get("qtyPerUnit")));
+
+            ModelBom saved = modelBomService.createModelBom(modelId, materialId, qtyPerUnit, tenantId, companyId);
+
+            ModelBomView view = new ModelBomView();
+            view.setId(saved.getId());
+            if (saved.getModel() != null) {
+                view.setModelId(saved.getModel().getId());
+                view.setModelCode(saved.getModel().getModelCode());
+                view.setModelName(saved.getModel().getModelName());
+                view.setHsCode(saved.getModel().getHsCode());
+                view.setCoCriteria(saved.getModel().getCoCriteria());
+            }
+            if (saved.getMaterial() != null) {
+                view.setMaterialId(saved.getMaterial().getId());
+                view.setMaterialCode(saved.getMaterial().getMaterialCode());
+                view.setMaterialName(saved.getMaterial().getMaterialName());
+            }
+            view.setQtyPerUnit(saved.getQtyPerUnit());
+
+            return ResponseEntity.status(HttpStatus.CREATED).body(view);
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ex.getMessage());
+        }
+    }
+
+    /**
+     * Update an existing ModelBom entry.
+     */
+    @PutMapping(path = "/{id}", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> update(@PathVariable("id") UUID id,
+                                    @Valid @RequestBody java.util.Map<String, Object> body,
+                                    @RequestParam(value = "tenantId", required = false) UUID tenantId,
+                                    @RequestParam(value = "companyId", required = false) UUID companyId,
+                                    @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId,
+                                    @RequestHeader(value = "X-Company-Id", required = false) String headerCompanyId) {
+        try {
+            tenantId = resolveTenant(tenantId, headerTenantId);
+            companyId = resolveCompany(companyId, headerCompanyId);
+
+            if (tenantId == null || companyId == null) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+            }
+
+            if (!modelBomRepository.existsById(id)) {
+                return ResponseEntity.notFound().build();
+            }
+
+            UUID materialId = body.get("materialId") != null ? UUID.fromString(String.valueOf(body.get("materialId"))) : null;
+            java.math.BigDecimal qtyPerUnit = body.get("qtyPerUnit") != null ? new java.math.BigDecimal(String.valueOf(body.get("qtyPerUnit"))) : null;
+
+            ModelBom saved = modelBomService.updateModelBom(id, materialId, qtyPerUnit, tenantId, companyId);
+
+            ModelBomView view = new ModelBomView();
+            view.setId(saved.getId());
+            if (saved.getModel() != null) {
+                view.setModelId(saved.getModel().getId());
+                view.setModelCode(saved.getModel().getModelCode());
+                view.setModelName(saved.getModel().getModelName());
+                view.setHsCode(saved.getModel().getHsCode());
+                view.setCoCriteria(saved.getModel().getCoCriteria());
+            }
+            if (saved.getMaterial() != null) {
+                view.setMaterialId(saved.getMaterial().getId());
+                view.setMaterialCode(saved.getMaterial().getMaterialCode());
+                view.setMaterialName(saved.getMaterial().getMaterialName());
+            }
+            view.setQtyPerUnit(saved.getQtyPerUnit());
+
+            return ResponseEntity.ok(view);
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ex.getMessage());
+        }
+    }
+
+    /**
+     * Delete a ModelBom entry.
+     */
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable("id") UUID id) {
         if (!modelBomRepository.existsById(id)) {

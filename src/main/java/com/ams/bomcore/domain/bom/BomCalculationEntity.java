@@ -37,6 +37,9 @@ public class BomCalculationEntity {
     @Column(name = "tenant_id", nullable = false)
     private UUID tenantId;
 
+    @Column(name = "company_id", nullable = false)
+    private UUID companyId;
+
     @Column(name = "model_name", nullable = false, length = 100)
     private String modelName;
 
@@ -78,6 +81,14 @@ public class BomCalculationEntity {
 
     public void setTenantId(UUID tenantId) {
         this.tenantId = tenantId;
+    }
+
+    public UUID getCompanyId() {
+        return companyId;
+    }
+
+    public void setCompanyId(UUID companyId) {
+        this.companyId = companyId;
     }
 
     public String getModelName() {

@@ -64,7 +64,7 @@ CREATE TABLE public.tenant (
 
 CREATE TABLE public.bom (
     id uuid DEFAULT public.uuid_v7() NOT NULL,
-    model_name character varying(100) NOT NULL,
+   -- model_name character varying(100) NOT NULL,
     version integer NOT NULL,
     status character varying(20) NOT NULL,
     created_at timestamp without time zone DEFAULT now(),

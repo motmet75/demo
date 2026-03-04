@@ -108,6 +108,10 @@ public class InventoryController {
             String exp = body.get("expirationDateTime") == null ? null : String.valueOf(body.get("expirationDateTime"));
             String prod = body.get("productionDateTime") == null ? null : String.valueOf(body.get("productionDateTime"));
             String qres = body.get("quantityReserved") == null ? null : String.valueOf(body.get("quantityReserved"));
+            String reason     = body.get("reason")     != null ? String.valueOf(body.get("reason"))     : "Manual add stock";
+            String createdBy  = body.get("createdBy")  != null ? String.valueOf(body.get("createdBy"))  : "system";
+            String notes      = body.get("notes")      != null ? String.valueOf(body.get("notes"))      : null;
+            UUID invoiceId    = body.get("invoiceId")  != null ? UUID.fromString(String.valueOf(body.get("invoiceId"))) : null;
 
             Instant expirationDateTime = exp == null || exp.trim().isEmpty() ? null : Instant.parse(exp);
             Instant productionDateTime = prod == null || prod.trim().isEmpty() ? null : Instant.parse(prod);
@@ -120,12 +124,11 @@ public class InventoryController {
             if (mid != null && wid != null) {
                 UUID materialId = UUID.fromString(String.valueOf(mid));
                 UUID warehouseId = UUID.fromString(String.valueOf(wid));
-                saved = inventoryService.addStockByIds(materialId, warehouseId, qty, batchNo, expirationDateTime, productionDateTime, quantityReserved, tenantId, companyId);
+                saved = inventoryService.addStockByIds(materialId, warehouseId, qty, batchNo, expirationDateTime, productionDateTime, quantityReserved, tenantId, companyId, reason, createdBy, notes, invoiceId);
             } else {
-                // fallback to codes for backward compatibility
                 String materialCode = (String) body.get("materialCode");
                 String warehouseCode = (String) body.get("warehouseCode");
-                saved = inventoryService.addStock(materialCode, warehouseCode, qty, batchNo, expirationDateTime, productionDateTime, quantityReserved, tenantId, companyId);
+                saved = inventoryService.addStock(materialCode, warehouseCode, qty, batchNo, expirationDateTime, productionDateTime, quantityReserved, tenantId, companyId, reason, createdBy, notes, invoiceId);
             }
             return ResponseEntity.status(HttpStatus.CREATED).body(saved);
         } catch (InventoryException ex) {
@@ -154,12 +157,15 @@ public class InventoryController {
             String exp = body.get("expirationDateTime") == null ? null : String.valueOf(body.get("expirationDateTime"));
             String prod = body.get("productionDateTime") == null ? null : String.valueOf(body.get("productionDateTime"));
             String qres = body.get("quantityReserved") == null ? null : String.valueOf(body.get("quantityReserved"));
+            String reason    = body.get("reason")    != null ? String.valueOf(body.get("reason"))    : "Manual update stock";
+            String createdBy = body.get("createdBy") != null ? String.valueOf(body.get("createdBy")) : "system";
+            String notes     = body.get("notes")     != null ? String.valueOf(body.get("notes"))     : null;
 
             Instant expirationDateTime = exp == null || exp.trim().isEmpty() ? null : Instant.parse(exp);
             Instant productionDateTime = prod == null || prod.trim().isEmpty() ? null : Instant.parse(prod);
             BigDecimal quantityReserved = qres == null || qres.trim().isEmpty() ? null : new BigDecimal(qres);
 
-            InventoryEntity updated = inventoryService.updateStock(id, qty, batchNo, expirationDateTime, productionDateTime, quantityReserved, tenantId, companyId);
+            InventoryEntity updated = inventoryService.updateStock(id, qty, batchNo, expirationDateTime, productionDateTime, quantityReserved, tenantId, companyId, reason, createdBy, notes);
             return ResponseEntity.ok(updated);
         } catch (InventoryException ex) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());

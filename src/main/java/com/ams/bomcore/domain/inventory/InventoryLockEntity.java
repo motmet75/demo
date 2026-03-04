@@ -27,8 +27,11 @@ public class InventoryLockEntity {
     @Column(name = "id", nullable = false)
     private UUID id;
 
-    @Column(name = "tenant_id", nullable = false, length = 100)
-    private String tenantId;
+    @Column(name = "tenant_id", nullable = false)
+    private UUID tenantId;
+
+    @Column(name = "company_id", nullable = false)
+    private UUID companyId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "material_id", nullable = false)
@@ -67,12 +70,20 @@ public class InventoryLockEntity {
         this.id = id;
     }
 
-    public String getTenantId() {
+    public UUID getTenantId() {
         return tenantId;
     }
 
-    public void setTenantId(String tenantId) {
+    public void setTenantId(UUID tenantId) {
         this.tenantId = tenantId;
+    }
+
+    public UUID getCompanyId() {
+        return companyId;
+    }
+
+    public void setCompanyId(UUID companyId) {
+        this.companyId = companyId;
     }
 
     public Material getMaterial() {

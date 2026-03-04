@@ -22,9 +22,11 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.ams.bomcore.domain.contract.Contract;
 import com.ams.bomcore.domain.inventory.InventoryEntity;
+import com.ams.bomcore.domain.inventory.InventoryMovementEntity;
 import com.ams.bomcore.domain.inventory.WarehouseEntity;
 import com.ams.bomcore.domain.material.Material;
 import com.ams.bomcore.repository.ContractRepository;
+import com.ams.bomcore.repository.InventoryMovementRepository;
 import com.ams.bomcore.repository.InventoryRepository;
 import com.ams.bomcore.repository.MaterialRepository;
 import com.ams.bomcore.repository.WarehouseRepository;
@@ -45,16 +47,19 @@ public class InventoryImportService {
     private final MaterialRepository materialRepository;
     private final WarehouseRepository warehouseRepository;
     private final ContractRepository contractRepository;
+    private final InventoryMovementRepository movementRepository;
 
     public InventoryImportService(
             InventoryRepository inventoryRepository,
             MaterialRepository materialRepository,
             WarehouseRepository warehouseRepository,
-            ContractRepository contractRepository) {
+            ContractRepository contractRepository,
+            InventoryMovementRepository movementRepository) {
         this.inventoryRepository = inventoryRepository;
         this.materialRepository = materialRepository;
         this.warehouseRepository = warehouseRepository;
         this.contractRepository = contractRepository;
+        this.movementRepository = movementRepository;
     }
 
     /**
@@ -261,7 +266,28 @@ public class InventoryImportService {
                     inv.setWarehouseCodeDenorm(warehouse.getCode());
 
                     inventoryRepository.save(inv);
-                    
+
+                    // Record inventory movement for each imported row
+                    try {
+                        InventoryMovementEntity movement = new InventoryMovementEntity();
+                        movement.setTenantId(tenantId);
+                        movement.setCompanyId(companyId);
+                        movement.setMaterial(material);
+                        movement.setToWarehouse(warehouse);
+                        movement.setQuantity(row.quantityOnHand != null ? row.quantityOnHand : BigDecimal.ZERO);
+                        movement.setUnit(row.unit != null && !row.unit.trim().isEmpty() ? row.unit : "pcs");
+                        movement.setMovementType(isNew ? "IMPORT" : "IMPORT_UPDATE");
+                        movement.setReason("CSV Import");
+                        movement.setReferenceType("INVENTORY");
+                        movement.setReferenceId(inv.getId());
+                        movement.setBatchNo(row.batchNo);
+                        movement.setCreatedBy("system");
+                        movement.setStatus("COMPLETED");
+                        movementRepository.save(movement);
+                    } catch (Exception movEx) {
+                        // movement logging is non-critical — don't fail the import
+                    }
+
                     if (isNew) {
                         createdCount++;
                     } else {
