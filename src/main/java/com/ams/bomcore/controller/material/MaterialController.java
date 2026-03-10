@@ -215,18 +215,19 @@ public class MaterialController {
                 // naive CSV split by comma
                 String[] cols = line.split(",");
                 // allow header detection
-                if (row == 1 && (cols[0].toLowerCase().contains("material") || cols.length < 3)) {
+                if (row == 1 && (cols[0].toLowerCase().contains("material") || cols[0].toLowerCase().contains("code") || cols.length < 3)) {
                     // assume header, skip
                     continue;
                 }
                 if (cols.length < 4) {
-                    errors.add("Row " + row + ": expected 4 columns (code,name,unit,type)");
+                    errors.add("Row " + row + ": expected at least 4 columns (code,name,unit,type[,description])");
                     continue;
                 }
                 String code = cols[0].trim();
                 String name = cols[1].trim();
                 String unit = cols[2].trim();
                 String type = cols[3].trim();
+                String description = cols.length > 4 ? cols[4].trim() : "";
                 if (code.isEmpty() || name.isEmpty() || unit.isEmpty() || type.isEmpty()) {
                     errors.add("Row " + row + ": missing required fields");
                     continue;
@@ -241,6 +242,7 @@ public class MaterialController {
                 m.setMaterialName(name);
                 m.setUnit(unit);
                 m.setMaterialType(type);
+                if (!description.isEmpty()) m.setDescription(description);
                 m.setCompany(company);
                 m.setTenant(tenant);
                 toSave.add(m);

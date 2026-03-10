@@ -37,6 +37,7 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
     warehouseId: i?.warehouseId ?? (i?.warehouse ? (i.warehouse.id ?? i.warehouse.uuid ?? i.warehouse._id) : undefined),
     warehouseCode: i?.warehouseCode ?? (i?.warehouse?.code ?? ''),
     quantityOnHand: i?.quantityOnHand ?? '',
+    quantityTotal: i?.quantityTotal ?? '',
     quantityReserved: i?.quantityReserved ?? '',
     quantityLocked: i?.quantityLocked ?? '',
     batchNo: i?.batchNo ?? '',
@@ -125,7 +126,7 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
         const inv = await fetchAllInvoices({ tenantId, companyId })
         if (!mounted) return
         setInvoices(Array.isArray(inv) ? inv : [])
-      } catch (e) { setInvoices([]) }
+      } catch { setInvoices([]) }
     })()
     return () => { mounted = false }
   }, [tenantId, companyId])
@@ -242,6 +243,7 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
       materialCode: form.materialCode,
       warehouseCode: form.warehouseCode,
       quantity: coerceNumber(form.quantityOnHand),
+      quantityTotal: coerceNumber(form.quantityTotal),
       quantityReserved: coerceNumber(form.quantityReserved),
       quantityLocked: coerceNumber(form.quantityLocked),
       batchNo: form.batchNo,
@@ -316,7 +318,10 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
 
             <TextField label="Batch No" value={form.batchNo} onChange={handleChange('batchNo')} disabled={isSubmitting} required />
 
-            <TextField label="Quantity On Hand" type="number" value={form.quantityOnHand} onChange={handleChange('quantityOnHand')} disabled={isSubmitting} required />
+            <TextField label="Quantity On Hand" type="number" value={form.quantityOnHand} onChange={handleChange('quantityOnHand')} disabled={isSubmitting} required
+              helperText="Current stock on hand" />
+            <TextField label="Total Qty" type="number" value={form.quantityTotal} disabled
+              helperText="Total quantity ever received — set at import/creation, not editable" InputProps={{ readOnly: true }} />
             <TextField label="Quantity Reserved" type="number" value={form.quantityReserved} onChange={handleChange('quantityReserved')} disabled={isSubmitting} />
             <TextField label="Quantity Locked" type="number" value={form.quantityLocked} onChange={handleChange('quantityLocked')} disabled={isSubmitting} />
 

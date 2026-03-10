@@ -20,6 +20,7 @@ public class InventoryViewDTO {
     private String warehouseCode;
     private String warehouseName;
     private BigDecimal quantityOnHand;
+    private BigDecimal quantityTotal;
     private BigDecimal quantityReserved;
     private BigDecimal quantityLocked;
     private String batchNo;
@@ -36,7 +37,7 @@ public class InventoryViewDTO {
 
     public InventoryViewDTO(UUID inventoryId, UUID tenantId, UUID companyId, UUID materialId, String materialCode, String materialName,
                             UUID warehouseId, String warehouseCode, String warehouseName,
-                            BigDecimal quantityOnHand, BigDecimal quantityReserved, BigDecimal quantityLocked, String batchNo,
+                            BigDecimal quantityOnHand, BigDecimal quantityTotal, BigDecimal quantityReserved, BigDecimal quantityLocked, String batchNo,
                             String contractCode, String unit, BigDecimal unitPrice, String currency,
                             Instant expirationDateTime, Instant productionDateTime, Instant createdAt,
                             Boolean visible, Boolean approved, Boolean locked) {
@@ -50,6 +51,7 @@ public class InventoryViewDTO {
         this.warehouseCode = warehouseCode;
         this.warehouseName = warehouseName;
         this.quantityOnHand = quantityOnHand;
+        this.quantityTotal = quantityTotal;
         this.quantityReserved = quantityReserved;
         this.quantityLocked = quantityLocked;
         this.batchNo = batchNo;
@@ -76,6 +78,7 @@ public class InventoryViewDTO {
     public String getWarehouseCode() { return warehouseCode; }
     public String getWarehouseName() { return warehouseName; }
     public BigDecimal getQuantityOnHand() { return quantityOnHand; }
+    public BigDecimal getQuantityTotal() { return quantityTotal; }
     public BigDecimal getQuantityReserved() { return quantityReserved; }
     public BigDecimal getQuantityLocked() { return quantityLocked; }
     public String getBatchNo() { return batchNo; }

@@ -69,3 +69,9 @@ export async function importInventory(file) {
   }
   return res.json()
 }
+
+export async function deleteInventory(id) {
+  const url = `/bom/api/inventory/${encodeURIComponent(id)}`
+  const { res } = await apiFetchJson(url, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`Failed to delete inventory: ${res.status}`)
+}

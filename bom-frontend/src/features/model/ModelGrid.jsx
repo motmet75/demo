@@ -11,25 +11,12 @@ export default function ModelGrid({ reloadSignal }) {
   const [loading, setLoading] = useState(false)
   const apiRef = useGridApiRef()
 
-  const normalizeSelection = (sel) => {
-    if (sel == null) return []
-    try {
-      if (Array.isArray(sel)) return sel.map(s => (s == null ? '' : String(s)))
-      if (sel instanceof Map) return Array.from(sel.keys()).map(k => String(k))
-      if (typeof sel === 'object' && !sel[Symbol.iterator]) return Object.keys(sel).filter(k => !!sel[k]).map(String)
-      if (typeof sel === 'object' && sel[Symbol.iterator]) return Array.from(sel).map(s => String(s))
-      return [String(sel)]
-    } catch {
-      return Array.isArray(sel) ? sel.map(s => String(s)) : [String(sel)]
-    }
-  }
-
   const [editOpen, setEditOpen] = useState(false)
   const [selected, setSelected] = useState(null)
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
   const [modalKey, setModalKey] = useState(0)
-  const [selectionModel, setSelectionModel] = useState([])
+  const [selectionModel, setSelectionModel] = useState({ type: 'include', ids: new Set() })
   const [paginationModel, setPaginationModel] = useState({ pageSize: 10, page: 0 })
   const [bomOpen, setBomOpen] = useState(false)
   const [bomModel, setBomModel] = useState(null)
@@ -131,7 +118,7 @@ export default function ModelGrid({ reloadSignal }) {
   const closeBom = () => { setBomOpen(false); setBomModel(null) }
 
   const columns = [
-    { field: 'uuid', headerName: 'UUID', width: 220, hide: true },
+    { field: 'uuid', headerName: 'UUID', width: 220, hide: true, flex: 1 },
     { field: 'modelCode', headerName: 'Code', width: 150 },
     { field: 'modelName', headerName: 'Name', flex: 1 },
     { field: 'hsCode', headerName: 'HS Code', width: 120 },
@@ -143,6 +130,52 @@ export default function ModelGrid({ reloadSignal }) {
       <GridActionsCellItem icon={<span style={{padding:4,border:'1px solid #ccc',borderRadius:4,fontSize:11}}>BOM</span>} label="View BOM" onClick={() => openBomForModel(params.row)} showInMenu={false} disabled={!!saving || !!deletingId} />
     ] }
   ]
+
+  // filter state
+  const [filterCode, setFilterCode] = useState('')
+  const [filterName, setFilterName] = useState('')
+  const [filterCreatedFrom, setFilterCreatedFrom] = useState('')
+  const [filterCreatedTo, setFilterCreatedTo] = useState('')
+  const [createdRangePreset, setCreatedRangePreset] = useState('')
+
+  const toDatetimeLocal = (d) => { const p = n => String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}` }
+  const applyCreatedRangePreset = (preset) => {
+    setCreatedRangePreset(preset)
+    if (!preset) { setFilterCreatedFrom(''); setFilterCreatedTo(''); return }
+    const now = new Date()
+    const ts = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0)
+    const te = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59)
+    if (preset === 'today') { setFilterCreatedFrom(toDatetimeLocal(ts)); setFilterCreatedTo(toDatetimeLocal(te)) }
+    else if (preset === 'yesterday') { const ys=new Date(ts); ys.setDate(ys.getDate()-1); const ye=new Date(te); ye.setDate(ye.getDate()-1); setFilterCreatedFrom(toDatetimeLocal(ys)); setFilterCreatedTo(toDatetimeLocal(ye)) }
+    else if (preset === 'this_week') { const ws=new Date(ts); ws.setDate(ws.getDate()-now.getDay()); setFilterCreatedFrom(toDatetimeLocal(ws)); setFilterCreatedTo(toDatetimeLocal(te)) }
+    else if (preset.startsWith('last_')) { const d=parseInt(preset.replace('last_',''),10); const f=new Date(ts); f.setDate(f.getDate()-(d-1)); setFilterCreatedFrom(toDatetimeLocal(f)); setFilterCreatedTo(toDatetimeLocal(te)) }
+  }
+
+  const filteredRows = rows.filter(r => {
+    const s = v => (v==null?'':String(v)).toLowerCase()
+    if (filterCode && !s(r.modelCode).includes(filterCode.toLowerCase())) return false
+    if (filterName && !s(r.modelName).includes(filterName.toLowerCase())) return false
+    if (filterCreatedFrom || filterCreatedTo) {
+      const d = r.createdAt ? new Date(r.createdAt) : null
+      if (!d || isNaN(d)) return false
+      if (filterCreatedFrom && d < new Date(filterCreatedFrom)) return false
+      if (filterCreatedTo   && d > new Date(filterCreatedTo))   return false
+    }
+    return true
+  })
+
+  const filteredIds = new Set(filteredRows.map(r => r.id))
+  // eslint-disable-next-line no-unused-vars
+  const _selectedIds = selectionModel.type === 'exclude'
+    ? filteredRows.map(r => r.id).filter(id => !selectionModel.ids.has(id))
+    : Array.from(selectionModel.ids ?? []).filter(id => filteredIds.has(id))
+
+  const handleSelectionModelChange = (model) => {
+    if (model && model.type === 'exclude') {
+      const excluded = model.ids ?? new Set()
+      setSelectionModel({ type: 'include', ids: new Set(filteredRows.map(r => r.id).filter(id => !excluded.has(id))) })
+    } else { setSelectionModel(model) }
+  }
 
   return (
     // top-level flex column so grid can flex-grow to fill available space when auto height is on
@@ -180,12 +213,49 @@ export default function ModelGrid({ reloadSignal }) {
         <div style={{ marginBottom: 8 }}>
           <button onClick={() => { setSelected(null); setModalKey(k => k + 1); setEditOpen(true) }} disabled={saving}>Add Model</button>
         </div>
+
+        {/* Filter bar */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8, alignItems: 'flex-end' }}>
+          {[
+            { label: 'Code', value: filterCode, set: setFilterCode, width: 140 },
+            { label: 'Name', value: filterName, set: setFilterName, width: 180 },
+          ].map(({ label, value, set, width }) => (
+            <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <label style={{ fontSize: 11, color: '#666' }}>{label}</label>
+              <input value={value} onChange={e => set(e.target.value)} placeholder={`Filter ${label}`} style={{ width, fontSize: 12, padding: '3px 6px', boxSizing: 'border-box' }} />
+            </div>
+          ))}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <label style={{ fontSize: 11, color: '#666' }}>Quick Range</label>
+            <select value={createdRangePreset} onChange={e => applyCreatedRangePreset(e.target.value)} style={{ fontSize: 12, padding: '3px 6px', boxSizing: 'border-box', height: 24 }}>
+              <option value="">— All —</option>
+              <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
+              <option value="this_week">This Week</option>
+              <option value="last_7">Last 7 Days</option>
+              <option value="last_14">Last 14 Days</option>
+              <option value="last_30">Last 30 Days</option>
+              <option value="last_60">Last 60 Days</option>
+              <option value="last_90">Last 90 Days</option>
+            </select>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <label style={{ fontSize: 11, color: '#666' }}>Created From</label>
+            <input type="datetime-local" value={filterCreatedFrom} onChange={e => { setCreatedRangePreset(''); setFilterCreatedFrom(e.target.value) }} style={{ fontSize: 12, padding: '3px 6px', boxSizing: 'border-box' }} />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <label style={{ fontSize: 11, color: '#666' }}>Created To</label>
+            <input type="datetime-local" value={filterCreatedTo} onChange={e => { setCreatedRangePreset(''); setFilterCreatedTo(e.target.value) }} style={{ fontSize: 12, padding: '3px 6px', boxSizing: 'border-box' }} />
+          </div>
+          <button type="button" onClick={() => { setFilterCode(''); setFilterName(''); setFilterCreatedFrom(''); setFilterCreatedTo(''); setCreatedRangePreset('') }} style={{ alignSelf: 'flex-end', fontSize: 12, padding: '4px 10px' }}>Clear</button>
+          <div style={{ alignSelf: 'flex-end', color: '#666', fontSize: 12 }}>{filteredRows.length} / {rows.length}</div>
+        </div>
       </div>
 
       {/* Grid container: flex-grow when auto height, fixed px when manual */}
       <div style={{ flex: manualHeight ? 'none' : 1, height: manualHeight ? `${gridHeight}px` : 'auto', minHeight: 0 }}>
         <div style={{ height: manualHeight ? '100%' : '100%', width: '100%' }}>
-          <DataGrid rows={rows} columns={columns} apiRef={apiRef} selectionModel={selectionModel} onSelectionModelChange={(s) => setSelectionModel(normalizeSelection(s))} checkboxSelection loading={loading} pageSizeOptions={[10,25,50]} paginationModel={paginationModel} onPaginationModelChange={(m) => setPaginationModel(m)} sx={{ height: '100%' }} />
+          <DataGrid rows={filteredRows} columns={columns} apiRef={apiRef} rowSelectionModel={selectionModel} onRowSelectionModelChange={handleSelectionModelChange} checkboxSelection loading={loading} pageSizeOptions={[10,25,50]} paginationModel={paginationModel} onPaginationModelChange={(m) => setPaginationModel(m)} sx={{ height: '100%' }} />
         </div>
       </div>
 

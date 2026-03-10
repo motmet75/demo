@@ -3,10 +3,11 @@ import { GridActionsCellItem, DataGrid, useGridApiRef } from '@mui/x-data-grid'
 import EditIcon from '@mui/icons-material/Edit'
 import DeleteIcon from '@mui/icons-material/Delete'
 import { fetchMaterials, updateMaterial, deleteMaterial } from '../../api/materialApi'
+import { apiFetch } from '../../api/client'
 import MaterialEditModal from './MaterialEditModal'
 import * as XLSX from 'xlsx'
 
-export default function MaterialGrid() {
+export default function MaterialGrid({ refreshKey }) {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(false)
   const apiRef = useGridApiRef()
@@ -15,16 +16,17 @@ export default function MaterialGrid() {
     try {
       const v = localStorage.getItem('materials_manual_height')
       return v === null ? false : v === 'true'
-    } catch (e) {
+    } catch {
       return false
     }
-  })
+ })
+  
   const [gridHeight, setGridHeight] = useState(() => {
     try {
       const v = localStorage.getItem('materials_grid_height')
       const n = v == null ? 520 : Number.parseInt(v, 10)
       return Number.isFinite(n) && n > 0 ? n : 520
-    } catch (e) {
+    } catch {
       return 520
     }
   }) // px when manual
@@ -34,48 +36,10 @@ export default function MaterialGrid() {
     try {
       localStorage.setItem('materials_manual_height', String(manualHeight))
       localStorage.setItem('materials_grid_height', String(gridHeight))
-    } catch (e) {
+    } catch {
       // ignore storage errors
     }
   }, [manualHeight, gridHeight])
-
-  // normalize selection shapes (MUI versions return different shapes)
-  const normalizeSelection = (sel) => {
-    if (sel == null) return []
-    try {
-      if (Array.isArray(sel)) return sel.map(s => {
-        if (s == null) return ''
-        if (typeof s === 'object') {
-          // objects may have id or rowId
-          if ('id' in s) return String(s.id)
-          if ('rowId' in s) return String(s.rowId)
-          // maybe [id, ...] tuple
-          if (Array.isArray(s) && s.length > 0) return String(s[0])
-          // fallback to JSON so we at least return something predictable
-          try { return String(s.toString()) } catch { return JSON.stringify(s) }
-        }
-        return String(s)
-      })
-      // Map -> take keys
-      if (sel instanceof Map) return Array.from(sel.keys()).map(k => String(k))
-      // plain object map { id: true }
-      if (typeof sel === 'object' && !sel[Symbol.iterator]) {
-        return Object.keys(sel).filter(k => !!sel[k]).map(String)
-      }
-      // iterable (Set of ids, or entries)
-      if (typeof sel === 'object' && sel[Symbol.iterator]) {
-        const arr = Array.from(sel)
-        // entries like [[id, true], [id2, true]] -> take first element
-        if (arr.length > 0 && Array.isArray(arr[0]) && arr[0].length >= 1) {
-          return arr.map(e => String(e[0]))
-        }
-        return arr.map(s => String(s))
-      }
-      return [String(sel)]
-    } catch {
-      return Array.isArray(sel) ? sel.map(s => String(s)) : [String(sel)]
-    }
-  }
 
   // dialog state
   const [editOpen, setEditOpen] = useState(false)
@@ -85,7 +49,7 @@ export default function MaterialGrid() {
   const [modalKey, setModalKey] = useState(0) // key to force remount of modal when opening
 
   // selection state for multi-select export
-  const [selectionModel, setSelectionModel] = useState([])
+  const [selectionModel, setSelectionModel] = useState({ type: 'include', ids: new Set() })
 
   // Pagination: controlled model so records-per-page is adjustable and persisted
   const [paginationModel, setPaginationModel] = useState(() => {
@@ -100,6 +64,50 @@ export default function MaterialGrid() {
     }
     return { pageSize: defaultSize, page: 0 }
   })
+
+  // filter state
+  const [filterUuid, setFilterUuid] = useState('')
+  const [filterCode, setFilterCode] = useState('')
+  const [filterName, setFilterName] = useState('')
+  const [filterUnit, setFilterUnit] = useState('')
+  const [filterType, setFilterType] = useState('')
+  const [filterDescription, setFilterDescription] = useState('')
+  const [filterCreatedFrom, setFilterCreatedFrom] = useState('')
+  const [filterCreatedTo, setFilterCreatedTo] = useState('')
+  const [createdRangePreset, setCreatedRangePreset] = useState('')
+
+  // Helper: convert a Date to the value required by datetime-local input (YYYY-MM-DDTHH:mm)
+  const toDatetimeLocal = (d) => {
+    const pad = (n) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  }
+
+  const applyCreatedRangePreset = (preset) => {
+    setCreatedRangePreset(preset)
+    if (!preset) { setFilterCreatedFrom(''); setFilterCreatedTo(''); return }
+    const now = new Date()
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0)
+    const todayEnd   = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59)
+    if (preset === 'today') {
+      setFilterCreatedFrom(toDatetimeLocal(todayStart))
+      setFilterCreatedTo(toDatetimeLocal(todayEnd))
+    } else if (preset === 'yesterday') {
+      const ys = new Date(todayStart); ys.setDate(ys.getDate() - 1)
+      const ye = new Date(todayEnd);   ye.setDate(ye.getDate() - 1)
+      setFilterCreatedFrom(toDatetimeLocal(ys))
+      setFilterCreatedTo(toDatetimeLocal(ye))
+    } else if (preset === 'this_week') {
+      const day = now.getDay() // 0=Sun
+      const weekStart = new Date(todayStart); weekStart.setDate(weekStart.getDate() - day)
+      setFilterCreatedFrom(toDatetimeLocal(weekStart))
+      setFilterCreatedTo(toDatetimeLocal(todayEnd))
+    } else if (preset.startsWith('last_')) {
+      const days = parseInt(preset.replace('last_', ''), 10)
+      const from = new Date(todayStart); from.setDate(from.getDate() - (days - 1))
+      setFilterCreatedFrom(toDatetimeLocal(from))
+      setFilterCreatedTo(toDatetimeLocal(todayEnd))
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -152,7 +160,7 @@ export default function MaterialGrid() {
 
   useEffect(() => {
     load()
-  }, [load])
+  }, [load, refreshKey])
 
   const handleOpenEdit = (row) => {
     // open modal with a deep-cloned object to avoid binding/mutation of the original row
@@ -219,6 +227,30 @@ export default function MaterialGrid() {
     }
   }
 
+  const handleDeleteSelected = async () => {
+    if (selectedIds.length === 0) return
+    if (!window.confirm(`Delete ${selectedIds.length} selected material(s)?`)) return
+    setDeletingId('bulk')
+    const failed = []
+    for (const id of selectedIds) {
+      try {
+        await deleteMaterial(id)
+      } catch (e) {
+        console.error('Failed to delete', id, e)
+        failed.push(id)
+      }
+    }
+    const deleted = selectedIds.filter(id => !failed.includes(id))
+    setRows(prev => prev.filter(r => !deleted.includes(r.id)))
+    setSelectionModel({ type: 'include', ids: new Set() })
+    setDeletingId(null)
+    if (failed.length > 0) {
+      alert(`Deleted ${deleted.length} item(s). Failed to delete ${failed.length} item(s).`)
+    } else {
+      alert(`Deleted ${deleted.length} material(s) successfully.`)
+    }
+  }
+
   // update page size and persist selection
   const handlePaginationModelChange = (newModel) => {
     // normalize to object shape { page, pageSize }
@@ -235,13 +267,14 @@ export default function MaterialGrid() {
 
   const columns = [
     // Hidden UUID column to carry the UUID value with each row (submitted to backend)
-    { field: 'uuid', headerName: 'UUID', width: 200, hide: true },
+    { field: 'uuid', headerName: 'UUID', width: 200, hide: true, flex: 1 },
     { field: 'materialCode', headerName: 'Code', width: 150, editable: false, resizable: true },
     { field: 'materialName', headerName: 'Name', flex: 1, editable: false, resizable: true, minWidth: 150 },
     { field: 'unit', headerName: 'Unit', width: 120, editable: false, resizable: true },
     { field: 'materialType', headerName: 'Type', width: 160, editable: false, resizable: true },
-    { field: 'price', headerName: 'Price', width: 150, editable: false, type: 'number', resizable: true },
     { field: 'description', headerName: 'Description', flex: 1, editable: false, minWidth: 200, resizable: true },
+    { field: 'createdAt', headerName: 'Created At', width: 180, editable: false, resizable: true,
+      valueFormatter: (value) => value ? new Date(value).toLocaleString() : '' },
     {
       field: 'actions', type: 'actions', headerName: 'Actions', width: 120, resizable: false, getActions: (params) => [
         <GridActionsCellItem
@@ -262,131 +295,87 @@ export default function MaterialGrid() {
     }
   ]
 
+  const filteredRows = rows.filter(r => {
+    const s = (v) => (v == null ? '' : String(v)).toLowerCase()
+    if (filterUuid && !s(r.id).includes(filterUuid.toLowerCase())) return false
+    if (filterCode && !s(r.materialCode).includes(filterCode.toLowerCase())) return false
+    if (filterName && !s(r.materialName).includes(filterName.toLowerCase())) return false
+    if (filterUnit && !s(r.unit).includes(filterUnit.toLowerCase())) return false
+    if (filterType && !s(r.materialType).includes(filterType.toLowerCase())) return false
+    if (filterDescription && !s(r.description).includes(filterDescription.toLowerCase())) return false
+    if (filterCreatedFrom || filterCreatedTo) {
+      const rowDate = r.createdAt ? new Date(r.createdAt) : null
+      if (!rowDate || isNaN(rowDate)) return false
+      if (filterCreatedFrom && rowDate < new Date(filterCreatedFrom)) return false
+      if (filterCreatedTo   && rowDate > new Date(filterCreatedTo))   return false
+    }
+    return true
+  })
+
+  // Derive selectedIds scoped to filteredRows only.
+  // When DataGrid fires a select-all (type:'exclude', ids=empty), convert it to an
+  // explicit include of all currently filtered row IDs so selection never escapes the filter.
+  const filteredIds = new Set(filteredRows.map(r => r.id))
+  const selectedIds = selectionModel.type === 'exclude'
+    ? filteredRows.map(r => r.id).filter(id => !selectionModel.ids.has(id))
+    : Array.from(selectionModel.ids ?? []).filter(id => filteredIds.has(id))
+
+  const handleSelectionModelChange = (model) => {
+    if (model && model.type === 'exclude') {
+      // Select-all fired by DataGrid header checkbox — clamp to filtered IDs only
+      const excluded = model.ids ?? new Set()
+      const newIds = new Set(filteredRows.map(r => r.id).filter(id => !excluded.has(id)))
+      setSelectionModel({ type: 'include', ids: newIds })
+    } else {
+      setSelectionModel(model)
+    }
+  }
+
   // export helpers: selected rows to worksheet and trigger download
-  const exportRows = async (selectedIds, format = 'xlsx') => {
+  const exportRows = async (ids, format = 'xlsx') => {
     try {
-      // debug: show selectionModel and apiRef methods availability
-      console.debug('exportRows called', { selectionModel, hasApiRef: !!(apiRef && apiRef.current), hasGetSelectedRows: !!(apiRef && apiRef.current && typeof apiRef.current.getSelectedRows === 'function'), hasGetRowSelectionModel: !!(apiRef && apiRef.current && typeof apiRef.current.getRowSelectionModel === 'function'), passedSelectedIds: selectedIds })
-
-      let rowsToExport = []
-      let payloadIds = []
-
-      // 1) Prefer API method that returns selected rows (Map) if available
-      if (apiRef && apiRef.current) {
-        try {
-          if (typeof apiRef.current.getSelectedRows === 'function') {
-            const selectedMap = apiRef.current.getSelectedRows()
-            if (selectedMap && selectedMap.size > 0) {
-              const arr = Array.from(selectedMap.values())
-              rowsToExport = arr
-              payloadIds = arr.map(r => (r && r.uuid ? String(r.uuid).trim() : String(r.id).trim()))
-            }
-          }
-        } catch {
-          // ignore and continue to other fallbacks
-        }
-
-        // 2) If no Map available, try getting the selection model and resolve rows locally
-        if ((!payloadIds || payloadIds.length === 0) && typeof apiRef.current.getRowSelectionModel === 'function') {
-          try {
-            const selModel = apiRef.current.getRowSelectionModel()
-            const selIds = normalizeSelection(selModel)
-            if (selIds && selIds.length > 0) {
-              // build lookup maps to resolve ids quickly
-              const rowsById = new Map(rows.map(r => [String(r.id), r]))
-              const rowsByUuid = new Map(rows.map(r => [String(r.uuid), r]))
-
-              const matched = selIds
-                .map(id => rowsByUuid.get(String(id)) || rowsById.get(String(id)) || (Number.isFinite(Number(id)) ? rows[Number(id)] : undefined))
-                .filter(Boolean)
-              if (matched && matched.length > 0) {
-                rowsToExport = matched
-                payloadIds = matched.map(r => (r && r.uuid ? String(r.uuid).trim() : String(r.id).trim()))
-              } else {
-                // If selection seems numeric (row indices), map indices
-                const maybeIndices = selIds.map(s => Number(s)).filter(n => Number.isFinite(n) && n >= 0 && n < rows.length)
-                if (maybeIndices.length > 0) {
-                  rowsToExport = maybeIndices.map(i => rows[i])
-                  payloadIds = rowsToExport.map(r => (r && r.uuid ? String(r.uuid).trim() : String(r.id).trim()))
-                }
-              }
-            }
-          } catch {
-            // ignore
-          }
-        }
+      if (!ids || ids.length === 0) {
+        alert('No rows selected for export')
+        return
       }
 
-      // 3) Final fallback: use selectedIds argument passed from UI (normalized)
-      if ((!payloadIds || payloadIds.length === 0)) {
-        const sids = (selectedIds || []).map(s => (s == null ? '' : String(s)))
+      // Build UUID payload — row.id is the UUID (set during load normalization)
+      const idSet = new Set(ids.map(String))
+      const rowsToExport = rows.filter(r => idSet.has(String(r.id)))
 
-        // try matching by uuid or id
-        const matched = rows.filter(r => sids.includes(String(r.uuid)) || sids.includes(String(r.id)))
-        if (matched && matched.length > 0) {
-          rowsToExport = matched
-          payloadIds = matched.map(r => (r && r.uuid ? String(r.uuid).trim() : String(r.id).trim()))
-        } else {
-          // numeric index fallback
-          const maybeIndices = (selectedIds || []).map(s => Number(s)).filter(n => Number.isFinite(n) && n >= 0 && n < rows.length)
-          if (maybeIndices.length > 0) {
-            rowsToExport = maybeIndices.map(i => rows[i])
-            payloadIds = rowsToExport.map(r => (r && r.uuid ? String(r.uuid).trim() : String(r.id).trim()))
-          }
-        }
-      }
-
-      // Validate UUIDs (server expects UUIDs)
       const uuidRe = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
-      payloadIds = (payloadIds || []).map(s => (s == null ? '' : String(s).trim())).filter(s => uuidRe.test(s))
+      const payloadIds = rowsToExport
+        .map(r => String(r.id ?? r.uuid ?? '').trim())
+        .filter(s => uuidRe.test(s))
 
-      if (!payloadIds || payloadIds.length === 0) {
-        console.debug('exportRows: no valid UUID payloadIds', { selectedIds, selectionModel, rowsToExport })
-        alert('No valid material IDs selected for export')
+      if (payloadIds.length === 0) {
+        alert('No valid material IDs found for export')
         return
       }
 
-      // proceed to fetch/stream or client-side CSV as before
       if (format === 'xlsx') {
-        try {
-          const res = await fetch('/bom/api/materials/export', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payloadIds)
-          })
-
-          if (!res.ok) {
-            const text = await res.text()
-            throw new Error('Export failed: ' + res.status + ' ' + text)
-          }
-
-          const blob = await res.blob()
-          const cd = res.headers.get('Content-Disposition') || res.headers.get('content-disposition')
-          let filename = 'materials_selected_export.xlsx'
-          if (cd) {
-            const match = /filename="?([^";]+)"?/.exec(cd)
-            if (match && match[1]) filename = match[1]
-          }
-
-          const url = URL.createObjectURL(blob)
-          const a = document.createElement('a')
-          a.href = url
-          a.download = filename
-          document.body.appendChild(a)
-          a.click()
-          a.remove()
-          URL.revokeObjectURL(url)
-        } catch (e) {
-          console.error('Server export failed', e)
-          alert('Server export failed: ' + (e && e.message ? e.message : 'Unknown error'))
+        const res = await apiFetch('/bom/api/materials/export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payloadIds)
+        })
+        if (!res.ok) {
+          const text = await res.text()
+          throw new Error('Export failed: ' + res.status + ' ' + text)
         }
+        const blob = await res.blob()
+        const cd = res.headers.get('Content-Disposition') || res.headers.get('content-disposition')
+        let filename = 'materials_export.xlsx'
+        if (cd) { const m = /filename="?([^";]+)"?/.exec(cd); if (m && m[1]) filename = m[1] }
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a'); a.href = url; a.download = filename
+        document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
         return
       }
 
-      // CSV client-side fallback remains unchanged
+      // CSV — client-side via XLSX
       const data = rowsToExport.map(r => ({
         ID: r.id,
-        UUID: r.uuid,
         Code: r.materialCode,
         Name: r.materialName,
         Unit: r.unit,
@@ -396,47 +385,12 @@ export default function MaterialGrid() {
         Active: r.isActive,
         CreatedAt: r.createdAt
       }))
-
       const worksheet = XLSX.utils.json_to_sheet(data)
-      if (format === 'csv') {
-        if (rowsToExport.length === 0) {
-          try {
-            const res = await fetch('/bom/api/materials/export', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payloadIds)
-            })
-            if (!res.ok) throw new Error('Export failed: ' + res.status)
-            const arrayBuffer = await res.arrayBuffer()
-            const wb = XLSX.read(arrayBuffer, { type: 'array' })
-            const firstSheetName = wb.SheetNames[0]
-            const csv = XLSX.utils.sheet_to_csv(wb.Sheets[firstSheetName])
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-            const url = URL.createObjectURL(blob)
-            const a = document.createElement('a')
-            a.href = url
-            a.download = 'materials_export.csv'
-            document.body.appendChild(a)
-            a.click()
-            a.remove()
-            URL.revokeObjectURL(url)
-          } catch (e) {
-            console.error('Server CSV fallback failed', e)
-            alert('CSV export failed: ' + (e && e.message ? e.message : 'Unknown error'))
-          }
-        } else {
-          const csv = XLSX.utils.sheet_to_csv(worksheet)
-          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-          const url = URL.createObjectURL(blob)
-          const a = document.createElement('a')
-          a.href = url
-          a.download = 'materials_export.csv'
-          document.body.appendChild(a)
-          a.click()
-          a.remove()
-          URL.revokeObjectURL(url)
-        }
-      }
+      const csv = XLSX.utils.sheet_to_csv(worksheet)
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href = url; a.download = 'materials_export.csv'
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
     } catch (e) {
       console.error('Export failed', e)
       alert('Export failed: ' + (e && e.message ? e.message : 'Unknown error'))
@@ -501,22 +455,100 @@ export default function MaterialGrid() {
 
         {/* Export controls */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+          <button type="button" onClick={() => load()} disabled={loading} title="Refresh">🔄 Refresh</button>
           <button
             type="button"
-            onClick={() => exportRows(selectionModel, 'xlsx')}
-            disabled={(selectionModel?.length || 0) === 0}
+            onClick={() => exportRows(selectedIds, 'xlsx')}
+            disabled={selectedIds.length === 0}
           >
             Export XLSX
           </button>
           <button
             type="button"
-            onClick={() => exportRows(selectionModel, 'csv')}
-            disabled={(selectionModel?.length || 0) === 0}
+            onClick={() => exportRows(selectedIds, 'csv')}
+            disabled={selectedIds.length === 0}
           >
             Export CSV
           </button>
+          <button
+            type="button"
+            onClick={handleDeleteSelected}
+            disabled={selectedIds.length === 0 || !!deletingId}
+            style={{ color: selectedIds.length > 0 ? '#d32f2f' : undefined, borderColor: selectedIds.length > 0 ? '#d32f2f' : undefined }}
+          >
+            Delete Selected ({selectedIds.length})
+          </button>
           <div style={{ color: '#333', fontSize: 13 }}>
-            Selected: {selectionModel ? selectionModel.length : 0}
+            Selected: {selectedIds.length}
+          </div>
+        </div>
+
+        {/* Filter fields */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8, alignItems: 'flex-end' }}>
+          {[
+            { label: 'UUID',        value: filterUuid,        set: setFilterUuid,        width: 220 },
+            { label: 'Code',        value: filterCode,        set: setFilterCode,        width: 120 },
+            { label: 'Name',        value: filterName,        set: setFilterName,        width: 160 },
+            { label: 'Unit',        value: filterUnit,        set: setFilterUnit,        width: 100 },
+            { label: 'Type',        value: filterType,        set: setFilterType,        width: 120 },
+            { label: 'Description', value: filterDescription, set: setFilterDescription, width: 160 },
+          ].map(({ label, value, set, width }) => (
+            <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <label style={{ fontSize: 11, color: '#666' }}>{label}</label>
+              <input
+                value={value}
+                onChange={e => set(e.target.value)}
+                placeholder={`Filter ${label}`}
+                style={{ width, fontSize: 12, padding: '3px 6px', boxSizing: 'border-box' }}
+              />
+            </div>
+          ))}
+          {/* Created At datetime range */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <label style={{ fontSize: 11, color: '#666' }}>Quick Range</label>
+            <select
+              value={createdRangePreset}
+              onChange={e => applyCreatedRangePreset(e.target.value)}
+              style={{ fontSize: 12, padding: '3px 6px', boxSizing: 'border-box', height: 24 }}
+            >
+              <option value="">— All —</option>
+              <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
+              <option value="this_week">This Week</option>
+              <option value="last_7">Last 7 Days</option>
+              <option value="last_14">Last 14 Days</option>
+              <option value="last_30">Last 30 Days</option>
+              <option value="last_60">Last 60 Days</option>
+              <option value="last_90">Last 90 Days</option>
+            </select>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <label style={{ fontSize: 11, color: '#666' }}>Created From</label>
+            <input
+              type="datetime-local"
+              value={filterCreatedFrom}
+              onChange={e => { setCreatedRangePreset(''); setFilterCreatedFrom(e.target.value) }}
+              style={{ fontSize: 12, padding: '3px 6px', boxSizing: 'border-box' }}
+            />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <label style={{ fontSize: 11, color: '#666' }}>Created To</label>
+            <input
+              type="datetime-local"
+              value={filterCreatedTo}
+              onChange={e => { setCreatedRangePreset(''); setFilterCreatedTo(e.target.value) }}
+              style={{ fontSize: 12, padding: '3px 6px', boxSizing: 'border-box' }}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => { setFilterUuid(''); setFilterCode(''); setFilterName(''); setFilterUnit(''); setFilterType(''); setFilterDescription(''); setFilterCreatedFrom(''); setFilterCreatedTo(''); setCreatedRangePreset('') }}
+            style={{ alignSelf: 'flex-end', fontSize: 12, padding: '4px 10px' }}
+          >
+            Clear
+          </button>
+          <div style={{ alignSelf: 'flex-end', color: '#666', fontSize: 12 }}>
+            {filteredRows.length} / {rows.length}
           </div>
         </div>
       </div>
@@ -525,10 +557,9 @@ export default function MaterialGrid() {
       <div style={{ flex: manualHeight ? 'none' : 1, height: manualHeight ? `${gridHeight}px` : 'auto', minHeight: 0 }}>
         <div style={{ height: manualHeight ? '100%' : '100%', width: '100%' }}>
           <DataGrid
-            rows={rows}
+            rows={filteredRows}
             columns={columns}
             apiRef={apiRef}
-            selectionModel={selectionModel}
             sx={{
               '& .MuiDataGrid-columnSeparator': {
                 visibility: 'visible',
@@ -550,9 +581,8 @@ export default function MaterialGrid() {
             paginationModel={paginationModel}
             onPaginationModelChange={handlePaginationModelChange}
             checkboxSelection={true}
-            // capture selection changes from any DataGrid API shape and normalize to string ids
-            onRowSelectionModelChange={(newSel) => setSelectionModel(normalizeSelection(newSel))}
-            onSelectionModelChange={(newSel) => setSelectionModel(normalizeSelection(newSel))}
+            rowSelectionModel={selectionModel}
+            onRowSelectionModelChange={handleSelectionModelChange}
             // allow row click to change selection (clicking row will select it)
             disableRowSelectionOnClick={false}
             // enable column resizing - allow user to resize columns by dragging

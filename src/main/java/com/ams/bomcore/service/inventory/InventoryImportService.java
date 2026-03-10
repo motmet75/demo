@@ -230,6 +230,7 @@ public class InventoryImportService {
 
                     // Set all fields from CSV
                     inv.setQuantityOnHand(row.quantityOnHand != null ? row.quantityOnHand : BigDecimal.ZERO);
+                    inv.setQuantityTotal(row.quantityTotal != null ? row.quantityTotal : (row.quantityOnHand != null ? row.quantityOnHand : BigDecimal.ZERO));
                     inv.setQuantityReserved(row.quantityReserved != null ? row.quantityReserved : BigDecimal.ZERO);
                     inv.setQuantityLocked(row.quantityLocked != null ? row.quantityLocked : BigDecimal.ZERO);
                     inv.setMaterialQuota(row.materialQuota);
@@ -358,6 +359,7 @@ public class InventoryImportService {
         row.purchaseNo = getColumnValue(values, columnMap, "purchase_no");
         
         row.quantityOnHand = parseBigDecimal(getColumnValue(values, columnMap, "quantity_on_hand"));
+        row.quantityTotal = parseBigDecimal(getColumnValue(values, columnMap, "quantity_total"));
         row.quantityReserved = parseBigDecimal(getColumnValue(values, columnMap, "quantity_reserved"));
         row.quantityLocked = parseBigDecimal(getColumnValue(values, columnMap, "quantity_locked"));
         row.materialQuota = parseBigDecimal(getColumnValue(values, columnMap, "material_quota"));
@@ -440,6 +442,7 @@ public class InventoryImportService {
         String cdsNo;
         String purchaseNo;
         BigDecimal quantityOnHand;
+        BigDecimal quantityTotal;
         BigDecimal quantityReserved;
         BigDecimal quantityLocked;
         BigDecimal materialQuota;

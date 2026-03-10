@@ -38,7 +38,36 @@ export default function InvoicePage() {
   const [totalRows, setTotalRows] = useState(0)
   const [filterType, setFilterType] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+  const [filterFromDate, setFilterFromDate] = useState('')
+  const [filterToDate, setFilterToDate] = useState('')
+  const [dateRangePreset, setDateRangePreset] = useState('')
   const [pagination, setPagination] = useState({ page: 0, pageSize: 20 })
+  const [selectionModel, setSelectionModel] = useState({ type: 'include', ids: new Set() })
+
+  const toDateLocal = (d) => { const p = n => String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}` }
+  const applyDateRangePreset = (preset) => {
+    setDateRangePreset(preset)
+    if (!preset) { setFilterFromDate(''); setFilterToDate(''); return }
+    const now = new Date()
+    const today = toDateLocal(now)
+    if (preset === 'today') { setFilterFromDate(today); setFilterToDate(today) }
+    else if (preset === 'yesterday') { const y=new Date(now); y.setDate(y.getDate()-1); const yd=toDateLocal(y); setFilterFromDate(yd); setFilterToDate(yd) }
+    else if (preset === 'this_week') { const ws=new Date(now); ws.setDate(ws.getDate()-now.getDay()); setFilterFromDate(toDateLocal(ws)); setFilterToDate(today) }
+    else if (preset.startsWith('last_')) { const d=parseInt(preset.replace('last_',''),10); const f=new Date(now); f.setDate(f.getDate()-(d-1)); setFilterFromDate(toDateLocal(f)); setFilterToDate(today) }
+  }
+
+  const pageIds = new Set(rows.map(r => r.id))
+  // eslint-disable-next-line no-unused-vars
+  const _selectedIds = selectionModel.type === 'exclude'
+    ? rows.map(r => r.id).filter(id => !selectionModel.ids.has(id))
+    : Array.from(selectionModel.ids ?? []).filter(id => pageIds.has(id))
+
+  const handleSelectionModelChange = (model) => {
+    if (model && model.type === 'exclude') {
+      const excluded = model.ids ?? new Set()
+      setSelectionModel({ type: 'include', ids: new Set(rows.map(r => r.id).filter(id => !excluded.has(id))) })
+    } else { setSelectionModel(model) }
+  }
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editRow, setEditRow] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -50,12 +79,14 @@ export default function InvoicePage() {
     try {
       const result = await fetchInvoices(
         { invoiceType: filterType || undefined, status: filterStatus || undefined,
+          fromDate: filterFromDate ? new Date(filterFromDate).toISOString() : undefined,
+          toDate:   filterToDate   ? new Date(filterToDate + 'T23:59:59').toISOString() : undefined,
           page: pagination.page, size: pagination.pageSize },
         { tenantId, companyId })
       setRows((result.content || []).map(r => ({ ...r, id: r.id })))
       setTotalRows(result.totalElements || 0)
     } catch (e) { setError(e.message) } finally { setLoading(false) }
-  }, [tenantId, companyId, filterType, filterStatus, pagination.page, pagination.pageSize])
+  }, [tenantId, companyId, filterType, filterStatus, filterFromDate, filterToDate, pagination.page, pagination.pageSize])
 
   useEffect(() => { load() }, [load])
 
@@ -147,6 +178,24 @@ export default function InvoicePage() {
           size="small" sx={{ minWidth: 130 }}>
           {STATUSES.map(s => <MenuItem key={s} value={s}>{s || 'All Statuses'}</MenuItem>)}
         </TextField>
+        <TextField select label="Quick Range" value={dateRangePreset}
+          onChange={e => applyDateRangePreset(e.target.value)} size="small" sx={{ minWidth: 140 }}>
+          <MenuItem value="">— All —</MenuItem>
+          <MenuItem value="today">Today</MenuItem>
+          <MenuItem value="yesterday">Yesterday</MenuItem>
+          <MenuItem value="this_week">This Week</MenuItem>
+          <MenuItem value="last_7">Last 7 Days</MenuItem>
+          <MenuItem value="last_14">Last 14 Days</MenuItem>
+          <MenuItem value="last_30">Last 30 Days</MenuItem>
+          <MenuItem value="last_60">Last 60 Days</MenuItem>
+          <MenuItem value="last_90">Last 90 Days</MenuItem>
+        </TextField>
+        <TextField label="From Date" type="date" value={filterFromDate}
+          onChange={e => { setDateRangePreset(''); setFilterFromDate(e.target.value) }}
+          size="small" InputLabelProps={{ shrink: true }} sx={{ width: 160 }} />
+        <TextField label="To Date" type="date" value={filterToDate}
+          onChange={e => { setDateRangePreset(''); setFilterToDate(e.target.value) }}
+          size="small" InputLabelProps={{ shrink: true }} sx={{ width: 160 }} />
         <Tooltip title="Refresh"><IconButton onClick={load}><RefreshIcon /></IconButton></Tooltip>
         <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}
           disabled={!tenantId || !companyId}>New Invoice</Button>
@@ -158,7 +207,12 @@ export default function InvoicePage() {
       <DataGrid rows={rows} columns={columns} loading={loading}
         rowCount={totalRows} paginationMode="server"
         paginationModel={pagination} onPaginationModelChange={setPagination}
-        pageSizeOptions={[10, 20, 50]} disableRowSelectionOnClick autoHeight
+        pageSizeOptions={[10, 20, 50]}
+        checkboxSelection
+        rowSelectionModel={selectionModel}
+        onRowSelectionModelChange={handleSelectionModelChange}
+        disableRowSelectionOnClick={false}
+        autoHeight
         sx={{ background: '#fff', borderRadius: 2 }} />
 
       {/* Create / Edit Dialog */}

@@ -95,6 +95,7 @@ public class InventoryService {
         if (existing.isPresent()) {
             inv = existing.get();
             inv.setQuantityOnHand(inv.getQuantityOnHand().add(qty));
+            // quantityTotal is NOT changed by movements — only set at import/initial creation
             if (quantityReserved != null) {
                 if (quantityReserved.compareTo(inv.getQuantityOnHand()) > 0) throw new InventoryException("Reserved quantity cannot exceed on-hand quantity");
                 inv.setQuantityLocked(quantityReserved);
@@ -105,6 +106,7 @@ public class InventoryService {
             inv.setWarehouse(w);
             inv.setBatchNo(batchNo);
             inv.setQuantityOnHand(qty);
+            // quantityTotal is NOT set here — only set at import/initial creation
             inv.setQuantityLocked(quantityReserved == null ? BigDecimal.ZERO : quantityReserved);
             if (inv.getQuantityLocked().compareTo(inv.getQuantityOnHand()) > 0) throw new InventoryException("Reserved quantity cannot exceed on-hand quantity");
             inv.setExpirationDateTime(expirationDateTime);
@@ -177,6 +179,7 @@ public class InventoryService {
         if (existing.isPresent()) {
             inv = existing.get();
             inv.setQuantityOnHand(inv.getQuantityOnHand().add(qty));
+            // quantityTotal is NOT changed by movements — only set at import/initial creation
             if (quantityReserved != null) {
                 if (quantityReserved.compareTo(inv.getQuantityOnHand()) > 0) throw new InventoryException("Reserved quantity cannot exceed on-hand quantity");
                 inv.setQuantityLocked(quantityReserved);
@@ -187,6 +190,7 @@ public class InventoryService {
             inv.setWarehouse(w);
             inv.setBatchNo(batchNo);
             inv.setQuantityOnHand(qty);
+            // quantityTotal is NOT set here — only set at import/initial creation
             inv.setQuantityLocked(quantityReserved == null ? BigDecimal.ZERO : quantityReserved);
             if (inv.getQuantityLocked().compareTo(inv.getQuantityOnHand()) > 0) throw new InventoryException("Reserved quantity cannot exceed on-hand quantity");
             inv.setExpirationDateTime(expirationDateTime);
@@ -221,12 +225,21 @@ public class InventoryService {
     public InventoryEntity updateStock(UUID inventoryId, BigDecimal newQuantityOnHand, String batchNo,
                                         Instant expirationDateTime, Instant productionDateTime,
                                         BigDecimal quantityReserved, UUID tenantId, UUID companyId) {
-        return updateStock(inventoryId, newQuantityOnHand, batchNo, expirationDateTime, productionDateTime,
+        return updateStock(inventoryId, newQuantityOnHand, null, batchNo, expirationDateTime, productionDateTime,
                 quantityReserved, tenantId, companyId, "Manual update stock", "system", null);
     }
 
     @Transactional(rollbackFor = Exception.class)
     public InventoryEntity updateStock(UUID inventoryId, BigDecimal newQuantityOnHand, String batchNo,
+                                        Instant expirationDateTime, Instant productionDateTime,
+                                        BigDecimal quantityReserved, UUID tenantId, UUID companyId,
+                                        String reason, String createdBy, String notes) {
+        return updateStock(inventoryId, newQuantityOnHand, null, batchNo, expirationDateTime, productionDateTime,
+                quantityReserved, tenantId, companyId, reason, createdBy, notes);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public InventoryEntity updateStock(UUID inventoryId, BigDecimal newQuantityOnHand, BigDecimal newQuantityTotal, String batchNo,
                                         Instant expirationDateTime, Instant productionDateTime,
                                         BigDecimal quantityReserved, UUID tenantId, UUID companyId,
                                         String reason, String createdBy, String notes) {
@@ -244,10 +257,10 @@ public class InventoryService {
             throw new InventoryException("New quantity cannot be less than reserved quantity");
         }
 
-        // Capture old quantity for adjustment delta
         BigDecimal oldQty = inv.getQuantityOnHand() == null ? BigDecimal.ZERO : inv.getQuantityOnHand();
         BigDecimal delta  = newQuantityOnHand.subtract(oldQty);
 
+        // Only update quantityOnHand — quantityTotal is set at import/initial creation only, never changed by movements or manual edits
         inv.setQuantityOnHand(newQuantityOnHand);
         if (batchNo != null) inv.setBatchNo(batchNo);
         if (expirationDateTime != null) inv.setExpirationDateTime(expirationDateTime);
@@ -255,7 +268,6 @@ public class InventoryService {
         if (quantityReserved != null) inv.setQuantityLocked(quantityReserved);
         InventoryEntity updated = inventoryRepository.save(inv);
 
-        // Only record a movement when the quantity actually changed
         if (delta.compareTo(BigDecimal.ZERO) != 0 && inv.getMaterial() != null && inv.getWarehouse() != null) {
             movementService.recordAdjustmentMovement(
                     inv.getMaterial().getId(),
@@ -275,7 +287,7 @@ public class InventoryService {
     // Keep previous signature for backward compatibility by delegating (optional)
     @Transactional(rollbackFor = Exception.class)
     public InventoryEntity updateStock(String inventoryId, BigDecimal newQuantityOnHand) {
-        return updateStock(UUID.fromString(inventoryId), newQuantityOnHand, null, null, null, null, null, null);
+        return updateStock(UUID.fromString(inventoryId), newQuantityOnHand, null, null, null, null, null, null, "Manual update stock", "system", null);
     }
 
     @Transactional(rollbackFor = Exception.class)

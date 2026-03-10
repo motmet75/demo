@@ -101,6 +101,9 @@ public class InventoryEntity {
     @Column(name = "quantity_on_hand", nullable = false, precision = 18, scale = 3)
     private BigDecimal quantityOnHand;
 
+    @Column(name = "quantity_total", precision = 18, scale = 3)
+    private BigDecimal quantityTotal;
+
     @Column(name = "quantity_reserved", precision = 18, scale = 3)
     private BigDecimal quantityReserved;
 
@@ -205,6 +208,14 @@ public class InventoryEntity {
 
     public void setQuantityOnHand(BigDecimal quantityOnHand) {
         this.quantityOnHand = quantityOnHand;
+    }
+
+    public BigDecimal getQuantityTotal() {
+        return quantityTotal;
+    }
+
+    public void setQuantityTotal(BigDecimal quantityTotal) {
+        this.quantityTotal = quantityTotal;
     }
 
     public BigDecimal getQuantityLocked() {
@@ -466,6 +477,9 @@ public class InventoryEntity {
         }
         if (quantityOnHand == null) {
             quantityOnHand = BigDecimal.ZERO;
+        }
+        if (quantityTotal == null) {
+            quantityTotal = quantityOnHand != null ? quantityOnHand : BigDecimal.ZERO;
         }
         if (unitPrice == null) {
             unitPrice = BigDecimal.ZERO;

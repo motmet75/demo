@@ -335,9 +335,14 @@ public class OrderService {
 
         String status = header.getStatus();
         if (!OrderHeader.STATUS_CONFIRMED.equals(status)
-                && !OrderHeader.STATUS_IN_PRODUCTION.equals(status)) {
+                && !OrderHeader.STATUS_IN_PRODUCTION.equals(status)
+                && !OrderHeader.STATUS_MATERIAL_READY.equals(status)) {
             throw new InvalidOrderStatusException(status, "COMPLETED");
         }
+
+        // If stock was already deducted by moveToProduction, skip the inventory deduction
+        // to avoid a double-deduction of quantityOnHand.
+        boolean stockAlreadyDeducted = OrderHeader.STATUS_MATERIAL_READY.equals(status);
 
         // Build a map of materialId → realQty from the dto (may be empty/null)
         Map<UUID, BigDecimal> realQtyOverrides = new HashMap<>();
@@ -367,15 +372,19 @@ public class OrderService {
             // Determine movement type
             String movementType = OrderHeader.TYPE_SALES.equals(header.getOrderType()) ? MVT_SALE : MVT_CONSUMPTION;
 
-            // Create finalized inventory movement
+            // Always create a finalized CONSUMPTION/SALE movement for the audit trail.
+            // quantityTotal is NEVER touched — only quantityOnHand via deductInventory.
             createInventoryMovement(
                     log.getMaterial(), null, realQty, log.getMaterial().getUnit(),
                     null, movementType, "Order finalized: " + header.getOrderNumber(),
                     dto != null ? dto.getUpdatedBy() : "system",
                     REF_ORDER, id, tenantId, companyId);
 
-            // Deduct real qty from inventory (quantityOnHand)
-            deductInventory(materialId, realQty, tenantId, companyId);
+            // Only deduct quantityOnHand if moveToProduction has NOT already done so.
+            // This prevents double-deduction when the order went through MATERIAL_READY.
+            if (!stockAlreadyDeducted) {
+                deductInventory(materialId, realQty, tenantId, companyId);
+            }
 
             // Deduct effective_planned_qty from quota (planned portion)
             deductQuota(log.getMaterial(), log.getEffectivePlannedQty(), tenantId, companyId);
@@ -881,12 +890,13 @@ public class OrderService {
             }
         }
 
-        // 3. Deduct FEFO per material, create movements
+        // 3. Deduct FEFO per material, create ISSUE_TO_PRODUCTION movements.
+        //    Only quantityOnHand is touched — quantityTotal is NEVER modified here.
         for (Map.Entry<UUID, BigDecimal> entry : requiredByMaterial.entrySet()) {
             UUID matId = entry.getKey();
             BigDecimal remaining = entry.getValue();
 
-            // Fetch inventory rows ordered by expiration (FEFO)
+            // Fetch inventory rows ordered by expiration date (FEFO)
             List<InventoryEntity> invRows = inventoryRepository.findByTenantIdAndCompanyId(tenantId, companyId)
                     .stream()
                     .filter(e -> e.getMaterial() != null && e.getMaterial().getId().equals(matId)
@@ -897,29 +907,32 @@ public class OrderService {
 
             for (InventoryEntity inv : invRows) {
                 if (remaining.compareTo(BigDecimal.ZERO) <= 0) break;
-                BigDecimal onHand = inv.getQuantityOnHand() == null ? BigDecimal.ZERO : inv.getQuantityOnHand();
-                BigDecimal locked = inv.getQuantityLocked() == null ? BigDecimal.ZERO : inv.getQuantityLocked();
-                BigDecimal usable = onHand.subtract(locked);
+                BigDecimal onHand  = inv.getQuantityOnHand()  == null ? BigDecimal.ZERO : inv.getQuantityOnHand();
+                BigDecimal locked  = inv.getQuantityLocked()  == null ? BigDecimal.ZERO : inv.getQuantityLocked();
+                BigDecimal usable  = onHand.subtract(locked);
                 if (usable.compareTo(BigDecimal.ZERO) <= 0) continue;
 
-                BigDecimal deduct = remaining.min(usable);
+                // How much we actually take from this inventory row
+                BigDecimal deductFromRow = remaining.min(usable);
 
-                // Deduct from inventory
-                inv.setQuantityOnHand(onHand.subtract(deduct));
-                inv.setOrderToDeduction(null); // clear tag
+                // Deduct quantityOnHand ONLY — quantityTotal must not change
+                inv.setQuantityOnHand(onHand.subtract(deductFromRow));
+                inv.setOrderToDeduction(null); // clear deduction tag
                 inventoryRepository.save(inv);
 
-                // Create one ISSUE_TO_PRODUCTION movement per order (split proportionally)
-                // For simplicity: attribute the whole deduction to the first order that needs it
+                // Distribute this row's deduction across orders that need this material
+                BigDecimal rowRemaining = deductFromRow;
                 for (UUID orderId : orderIds) {
+                    if (rowRemaining.compareTo(BigDecimal.ZERO) <= 0) break;
                     BigDecimal orderNeed = consumptionLogRepository.findByOrderId(orderId)
                             .stream()
-                            .filter(l -> !("CANCELLED".equals(l.getStatus())) && l.getMaterial().getId().equals(matId))
+                            .filter(l -> !"CANCELLED".equals(l.getStatus())
+                                    && l.getMaterial().getId().equals(matId))
                             .map(OrderConsumptionLogEntity::getEffectivePlannedQty)
                             .reduce(BigDecimal.ZERO, BigDecimal::add);
                     if (orderNeed.compareTo(BigDecimal.ZERO) <= 0) continue;
 
-                    BigDecimal forOrder = deduct.min(orderNeed);
+                    BigDecimal forOrder = rowRemaining.min(orderNeed);
                     if (forOrder.compareTo(BigDecimal.ZERO) <= 0) continue;
 
                     Material mat = materialById.get(matId);
@@ -941,11 +954,11 @@ public class OrderService {
                     mvt.setStatus("COMPLETED");
                     movementRepository.save(mvt);
 
-                    deduct = deduct.subtract(forOrder);
-                    if (deduct.compareTo(BigDecimal.ZERO) <= 0) break;
+                    rowRemaining = rowRemaining.subtract(forOrder);
                 }
 
-                remaining = remaining.subtract(usable.min(remaining));
+                // Advance the global remaining counter by exactly what was taken from this row
+                remaining = remaining.subtract(deductFromRow);
             }
         }
 

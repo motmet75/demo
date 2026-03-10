@@ -43,7 +43,27 @@ export default function InventoryMovementPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [filterType, setFilterType] = useState('')
+  const [filterMaterial, setFilterMaterial] = useState('')
+  const [filterCreatedFrom, setFilterCreatedFrom] = useState('')
+  const [filterCreatedTo, setFilterCreatedTo] = useState('')
+  const [createdRangePreset, setCreatedRangePreset] = useState('')
   const [paginationModel, setPaginationModel] = useState({ pageSize: 25, page: 0 })
+
+  // selection — v8 format: { type: 'include'|'exclude', ids: Set }
+  const [selectionModel, setSelectionModel] = useState({ type: 'include', ids: new Set() })
+
+  const toDatetimeLocal = (d) => { const p = n => String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}` }
+  const applyCreatedRangePreset = (preset) => {
+    setCreatedRangePreset(preset)
+    if (!preset) { setFilterCreatedFrom(''); setFilterCreatedTo(''); return }
+    const now = new Date()
+    const ts = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0)
+    const te = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59)
+    if (preset === 'today') { setFilterCreatedFrom(toDatetimeLocal(ts)); setFilterCreatedTo(toDatetimeLocal(te)) }
+    else if (preset === 'yesterday') { const ys=new Date(ts); ys.setDate(ys.getDate()-1); const ye=new Date(te); ye.setDate(ye.getDate()-1); setFilterCreatedFrom(toDatetimeLocal(ys)); setFilterCreatedTo(toDatetimeLocal(ye)) }
+    else if (preset === 'this_week') { const ws=new Date(ts); ws.setDate(ws.getDate()-now.getDay()); setFilterCreatedFrom(toDatetimeLocal(ws)); setFilterCreatedTo(toDatetimeLocal(te)) }
+    else if (preset.startsWith('last_')) { const d=parseInt(preset.replace('last_',''),10); const f=new Date(ts); f.setDate(f.getDate()-(d-1)); setFilterCreatedFrom(toDatetimeLocal(f)); setFilterCreatedTo(toDatetimeLocal(te)) }
+  }
 
   const load = useCallback(async () => {
     if (!tenantId || !companyId) return
@@ -104,10 +124,66 @@ export default function InventoryMovementPage() {
     catch (ex) { alert('Delete failed: ' + (ex?.message || ex)) }
   }
 
+  async function handleDeleteSelected() {
+    if (selectedIds.length === 0) return
+    if (!window.confirm(`Delete ${selectedIds.length} selected movement record(s)? This cannot be undone.`)) return
+    const failed = []
+    for (const id of selectedIds) {
+      try {
+        await deleteMovement(id)
+      } catch (e) {
+        console.error('Failed to delete movement', id, e)
+        failed.push(id)
+      }
+    }
+    const deleted = selectedIds.filter(id => !failed.includes(id))
+    setRows(prev => prev.filter(r => !deleted.includes(r.id)))
+    setSelectionModel({ type: 'include', ids: new Set() })
+    if (failed.length > 0) {
+      alert(`Deleted ${deleted.length} record(s). Failed to delete ${failed.length} record(s).`)
+    } else {
+      alert(`Deleted ${deleted.length} movement record(s) successfully.`)
+    }
+  }
+
   const matMap = Object.fromEntries(materials.map(m => [m.id, m]))
   const whMap = Object.fromEntries(warehouses.map(w => [w.id, w]))
 
+  const filteredRows = rows.filter(r => {
+    if (filterType && r.movementType !== filterType) return false
+    if (filterMaterial) {
+      const mat = r.material ? `${r.material.materialCode ?? ''} ${r.material.materialName ?? ''}` : (matMap[r.materialId] ? matMap[r.materialId].materialCode : '')
+      if (!mat.toLowerCase().includes(filterMaterial.toLowerCase())) return false
+    }
+    if (filterCreatedFrom || filterCreatedTo) {
+      const d = r.createdAt ? new Date(r.createdAt) : null
+      if (!d || isNaN(d)) return false
+      if (filterCreatedFrom && d < new Date(filterCreatedFrom)) return false
+      if (filterCreatedTo   && d > new Date(filterCreatedTo))   return false
+    }
+    return true
+  })
+
+  const filteredIds = new Set(filteredRows.map(r => r.id))
+  const selectedIds = selectionModel.type === 'exclude'
+    ? filteredRows.map(r => r.id).filter(id => !selectionModel.ids.has(id))
+    : Array.from(selectionModel.ids ?? []).filter(id => filteredIds.has(id))
+
+  const handleSelectionModelChange = (model) => {
+    if (model && model.type === 'exclude') {
+      const excluded = model.ids ?? new Set()
+      setSelectionModel({ type: 'include', ids: new Set(filteredRows.map(r => r.id).filter(id => !excluded.has(id))) })
+    } else { setSelectionModel(model) }
+  }
+
   const columns = [
+    {
+      field: 'id', headerName: 'ID', flex: 1, minWidth: 280,
+      valueGetter: (value) => value ? String(value) : '',
+      renderCell: ({ value }) => value
+        ? <span title={value} style={{ fontFamily: 'monospace', fontSize: 12, cursor: 'pointer' }} onClick={() => navigator.clipboard?.writeText(value)}>{value}</span>
+        : ''
+    },
     { field: 'createdAt', headerName: 'Date', width: 170, valueFormatter: (value) => value ? new Date(value).toLocaleString() : '' },
     { field: 'movementType', headerName: 'Type', width: 130, renderCell: ({ value }) => <Chip label={value} color={TYPE_COLORS[value] || 'default'} size="small" /> },
     { field: 'materialId', headerName: 'Material', width: 180, valueGetter: (value, row) => row?.material ? `${row.material.materialCode ?? ''} — ${row.material.materialName ?? ''}` : (row && matMap[row.materialId] ? `${matMap[row.materialId].materialCode}` : value ?? '') },
@@ -119,7 +195,14 @@ export default function InventoryMovementPage() {
     { field: 'reason', headerName: 'Reason', width: 150 },
     { field: 'referenceType', headerName: 'Ref Type', width: 120 },
     {
-      field: 'referenceId', headerName: 'Ref ID', width: 300,
+      field: 'referenceId', headerName: 'Ref ID', flex: 1, minWidth: 280,
+      valueGetter: (value) => value ? String(value) : '',
+      renderCell: ({ value }) => value
+        ? <span title={value} style={{ fontFamily: 'monospace', fontSize: 12, cursor: 'pointer' }} onClick={() => navigator.clipboard?.writeText(value)}>{value}</span>
+        : ''
+    },
+    {
+      field: 'inventoryId', headerName: 'Inventory ID', flex: 1, minWidth: 280,
       valueGetter: (value) => value ? String(value) : '',
       renderCell: ({ value }) => value
         ? <span title={value} style={{ fontFamily: 'monospace', fontSize: 12, cursor: 'pointer' }} onClick={() => navigator.clipboard?.writeText(value)}>{value}</span>
@@ -133,19 +216,70 @@ export default function InventoryMovementPage() {
 
   return (
     <Box sx={{ p: 2 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', mb: 2, gap: 1 }}>
         <h2 style={{ margin: 0 }}>Inventory Movements</h2>
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end', flexWrap: 'wrap', justifyContent: 'flex-start', width: '100%' }}>
           <TextField select label="Filter by type" value={filterType} onChange={e => setFilterType(e.target.value)} size="small" sx={{ width: 160 }}>
             <MenuItem value="">All Types</MenuItem>
             {MOVEMENT_TYPES.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
           </TextField>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+            <span style={{ fontSize: 11, color: '#666' }}>Material</span>
+            <input value={filterMaterial} onChange={e => setFilterMaterial(e.target.value)} placeholder="Filter Material" style={{ fontSize: 12, padding: '3px 6px', width: 140 }} />
+          </Box>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+            <span style={{ fontSize: 11, color: '#666' }}>Quick Range</span>
+            <select value={createdRangePreset} onChange={e => applyCreatedRangePreset(e.target.value)} style={{ fontSize: 12, padding: '3px 6px', height: 32 }}>
+              <option value="">— All —</option>
+              <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
+              <option value="this_week">This Week</option>
+              <option value="last_7">Last 7 Days</option>
+              <option value="last_14">Last 14 Days</option>
+              <option value="last_30">Last 30 Days</option>
+              <option value="last_60">Last 60 Days</option>
+              <option value="last_90">Last 90 Days</option>
+            </select>
+          </Box>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+            <span style={{ fontSize: 11, color: '#666' }}>Created From</span>
+            <input type="datetime-local" value={filterCreatedFrom} onChange={e => { setCreatedRangePreset(''); setFilterCreatedFrom(e.target.value) }} style={{ fontSize: 12, padding: '3px 6px' }} />
+          </Box>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+            <span style={{ fontSize: 11, color: '#666' }}>Created To</span>
+            <input type="datetime-local" value={filterCreatedTo} onChange={e => { setCreatedRangePreset(''); setFilterCreatedTo(e.target.value) }} style={{ fontSize: 12, padding: '3px 6px' }} />
+          </Box>
+          <Button size="small" variant="outlined" sx={{ alignSelf: 'flex-end' }}
+            onClick={() => { setFilterType(''); setFilterMaterial(''); setFilterCreatedFrom(''); setFilterCreatedTo(''); setCreatedRangePreset('') }}>
+            Clear
+          </Button>
+          <span style={{ alignSelf: 'flex-end', fontSize: 12, color: '#666' }}>{filteredRows.length} / {rows.length}</span>
+          <Button
+            variant="outlined"
+            color="error"
+            disabled={selectedIds.length === 0}
+            onClick={handleDeleteSelected}
+          >
+            Delete Selected ({selectedIds.length})
+          </Button>
+          <Button variant="outlined" onClick={() => load()} disabled={loading} title="Refresh">🔄 Refresh</Button>
           <Button variant="contained" onClick={() => { setForm(EMPTY_FORM); setError(''); setDialogOpen(true) }}>+ Record Movement</Button>
         </Box>
       </Box>
 
       <Box sx={{ height: 600 }}>
-        <DataGrid rows={rows} columns={columns} loading={loading} pageSizeOptions={[25, 50, 100]} paginationModel={paginationModel} onPaginationModelChange={setPaginationModel} density="compact" />
+        <DataGrid
+          rows={filteredRows}
+          columns={columns}
+          loading={loading}
+          pageSizeOptions={[25, 50, 100]}
+          paginationModel={paginationModel}
+          onPaginationModelChange={setPaginationModel}
+          density="compact"
+          checkboxSelection
+          rowSelectionModel={selectionModel}
+          onRowSelectionModelChange={handleSelectionModelChange}
+        />
       </Box>
 
       {/* Record Movement Dialog */}

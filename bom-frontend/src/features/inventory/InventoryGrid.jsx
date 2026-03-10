@@ -3,7 +3,7 @@ import { DataGrid, GridActionsCellItem, useGridApiRef } from '@mui/x-data-grid'
 import EditIcon from '@mui/icons-material/Edit'
 import LocalHospitalIcon from '@mui/icons-material/LocalHospital'
 import CallReceivedIcon from '@mui/icons-material/CallReceived'
-import { fetchInventoryView, addStock, updateInventory, reserveInventory, releaseInventory } from '../../api/inventoryApi'
+import { fetchInventoryView, addStock, updateInventory, reserveInventory, releaseInventory, deleteInventory } from '../../api/inventoryApi'
 import InventoryEditModal from './InventoryEditModal'
 import InventoryImport from './InventoryImport'
 import * as XLSX from 'xlsx'
@@ -15,6 +15,22 @@ export default function InventoryGrid() {
   const [filterMaterial, setFilterMaterial] = useState('')
   const [filterWarehouse, setFilterWarehouse] = useState('')
   const [filterInventoryUuid, setFilterInventoryUuid] = useState('')
+  const [filterCreatedFrom, setFilterCreatedFrom] = useState('')
+  const [filterCreatedTo, setFilterCreatedTo] = useState('')
+  const [createdRangePreset, setCreatedRangePreset] = useState('')
+
+  const toDatetimeLocal = (d) => { const p = n => String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}` }
+  const applyCreatedRangePreset = (preset) => {
+    setCreatedRangePreset(preset)
+    if (!preset) { setFilterCreatedFrom(''); setFilterCreatedTo(''); return }
+    const now = new Date()
+    const ts = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0)
+    const te = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59)
+    if (preset === 'today') { setFilterCreatedFrom(toDatetimeLocal(ts)); setFilterCreatedTo(toDatetimeLocal(te)) }
+    else if (preset === 'yesterday') { const ys=new Date(ts); ys.setDate(ys.getDate()-1); const ye=new Date(te); ye.setDate(ye.getDate()-1); setFilterCreatedFrom(toDatetimeLocal(ys)); setFilterCreatedTo(toDatetimeLocal(ye)) }
+    else if (preset === 'this_week') { const ws=new Date(ts); ws.setDate(ws.getDate()-now.getDay()); setFilterCreatedFrom(toDatetimeLocal(ws)); setFilterCreatedTo(toDatetimeLocal(te)) }
+    else if (preset.startsWith('last_')) { const d=parseInt(preset.replace('last_',''),10); const f=new Date(ts); f.setDate(f.getDate()-(d-1)); setFilterCreatedFrom(toDatetimeLocal(f)); setFilterCreatedTo(toDatetimeLocal(te)) }
+  }
 
   const [editOpen, setEditOpen] = useState(false)
   const [selected, setSelected] = useState(null)
@@ -25,45 +41,8 @@ export default function InventoryGrid() {
 
   const apiRef = useGridApiRef()
 
-  // selection for export
-  const [selectionModel, setSelectionModel] = useState([])
-
-  // normalize selection shapes (MUI versions return different shapes)
-  const normalizeSelection = (sel) => {
-    if (sel == null) return []
-    try {
-      if (Array.isArray(sel)) return sel.map(s => {
-        if (s == null) return ''
-        if (typeof s === 'object') {
-          // objects may have id or rowId
-          if ('id' in s) return String(s.id)
-          if ('rowId' in s) return String(s.rowId)
-          // maybe [id, ...] tuple
-          if (Array.isArray(s) && s.length > 0) return String(s[0])
-          try { return String(s.toString()) } catch { return JSON.stringify(s) }
-        }
-        return String(s)
-      })
-      // Map -> take keys
-      if (sel instanceof Map) return Array.from(sel.keys()).map(k => String(k))
-      // plain object map { id: true }
-      if (typeof sel === 'object' && !sel[Symbol.iterator]) {
-        return Object.keys(sel).filter(k => !!sel[k]).map(String)
-      }
-      // iterable (Set of ids, or entries)
-      if (typeof sel === 'object' && sel[Symbol.iterator]) {
-        const arr = Array.from(sel)
-        // entries like [[id, true], [id2, true]] -> take first element
-        if (arr.length > 0 && Array.isArray(arr[0]) && arr[0].length >= 1) {
-          return arr.map(e => String(e[0]))
-        }
-        return arr.map(s => String(s))
-      }
-      return [String(sel)]
-    } catch {
-      return Array.isArray(sel) ? sel.map(s => String(s)) : [String(sel)]
-    }
-  }
+  // selection for export / bulk delete — v8 format: { type: 'include'|'exclude', ids: Set }
+  const [selectionModel, setSelectionModel] = useState({ type: 'include', ids: new Set() })
 
   // grid height control: when `auto` grid fills remaining viewport, otherwise uses px value
   const [manualHeight, setManualHeight] = useState(() => {
@@ -110,6 +89,7 @@ export default function InventoryGrid() {
     const quantityOnHand = item.quantityOnHand ?? 0
     const quantityReserved = item.quantityReserved ?? 0
     const quantityLocked = item.quantityLocked ?? 0
+    const quantityTotal = item.quantityTotal ?? item.quantity_total ?? quantityOnHand
 
     return {
       id: inventoryId != null ? String(inventoryId) : undefined,
@@ -123,6 +103,7 @@ export default function InventoryGrid() {
       warehouseCode,
       warehouseName,
       quantityOnHand,
+      quantityTotal,
       quantityReserved,
       quantityLocked,
       availableQuantity: Number(quantityOnHand) - Number(quantityLocked),
@@ -232,6 +213,28 @@ export default function InventoryGrid() {
     } catch { alert('Release failed') }
   }
 
+  const handleDeleteSelected = async () => {
+    if (selectedIds.length === 0) return
+    if (!window.confirm(`Delete ${selectedIds.length} selected inventory record(s)? This cannot be undone.`)) return
+    const failed = []
+    for (const id of selectedIds) {
+      try {
+        await deleteInventory(id)
+      } catch (e) {
+        console.error('Failed to delete inventory', id, e)
+        failed.push(id)
+      }
+    }
+    const deleted = selectedIds.filter(id => !failed.includes(id))
+    setRows(prev => prev.filter(r => !deleted.includes(r.id)))
+    setSelectionModel({ type: 'include', ids: new Set() })
+    if (failed.length > 0) {
+      alert(`Deleted ${deleted.length} record(s). Failed to delete ${failed.length} record(s).`)
+    } else {
+      alert(`Deleted ${deleted.length} inventory record(s) successfully.`)
+    }
+  }
+
   const exportRows = async (selectedIds, format = 'xlsx') => {
     try {
       // Build rowsToExport and payloadIds (UUIDs)
@@ -304,6 +307,7 @@ export default function InventoryGrid() {
         WarehouseName: r.warehouseName,
         Batch: r.batchNo,
         QuantityOnHand: r.quantityOnHand,
+        QuantityTotal: r.quantityTotal,
         QuantityReserved: r.quantityReserved,
         QuantityLocked: r.quantityLocked,
         Available: r.availableQuantity,
@@ -385,6 +389,7 @@ export default function InventoryGrid() {
     { field: 'warehouseCode', headerName: 'Warehouse Code', width: 160 },
     { field: 'warehouseName', headerName: 'Warehouse Name', width: 200 },
     { field: 'quantityOnHand', headerName: 'Qty On Hand', width: 140, type: 'number' },
+    { field: 'quantityTotal', headerName: 'Total Qty', width: 140, type: 'number' },
     { field: 'quantityReserved', headerName: 'Qty Reserved', width: 140, type: 'number' },
     { field: 'quantityLocked', headerName: 'Qty Locked', width: 140, type: 'number' },
     { field: 'availableQuantity', headerName: 'Available', width: 140, type: 'number' },
@@ -417,8 +422,26 @@ export default function InventoryGrid() {
     if (filterMaterial && filterMaterial.trim() !== '' && !(r.materialCode || '').toLowerCase().includes(filterMaterial.trim().toLowerCase())) return false
     if (filterWarehouse && filterWarehouse.trim() !== '' && !(r.warehouseCode || '').toLowerCase().includes(filterWarehouse.trim().toLowerCase())) return false
     if (filterInventoryUuid && filterInventoryUuid.trim() !== '' && !(r.inventoryId || '').toLowerCase().includes(filterInventoryUuid.trim().toLowerCase())) return false
+    if (filterCreatedFrom || filterCreatedTo) {
+      const d = r.createdAt ? new Date(r.createdAt) : null
+      if (!d || isNaN(d)) return false
+      if (filterCreatedFrom && d < new Date(filterCreatedFrom)) return false
+      if (filterCreatedTo   && d > new Date(filterCreatedTo))   return false
+    }
     return true
   })
+
+  const filteredIds = new Set(filteredRows.map(r => r.id))
+  const selectedIds = selectionModel.type === 'exclude'
+    ? filteredRows.map(r => r.id).filter(id => !selectionModel.ids.has(id))
+    : Array.from(selectionModel.ids ?? []).filter(id => filteredIds.has(id))
+
+  const handleSelectionModelChange = (model) => {
+    if (model && model.type === 'exclude') {
+      const excluded = model.ids ?? new Set()
+      setSelectionModel({ type: 'include', ids: new Set(filteredRows.map(r => r.id).filter(id => !excluded.has(id))) })
+    } else { setSelectionModel(model) }
+  }
 
   return (
     // top-level flex column so grid can flex-grow to fill available space when auto
@@ -427,6 +450,7 @@ export default function InventoryGrid() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={() => { setSelected(null); setModalKey(k => k + 1); setEditOpen(true) }} disabled={saving}>Add Inventory</button>
           <button onClick={() => setImportOpen(true)} disabled={saving}>Import Inventory</button>
+          <button onClick={() => load()} disabled={loading} title="Refresh">🔄 Refresh</button>
           <h2 style={{ margin: 0 }}>Inventory</h2>
         </div>
         <div />
@@ -442,7 +466,7 @@ export default function InventoryGrid() {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 12, padding: '0 8px 8px 8px' }}>
+      <div style={{ display: 'flex', gap: 12, padding: '0 8px 8px 8px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <div>
           <label style={{ fontSize: 12 }}>Filter Inventory UUID:</label><br />
           <input value={filterInventoryUuid} onChange={e => setFilterInventoryUuid(e.target.value)} style={{ width: 280 }} />
@@ -455,6 +479,30 @@ export default function InventoryGrid() {
           <label style={{ fontSize: 12 }}>Filter Warehouse:</label><br />
           <input value={filterWarehouse} onChange={e => setFilterWarehouse(e.target.value)} />
         </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <label style={{ fontSize: 12 }}>Quick Range</label>
+          <select value={createdRangePreset} onChange={e => applyCreatedRangePreset(e.target.value)} style={{ fontSize: 12, padding: '3px 6px', height: 24 }}>
+            <option value="">— All —</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="this_week">This Week</option>
+            <option value="last_7">Last 7 Days</option>
+            <option value="last_14">Last 14 Days</option>
+            <option value="last_30">Last 30 Days</option>
+            <option value="last_60">Last 60 Days</option>
+            <option value="last_90">Last 90 Days</option>
+          </select>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <label style={{ fontSize: 12 }}>Created From</label>
+          <input type="datetime-local" value={filterCreatedFrom} onChange={e => { setCreatedRangePreset(''); setFilterCreatedFrom(e.target.value) }} style={{ fontSize: 12, padding: '3px 6px' }} />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <label style={{ fontSize: 12 }}>Created To</label>
+          <input type="datetime-local" value={filterCreatedTo} onChange={e => { setCreatedRangePreset(''); setFilterCreatedTo(e.target.value) }} style={{ fontSize: 12, padding: '3px 6px' }} />
+        </div>
+        <button type="button" onClick={() => { setFilterInventoryUuid(''); setFilterMaterial(''); setFilterWarehouse(''); setFilterCreatedFrom(''); setFilterCreatedTo(''); setCreatedRangePreset('') }} style={{ alignSelf: 'flex-end', fontSize: 12, padding: '4px 10px' }}>Clear</button>
+        <div style={{ alignSelf: 'flex-end', color: '#666', fontSize: 12 }}>{filteredRows.length} / {rows.length}</div>
       </div>
 
       {/* Height control: toggle auto/manual and slider/number for manual px height */}
@@ -490,11 +538,17 @@ export default function InventoryGrid() {
         <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
           <button type="button" onClick={() => exportRows(filteredRows.map(r => r.id), 'xlsx')}>Export Filtered XLSX</button>
           <button type="button" onClick={() => exportRows(filteredRows.map(r => r.id), 'csv')}>Export Filtered CSV</button>
-          <button type="button" onClick={() => exportRows(selectionModel, 'xlsx')} disabled={(selectionModel?.length || 0) === 0}>Export Selected XLSX</button>
-          <button type="button" onClick={() => exportRows(selectionModel, 'csv')} disabled={(selectionModel?.length || 0) === 0}>Export Selected CSV</button>
-          <div style={{ color: '#333', fontSize: 13 }}>
-            Selected: {selectionModel ? selectionModel.length : 0}
-          </div>
+          <button type="button" onClick={() => exportRows(selectedIds, 'xlsx')} disabled={selectedIds.length === 0}>Export Selected XLSX</button>
+          <button type="button" onClick={() => exportRows(selectedIds, 'csv')} disabled={selectedIds.length === 0}>Export Selected CSV</button>
+          <button
+            type="button"
+            onClick={handleDeleteSelected}
+            disabled={selectedIds.length === 0}
+            style={{ color: selectedIds.length > 0 ? '#d32f2f' : undefined, borderColor: selectedIds.length > 0 ? '#d32f2f' : undefined }}
+          >
+            Delete Selected ({selectedIds.length})
+          </button>
+          <div style={{ color: '#333', fontSize: 13 }}>Selected: {selectedIds.length}</div>
         </div>
       </div>
 
@@ -512,10 +566,8 @@ export default function InventoryGrid() {
              initialState={{
                pinnedColumns: { left: ['inventoryId'] }
              }}
-             // controlled selectionModel with normalization to handle different DataGrid shapes
-             selectionModel={selectionModel}
-             onRowSelectionModelChange={(newSel) => { const norm = normalizeSelection(newSel); console.debug('onRowSelectionModelChange ->', newSel, 'normalized ->', norm); setSelectionModel(norm) }}
-             onSelectionModelChange={(newSel) => { const norm = normalizeSelection(newSel); console.debug('onSelectionModelChange ->', newSel, 'normalized ->', norm); setSelectionModel(norm) }}
+             rowSelectionModel={selectionModel}
+             onRowSelectionModelChange={handleSelectionModelChange}
            />
          </div>
        </div>

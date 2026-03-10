@@ -165,7 +165,8 @@ public class InventoryController {
             Instant productionDateTime = prod == null || prod.trim().isEmpty() ? null : Instant.parse(prod);
             BigDecimal quantityReserved = qres == null || qres.trim().isEmpty() ? null : new BigDecimal(qres);
 
-            InventoryEntity updated = inventoryService.updateStock(id, qty, batchNo, expirationDateTime, productionDateTime, quantityReserved, tenantId, companyId, reason, createdBy, notes);
+            // quantityTotal is intentionally NOT accepted here — it is set only at import/initial creation
+            InventoryEntity updated = inventoryService.updateStock(id, qty, null, batchNo, expirationDateTime, productionDateTime, quantityReserved, tenantId, companyId, reason, createdBy, notes);
             return ResponseEntity.ok(updated);
         } catch (InventoryException ex) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());

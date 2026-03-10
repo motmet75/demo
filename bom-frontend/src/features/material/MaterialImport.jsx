@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { importMaterials, createMaterial } from '../../api/materialApi'
 import MaterialEditModal from './MaterialEditModal'
 
-export default function MaterialImport() {
+export default function MaterialImport({ onImportComplete }) {
   const [file, setFile] = useState(null)
   const [result, setResult] = useState(null)
   const [uploading, setUploading] = useState(false)
@@ -17,6 +17,9 @@ export default function MaterialImport() {
     try {
       const res = await importMaterials(file)
       setResult(res)
+      if (res && res.success && typeof onImportComplete === 'function') {
+        onImportComplete()
+      }
     } catch (err) {
       setResult({ success: false, message: err.message || 'Upload failed' })
     } finally {

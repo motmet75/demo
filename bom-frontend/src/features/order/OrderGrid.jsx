@@ -49,13 +49,38 @@ export default function OrderGrid() {
   const [error, setError]         = useState('')
   const [totalRows, setTotalRows] = useState(0)
   const [selectionModel, setSelectionModel] = useState({ type: 'include', ids: new Set() })
-  const selected = Array.from(selectionModel.ids ?? [])
 
   const [filterStatus, setFilterStatus]       = useState('')
   const [filterOrderType, setFilterOrderType] = useState('')
   const [filterFromDate, setFilterFromDate]   = useState('')
   const [filterToDate, setFilterToDate]       = useState('')
+  const [dateRangePreset, setDateRangePreset] = useState('')
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 20 })
+
+  const toDateLocal = (d) => { const p = n => String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}` }
+  const applyDateRangePreset = (preset) => {
+    setDateRangePreset(preset)
+    if (!preset) { setFilterFromDate(''); setFilterToDate(''); return }
+    const now = new Date()
+    const today = toDateLocal(now)
+    if (preset === 'today') { setFilterFromDate(today); setFilterToDate(today) }
+    else if (preset === 'yesterday') { const y=new Date(now); y.setDate(y.getDate()-1); const yd=toDateLocal(y); setFilterFromDate(yd); setFilterToDate(yd) }
+    else if (preset === 'this_week') { const ws=new Date(now); ws.setDate(ws.getDate()-now.getDay()); setFilterFromDate(toDateLocal(ws)); setFilterToDate(today) }
+    else if (preset.startsWith('last_')) { const d=parseInt(preset.replace('last_',''),10); const f=new Date(now); f.setDate(f.getDate()-(d-1)); setFilterFromDate(toDateLocal(f)); setFilterToDate(today) }
+  }
+
+  // selected is scoped to current page rows (server-side pagination — rows is current page)
+  const pageIds = new Set(rows.map(r => r.id))
+  const selected = selectionModel.type === 'exclude'
+    ? rows.map(r => r.id).filter(id => !selectionModel.ids.has(id))
+    : Array.from(selectionModel.ids ?? []).filter(id => pageIds.has(id))
+
+  const handleSelectionModelChange = (model) => {
+    if (model && model.type === 'exclude') {
+      const excluded = model.ids ?? new Set()
+      setSelectionModel({ type: 'include', ids: new Set(rows.map(r => r.id).filter(id => !excluded.has(id))) })
+    } else { setSelectionModel(model) }
+  }
 
   const [createOpen, setCreateOpen] = useState(false)
   const [detailId, setDetailId]     = useState(null)
@@ -145,6 +170,11 @@ export default function OrderGrid() {
   }
 
   const columns = [
+    { field: 'id', headerName: 'UUID', flex: 1, minWidth: 280,
+      renderCell: ({ value }) => value
+        ? <span title={value} style={{ fontFamily: 'monospace', fontSize: 11, cursor: 'pointer' }} onClick={() => navigator.clipboard?.writeText(value)}>{value}</span>
+        : '—'
+    },
     { field: 'orderNumber', headerName: 'Order #', width: 160,
       renderCell: ({ row }) => (
         <Button size="small" variant="text" onClick={() => setDetailId(row.id)}
@@ -243,9 +273,22 @@ export default function OrderGrid() {
           size="small" sx={{ minWidth: 150 }}>
           {ORDER_TYPES_FILTER.map(t => <MenuItem key={t} value={t}>{t || 'All Types'}</MenuItem>)}
         </TextField>
-        <TextField label="From Date" type="date" value={filterFromDate} onChange={e => setFilterFromDate(e.target.value)}
+        <TextField select label="Quick Range" value={dateRangePreset}
+          onChange={e => { applyDateRangePreset(e.target.value); setPaginationModel(p => ({ ...p, page: 0 })) }}
+          size="small" sx={{ minWidth: 140 }}>
+          <MenuItem value="">— All —</MenuItem>
+          <MenuItem value="today">Today</MenuItem>
+          <MenuItem value="yesterday">Yesterday</MenuItem>
+          <MenuItem value="this_week">This Week</MenuItem>
+          <MenuItem value="last_7">Last 7 Days</MenuItem>
+          <MenuItem value="last_14">Last 14 Days</MenuItem>
+          <MenuItem value="last_30">Last 30 Days</MenuItem>
+          <MenuItem value="last_60">Last 60 Days</MenuItem>
+          <MenuItem value="last_90">Last 90 Days</MenuItem>
+        </TextField>
+        <TextField label="From Date" type="date" value={filterFromDate} onChange={e => { setDateRangePreset(''); setFilterFromDate(e.target.value) }}
           size="small" InputLabelProps={{ shrink: true }} sx={{ width: 160 }} />
-        <TextField label="To Date" type="date" value={filterToDate} onChange={e => setFilterToDate(e.target.value)}
+        <TextField label="To Date" type="date" value={filterToDate} onChange={e => { setDateRangePreset(''); setFilterToDate(e.target.value) }}
           size="small" InputLabelProps={{ shrink: true }} sx={{ width: 160 }} />
         <Tooltip title="Refresh"><IconButton onClick={load}><RefreshIcon /></IconButton></Tooltip>
         <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)} disabled={noContextMsg}>
@@ -264,7 +307,7 @@ export default function OrderGrid() {
         pageSizeOptions={[10, 20, 50, 100]}
         checkboxSelection
         rowSelectionModel={selectionModel}
-        onRowSelectionModelChange={model => setSelectionModel(model)}
+        onRowSelectionModelChange={handleSelectionModelChange}
         disableRowSelectionOnClick={false}
         autoHeight
         sx={{ background: '#fff', borderRadius: 2 }}

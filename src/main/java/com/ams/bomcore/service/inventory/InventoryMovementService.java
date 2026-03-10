@@ -3,6 +3,7 @@ package com.ams.bomcore.service.inventory;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -19,17 +20,17 @@ import com.ams.bomcore.repository.WarehouseRepository;
 
 /**
  * Service for managing inventory movements.
- * Records all IN, OUT, TRANSFER, ADJUSTMENT movements and updates inventory accordingly.
+ * Records all IN, OUT, TRANSFER, ADJUSTMENT movements and updates inventory quantities accordingly.
  */
 @Service
 public class InventoryMovementService {
 
     // Movement types
-    public static final String MOVEMENT_IN = "IN";
-    public static final String MOVEMENT_OUT = "OUT";
-    public static final String MOVEMENT_TRANSFER = "TRANSFER";
+    public static final String MOVEMENT_IN         = "IN";
+    public static final String MOVEMENT_OUT        = "OUT";
+    public static final String MOVEMENT_TRANSFER   = "TRANSFER";
     public static final String MOVEMENT_ADJUSTMENT = "ADJUSTMENT";
-    public static final String MOVEMENT_IMPORT = "IMPORT";
+    public static final String MOVEMENT_IMPORT     = "IMPORT";
 
     private final InventoryMovementRepository movementRepository;
     private final InventoryRepository inventoryRepository;
@@ -46,37 +47,58 @@ public class InventoryMovementService {
         this.warehouseRepository = warehouseRepository;
     }
 
-    /**
-     * List all movements for tenant and company.
-     */
+    // ─── helpers ────────────────────────────────────────────────────────────────
+
+    /** Find an inventory row by material + warehouse + batchNo. Returns empty Optional when batchNo is null/blank (uses first row for that material+warehouse). */
+    private Optional<InventoryEntity> findInventory(Material material, WarehouseEntity warehouse, String batchNo) {
+        if (batchNo != null && !batchNo.isBlank()) {
+            return inventoryRepository.findByMaterialAndWarehouseCodeAndBatchNo(material, warehouse.getCode(), batchNo);
+        }
+        return inventoryRepository.findByMaterialAndWarehouseCode(material, warehouse.getCode());
+    }
+
+    /** Find or create an inventory row. Used for IN so a row is auto-created if it doesn't yet exist. */
+    private InventoryEntity findOrCreateInventory(Material material, WarehouseEntity warehouse, String batchNo,
+                                                   UUID tenantId, UUID companyId) {
+        Optional<InventoryEntity> opt = findInventory(material, warehouse, batchNo);
+        if (opt.isPresent()) return opt.get();
+
+        InventoryEntity inv = new InventoryEntity();
+        inv.setMaterial(material);
+        inv.setWarehouse(warehouse);
+        inv.setBatchNo(batchNo != null && !batchNo.isBlank() ? batchNo : "DEFAULT");
+        inv.setQuantityOnHand(BigDecimal.ZERO);
+        inv.setQuantityTotal(BigDecimal.ZERO);
+        inv.setQuantityReserved(BigDecimal.ZERO);
+        inv.setQuantityLocked(BigDecimal.ZERO);
+        inv.setUnit(material.getUnit() != null ? material.getUnit() : "pcs");
+        inv.setTenantId(tenantId);
+        inv.setCompanyId(companyId);
+        inv.setMaterialCodeDenorm(material.getMaterialCode());
+        inv.setWarehouseCodeDenorm(warehouse.getCode());
+        return inventoryRepository.save(inv);
+    }
+
+    // ─── query methods ───────────────────────────────────────────────────────────
+
     public List<InventoryMovementEntity> listAll(UUID tenantId, UUID companyId) {
         return movementRepository.findAllByTenantAndCompanyOrderByCreatedAtDesc(tenantId, companyId);
     }
 
-    /**
-     * List movements by type.
-     */
     public List<InventoryMovementEntity> listByType(UUID tenantId, UUID companyId, String movementType) {
         return movementRepository.findByTenantIdAndCompanyIdAndMovementType(tenantId, companyId, movementType);
     }
 
-    /**
-     * List movements by material.
-     */
     public List<InventoryMovementEntity> listByMaterial(UUID tenantId, UUID companyId, UUID materialId) {
         return movementRepository.findByTenantIdAndCompanyIdAndMaterialId(tenantId, companyId, materialId);
     }
 
-    /**
-     * List movements by date range.
-     */
     public List<InventoryMovementEntity> listByDateRange(UUID tenantId, UUID companyId, Instant fromDate, Instant toDate) {
         return movementRepository.findByTenantIdAndCompanyIdAndDateRange(tenantId, companyId, fromDate, toDate);
     }
 
-    /**
-     * Record an IN movement (receiving stock).
-     */
+    // ─── IN ─────────────────────────────────────────────────────────────────────
+
     @Transactional(rollbackFor = Exception.class)
     public InventoryMovementEntity recordInMovement(UUID materialId, UUID warehouseId, BigDecimal quantity,
                                                      String unit, String batchNo, String reason, String createdBy,
@@ -91,11 +113,27 @@ public class InventoryMovementService {
                                                      String unit, String batchNo, String reason, String createdBy,
                                                      String referenceType, UUID referenceId, UUID inventoryId,
                                                      String notes, UUID tenantId, UUID companyId) {
+        if (quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0)
+            throw new InventoryException("IN quantity must be positive");
+
         Material material = materialRepository.findById(materialId)
                 .orElseThrow(() -> new InventoryException("Material not found: " + materialId));
         WarehouseEntity warehouse = warehouseRepository.findById(warehouseId)
                 .orElseThrow(() -> new InventoryException("Warehouse not found: " + warehouseId));
 
+        // ── update inventory ────────────────────────────────────────────────────
+        InventoryEntity inv;
+        if (inventoryId != null) {
+            inv = inventoryRepository.findById(inventoryId)
+                    .orElseGet(() -> findOrCreateInventory(material, warehouse, batchNo, tenantId, companyId));
+        } else {
+            inv = findOrCreateInventory(material, warehouse, batchNo, tenantId, companyId);
+        }
+        // Only update quantityOnHand — quantityTotal is NOT changed by movements
+        inv.setQuantityOnHand((inv.getQuantityOnHand() == null ? BigDecimal.ZERO : inv.getQuantityOnHand()).add(quantity));
+        InventoryEntity savedInv = inventoryRepository.save(inv);
+
+        // ── record movement ─────────────────────────────────────────────────────
         InventoryMovementEntity movement = new InventoryMovementEntity();
         movement.setTenantId(tenantId);
         movement.setCompanyId(companyId);
@@ -107,18 +145,16 @@ public class InventoryMovementService {
         movement.setReason(reason);
         movement.setReferenceType(referenceType);
         movement.setReferenceId(referenceId);
-        movement.setInventoryId(inventoryId);
+        movement.setInventoryId(savedInv.getId());
         movement.setBatchNo(batchNo);
         movement.setCreatedBy(createdBy);
         movement.setNotes(notes);
         movement.setStatus("COMPLETED");
-
         return movementRepository.save(movement);
     }
 
-    /**
-     * Record an OUT movement (issuing stock).
-     */
+    // ─── OUT ────────────────────────────────────────────────────────────────────
+
     @Transactional(rollbackFor = Exception.class)
     public InventoryMovementEntity recordOutMovement(UUID materialId, UUID warehouseId, BigDecimal quantity,
                                                       String unit, String batchNo, String reason, String createdBy,
@@ -133,11 +169,48 @@ public class InventoryMovementService {
                                                       String unit, String batchNo, String reason, String createdBy,
                                                       String referenceType, UUID referenceId, UUID inventoryId,
                                                       String notes, UUID tenantId, UUID companyId) {
+        if (quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0)
+            throw new InventoryException("OUT quantity must be positive");
+
         Material material = materialRepository.findById(materialId)
                 .orElseThrow(() -> new InventoryException("Material not found: " + materialId));
         WarehouseEntity warehouse = warehouseRepository.findById(warehouseId)
                 .orElseThrow(() -> new InventoryException("Warehouse not found: " + warehouseId));
 
+        // ── update inventory ────────────────────────────────────────────────────
+        InventoryEntity inv;
+        if (inventoryId != null) {
+            inv = inventoryRepository.findById(inventoryId)
+                    .orElseGet(() -> findInventory(material, warehouse, batchNo)
+                            .orElseThrow(() -> new InventoryException("Inventory row not found for OUT movement")));
+        } else {
+            inv = findInventory(material, warehouse, batchNo)
+                    .orElseThrow(() -> new InventoryException(
+                            "No inventory found for material " + material.getMaterialCode()
+                            + " in warehouse " + warehouse.getCode()
+                            + (batchNo != null ? " batch " + batchNo : "")));
+        }
+
+        BigDecimal onHand = inv.getQuantityOnHand() == null ? BigDecimal.ZERO : inv.getQuantityOnHand();
+        BigDecimal reserved = inv.getQuantityReserved() == null ? BigDecimal.ZERO : inv.getQuantityReserved();
+        BigDecimal available = onHand.subtract(reserved);
+
+        if (available.compareTo(quantity) < 0) {
+            throw new InventoryException(String.format(
+                    "Insufficient available quantity for OUT movement. Available: %s, Requested: %s (onHand=%s, reserved=%s)",
+                    available.toPlainString(), quantity.toPlainString(),
+                    onHand.toPlainString(), reserved.toPlainString()));
+        }
+
+        inv.setQuantityOnHand(onHand.subtract(quantity));
+        // Release any reserved portion consumed by this OUT
+        if (reserved.compareTo(BigDecimal.ZERO) > 0) {
+            BigDecimal releaseAmt = reserved.min(quantity);
+            inv.setQuantityReserved(reserved.subtract(releaseAmt));
+        }
+        InventoryEntity savedInv = inventoryRepository.save(inv);
+
+        // ── record movement ─────────────────────────────────────────────────────
         InventoryMovementEntity movement = new InventoryMovementEntity();
         movement.setTenantId(tenantId);
         movement.setCompanyId(companyId);
@@ -149,23 +222,24 @@ public class InventoryMovementService {
         movement.setReason(reason);
         movement.setReferenceType(referenceType);
         movement.setReferenceId(referenceId);
-        movement.setInventoryId(inventoryId);
+        movement.setInventoryId(savedInv.getId());
         movement.setBatchNo(batchNo);
         movement.setCreatedBy(createdBy);
         movement.setNotes(notes);
         movement.setStatus("COMPLETED");
-
         return movementRepository.save(movement);
     }
 
-    /**
-     * Record a TRANSFER movement between warehouses.
-     */
+    // ─── TRANSFER ───────────────────────────────────────────────────────────────
+
     @Transactional(rollbackFor = Exception.class)
     public InventoryMovementEntity recordTransferMovement(UUID materialId, UUID fromWarehouseId, UUID toWarehouseId,
                                                            BigDecimal quantity, String unit, String batchNo,
                                                            String reason, String createdBy, String notes,
                                                            UUID tenantId, UUID companyId) {
+        if (quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0)
+            throw new InventoryException("TRANSFER quantity must be positive");
+
         Material material = materialRepository.findById(materialId)
                 .orElseThrow(() -> new InventoryException("Material not found: " + materialId));
         WarehouseEntity fromWarehouse = warehouseRepository.findById(fromWarehouseId)
@@ -173,6 +247,31 @@ public class InventoryMovementService {
         WarehouseEntity toWarehouse = warehouseRepository.findById(toWarehouseId)
                 .orElseThrow(() -> new InventoryException("To warehouse not found: " + toWarehouseId));
 
+        // ── deduct from source ──────────────────────────────────────────────────
+        InventoryEntity srcInv = findInventory(material, fromWarehouse, batchNo)
+                .orElseThrow(() -> new InventoryException(
+                        "No inventory found for material " + material.getMaterialCode()
+                        + " in source warehouse " + fromWarehouse.getCode()
+                        + (batchNo != null ? " batch " + batchNo : "")));
+
+        BigDecimal srcOnHand  = srcInv.getQuantityOnHand() == null ? BigDecimal.ZERO : srcInv.getQuantityOnHand();
+        BigDecimal srcReserved = srcInv.getQuantityReserved() == null ? BigDecimal.ZERO : srcInv.getQuantityReserved();
+        BigDecimal srcAvailable = srcOnHand.subtract(srcReserved);
+
+        if (srcAvailable.compareTo(quantity) < 0) {
+            throw new InventoryException(String.format(
+                    "Insufficient available quantity for TRANSFER. Available: %s, Requested: %s",
+                    srcAvailable.toPlainString(), quantity.toPlainString()));
+        }
+        srcInv.setQuantityOnHand(srcOnHand.subtract(quantity));
+        inventoryRepository.save(srcInv);
+
+        // ── add to destination — only quantityOnHand, NOT quantityTotal ──────────
+        InventoryEntity dstInv = findOrCreateInventory(material, toWarehouse, batchNo, tenantId, companyId);
+        dstInv.setQuantityOnHand((dstInv.getQuantityOnHand() == null ? BigDecimal.ZERO : dstInv.getQuantityOnHand()).add(quantity));
+        inventoryRepository.save(dstInv);
+
+        // ── record movement ─────────────────────────────────────────────────────
         InventoryMovementEntity movement = new InventoryMovementEntity();
         movement.setTenantId(tenantId);
         movement.setCompanyId(companyId);
@@ -187,32 +286,45 @@ public class InventoryMovementService {
         movement.setCreatedBy(createdBy);
         movement.setNotes(notes);
         movement.setStatus("COMPLETED");
-
         return movementRepository.save(movement);
     }
 
-    /**
-     * Record an ADJUSTMENT movement (inventory correction).
-     */
+    // ─── ADJUSTMENT ─────────────────────────────────────────────────────────────
+
     @Transactional(rollbackFor = Exception.class)
     public InventoryMovementEntity recordAdjustmentMovement(UUID materialId, UUID warehouseId, BigDecimal quantity,
                                                              String unit, String batchNo, String reason, String createdBy,
                                                              String notes, UUID tenantId, UUID companyId) {
+        if (quantity == null)
+            throw new InventoryException("ADJUSTMENT quantity must not be null");
+
         Material material = materialRepository.findById(materialId)
                 .orElseThrow(() -> new InventoryException("Material not found: " + materialId));
         WarehouseEntity warehouse = warehouseRepository.findById(warehouseId)
                 .orElseThrow(() -> new InventoryException("Warehouse not found: " + warehouseId));
 
+        // ── update inventory ────────────────────────────────────────────────────
+        InventoryEntity inv = findInventory(material, warehouse, batchNo)
+                .orElseGet(() -> findOrCreateInventory(material, warehouse, batchNo, tenantId, companyId));
+
+        BigDecimal current = inv.getQuantityOnHand() == null ? BigDecimal.ZERO : inv.getQuantityOnHand();
+        BigDecimal newOnHand = current.add(quantity);   // quantity may be negative (downward adjustment)
+        if (newOnHand.compareTo(BigDecimal.ZERO) < 0)
+            throw new InventoryException("Adjustment would result in negative on-hand quantity (" + newOnHand.toPlainString() + ")");
+
+        inv.setQuantityOnHand(newOnHand);
+        InventoryEntity savedInv = inventoryRepository.save(inv);
+
+        // ── record movement ─────────────────────────────────────────────────────
         InventoryMovementEntity movement = new InventoryMovementEntity();
         movement.setTenantId(tenantId);
         movement.setCompanyId(companyId);
         movement.setMaterial(material);
-        // For adjustments, positive qty -> to_warehouse, negative qty -> from_warehouse
+        // Positive adjustment → to_warehouse; negative → from_warehouse
         if (quantity.compareTo(BigDecimal.ZERO) >= 0) {
             movement.setToWarehouse(warehouse);
         } else {
             movement.setFromWarehouse(warehouse);
-            movement.setQuantity(quantity.abs());
         }
         movement.setQuantity(quantity.abs());
         movement.setUnit(unit != null ? unit : "pcs");
@@ -221,10 +333,12 @@ public class InventoryMovementService {
         movement.setBatchNo(batchNo);
         movement.setCreatedBy(createdBy);
         movement.setNotes(notes);
+        movement.setInventoryId(savedInv.getId());
         movement.setStatus("COMPLETED");
-
         return movementRepository.save(movement);
     }
+
+    // ─── IMPORT ─────────────────────────────────────────────────────────────────
 
     @Transactional(rollbackFor = Exception.class)
     public InventoryMovementEntity recordImportMovement(UUID materialId, UUID warehouseId, BigDecimal quantity,
@@ -234,12 +348,6 @@ public class InventoryMovementService {
                 inventoryId, null, tenantId, companyId);
     }
 
-    /**
-     * Record an IMPORT movement (from CSV import or manual add with optional invoice).
-     *
-     * @param inventoryId  the inventory row UUID (stored in inventory_id column)
-     * @param invoiceId    optional invoice UUID (stored in reference_id, referenceType = "INVOICE")
-     */
     @Transactional(rollbackFor = Exception.class)
     public InventoryMovementEntity recordImportMovement(UUID materialId, UUID warehouseId, BigDecimal quantity,
                                                          String unit, String batchNo, String createdBy,
@@ -250,6 +358,8 @@ public class InventoryMovementService {
         WarehouseEntity warehouse = warehouseRepository.findById(warehouseId)
                 .orElseThrow(() -> new InventoryException("Warehouse not found: " + warehouseId));
 
+        // ── inventory row is already created/updated by InventoryImportService;
+        //    just stamp the inventoryId on the movement ──────────────────────────
         InventoryMovementEntity movement = new InventoryMovementEntity();
         movement.setTenantId(tenantId);
         movement.setCompanyId(companyId);
@@ -265,20 +375,15 @@ public class InventoryMovementService {
         movement.setBatchNo(batchNo);
         movement.setCreatedBy(createdBy);
         movement.setStatus("COMPLETED");
-
         return movementRepository.save(movement);
     }
 
-    /**
-     * Get movement by ID.
-     */
+    // ─── misc ────────────────────────────────────────────────────────────────────
+
     public InventoryMovementEntity getById(UUID id) {
         return movementRepository.findById(id).orElse(null);
     }
 
-    /**
-     * Delete movement by ID.
-     */
     @Transactional(rollbackFor = Exception.class)
     public void delete(UUID id) {
         movementRepository.deleteById(id);

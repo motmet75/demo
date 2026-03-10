@@ -46,7 +46,7 @@ public interface InventoryRepository extends JpaRepository<InventoryEntity, UUID
     // Projection for grid display: join Inventory -> Material -> Warehouse in one query to avoid N+1
     @Query("SELECT new com.ams.bomcore.controller.inventory.dto.InventoryViewDTO("
             + "i.id, i.tenantId, i.companyId, m.id, m.materialCode, m.materialName, w.id, w.code, w.name, "
-            + "i.quantityOnHand, i.quantityReserved, i.quantityLocked, i.batchNo, i.contractCode, i.unit, i.unitPrice, i.currency, "
+            + "i.quantityOnHand, i.quantityTotal, i.quantityReserved, i.quantityLocked, i.batchNo, i.contractCode, i.unit, i.unitPrice, i.currency, "
             + "i.expirationDateTime, i.productionDateTime, i.createdAt, i.visible, i.approved, i.locked) "
             + "FROM InventoryEntity i "
             + "JOIN i.material m "
@@ -57,7 +57,7 @@ public interface InventoryRepository extends JpaRepository<InventoryEntity, UUID
     // New: projection for tenant+company-scoped inventory view
     @Query("SELECT new com.ams.bomcore.controller.inventory.dto.InventoryViewDTO("
             + "i.id, i.tenantId, i.companyId, m.id, m.materialCode, m.materialName, w.id, w.code, w.name, "
-            + "i.quantityOnHand, i.quantityReserved, i.quantityLocked, i.batchNo, i.contractCode, i.unit, i.unitPrice, i.currency, "
+            + "i.quantityOnHand, i.quantityTotal, i.quantityReserved, i.quantityLocked, i.batchNo, i.contractCode, i.unit, i.unitPrice, i.currency, "
             + "i.expirationDateTime, i.productionDateTime, i.createdAt, i.visible, i.approved, i.locked) "
             + "FROM InventoryEntity i "
             + "JOIN i.material m "
@@ -68,7 +68,7 @@ public interface InventoryRepository extends JpaRepository<InventoryEntity, UUID
     // New: projection filtered by companyId only
     @Query("SELECT new com.ams.bomcore.controller.inventory.dto.InventoryViewDTO("
             + "i.id, i.tenantId, i.companyId, m.id, m.materialCode, m.materialName, w.id, w.code, w.name, "
-            + "i.quantityOnHand, i.quantityReserved, i.quantityLocked, i.batchNo, i.contractCode, i.unit, i.unitPrice, i.currency, "
+            + "i.quantityOnHand, i.quantityTotal, i.quantityReserved, i.quantityLocked, i.batchNo, i.contractCode, i.unit, i.unitPrice, i.currency, "
             + "i.expirationDateTime, i.productionDateTime, i.createdAt, i.visible, i.approved, i.locked) "
             + "FROM InventoryEntity i "
             + "JOIN i.material m "

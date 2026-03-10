@@ -101,6 +101,27 @@ export default function BomGrid() {
   const [actionLoading, setActionLoading] = useState({})
 
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 20 })
+  const [selectionModel, setSelectionModel] = useState({ type: 'include', ids: new Set() })
+
+  // filter state
+  const [filterModelCode, setFilterModelCode] = useState('')
+  const [filterStatus, setFilterStatus] = useState('')
+  const [filterCreatedFrom, setFilterCreatedFrom] = useState('')
+  const [filterCreatedTo, setFilterCreatedTo] = useState('')
+  const [createdRangePreset, setCreatedRangePreset] = useState('')
+
+  const toDatetimeLocal = (d) => { const p = n => String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}` }
+  const applyCreatedRangePreset = (preset) => {
+    setCreatedRangePreset(preset)
+    if (!preset) { setFilterCreatedFrom(''); setFilterCreatedTo(''); return }
+    const now = new Date()
+    const ts = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0)
+    const te = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59)
+    if (preset === 'today') { setFilterCreatedFrom(toDatetimeLocal(ts)); setFilterCreatedTo(toDatetimeLocal(te)) }
+    else if (preset === 'yesterday') { const ys=new Date(ts); ys.setDate(ys.getDate()-1); const ye=new Date(te); ye.setDate(ye.getDate()-1); setFilterCreatedFrom(toDatetimeLocal(ys)); setFilterCreatedTo(toDatetimeLocal(ye)) }
+    else if (preset === 'this_week') { const ws=new Date(ts); ws.setDate(ws.getDate()-now.getDay()); setFilterCreatedFrom(toDatetimeLocal(ws)); setFilterCreatedTo(toDatetimeLocal(te)) }
+    else if (preset.startsWith('last_')) { const d=parseInt(preset.replace('last_',''),10); const f=new Date(ts); f.setDate(f.getDate()-(d-1)); setFilterCreatedFrom(toDatetimeLocal(f)); setFilterCreatedTo(toDatetimeLocal(te)) }
+  }
 
   // ── Load ──────────────────────────────────────────────────────────
   const load = useCallback(async () => {
@@ -237,6 +258,31 @@ export default function BomGrid() {
 
   const noCtx = !tenantId || !companyId
 
+  const filteredRows = rows.filter(r => {
+    const s = v => (v==null?'':String(v)).toLowerCase()
+    if (filterModelCode && !s(r.modelCode).includes(filterModelCode.toLowerCase())) return false
+    if (filterStatus && r.status !== filterStatus) return false
+    if (filterCreatedFrom || filterCreatedTo) {
+      const d = r.createdAt ? new Date(r.createdAt) : null
+      if (!d || isNaN(d)) return false
+      if (filterCreatedFrom && d < new Date(filterCreatedFrom)) return false
+      if (filterCreatedTo   && d > new Date(filterCreatedTo))   return false
+    }
+    return true
+  })
+
+  const filteredIds = new Set(filteredRows.map(r => r.id))
+  const selectedIds = selectionModel.type === 'exclude'
+    ? filteredRows.map(r => r.id).filter(id => !selectionModel.ids.has(id))
+    : Array.from(selectionModel.ids ?? []).filter(id => filteredIds.has(id))
+
+  const handleSelectionModelChange = (model) => {
+    if (model && model.type === 'exclude') {
+      const excluded = model.ids ?? new Set()
+      setSelectionModel({ type: 'include', ids: new Set(filteredRows.map(r => r.id).filter(id => !excluded.has(id))) })
+    } else { setSelectionModel(model) }
+  }
+
   return (
     <Box>
       {/* ── Toolbar ─────────────────────────────────────────────── */}
@@ -248,17 +294,62 @@ export default function BomGrid() {
         </Button>
       </Box>
 
+      {/* Filter bar */}
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2, alignItems: 'flex-end' }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+          <Typography variant="caption" color="text.secondary">Model Code</Typography>
+          <input value={filterModelCode} onChange={e => setFilterModelCode(e.target.value)} placeholder="Filter Model Code" style={{ fontSize: 12, padding: '3px 6px', width: 140 }} />
+        </Box>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+          <Typography variant="caption" color="text.secondary">Status</Typography>
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ fontSize: 12, padding: '3px 6px', height: 24 }}>
+            <option value="">All</option>
+            {['DRAFT','ACTIVE','ARCHIVED'].map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </Box>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+          <Typography variant="caption" color="text.secondary">Quick Range</Typography>
+          <select value={createdRangePreset} onChange={e => applyCreatedRangePreset(e.target.value)} style={{ fontSize: 12, padding: '3px 6px', height: 24 }}>
+            <option value="">— All —</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="this_week">This Week</option>
+            <option value="last_7">Last 7 Days</option>
+            <option value="last_14">Last 14 Days</option>
+            <option value="last_30">Last 30 Days</option>
+            <option value="last_60">Last 60 Days</option>
+            <option value="last_90">Last 90 Days</option>
+          </select>
+        </Box>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+          <Typography variant="caption" color="text.secondary">Created From</Typography>
+          <input type="datetime-local" value={filterCreatedFrom} onChange={e => { setCreatedRangePreset(''); setFilterCreatedFrom(e.target.value) }} style={{ fontSize: 12, padding: '3px 6px' }} />
+        </Box>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+          <Typography variant="caption" color="text.secondary">Created To</Typography>
+          <input type="datetime-local" value={filterCreatedTo} onChange={e => { setCreatedRangePreset(''); setFilterCreatedTo(e.target.value) }} style={{ fontSize: 12, padding: '3px 6px' }} />
+        </Box>
+        <Button size="small" variant="outlined" sx={{ alignSelf: 'flex-end' }}
+          onClick={() => { setFilterModelCode(''); setFilterStatus(''); setFilterCreatedFrom(''); setFilterCreatedTo(''); setCreatedRangePreset('') }}>
+          Clear
+        </Button>
+        <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'flex-end' }}>{filteredRows.length} / {rows.length}</Typography>
+      </Box>
+
       {noCtx && <Alert severity="warning" sx={{ mb: 2 }}>Select Tenant and Company to manage BOMs.</Alert>}
       {error  && <Alert severity="error"  sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
 
       <DataGrid
-        rows={rows}
+        rows={filteredRows}
         columns={columns}
         loading={loading}
         paginationModel={paginationModel}
         onPaginationModelChange={setPaginationModel}
         pageSizeOptions={[10, 20, 50]}
-        disableRowSelectionOnClick
+        checkboxSelection
+        rowSelectionModel={selectionModel}
+        onRowSelectionModelChange={handleSelectionModelChange}
+        disableRowSelectionOnClick={false}
         autoHeight
         sx={{ background: '#fff', borderRadius: 2 }}
       />
