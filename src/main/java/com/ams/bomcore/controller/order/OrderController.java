@@ -55,7 +55,7 @@ import com.ams.bomcore.service.order.exception.QuotaExceededException;
  * Multi-tenant: tenant + company resolved from headers (X-Tenant-Id, X-Company-Id)
  * or query params, following the same pattern as MaterialController.
  */
-@CrossOrigin(origins = "http://localhost:5173")
+@CrossOrigin(origins = {"http://localhost:5173", "http://15.165.215.69:5173"})
 @RestController
 @RequestMapping("/api/orders")
 public class OrderController {

@@ -21,6 +21,14 @@ public class CorsConfig {
                         .allowedMethods("GET","POST","PUT","DELETE","OPTIONS")
                         .allowedHeaders("*")
                         .allowCredentials(true);
+                registry.addMapping("/api/orders/**")
+                .allowedOrigins(
+                    "http://localhost:5173",
+                    "http://15.165.215.69:5173"
+                )
+                .allowedMethods("GET","POST","PUT","DELETE","OPTIONS")
+                .allowedHeaders("*")
+                .allowCredentials(true);
             }
         };
     }

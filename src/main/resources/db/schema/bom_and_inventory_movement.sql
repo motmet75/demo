@@ -147,6 +147,7 @@ CREATE TABLE public.inventory_movement (
     
     reference_type      character varying(50),
     reference_id        uuid,
+    inventory_id        uuid,
     batch_no            character varying(50),
     production_batch_id uuid,
     
