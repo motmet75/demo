@@ -1,7 +1,7 @@
 import { apiFetch, apiFetchJson } from './client'
 
 export async function fetchMaterials() {
-  const { res, data } = await apiFetchJson('/api/bom/materials')
+  const { res, data } = await apiFetchJson('/bom/materials')
   if (!res.ok) return []
 
   if (Array.isArray(data)) return data

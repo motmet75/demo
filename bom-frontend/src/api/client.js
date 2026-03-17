@@ -15,10 +15,21 @@ export function getContextHeaders() {
   }
 }
 
+/**
+ * Ensure every relative URL goes through the /api proxy.
+ * Skips URLs that already start with /api or are absolute (http/https).
+ */
+function withApiPrefix(url) {
+  if (!url || url.startsWith('http://') || url.startsWith('https://') || url.startsWith('/api')) {
+    return url
+  }
+  return '/api' + url
+}
+
 export async function apiFetch(url, opts = {}) {
   const headers = Object.assign({}, opts.headers || {}, getContextHeaders())
   const final = Object.assign({}, opts, { headers })
-  return fetch(url, final)
+  return fetch(withApiPrefix(url), final)
 }
 
 export async function apiFetchJson(url, opts = {}) {
