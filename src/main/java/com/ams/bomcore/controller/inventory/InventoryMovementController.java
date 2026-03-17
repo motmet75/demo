@@ -32,7 +32,7 @@ import jakarta.validation.Valid;
  */
 @CrossOrigin(origins = "http://localhost:5173")
 @RestController
-@RequestMapping("/bom/api/inventory-movements")
+@RequestMapping("/bom/inventory-movements")
 public class InventoryMovementController {
 
     private final InventoryMovementService movementService;

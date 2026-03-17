@@ -1,3 +1,5 @@
+import { apiFetch } from './client'
+
 export async function fetchSuppliers(options = {}) {
   // options: { tenantId, companyId }
   const headers = {};
@@ -7,9 +9,9 @@ export async function fetchSuppliers(options = {}) {
   const params = new URLSearchParams();
   if (options.tenantId) params.set('tenantId', String(options.tenantId));
   if (options.companyId) params.set('companyId', String(options.companyId));
-  const url = '/bom/api/suppliers' + (params.toString() ? `?${params.toString()}` : '');
+  const url = '/bom/suppliers' + (params.toString() ? `?${params.toString()}` : '');
 
-  const res = await fetch(url, { headers });
+  const res = await apiFetch(url, { headers });
   const text = await res.text()
   let data = null
   try {
@@ -37,9 +39,9 @@ export async function createSupplier(payload, options = {}) {
   const params = new URLSearchParams();
   if (options.tenantId) params.set('tenantId', String(options.tenantId));
   if (options.companyId) params.set('companyId', String(options.companyId));
-  const url = '/bom/api/suppliers' + (params.toString() ? `?${params.toString()}` : '');
+  const url = '/bom/suppliers' + (params.toString() ? `?${params.toString()}` : '');
 
-  const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) })
+  const res = await apiFetch(url, { method: 'POST', headers, body: JSON.stringify(payload) })
   const text = await res.text()
   let data = null
   try {
@@ -64,13 +66,13 @@ export async function updateSupplier(id, payload, options = {}) {
   const params = new URLSearchParams();
   if (options.tenantId) params.set('tenantId', String(options.tenantId));
   if (options.companyId) params.set('companyId', String(options.companyId));
-  const url = `/bom/api/suppliers/${encodeURIComponent(id)}` + (params.toString() ? `?${params.toString()}` : '');
+  const url = `/bom/suppliers/${encodeURIComponent(id)}` + (params.toString() ? `?${params.toString()}` : '');
 
   const headers = { 'Content-Type': 'application/json' };
   if (options.tenantId) headers['X-Tenant-Id'] = String(options.tenantId);
   if (options.companyId) headers['X-Company-Id'] = String(options.companyId);
 
-  const res = await fetch(url, { method: 'PUT', headers, body: JSON.stringify(payload) })
+  const res = await apiFetch(url, { method: 'PUT', headers, body: JSON.stringify(payload) })
   const text = await res.text()
   let data = null
   try {
@@ -95,13 +97,13 @@ export async function deleteSupplier(id, options = {}) {
   const params = new URLSearchParams();
   if (options.tenantId) params.set('tenantId', String(options.tenantId));
   if (options.companyId) params.set('companyId', String(options.companyId));
-  const url = `/bom/api/suppliers/${encodeURIComponent(id)}` + (params.toString() ? `?${params.toString()}` : '');
+  const url = `/bom/suppliers/${encodeURIComponent(id)}` + (params.toString() ? `?${params.toString()}` : '');
 
   const headers = {};
   if (options.tenantId) headers['X-Tenant-Id'] = String(options.tenantId);
   if (options.companyId) headers['X-Company-Id'] = String(options.companyId);
 
-  const res = await fetch(url, { method: 'DELETE', headers })
+  const res = await apiFetch(url, { method: 'DELETE', headers })
   const text = await res.text()
   let data = null
   try {

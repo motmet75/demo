@@ -3,13 +3,11 @@ package com.ams.bomcore.controller.material;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
-import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 import java.util.Optional;
 
 import jakarta.validation.Valid;
@@ -55,7 +53,7 @@ import com.ams.bomcore.service.material.MaterialService;
  */
 @CrossOrigin(origins = "http://localhost:5173")
 @RestController
-@RequestMapping("/bom/api/materials")
+@RequestMapping("/bom/materials")
 public class MaterialController {
 
     private final MaterialService materialService;

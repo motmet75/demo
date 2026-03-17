@@ -1,7 +1,7 @@
 import { apiFetch, apiFetchJson } from './client'
 
 export async function fetchMaterials() {
-  const { res, data } = await apiFetchJson('/bom/api/materials')
+  const { res, data } = await apiFetchJson('/api/bom/materials')
   if (!res.ok) return []
 
   if (Array.isArray(data)) return data
@@ -14,13 +14,13 @@ export async function fetchMaterials() {
 }
 
 export async function createMaterial(payload) {
-  const { res, data } = await apiFetchJson('/bom/api/materials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+  const { res, data } = await apiFetchJson('/api/bom/materials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
   if (!res.ok) throw new Error((data && data.message) || 'Create failed')
   return data
 }
 
 export async function updateMaterial(id, payload) {
-  const url = `/bom/api/materials/${encodeURIComponent(id)}`
+  const url = `/api/bom/materials/${encodeURIComponent(id)}`
   const { res, data } = await apiFetchJson(url, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -39,7 +39,7 @@ export async function updateMaterial(id, payload) {
 }
 
 export async function deleteMaterial(id) {
-  const url = `/bom/api/materials/${encodeURIComponent(id)}`
+  const url = `/api/bom/materials/${encodeURIComponent(id)}`
   const res = await apiFetch(url, { method: 'DELETE' })
   const text = await res.text()
   let data = null
@@ -57,7 +57,7 @@ export async function deleteMaterial(id) {
 export async function importMaterials(file) {
   const form = new FormData()
   form.append('file', file)
-  const res = await apiFetch('/bom/api/materials/import', { method: 'POST', body: form })
+  const res = await apiFetch('/api/bom/materials/import', { method: 'POST', body: form })
   if (!res.ok) {
     const text = await res.text()
     throw new Error(text || 'Upload failed')

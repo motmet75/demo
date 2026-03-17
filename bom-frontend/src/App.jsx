@@ -26,7 +26,7 @@ import ConsumptionPage from './features/consumption/ConsumptionPage'
 export default function App() {
   return (
     <AppProvider>
-      <BrowserRouter>
+      <BrowserRouter basename="/bom-inventory">
         <div style={{ padding: 20 }}>
           <h1>BOM System</h1>
 

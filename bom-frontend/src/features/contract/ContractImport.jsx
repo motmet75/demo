@@ -10,7 +10,7 @@ export default function ContractImport() {
     const fd = new FormData()
     fd.append('file', file)
     try {
-      const res = await apiFetch('/bom/api/contracts/import', { method: 'POST', body: fd })
+      const res = await apiFetch('/bom/contracts/import', { method: 'POST', body: fd })
       const json = await res.json()
       setResult(json)
       alert('Import completed: ' + (json && json.message ? json.message : 'Done'))

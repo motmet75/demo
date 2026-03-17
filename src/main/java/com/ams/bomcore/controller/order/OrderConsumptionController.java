@@ -21,7 +21,7 @@ import com.ams.bomcore.repository.OrderConsumptionRepository;
  */
 @CrossOrigin(origins = "http://localhost:5173")
 @RestController
-@RequestMapping("/bom/api/order-consumption")
+@RequestMapping("/bom/order-consumption")
 public class OrderConsumptionController {
 
     private final OrderConsumptionRepository repository;

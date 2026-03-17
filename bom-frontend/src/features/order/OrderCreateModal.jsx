@@ -53,7 +53,7 @@ export default function OrderCreateModal({ open, onClose, onCreated }) {
   useEffect(() => {
     if (!open) return
     fetchMaterials().then(d => setMaterials(Array.isArray(d) ? d : [])).catch(() => {})
-    apiFetchJson('/bom/api/models').then(({ data }) => {
+    apiFetchJson('/bom/models').then(({ data }) => {
       const list = Array.isArray(data) ? data : (data && Array.isArray(data.content) ? data.content : [])
       setModels(list)
     }).catch(() => {})
@@ -105,7 +105,7 @@ export default function OrderCreateModal({ open, onClose, onCreated }) {
           notes:          l.notes || null
         }))
       }
-      const { res, data } = await apiFetchJson('/api/orders', {
+      const { res, data } = await apiFetchJson('/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)

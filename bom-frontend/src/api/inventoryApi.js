@@ -1,7 +1,7 @@
 import { apiFetch, apiFetchJson } from './client'
 
 export async function fetchInventory() {
-  const { res, data } = await apiFetchJson('/bom/api/inventory')
+  const { res, data } = await apiFetchJson('/bom/inventory')
   if (!res.ok) return []
 
   if (Array.isArray(data)) return data
@@ -14,13 +14,13 @@ export async function fetchInventory() {
 }
 
 export async function fetchInventoryView() {
-  const { res, data } = await apiFetchJson('/bom/api/inventory/view')
+  const { res, data } = await apiFetchJson('/bom/inventory/view')
   if (!res.ok) return []
   return Array.isArray(data) ? data : (data && Array.isArray(data.data) ? data.data : [])
 }
 
 export async function addStock(payload) {
-  const { res } = await apiFetchJson('/bom/api/inventory', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+  const { res } = await apiFetchJson('/bom/inventory', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
   if (!res.ok) {
     const text = await res.text()
     throw new Error(text || 'Add stock failed')
@@ -29,7 +29,7 @@ export async function addStock(payload) {
 }
 
 export async function updateInventory(id, payload) {
-  const url = `/bom/api/inventory/${encodeURIComponent(id)}`
+  const url = `/bom/inventory/${encodeURIComponent(id)}`
   const { res, data } = await apiFetchJson(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
   if (!res.ok) {
     const message = (data && data.message) || (typeof data === 'string' ? data : res.statusText) || `Request failed with status ${res.status}`
@@ -42,7 +42,7 @@ export async function updateInventory(id, payload) {
 }
 
 export async function reserveInventory(id, qty) {
-  const url = `/bom/api/inventory/${encodeURIComponent(id)}/reserve`
+  const url = `/bom/inventory/${encodeURIComponent(id)}/reserve`
   const { res, data } = await apiFetchJson(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ quantity: qty }) })
   if (!res.ok) {
     throw new Error((data && data.message) || 'Reserve failed')
@@ -51,7 +51,7 @@ export async function reserveInventory(id, qty) {
 }
 
 export async function releaseInventory(id, qty) {
-  const url = `/bom/api/inventory/${encodeURIComponent(id)}/release`
+  const url = `/bom/inventory/${encodeURIComponent(id)}/release`
   const { res, data } = await apiFetchJson(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ quantity: qty }) })
   if (!res.ok) {
     throw new Error((data && data.message) || 'Release failed')
@@ -62,7 +62,7 @@ export async function releaseInventory(id, qty) {
 export async function importInventory(file) {
   const form = new FormData()
   form.append('file', file)
-  const res = await apiFetch('/bom/api/inventory/import', { method: 'POST', body: form })
+  const res = await apiFetch('/bom/inventory/import', { method: 'POST', body: form })
   if (!res.ok) {
     const text = await res.text()
     throw new Error(text || 'Upload failed')
@@ -71,7 +71,7 @@ export async function importInventory(file) {
 }
 
 export async function deleteInventory(id) {
-  const url = `/bom/api/inventory/${encodeURIComponent(id)}`
+  const url = `/bom/inventory/${encodeURIComponent(id)}`
   const { res } = await apiFetchJson(url, { method: 'DELETE' })
   if (!res.ok) throw new Error(`Failed to delete inventory: ${res.status}`)
 }

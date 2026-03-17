@@ -1,6 +1,6 @@
 import { apiFetch, apiFetchJson } from './client'
 
-const BASE = '/bom/api/invoices'
+const BASE = '/bom/invoices'
 
 export async function fetchInvoices({ invoiceType, status, page = 0, size = 20 } = {}, options = {}) {
   const params = new URLSearchParams()

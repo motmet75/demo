@@ -57,7 +57,7 @@ import com.ams.bomcore.service.order.exception.QuotaExceededException;
  */
 @CrossOrigin(origins = {"http://localhost:5173", "http://15.165.215.69:5173"})
 @RestController
-@RequestMapping("/api/orders")
+@RequestMapping("/orders")
 public class OrderController {
 
     private final OrderService orderService;

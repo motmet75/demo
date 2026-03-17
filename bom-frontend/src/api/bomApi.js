@@ -1,6 +1,6 @@
 import { apiFetchJson } from './client'
 
-const BASE = '/bom/api/bom-crud'
+const BASE = '/bom/bom-crud'
 
 function ctx(opts = {}) {
   // attach context headers from client.js automatically via apiFetchJson

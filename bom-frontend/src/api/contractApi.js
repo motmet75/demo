@@ -9,7 +9,7 @@ function buildUrl(base, params = {}) {
 }
 
 export async function fetchContracts() {
-  const { res, data } = await apiFetchJson('/bom/api/contracts')
+  const { res, data } = await apiFetchJson('/bom/contracts')
   if (!res.ok) {
     const text = typeof data === 'string' ? data : JSON.stringify(data)
     throw new Error('Failed to fetch contracts: ' + res.status + ' ' + text)
@@ -18,7 +18,7 @@ export async function fetchContracts() {
 }
 
 export async function updateContract(id, payload) {
-  const url = buildUrl(`/bom/api/contracts/${encodeURIComponent(id)}`, { tenantId: payload.tenantId, companyId: payload.companyId })
+  const url = buildUrl(`/bom/contracts/${encodeURIComponent(id)}`, { tenantId: payload.tenantId, companyId: payload.companyId })
   const body = { ...payload }
   // remove the transient helper ids from body
   delete body.tenantId
@@ -35,7 +35,7 @@ export async function updateContract(id, payload) {
 }
 
 export async function deleteContract(id) {
-  const res = await apiFetch('/bom/api/contracts/' + id, { method: 'DELETE' })
+  const res = await apiFetch('/bom/contracts/' + id, { method: 'DELETE' })
   if (!res.ok && res.status !== 204) {
     const text = await res.text()
     throw new Error('Failed to delete: ' + res.status + ' ' + text)
@@ -44,7 +44,7 @@ export async function deleteContract(id) {
 }
 
 export async function createContract(payload) {
-  const url = buildUrl('/bom/api/contracts', { tenantId: payload.tenantId, companyId: payload.companyId })
+  const url = buildUrl('/bom/contracts', { tenantId: payload.tenantId, companyId: payload.companyId })
   const body = { ...payload }
   delete body.tenantId
   delete body.companyId

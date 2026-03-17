@@ -44,7 +44,7 @@ import com.ams.bomcore.service.contract.ContractService;
 
 @CrossOrigin(origins = "http://localhost:5173")
 @RestController
-@RequestMapping("/bom/api/contracts")
+@RequestMapping("/bom/contracts")
 public class ContractController {
 
     private final ContractService contractService;

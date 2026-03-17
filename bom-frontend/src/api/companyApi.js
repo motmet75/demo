@@ -1,4 +1,6 @@
-const base = '/bom/api/companies'
+import { apiFetch } from './client'
+
+const base = '/bom/companies'
 
 async function handleResponse(res) {
   const text = await res.text()
@@ -12,12 +14,12 @@ async function handleResponse(res) {
 
 export async function getCompanies(tenantId) {
   const url = tenantId ? `${base}?tenantId=${tenantId}` : base
-  const res = await fetch(url)
+  const res = await apiFetch(url)
   return handleResponse(res)
 }
 
 export async function createCompany(payload) {
-  const res = await fetch(base, {
+  const res = await apiFetch(base, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -26,7 +28,7 @@ export async function createCompany(payload) {
 }
 
 export async function updateCompany(id, payload) {
-  const res = await fetch(`${base}/${id}`, {
+  const res = await apiFetch(`${base}/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -35,7 +37,7 @@ export async function updateCompany(id, payload) {
 }
 
 export async function deleteCompany(id) {
-  const res = await fetch(`${base}/${id}`, { method: 'DELETE' })
+  const res = await apiFetch(`${base}/${id}`, { method: 'DELETE' })
   if (!res.ok) throw new Error(res.statusText)
   return true
 }

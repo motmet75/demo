@@ -24,7 +24,7 @@ import com.ams.bomcore.domain.tenant.Tenant;
 
 @CrossOrigin(origins = "http://localhost:5173")
 @RestController
-@RequestMapping("/bom/api/models")
+@RequestMapping("/bom/models")
 public class ModelImportBomController {
 
     private final ModelBomService modelBomService;

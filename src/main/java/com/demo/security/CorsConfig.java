@@ -15,16 +15,20 @@ public class CorsConfig {
             public void addCorsMappings(CorsRegistry registry) {
                 registry.addMapping("/bom/api/**")
                         .allowedOrigins(
-                            "http://localhost:5173",
-                            "http://15.165.215.69:5173"
+                        		"https://192.168.100.175", 
+                        		"http://localhost:5173",
+                            "http://15.165.215.69:5173",
+                            "https://anhmedia.vn"
                         )
                         .allowedMethods("GET","POST","PUT","DELETE","OPTIONS")
                         .allowedHeaders("*")
                         .allowCredentials(true);
                 registry.addMapping("/api/orders/**")
                 .allowedOrigins(
-                    "http://localhost:5173",
-                    "http://15.165.215.69:5173"
+                		"https://192.168.100.175", 
+                		"http://localhost:5173",
+                    "http://15.165.215.69:5173",
+                    "https://anhmedia.vn"
                 )
                 .allowedMethods("GET","POST","PUT","DELETE","OPTIONS")
                 .allowedHeaders("*")

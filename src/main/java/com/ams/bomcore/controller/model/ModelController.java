@@ -35,7 +35,7 @@ import jakarta.validation.Valid;
  */
 @CrossOrigin(origins = "http://localhost:5173")
 @RestController
-@RequestMapping("/bom/api/models")
+@RequestMapping("/bom/models")
 public class ModelController {
 
     private final ModelService modelService;

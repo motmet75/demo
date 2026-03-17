@@ -13,7 +13,7 @@ import com.ams.bomcore.repository.TenantRepository;
 
 @RestController
 @CrossOrigin(origins = "http://localhost:5173")
-@RequestMapping("/bom/api/tenants")
+@RequestMapping("/bom/tenants")
 public class TenantController {
 
     private final TenantRepository tenantRepository;

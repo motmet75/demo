@@ -4,6 +4,7 @@ import EditIcon from '@mui/icons-material/Edit'
 import LocalHospitalIcon from '@mui/icons-material/LocalHospital'
 import CallReceivedIcon from '@mui/icons-material/CallReceived'
 import { fetchInventoryView, addStock, updateInventory, reserveInventory, releaseInventory, deleteInventory } from '../../api/inventoryApi'
+import { apiFetch, getContextHeaders } from '../../api/client'
 import InventoryEditModal from './InventoryEditModal'
 import InventoryImport from './InventoryImport'
 import * as XLSX from 'xlsx'
@@ -268,8 +269,8 @@ export default function InventoryGrid() {
 
       // Try server-side export if backend supports it
       try {
-        const res = await fetch('/bom/api/inventory/export', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payloadIds)
+        const res = await apiFetch('/bom/inventory/export', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', ...getContextHeaders() }, body: JSON.stringify(payloadIds)
         })
         if (!res.ok) {
           const text = await res.text()

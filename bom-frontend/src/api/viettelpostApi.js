@@ -1,7 +1,7 @@
 // API client for Viettel Post endpoints
 import { apiFetch, apiFetchJson } from './client'
 
-const API_BASE = '/api/viettelpost'
+const API_BASE = '/viettelpost'
 
 /**
  * Get stored token

@@ -77,7 +77,7 @@ function injectContextToBody(body) {
 }
 
 export async function fetchWarehouses() {
-  const { res, data } = await apiFetchJson('/bom/api/warehouses')
+  const { res, data } = await apiFetchJson('/bom/warehouses')
   if (!res.ok) return []
 
   if (Array.isArray(data)) return data.map(normalizeWarehouse)
@@ -94,7 +94,7 @@ export async function fetchWarehouses() {
 export async function createWarehouse(payload) {
   const bodyWithCtx = injectContextToBody(payload)
   const body = sanitizePayload(bodyWithCtx)
-  const { res, data } = await apiFetchJson('/bom/api/warehouses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  const { res, data } = await apiFetchJson('/bom/warehouses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
   if (!res.ok) {
     const message = (data && data.message) || (typeof data === 'string' ? data : res.statusText) || `Request failed with status ${res.status}`
     const error = new Error(message)
@@ -108,7 +108,7 @@ export async function createWarehouse(payload) {
 export async function updateWarehouse(id, payload) {
   const bodyWithCtx = injectContextToBody(payload)
   const body = sanitizePayload(bodyWithCtx)
-  const url = `/bom/api/warehouses/${encodeURIComponent(id)}`
+  const url = `/bom/warehouses/${encodeURIComponent(id)}`
   const { res, data } = await apiFetchJson(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
   if (!res.ok) {
     const message = (data && data.message) || (typeof data === 'string' ? data : res.statusText) || `Request failed with status ${res.status}`
@@ -121,7 +121,7 @@ export async function updateWarehouse(id, payload) {
 }
 
 export async function deleteWarehouse(id) {
-  const url = `/bom/api/warehouses/${encodeURIComponent(id)}`
+  const url = `/bom/warehouses/${encodeURIComponent(id)}`
   const res = await apiFetch(url, { method: 'DELETE' })
   const text = await res.text()
   let data = null

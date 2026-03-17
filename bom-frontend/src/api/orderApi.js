@@ -1,6 +1,6 @@
 import { apiFetchJson } from './client'
 
-const BASE = '/api/orders'
+const BASE = '/orders'
 
 function extractPage(data) {
   // Spring Page<T> envelope → { content, totalElements, ... }

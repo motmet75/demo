@@ -32,7 +32,7 @@ import com.ams.bomcore.domain.company.Company;
 
 @CrossOrigin(origins = "http://localhost:5173")
 @RestController
-@RequestMapping("/bom/api/warehouses")
+@RequestMapping("/bom/warehouses")
 public class WarehouseController {
 
     private final WarehouseService warehouseService;

@@ -19,7 +19,7 @@ import com.ams.bomcore.service.bom.BomCalculationService;
  */
 @CrossOrigin(origins = "http://localhost:5173")
 @RestController
-@RequestMapping("/bom/api/bom")
+@RequestMapping("/bom/bom")
 public class BomCheckController {
 
     private final BomCalculationService bomCalculationService;

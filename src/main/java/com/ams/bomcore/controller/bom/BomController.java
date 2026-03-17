@@ -16,7 +16,7 @@ import com.ams.bomcore.repository.BomRepository;
 
 @RestController
 @CrossOrigin(origins = "http://localhost:5173")
-@RequestMapping("/bom/api/boms")
+@RequestMapping("/bom/boms")
 public class BomController {
 
     private final BomRepository bomRepository;

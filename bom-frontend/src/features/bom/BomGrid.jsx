@@ -37,7 +37,7 @@ function CreateBomDialog({ open, onClose, onCreated }) {
 
   useEffect(() => {
     if (!open) return
-    apiFetchJson('/bom/api/models').then(({ data }) => {
+    apiFetchJson('/bom/models').then(({ data }) => {
       const list = Array.isArray(data) ? data : (data?.content ?? [])
       setModels(list)
     }).catch(() => {})

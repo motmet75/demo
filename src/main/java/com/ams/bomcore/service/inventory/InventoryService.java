@@ -349,4 +349,18 @@ public class InventoryService {
         inv.setQuantityLocked(locked.subtract(qty));
         return inventoryRepository.save(inv);
     }
+
+    /**
+     * Delete an inventory record by id, validating tenant/company ownership.
+     */
+    @Transactional
+    public void deleteById(UUID inventoryId, UUID tenantId, UUID companyId) {
+        InventoryEntity inv = inventoryRepository.findById(inventoryId)
+                .orElseThrow(() -> new InventoryException("Inventory not found: " + inventoryId));
+        if (tenantId != null && !tenantId.equals(inv.getTenantId()))
+            throw new InventoryException("inventory does not belong to tenant");
+        if (companyId != null && !companyId.equals(inv.getCompanyId()))
+            throw new InventoryException("inventory does not belong to company");
+        inventoryRepository.deleteById(inventoryId);
+    }
 }

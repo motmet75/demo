@@ -43,7 +43,7 @@ import com.ams.bomcore.service.bom.BomService;
  */
 @CrossOrigin(origins = "http://localhost:5173")
 @RestController
-@RequestMapping("/bom/api/bom-crud")
+@RequestMapping("/bom/bom-crud")
 public class BomCrudController {
 
     private final BomService bomService;

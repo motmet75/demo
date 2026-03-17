@@ -1,7 +1,7 @@
 import { apiFetch, apiFetchJson } from './client'
 
 export async function fetchModels() {
-  const { res, data } = await apiFetchJson('/bom/api/models')
+  const { res, data } = await apiFetchJson('/bom/models')
   if (!res.ok) return []
 
   // If the API returns an array directly
@@ -18,7 +18,7 @@ export async function fetchModels() {
 }
 
 export async function createModel(payload) {
-  const { res, data } = await apiFetchJson('/bom/api/models', {
+  const { res, data } = await apiFetchJson('/bom/models', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
@@ -34,7 +34,7 @@ export async function createModel(payload) {
 }
 
 export async function updateModel(id, payload) {
-  const url = `/bom/api/models/${encodeURIComponent(id)}`
+  const url = `/bom/models/${encodeURIComponent(id)}`
   const { res, data } = await apiFetchJson(url, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -53,7 +53,7 @@ export async function updateModel(id, payload) {
 }
 
 export async function deleteModel(id) {
-  const url = `/bom/api/models/${encodeURIComponent(id)}`
+  const url = `/bom/models/${encodeURIComponent(id)}`
   const res = await apiFetch(url, { method: 'DELETE' })
   const text = await res.text()
   let data = null
@@ -86,7 +86,7 @@ export async function importModelBoms(file, options = {}) {
   // include X-Tenant-Id header for server-side tenant resolution if provided
   if (options.tenantId) headers['X-Tenant-Id'] = options.tenantId
 
-  const res = await apiFetch('/bom/api/models/import-bom', { method: 'POST', body: form, headers })
+  const res = await apiFetch('/bom/models/import-bom', { method: 'POST', body: form, headers })
   if (!res.ok) {
     const text = await res.text()
     throw new Error(text || 'Upload failed')
@@ -95,7 +95,7 @@ export async function importModelBoms(file, options = {}) {
 }
 
 export async function fetchModelBoms() {
-  const { res, data } = await apiFetchJson('/bom/api/model-boms')
+  const { res, data } = await apiFetchJson('/bom/model-boms')
   if (!res.ok) return []
 
   if (Array.isArray(data)) return data
@@ -114,7 +114,7 @@ export async function fetchModelBomsByModel(modelId, options = {}) {
   if (options.tenantId) params.set('tenantId', options.tenantId)
   if (options.companyId) params.set('companyId', options.companyId)
   const qs = params.toString()
-  const url = `/bom/api/model-boms/by-model/${encodeURIComponent(modelId)}${qs ? '?' + qs : ''}`
+  const url = `/bom/model-boms/by-model/${encodeURIComponent(modelId)}${qs ? '?' + qs : ''}`
   const headers = {}
   if (options.tenantId) headers['X-Tenant-Id'] = options.tenantId
   const { res, data } = await apiFetchJson(url, { headers })
@@ -134,7 +134,7 @@ export async function createModelBom(payload, options = {}) {
   if (options.tenantId) params.set('tenantId', options.tenantId)
   if (options.companyId) params.set('companyId', options.companyId)
   const qs = params.toString()
-  const url = `/bom/api/model-boms${qs ? '?' + qs : ''}`
+  const url = `/bom/model-boms${qs ? '?' + qs : ''}`
   const headers = { 'Content-Type': 'application/json' }
   if (options.tenantId) headers['X-Tenant-Id'] = options.tenantId
   if (options.companyId) headers['X-Company-Id'] = options.companyId
@@ -149,7 +149,7 @@ export async function updateModelBom(id, payload, options = {}) {
   if (options.tenantId) params.set('tenantId', options.tenantId)
   if (options.companyId) params.set('companyId', options.companyId)
   const qs = params.toString()
-  const url = `/bom/api/model-boms/${encodeURIComponent(id)}${qs ? '?' + qs : ''}`
+  const url = `/bom/model-boms/${encodeURIComponent(id)}${qs ? '?' + qs : ''}`
   const headers = { 'Content-Type': 'application/json' }
   if (options.tenantId) headers['X-Tenant-Id'] = options.tenantId
   if (options.companyId) headers['X-Company-Id'] = options.companyId
@@ -159,6 +159,6 @@ export async function updateModelBom(id, payload, options = {}) {
 }
 
 export async function deleteModelBom(id) {
-  const res = await apiFetch(`/bom/api/model-boms/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  const res = await apiFetch(`/bom/model-boms/${encodeURIComponent(id)}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('Failed to delete BOM item')
 }

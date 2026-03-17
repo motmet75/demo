@@ -13,7 +13,7 @@ import java.util.Map;
  * REST Controller for Viettel Post API endpoints
  */
 @RestController
-@RequestMapping("/api/viettelpost")
+@RequestMapping("/viettelpost")
 @CrossOrigin(origins = "*")
 public class ViettelPostController {
 

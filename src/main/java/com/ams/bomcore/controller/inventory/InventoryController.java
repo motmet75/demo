@@ -12,6 +12,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -31,7 +32,7 @@ import com.ams.bomcore.service.inventory.InventoryService;
 
 @CrossOrigin(origins = "http://localhost:5173")
 @RestController
-@RequestMapping("/bom/api/inventory")
+@RequestMapping("/bom/inventory")
 public class InventoryController {
 
     private final InventoryService inventoryService;
@@ -216,6 +217,27 @@ public class InventoryController {
             BigDecimal qty = new BigDecimal(String.valueOf(body.get("quantity")));
             InventoryEntity updated = inventoryService.releaseById(id, qty, tenantId, companyId);
             return ResponseEntity.ok(updated);
+        } catch (InventoryException ex) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ex.getMessage());
+        }
+    }
+
+    /**
+     * Delete an inventory record by id
+     */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteStock(@PathVariable("id") UUID id,
+                                         @RequestParam(value = "tenantId", required = false) UUID tenantId,
+                                         @RequestParam(value = "companyId", required = false) UUID companyId,
+                                         @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId,
+                                         @RequestHeader(value = "X-Company-Id", required = false) String headerCompanyId) {
+        try {
+            tenantId = resolveTenant(tenantId, headerTenantId);
+            companyId = resolveCompany(companyId, headerCompanyId);
+            inventoryService.deleteById(id, tenantId, companyId);
+            return ResponseEntity.noContent().build();
         } catch (InventoryException ex) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
         } catch (Exception ex) {

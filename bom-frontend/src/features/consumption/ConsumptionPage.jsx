@@ -44,7 +44,7 @@ export default function ConsumptionPage() {
     try {
       // Query the order_consumption_view via a dedicated endpoint
       const params = new URLSearchParams({ tenantId, companyId })
-      const { res, data } = await apiFetchJson(`/bom/api/order-consumption?${params}`)
+      const { res, data } = await apiFetchJson(`/bom/order-consumption?${params}`)
       if (!res.ok) throw new Error('Failed to load consumption data')
       setRows((Array.isArray(data) ? data : []).map((r, i) => ({ ...r, _id: r.id || i })))
     } catch (e) { setError(e.message) } finally { setLoading(false) }

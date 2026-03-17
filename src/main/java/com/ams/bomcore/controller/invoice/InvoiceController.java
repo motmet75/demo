@@ -39,7 +39,7 @@ import com.ams.bomcore.service.invoice.InvoiceService;
  */
 @CrossOrigin(origins = "http://localhost:5173")
 @RestController
-@RequestMapping("/bom/api/invoices")
+@RequestMapping("/bom/invoices")
 public class InvoiceController {
 
     private final InvoiceService invoiceService;
