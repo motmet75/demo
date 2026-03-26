@@ -1,9 +1,10 @@
-package com.demo.viettelpost;
+package com.ams.bomcore.viettelpost;
 
-import com.demo.viettelpost.ViettelPostDTO.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import com.ams.bomcore.viettelpost.ViettelPostDTO.*;
 
 import java.util.HashMap;
 import java.util.List;

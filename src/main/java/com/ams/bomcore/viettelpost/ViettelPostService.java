@@ -1,6 +1,6 @@
-package com.demo.viettelpost;
+package com.ams.bomcore.viettelpost;
 
-import com.demo.viettelpost.ViettelPostDTO.*;
+import com.ams.bomcore.viettelpost.ViettelPostDTO.*;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;

@@ -57,8 +57,12 @@ export default function ModelGrid({ reloadSignal }) {
       let list = Array.isArray(data) ? data : (data && (data.data || data.items || data.content)) || []
       if (!Array.isArray(list)) list = []
       setRows(list.map(r => ({ id: r.id == null ? '' : String(r.id), uuid: r.id == null ? '' : String(r.id), modelCode: r.modelCode, modelName: r.modelName, isActive: r.isActive, hsCode: r.hsCode ?? '', coCriteria: r.coCriteria ?? '' })) )
-    } catch {
-      console.error('Failed to load models')
+    } catch (e) {
+      const msg = e && e.message ? e.message : ''
+      console.error('Failed to load models', msg)
+      if (!msg.includes('tenant') && !msg.includes('company')) {
+        alert('Failed to load models: ' + (msg || 'Unknown error'))
+      }
       setRows([])
     } finally {
       setLoading(false)

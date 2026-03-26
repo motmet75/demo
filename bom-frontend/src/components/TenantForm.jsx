@@ -5,6 +5,7 @@ export default function TenantForm({ mode = 'create', tenant = null, onCreate, o
   const [tenantCode, setTenantCode] = useState('')
   const [tenantName, setTenantName] = useState('')
   const [isActive, setIsActive] = useState(true)
+  const [maxCompanies, setMaxCompanies] = useState(1)
   const [errors, setErrors] = useState({})
   const [checking, setChecking] = useState(false)
 
@@ -13,6 +14,7 @@ export default function TenantForm({ mode = 'create', tenant = null, onCreate, o
       setTenantCode(tenant.tenantCode || tenant.code || '')
       setTenantName(tenant.tenantName || tenant.name || '')
       setIsActive(tenant.isActive ?? true)
+      setMaxCompanies(tenant.maxCompanies ?? 1)
     }
   }, [mode, tenant])
 
@@ -29,7 +31,7 @@ export default function TenantForm({ mode = 'create', tenant = null, onCreate, o
         const list = Array.isArray(all) ? all : (all && all.data ? all.data : [])
         const exists = list.find((t) => (t.tenantCode || t.code) === tenantCode && (mode !== 'edit' || t.id !== tenant.id))
         if (exists) e.tenantCode = 'Tenant code already exists'
-      } catch (err) {
+      } catch {
         // ignore remote errors for uniqueness
       } finally {
         setChecking(false)
@@ -44,7 +46,7 @@ export default function TenantForm({ mode = 'create', tenant = null, onCreate, o
     e.preventDefault()
     const ok = await validate()
     if (!ok) return
-    const payload = { tenantCode, tenantName, isActive }
+    const payload = { tenantCode, tenantName, isActive, maxCompanies: Number(maxCompanies) || 1 }
     if (mode === 'create') {
       await onCreate(payload)
       setTenantCode('')
@@ -71,6 +73,17 @@ export default function TenantForm({ mode = 'create', tenant = null, onCreate, o
         <label>
           <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} /> Active
         </label>
+      </div>
+      <div style={{ marginTop: 8 }}>
+        <label>Max Companies</label><br />
+        <input
+          type="number"
+          min="1"
+          value={maxCompanies}
+          onChange={(e) => setMaxCompanies(Math.max(1, parseInt(e.target.value, 10) || 1))}
+          style={{ width: 80 }}
+        />
+        <span style={{ marginLeft: 8, color: '#666', fontSize: 12 }}>Max number of companies this tenant can create</span>
       </div>
       <div style={{ marginTop: 12 }}>
         <button type="submit" disabled={checking}>{mode === 'create' ? 'Create' : 'Save'}</button>

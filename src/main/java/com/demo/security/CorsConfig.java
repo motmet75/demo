@@ -11,28 +11,32 @@ public class CorsConfig {
     @Bean
     public WebMvcConfigurer corsConfigurer() {
         return new WebMvcConfigurer() {
-        	@Override
+            @Override
             public void addCorsMappings(CorsRegistry registry) {
-                registry.addMapping("/bom/api/**")
-                        .allowedOrigins(
-                        		"https://192.168.100.175", 
-                        		"http://localhost:5173",
-                            "http://15.165.215.69:5173",
-                            "https://anhmedia.vn"
-                        )
-                        .allowedMethods("GET","POST","PUT","DELETE","OPTIONS")
-                        .allowedHeaders("*")
-                        .allowCredentials(true);
-                registry.addMapping("/api/orders/**")
-                .allowedOrigins(
-                		"https://192.168.100.175", 
-                		"http://localhost:5173",
+                String[] origins = {
+                    "https://192.168.100.175",
+                    "http://localhost:5173",
                     "http://15.165.215.69:5173",
                     "https://anhmedia.vn"
-                )
-                .allowedMethods("GET","POST","PUT","DELETE","OPTIONS")
-                .allowedHeaders("*")
-                .allowCredentials(true);
+                };
+
+                registry.addMapping("/auth/**")
+                        .allowedOrigins(origins)
+                        .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                        .allowedHeaders("*")
+                        .allowCredentials(true);
+
+                registry.addMapping("/admin/**")
+                        .allowedOrigins(origins)
+                        .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                        .allowedHeaders("*")
+                        .allowCredentials(true);
+
+                registry.addMapping("/bom/**")
+                        .allowedOrigins(origins)
+                        .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                        .allowedHeaders("*")
+                        .allowCredentials(true);
             }
         };
     }

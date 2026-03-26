@@ -33,6 +33,9 @@ public class Tenant {
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = Boolean.TRUE;
 
+    @Column(name = "max_companies", nullable = false)
+    private Integer maxCompanies = 1;
+
     @Column(name = "created_at")
     private Instant createdAt;
 
@@ -52,6 +55,9 @@ public class Tenant {
 
     public Boolean getIsActive() { return isActive; }
     public void setIsActive(Boolean isActive) { this.isActive = isActive; }
+
+    public Integer getMaxCompanies() { return maxCompanies; }
+    public void setMaxCompanies(Integer maxCompanies) { this.maxCompanies = maxCompanies; }
 
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }

@@ -16,6 +16,7 @@ export default function CompanyGrid() {
   const [deletingId, setDeletingId] = useState(null)
   const [modalKey, setModalKey] = useState(0)
   const [selectionModel, setSelectionModel] = useState({ type: 'include', ids: new Set() })
+  const [quota, setQuota] = useState({ count: 0, max: 1 })
 
   // filter state
   const [filterCode, setFilterCode] = useState('')
@@ -51,6 +52,12 @@ export default function CompanyGrid() {
           createdAt: r.createdAt ?? null,
           __raw: r
         })))
+        // quota comes from any row (all share the same tenant quota)
+        if (data.length > 0) {
+          setQuota({ count: data[0].companyCount ?? data.length, max: data[0].maxCompanies ?? 1 })
+        } else {
+          setQuota(q => ({ ...q, count: 0 }))
+        }
       } else { setRows([]) }
     } catch (err) {
       console.error('Failed to load companies', err)
@@ -148,10 +155,30 @@ export default function CompanyGrid() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100%' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 8 }}>
-        <h3>Companies</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 8, alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <h3 style={{ margin: 0 }}>Companies</h3>
+          <span style={{
+            fontSize: 13,
+            padding: '2px 10px',
+            borderRadius: 12,
+            background: quota.count >= quota.max ? '#ffebee' : '#e8f5e9',
+            color: quota.count >= quota.max ? '#c62828' : '#2e7d32',
+            fontWeight: 'bold',
+            border: `1px solid ${quota.count >= quota.max ? '#ef9a9a' : '#a5d6a7'}`
+          }}>
+            {quota.count} / {quota.max} companies
+            {quota.count >= quota.max ? ' ⚠ limit reached' : ''}
+          </span>
+        </div>
         <div>
-          <button onClick={() => { setSelected(null); setModalKey(k => k + 1); setEditOpen(true) }} disabled={saving}>Add Company</button>
+          <button
+            onClick={() => { setSelected(null); setModalKey(k => k + 1); setEditOpen(true) }}
+            disabled={saving || quota.count >= quota.max}
+            title={quota.count >= quota.max ? `Limit reached: this tenant can have at most ${quota.max} company/companies` : 'Add Company'}
+          >
+            Add Company
+          </button>
         </div>
       </div>
 

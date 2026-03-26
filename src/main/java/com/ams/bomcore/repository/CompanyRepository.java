@@ -15,6 +15,8 @@ public interface CompanyRepository extends JpaRepository<Company, UUID> {
 
     List<Company> findAllByTenant(Tenant tenant);
 
+    long countByTenant(Tenant tenant);
+
     Optional<Company> findByCompanyCode(String companyCode);
 
     // Added: tenant-scoped lookup using tenant id for uniqueness checks

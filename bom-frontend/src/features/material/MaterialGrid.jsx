@@ -146,11 +146,14 @@ export default function MaterialGrid({ refreshKey }) {
       })))
     } catch (e) {
       console.error('Failed to load materials', e)
-      // Show a basic error to the user
-      try {
-        alert('Failed to load materials: ' + (e && e.message ? e.message : 'Unknown error'))
-      } catch {
-        /* ignore alert failures */ void 0
+      // Don't show an alert for missing context — the user just hasn't selected a company yet
+      const msg = e && e.message ? e.message : ''
+      if (!msg.includes('tenant') && !msg.includes('company')) {
+        try {
+          alert('Failed to load materials: ' + (msg || 'Unknown error'))
+        } catch {
+          /* ignore alert failures */ void 0
+        }
       }
       setRows([])
     } finally {

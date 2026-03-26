@@ -2,6 +2,22 @@ import React, { useState } from 'react'
 import { importMaterials, createMaterial } from '../../api/materialApi'
 import MaterialEditModal from './MaterialEditModal'
 
+const MATERIAL_CSV_TEMPLATE = [
+  'material_code,material_name,unit,material_type,description',
+  'MAT-001,Steel Plate,kg,RAW_MATERIAL,Cold-rolled steel plate',
+  'MAT-002,Copper Wire,m,RAW_MATERIAL,2mm copper wire',
+].join('\n')
+
+function downloadTemplate() {
+  const blob = new Blob([MATERIAL_CSV_TEMPLATE], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'material_import_template.csv'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export default function MaterialImport({ onImportComplete }) {
   const [file, setFile] = useState(null)
   const [result, setResult] = useState(null)
@@ -64,6 +80,18 @@ export default function MaterialImport({ onImportComplete }) {
   return (
     <div style={{ marginBottom: 20 }}>
       <h3>Import Materials (CSV)</h3>
+      <div style={{ marginBottom: 8 }}>
+        <button
+          type="button"
+          onClick={downloadTemplate}
+          style={{ fontSize: 12, padding: '2px 10px', background: '#e8f5e9', border: '1px solid #a5d6a7', borderRadius: 4, cursor: 'pointer' }}
+        >
+          ⬇ Download CSV Template
+        </button>
+        <span style={{ marginLeft: 8, fontSize: 11, color: '#666' }}>
+          Format: material_code, material_name, unit, material_type, description
+        </span>
+      </div>
       <div style={{ marginBottom: 12 }}>
         <button type="button" onClick={handleOpenAdd} disabled={uploading || adding}>
           {adding ? 'Adding...' : 'Add Material'}

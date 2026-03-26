@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react'
 import { getTenants, createTenant, updateTenant, activateTenant } from '../api/tenantApi'
+import { getCompanies } from '../api/companyApi'
 import TenantForm from './TenantForm'
 
 export default function TenantList() {
   const [tenants, setTenants] = useState([])
+  const [companyCounts, setCompanyCounts] = useState({})
   const [loading, setLoading] = useState(false)
   const [editing, setEditing] = useState(null)
   const [error, setError] = useState(null)
@@ -13,7 +15,17 @@ export default function TenantList() {
     setError(null)
     try {
       const data = await getTenants()
-      setTenants(Array.isArray(data) ? data : (data && data.data ? data.data : []))
+      const list = Array.isArray(data) ? data : (data && data.data ? data.data : [])
+      setTenants(list)
+      // load company counts for all tenants in parallel
+      const counts = await Promise.all(
+        list.map((t) =>
+          getCompanies(t.id)
+            .then((companies) => ({ id: t.id, count: Array.isArray(companies) ? companies.length : 0 }))
+            .catch(() => ({ id: t.id, count: 0 }))
+        )
+      )
+      setCompanyCounts(Object.fromEntries(counts.map((c) => [c.id, c.count])))
     } catch (e) {
       setError(e.message || String(e))
     } finally {
@@ -48,26 +60,37 @@ export default function TenantList() {
       <table style={{ width: '100%', marginTop: 12, borderCollapse: 'collapse' }}>
         <thead>
           <tr>
-            <th>Code</th>
-            <th>Name</th>
-            <th>Active</th>
-            <th>Created</th>
-            <th>Actions</th>
+            <th style={{ textAlign: 'left', padding: '4px 8px' }}>Code</th>
+            <th style={{ textAlign: 'left', padding: '4px 8px' }}>Name</th>
+            <th style={{ textAlign: 'center', padding: '4px 8px' }}>Active</th>
+            <th style={{ textAlign: 'center', padding: '4px 8px' }}>Companies</th>
+            <th style={{ textAlign: 'left', padding: '4px 8px' }}>Created</th>
+            <th style={{ textAlign: 'left', padding: '4px 8px' }}>Actions</th>
           </tr>
         </thead>
         <tbody>
-          {tenants.map((t) => (
-            <tr key={t.id} style={{ borderTop: '1px solid #eee' }}>
-              <td>{t.tenantCode || t.code || ''}</td>
-              <td>{t.tenantName || t.name || ''}</td>
-              <td>{t.isActive ? 'Yes' : 'No'}</td>
-              <td>{t.createdAt ? new Date(t.createdAt).toLocaleString() : ''}</td>
-              <td>
-                <button onClick={() => setEditing(t)}>Edit</button>
-                <button onClick={() => onToggleActive(t)} style={{ marginLeft: 8 }}>{t.isActive ? 'Deactivate' : 'Activate'}</button>
-              </td>
-            </tr>
-          ))}
+          {tenants.map((t) => {
+            const count = companyCounts[t.id] ?? '…'
+            const max = t.maxCompanies ?? 1
+            const atLimit = typeof count === 'number' && count >= max
+            return (
+              <tr key={t.id} style={{ borderTop: '1px solid #eee' }}>
+                <td style={{ padding: '4px 8px' }}>{t.tenantCode || t.code || ''}</td>
+                <td style={{ padding: '4px 8px' }}>{t.tenantName || t.name || ''}</td>
+                <td style={{ padding: '4px 8px', textAlign: 'center' }}>{t.isActive ? 'Yes' : 'No'}</td>
+                <td style={{ padding: '4px 8px', textAlign: 'center' }}>
+                  <span style={{ color: atLimit ? '#c62828' : '#2e7d32', fontWeight: 'bold' }}>{count}</span>
+                  <span style={{ color: '#666' }}> / {max}</span>
+                  {atLimit && <span style={{ marginLeft: 6, color: '#c62828', fontSize: 11 }}>⚠ limit</span>}
+                </td>
+                <td style={{ padding: '4px 8px' }}>{t.createdAt ? new Date(t.createdAt).toLocaleString() : ''}</td>
+                <td style={{ padding: '4px 8px' }}>
+                  <button onClick={() => setEditing(t)}>Edit</button>
+                  <button onClick={() => onToggleActive(t)} style={{ marginLeft: 8 }}>{t.isActive ? 'Deactivate' : 'Activate'}</button>
+                </td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
 

@@ -56,11 +56,11 @@ public class User implements UserDetails, OAuth2User, Serializable {
     private String password = "";
 
 	@NotBlank
-	@Column(name = "firstName")
+	@Column(name = "firstname")
     private String firstName= "";
 
 	@NotBlank
-    @Column(name = "lastName")
+    @Column(name = "lastname")
     private String lastName= "";
 
     @Column(name = "avarta")
@@ -70,7 +70,7 @@ public class User implements UserDetails, OAuth2User, Serializable {
     @Email
     private String email= "";
 
-	@Column(name = "isAccountNonExpired")
+	@Column(name = "isaccountnonexpired")
 	private boolean accountNonExpired = true;
 
 	@Column(name = "isaccountnonlocked")
@@ -142,6 +142,20 @@ public class User implements UserDetails, OAuth2User, Serializable {
 	@Transient
 	private String tenantString = "portal.tuonghoa-imex.com"; // Default tenant, can be overridden;
 
+	@Column(name = "lastTenantId")
+	private String lastTenantId;
+
+	@Column(name = "lastCompanyId")
+	private String lastCompanyId;
+
+	/** The tenant this user is explicitly assigned to by an admin. */
+	@Column(name = "assignedTenantId")
+	private String assignedTenantId;
+
+	/** The company this user is explicitly assigned to by an admin. */
+	@Column(name = "assignedCompanyId")
+	private String assignedCompanyId;
+
 
 		
 	public String getTenantString() {
@@ -150,6 +164,38 @@ public class User implements UserDetails, OAuth2User, Serializable {
 
 	public void setTenantString(String tenantString) {
 		this.tenantString = tenantString;
+	}
+
+	public String getLastTenantId() {
+		return lastTenantId;
+	}
+
+	public void setLastTenantId(String lastTenantId) {
+		this.lastTenantId = lastTenantId;
+	}
+
+	public String getLastCompanyId() {
+		return lastCompanyId;
+	}
+
+	public void setLastCompanyId(String lastCompanyId) {
+		this.lastCompanyId = lastCompanyId;
+	}
+
+	public String getAssignedTenantId() {
+		return assignedTenantId;
+	}
+
+	public void setAssignedTenantId(String assignedTenantId) {
+		this.assignedTenantId = assignedTenantId;
+	}
+
+	public String getAssignedCompanyId() {
+		return assignedCompanyId;
+	}
+
+	public void setAssignedCompanyId(String assignedCompanyId) {
+		this.assignedCompanyId = assignedCompanyId;
 	}
 
 	/**

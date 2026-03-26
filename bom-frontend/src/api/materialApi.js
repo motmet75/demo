@@ -1,6 +1,10 @@
-import { apiFetch, apiFetchJson } from './client'
+import { apiFetch, apiFetchJson, getContextHeaders } from './client'
 
 export async function fetchMaterials() {
+  const ctx = getContextHeaders()
+  if (!ctx['X-Tenant-Id'] || !ctx['X-Company-Id']) {
+    throw new Error('Please select a tenant and company before loading materials.')
+  }
   const { res, data } = await apiFetchJson('/bom/materials')
   if (!res.ok) return []
 
@@ -14,13 +18,13 @@ export async function fetchMaterials() {
 }
 
 export async function createMaterial(payload) {
-  const { res, data } = await apiFetchJson('/api/bom/materials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+  const { res, data } = await apiFetchJson('/bom/materials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
   if (!res.ok) throw new Error((data && data.message) || 'Create failed')
   return data
 }
 
 export async function updateMaterial(id, payload) {
-  const url = `/api/bom/materials/${encodeURIComponent(id)}`
+  const url = `/bom/materials/${encodeURIComponent(id)}`
   const { res, data } = await apiFetchJson(url, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -39,7 +43,7 @@ export async function updateMaterial(id, payload) {
 }
 
 export async function deleteMaterial(id) {
-  const url = `/api/bom/materials/${encodeURIComponent(id)}`
+  const url = `/bom/materials/${encodeURIComponent(id)}`
   const res = await apiFetch(url, { method: 'DELETE' })
   const text = await res.text()
   let data = null
@@ -55,9 +59,13 @@ export async function deleteMaterial(id) {
 }
 
 export async function importMaterials(file) {
+  const ctx = getContextHeaders()
+  if (!ctx['X-Tenant-Id'] || !ctx['X-Company-Id']) {
+    throw new Error('Please select a tenant and company before importing.')
+  }
   const form = new FormData()
   form.append('file', file)
-  const res = await apiFetch('/api/bom/materials/import', { method: 'POST', body: form })
+  const res = await apiFetch('/bom/materials/import', { method: 'POST', body: form })
   if (!res.ok) {
     const text = await res.text()
     throw new Error(text || 'Upload failed')

@@ -1,6 +1,10 @@
-import { apiFetch, apiFetchJson } from './client'
+import { apiFetch, apiFetchJson, getContextHeaders } from './client'
 
 export async function fetchModels() {
+  const ctx = getContextHeaders()
+  if (!ctx['X-Tenant-Id'] || !ctx['X-Company-Id']) {
+    throw new Error('Please select a tenant and company before loading models.')
+  }
   const { res, data } = await apiFetchJson('/bom/models')
   if (!res.ok) return []
 

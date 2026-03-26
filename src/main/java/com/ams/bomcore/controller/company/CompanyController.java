@@ -6,10 +6,13 @@ import java.util.stream.Collectors;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import com.ams.bomcore.domain.company.Company;
 import com.ams.bomcore.domain.tenant.Tenant;
+import com.ams.bomcore.domain.user.User;
 import com.ams.bomcore.repository.CompanyRepository;
 import com.ams.bomcore.repository.TenantRepository;
 
@@ -28,13 +31,28 @@ public class CompanyController {
 
     @GetMapping
     public List<CompanyDto> list(@RequestParam(value = "tenantId", required = false) UUID tenantId,
-                                 @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId) {
-        // prefer header if present
-        if (headerTenantId != null && !headerTenantId.isBlank()) {
+                                 @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId,
+                                 Authentication authentication) {
+
+        // Non-admin users are always scoped to their assignedTenantId
+        if (authentication != null && authentication.getPrincipal() instanceof User currentUser) {
+            boolean isAdmin = currentUser.getAuthorities() != null &&
+                    currentUser.getAuthorities().stream().anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+            if (!isAdmin && StringUtils.hasText(currentUser.getAssignedTenantId())) {
+                try {
+                    tenantId = UUID.fromString(currentUser.getAssignedTenantId());
+                } catch (Exception e) {
+                    throw new IllegalArgumentException("User has an invalid assignedTenantId");
+                }
+            }
+        }
+
+        // prefer header if present (admin path)
+        if (tenantId == null && headerTenantId != null && !headerTenantId.isBlank()) {
             try {
                 tenantId = UUID.fromString(headerTenantId);
             } catch (Exception e) {
-                // ignore and fall through to query param
+                // ignore and fall through
             }
         }
 
@@ -43,9 +61,12 @@ public class CompanyController {
         }
 
         Tenant tenant = tenantRepository.findById(tenantId).orElseThrow(() -> new IllegalArgumentException("tenant not found"));
-
         List<Company> companies = companyRepository.findAllByTenant(tenant);
-        return companies.stream().map(c -> new CompanyDto(c.getId(), c.getCompanyCode(), c.getCompanyName())).collect(Collectors.toList());
+        int max = tenant.getMaxCompanies() == null ? 1 : tenant.getMaxCompanies();
+        int count = companies.size();
+        return companies.stream()
+                .map(c -> new CompanyDto(c.getId(), c.getCompanyCode(), c.getCompanyName(), count, max))
+                .collect(Collectors.toList());
     }
 
     @PostMapping
@@ -58,6 +79,14 @@ public class CompanyController {
         if (tenantId == null) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorDto("tenantId is required"));
         Tenant tenant = tenantRepository.findById(tenantId).orElseThrow(() -> new IllegalArgumentException("tenant not found"));
 
+        // enforce maxCompanies quota
+        int max = tenant.getMaxCompanies() == null ? 1 : tenant.getMaxCompanies();
+        long current = companyRepository.countByTenant(tenant);
+        if (current >= max) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new ErrorDto("Company limit reached: this tenant can have at most " + max + " company/companies"));
+        }
+
         // unique code check
         var existing = companyRepository.findByCompanyCodeAndTenantId(dto.companyCode, tenant.getId());
         if (existing.isPresent()) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorDto("companyCode already exists for tenant"));
@@ -67,7 +96,7 @@ public class CompanyController {
         c.setCompanyCode(dto.companyCode);
         c.setCompanyName(dto.companyName);
         companyRepository.save(c);
-        return ResponseEntity.status(HttpStatus.CREATED).body(new CompanyDto(c.getId(), c.getCompanyCode(), c.getCompanyName()));
+        return ResponseEntity.status(HttpStatus.CREATED).body(new CompanyDto(c.getId(), c.getCompanyCode(), c.getCompanyName(), (int)(current + 1), max));
     }
 
     @PutMapping("/{id}")
@@ -91,7 +120,10 @@ public class CompanyController {
             c.setTenant(t);
         }
         companyRepository.save(c);
-        return ResponseEntity.ok(new CompanyDto(c.getId(), c.getCompanyCode(), c.getCompanyName()));
+        Tenant finalTenant = c.getTenant();
+        int max = finalTenant.getMaxCompanies() == null ? 1 : finalTenant.getMaxCompanies();
+        int count = (int) companyRepository.countByTenant(finalTenant);
+        return ResponseEntity.ok(new CompanyDto(c.getId(), c.getCompanyCode(), c.getCompanyName(), count, max));
     }
 
     @DeleteMapping("/{id}")
@@ -106,7 +138,12 @@ public class CompanyController {
         public final UUID id;
         public final String code;
         public final String name;
-        public CompanyDto(UUID id, String code, String name) { this.id = id; this.code = code; this.name = name; }
+        public final int companyCount;
+        public final int maxCompanies;
+        public CompanyDto(UUID id, String code, String name, int companyCount, int maxCompanies) {
+            this.id = id; this.code = code; this.name = name;
+            this.companyCount = companyCount; this.maxCompanies = maxCompanies;
+        }
     }
 
     public static class CreateCompanyDto {
