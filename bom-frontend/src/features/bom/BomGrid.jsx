@@ -21,8 +21,9 @@ import SyncIcon from '@mui/icons-material/Sync'
 import ArchiveIcon from '@mui/icons-material/Archive'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import DeleteIcon from '@mui/icons-material/Delete'
+import EditIcon from '@mui/icons-material/Edit'
 import { useAppContext } from '../../context/AppContext'
-import { fetchBoms, createBom, updateBomStatus, deleteBom, syncBomFromModelBoms } from '../../api/bomApi'
+import { fetchBoms, createBom, updateBomName, updateBomStatus, deleteBom, syncBomFromModelBoms } from '../../api/bomApi'
 import { apiFetchJson } from '../../api/client'
 import BomItemsDialog from './BomItemsDialog'
 
@@ -31,7 +32,7 @@ const STATUS_COLOR = { ACTIVE: 'success', ARCHIVED: 'default', DRAFT: 'warning' 
 // ── Create BOM dialog ─────────────────────────────────────────────────
 function CreateBomDialog({ open, onClose, onCreated }) {
   const [models, setModels] = useState([])
-  const [form, setForm]     = useState({ modelId: '', version: '1', status: 'DRAFT' })
+  const [form, setForm]     = useState({ modelId: '', version: '1', status: 'DRAFT', bomName: '' })
   const [saving, setSaving] = useState(false)
   const [error, setError]   = useState('')
 
@@ -41,7 +42,7 @@ function CreateBomDialog({ open, onClose, onCreated }) {
       const list = Array.isArray(data) ? data : (data?.content ?? [])
       setModels(list)
     }).catch(() => {})
-    setForm({ modelId: '', version: '1', status: 'DRAFT' })
+    setForm({ modelId: '', version: '1', status: 'DRAFT', bomName: '' })
     setError('')
   }, [open])
 
@@ -50,7 +51,7 @@ function CreateBomDialog({ open, onClose, onCreated }) {
     if (!form.modelId) { setError('Model is required'); return }
     setSaving(true); setError('')
     try {
-      const bom = await createBom({ modelId: form.modelId, version: parseInt(form.version) || 1, status: form.status })
+      const bom = await createBom({ modelId: form.modelId, version: parseInt(form.version) || 1, status: form.status, bomName: form.bomName || undefined })
       onCreated(bom)
       onClose()
     } catch (e) { setError(e.message) }
@@ -69,6 +70,8 @@ function CreateBomDialog({ open, onClose, onCreated }) {
             <TextField select label="Model *" value={form.modelId} onChange={ch('modelId')} disabled={saving} fullWidth>
               {models.map(m => <MenuItem key={m.id} value={m.id}>{m.modelCode} — {m.modelName}</MenuItem>)}
             </TextField>
+            <TextField label="BOM Name" value={form.bomName} onChange={ch('bomName')} disabled={saving} fullWidth
+              placeholder="e.g. Standard Recipe, Summer Menu v2" />
             <Box sx={{ display: 'flex', gap: 2 }}>
               <TextField label="Version" type="number" value={form.version} onChange={ch('version')} disabled={saving} sx={{ flex: 1 }} inputProps={{ min: 1 }} />
               <TextField select label="Status" value={form.status} onChange={ch('status')} disabled={saving} sx={{ flex: 1 }}>
@@ -99,6 +102,10 @@ export default function BomGrid() {
   const [createOpen, setCreateOpen] = useState(false)
   const [itemsBom,   setItemsBom]   = useState(null)  // bom row for items dialog
   const [actionLoading, setActionLoading] = useState({})
+  const [renameRow,  setRenameRow]  = useState(null)  // bom row being renamed
+  const [renameName, setRenameName] = useState('')
+  const [renameSaving, setRenameSaving] = useState(false)
+  const [renameError, setRenameError] = useState('')
 
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 20 })
   const [selectionModel, setSelectionModel] = useState({ type: 'include', ids: new Set() })
@@ -143,7 +150,7 @@ export default function BomGrid() {
     if (!window.confirm(`Activate BOM v${row.version} for ${row.modelCode}? The current ACTIVE BOM will be archived.`)) return
     setBusy(row.id, true); setError('')
     try {
-      const updated = await updateBomStatus(row.id, 'ACTIVE')
+      await updateBomStatus(row.id, 'ACTIVE')
       // re-load so archived row also updates
       await load()
     } catch (e) { setError(e.message) }
@@ -154,8 +161,8 @@ export default function BomGrid() {
     if (!window.confirm(`Archive BOM v${row.version} for ${row.modelCode}?`)) return
     setBusy(row.id, true); setError('')
     try {
-      const updated = await updateBomStatus(row.id, 'ARCHIVED')
-      setRows(prev => prev.map(r => r.id === updated.id ? { ...updated, id: updated.id } : r))
+      const updatedBom = await updateBomStatus(row.id, 'ARCHIVED')
+      setRows(prev => prev.map(r => r.id === updatedBom.id ? { ...updatedBom, id: updatedBom.id } : r))
     } catch (e) { setError(e.message) }
     finally { setBusy(row.id, false) }
   }
@@ -174,17 +181,37 @@ export default function BomGrid() {
   async function handleSync(row) {
     setBusy(row.id, true); setError('')
     try {
-      const updated = await syncBomFromModelBoms(row.modelId)
-      // reload so new version appears
+      await syncBomFromModelBoms(row.modelId)
       await load()
     } catch (e) { setError(e.message) }
     finally { setBusy(row.id, false) }
   }
 
+  function openRename(row) {
+    setRenameRow(row)
+    setRenameName(row.bomName || '')
+    setRenameError('')
+  }
+
+  async function handleRenameSubmit(e) {
+    e.preventDefault()
+    if (!renameRow || renameSaving) return
+    setRenameSaving(true); setRenameError('')
+    try {
+      const updated = await updateBomName(renameRow.id, renameName.trim() || null)
+      setRows(prev => prev.map(r => r.id === updated.id ? { ...r, bomName: updated.bomName } : r))
+      setRenameRow(null)
+    } catch (e) { setRenameError(e.message || 'Rename failed') }
+    finally { setRenameSaving(false) }
+  }
+
   // ── Columns ───────────────────────────────────────────────────────
   const columns = [
     { field: 'modelCode', headerName: 'Model Code', width: 140 },
-    { field: 'modelName', headerName: 'Model Name', flex: 1 },
+    { field: 'modelName', headerName: 'Model Name', flex: 1, minWidth: 140 },
+    { field: 'bomName',   headerName: 'BOM Name',   flex: 1, minWidth: 140,
+      renderCell: ({ value }) => value || <span style={{ color: '#aaa', fontStyle: 'italic' }}>—</span>
+    },
     { field: 'version',   headerName: 'Version',    width: 90,  type: 'number' },
     {
       field: 'status', headerName: 'Status', width: 120,
@@ -206,6 +233,13 @@ export default function BomGrid() {
             <Tooltip title="Edit BOM Items">
               <IconButton size="small" onClick={() => setItemsBom(row)} disabled={busy}>
                 <ListAltIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+
+            {/* Rename BOM name */}
+            <Tooltip title="Edit BOM Name">
+              <IconButton size="small" color="primary" onClick={() => openRename(row)} disabled={busy}>
+                <EditIcon fontSize="small" />
               </IconButton>
             </Tooltip>
 
@@ -272,7 +306,7 @@ export default function BomGrid() {
   })
 
   const filteredIds = new Set(filteredRows.map(r => r.id))
-  const selectedIds = selectionModel.type === 'exclude'
+  const _selectedIds = selectionModel.type === 'exclude'
     ? filteredRows.map(r => r.id).filter(id => !selectionModel.ids.has(id))
     : Array.from(selectionModel.ids ?? []).filter(id => filteredIds.has(id))
 
@@ -366,6 +400,36 @@ export default function BomGrid() {
         bom={itemsBom}
         onClose={() => setItemsBom(null)}
       />
+
+      {/* ── Rename BOM Name dialog ───────────────────────────────── */}
+      <Dialog open={!!renameRow} onClose={renameSaving ? undefined : () => setRenameRow(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Edit BOM Name</DialogTitle>
+        <form onSubmit={handleRenameSubmit}>
+          <DialogContent dividers>
+            {renameError && <Alert severity="error" sx={{ mb: 2 }}>{renameError}</Alert>}
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+              {renameRow ? `${renameRow.modelCode} — v${renameRow.version} (${renameRow.status})` : ''}
+            </Typography>
+            <TextField
+              label="BOM Name"
+              value={renameName}
+              onChange={e => setRenameName(e.target.value)}
+              disabled={renameSaving}
+              fullWidth
+              autoFocus
+              placeholder="e.g. Standard Recipe, Summer Menu v2"
+              helperText="Leave blank to clear the name"
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setRenameRow(null)} disabled={renameSaving}>Cancel</Button>
+            <Button type="submit" variant="contained" disabled={renameSaving}>
+              {renameSaving ? <CircularProgress size={18} sx={{ mr: 1 }} /> : null}
+              Save
+            </Button>
+          </DialogActions>
+        </form>
+      </Dialog>
     </Box>
   )
 }

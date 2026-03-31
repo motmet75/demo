@@ -4,7 +4,7 @@ import { useAuth } from '../context/useAuth'
 import { getTenants } from '../api/tenantApi'
 
 export default function TenantSelector() {
-  const { tenantId, setTenantId, companyId } = useAppContext()
+  const { tenantId, setTenantId } = useAppContext()
   const { isAdmin, user } = useAuth()
   const [tenants, setTenants] = useState([])
   const [loading, setLoading] = useState(false)
@@ -42,12 +42,12 @@ export default function TenantSelector() {
     )
   }
 
-  const disabled = !!(companyId)
+  const disabled = false // Always allow tenant selection if context is missing or user wants to change
 
   return (
     <div style={{ display: 'inline-block', marginRight: 12 }}>
       <label>Tenant: </label>
-      <select value={tenantId || ''} onChange={handleChange} disabled={disabled || !!tenantId}>
+      <select value={tenantId || ''} onChange={handleChange} disabled={disabled}>
         <option value="">-- Select tenant --</option>
         {tenants.map((t) => (
           <option key={t.id} value={t.id}>{(t.tenantCode || t.code || t.name) + ' - ' + (t.tenantName || t.name || '')}</option>
@@ -55,7 +55,6 @@ export default function TenantSelector() {
       </select>
       {loading && <span style={{ marginLeft: 8 }}>Loading...</span>}
       {error && <span style={{ color: 'red', marginLeft: 8 }}>{error}</span>}
-      {disabled && <span style={{ marginLeft: 8, color: '#666' }}>Switch disabled while company selected</span>}
     </div>
   )
 }

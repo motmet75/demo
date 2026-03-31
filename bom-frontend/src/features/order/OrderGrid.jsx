@@ -27,11 +27,13 @@ import LocalShippingIcon from '@mui/icons-material/LocalShipping'
 import CancelIcon from '@mui/icons-material/Cancel'
 import InventoryIcon from '@mui/icons-material/Inventory'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
+import EditIcon from '@mui/icons-material/Edit'
 import { useAppContext } from '../../context/AppContext'
 import { fetchOrders, confirmOrder, deliverOrder, cancelOrder, checkInventory, moveToProduction } from '../../api/orderApi'
 import OrderCreateModal from './OrderCreateModal'
 import OrderDetailModal from './OrderDetailModal'
 import FinishOrderModal from './FinishOrderModal'
+import OrderEditModal from './OrderEditModal'
 
 const STATUS_COLOR = {
   DRAFT: 'default', CONFIRMED: 'primary', IN_PRODUCTION: 'warning',
@@ -84,6 +86,7 @@ export default function OrderGrid() {
 
   const [createOpen, setCreateOpen] = useState(false)
   const [detailId, setDetailId]     = useState(null)
+  const [editId, setEditId]         = useState(null)
   const [finishId, setFinishId]     = useState(null)
   const [actionLoading, setActionLoading] = useState({})
 
@@ -164,13 +167,16 @@ export default function OrderGrid() {
   const handleFinished = (updated) =>
     setRows(prev => prev.map(r => r.id === updated.id ? { ...updated, id: updated.id } : r))
 
+  const handleUpdated = (updated) =>
+    setRows(prev => prev.map(r => r.id === updated.id ? { ...updated, id: updated.id } : r))
+
   const handleCreated = (order) => {
     setRows(prev => [{ ...order, id: order.id }, ...prev])
     setTotalRows(t => t + 1)
   }
 
   const columns = [
-    { field: 'id', headerName: 'UUID', flex: 1, minWidth: 280,
+    { field: 'id', headerName: 'UUID', flex: 1, minWidth: 80,
       renderCell: ({ value }) => value
         ? <span title={value} style={{ fontFamily: 'monospace', fontSize: 11, cursor: 'pointer' }} onClick={() => navigator.clipboard?.writeText(value)}>{value}</span>
         : '—'
@@ -197,7 +203,7 @@ export default function OrderGrid() {
     { field: 'createdAt',        headerName: 'Created At',    width: 180,
       renderCell: ({ value }) => value ? new Date(value).toLocaleString() : '—' },
     {
-      field: '_actions', headerName: 'Actions', width: 220, sortable: false, filterable: false,
+      field: '_actions', headerName: 'Actions', width: 260, sortable: false, filterable: false,
       renderCell: ({ row }) => {
         const busy = !!actionLoading[row.id]; const s = row.status
         return (
@@ -205,6 +211,13 @@ export default function OrderGrid() {
             <Tooltip title="View Detail">
               <IconButton size="small" onClick={() => setDetailId(row.id)}><VisibilityIcon fontSize="small" /></IconButton>
             </Tooltip>
+            {s === 'DRAFT' && (
+              <Tooltip title="Edit Order"><span>
+                <IconButton size="small" color="secondary" disabled={busy} onClick={() => setEditId(row.id)}>
+                  <EditIcon fontSize="small" />
+                </IconButton>
+              </span></Tooltip>
+            )}
             {s === 'DRAFT' && (
               <Tooltip title="Confirm Order"><span>
                 <IconButton size="small" color="primary" disabled={busy} onClick={() => handleConfirm(row.id)}>
@@ -384,6 +397,7 @@ export default function OrderGrid() {
 
       {/* ── Other Dialogs ───────────────────────────────────────── */}
       <OrderCreateModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={handleCreated} />
+      <OrderEditModal open={!!editId} orderId={editId} onClose={() => setEditId(null)} onUpdated={handleUpdated} />
       <OrderDetailModal open={!!detailId} orderId={detailId} onClose={() => setDetailId(null)} />
       <FinishOrderModal open={!!finishId} orderId={finishId}
         onClose={() => setFinishId(null)} onFinished={handleFinished} />

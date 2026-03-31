@@ -19,7 +19,7 @@ import TenantSelector from './components/TenantSelector'
 import CompanySelector from './components/CompanySelector'
 import BomSelector from './components/BomSelector'
 import RequireContext from './components/RequireContext'
-import TenantList from './components/TenantList'
+// import TenantList from './components/TenantList'
 import ContractPage from './features/contract/ContractPage'
 import InventoryMovementPage from './features/inventory/InventoryMovementPage'
 import InvoicePage from './features/invoice/InvoicePage'
@@ -27,6 +27,7 @@ import ConsumptionPage from './features/consumption/ConsumptionPage'
 import LoginForm from './components/LoginForm'
 import RequireAuth from './components/RequireAuth'
 import AdminPage from './features/admin/AdminPage'
+import TenantsPage from './features/tenant/TenantsPage'
 
 function AppShell() {
   const { user, logout, isAdmin } = useAuth()
@@ -72,10 +73,9 @@ function AppShell() {
           <Link to="/orders" style={{ marginRight: 12, color: '#1565c0', fontWeight: 'bold' }}>📦 Orders</Link>
           <Link to="/invoices" style={{ marginRight: 12, color: '#6d4c41', fontWeight: 'bold' }}>🧾 Invoices</Link>
           <Link to="/consumption" style={{ marginRight: 12, color: '#37474f', fontWeight: 'bold' }}>📊 Consumption</Link>
-          {isAdmin && <Link to="/tenants" style={{ marginLeft: 12 }}>Tenants</Link>}
           <Link to="/companies" style={{ marginLeft: 12 }}>Companies</Link>
-          <Link to="/viettelpost" style={{ marginRight: 12, color: '#e74c3c', fontWeight: 'bold' }}>🚚 Shipping</Link>
-          {isAdmin ? <Link to="/admin/users" style={{ marginLeft: 12, fontWeight: 'bold', color: '#b71c1c' }}>Admin</Link> : null}
+          {isAdmin ? <Link to="/admin" style={{ marginLeft: 12, fontWeight: 'bold', color: '#b71c1c' }}>Admin</Link> : null}
+          {isAdmin ? <Link to="/tenants" style={{ marginLeft: 12 }}>Tenants</Link> : null}
         </nav>
 
         <Routes>
@@ -87,7 +87,6 @@ function AppShell() {
           <Route path="/inventory-movements" element={<RequireAuth><RequireContext><InventoryMovementPage /></RequireContext></RequireAuth>} />
           <Route path="/warehouses" element={<RequireAuth><WarehousePage /></RequireAuth>} />
           <Route path="/suppliers" element={<RequireAuth><SupplierPage /></RequireAuth>} />
-          <Route path="/tenants" element={<RequireAuth adminOnly><TenantList /></RequireAuth>} />
           <Route path="/companies" element={<RequireAuth><CompanyPage /></RequireAuth>} />
           <Route path="/contracts" element={<RequireAuth><RequireContext><ContractPage /></RequireContext></RequireAuth>} />
           <Route path="/orders" element={<RequireAuth><RequireContext><OrderPage /></RequireContext></RequireAuth>} />
@@ -95,7 +94,9 @@ function AppShell() {
           <Route path="/consumption" element={<RequireAuth><RequireContext><ConsumptionPage /></RequireContext></RequireAuth>} />
           <Route path="/boms" element={<RequireAuth><RequireContext><BomPage /></RequireContext></RequireAuth>} />
           <Route path="/viettelpost" element={<RequireAuth><ViettelPostPage /></RequireAuth>} />
+          <Route path="/admin" element={<RequireAuth adminOnly><AdminPage /></RequireAuth>} />
           <Route path="/admin/users" element={<RequireAuth adminOnly><AdminPage /></RequireAuth>} />
+          <Route path="/tenants" element={<RequireAuth adminOnly><TenantsPage /></RequireAuth>} />
         </Routes>
       </div>
     </BrowserRouter>

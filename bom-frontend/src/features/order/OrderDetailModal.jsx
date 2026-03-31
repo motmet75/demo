@@ -17,6 +17,8 @@ import TableCell from '@mui/material/TableCell'
 import TableBody from '@mui/material/TableBody'
 import PropTypes from 'prop-types'
 import { fetchOrderById } from '../../api/orderApi'
+import { apiFetchJson } from '../../api/client'
+import { fetchMaterials } from '../../api/materialApi'
 
 const STATUS_COLOR = {
   DRAFT: 'default', CONFIRMED: 'primary', IN_PRODUCTION: 'warning',
@@ -41,6 +43,8 @@ export default function OrderDetailModal({ open, orderId, onClose }) {
   const [order, setOrder] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError]   = useState('')
+  const [modelMap, setModelMap] = useState({})   // id → { modelCode, modelName }
+  const [materialMap, setMaterialMap] = useState({}) // id → { materialCode, materialName }
 
   useEffect(() => {
     if (!open || !orderId) return
@@ -51,6 +55,22 @@ export default function OrderDetailModal({ open, orderId, onClose }) {
       .catch(e => setError(e.message || 'Failed to load order'))
       .finally(() => setLoading(false))
   }, [open, orderId])
+
+  // Load lookup maps for model/material names
+  useEffect(() => {
+    if (!open) return
+    apiFetchJson('/bom/models').then(({ data }) => {
+      const list = Array.isArray(data) ? data : (data && Array.isArray(data.content) ? data.content : [])
+      const map = {}
+      list.forEach(m => { map[m.id] = m })
+      setModelMap(map)
+    }).catch(() => {})
+    fetchMaterials().then(list => {
+      const map = {}
+      list.forEach(m => { map[m.id] = m })
+      setMaterialMap(map)
+    }).catch(() => {})
+  }, [open])
 
   return (
     <Dialog open={!!open} onClose={onClose} fullWidth maxWidth="md">
@@ -92,33 +112,40 @@ export default function OrderDetailModal({ open, orderId, onClose }) {
                 <TableRow sx={{ '& th': { fontWeight: 600 } }}>
                   <TableCell>#</TableCell>
                   <TableCell>Type</TableCell>
-                  <TableCell>Model / Material ID</TableCell>
+                  <TableCell>Model / Material</TableCell>
                   <TableCell align="right">Ordered</TableCell>
                   <TableCell align="right">Produced</TableCell>
                   <TableCell align="right">Delivered</TableCell>
                   <TableCell align="right">Cancelled</TableCell>
                   <TableCell>Unit</TableCell>
                   <TableCell>Status</TableCell>
+                  <TableCell>Notes</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {(order.lines || []).map(l => (
-                  <TableRow key={l.id}>
-                    <TableCell>{l.lineNumber}</TableCell>
-                    <TableCell><Chip label={l.lineType} size="small" variant="outlined" /></TableCell>
-                    <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
-                      {l.lineType === 'MODEL' ? l.modelId : l.materialId}
-                    </TableCell>
-                    <TableCell align="right">{l.quantityOrdered}</TableCell>
-                    <TableCell align="right">{l.quantityProduced}</TableCell>
-                    <TableCell align="right">{l.quantityDelivered}</TableCell>
-                    <TableCell align="right">{l.quantityCancelled}</TableCell>
-                    <TableCell>{l.unit}</TableCell>
-                    <TableCell>
-                      <Chip label={l.lineStatus} size="small" color={l.lineStatus === 'COMPLETED' ? 'success' : l.lineStatus === 'CANCELLED' ? 'error' : 'default'} />
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {(order.lines || []).map(l => {
+                  const model    = l.modelId    ? modelMap[l.modelId]       : null
+                  const material = l.materialId ? materialMap[l.materialId] : null
+                  const nameLabel = l.lineType === 'MODEL'
+                    ? (model    ? `${model.modelCode} – ${model.modelName}`        : <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{l.modelId}</span>)
+                    : (material ? `${material.materialCode} – ${material.materialName}` : <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{l.materialId}</span>)
+                  return (
+                    <TableRow key={l.id}>
+                      <TableCell>{l.lineNumber}</TableCell>
+                      <TableCell><Chip label={l.lineType} size="small" variant="outlined" /></TableCell>
+                      <TableCell>{nameLabel}</TableCell>
+                      <TableCell align="right">{l.quantityOrdered}</TableCell>
+                      <TableCell align="right">{l.quantityProduced}</TableCell>
+                      <TableCell align="right">{l.quantityDelivered}</TableCell>
+                      <TableCell align="right">{l.quantityCancelled}</TableCell>
+                      <TableCell>{l.unit}</TableCell>
+                      <TableCell>
+                        <Chip label={l.lineStatus} size="small" color={l.lineStatus === 'COMPLETED' ? 'success' : l.lineStatus === 'CANCELLED' ? 'error' : 'default'} />
+                      </TableCell>
+                      <TableCell sx={{ maxWidth: 200, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12 }}>{l.notes || '—'}</TableCell>
+                    </TableRow>
+                  )
+                })}
               </TableBody>
             </Table>
           </>

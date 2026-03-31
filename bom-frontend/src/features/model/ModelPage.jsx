@@ -13,7 +13,7 @@ export default function ModelPage() {
 
   return (
     <div>
-      <ModelImport />
+      <ModelImport onImportSuccess={handleImportSuccess} />
 
       <div style={{ marginBottom: 12 }}>
         <button type="button" onClick={handleOpenImport}>Import BOM</button>

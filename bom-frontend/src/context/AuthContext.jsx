@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { apiFetchJson } from '../api/client'
+import { apiFetchJson, setLiveUsername } from '../api/client'
 import AuthContext from './AuthContextValue'
 import { useAppContext } from './AppContext'
 
@@ -12,10 +12,12 @@ export function AuthProvider({ children }) {
     const { res, data } = await apiFetchJson('/auth/me', { credentials: 'include' })
     if (!res.ok || !data?.authenticated) {
       setUser(null)
+      setLiveUsername(null)
       return null
     }
     const u = data.user || null
     setUser(u)
+    setLiveUsername(u?.username ?? null)
     restoreFromUser(u)
     return u
   }
@@ -41,6 +43,7 @@ export function AuthProvider({ children }) {
 
     const u = data.user || null
     setUser(u)
+    setLiveUsername(u?.username ?? null)
     restoreFromUser(u)
     return u
   }
@@ -48,6 +51,7 @@ export function AuthProvider({ children }) {
   const logout = async () => {
     await apiFetchJson('/auth/logout', { method: 'POST', credentials: 'include' })
     setUser(null)
+    setLiveUsername(null)
   }
 
   const value = useMemo(() => ({

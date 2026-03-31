@@ -77,6 +77,10 @@ export default function ConsumptionPage() {
             color={value === 'SUFFICIENT' ? 'success' : 'error'}
             variant="outlined" />
         : '—' },
+    { field: 'updatedBy', headerName: 'Checked By', width: 130,
+      renderCell: ({ value }) => value
+        ? <span style={{ fontWeight: 500 }}>{value}</span>
+        : <span style={{ color: '#aaa' }}>—</span> },
     { field: 'createdAt', headerName: 'Checked At', width: 170,
       valueFormatter: v => v ? new Date(v).toLocaleString() : '' },
   ]

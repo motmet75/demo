@@ -17,7 +17,8 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        // apply to bom APIs and inventory/materials etc. Skip public tenant/company endpoints which the interceptor already allows
-        registry.addInterceptor(contextInterceptor).addPathPatterns("/bom/api/**", "/api/**");
+        // apply to all /bom/** endpoints — covers inventory, movements, materials, etc.
+        // public tenant/company endpoints are allowed inside the interceptor itself
+        registry.addInterceptor(contextInterceptor).addPathPatterns("/bom/**", "/api/**");
     }
 }

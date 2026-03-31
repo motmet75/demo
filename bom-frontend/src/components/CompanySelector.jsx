@@ -1,11 +1,9 @@
 import React, { useEffect, useState } from 'react'
 import { useAppContext } from '../context/AppContext'
-import { useAuth } from '../context/useAuth'
 import companyApi from '../api/companyApi'
 
 export default function CompanySelector() {
-  const { tenantId, companyId, setCompanyId } = useAppContext()
-  const { isAdmin, user } = useAuth()
+  const { tenantId, companyId, setCompanyWithName } = useAppContext()
   const [companies, setCompanies] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -32,33 +30,19 @@ export default function CompanySelector() {
 
   const handleChange = (e) => {
     const v = e.target.value || null
-    setCompanyId(v)
+    const selected = companies.find(c => c.id === v)
+    const name = selected ? (selected.name ?? selected.companyName ?? selected.code ?? null) : null
+    setCompanyWithName(v, name)
   }
 
-  // Non-admin users: can select company but only within their assignedTenantId
-  if (!isAdmin) {
-    return (
-      <div style={{ display: 'inline-block', marginRight: 12 }}>
-        <label>Company: </label>
-        <select value={companyId || ''} onChange={handleChange} disabled={!tenantId}>
-          <option value="">-- Select company --</option>
-          {companies.map((c) => (
-            <option key={c.id} value={c.id}>{c.code ?? c.companyCode ?? ''} - {c.name ?? c.companyName ?? ''}</option>
-          ))}
-        </select>
-        {loading && <span style={{ marginLeft: 8 }}>Loading...</span>}
-        {error && <span style={{ color: 'red', marginLeft: 8 }}>{error}</span>}
-      </div>
-    )
-  }
-
+  // Always allow company selection if tenant is selected
   return (
     <div style={{ display: 'inline-block', marginRight: 12 }}>
       <label>Company: </label>
-      <select value={companyId || ''} onChange={handleChange} disabled={!tenantId || !!companyId}>
+      <select value={companyId || ''} onChange={handleChange} disabled={!tenantId}>
         <option value="">-- Select company --</option>
         {companies.map((c) => (
-          <option key={c.id} value={c.id}>{c.code} - {c.name}</option>
+          <option key={c.id} value={c.id}>{c.code ?? c.companyCode ?? ''} - {c.name ?? c.companyName ?? ''}</option>
         ))}
       </select>
       {loading && <span style={{ marginLeft: 8 }}>Loading...</span>}

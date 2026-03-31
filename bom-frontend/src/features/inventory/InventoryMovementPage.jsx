@@ -11,6 +11,7 @@ import MenuItem from '@mui/material/MenuItem'
 import Chip from '@mui/material/Chip'
 import CircularProgress from '@mui/material/CircularProgress'
 import { useAppContext } from '../../context/AppContext'
+import { useAuth } from '../../context/useAuth'
 import { fetchMovements, recordMovementIn, recordMovementOut, recordMovementTransfer, recordMovementAdjustment, deleteMovement } from '../../api/inventoryMovementApi'
 import { fetchMaterials } from '../../api/materialApi'
 import { fetchWarehouses } from '../../api/warehouseApi'
@@ -18,28 +19,30 @@ import { fetchWarehouses } from '../../api/warehouseApi'
 const MOVEMENT_TYPES = ['IN', 'OUT', 'TRANSFER', 'ADJUSTMENT', 'IMPORT', 'IMPORT_UPDATE']
 const TYPE_COLORS = { IN: 'success', OUT: 'error', TRANSFER: 'info', ADJUSTMENT: 'warning', IMPORT: 'default', IMPORT_UPDATE: 'default' }
 
-const EMPTY_FORM = {
-  movementType: 'IN',
-  materialId: '',
-  fromWarehouseId: '',
-  toWarehouseId: '',
-  warehouseId: '',
-  quantity: '',
-  unit: 'pcs',
-  batchNo: '',
-  reason: '',
-  createdBy: 'system',
-  notes: ''
-}
-
 export default function InventoryMovementPage() {
   const { tenantId, companyId } = useAppContext()
+  const { user } = useAuth()
+  const currentUsername = user?.username || 'system'
+
+  const makeEmptyForm = () => ({
+    movementType: 'IN',
+    materialId: '',
+    fromWarehouseId: '',
+    toWarehouseId: '',
+    warehouseId: '',
+    quantity: '',
+    unit: 'pcs',
+    batchNo: '',
+    reason: '',
+    notes: ''
+  })
+
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(false)
   const [materials, setMaterials] = useState([])
   const [warehouses, setWarehouses] = useState([])
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [form, setForm] = useState(EMPTY_FORM)
+  const [form, setForm] = useState(makeEmptyForm)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [filterType, setFilterType] = useState('')
@@ -98,7 +101,7 @@ export default function InventoryMovementPage() {
       const opts = { tenantId, companyId }
       const qty = parseFloat(form.quantity)
       if (isNaN(qty) || qty <= 0) { setError('Quantity must be a positive number'); setSaving(false); return }
-      const base = { materialId: form.materialId, quantity: qty, unit: form.unit, batchNo: form.batchNo || undefined, reason: form.reason || undefined, createdBy: form.createdBy || 'system', notes: form.notes || undefined }
+      const base = { materialId: form.materialId, quantity: qty, unit: form.unit, batchNo: form.batchNo || undefined, reason: form.reason || undefined, createdBy: currentUsername, notes: form.notes || undefined }
       if (form.movementType === 'IN') {
         await recordMovementIn({ ...base, warehouseId: form.warehouseId }, opts)
       } else if (form.movementType === 'OUT') {
@@ -109,7 +112,7 @@ export default function InventoryMovementPage() {
         await recordMovementAdjustment({ ...base, warehouseId: form.warehouseId }, opts)
       }
       setDialogOpen(false)
-      setForm(EMPTY_FORM)
+      setForm(makeEmptyForm())
       await load()
     } catch (ex) {
       setError(ex?.message || 'Failed to record movement')
@@ -209,7 +212,7 @@ export default function InventoryMovementPage() {
         : ''
     },
     { field: 'status', headerName: 'Status', width: 110 },
-    { field: 'createdBy', headerName: 'By', width: 100 },
+    { field: 'createdBy', headerName: 'Created By', width: 130 },
     { field: 'notes', headerName: 'Notes', flex: 1 },
     { field: 'actions', headerName: '', width: 80, sortable: false, renderCell: ({ row }) => row.movementType !== 'IMPORT' && row.movementType !== 'IMPORT_UPDATE' ? <Button size="small" color="error" onClick={() => handleDelete(row.id)}>Del</Button> : null }
   ]
@@ -263,7 +266,7 @@ export default function InventoryMovementPage() {
             Delete Selected ({selectedIds.length})
           </Button>
           <Button variant="outlined" onClick={() => load()} disabled={loading} title="Refresh">🔄 Refresh</Button>
-          <Button variant="contained" onClick={() => { setForm(EMPTY_FORM); setError(''); setDialogOpen(true) }}>+ Record Movement</Button>
+          <Button variant="contained" onClick={() => { setForm(makeEmptyForm()); setError(''); setDialogOpen(true) }}>+ Record Movement</Button>
         </Box>
       </Box>
 
@@ -316,7 +319,10 @@ export default function InventoryMovementPage() {
             </Box>
             <TextField label="Batch No" value={form.batchNo} onChange={handleChange('batchNo')} disabled={saving} size="small" />
             <TextField label="Reason" value={form.reason} onChange={handleChange('reason')} disabled={saving} size="small" />
-            <TextField label="Created By" value={form.createdBy} onChange={handleChange('createdBy')} disabled={saving} size="small" />
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <span style={{ fontSize: 13, color: '#555', minWidth: 80 }}>Created By:</span>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>{currentUsername}</span>
+            </Box>
             <TextField label="Notes" value={form.notes} onChange={handleChange('notes')} disabled={saving} size="small" multiline rows={2} />
 
             {error && <Box sx={{ color: 'error.main', fontSize: 13 }}>{error}</Box>}

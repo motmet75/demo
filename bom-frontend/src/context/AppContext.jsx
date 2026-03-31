@@ -7,12 +7,14 @@ const STORAGE_KEY = 'bom_app_context_v1'
 const defaultState = {
   tenantId: null,
   companyId: null,
+  companyName: null,
 }
 
 const AppContext = createContext({
   ...defaultState,
   setTenantId: () => {},
   setCompanyId: () => {},
+  setCompanyWithName: () => {},
   reset: () => {},
   restoreFromUser: () => {},
 })
@@ -26,6 +28,7 @@ export function AppProvider({ children }) {
       return {
         tenantId: parsed.tenantId ?? null,
         companyId: parsed.companyId ?? null,
+        companyName: parsed.companyName ?? null,
       }
     } catch {
       return defaultState
@@ -67,19 +70,27 @@ export function AppProvider({ children }) {
     }).catch(() => {/* ignore – user may not be logged in yet */})
   }, [state.tenantId, state.companyId])
 
-  // When tenant changes, clear company
+  // When tenant changes, clear company and companyName
   const setTenantId = (tenantId) => {
     setState((s) => {
       if (s.tenantId === tenantId) return { ...s }
-      return { ...s, tenantId: tenantId ?? null, companyId: null }
+      return { ...s, tenantId: tenantId ?? null, companyId: null, companyName: null }
     })
   }
 
-  // When company changes
+  // When company changes (id only, clears name)
   const setCompanyId = (companyId) => {
     setState((s) => {
       if (s.companyId === companyId) return { ...s }
-      return { ...s, companyId: companyId ?? null }
+      return { ...s, companyId: companyId ?? null, companyName: null }
+    })
+  }
+
+  // When company changes with known name
+  const setCompanyWithName = (companyId, companyName) => {
+    setState((s) => {
+      if (s.companyId === companyId && s.companyName === companyName) return s
+      return { ...s, companyId: companyId ?? null, companyName: companyName ?? null }
     })
   }
 
@@ -117,8 +128,10 @@ export function AppProvider({ children }) {
       value={{
         tenantId: state.tenantId,
         companyId: state.companyId,
+        companyName: state.companyName,
         setTenantId,
         setCompanyId,
+        setCompanyWithName,
         reset,
         restoreFromUser,
       }}

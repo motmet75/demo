@@ -207,12 +207,10 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
     // validate batchNo required
     if (!form.batchNo || String(form.batchNo).trim() === '') { setErrorMessage('batchNo is required'); return }
 
-    // validate expiration date if provided: must be future
+    // validate expiration date if provided
     if (form.expirationLocal && String(form.expirationLocal).trim() !== '') {
       const expDate = new Date(form.expirationLocal)
       if (Number.isNaN(expDate.getTime())) { setErrorMessage('Invalid expiration date'); return }
-      const now = new Date()
-      if (expDate < now) { setErrorMessage('Expiration date must be in the future or now'); return }
     }
 
     setIsSubmitting(true)
