@@ -115,9 +115,32 @@ public class BomCrudController {
             Integer version = body.get("version") != null
                     ? Integer.parseInt(String.valueOf(body.get("version"))) : 1;
             String status = body.get("status") != null ? String.valueOf(body.get("status")) : "DRAFT";
+            String bomName = body.get("bomName") != null ? String.valueOf(body.get("bomName")) : null;
 
             BomEntity bom = bomService.createBom(modelId, tenantId, companyId, version, status);
+            if (bomName != null && !bomName.isBlank()) { bom.setBomName(bomName); }
+            bom = bomService.saveBom(bom);
             return ResponseEntity.status(HttpStatus.CREATED).body(toDto(bom));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(e.getMessage());
+        }
+    }
+
+    // ── Update BOM name ───────────────────────────────────────────────
+
+    @PutMapping(path = "/{id}/name", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> updateName(
+            @PathVariable UUID id,
+            @RequestBody Map<String, Object> body) {
+        try {
+            BomEntity bom = bomService.getById(id)
+                    .orElseThrow(() -> new IllegalArgumentException("BOM not found: " + id));
+            String bomName = body.get("bomName") != null ? String.valueOf(body.get("bomName")) : null;
+            bom.setBomName(bomName != null && !bomName.isBlank() ? bomName.trim() : null);
+            bom = bomService.saveBom(bom);
+            return ResponseEntity.ok(toDto(bom));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         } catch (Exception e) {
@@ -281,6 +304,7 @@ public class BomCrudController {
                 b.getModel() != null ? b.getModel().getId() : null,
                 b.getModel() != null ? b.getModel().getModelCode() : null,
                 b.getModel() != null ? b.getModel().getModelName() : null,
+                b.getBomName(),
                 b.getVersion(),
                 b.getStatus(),
                 b.getTenantId(),
@@ -306,18 +330,20 @@ public class BomCrudController {
         public final UUID modelId;
         public final String modelCode;
         public final String modelName;
+        public final String bomName;
         public final Integer version;
         public final String status;
         public final UUID tenantId;
         public final UUID companyId;
         public final java.time.Instant createdAt;
 
-        public BomDto(UUID id, UUID modelId, String modelCode, String modelName,
+        public BomDto(UUID id, UUID modelId, String modelCode, String modelName, String bomName,
                       Integer version, String status, UUID tenantId, UUID companyId,
                       java.time.Instant createdAt) {
             this.id = id; this.modelId = modelId; this.modelCode = modelCode;
-            this.modelName = modelName; this.version = version; this.status = status;
-            this.tenantId = tenantId; this.companyId = companyId; this.createdAt = createdAt;
+            this.modelName = modelName; this.bomName = bomName; this.version = version;
+            this.status = status; this.tenantId = tenantId; this.companyId = companyId;
+            this.createdAt = createdAt;
         }
     }
 

@@ -66,6 +66,9 @@ public class OrderConsumption {
     @Column(name = "updated_at")
     private Instant updatedAt;
 
+    @Column(name = "updated_by", length = 100)
+    private String updatedBy;
+
     public OrderConsumption() {}
 
     @PrePersist
@@ -112,6 +115,9 @@ public class OrderConsumption {
 
     public Instant getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
+
+    public String getUpdatedBy() { return updatedBy; }
+    public void setUpdatedBy(String updatedBy) { this.updatedBy = updatedBy; }
 
     @Override
     public boolean equals(Object o) {

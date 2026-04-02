@@ -13,7 +13,9 @@ import java.util.Map;
 /**
  * REST Controller for Viettel Post API endpoints
  */
-@RestController
+// This controller is superseded by com.demo.viettelpost.ViettelPostController.
+// @RestController annotation removed to avoid bean name and URL mapping conflicts.
+// @RestController("bomCoreViettelPostController")
 @RequestMapping("/viettelpost")
 @CrossOrigin(origins = "*")
 public class ViettelPostController {

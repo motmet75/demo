@@ -59,6 +59,11 @@ public class BomService {
         return bomRepository.findById(id);
     }
 
+    /** Save an already-modified BomEntity (e.g. after setting bomName). */
+    public BomEntity saveBom(BomEntity bom) {
+        return bomRepository.save(bom);
+    }
+
     public Optional<BomEntity> getActiveBomForModel(UUID modelId, UUID tenantId) {
         return modelRepository.findById(modelId)
                 .flatMap(m -> bomRepository.findByModelAndTenantIdAndStatus(m, tenantId, "ACTIVE"));

@@ -41,6 +41,17 @@ export async function createBom(payload) {
   return data
 }
 
+// ── Update BOM name ───────────────────────────────────────────────────
+export async function updateBomName(bomId, bomName) {
+  const { res, data } = await apiFetchJson(`${BASE}/${encodeURIComponent(bomId)}/name`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ bomName })
+  })
+  if (!res.ok) throw new Error((typeof data === 'string' ? data : data?.error) || 'Update name failed')
+  return data
+}
+
 // ── Update BOM status ─────────────────────────────────────────────────
 export async function updateBomStatus(bomId, status) {
   const { res, data } = await apiFetchJson(`${BASE}/${encodeURIComponent(bomId)}/status`, {

@@ -48,6 +48,7 @@ import com.ams.bomcore.repository.OrderLineRepository;
 import com.ams.bomcore.repository.ProductionConsumptionRepository;
 import com.ams.bomcore.repository.ProductionRunRepository;
 import com.ams.bomcore.service.bom.BomService;
+import com.ams.bomcore.context.UserContext;
 import com.ams.bomcore.service.order.exception.BomNotFoundException;
 import com.ams.bomcore.service.order.exception.InsufficientStockException;
 import com.ams.bomcore.service.order.exception.InvalidOrderStatusException;
@@ -522,6 +523,10 @@ public class OrderService {
         line.setNotes(dto.getNotes());
         line.setTenantId(tenantId);
         line.setCompanyId(companyId);
+        // Store selected BOM id early — will be overwritten with resolved bom id after explosion
+        if (dto.getBomId() != null) {
+            line.setBomCalculationId(dto.getBomId());
+        }
         return line;
     }
 
@@ -531,13 +536,19 @@ public class OrderService {
      */
     private void processProvisionalConsumption(OrderHeader header, List<OrderLine> lines,
                                                 UUID tenantId, UUID companyId) {
-        // Pre-flight: validate active BOM exists for every MODEL line
+        // Pre-flight: validate that a BOM (active or specified) exists for every MODEL line
         for (OrderLine line : lines) {
             if (OrderLine.LINE_TYPE_MODEL.equals(line.getLineType())) {
-                try {
-                    bomService.validateActiveBomForOrder(line.getModelId(), tenantId);
-                } catch (IllegalStateException e) {
-                    throw new BomNotFoundException(e.getMessage());
+                if (line.getBomCalculationId() != null) {
+                    // Specific BOM chosen — validate it exists and belongs to this tenant
+                    bomRepository.findByIdAndTenantIdAndCompanyId(line.getBomCalculationId(), tenantId, companyId)
+                            .orElseThrow(() -> new BomNotFoundException("BOM not found: " + line.getBomCalculationId()));
+                } else {
+                    try {
+                        bomService.validateActiveBomForOrder(line.getModelId(), tenantId);
+                    } catch (IllegalStateException e) {
+                        throw new BomNotFoundException(e.getMessage());
+                    }
                 }
             }
         }
@@ -551,9 +562,9 @@ public class OrderService {
     }
 
     /**
-     * Explode the active BOM for a MODEL line.
-     * Creates one OrderConsumptionLogEntity per BOM item (material).
-     * Applies compensation rate (from material.price field if used as rate, or default 1.0).
+     * Explode the BOM for a MODEL line.
+     * Uses the BOM id stored on the line (set from OrderLineCreateDto.bomId) if present,
+     * otherwise falls back to the ACTIVE BOM for the model+tenant.
      */
     private void explodeBomForLine(OrderHeader header, OrderLine line,
                                    UUID tenantId, UUID companyId) {
@@ -563,9 +574,15 @@ public class OrderService {
         Model model = modelRepository.findById(modelId)
                 .orElseThrow(() -> new IllegalArgumentException("Model not found: " + modelId));
 
-        // Find the active BOM for this model+tenant
-        BomEntity bom = bomRepository.findByModelAndTenantIdAndStatus(model, tenantId, "ACTIVE")
-                .orElseThrow(() -> new BomNotFoundException(modelId));
+        // Resolve BOM: use caller-supplied bomId if present, else find ACTIVE
+        BomEntity bom;
+        if (line.getBomCalculationId() != null) {
+            bom = bomRepository.findById(line.getBomCalculationId())
+                    .orElseThrow(() -> new BomNotFoundException(line.getBomCalculationId()));
+        } else {
+            bom = bomRepository.findByModelAndTenantIdAndStatus(model, tenantId, "ACTIVE")
+                    .orElseThrow(() -> new BomNotFoundException(modelId));
+        }
 
         // Get all BOM items (flat explosion — level-0 leaf items are raw materials)
         List<BomItemEntity> bomItems = bomItemRepository.findByBomIdAndTenantIdAndCompanyId(
@@ -746,6 +763,9 @@ public class OrderService {
         // Clear old consumption entries for these orders
         orderConsumptionRepository.deleteByOrderIds(orderIds);
 
+        // Capture the currently logged-in user
+        String checkedBy = UserContext.getUsernameOrDefault();
+
         // Aggregate required qty per material across all orders
         Map<UUID, BigDecimal> requiredQtyByMaterial = new java.util.LinkedHashMap<>();
         Map<UUID, Material> materialById = new HashMap<>();
@@ -803,6 +823,7 @@ public class OrderService {
                         oc.setCheckResult(sufficient ? "SUFFICIENT" : "INSUFFICIENT");
                         oc.setTenantId(tenantId);
                         oc.setCompanyId(companyId);
+                        oc.setUpdatedBy(checkedBy);
                         orderConsumptionRepository.save(oc);
                     }
                 }
@@ -868,6 +889,9 @@ public class OrderService {
     @Transactional(rollbackFor = Exception.class)
     public List<OrderResponseDto> moveToProduction(List<UUID> orderIds, Instant deliveryDateTime,
                                                     String issuedBy, UUID tenantId, UUID companyId) {
+        // Resolve issuedBy: prefer explicit param, fall back to UserContext
+        String resolvedIssuedBy = (issuedBy != null && !issuedBy.isBlank())
+                ? issuedBy : UserContext.getUsernameOrDefault();
         // 1. Verify stock
         CheckInventoryResult check = checkInventory(orderIds, tenantId, companyId);
         if (!check.isSufficient()) {
@@ -950,7 +974,7 @@ public class OrderService {
                     mvt.setReferenceId(orderId);
                     mvt.setInventoryId(inv.getId());
                     mvt.setBatchNo(inv.getBatchNo());
-                    mvt.setCreatedBy(issuedBy);
+                    mvt.setCreatedBy(resolvedIssuedBy);
                     mvt.setStatus("COMPLETED");
                     movementRepository.save(mvt);
 

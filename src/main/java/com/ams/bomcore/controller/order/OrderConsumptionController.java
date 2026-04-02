@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.ams.bomcore.domain.order.OrderConsumption;
+import com.ams.bomcore.controller.order.dto.OrderConsumptionDto;
 import com.ams.bomcore.repository.OrderConsumptionRepository;
 
 /**
@@ -45,6 +45,6 @@ public class OrderConsumptionController {
         companyId = resolve(companyId, hc);
         if (tenantId == null || companyId == null)
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
-        return ResponseEntity.ok(repository.findByTenantIdAndCompanyId(tenantId, companyId));
+        return ResponseEntity.ok(repository.findDtoByTenantIdAndCompanyId(tenantId, companyId));
     }
 }

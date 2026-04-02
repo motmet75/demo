@@ -21,4 +21,7 @@ public interface BomRepository extends JpaRepository<BomEntity, UUID> {
 
     List<BomEntity> findAllByTenantIdAndCompanyId(UUID tenantId, UUID companyId);
 
+    List<BomEntity> findAllByModelIdAndTenantIdAndCompanyId(UUID modelId, UUID tenantId, UUID companyId);
+
+    Optional<BomEntity> findByIdAndTenantIdAndCompanyId(UUID id, UUID tenantId, UUID companyId);
 }

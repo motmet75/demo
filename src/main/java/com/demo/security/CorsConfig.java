@@ -17,7 +17,7 @@ public class CorsConfig {
                     "https://192.168.100.175",
                     "http://localhost:5173",
                     "http://15.165.215.69:5173",
-                    "https://anhmedia.vn"
+                    "https://anhmedia.vn", 
                 };
 
                 registry.addMapping("/auth/**")
@@ -37,6 +37,15 @@ public class CorsConfig {
                         .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                         .allowedHeaders("*")
                         .allowCredentials(true);
+                
+               
+
+                registry.addMapping("/viettelpost/**")
+                        .allowedOrigins(origins)
+                        .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                        .allowedHeaders("*")
+                        .allowCredentials(true);
+               
             }
         };
     }

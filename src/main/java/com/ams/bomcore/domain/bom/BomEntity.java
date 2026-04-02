@@ -38,6 +38,9 @@ public class BomEntity {
     @JoinColumn(name = "model_id", nullable = false)
     private Model model;
 
+    @Column(name = "bom_name", length = 200)
+    private String bomName;
+
     @Column(name = "version", nullable = false)
     private Integer version;
 
@@ -88,6 +91,14 @@ public class BomEntity {
 
     public void setVersion(Integer version) {
         this.version = version;
+    }
+
+    public String getBomName() {
+        return bomName;
+    }
+
+    public void setBomName(String bomName) {
+        this.bomName = bomName;
     }
 
     public String getStatus() {

@@ -80,6 +80,12 @@ public class OrderCreateDto {
         /** Required when lineType = MODEL */
         private UUID modelId;
 
+        /**
+         * Optional: specific BOM id to use for this MODEL line.
+         * If null, the service will use the ACTIVE BOM for the model.
+         */
+        private UUID bomId;
+
         /** Required when lineType = MATERIAL */
         private UUID materialId;
 
@@ -99,6 +105,9 @@ public class OrderCreateDto {
 
         public UUID getModelId() { return modelId; }
         public void setModelId(UUID modelId) { this.modelId = modelId; }
+
+        public UUID getBomId() { return bomId; }
+        public void setBomId(UUID bomId) { this.bomId = bomId; }
 
         public UUID getMaterialId() { return materialId; }
         public void setMaterialId(UUID materialId) { this.materialId = materialId; }

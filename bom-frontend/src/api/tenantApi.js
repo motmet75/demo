@@ -44,4 +44,11 @@ export async function activateTenant(id, active) {
   return handleResponse(res)
 }
 
-export default { getTenants, createTenant, updateTenant, activateTenant }
+export async function deleteTenant(id) {
+  const res = await apiFetch(`${base}/${id}`, {
+    method: 'DELETE',
+  })
+  return handleResponse(res)
+}
+
+export default { getTenants, createTenant, updateTenant, activateTenant, deleteTenant }

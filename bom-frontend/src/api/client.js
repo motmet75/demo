@@ -2,12 +2,15 @@
 const STORAGE_KEY = 'bom_app_context_v1'
 
 // In-memory context store — updated synchronously by React components via setLiveContext().
-// This is always preferred over localStorage so API calls get the current React state,
-// not a potentially-stale serialised snapshot.
 let _liveContext = { tenantId: null, companyId: null }
+let _liveUsername = null
 
 export function setLiveContext(tenantId, companyId) {
   _liveContext = { tenantId: tenantId ?? null, companyId: companyId ?? null }
+}
+
+export function setLiveUsername(username) {
+  _liveUsername = username ?? null
 }
 
 export function getContextHeaders() {
@@ -15,25 +18,29 @@ export function getContextHeaders() {
   const tenantId = _liveContext.tenantId
   const companyId = _liveContext.companyId
 
+  const headers = {}
+
   if (tenantId || companyId) {
-    const headers = {}
     if (tenantId) headers['X-Tenant-Id'] = tenantId
     if (companyId) headers['X-Company-Id'] = companyId
-    return headers
+  } else {
+    // Fallback: read from localStorage (used before the first React render)
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (parsed.tenantId) headers['X-Tenant-Id'] = parsed.tenantId
+        if (parsed.companyId) headers['X-Company-Id'] = parsed.companyId
+      }
+    } catch {
+      // ignore
+    }
   }
 
-  // Fallback: read from localStorage (used before the first React render)
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return {}
-    const parsed = JSON.parse(raw)
-    const headers = {}
-    if (parsed.tenantId) headers['X-Tenant-Id'] = parsed.tenantId
-    if (parsed.companyId) headers['X-Company-Id'] = parsed.companyId
-    return headers
-  } catch {
-    return {}
-  }
+  // Always attach the logged-in username when available
+  if (_liveUsername) headers['X-Username'] = _liveUsername
+
+  return headers
 }
 
 /**

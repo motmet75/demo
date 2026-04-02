@@ -13,6 +13,7 @@ import com.ams.bomcore.domain.inventory.InventoryEntity;
 import com.ams.bomcore.domain.inventory.InventoryMovementEntity;
 import com.ams.bomcore.domain.inventory.WarehouseEntity;
 import com.ams.bomcore.domain.material.Material;
+import com.ams.bomcore.context.UserContext;
 import com.ams.bomcore.repository.InventoryMovementRepository;
 import com.ams.bomcore.repository.InventoryRepository;
 import com.ams.bomcore.repository.MaterialRepository;
@@ -48,6 +49,12 @@ public class InventoryMovementService {
     }
 
     // ─── helpers ────────────────────────────────────────────────────────────────
+
+    /** Resolve createdBy: prefer explicit param, fall back to UserContext (thread-local), then "system". */
+    private String resolveCreatedBy(String createdBy) {
+        if (createdBy != null && !createdBy.isBlank()) return createdBy;
+        return UserContext.getUsernameOrDefault();
+    }
 
     /** Find an inventory row by material + warehouse + batchNo. Returns empty Optional when batchNo is null/blank (uses first row for that material+warehouse). */
     private Optional<InventoryEntity> findInventory(Material material, WarehouseEntity warehouse, String batchNo) {
@@ -147,7 +154,7 @@ public class InventoryMovementService {
         movement.setReferenceId(referenceId);
         movement.setInventoryId(savedInv.getId());
         movement.setBatchNo(batchNo);
-        movement.setCreatedBy(createdBy);
+        movement.setCreatedBy(resolveCreatedBy(createdBy));
         movement.setNotes(notes);
         movement.setStatus("COMPLETED");
         return movementRepository.save(movement);
@@ -224,7 +231,7 @@ public class InventoryMovementService {
         movement.setReferenceId(referenceId);
         movement.setInventoryId(savedInv.getId());
         movement.setBatchNo(batchNo);
-        movement.setCreatedBy(createdBy);
+        movement.setCreatedBy(resolveCreatedBy(createdBy));
         movement.setNotes(notes);
         movement.setStatus("COMPLETED");
         return movementRepository.save(movement);
@@ -283,7 +290,7 @@ public class InventoryMovementService {
         movement.setMovementType(MOVEMENT_TRANSFER);
         movement.setReason(reason);
         movement.setBatchNo(batchNo);
-        movement.setCreatedBy(createdBy);
+        movement.setCreatedBy(resolveCreatedBy(createdBy));
         movement.setNotes(notes);
         movement.setStatus("COMPLETED");
         return movementRepository.save(movement);
@@ -331,7 +338,7 @@ public class InventoryMovementService {
         movement.setMovementType(MOVEMENT_ADJUSTMENT);
         movement.setReason(reason);
         movement.setBatchNo(batchNo);
-        movement.setCreatedBy(createdBy);
+        movement.setCreatedBy(resolveCreatedBy(createdBy));
         movement.setNotes(notes);
         movement.setInventoryId(savedInv.getId());
         movement.setStatus("COMPLETED");
@@ -373,7 +380,7 @@ public class InventoryMovementService {
         movement.setReferenceId(invoiceId != null ? invoiceId : inventoryId);
         movement.setInventoryId(inventoryId);
         movement.setBatchNo(batchNo);
-        movement.setCreatedBy(createdBy);
+        movement.setCreatedBy(resolveCreatedBy(createdBy));
         movement.setStatus("COMPLETED");
         return movementRepository.save(movement);
     }

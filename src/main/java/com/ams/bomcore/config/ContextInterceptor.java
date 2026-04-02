@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 import com.ams.bomcore.context.TenantContext;
+import com.ams.bomcore.context.UserContext;
 import com.ams.bomcore.repository.CompanyRepository;
 import com.ams.bomcore.repository.TenantRepository;
 import com.ams.bomcore.service.TenantValidationService;
@@ -31,7 +32,7 @@ public class ContextInterceptor implements HandlerInterceptor {
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
         String path = request.getRequestURI();
         // allow public endpoints
-        if (path.startsWith("/bom/api/tenants") || path.startsWith("/bom/api/companies")) return true;
+        if (path.startsWith("/api/bom/tenants") || path.startsWith("/api/bom/companies")) return true;
 
         String tenantHeader = request.getHeader("X-Tenant-Id");
         String companyHeader = request.getHeader("X-Company-Id");
@@ -49,6 +50,12 @@ public class ContextInterceptor implements HandlerInterceptor {
 
         // set tenant context for downstream services/repositories
         TenantContext.setTenantId(tenantHeader);
+
+        // capture logged-in username from header (set by frontend/gateway)
+        String usernameHeader = request.getHeader("X-Username");
+        if (usernameHeader != null && !usernameHeader.isBlank()) {
+            UserContext.setUsername(usernameHeader);
+        }
 
         if (companyHeader == null || companyHeader.isBlank()) {
             response.sendError(HttpStatus.BAD_REQUEST.value(), "Missing X-Company-Id header");
@@ -91,5 +98,6 @@ public class ContextInterceptor implements HandlerInterceptor {
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) throws Exception {
         TenantContext.clear();
+        UserContext.clear();
     }
 }

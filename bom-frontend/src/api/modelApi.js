@@ -1,5 +1,30 @@
 import { apiFetch, apiFetchJson, getContextHeaders } from './client'
 
+export async function importModels(file) {
+  const ctx = getContextHeaders()
+  if (!ctx['X-Tenant-Id'] || !ctx['X-Company-Id']) {
+    throw new Error('Please select a tenant and company before importing.')
+  }
+  const form = new FormData()
+  form.append('file', file)
+  const res = await apiFetch('/bom/models/import', { method: 'POST', body: form })
+  if (!res.ok) {
+    const text = await res.text()
+    let msg = text
+    try { msg = JSON.parse(text)?.message || text } catch { /* ignore */ }
+    throw new Error(msg || 'Upload failed')
+  }
+  return res.json()
+}
+
+export async function fetchBomsByModel(modelId) {
+  if (!modelId) return []
+  const { res, data } = await apiFetchJson(`/bom/boms/by-model/${encodeURIComponent(modelId)}`)
+  if (!res.ok) return []
+  const list = Array.isArray(data) ? data : (data?.data ?? [])
+  return list
+}
+
 export async function fetchModels() {
   const ctx = getContextHeaders()
   if (!ctx['X-Tenant-Id'] || !ctx['X-Company-Id']) {
