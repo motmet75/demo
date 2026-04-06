@@ -40,13 +40,13 @@ public class BomCalculationItemEntity {
     @JoinColumn(name = "material_id", nullable = false)
     private Material material;
 
-    @Column(name = "required_qty", nullable = false, precision = 14, scale = 4)
+    @Column(name = "required_qty", nullable = false, columnDefinition = "numeric")
     private BigDecimal requiredQty;
 
-    @Column(name = "available_qty", nullable = false, precision = 14, scale = 4)
+    @Column(name = "available_qty", nullable = false, columnDefinition = "numeric")
     private BigDecimal availableQty;
 
-    @Column(name = "shortage_qty", nullable = false, precision = 14, scale = 4)
+    @Column(name = "shortage_qty", nullable = false, columnDefinition = "numeric")
     private BigDecimal shortageQty;
 
     public BomCalculationItemEntity() {

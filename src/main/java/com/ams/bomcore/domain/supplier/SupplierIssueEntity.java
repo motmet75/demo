@@ -38,7 +38,7 @@ public class SupplierIssueEntity {
     @JoinColumn(name = "material_id", nullable = false)
     private Material material;
 
-    @Column(name = "quantity", precision = 14, scale = 4)
+    @Column(name = "quantity", columnDefinition = "numeric")
     private BigDecimal quantity;
 
     @Column(name = "issue_type", nullable = false, length = 30)

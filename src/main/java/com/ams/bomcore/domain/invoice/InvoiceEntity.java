@@ -62,13 +62,13 @@ public class InvoiceEntity {
     @Column(name = "currency", length = 3)
     private String currency = "USD";
 
-    @Column(name = "subtotal", precision = 18, scale = 4)
+    @Column(name = "subtotal", columnDefinition = "numeric")
     private BigDecimal subtotal = BigDecimal.ZERO;
 
-    @Column(name = "tax_amount", precision = 18, scale = 4)
+    @Column(name = "tax_amount", columnDefinition = "numeric")
     private BigDecimal taxAmount = BigDecimal.ZERO;
 
-    @Column(name = "total_amount", precision = 18, scale = 4)
+    @Column(name = "total_amount", columnDefinition = "numeric")
     private BigDecimal totalAmount = BigDecimal.ZERO;
 
     @Column(name = "status", nullable = false, length = 20)

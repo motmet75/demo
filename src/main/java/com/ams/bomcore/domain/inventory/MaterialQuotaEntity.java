@@ -45,10 +45,10 @@ public class MaterialQuotaEntity {
     @Column(name = "quota_period", nullable = false)
     private LocalDate quotaPeriod;
 
-    @Column(name = "allocated_quota", nullable = false, precision = 18, scale = 4)
+    @Column(name = "allocated_quota", nullable = false, columnDefinition = "numeric")
     private BigDecimal allocatedQuota = BigDecimal.ZERO;
 
-    @Column(name = "consumed_quota", nullable = false, precision = 18, scale = 4)
+    @Column(name = "consumed_quota", nullable = false, columnDefinition = "numeric")
     private BigDecimal consumedQuota = BigDecimal.ZERO;
 
     @Column(name = "created_at")

@@ -44,7 +44,7 @@ public class InventoryLockEntity {
     @Column(name = "lock_type", nullable = false, length = 30)
     private String lockType;
 
-    @Column(name = "quantity", nullable = false, precision = 14, scale = 4)
+    @Column(name = "quantity", nullable = false, columnDefinition = "numeric")
     private BigDecimal quantity;
 
     @Column(name = "reference_type", length = 50)

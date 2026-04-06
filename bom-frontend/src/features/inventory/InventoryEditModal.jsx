@@ -6,6 +6,9 @@ import DialogActions from '@mui/material/DialogActions'
 import TextField from '@mui/material/TextField'
 import Button from '@mui/material/Button'
 import Box from '@mui/material/Box'
+import Typography from '@mui/material/Typography'
+import Chip from '@mui/material/Chip'
+import Divider from '@mui/material/Divider'
 import PropTypes from 'prop-types'
 import Autocomplete from '@mui/material/Autocomplete'
 import { fetchMaterials } from '../../api/materialApi'
@@ -29,8 +32,15 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
   }
 
+  // Freeze the original server values in state — initialised once at mount.
+  // Because InventoryGrid passes key={modalKey}, this component is fully remounted
+  // on every dialog open, so useState(() => ...) always captures the correct snapshot.
+  const [origQtyOnHand] = useState(() => inventory != null ? Number(inventory.quantityOnHand ?? 0) : null)
+  // Keep original reserved/locked as info-only for display — NOT used as a hard constraint.
+  const [origReserved]  = useState(() => inventory != null ? Number(inventory.quantityReserved ?? 0) : 0)
+  const [origLocked]    = useState(() => inventory != null ? Number(inventory.quantityLocked   ?? 0) : 0)
+
   const makeInitial = (i) => ({
-    // prefer explicit ids when present (editing existing row)
     materialId: i?.materialId ?? (i?.material ? (i.material.id ?? i.material.uuid ?? i.material._id) : undefined),
     materialCode: i?.material?.materialCode ?? (i?.materialCode ?? ''),
     materialName: i?.materialName ?? (i?.material?.materialName ?? ''),
@@ -50,7 +60,7 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
     originCountry: i?.originCountry ?? '',
     orderToDeduction: i?.orderToDeduction ?? '',
     userName: i?.userName ?? 'system',
-    reason: i ? 'Manual update stock' : 'Manual add stock',
+    reason: i ? 'Manual adjustment' : 'Manual add stock',
     createdBy: i?.userName ?? 'system',
     notes: '',
     expirationLocal: i?.expirationDateTime ? isoToLocalDatetime(i.expirationDateTime) : (i?.expiration_date ? isoToLocalDatetime(i.expiration_date) : localNow()),
@@ -69,15 +79,8 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
   const [warehouses, setWarehouses] = useState([])
   const [invoices, setInvoices] = useState([])
 
-  // reset form whenever the modal opens or the inventory prop changes
-  useEffect(() => {
-    // schedule update to avoid synchronous setState in effect which can trigger lint warnings
-    const t = setTimeout(() => {
-      setForm(makeInitial(inventory))
-      setErrorMessage('')
-    }, 0)
-    return () => clearTimeout(t)
-  }, [inventory, open])
+  // Note: no reset effect needed — InventoryGrid passes key={modalKey} which fully
+  // remounts this component on every open, so useState initialisers always run fresh.
 
   useEffect(() => {
     let mounted = true
@@ -195,14 +198,45 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
     return !Number.isNaN(Number(val))
   }
 
+  // Compute adjustment delta (new - original), only when editing
+  const isEditing = !!(inventory && (inventory.id || inventory.inventoryId))
+  const newQty = form.quantityOnHand !== '' ? Number(form.quantityOnHand) : null
+  // origQtyOnHand / origReserved / origLocked come directly from the inventory prop (declared above)
+  const origQty = origQtyOnHand  // alias for readability in JSX below
+  const delta = (isEditing && newQty !== null && origQty !== null && !Number.isNaN(newQty) && !Number.isNaN(origQty))
+    ? newQty - origQty
+    : null
+  const deltaLabel = delta === null ? null
+    : delta === 0 ? 'No change'
+    : delta > 0 ? `+${Number(delta).toLocaleString(undefined, { maximumFractionDigits: 9 })} (stock increase)`
+    : `${Number(delta).toLocaleString(undefined, { maximumFractionDigits: 9 })} (stock decrease)`
+  const deltaColor = delta === null || delta === 0 ? 'default' : delta > 0 ? 'success' : 'error'
+
+  // Constraint: only block if new on-hand would be negative (< 0).
+  // Reserved/locked are shown as info but do NOT block — the backend handles reconciliation.
+  const fmtN = (n) => Number(n).toLocaleString(undefined, { maximumFractionDigits: 9 })
+  const availableAfter = (isEditing && newQty !== null && !Number.isNaN(newQty))
+    ? newQty - origReserved - origLocked
+    : null
+  // Only truly invalid if the user literally types a negative on-hand value
+  const isNegativeOnHand = newQty !== null && !Number.isNaN(newQty) && newQty < 0
+
   const handleSubmit = async (e) => {
     if (e && e.preventDefault) e.preventDefault()
     if (isSubmitting || saving) return
     setErrorMessage('')
 
     // validate numeric
-    if (!validateNumber(form.quantityOnHand)) { setErrorMessage('quantityOnHand must be numeric'); return }
-    if (form.quantityReserved !== '' && !validateNumber(form.quantityReserved)) { setErrorMessage('quantityReserved must be numeric'); return }
+    if (!validateNumber(form.quantityOnHand)) { setErrorMessage('Quantity On Hand must be numeric'); return }
+    if (form.quantityReserved !== '' && !validateNumber(form.quantityReserved)) { setErrorMessage('Quantity Reserved must be numeric'); return }
+    if (form.quantityLocked !== '' && !validateNumber(form.quantityLocked)) { setErrorMessage('Quantity Locked must be numeric'); return }
+
+    // validate new on-hand is not negative
+    const newQtyVal = Number(form.quantityOnHand)
+    if (!Number.isNaN(newQtyVal) && newQtyVal < 0) {
+      setErrorMessage('Quantity On Hand cannot be negative')
+      return
+    }
 
     // validate batchNo required
     if (!form.batchNo || String(form.batchNo).trim() === '') { setErrorMessage('batchNo is required'); return }
@@ -235,15 +269,21 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
     }
 
     const payload = {
-      ...(inventory && (inventory.id || inventory.inventoryId) ? { id: (inventory.id ?? inventory.inventoryId) } : {}),
+      ...(isEditing ? { id: (inventory.id ?? inventory.inventoryId) } : {}),
       ...(form.materialId != null && form.materialId !== '' ? { materialId: form.materialId } : {}),
       ...(form.warehouseId != null && form.warehouseId !== '' ? { warehouseId: form.warehouseId } : {}),
       materialCode: form.materialCode,
       warehouseCode: form.warehouseCode,
       quantity: coerceNumber(form.quantityOnHand),
       quantityTotal: coerceNumber(form.quantityTotal),
-      quantityReserved: coerceNumber(form.quantityReserved),
-      quantityLocked: coerceNumber(form.quantityLocked),
+      // When editing, do NOT send quantityReserved / quantityLocked back to the backend.
+      // Those fields are managed exclusively by the reserve/release system.
+      // Sending the current values triggers the backend constraint check against the new
+      // (lower) quantityOnHand and causes a false-positive rejection.
+      ...(!isEditing ? {
+        quantityReserved: coerceNumber(form.quantityReserved),
+        quantityLocked: coerceNumber(form.quantityLocked),
+      } : {}),
       batchNo: form.batchNo,
       contractCode: form.contractCode || null,
       unit: form.unit || 'pcs',
@@ -255,15 +295,16 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
       orderToDeduction: form.orderToDeduction || null,
       expirationDateTime: toIso(form.expirationLocal),
       productionDateTime: toIso(form.productionLocal),
-      reason: form.reason || (inventory ? 'Manual update stock' : 'Manual add stock'),
+      reason: form.reason || (isEditing ? 'Manual adjustment' : 'Manual add stock'),
       createdBy: form.createdBy || 'system',
       notes: form.notes || null,
-      ...((!inventory && form.invoiceId) ? { invoiceId: form.invoiceId } : {})
+      ...(!isEditing && form.invoiceId ? { invoiceId: form.invoiceId } : {})
     }
 
     try {
       const res = onSave && onSave(payload)
       if (res && typeof res.then === 'function') await res
+      // Movement is recorded atomically by the backend updateStock — no separate call needed.
     } catch (err) {
       console.error('Save failed', err)
       setErrorMessage((err && err.message) || 'Failed to save')
@@ -278,7 +319,7 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
 
   return (
     <Dialog key={key} open={!!open} onClose={isSubmitting ? undefined : onClose} fullWidth maxWidth="sm">
-      <DialogTitle>{inventory ? 'Edit Inventory' : 'Add Inventory'}</DialogTitle>
+      <DialogTitle>{isEditing ? 'Edit Inventory' : 'Add Inventory'}</DialogTitle>
       <form onSubmit={handleSubmit}>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
@@ -295,7 +336,7 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
               }}
               onInputChange={handleMaterialInputChange}
               onChange={handleMaterialChange}
-              renderInput={(params) => <TextField {...params} label="Material Code" disabled={isSubmitting || !!(inventory && (inventory.inventoryId || inventory.id))} required />}
+              renderInput={(params) => <TextField {...params} label="Material Code" disabled={isSubmitting || isEditing} required />}
             />
 
             <Autocomplete
@@ -311,17 +352,79 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
               }}
               onInputChange={handleWarehouseInputChange}
               onChange={handleWarehouseChange}
-              renderInput={(params) => <TextField {...params} label="Warehouse Code" disabled={isSubmitting || !!(inventory && (inventory.inventoryId || inventory.id))} required />}
+              renderInput={(params) => <TextField {...params} label="Warehouse Code" disabled={isSubmitting || isEditing} required />}
             />
 
             <TextField label="Batch No" value={form.batchNo} onChange={handleChange('batchNo')} disabled={isSubmitting} required />
 
-            <TextField label="Quantity On Hand" type="number" value={form.quantityOnHand} onChange={handleChange('quantityOnHand')} disabled={isSubmitting} required
-              helperText="Current stock on hand" />
+            {/* Quantity on Hand — with adjustment preview when editing */}
+            {isEditing && origQty !== null && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1, py: 0.5, bgcolor: 'grey.50', borderRadius: 1, border: '1px solid', borderColor: 'grey.200' }}>
+                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 110 }}>Original Qty:</Typography>
+                <Typography variant="body2" fontWeight={600} fontFamily="monospace">
+                  {Number(origQty).toLocaleString(undefined, { maximumFractionDigits: 9 })}
+                </Typography>
+              </Box>
+            )}
+
+            <TextField
+              label="Quantity On Hand"
+              type="number"
+              value={form.quantityOnHand}
+              onChange={handleChange('quantityOnHand')}
+              disabled={isSubmitting}
+              required
+              inputProps={{ step: 'any' }}
+              helperText={isEditing ? 'Enter the new stock quantity — adjustment will be recorded automatically' : 'Current stock on hand'}
+            />
+
+            {/* Live adjustment delta */}
+            {isEditing && delta !== null && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1, py: 0.5, bgcolor: delta === 0 ? 'grey.50' : delta > 0 ? 'success.50' : 'error.50', borderRadius: 1, border: '1px solid', borderColor: delta === 0 ? 'grey.200' : delta > 0 ? 'success.200' : 'error.200' }}>
+                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 110 }}>Adjustment:</Typography>
+                <Chip
+                  label={deltaLabel}
+                  size="small"
+                  color={deltaColor}
+                  variant={delta === 0 ? 'outlined' : 'filled'}
+                  sx={{ fontFamily: 'monospace', fontWeight: 700 }}
+                />
+              </Box>
+            )}
+
+            {/* Live constraint violation warning — only when literally negative */}
+            {isEditing && isNegativeOnHand && (
+              <Box sx={{ px: 1.5, py: 1, bgcolor: 'error.50', border: '1px solid', borderColor: 'error.300', borderRadius: 1 }}>
+                <Typography variant="caption" color="error.main" fontWeight={700} display="block">
+                  ⚠ Quantity On Hand cannot be negative
+                </Typography>
+              </Box>
+            )}
+
+            {/* Info: projected available after adjustment */}
+            {isEditing && availableAfter !== null && !isNegativeOnHand && (origReserved > 0 || origLocked > 0) && (
+              <Box sx={{ px: 1.5, py: 0.75, bgcolor: availableAfter < 0 ? 'warning.50' : 'info.50', border: '1px solid', borderColor: availableAfter < 0 ? 'warning.300' : 'info.200', borderRadius: 1 }}>
+                <Typography variant="caption" color="text.secondary" display="block">
+                  After adjustment — Reserved: <strong>{fmtN(origReserved)}</strong> · Locked: <strong>{fmtN(origLocked)}</strong> · Available: <strong style={{ color: availableAfter < 0 ? '#ed6c02' : 'inherit' }}>{fmtN(availableAfter)}</strong>
+                  {availableAfter < 0 && ' ⚠ available will go negative — backend will reconcile'}
+                </Typography>
+              </Box>
+            )}
+
+            <Divider />
+
             <TextField label="Total Qty" type="number" value={form.quantityTotal} disabled
               helperText="Total quantity ever received — set at import/creation, not editable" InputProps={{ readOnly: true }} />
-            <TextField label="Quantity Reserved" type="number" value={form.quantityReserved} onChange={handleChange('quantityReserved')} disabled={isSubmitting} />
-            <TextField label="Quantity Locked" type="number" value={form.quantityLocked} onChange={handleChange('quantityLocked')} disabled={isSubmitting} />
+            <TextField label="Quantity Reserved" type="number" value={form.quantityReserved}
+              onChange={isEditing ? undefined : handleChange('quantityReserved')}
+              disabled={isSubmitting || isEditing}
+              InputProps={{ readOnly: isEditing }}
+              helperText={isEditing ? 'Managed by reserve/release — not editable here' : undefined} />
+            <TextField label="Quantity Locked" type="number" value={form.quantityLocked}
+              onChange={isEditing ? undefined : handleChange('quantityLocked')}
+              disabled={isSubmitting || isEditing}
+              InputProps={{ readOnly: isEditing }}
+              helperText={isEditing ? 'Managed by reserve/release — not editable here' : undefined} />
 
             <TextField label="Contract Code" value={form.contractCode} onChange={handleChange('contractCode')} disabled={isSubmitting} />
             <TextField label="Unit" value={form.unit} onChange={handleChange('unit')} disabled={isSubmitting} />
@@ -333,57 +436,46 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
             <TextField label="Origin Country" value={form.originCountry} onChange={handleChange('originCountry')} disabled={isSubmitting} />
             <TextField label="Order/Deduction" value={form.orderToDeduction} onChange={handleChange('orderToDeduction')} disabled={isSubmitting} />
 
-            <TextField
-              label="Expiration Date"
-              type="datetime-local"
-              value={form.expirationLocal}
-              onChange={handleChange('expirationLocal')}
-              InputLabelProps={{ shrink: true }}
-              disabled={isSubmitting}
-            />
+            <TextField label="Expiration Date" type="datetime-local" value={form.expirationLocal}
+              onChange={handleChange('expirationLocal')} InputLabelProps={{ shrink: true }} disabled={isSubmitting} />
+            <TextField label="Production Date" type="datetime-local" value={form.productionLocal}
+              onChange={handleChange('productionLocal')} InputLabelProps={{ shrink: true }} disabled={isSubmitting} />
 
-            <TextField
-              label="Production Date"
-              type="datetime-local"
-              value={form.productionLocal}
-              onChange={handleChange('productionLocal')}
-              InputLabelProps={{ shrink: true }}
-              disabled={isSubmitting}
-            />
+            <Divider />
 
             {/* Movement audit fields */}
             <TextField label="Reason" value={form.reason} onChange={handleChange('reason')} disabled={isSubmitting}
-              helperText="Recorded in Inventory Movements log" />
+              helperText={isEditing ? 'Recorded in the ADJUSTMENT movement entry' : 'Recorded in Inventory Movements log'} />
             <TextField label="Created By" value={form.createdBy} onChange={handleChange('createdBy')} disabled={isSubmitting} />
             <TextField label="Notes" value={form.notes} onChange={handleChange('notes')} disabled={isSubmitting}
               multiline minRows={2} />
 
             {/* Invoice picker — only relevant when adding new stock */}
-            {!inventory && (
+            {!isEditing && (
               <Autocomplete
                 options={invoices}
-                getOptionLabel={inv => inv.invoiceNumber
-                  ? `${inv.invoiceNumber} — ${inv.invoiceType} — ${inv.partyName || ''}`
-                  : ''}
+                getOptionLabel={inv => inv.invoiceNumber ? `${inv.invoiceNumber} — ${inv.invoiceType} — ${inv.partyName || ''}` : ''}
                 value={invoices.find(inv => inv.id === form.invoiceId) || null}
                 onChange={(_, val) => setForm(f => ({ ...f, invoiceId: val ? val.id : '' }))}
-                renderInput={(params) => (
-                  <TextField {...params} label="Link to Invoice (optional)"
-                    placeholder="Select purchase/sale invoice…" size="small" />
-                )}
+                renderInput={(params) => <TextField {...params} label="Link to Invoice (optional)" placeholder="Select purchase/sale invoice…" size="small" />}
                 isOptionEqualToValue={(opt, val) => opt.id === val.id}
                 disabled={isSubmitting}
               />
             )}
 
-            {form.createdAt ? <div>Created At: {String(form.createdAt)}</div> : null}
+            {form.createdAt ? <div style={{ fontSize: 12, color: '#888' }}>Created At: {String(form.createdAt)}</div> : null}
 
             {errorMessage ? <div style={{ color: 'red' }}>{errorMessage}</div> : null}
           </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={onClose} color="inherit" disabled={isSubmitting}>Cancel</Button>
-          <Button type="submit" variant="contained" disabled={isSubmitting}>{isSubmitting ? 'Saving...' : 'Save'}</Button>
+          <Button type="submit" variant="contained" disabled={isSubmitting || saving || isNegativeOnHand}
+            color={isEditing && delta !== null && delta !== 0 ? (delta > 0 ? 'success' : 'error') : 'primary'}>
+            {isSubmitting ? 'Saving...' : isEditing && delta !== null && delta !== 0
+              ? `Save & Record Adjustment (${delta > 0 ? '+' : ''}${Number(delta).toLocaleString(undefined, { maximumFractionDigits: 9 })})`
+              : 'Save'}
+          </Button>
         </DialogActions>
       </form>
     </Dialog>

@@ -197,8 +197,8 @@ export default function OrderGrid() {
       renderCell: ({ value }) => value ? new Date(value).toLocaleString() : '—' },
     { field: 'plannedStartDate', headerName: 'Planned Start', width: 130 },
     { field: 'plannedEndDate',   headerName: 'Planned End',   width: 130 },
-    { field: 'totalPlannedQty',  headerName: 'Planned Qty',   width: 120, type: 'number' },
-    { field: 'totalActualQty',   headerName: 'Actual Qty',    width: 110, type: 'number' },
+    { field: 'totalPlannedQty',  headerName: 'Planned Qty',   width: 120, type: 'number', valueFormatter: (value) => value == null ? '' : Number(value).toLocaleString(undefined, { maximumFractionDigits: 9 }) },
+    { field: 'totalActualQty',   headerName: 'Actual Qty',    width: 110, type: 'number', valueFormatter: (value) => value == null ? '' : Number(value).toLocaleString(undefined, { maximumFractionDigits: 9 }) },
     { field: 'createdBy',        headerName: 'Created By',    width: 120 },
     { field: 'createdAt',        headerName: 'Created At',    width: 180,
       renderCell: ({ value }) => value ? new Date(value).toLocaleString() : '—' },
@@ -350,8 +350,8 @@ export default function OrderGrid() {
                   <TableRow key={r.materialId}>
                     <TableCell sx={{ fontFamily: 'monospace' }}>{r.materialCode}</TableCell>
                     <TableCell>{r.materialName}</TableCell>
-                    <TableCell align="right">{Number(r.requiredQty).toFixed(4)}</TableCell>
-                    <TableCell align="right">{Number(r.availableQty).toFixed(4)}</TableCell>
+                    <TableCell align="right">{Number(r.requiredQty).toLocaleString(undefined, { maximumFractionDigits: 9 })}</TableCell>
+                    <TableCell align="right">{Number(r.availableQty).toLocaleString(undefined, { maximumFractionDigits: 9 })}</TableCell>
                     <TableCell>
                       <Chip label={r.sufficient ? 'OK' : 'SHORT'} size="small"
                         color={r.sufficient ? 'success' : 'error'} />

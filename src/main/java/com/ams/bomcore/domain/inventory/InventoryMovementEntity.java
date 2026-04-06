@@ -46,7 +46,7 @@ public class InventoryMovementEntity {
     @JoinColumn(name = "to_warehouse_id")
     private WarehouseEntity toWarehouse;
 
-    @Column(name = "quantity", nullable = false, precision = 14, scale = 4)
+    @Column(name = "quantity", nullable = false, columnDefinition = "numeric")
     private BigDecimal quantity;
 
     @Column(name = "unit", nullable = false, length = 20)

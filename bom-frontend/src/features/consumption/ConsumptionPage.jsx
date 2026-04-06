@@ -66,11 +66,11 @@ export default function ConsumptionPage() {
     { field: 'materialCode', headerName: 'Material Code', width: 150 },
     { field: 'materialName', headerName: 'Material Name', width: 200 },
     { field: 'plannedQty', headerName: 'Planned Qty', width: 120, type: 'number',
-      valueFormatter: v => v != null ? Number(v).toFixed(4) : '' },
+      valueFormatter: v => v != null ? Number(v).toLocaleString(undefined, { maximumFractionDigits: 9 }) : '' },
     { field: 'adjustedQty', headerName: 'Adjusted Qty', width: 130, type: 'number',
-      valueFormatter: v => v != null ? Number(v).toFixed(4) : '' },
+      valueFormatter: v => v != null ? Number(v).toLocaleString(undefined, { maximumFractionDigits: 9 }) : '' },
     { field: 'availableQty', headerName: 'Available Qty', width: 130, type: 'number',
-      valueFormatter: v => v != null ? Number(v).toFixed(4) : '' },
+      valueFormatter: v => v != null ? Number(v).toLocaleString(undefined, { maximumFractionDigits: 9 }) : '' },
     { field: 'checkResult', headerName: 'Check', width: 120,
       renderCell: ({ value }) => value
         ? <Chip label={value} size="small"
@@ -99,10 +99,26 @@ export default function ConsumptionPage() {
   })
 
   const filteredIds = new Set(filteredRows.map(r => r._id))
-  // eslint-disable-next-line no-unused-vars
-  const _selectedIds = selectionModel.type === 'exclude'
+  const selectedIds = selectionModel.type === 'exclude'
     ? filteredRows.map(r => r._id).filter(id => !selectionModel.ids.has(id))
     : Array.from(selectionModel.ids ?? []).filter(id => filteredIds.has(id))
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.length === 0) return
+    if (!window.confirm(`Delete ${selectedIds.length} selected consumption record(s)? This cannot be undone.`)) return
+    try {
+      const { res } = await apiFetchJson(`/bom/order-consumption/bulk`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(selectedIds),
+      })
+      if (!res.ok) throw new Error(`Delete failed (${res.status})`)
+      setRows(prev => prev.filter(r => !selectedIds.includes(r._id)))
+      setSelectionModel({ type: 'include', ids: new Set() })
+    } catch (e) {
+      alert('Delete failed: ' + e.message)
+    }
+  }
 
   const handleSelectionModelChange = (model) => {
     if (model && model.type === 'exclude') {
@@ -155,6 +171,16 @@ export default function ConsumptionPage() {
           Clear
         </Button>
         <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'flex-end' }}>{filteredRows.length} / {rows.length}</Typography>
+        <Button
+          size="small"
+          variant="outlined"
+          color="error"
+          disabled={selectedIds.length === 0}
+          onClick={handleDeleteSelected}
+          sx={{ alignSelf: 'flex-end' }}
+        >
+          Delete Selected ({selectedIds.length})
+        </Button>
       </Box>
 
       {(!tenantId || !companyId) && <Alert severity="warning" sx={{ mb: 2 }}>Select Tenant and Company.</Alert>}

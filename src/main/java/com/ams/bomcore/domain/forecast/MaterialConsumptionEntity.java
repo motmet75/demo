@@ -36,7 +36,7 @@ public class MaterialConsumptionEntity {
     @JoinColumn(name = "material_id", nullable = false)
     private Material material;
 
-    @Column(name = "quantity", nullable = false, precision = 14, scale = 4)
+    @Column(name = "quantity", nullable = false, columnDefinition = "numeric")
     private java.math.BigDecimal quantity;
 
     @Column(name = "source", nullable = false, length = 30)

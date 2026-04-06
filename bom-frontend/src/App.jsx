@@ -1,5 +1,13 @@
-import React from 'react'
-import { BrowserRouter, Routes, Route, Link } from 'react-router-dom'
+import React, { useState } from 'react'
+import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom'
+import Box from '@mui/material/Box'
+import Tooltip from '@mui/material/Tooltip'
+import IconButton from '@mui/material/IconButton'
+import Typography from '@mui/material/Typography'
+import Divider from '@mui/material/Divider'
+import MenuIcon from '@mui/icons-material/Menu'
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
+import LogoutIcon from '@mui/icons-material/Logout'
 
 import MaterialPage from './features/material/MaterialPage'
 import ModelPage from './features/model/ModelPage'
@@ -13,13 +21,11 @@ import BomPage from './features/bom/BomPage'
 import { AppProvider } from './context/AppContext'
 import { AuthProvider } from './context/AuthContext'
 import { useAuth } from './context/useAuth'
-
 import ContextHeaderBar from './components/ContextHeaderBar'
 import TenantSelector from './components/TenantSelector'
 import CompanySelector from './components/CompanySelector'
 import BomSelector from './components/BomSelector'
 import RequireContext from './components/RequireContext'
-// import TenantList from './components/TenantList'
 import ContractPage from './features/contract/ContractPage'
 import InventoryMovementPage from './features/inventory/InventoryMovementPage'
 import InvoicePage from './features/invoice/InvoicePage'
@@ -29,76 +35,165 @@ import RequireAuth from './components/RequireAuth'
 import AdminPage from './features/admin/AdminPage'
 import TenantsPage from './features/tenant/TenantsPage'
 
+const SIDEBAR_FULL = 200
+const SIDEBAR_MINI = 52
+
+const NAV_ITEMS = [
+  { label: 'Materials',   path: '/materials',            icon: '🧱' },
+  { label: 'Models',      path: '/models',               icon: '📐' },
+  { label: 'BOMs',        path: '/boms',                 icon: '🧩' },
+  { divider: true },
+  { label: 'Inventory',   path: '/inventory',            icon: '📦' },
+  { label: 'Movements',   path: '/inventory-movements',  icon: '🔄' },
+  { label: 'Warehouses',  path: '/warehouses',           icon: '🏭' },
+  { divider: true },
+  { label: 'Suppliers',   path: '/suppliers',            icon: '🤝' },
+  { label: 'Contracts',   path: '/contracts',            icon: '📄' },
+  { divider: true },
+  { label: 'Orders',      path: '/orders',               icon: '🛒' },
+  { label: 'Invoices',    path: '/invoices',             icon: '🧾' },
+  { label: 'Consumption', path: '/consumption',          icon: '📊' },
+  { divider: true },
+  { label: 'Companies',   path: '/companies',            icon: '🏢' },
+]
+
+const ADMIN_ITEMS = [
+  { label: 'Admin',       path: '/admin',                icon: '🔧', adminOnly: true },
+  { label: 'Tenants',     path: '/tenants',              icon: '🏗️',  adminOnly: true },
+]
+
+function NavItem({ item, collapsed, active }) {
+  return (
+    <Tooltip title={collapsed ? item.label : ''} placement="right">
+      <Link
+        to={item.path}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          padding: collapsed ? '9px 0' : '9px 14px',
+          justifyContent: collapsed ? 'center' : 'flex-start',
+          textDecoration: 'none',
+          borderRadius: 6,
+          margin: '1px 6px',
+          background: active ? 'rgba(25,118,210,0.13)' : 'transparent',
+          color: active ? '#1565c0' : '#333',
+          fontWeight: active ? 700 : 400,
+          fontSize: 13,
+          transition: 'background 0.15s',
+        }}
+      >
+        <span style={{ fontSize: 16, lineHeight: 1, flexShrink: 0 }}>{item.icon}</span>
+        {!collapsed && <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>}
+      </Link>
+    </Tooltip>
+  )
+}
+
+function Sidebar({ collapsed, onToggle, isAdmin }) {
+  const location = useLocation()
+
+  return (
+    <Box sx={{
+      width: collapsed ? SIDEBAR_MINI : SIDEBAR_FULL,
+      flexShrink: 0,
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100vh',
+      position: 'sticky',
+      top: 0,
+      background: '#f8f9fa',
+      borderRight: '1px solid #e0e0e0',
+      transition: 'width 0.2s',
+      overflow: 'hidden',
+      zIndex: 10,
+    }}>
+      {/* Header */}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'space-between', px: collapsed ? 0 : 1.5, py: 1.2, borderBottom: '1px solid #e0e0e0', minHeight: 48 }}>
+        {!collapsed && <Typography variant="subtitle2" fontWeight={700} sx={{ color: '#1565c0', letterSpacing: 0.5 }}>BOM System</Typography>}
+        <IconButton size="small" onClick={onToggle} sx={{ flexShrink: 0 }}>
+          {collapsed ? <MenuIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
+        </IconButton>
+      </Box>
+
+      {/* Nav items — scrollable */}
+      <Box sx={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', py: 0.5 }}>
+        {NAV_ITEMS.map((item, i) =>
+          item.divider
+            ? <Divider key={`d${i}`} sx={{ my: 0.5, mx: collapsed ? 0.5 : 1 }} />
+            : <NavItem key={item.path} item={item} collapsed={collapsed} active={location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path))} />
+        )}
+        {isAdmin && <>
+          <Divider sx={{ my: 0.5, mx: collapsed ? 0.5 : 1 }} />
+          {ADMIN_ITEMS.map(item =>
+            <NavItem key={item.path} item={item} collapsed={collapsed} active={location.pathname === item.path || location.pathname.startsWith(item.path)} />
+          )}
+        </>}
+      </Box>
+    </Box>
+  )
+}
+
 function AppShell() {
   const { user, logout, isAdmin } = useAuth()
+  const [collapsed, setCollapsed] = useState(false)
 
   return (
     <BrowserRouter basename="/bom-inventory">
-      <div style={{ padding: 20 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <h1>BOM System</h1>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+
+        {/* Sidebar */}
+        {user && <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} isAdmin={isAdmin} />}
+
+        {/* Main area */}
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+
+          {/* Top header bar */}
+          <Box sx={{ flexShrink: 0, borderBottom: '1px solid #e0e0e0', px: 2, py: 0.75, display: 'flex', alignItems: 'center', gap: 1.5, background: '#fff', flexWrap: 'wrap' }}>
             {user ? (
               <>
-                <span>Signed in as <strong>{user.username}</strong></span>
-                <button type="button" onClick={logout}>Logout</button>
+                <ContextHeaderBar />
+                <TenantSelector />
+                <CompanySelector />
+                <BomSelector />
+                <Box sx={{ flex: 1 }} />
+                <Typography variant="body2" color="text.secondary">
+                  <strong>{user.username}</strong>
+                </Typography>
+                <Tooltip title="Logout">
+                  <IconButton size="small" onClick={logout}><LogoutIcon fontSize="small" /></IconButton>
+                </Tooltip>
               </>
             ) : (
-              <Link to="/login">Login</Link>
+              <Link to="/login" style={{ fontSize: 14 }}>Login</Link>
             )}
-          </div>
-        </div>
+          </Box>
 
-        {user ? (
-          <>
-            <ContextHeaderBar />
-
-            <div style={{ marginBottom: 12 }}>
-              <TenantSelector />
-              <CompanySelector />
-              <BomSelector />
-            </div>
-          </>
-        ) : null}
-
-        <nav style={{ marginBottom: 16 }}>
-          <Link to="/materials" style={{ marginRight: 12 }}>Materials</Link>
-          <Link to="/models" style={{ marginRight: 12 }}>Models</Link>
-          <Link to="/boms" style={{ marginRight: 12, color: '#6a1b9a', fontWeight: 'bold' }}>🧩 BOMs</Link>
-          <Link to="/inventory" style={{ marginRight: 12 }}>Inventory</Link>
-          <Link to="/inventory-movements" style={{ marginRight: 12 }}>Movements</Link>
-          <Link to="/warehouses" style={{ marginRight: 12 }}>Warehouses</Link>
-          <Link to="/suppliers" style={{ marginRight: 12 }}>Suppliers</Link>
-          <Link to="/contracts" style={{ marginRight: 12 }}>Contracts</Link>
-          <Link to="/orders" style={{ marginRight: 12, color: '#1565c0', fontWeight: 'bold' }}>📦 Orders</Link>
-          <Link to="/invoices" style={{ marginRight: 12, color: '#6d4c41', fontWeight: 'bold' }}>🧾 Invoices</Link>
-          <Link to="/consumption" style={{ marginRight: 12, color: '#37474f', fontWeight: 'bold' }}>📊 Consumption</Link>
-          <Link to="/companies" style={{ marginLeft: 12 }}>Companies</Link>
-          {isAdmin ? <Link to="/admin" style={{ marginLeft: 12, fontWeight: 'bold', color: '#b71c1c' }}>Admin</Link> : null}
-          {isAdmin ? <Link to="/tenants" style={{ marginLeft: 12 }}>Tenants</Link> : null}
-        </nav>
-
-        <Routes>
-          <Route path="/login" element={<LoginForm />} />
-          <Route path="/" element={<RequireAuth><RequireContext><MaterialPage /></RequireContext></RequireAuth>} />
-          <Route path="/materials" element={<RequireAuth><RequireContext><MaterialPage /></RequireContext></RequireAuth>} />
-          <Route path="/models" element={<RequireAuth><ModelPage /></RequireAuth>} />
-          <Route path="/inventory" element={<RequireAuth><RequireContext><InventoryPage /></RequireContext></RequireAuth>} />
-          <Route path="/inventory-movements" element={<RequireAuth><RequireContext><InventoryMovementPage /></RequireContext></RequireAuth>} />
-          <Route path="/warehouses" element={<RequireAuth><WarehousePage /></RequireAuth>} />
-          <Route path="/suppliers" element={<RequireAuth><SupplierPage /></RequireAuth>} />
-          <Route path="/companies" element={<RequireAuth><CompanyPage /></RequireAuth>} />
-          <Route path="/contracts" element={<RequireAuth><RequireContext><ContractPage /></RequireContext></RequireAuth>} />
-          <Route path="/orders" element={<RequireAuth><RequireContext><OrderPage /></RequireContext></RequireAuth>} />
-          <Route path="/invoices" element={<RequireAuth><RequireContext><InvoicePage /></RequireContext></RequireAuth>} />
-          <Route path="/consumption" element={<RequireAuth><RequireContext><ConsumptionPage /></RequireContext></RequireAuth>} />
-          <Route path="/boms" element={<RequireAuth><RequireContext><BomPage /></RequireContext></RequireAuth>} />
-          <Route path="/viettelpost" element={<RequireAuth><ViettelPostPage /></RequireAuth>} />
-          <Route path="/admin" element={<RequireAuth adminOnly><AdminPage /></RequireAuth>} />
-          <Route path="/admin/users" element={<RequireAuth adminOnly><AdminPage /></RequireAuth>} />
-          <Route path="/tenants" element={<RequireAuth adminOnly><TenantsPage /></RequireAuth>} />
-        </Routes>
-      </div>
+          {/* Page content — scrollable */}
+          <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+            <Routes>
+              <Route path="/login" element={<LoginForm />} />
+              <Route path="/" element={<RequireAuth><RequireContext><MaterialPage /></RequireContext></RequireAuth>} />
+              <Route path="/materials" element={<RequireAuth><RequireContext><MaterialPage /></RequireContext></RequireAuth>} />
+              <Route path="/models" element={<RequireAuth><ModelPage /></RequireAuth>} />
+              <Route path="/inventory" element={<RequireAuth><RequireContext><InventoryPage /></RequireContext></RequireAuth>} />
+              <Route path="/inventory-movements" element={<RequireAuth><RequireContext><InventoryMovementPage /></RequireContext></RequireAuth>} />
+              <Route path="/warehouses" element={<RequireAuth><WarehousePage /></RequireAuth>} />
+              <Route path="/suppliers" element={<RequireAuth><SupplierPage /></RequireAuth>} />
+              <Route path="/companies" element={<RequireAuth><CompanyPage /></RequireAuth>} />
+              <Route path="/contracts" element={<RequireAuth><RequireContext><ContractPage /></RequireContext></RequireAuth>} />
+              <Route path="/orders" element={<RequireAuth><RequireContext><OrderPage /></RequireContext></RequireAuth>} />
+              <Route path="/invoices" element={<RequireAuth><RequireContext><InvoicePage /></RequireContext></RequireAuth>} />
+              <Route path="/consumption" element={<RequireAuth><RequireContext><ConsumptionPage /></RequireContext></RequireAuth>} />
+              <Route path="/boms" element={<RequireAuth><RequireContext><BomPage /></RequireContext></RequireAuth>} />
+              <Route path="/viettelpost" element={<RequireAuth><ViettelPostPage /></RequireAuth>} />
+              <Route path="/admin" element={<RequireAuth adminOnly><AdminPage /></RequireAuth>} />
+              <Route path="/admin/users" element={<RequireAuth adminOnly><AdminPage /></RequireAuth>} />
+              <Route path="/tenants" element={<RequireAuth adminOnly><TenantsPage /></RequireAuth>} />
+            </Routes>
+          </Box>
+        </Box>
+      </Box>
     </BrowserRouter>
   )
 }

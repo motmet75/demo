@@ -281,6 +281,7 @@ public class InventoryImportService {
                         movement.setReason("CSV Import");
                         movement.setReferenceType("INVENTORY");
                         movement.setReferenceId(inv.getId());
+                        movement.setInventoryId(inv.getId());
                         movement.setBatchNo(row.batchNo);
                         movement.setCreatedBy("system");
                         movement.setStatus("COMPLETED");

@@ -714,20 +714,27 @@ public class OrderService {
         }
     }
 
-    /** Create an InventoryMovementEntity record. */
+    /** Create an InventoryMovementEntity record.
+     *  quantity must be the absolute (positive) amount moved.
+     *  For stock-out types (CONSUMPTION, SALE) it is stored as negative automatically. */
     private void createInventoryMovement(Material material,
                                           com.ams.bomcore.domain.inventory.WarehouseEntity warehouse,
                                           BigDecimal quantity, String unit,
                                           String batchNo, String movementType, String reason,
                                           String createdBy, String referenceType, UUID referenceId,
                                           UUID tenantId, UUID companyId) {
+        // Stock-out movement types are stored with a negative quantity
+        boolean isStockOut = MVT_CONSUMPTION.equals(movementType) || MVT_SALE.equals(movementType)
+                || MVT_ISSUE_TO_PRODUCTION.equals(movementType);
+        BigDecimal storedQty = isStockOut ? quantity.negate() : quantity;
+
         InventoryMovementEntity movement = new InventoryMovementEntity();
         movement.setId(UUID.randomUUID());
         movement.setTenantId(tenantId);
         movement.setCompanyId(companyId);
         movement.setMaterial(material);
         movement.setFromWarehouse(warehouse);
-        movement.setQuantity(quantity);
+        movement.setQuantity(storedQty);
         movement.setUnit(unit != null ? unit : "pcs");
         movement.setMovementType(movementType);
         movement.setReason(reason);
@@ -966,7 +973,7 @@ public class OrderService {
                     mvt.setCompanyId(companyId);
                     mvt.setMaterial(mat);
                     mvt.setFromWarehouse(inv.getWarehouse());
-                    mvt.setQuantity(forOrder);
+                    mvt.setQuantity(forOrder.negate());  // negative — stock leaving inventory to production
                     mvt.setUnit(mat != null && mat.getUnit() != null ? mat.getUnit() : "pcs");
                     mvt.setMovementType(MVT_ISSUE_TO_PRODUCTION);
                     mvt.setReason("Move to production: order batch");

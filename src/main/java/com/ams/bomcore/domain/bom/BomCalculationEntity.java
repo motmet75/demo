@@ -43,7 +43,7 @@ public class BomCalculationEntity {
     @Column(name = "model_name", nullable = false, length = 100)
     private String modelName;
 
-    @Column(name = "target_qty", nullable = false, precision = 14, scale = 4)
+    @Column(name = "target_qty", nullable = false, columnDefinition = "numeric")
     private BigDecimal targetQty;
 
     @Column(name = "status", nullable = false, length = 20)

@@ -77,10 +77,10 @@ public class OrderHeader {
     @Column(name = "delivery_date_time")
     private Instant deliveryDateTime;
 
-    @Column(name = "total_planned_qty", precision = 14, scale = 4)
+    @Column(name = "total_planned_qty", columnDefinition = "numeric")
     private BigDecimal totalPlannedQty;
 
-    @Column(name = "total_actual_qty", precision = 14, scale = 4)
+    @Column(name = "total_actual_qty", columnDefinition = "numeric")
     private BigDecimal totalActualQty;
 
     @Column(name = "notes", columnDefinition = "TEXT")

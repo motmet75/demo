@@ -39,15 +39,15 @@ public class OrderConsumption {
     private Material material;
 
     /** Raw planned quantity (from BOM * ordered qty) */
-    @Column(name = "planned_qty", nullable = false, precision = 14, scale = 4)
+    @Column(name = "planned_qty", nullable = false, columnDefinition = "numeric")
     private BigDecimal plannedQty;
 
     /** planned_qty * materialQuotaPercentage */
-    @Column(name = "adjusted_qty", nullable = false, precision = 14, scale = 4)
+    @Column(name = "adjusted_qty", nullable = false, columnDefinition = "numeric")
     private BigDecimal adjustedQty;
 
     /** Available qty at time of check */
-    @Column(name = "available_qty", precision = 14, scale = 4)
+    @Column(name = "available_qty", columnDefinition = "numeric")
     private BigDecimal availableQty;
 
     /** SUFFICIENT | INSUFFICIENT */

@@ -10,6 +10,7 @@ import Box from '@mui/material/Box'
 import MenuItem from '@mui/material/MenuItem'
 import Chip from '@mui/material/Chip'
 import CircularProgress from '@mui/material/CircularProgress'
+import * as XLSX from 'xlsx'
 import { useAppContext } from '../../context/AppContext'
 import { useAuth } from '../../context/useAuth'
 import { fetchMovements, recordMovementIn, recordMovementOut, recordMovementTransfer, recordMovementAdjustment, deleteMovement } from '../../api/inventoryMovementApi'
@@ -47,6 +48,7 @@ export default function InventoryMovementPage() {
   const [error, setError] = useState('')
   const [filterType, setFilterType] = useState('')
   const [filterMaterial, setFilterMaterial] = useState('')
+  const [filterInventoryId, setFilterInventoryId] = useState('')
   const [filterCreatedFrom, setFilterCreatedFrom] = useState('')
   const [filterCreatedTo, setFilterCreatedTo] = useState('')
   const [createdRangePreset, setCreatedRangePreset] = useState('')
@@ -100,7 +102,10 @@ export default function InventoryMovementPage() {
     try {
       const opts = { tenantId, companyId }
       const qty = parseFloat(form.quantity)
-      if (isNaN(qty) || qty <= 0) { setError('Quantity must be a positive number'); setSaving(false); return }
+      if (isNaN(qty)) { setError('Quantity must be a number'); setSaving(false); return }
+      // ADJUSTMENT allows negative (decrease); all others must be positive
+      if (form.movementType !== 'ADJUSTMENT' && qty <= 0) { setError('Quantity must be positive'); setSaving(false); return }
+      if (form.movementType === 'ADJUSTMENT' && qty === 0) { setError('Adjustment quantity cannot be zero'); setSaving(false); return }
       const base = { materialId: form.materialId, quantity: qty, unit: form.unit, batchNo: form.batchNo || undefined, reason: form.reason || undefined, createdBy: currentUsername, notes: form.notes || undefined }
       if (form.movementType === 'IN') {
         await recordMovementIn({ ...base, warehouseId: form.warehouseId }, opts)
@@ -149,6 +154,53 @@ export default function InventoryMovementPage() {
     }
   }
 
+  const buildExportRows = (ids) => {
+    const idSet = new Set(ids)
+    return filteredRows.filter(r => idSet.has(r.id)).map(r => ({
+      ID: r.id ?? '',
+      Date: r.createdAt ? new Date(r.createdAt).toLocaleString() : '',
+      Type: r.movementType ?? '',
+      Material: r.material ? `${r.material.materialCode ?? ''} — ${r.material.materialName ?? ''}` : (matMap[r.materialId] ? `${matMap[r.materialId].materialCode} — ${matMap[r.materialId].materialName ?? ''}` : r.materialId ?? ''),
+      'From Warehouse': r.fromWarehouse ? r.fromWarehouse.code : (whMap[r.fromWarehouseId] ? whMap[r.fromWarehouseId].code : r.fromWarehouseId ?? ''),
+      'To Warehouse': r.toWarehouse ? r.toWarehouse.code : (whMap[r.toWarehouseId] ? whMap[r.toWarehouseId].code : r.toWarehouseId ?? ''),
+      Quantity: r.quantity ?? '',
+      Unit: r.unit ?? '',
+      'Batch No': r.batchNo ?? '',
+      Reason: r.reason ?? '',
+      'Ref Type': r.referenceType ?? '',
+      'Ref ID': r.referenceId ?? '',
+      'Inventory ID': r.inventoryId ?? '',
+      Status: r.status ?? '',
+      'Created By': r.createdBy ?? '',
+      Notes: r.notes ?? '',
+    }))
+  }
+
+  const handleExportXlsx = () => {
+    const exportIds = selectedIds.length > 0 ? selectedIds : filteredRows.map(r => r.id)
+    const data = buildExportRows(exportIds)
+    if (data.length === 0) { alert('No data to export'); return }
+    const ws = XLSX.utils.json_to_sheet(data)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Movements')
+    XLSX.writeFile(wb, `inventory_movements_${new Date().toISOString().slice(0,10)}.xlsx`)
+  }
+
+  const handleExportCsv = () => {
+    const exportIds = selectedIds.length > 0 ? selectedIds : filteredRows.map(r => r.id)
+    const data = buildExportRows(exportIds)
+    if (data.length === 0) { alert('No data to export'); return }
+    const ws = XLSX.utils.json_to_sheet(data)
+    const csv = XLSX.utils.sheet_to_csv(ws)
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `inventory_movements_${new Date().toISOString().slice(0,10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const matMap = Object.fromEntries(materials.map(m => [m.id, m]))
   const whMap = Object.fromEntries(warehouses.map(w => [w.id, w]))
 
@@ -157,6 +209,10 @@ export default function InventoryMovementPage() {
     if (filterMaterial) {
       const mat = r.material ? `${r.material.materialCode ?? ''} ${r.material.materialName ?? ''}` : (matMap[r.materialId] ? matMap[r.materialId].materialCode : '')
       if (!mat.toLowerCase().includes(filterMaterial.toLowerCase())) return false
+    }
+    if (filterInventoryId) {
+      const invId = r.inventoryId ? String(r.inventoryId) : ''
+      if (!invId.toLowerCase().includes(filterInventoryId.toLowerCase())) return false
     }
     if (filterCreatedFrom || filterCreatedTo) {
       const d = r.createdAt ? new Date(r.createdAt) : null
@@ -192,7 +248,7 @@ export default function InventoryMovementPage() {
     { field: 'materialId', headerName: 'Material', width: 180, valueGetter: (value, row) => row?.material ? `${row.material.materialCode ?? ''} — ${row.material.materialName ?? ''}` : (row && matMap[row.materialId] ? `${matMap[row.materialId].materialCode}` : value ?? '') },
     { field: 'fromWarehouseId', headerName: 'From WH', width: 130, valueGetter: (value, row) => row?.fromWarehouse ? row.fromWarehouse.code : (row && whMap[row.fromWarehouseId] ? whMap[row.fromWarehouseId].code : '') },
     { field: 'toWarehouseId', headerName: 'To WH', width: 130, valueGetter: (value, row) => row?.toWarehouse ? row.toWarehouse.code : (row && whMap[row.toWarehouseId] ? whMap[row.toWarehouseId].code : '') },
-    { field: 'quantity', headerName: 'Qty', width: 100, type: 'number' },
+    { field: 'quantity', headerName: 'Qty', width: 100, type: 'number', valueFormatter: (value) => value == null ? '' : Number(value).toLocaleString(undefined, { maximumFractionDigits: 9 }) },
     { field: 'unit', headerName: 'Unit', width: 80 },
     { field: 'batchNo', headerName: 'Batch', width: 120 },
     { field: 'reason', headerName: 'Reason', width: 150 },
@@ -218,10 +274,40 @@ export default function InventoryMovementPage() {
   ]
 
   return (
-    <Box sx={{ p: 2 }}>
-      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', mb: 2, gap: 1 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100%' }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', p: 2, pb: 0, gap: 1 }}>
         <h2 style={{ margin: 0 }}>Inventory Movements</h2>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end', flexWrap: 'wrap', justifyContent: 'flex-start', width: '100%' }}>
+
+          {/* ── Left-side actions: Refresh, Export, Delete, Record ── */}
+          <Button variant="outlined" onClick={() => load()} disabled={loading} title="Refresh">🔄 Refresh</Button>
+          <Button
+            variant="outlined"
+            color="success"
+            onClick={handleExportXlsx}
+            title={selectedIds.length > 0 ? `Export ${selectedIds.length} selected row(s) to XLSX` : 'Export all filtered rows to XLSX'}
+          >
+            ⬇ XLSX{selectedIds.length > 0 ? ` (${selectedIds.length})` : ''}
+          </Button>
+          <Button
+            variant="outlined"
+            color="success"
+            onClick={handleExportCsv}
+            title={selectedIds.length > 0 ? `Export ${selectedIds.length} selected row(s) to CSV` : 'Export all filtered rows to CSV'}
+          >
+            ⬇ CSV{selectedIds.length > 0 ? ` (${selectedIds.length})` : ''}
+          </Button>
+          <Button
+            variant="outlined"
+            color="error"
+            disabled={selectedIds.length === 0}
+            onClick={handleDeleteSelected}
+          >
+            Delete Selected ({selectedIds.length})
+          </Button>
+          <Button variant="contained" onClick={() => { setForm(makeEmptyForm()); setError(''); setDialogOpen(true) }}>+ Record Movement</Button>
+
+          {/* ── Filters ── */}
           <TextField select label="Filter by type" value={filterType} onChange={e => setFilterType(e.target.value)} size="small" sx={{ width: 160 }}>
             <MenuItem value="">All Types</MenuItem>
             {MOVEMENT_TYPES.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
@@ -229,6 +315,10 @@ export default function InventoryMovementPage() {
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
             <span style={{ fontSize: 11, color: '#666' }}>Material</span>
             <input value={filterMaterial} onChange={e => setFilterMaterial(e.target.value)} placeholder="Filter Material" style={{ fontSize: 12, padding: '3px 6px', width: 140 }} />
+          </Box>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+            <span style={{ fontSize: 11, color: '#666' }}>Inventory ID</span>
+            <input value={filterInventoryId} onChange={e => setFilterInventoryId(e.target.value)} placeholder="Filter Inventory ID" style={{ fontSize: 12, padding: '3px 6px', width: 140 }} />
           </Box>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
             <span style={{ fontSize: 11, color: '#666' }}>Quick Range</span>
@@ -253,24 +343,15 @@ export default function InventoryMovementPage() {
             <input type="datetime-local" value={filterCreatedTo} onChange={e => { setCreatedRangePreset(''); setFilterCreatedTo(e.target.value) }} style={{ fontSize: 12, padding: '3px 6px' }} />
           </Box>
           <Button size="small" variant="outlined" sx={{ alignSelf: 'flex-end' }}
-            onClick={() => { setFilterType(''); setFilterMaterial(''); setFilterCreatedFrom(''); setFilterCreatedTo(''); setCreatedRangePreset('') }}>
+            onClick={() => { setFilterType(''); setFilterMaterial(''); setFilterInventoryId(''); setFilterCreatedFrom(''); setFilterCreatedTo(''); setCreatedRangePreset('') }}>
             Clear
           </Button>
           <span style={{ alignSelf: 'flex-end', fontSize: 12, color: '#666' }}>{filteredRows.length} / {rows.length}</span>
-          <Button
-            variant="outlined"
-            color="error"
-            disabled={selectedIds.length === 0}
-            onClick={handleDeleteSelected}
-          >
-            Delete Selected ({selectedIds.length})
-          </Button>
-          <Button variant="outlined" onClick={() => load()} disabled={loading} title="Refresh">🔄 Refresh</Button>
-          <Button variant="contained" onClick={() => { setForm(makeEmptyForm()); setError(''); setDialogOpen(true) }}>+ Record Movement</Button>
         </Box>
       </Box>
 
-      <Box sx={{ height: 600 }}>
+      {/* Grid fills remaining height */}
+      <Box sx={{ flex: 1, minHeight: 0, p: 2, pt: 1 }}>
         <DataGrid
           rows={filteredRows}
           columns={columns}
@@ -282,6 +363,7 @@ export default function InventoryMovementPage() {
           checkboxSelection
           rowSelectionModel={selectionModel}
           onRowSelectionModelChange={handleSelectionModelChange}
+          sx={{ height: '100%' }}
         />
       </Box>
 
@@ -314,7 +396,15 @@ export default function InventoryMovementPage() {
             </>)}
 
             <Box sx={{ display: 'flex', gap: 1 }}>
-              <TextField label="Quantity" value={form.quantity} onChange={handleChange('quantity')} required disabled={saving} size="small" type="number" inputProps={{ step: 'any', min: 0 }} sx={{ flex: 1 }} />
+              <TextField
+                label={form.movementType === 'ADJUSTMENT' ? 'Quantity (negative = decrease)' : 'Quantity'}
+                value={form.quantity}
+                onChange={handleChange('quantity')}
+                required disabled={saving} size="small" type="number"
+                inputProps={{ step: 'any', min: form.movementType === 'ADJUSTMENT' ? undefined : 0 }}
+                helperText={form.movementType === 'ADJUSTMENT' ? 'Use negative to decrease stock, positive to increase' : undefined}
+                sx={{ flex: 1 }}
+              />
               <TextField label="Unit" value={form.unit} onChange={handleChange('unit')} disabled={saving} size="small" sx={{ width: 90 }} />
             </Box>
             <TextField label="Batch No" value={form.batchNo} onChange={handleChange('batchNo')} disabled={saving} size="small" />

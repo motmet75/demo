@@ -251,11 +251,10 @@ public class InventoryService {
         if (inv.getTenantId() == null || !inv.getTenantId().equals(tenantId)) throw new InventoryException("inventory does not belong to tenant");
         if (inv.getCompanyId() == null || !inv.getCompanyId().equals(companyId)) throw new InventoryException("inventory does not belong to company");
 
-        BigDecimal locked = inv.getQuantityLocked() == null ? BigDecimal.ZERO : inv.getQuantityLocked();
-        BigDecimal newLocked = quantityReserved == null ? locked : quantityReserved;
-        if (newQuantityOnHand.compareTo(newLocked) < 0) {
-            throw new InventoryException("New quantity cannot be less than reserved quantity");
-        }
+        // Note: we intentionally do NOT check newQuantityOnHand >= quantityLocked here.
+        // updateStock is a manual override operation — the operator is explicitly setting
+        // the absolute on-hand value. Reserved/locked quantities are managed separately
+        // by reserveById / releaseById and will be reconciled by those flows.
 
         BigDecimal oldQty = inv.getQuantityOnHand() == null ? BigDecimal.ZERO : inv.getQuantityOnHand();
         BigDecimal delta  = newQuantityOnHand.subtract(oldQty);
@@ -265,19 +264,31 @@ public class InventoryService {
         if (batchNo != null) inv.setBatchNo(batchNo);
         if (expirationDateTime != null) inv.setExpirationDateTime(expirationDateTime);
         if (productionDateTime != null) inv.setProductionDateTime(productionDateTime);
-        if (quantityReserved != null) inv.setQuantityLocked(quantityReserved);
+        // quantityReserved param is ignored on edit — reserved/locked managed by reserve/release only
         InventoryEntity updated = inventoryRepository.save(inv);
 
+        // Record movement log ONLY — inventory quantity is already updated above.
+        // Do NOT call recordAdjustmentMovement (which would re-apply delta to inventory).
         if (delta.compareTo(BigDecimal.ZERO) != 0 && inv.getMaterial() != null && inv.getWarehouse() != null) {
-            movementService.recordAdjustmentMovement(
+            // Build signed-delta audit note: "Adjusted from X to Y (+/-delta)"
+            String sign = delta.compareTo(BigDecimal.ZERO) > 0 ? "+" : "";
+            String auditNote = "Adjusted from " + oldQty.toPlainString()
+                    + " to " + newQuantityOnHand.toPlainString()
+                    + " (" + sign + delta.toPlainString() + ")";
+            String combinedNotes = (notes != null && !notes.isBlank())
+                    ? notes + " | " + auditNote
+                    : auditNote;
+
+            movementService.recordAdjustmentMovementLogOnly(
+                    updated.getId(),
                     inv.getMaterial().getId(),
                     inv.getWarehouse().getId(),
-                    delta,
+                    delta,                          // signed: negative for decrease
                     inv.getMaterial().getUnit() != null ? inv.getMaterial().getUnit() : "pcs",
                     inv.getBatchNo(),
                     reason != null ? reason : "Manual update stock",
                     createdBy != null ? createdBy : "system",
-                    notes,
+                    combinedNotes,
                     tenantId, companyId);
         }
 

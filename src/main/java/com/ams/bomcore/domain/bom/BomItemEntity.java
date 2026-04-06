@@ -45,7 +45,7 @@ public class BomItemEntity {
     @JoinColumn(name = "material_id", nullable = false)
     private Material material;
 
-    @Column(name = "quantity", nullable = false, precision = 12, scale = 4)
+    @Column(name = "quantity", nullable = false, columnDefinition = "numeric")
     private BigDecimal quantity;
 
     @Column(name = "level", nullable = false)

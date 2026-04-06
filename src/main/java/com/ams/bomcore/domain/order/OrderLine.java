@@ -54,22 +54,22 @@ public class OrderLine {
     @Column(name = "material_id")
     private UUID materialId;
 
-    @Column(name = "quantity_ordered", nullable = false, precision = 14, scale = 4)
+    @Column(name = "quantity_ordered", nullable = false, columnDefinition = "numeric")
     private BigDecimal quantityOrdered;
 
-    @Column(name = "quantity_produced", precision = 14, scale = 4)
+    @Column(name = "quantity_produced", columnDefinition = "numeric")
     private BigDecimal quantityProduced = BigDecimal.ZERO;
 
-    @Column(name = "quantity_delivered", precision = 14, scale = 4)
+    @Column(name = "quantity_delivered", columnDefinition = "numeric")
     private BigDecimal quantityDelivered = BigDecimal.ZERO;
 
-    @Column(name = "quantity_cancelled", precision = 14, scale = 4)
+    @Column(name = "quantity_cancelled", columnDefinition = "numeric")
     private BigDecimal quantityCancelled = BigDecimal.ZERO;
 
     @Column(name = "unit", nullable = false, length = 20)
     private String unit;
 
-    @Column(name = "unit_price", precision = 18, scale = 4)
+    @Column(name = "unit_price", columnDefinition = "numeric")
     private BigDecimal unitPrice;
 
     @Column(name = "line_status", length = 20)

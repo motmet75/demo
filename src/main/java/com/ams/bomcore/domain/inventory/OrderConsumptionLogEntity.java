@@ -41,17 +41,17 @@ public class OrderConsumptionLogEntity {
     @JoinColumn(name = "material_id", nullable = false)
     private Material material;
 
-    @Column(name = "planned_qty", nullable = false, precision = 14, scale = 4)
+    @Column(name = "planned_qty", nullable = false, columnDefinition = "numeric")
     private BigDecimal plannedQty;
 
-    @Column(name = "effective_planned_qty", nullable = false, precision = 14, scale = 4)
+    @Column(name = "effective_planned_qty", nullable = false, columnDefinition = "numeric")
     private BigDecimal effectivePlannedQty;
 
-    @Column(name = "real_consumption_qty", precision = 14, scale = 4)
+    @Column(name = "real_consumption_qty", columnDefinition = "numeric")
     private BigDecimal realConsumptionQty;
 
     // variance_qty is a generated column in DB; mark as insertable=false updatable=false
-    @Column(name = "variance_qty", insertable = false, updatable = false, precision = 14, scale = 4)
+    @Column(name = "variance_qty", insertable = false, updatable = false, columnDefinition = "numeric")
     private BigDecimal varianceQty;
 
     @Column(name = "status", nullable = false, length = 20)

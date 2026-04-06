@@ -223,7 +223,7 @@ public class InventoryMovementService {
         movement.setCompanyId(companyId);
         movement.setMaterial(material);
         movement.setFromWarehouse(warehouse);
-        movement.setQuantity(quantity);
+        movement.setQuantity(quantity.negate());  // negative — stock leaving inventory
         movement.setUnit(unit != null ? unit : "pcs");
         movement.setMovementType(MOVEMENT_OUT);
         movement.setReason(reason);
@@ -322,7 +322,34 @@ public class InventoryMovementService {
         inv.setQuantityOnHand(newOnHand);
         InventoryEntity savedInv = inventoryRepository.save(inv);
 
-        // ── record movement ─────────────────────────────────────────────────────
+        return buildAndSaveAdjustmentMovement(material, warehouse, quantity, unit, batchNo, reason, createdBy, notes, tenantId, companyId, savedInv.getId());
+    }
+
+    /**
+     * Record an ADJUSTMENT movement log entry only — does NOT touch inventory quantity.
+     * Use this when the caller has already set quantityOnHand directly (e.g. InventoryService.updateStock).
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public InventoryMovementEntity recordAdjustmentMovementLogOnly(UUID inventoryId, UUID materialId, UUID warehouseId,
+                                                                    BigDecimal quantity, String unit, String batchNo,
+                                                                    String reason, String createdBy, String notes,
+                                                                    UUID tenantId, UUID companyId) {
+        if (quantity == null)
+            throw new InventoryException("ADJUSTMENT quantity must not be null");
+
+        Material material = materialRepository.findById(materialId)
+                .orElseThrow(() -> new InventoryException("Material not found: " + materialId));
+        WarehouseEntity warehouse = warehouseRepository.findById(warehouseId)
+                .orElseThrow(() -> new InventoryException("Warehouse not found: " + warehouseId));
+
+        return buildAndSaveAdjustmentMovement(material, warehouse, quantity, unit, batchNo, reason, createdBy, notes, tenantId, companyId, inventoryId);
+    }
+
+    /** Shared movement-record builder used by both adjustment variants. */
+    private InventoryMovementEntity buildAndSaveAdjustmentMovement(Material material, WarehouseEntity warehouse,
+                                                                     BigDecimal quantity, String unit, String batchNo,
+                                                                     String reason, String createdBy, String notes,
+                                                                     UUID tenantId, UUID companyId, UUID inventoryId) {
         InventoryMovementEntity movement = new InventoryMovementEntity();
         movement.setTenantId(tenantId);
         movement.setCompanyId(companyId);
@@ -333,14 +360,15 @@ public class InventoryMovementService {
         } else {
             movement.setFromWarehouse(warehouse);
         }
-        movement.setQuantity(quantity.abs());
+        // Store the signed quantity — negative means stock decrease, positive means increase
+        movement.setQuantity(quantity);
         movement.setUnit(unit != null ? unit : "pcs");
         movement.setMovementType(MOVEMENT_ADJUSTMENT);
         movement.setReason(reason);
         movement.setBatchNo(batchNo);
         movement.setCreatedBy(resolveCreatedBy(createdBy));
         movement.setNotes(notes);
-        movement.setInventoryId(savedInv.getId());
+        movement.setInventoryId(inventoryId);
         movement.setStatus("COMPLETED");
         return movementRepository.save(movement);
     }

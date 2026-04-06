@@ -74,7 +74,7 @@ public class InventoryEntity {
     @Column(name = "unit", nullable = false, length = 20)
     private String unit = "pcs";
 
-    @Column(name = "unit_price", precision = 18, scale = 4)
+    @Column(name = "unit_price", columnDefinition = "numeric")
     private BigDecimal unitPrice = BigDecimal.ZERO;
 
     @Column(name = "currency", length = 3)
@@ -98,22 +98,22 @@ public class InventoryEntity {
     @Column(name = "purchase_no", length = 50)
     private String purchaseNo;
 
-    @Column(name = "quantity_on_hand", nullable = false, precision = 18, scale = 3)
+    @Column(name = "quantity_on_hand", nullable = false, columnDefinition = "numeric")
     private BigDecimal quantityOnHand;
 
-    @Column(name = "quantity_total", precision = 18, scale = 3)
+    @Column(name = "quantity_total", columnDefinition = "numeric")
     private BigDecimal quantityTotal;
 
-    @Column(name = "quantity_reserved", precision = 18, scale = 3)
+    @Column(name = "quantity_reserved", columnDefinition = "numeric")
     private BigDecimal quantityReserved;
 
-    @Column(name = "quantity_locked", precision = 18, scale = 3)
+    @Column(name = "quantity_locked", columnDefinition = "numeric")
     private BigDecimal quantityLocked;
 
-    @Column(name = "material_quota", precision = 18, scale = 3)
+    @Column(name = "material_quota", columnDefinition = "numeric")
     private BigDecimal materialQuota;
 
-    @Column(name = "material_quota_percentage", precision = 8, scale = 5)
+    @Column(name = "material_quota_percentage", columnDefinition = "numeric")
     private BigDecimal materialQuotaPercentage;
 
     // Dates & timestamps

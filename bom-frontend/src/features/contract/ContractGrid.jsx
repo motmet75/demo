@@ -143,7 +143,7 @@ export default function ContractGrid() {
     { field: 'status', headerName: 'Status', width: 140 },
     { field: 'startDate', headerName: 'Start', width: 180 },
     { field: 'endDate', headerName: 'End', width: 180 },
-    { field: 'totalValue', headerName: 'Value', width: 140 },
+    { field: 'totalValue', headerName: 'Value', width: 140, type: 'number', valueFormatter: (value) => value == null ? '' : Number(value).toLocaleString(undefined, { maximumFractionDigits: 9 }) },
     { field: 'currency', headerName: 'Currency', width: 100 },
     { field: 'actions', type: 'actions', headerName: 'Actions', width: 120, getActions: (params) => {
       if (!params || !params.row) return []

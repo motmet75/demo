@@ -38,20 +38,20 @@ public class ProductionConsumption {
     @JoinColumn(name = "material_id", nullable = false)
     private Material material;
 
-    @Column(name = "planned_qty", nullable = false, precision = 14, scale = 4)
+    @Column(name = "planned_qty", nullable = false, columnDefinition = "numeric")
     private BigDecimal plannedQty;
 
-    @Column(name = "effective_planned_qty", nullable = false, precision = 14, scale = 4)
+    @Column(name = "effective_planned_qty", nullable = false, columnDefinition = "numeric")
     private BigDecimal effectivePlannedQty;
 
-    @Column(name = "actual_consumed_qty", precision = 14, scale = 4)
+    @Column(name = "actual_consumed_qty", columnDefinition = "numeric")
     private BigDecimal actualConsumedQty;
 
     /**
      * DB-generated column: COALESCE(actual_consumed_qty, effective_planned_qty) - planned_qty.
      * Never set by the application.
      */
-    @Column(name = "variance_qty", insertable = false, updatable = false, precision = 14, scale = 4)
+    @Column(name = "variance_qty", insertable = false, updatable = false, columnDefinition = "numeric")
     private BigDecimal varianceQty;
 
     @Column(name = "tenant_id", nullable = false)

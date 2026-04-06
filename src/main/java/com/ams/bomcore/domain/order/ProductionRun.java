@@ -43,13 +43,13 @@ public class ProductionRun {
     @Column(name = "model_id", nullable = false)
     private UUID modelId;
 
-    @Column(name = "target_qty", nullable = false, precision = 14, scale = 4)
+    @Column(name = "target_qty", nullable = false, columnDefinition = "numeric")
     private BigDecimal targetQty;
 
-    @Column(name = "produced_qty", precision = 14, scale = 4)
+    @Column(name = "produced_qty", columnDefinition = "numeric")
     private BigDecimal producedQty = BigDecimal.ZERO;
 
-    @Column(name = "scrapped_qty", precision = 14, scale = 4)
+    @Column(name = "scrapped_qty", columnDefinition = "numeric")
     private BigDecimal scrappedQty = BigDecimal.ZERO;
 
     @Column(name = "status", nullable = false, length = 20)

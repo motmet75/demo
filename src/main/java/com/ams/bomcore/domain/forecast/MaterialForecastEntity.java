@@ -44,7 +44,7 @@ public class MaterialForecastEntity {
     @Column(name = "forecast_date", nullable = false)
     private LocalDate forecastDate;
 
-    @Column(name = "forecast_qty", nullable = false, precision = 14, scale = 4)
+    @Column(name = "forecast_qty", nullable = false, columnDefinition = "numeric")
     private java.math.BigDecimal forecastQty;
 
     @Column(name = "model_version", length = 20)

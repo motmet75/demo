@@ -80,7 +80,7 @@ public class Contract {
     @Column(name = "termination_date")
     private Instant terminationDate;
 
-    @Column(name = "total_value", precision = 19, scale = 4)
+    @Column(name = "total_value", columnDefinition = "numeric")
     private BigDecimal totalValue;
 
     @Column(name = "currency", length = 10)

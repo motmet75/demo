@@ -38,7 +38,7 @@ public class MaterialDefectEntity {
     @JoinColumn(name = "warehouse_id", nullable = false)
     private WarehouseEntity warehouse;
 
-    @Column(name = "quantity", nullable = false, precision = 14, scale = 4)
+    @Column(name = "quantity", nullable = false, columnDefinition = "numeric")
     private BigDecimal quantity;
 
     @Column(name = "defect_reason", columnDefinition = "TEXT")

@@ -42,7 +42,7 @@ public class ModelBom {
     @JoinColumn(name = "material_id", nullable = false)
     private Material material;
 
-    @Column(name = "qty_per_unit", precision = 14, scale = 4, nullable = false)
+    @Column(name = "qty_per_unit", nullable = false, columnDefinition = "numeric")
     private BigDecimal qtyPerUnit;
 
     public ModelBom() {
