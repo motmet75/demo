@@ -135,14 +135,18 @@ public class Authority implements GrantedAuthority {
 			return true;
 		}
 		if (obj instanceof Authority) {
-			return this.authority.equals(((Authority) obj).authority);
+			String otherAuthority = ((Authority) obj).authority;
+			if (this.authority == null) {
+				return otherAuthority == null;
+			}
+			return this.authority.equals(otherAuthority);
 		}
 		return false;
 	}
 
 	@Override
 	public int hashCode() {
-		return this.authority.hashCode();
+		return this.authority == null ? 0 : this.authority.hashCode();
 	}
 
 	@Override
