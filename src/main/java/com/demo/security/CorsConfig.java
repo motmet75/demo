@@ -2,51 +2,56 @@ package com.demo.security;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+import java.util.List;
 
 @Configuration
 public class CorsConfig {
 
-    @Bean
-    public WebMvcConfigurer corsConfigurer() {
-        return new WebMvcConfigurer() {
-            @Override
-            public void addCorsMappings(CorsRegistry registry) {
-                String[] origins = {
-                    "https://192.168.100.175",
-                    "http://localhost:5173",
-                    "http://15.165.215.69:5173",
-                    "https://anhmedia.vn", 
-                };
+	private static final List<String> ALLOWED_ORIGINS = List.of(
+		"https://192.168.100.176:8443",
+		"https://192.168.100.176",
+		"http://192.168.100.176:5173",
+		"http://localhost:5173",
+		"http://localhost:3000",
+		"https://anhmedia.vn"
+	);
 
-                registry.addMapping("/auth/**")
-                        .allowedOrigins(origins)
-                        .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-                        .allowedHeaders("*")
-                        .allowCredentials(true);
+	@Bean
+	public CorsConfigurationSource corsConfigurationSource() {
+		CorsConfiguration config = new CorsConfiguration();
+		config.setAllowedOrigins(ALLOWED_ORIGINS);
+		config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
+		config.setAllowedHeaders(List.of("*"));
+		config.setAllowCredentials(true);
+		config.setMaxAge(3600L);
 
-                registry.addMapping("/admin/**")
-                        .allowedOrigins(origins)
-                        .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-                        .allowedHeaders("*")
-                        .allowCredentials(true);
+		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+		source.registerCorsConfiguration("/**", config);
+		return source;
+	}
 
-                registry.addMapping("/bom/**")
-                        .allowedOrigins(origins)
-                        .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-                        .allowedHeaders("*")
-                        .allowCredentials(true);
-                
-               
-
-                registry.addMapping("/viettelpost/**")
-                        .allowedOrigins(origins)
-                        .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-                        .allowedHeaders("*")
-                        .allowCredentials(true);
-               
-            }
-        };
-    }
+	
+	@Bean
+	public WebMvcConfigurer corsConfigurer() {
+		return new WebMvcConfigurer() {
+			@Override
+			public void addCorsMappings(CorsRegistry registry) {
+				registry.addMapping("/**")
+					.allowedOrigins(ALLOWED_ORIGINS.toArray(new String[0]))
+					.allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
+					.allowedHeaders("*")
+					.allowCredentials(true)
+					.maxAge(3600);
+			}
+		};
+	}
 }

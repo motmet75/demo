@@ -5,13 +5,11 @@ export default defineConfig({
   plugins: [react()],
   base: '/bom-inventory',
   server: {
+    host: '0.0.0.0',
     port: 5173,
-    historyApiFallback: {
-      index: '/bom-inventory/index.html'
-    },
     proxy: {
-      '/api': {
-        target: 'http://localhost:8080',
+      '/sapi': {
+        target: 'http://localhost:8081',
         changeOrigin: true
       }
     }

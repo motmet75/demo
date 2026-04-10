@@ -357,7 +357,7 @@ export default function MaterialGrid({ refreshKey }) {
       }
 
       if (format === 'xlsx') {
-        const res = await apiFetch('/api/bom/materials/export', {
+        const res = await apiFetch('/sapi/bom/materials/export', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payloadIds)

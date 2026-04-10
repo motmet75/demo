@@ -44,14 +44,14 @@ export function getContextHeaders() {
 }
 
 /**
- * Ensure every relative URL goes through the /api proxy.
- * Skips URLs that already start with /api or are absolute (http/https).
+ * Ensure every relative URL goes through the /sapi proxy.
+ * Skips URLs that already start with /sapi or are absolute (http/https).
  */
 function withApiPrefix(url) {
-  if (!url || url.startsWith('http://') || url.startsWith('https://') || url.startsWith('/api')) {
+  if (!url || url.startsWith('http://') || url.startsWith('https://') || url.startsWith('/sapi')) {
     return url
   }
-  return '/api' + url
+  return '/sapi' + url
 }
 
 export async function apiFetch(url, opts = {}) {
