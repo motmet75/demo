@@ -2,11 +2,16 @@
 const STORAGE_KEY = 'bom_app_context_v1'
 
 // In-memory context store — updated synchronously by React components via setLiveContext().
+// _contextReady becomes true once setLiveContext has been called at least once,
+// meaning the React state has been initialised and the localStorage fallback
+// should no longer be used (even if both values are null/cleared).
 let _liveContext = { tenantId: null, companyId: null }
+let _contextReady = false
 let _liveUsername = null
 
 export function setLiveContext(tenantId, companyId) {
   _liveContext = { tenantId: tenantId ?? null, companyId: companyId ?? null }
+  _contextReady = true
 }
 
 export function setLiveUsername(username) {
@@ -14,32 +19,31 @@ export function setLiveUsername(username) {
 }
 
 export function getContextHeaders() {
-  // Prefer live in-memory context; fall back to localStorage for the initial load
-  const tenantId = _liveContext.tenantId
-  const companyId = _liveContext.companyId
-
-  const headers = {}
-
-  if (tenantId || companyId) {
-    if (tenantId) headers['X-Tenant-Id'] = tenantId
-    if (companyId) headers['X-Company-Id'] = companyId
-  } else {
-    // Fallback: read from localStorage (used before the first React render)
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY)
-      if (raw) {
-        const parsed = JSON.parse(raw)
-        if (parsed.tenantId) headers['X-Tenant-Id'] = parsed.tenantId
-        if (parsed.companyId) headers['X-Company-Id'] = parsed.companyId
-      }
-    } catch {
-      // ignore
-    }
+  // Once React state is initialised (_contextReady), always use the live values —
+  // even if they are null (user cleared the selectors).  This prevents stale
+  // localStorage values from leaking into requests after a context switch.
+  if (_contextReady) {
+    const headers = {}
+    if (_liveContext.tenantId)  headers['X-Tenant-Id']  = _liveContext.tenantId
+    if (_liveContext.companyId) headers['X-Company-Id'] = _liveContext.companyId
+    if (_liveUsername)          headers['X-Username']   = _liveUsername
+    return headers
   }
 
-  // Always attach the logged-in username when available
+  // Before first React render: fall back to localStorage so the very first
+  // authenticated request already carries the saved context.
+  const headers = {}
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (parsed.tenantId)  headers['X-Tenant-Id']  = parsed.tenantId
+      if (parsed.companyId) headers['X-Company-Id'] = parsed.companyId
+    }
+  } catch {
+    // ignore
+  }
   if (_liveUsername) headers['X-Username'] = _liveUsername
-
   return headers
 }
 
@@ -56,6 +60,18 @@ function withApiPrefix(url) {
 
 export async function apiFetch(url, opts = {}) {
   const headers = Object.assign({}, opts.headers || {}, getContextHeaders())
+  const final = Object.assign({}, opts, { headers })
+  return fetch(withApiPrefix(url), final)
+}
+
+/**
+ * Like apiFetch but never injects X-Tenant-Id / X-Company-Id headers.
+ * Use this for global admin endpoints (e.g. /bom/tenants, /admin/*) that
+ * must work regardless of which tenant/company the admin currently has selected.
+ */
+export async function apiFetchNoContext(url, opts = {}) {
+  const headers = Object.assign({}, opts.headers || {})
+  if (_liveUsername) headers['X-Username'] = _liveUsername
   const final = Object.assign({}, opts, { headers })
   return fetch(withApiPrefix(url), final)
 }

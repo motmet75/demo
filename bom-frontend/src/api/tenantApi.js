@@ -1,6 +1,7 @@
-import { apiFetch } from './client'
+import { apiFetchNoContext } from './client'
 
 const base = '/bom/tenants'
+const opts = { credentials: 'include' }
 
 async function handleResponse(res) {
   const text = await res.text()
@@ -13,12 +14,14 @@ async function handleResponse(res) {
 }
 
 export async function getTenants() {
-  const res = await apiFetch(base)
-  return handleResponse(res)
+  const res = await apiFetchNoContext(base, opts)
+  const data = await handleResponse(res)
+  return Array.isArray(data) ? data : (data?.data ?? [])
 }
 
 export async function createTenant(payload) {
-  const res = await apiFetch(base, {
+  const res = await apiFetchNoContext(base, {
+    ...opts,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -27,7 +30,8 @@ export async function createTenant(payload) {
 }
 
 export async function updateTenant(id, payload) {
-  const res = await apiFetch(`${base}/${id}`, {
+  const res = await apiFetchNoContext(`${base}/${id}`, {
+    ...opts,
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -36,7 +40,8 @@ export async function updateTenant(id, payload) {
 }
 
 export async function activateTenant(id, active) {
-  const res = await apiFetch(`${base}/${id}/activate`, {
+  const res = await apiFetchNoContext(`${base}/${id}/activate`, {
+    ...opts,
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ isActive: !!active }),
@@ -45,9 +50,7 @@ export async function activateTenant(id, active) {
 }
 
 export async function deleteTenant(id) {
-  const res = await apiFetch(`${base}/${id}`, {
-    method: 'DELETE',
-  })
+  const res = await apiFetchNoContext(`${base}/${id}`, { ...opts, method: 'DELETE' })
   return handleResponse(res)
 }
 

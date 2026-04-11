@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { apiFetchJson, setLiveUsername } from '../api/client'
 import AuthContext from './AuthContextValue'
 import { useAppContext } from './AppContext'
@@ -8,7 +8,7 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
   const { restoreFromUser } = useAppContext()
 
-  const refreshMe = async () => {
+  const refreshMe = useCallback(async () => {
     const { res, data } = await apiFetchJson('/auth/me', { credentials: 'include' })
     if (!res.ok || !data?.authenticated) {
       setUser(null)
@@ -20,16 +20,15 @@ export function AuthProvider({ children }) {
     setLiveUsername(u?.username ?? null)
     restoreFromUser(u)
     return u
-  }
+  }, [restoreFromUser])
 
-  useState(() => {
-    Promise.resolve()
-      .then(() => refreshMe())
-      .finally(() => setLoading(false))
-    return 0
-  })
+  // Run once on mount to restore session
+  useEffect(() => {
+    refreshMe().finally(() => setLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  const login = async ({ username, password }) => {
+  const login = useCallback(async ({ username, password }) => {
     const { res, data } = await apiFetchJson('/auth/login', {
       method: 'POST',
       credentials: 'include',
@@ -46,13 +45,13 @@ export function AuthProvider({ children }) {
     setLiveUsername(u?.username ?? null)
     restoreFromUser(u)
     return u
-  }
+  }, [restoreFromUser])
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     await apiFetchJson('/auth/logout', { method: 'POST', credentials: 'include' })
     setUser(null)
     setLiveUsername(null)
-  }
+  }, [])
 
   const value = useMemo(() => ({
     user,
@@ -61,7 +60,6 @@ export function AuthProvider({ children }) {
     logout,
     refreshMe,
     isAdmin: !!user?.authorities?.includes('ROLE_ADMIN')
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [user, loading, login, logout, refreshMe])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -38,7 +38,7 @@ public class SecurityConfig {
                 .requestMatchers("/auth/login", "/auth/logout", "/auth/me", "/auth/change-password", "/auth/last-context", "/error").permitAll()
                 // .requestMatchers("/api/auth/login", ...).permitAll()
                 .requestMatchers("/admin/**").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.GET, "/bom/tenants/**").permitAll() // Allow public GET access
+                .requestMatchers(HttpMethod.GET, "/bom/tenants", "/bom/tenants/**").permitAll() // Allow public GET access
                 .requestMatchers("/bom/**").authenticated()
                 .anyRequest().permitAll()
             )

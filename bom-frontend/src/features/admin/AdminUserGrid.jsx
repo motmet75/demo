@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Box, Button, Chip, Stack, Typography } from '@mui/material'
+import { Alert, Box, Button, Chip, Stack, Typography } from '@mui/material'
 import { DataGrid, GridActionsCellItem } from '@mui/x-data-grid'
 import EditIcon from '@mui/icons-material/Edit'
 import DeleteIcon from '@mui/icons-material/Delete'
@@ -14,6 +14,7 @@ export default function AdminUserGrid() {
   const [tenants, setTenants] = useState([])
   const [companies, setCompanies] = useState([])
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
   const [saving, setSaving] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [selected, setSelected] = useState(null)
@@ -23,6 +24,7 @@ export default function AdminUserGrid() {
 
   const load = async () => {
     setLoading(true)
+    setError(null)
     try {
       const [users, tenantList] = await Promise.all([fetchAdminUsers(), getTenants().catch(() => [])])
       setTenants(tenantList)
@@ -33,8 +35,9 @@ export default function AdminUserGrid() {
         ...users.filter((u) => u.assignedTenantId).map((u) => String(u.assignedTenantId))
       ])]
       const companyArrays = await Promise.all(tenantIds.map((tid) => getCompanies(tid).catch(() => [])))
-      const allCompanies = companyArrays.flat()
-      setCompanies(allCompanies)
+      setCompanies(companyArrays.flat())
+    } catch (e) {
+      setError(e.message || 'Failed to load users')
     } finally {
       setLoading(false)
     }
@@ -127,6 +130,7 @@ export default function AdminUserGrid() {
 
   return (
     <Box>
+      {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Box>
           <Typography variant="h6">Users</Typography>

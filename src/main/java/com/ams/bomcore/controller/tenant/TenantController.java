@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -13,9 +15,11 @@ import com.ams.bomcore.domain.tenant.Tenant;
 import com.ams.bomcore.repository.TenantRepository;
 
 @RestController
-@CrossOrigin(origins = "http://localhost:5173", allowCredentials = "true")
+@CrossOrigin(origins = "*", allowCredentials = "false")
 @RequestMapping("/bom/tenants")
 public class TenantController {
+
+    private static final Logger log = LoggerFactory.getLogger(TenantController.class);
 
     private final TenantRepository tenantRepository;
 
@@ -24,10 +28,17 @@ public class TenantController {
     }
 
     @GetMapping
-    public List<TenantDto> list() {
-        return tenantRepository.findAll().stream()
-                .map(t -> new TenantDto(t.getId(), t.getTenantCode(), t.getTenantName(), t.getIsActive(), t.getMaxCompanies(), t.getCreatedAt()))
-                .collect(Collectors.toList());
+    public ResponseEntity<?> list() {
+        try {
+            List<TenantDto> result = tenantRepository.findAll().stream()
+                    .map(t -> new TenantDto(t.getId(), t.getTenantCode(), t.getTenantName(), t.getIsActive(), t.getMaxCompanies(), t.getCreatedAt()))
+                    .collect(Collectors.toList());
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            log.error("Failed to list tenants", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new ErrorDto("Failed to load tenants: " + e.getMessage()));
+        }
     }
 
     @PostMapping

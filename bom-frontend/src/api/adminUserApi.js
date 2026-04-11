@@ -1,13 +1,22 @@
-import { apiFetch, apiFetchJson } from './client'
+import { apiFetchNoContext } from './client'
+
+// Helper that mirrors apiFetchJson but uses apiFetchNoContext
+async function fetchJson(url, opts = {}) {
+  const res = await apiFetchNoContext(url, opts)
+  const text = await res.text()
+  let data = null
+  try { data = text ? JSON.parse(text) : null } catch { data = text }
+  return { res, data }
+}
 
 export async function fetchAdminUsers() {
-  const { res, data } = await apiFetchJson('/admin/users', { credentials: 'include' })
+  const { res, data } = await fetchJson('/admin/users', { credentials: 'include' })
   if (!res.ok) throw new Error(data?.message || 'Failed to load users')
   return Array.isArray(data) ? data : []
 }
 
 export async function createAdminUser(payload) {
-  const { res, data } = await apiFetchJson('/admin/users', {
+  const { res, data } = await fetchJson('/admin/users', {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -18,7 +27,7 @@ export async function createAdminUser(payload) {
 }
 
 export async function updateAdminUser(id, payload) {
-  const { res, data } = await apiFetchJson(`/admin/users/${encodeURIComponent(id)}`, {
+  const { res, data } = await fetchJson(`/admin/users/${encodeURIComponent(id)}`, {
     method: 'PUT',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -29,7 +38,7 @@ export async function updateAdminUser(id, payload) {
 }
 
 export async function deleteAdminUser(id) {
-  const res = await apiFetch(`/admin/users/${encodeURIComponent(id)}`, {
+  const res = await apiFetchNoContext(`/admin/users/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     credentials: 'include'
   })
@@ -40,7 +49,7 @@ export async function deleteAdminUser(id) {
 }
 
 export async function replaceUserAuthorities(username, authorities) {
-  const { res, data } = await apiFetchJson(`/admin/authorities/${encodeURIComponent(username)}`, {
+  const { res, data } = await fetchJson(`/admin/authorities/${encodeURIComponent(username)}`, {
     method: 'PUT',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -51,7 +60,7 @@ export async function replaceUserAuthorities(username, authorities) {
 }
 
 export async function assignUserTenant(id, tenantId) {
-  const { res, data } = await apiFetchJson(`/admin/users/${encodeURIComponent(id)}/tenant`, {
+  const { res, data } = await fetchJson(`/admin/users/${encodeURIComponent(id)}/tenant`, {
     method: 'PATCH',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },

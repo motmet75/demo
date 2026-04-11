@@ -40,7 +40,9 @@ export function AppProvider({ children }) {
     setLiveContext(state.tenantId, state.companyId)
   }, [state.tenantId, state.companyId])
 
-  // Track whether we should persist to server (skip initial mount)
+  // Track whether we should persist to server (skip initial mount).
+  // We use a ref so that ONLY the very first effect execution (React mount)
+  // is skipped – subsequent changes always fire the PATCH.
   const initialised = useRef(false)
 
   // Persist to localStorage whenever state changes
@@ -52,13 +54,16 @@ export function AppProvider({ children }) {
     }
   }, [state])
 
-  // Persist to server whenever state changes (after first render)
+  // Persist to server whenever tenantId or companyId change (after first render).
+  // We always send BOTH fields so the backend can set or clear each one
+  // independently – empty string tells the backend "clear this field".
+  // We do NOT skip the null+null case: if the user clears both selectors the
+  // backend must also clear both DB columns so they are never stale.
   useEffect(() => {
     if (!initialised.current) {
       initialised.current = true
       return
     }
-    // Fire-and-forget: save last context to backend for this user
     apiFetch('/auth/last-context', {
       method: 'PATCH',
       credentials: 'include',
@@ -96,30 +101,30 @@ export function AppProvider({ children }) {
 
   const reset = () => setState(defaultState)
 
-  // Called by AuthContext after login/me to restore last-used tenant+company
+  // Called by AuthContext after login/me to restore last-used tenant+company.
   const restoreFromUser = (user) => {
     if (!user) return
     const isAdmin = Array.isArray(user.authorities) && user.authorities.includes('ROLE_ADMIN')
 
     setState((s) => {
-      // Non-admin: lock tenantId to assignedTenantId, but allow free company selection
+      // Non-admin: tenant is locked to assignedTenantId; restore lastCompanyId
+      // only when it belongs to the same forced tenant.
       if (!isAdmin) {
         const forcedTenant = user.assignedTenantId ?? null
-        // Restore lastCompanyId if tenant hasn't changed, otherwise reset
         const restoredCompany = forcedTenant === s.tenantId
           ? (user.lastCompanyId ?? s.companyId)
           : (user.lastCompanyId ?? null)
         if (forcedTenant === s.tenantId && restoredCompany === s.companyId) return s
-        return { tenantId: forcedTenant, companyId: restoredCompany }
+        return { tenantId: forcedTenant, companyId: restoredCompany, companyName: s.companyName }
       }
 
-      // Admin: restore last-used context as before
-      const newTenantId = user.lastTenantId ?? s.tenantId
-      const newCompanyId = user.lastTenantId === s.tenantId
-        ? (user.lastCompanyId ?? s.companyId)
-        : user.lastCompanyId ?? null
+      // Admin: use DB values directly and never blend with stale localStorage.
+      // The backend now always mirrors exactly what was last selected, so these
+      // values are always self-consistent (no stale cross-tenant companyId).
+      const newTenantId = user.lastTenantId ?? null
+      const newCompanyId = user.lastCompanyId ?? null
       if (newTenantId === s.tenantId && newCompanyId === s.companyId) return s
-      return { tenantId: newTenantId, companyId: newCompanyId }
+      return { tenantId: newTenantId, companyId: newCompanyId, companyName: null }
     })
   }
 

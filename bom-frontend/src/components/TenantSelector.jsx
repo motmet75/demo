@@ -1,38 +1,22 @@
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 import { useAppContext } from '../context/AppContext'
 import { useAuth } from '../context/useAuth'
-import { getTenants } from '../api/tenantApi'
+import { useTenantList } from '../context/TenantListContext'
 
 export default function TenantSelector() {
   const { tenantId, setTenantId } = useAppContext()
-  const { isAdmin, user } = useAuth()
-  const [tenants, setTenants] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-
-  useEffect(() => {
-    let mounted = true
-    getTenants()
-      .then((data) => {
-        if (mounted) {
-          setTenants(Array.isArray(data) ? data : (data && data.data ? data.data : []))
-          setLoading(false)
-        }
-      })
-      .catch((e) => { if (mounted) { setError(e.message || String(e)); setLoading(false) } })
-    return () => { mounted = false }
-  }, [])
+  const { isAdmin, user, loading: authLoading } = useAuth()
+  const { tenants, loading, error } = useTenantList()
 
   const handleChange = (e) => {
     const v = e.target.value || null
     setTenantId(v)
   }
 
-  // Non-admin users are locked to their assignedTenantId
+  // Non-admin users are locked to their assignedTenantId – show it as a label
   if (!isAdmin) {
-    const assigned = tenants.find((t) => String(t.id) === String(user?.assignedTenantId))
-    const label = assigned
-      ? `${assigned.tenantCode || assigned.code || ''} - ${assigned.tenantName || assigned.name || ''}`
+    const label = user?.assignedTenantName
+      ? `${user.assignedTenantCode || ''} - ${user.assignedTenantName}`
       : (tenantId || '—')
     return (
       <div style={{ display: 'inline-block', marginRight: 12 }}>
@@ -42,15 +26,19 @@ export default function TenantSelector() {
     )
   }
 
-  const disabled = false // Always allow tenant selection if context is missing or user wants to change
+  if (authLoading) {
+    return <div style={{ display: 'inline-block', marginRight: 12 }}>Tenant: <span>...</span></div>
+  }
 
   return (
     <div style={{ display: 'inline-block', marginRight: 12 }}>
       <label>Tenant: </label>
-      <select value={tenantId || ''} onChange={handleChange} disabled={disabled}>
+      <select value={tenantId || ''} onChange={handleChange}>
         <option value="">-- Select tenant --</option>
         {tenants.map((t) => (
-          <option key={t.id} value={t.id}>{(t.tenantCode || t.code || t.name) + ' - ' + (t.tenantName || t.name || '')}</option>
+          <option key={t.id} value={String(t.id)}>
+            {(t.tenantCode || t.code || '') + ' - ' + (t.tenantName || t.name || '')}
+          </option>
         ))}
       </select>
       {loading && <span style={{ marginLeft: 8 }}>Loading...</span>}

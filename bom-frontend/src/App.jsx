@@ -21,6 +21,7 @@ import BomPage from './features/bom/BomPage'
 import { AppProvider } from './context/AppContext'
 import { AuthProvider } from './context/AuthContext'
 import { useAuth } from './context/useAuth'
+import { TenantListProvider } from './context/TenantListContext'
 import ContextHeaderBar from './components/ContextHeaderBar'
 import TenantSelector from './components/TenantSelector'
 import CompanySelector from './components/CompanySelector'
@@ -134,6 +135,34 @@ function Sidebar({ collapsed, onToggle, isAdmin }) {
   )
 }
 
+// Routes where tenant/company context controls should be hidden
+const ADMIN_ONLY_PATHS = ['/admin', '/tenants']
+
+function HeaderBar({ user, logout }) {
+  const location = useLocation()
+  const hideContext = ADMIN_ONLY_PATHS.some(p => location.pathname === p || location.pathname.startsWith(p + '/'))
+
+  if (!user) {
+    return <Link to="/login" style={{ fontSize: 14 }}>Login</Link>
+  }
+
+  return (
+    <>
+      {!hideContext && <ContextHeaderBar />}
+      {!hideContext && <TenantSelector />}
+      {!hideContext && <CompanySelector />}
+      {!hideContext && <BomSelector />}
+      <Box sx={{ flex: 1 }} />
+      <Typography variant="body2" color="text.secondary">
+        <strong>{user.username}</strong>
+      </Typography>
+      <Tooltip title="Logout">
+        <IconButton size="small" onClick={logout}><LogoutIcon fontSize="small" /></IconButton>
+      </Tooltip>
+    </>
+  )
+}
+
 function AppShell() {
   const { user, logout, isAdmin } = useAuth()
   const [collapsed, setCollapsed] = useState(false)
@@ -150,23 +179,7 @@ function AppShell() {
 
           {/* Top header bar */}
           <Box sx={{ flexShrink: 0, borderBottom: '1px solid #e0e0e0', px: 2, py: 0.75, display: 'flex', alignItems: 'center', gap: 1.5, background: '#fff', flexWrap: 'wrap' }}>
-            {user ? (
-              <>
-                <ContextHeaderBar />
-                <TenantSelector />
-                <CompanySelector />
-                <BomSelector />
-                <Box sx={{ flex: 1 }} />
-                <Typography variant="body2" color="text.secondary">
-                  <strong>{user.username}</strong>
-                </Typography>
-                <Tooltip title="Logout">
-                  <IconButton size="small" onClick={logout}><LogoutIcon fontSize="small" /></IconButton>
-                </Tooltip>
-              </>
-            ) : (
-              <Link to="/login" style={{ fontSize: 14 }}>Login</Link>
-            )}
+            <HeaderBar user={user} logout={logout} />
           </Box>
 
           {/* Page content — scrollable */}
@@ -202,7 +215,9 @@ export default function App() {
   return (
     <AppProvider>
       <AuthProvider>
-        <AppShell />
+        <TenantListProvider>
+          <AppShell />
+        </TenantListProvider>
       </AuthProvider>
     </AppProvider>
   )

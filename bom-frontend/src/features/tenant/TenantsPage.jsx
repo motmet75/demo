@@ -1,33 +1,25 @@
-import React, { useContext, useEffect, useState } from 'react';
-import AuthContext from '../../context/AuthContextValue';
-import { getTenants, createTenant, updateTenant, deleteTenant } from '../../api/tenantApi';
+import React, { useState } from 'react';
+import { useAuth } from '../../context/useAuth';
+import { useTenantList } from '../../context/TenantListContext';
+import { createTenant, updateTenant, deleteTenant } from '../../api/tenantApi';
 
+// Admin-only page – does NOT require tenant or company context to load.
 export default function TenantsPage() {
-  const { user, loading } = useContext(AuthContext);
-  const [tenants, setTenants] = useState([]);
+  const { user, loading, isAdmin } = useAuth();
+  const { tenants, loading: tenantsLoading, reload } = useTenantList();
   const [error, setError] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [editTenant, setEditTenant] = useState(null);
   const [formData, setFormData] = useState({ tenantName: '', tenantCode: '', isActive: true, maxCompanies: 1 });
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    if (loading) return;
-    if (!user) return;
-    getTenants()
-      .then(setTenants)
-      .catch(e => setError(e.message));
-  }, [user, loading]);
-
-  const refresh = () => {
-    getTenants().then(setTenants).catch(e => setError(e.message));
-  };
+  const refresh = () => { setError(null); reload(); };
 
   const handleEdit = (tenant) => {
     setEditTenant(tenant);
     setFormData({
-      tenantName: tenant.tenantName || tenant.name || '',
-      tenantCode: tenant.tenantCode || tenant.code || '',
+      tenantName: tenant.tenantName ?? '',
+      tenantCode: tenant.tenantCode ?? '',
       isActive: tenant.isActive != null ? tenant.isActive : true,
       maxCompanies: tenant.maxCompanies != null ? tenant.maxCompanies : 1
     });
@@ -35,10 +27,10 @@ export default function TenantsPage() {
   };
 
   const handleDelete = async (tenant) => {
-    if (!window.confirm(`Delete tenant '${tenant.name || tenant.tenantName}'?`)) return;
+    if (!window.confirm(`Delete tenant '${tenant.tenantName}'?`)) return;
     setSaving(true);
     try {
-      await deleteTenant(tenant.id || tenant.tenantId);
+      await deleteTenant(tenant.id);
       refresh();
     } catch (e) {
       setError(e.message);
@@ -52,7 +44,7 @@ export default function TenantsPage() {
     setSaving(true);
     try {
       if (editTenant) {
-        await updateTenant(editTenant.id || editTenant.tenantId, formData);
+        await updateTenant(editTenant.id, formData);
       } else {
         await createTenant(formData);
       }
@@ -67,12 +59,13 @@ export default function TenantsPage() {
     }
   };
 
-  if (loading) return <div>Loading...</div>;
+  if (loading || tenantsLoading) return <div>Loading...</div>;
   if (!user) return <div style={{color: 'red'}}>You must be logged in to view tenants.</div>;
-  if (error) return <div style={{color: 'red'}}>{error}</div>;
+  if (!isAdmin) return <div style={{color: 'red'}}>Access denied – admin only.</div>;
   return (
     <div>
       <h2>Tenants</h2>
+      {error && <div style={{color: 'red', marginBottom: 8}}>{error}</div>}
       <button onClick={() => { setShowForm(true); setEditTenant(null); setFormData({ tenantName: '', tenantCode: '', isActive: true, maxCompanies: 1 }); }} disabled={saving}>
         + Add Tenant
       </button>
@@ -98,8 +91,10 @@ export default function TenantsPage() {
       )}
       <ul>
         {tenants.map(t => (
-          <li key={t.id || t.tenantId}>
-            {t.tenantName || t.name} ({t.tenantCode || t.code})
+          <li key={t.id}>
+            <strong>{t.tenantName}</strong> ({t.tenantCode})
+            {' '}{t.isActive ? '✅' : '⛔'}
+            {' '}Max companies: {t.maxCompanies}
             <button onClick={() => handleEdit(t)} style={{ marginLeft: 8 }}>Edit</button>
             <button onClick={() => handleDelete(t)} style={{ marginLeft: 4 }} disabled={saving}>Delete</button>
           </li>

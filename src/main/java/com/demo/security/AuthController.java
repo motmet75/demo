@@ -148,12 +148,17 @@ public class AuthController {
                     .body(new AuthResponse(false, null, "User not found"));
         }
 
-        if (request.tenantId() != null) {
-            user.setLastTenantId(request.tenantId().isBlank() ? null : request.tenantId());
-        }
-        if (request.companyId() != null) {
-            user.setLastCompanyId(request.companyId().isBlank() ? null : request.companyId());
-        }
+        // Always mirror exactly what the frontend has selected.
+        // Non-null + non-blank  → save the value.
+        // Null or blank         → clear the field (null in DB).
+        // This ensures the DB never holds a stale context after the user
+        // changes or clears either the tenant or the company.
+        user.setLastTenantId(
+            (request.tenantId() != null && !request.tenantId().isBlank())
+                ? request.tenantId() : null);
+        user.setLastCompanyId(
+            (request.companyId() != null && !request.companyId().isBlank())
+                ? request.companyId() : null);
         userRepository.save(user);
 
         user.setAuthorities(sessionUser.getAuthorities());
