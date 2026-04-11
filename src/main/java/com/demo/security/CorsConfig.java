@@ -23,6 +23,7 @@ public class CorsConfig {
 		"http://localhost:5173",
 		"http://localhost:3000",
 		"https://anhmedia.vn:8443",
+		"https://anhmedia.vn:443",
 		"https://anhmedia.vn",
 		"https://anhmedia.vn:5173"
 	);
