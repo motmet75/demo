@@ -17,12 +17,14 @@ import java.util.List;
 public class CorsConfig {
 
 	private static final List<String> ALLOWED_ORIGINS = List.of(
-		"https://192.168.100.176:8443",
-		"https://192.168.100.176",
-		"http://192.168.100.176:5173",
+		"https://15.165.215.69:8443",
+		"https://15.165.215.69",
+		"http://15.165.215.69:5173",
 		"http://localhost:5173",
 		"http://localhost:3000",
-		"https://anhmedia.vn"
+		"https://anhmedia.vn:8443",
+		"https://anhmedia.vn",
+		"https://anhmedia.vn:5173"
 	);
 
 	@Bean

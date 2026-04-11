@@ -226,7 +226,7 @@ public class InventoryService {
                                         Instant expirationDateTime, Instant productionDateTime,
                                         BigDecimal quantityReserved, UUID tenantId, UUID companyId) {
         return updateStock(inventoryId, newQuantityOnHand, null, batchNo, expirationDateTime, productionDateTime,
-                quantityReserved, tenantId, companyId, "Manual update stock", "system", null);
+                quantityReserved, null, null, tenantId, companyId, "Manual update stock", "system", null);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -235,13 +235,28 @@ public class InventoryService {
                                         BigDecimal quantityReserved, UUID tenantId, UUID companyId,
                                         String reason, String createdBy, String notes) {
         return updateStock(inventoryId, newQuantityOnHand, null, batchNo, expirationDateTime, productionDateTime,
-                quantityReserved, tenantId, companyId, reason, createdBy, notes);
+                quantityReserved, null, null, tenantId, companyId, reason, createdBy, notes);
     }
 
     @Transactional(rollbackFor = Exception.class)
     public InventoryEntity updateStock(UUID inventoryId, BigDecimal newQuantityOnHand, BigDecimal newQuantityTotal, String batchNo,
                                         Instant expirationDateTime, Instant productionDateTime,
                                         BigDecimal quantityReserved, UUID tenantId, UUID companyId,
+                                        String reason, String createdBy, String notes) {
+        return updateStock(inventoryId, newQuantityOnHand, newQuantityTotal, batchNo, expirationDateTime,
+                productionDateTime, quantityReserved, null, null, tenantId, companyId, reason, createdBy, notes);
+    }
+
+    /**
+     * Full update: also persists {@code orderToDeduction} and {@code materialQuotaPercentage}
+     * when non-null values are provided.
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public InventoryEntity updateStock(UUID inventoryId, BigDecimal newQuantityOnHand, BigDecimal newQuantityTotal, String batchNo,
+                                        Instant expirationDateTime, Instant productionDateTime,
+                                        BigDecimal quantityReserved,
+                                        String orderToDeduction, BigDecimal materialQuotaPercentage,
+                                        UUID tenantId, UUID companyId,
                                         String reason, String createdBy, String notes) {
         if (newQuantityOnHand == null || newQuantityOnHand.compareTo(BigDecimal.ZERO) < 0) throw new InventoryException("Quantity must be non-negative");
 
@@ -251,26 +266,25 @@ public class InventoryService {
         if (inv.getTenantId() == null || !inv.getTenantId().equals(tenantId)) throw new InventoryException("inventory does not belong to tenant");
         if (inv.getCompanyId() == null || !inv.getCompanyId().equals(companyId)) throw new InventoryException("inventory does not belong to company");
 
-        // Note: we intentionally do NOT check newQuantityOnHand >= quantityLocked here.
-        // updateStock is a manual override operation — the operator is explicitly setting
-        // the absolute on-hand value. Reserved/locked quantities are managed separately
-        // by reserveById / releaseById and will be reconciled by those flows.
-
         BigDecimal oldQty = inv.getQuantityOnHand() == null ? BigDecimal.ZERO : inv.getQuantityOnHand();
         BigDecimal delta  = newQuantityOnHand.subtract(oldQty);
 
-        // Only update quantityOnHand — quantityTotal is set at import/initial creation only, never changed by movements or manual edits
         inv.setQuantityOnHand(newQuantityOnHand);
         if (batchNo != null) inv.setBatchNo(batchNo);
         if (expirationDateTime != null) inv.setExpirationDateTime(expirationDateTime);
         if (productionDateTime != null) inv.setProductionDateTime(productionDateTime);
+        // orderToDeduction: null means "do not change"; empty string means "clear it"
+        if (orderToDeduction != null) {
+            inv.setOrderToDeduction(orderToDeduction.isBlank() ? null : orderToDeduction.trim());
+        }
+        // materialQuotaPercentage: null means "do not change"
+        if (materialQuotaPercentage != null) {
+            inv.setMaterialQuotaPercentage(materialQuotaPercentage);
+        }
         // quantityReserved param is ignored on edit — reserved/locked managed by reserve/release only
         InventoryEntity updated = inventoryRepository.save(inv);
 
-        // Record movement log ONLY — inventory quantity is already updated above.
-        // Do NOT call recordAdjustmentMovement (which would re-apply delta to inventory).
         if (delta.compareTo(BigDecimal.ZERO) != 0 && inv.getMaterial() != null && inv.getWarehouse() != null) {
-            // Build signed-delta audit note: "Adjusted from X to Y (+/-delta)"
             String sign = delta.compareTo(BigDecimal.ZERO) > 0 ? "+" : "";
             String auditNote = "Adjusted from " + oldQty.toPlainString()
                     + " to " + newQuantityOnHand.toPlainString()
@@ -283,7 +297,7 @@ public class InventoryService {
                     updated.getId(),
                     inv.getMaterial().getId(),
                     inv.getWarehouse().getId(),
-                    delta,                          // signed: negative for decrease
+                    delta,
                     inv.getMaterial().getUnit() != null ? inv.getMaterial().getUnit() : "pcs",
                     inv.getBatchNo(),
                     reason != null ? reason : "Manual update stock",

@@ -25,6 +25,7 @@ public class InventoryViewDTO {
     private BigDecimal quantityLocked;
     private String batchNo;
     private String contractCode;
+    private String orderToDeduction;
     private String unit;
     private BigDecimal unitPrice;
     private String currency;
@@ -34,13 +35,15 @@ public class InventoryViewDTO {
     private Boolean visible;
     private Boolean approved;
     private Boolean locked;
+    private BigDecimal materialQuotaPercentage;
 
     public InventoryViewDTO(UUID inventoryId, UUID tenantId, UUID companyId, UUID materialId, String materialCode, String materialName,
                             UUID warehouseId, String warehouseCode, String warehouseName,
                             BigDecimal quantityOnHand, BigDecimal quantityTotal, BigDecimal quantityReserved, BigDecimal quantityLocked, String batchNo,
-                            String contractCode, String unit, BigDecimal unitPrice, String currency,
+                            String contractCode, String orderToDeduction, String unit, BigDecimal unitPrice, String currency,
                             Instant expirationDateTime, Instant productionDateTime, Instant createdAt,
-                            Boolean visible, Boolean approved, Boolean locked) {
+                            Boolean visible, Boolean approved, Boolean locked,
+                            BigDecimal materialQuotaPercentage) {
         this.inventoryId = inventoryId;
         this.tenantId = tenantId;
         this.companyId = companyId;
@@ -56,6 +59,7 @@ public class InventoryViewDTO {
         this.quantityLocked = quantityLocked;
         this.batchNo = batchNo;
         this.contractCode = contractCode;
+        this.orderToDeduction = orderToDeduction;
         this.unit = unit;
         this.unitPrice = unitPrice;
         this.currency = currency;
@@ -65,6 +69,7 @@ public class InventoryViewDTO {
         this.visible = visible;
         this.approved = approved;
         this.locked = locked;
+        this.materialQuotaPercentage = materialQuotaPercentage;
     }
 
     // Getters
@@ -83,6 +88,7 @@ public class InventoryViewDTO {
     public BigDecimal getQuantityLocked() { return quantityLocked; }
     public String getBatchNo() { return batchNo; }
     public String getContractCode() { return contractCode; }
+    public String getOrderToDeduction() { return orderToDeduction; }
     public String getUnit() { return unit; }
     public BigDecimal getUnitPrice() { return unitPrice; }
     public String getCurrency() { return currency; }
@@ -92,4 +98,5 @@ public class InventoryViewDTO {
     public Boolean getVisible() { return visible; }
     public Boolean getApproved() { return approved; }
     public Boolean getLocked() { return locked; }
+    public BigDecimal getMaterialQuotaPercentage() { return materialQuotaPercentage; }
 }

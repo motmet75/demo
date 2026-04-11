@@ -7,6 +7,7 @@ import { fetchInventoryView, addStock, updateInventory, reserveInventory, releas
 import { apiFetch, getContextHeaders } from '../../api/client'
 import InventoryEditModal from './InventoryEditModal'
 import InventoryImport from './InventoryImport'
+import InventoryPatchCsv from './InventoryPatchCsv'
 import * as XLSX from 'xlsx'
 
 export default function InventoryGrid() {
@@ -39,6 +40,7 @@ export default function InventoryGrid() {
   const [modalKey, setModalKey] = useState(0)
 
   const [importOpen, setImportOpen] = useState(false)
+  const [patchOpen, setPatchOpen]   = useState(false)
 
   const apiRef = useGridApiRef()
 
@@ -407,11 +409,11 @@ export default function InventoryGrid() {
     { field: 'xformNo', headerName: 'Xform No', width: 120 },
     { field: 'cdsNo', headerName: 'CDS No', width: 120 },
     { field: 'purchaseNo', headerName: 'Purchase No', width: 120 },
-    { field: 'materialQuota', headerName: 'Material Quota', width: 140, type: 'number', valueFormatter: (value) => value == null ? '' : Number(value).toLocaleString(undefined, { maximumFractionDigits: 9 }) },
+    { field: 'materialQuota', headerName: 'Material Quota', width: 140, type: 'number', valueFormatter: (value) => value == null ? '' : Number(value).toLocaleString(undefined, { maximumFractionDigits: 9 }), hide: true },
     { field: 'materialQuotaPercentage', headerName: 'Quota %', width: 120, type: 'number', valueFormatter: (value) => value == null ? '' : Number(value).toLocaleString(undefined, { maximumFractionDigits: 9 }) },
-    { field: 'xformDate', headerName: 'Xform Date', width: 150 },
-    { field: 'purchaseDateTime', headerName: 'Purchase Date', width: 180 },
-    { field: 'cdsDateTime', headerName: 'CDS Date', width: 180 },
+    { field: 'xformDate', headerName: 'Xform Date', width: 150, hide: true },
+    { field: 'purchaseDateTime', headerName: 'Purchase Date', width: 180, hide: true },
+    { field: 'cdsDateTime', headerName: 'CDS Date', width: 180, hide: true },
     { field: 'expirationDateTime', headerName: 'Expiration', width: 180 },
     { field: 'productionDateTime', headerName: 'Production', width: 180 },
     { field: 'createdAt', headerName: 'Created At', width: 180 },
@@ -450,7 +452,13 @@ export default function InventoryGrid() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={() => { setSelected(null); setModalKey(k => k + 1); setEditOpen(true) }} disabled={saving}>Add Inventory</button>
-          <button onClick={() => setImportOpen(true)} disabled={saving}>Import Inventory</button>
+          <button onClick={() => { setImportOpen(o => !o); setPatchOpen(false) }} disabled={saving}>
+            {importOpen ? '✕ Close Import' : 'Import Inventory'}
+          </button>
+          <button onClick={() => { setPatchOpen(o => !o); setImportOpen(false) }} disabled={saving}
+            style={{ background: patchOpen ? '#e65100' : '#1565c0', color: '#fff', border: 'none', borderRadius: 4, padding: '4px 12px', cursor: 'pointer' }}>
+            {patchOpen ? '✕ Close Patch' : '✏ Patch Deduction / Quota'}
+          </button>
           <button onClick={() => load()} disabled={loading} title="Refresh">🔄 Refresh</button>
           <h2 style={{ margin: 0 }}>Inventory</h2>
         </div>
@@ -463,6 +471,16 @@ export default function InventoryGrid() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <InventoryImport onImportComplete={() => { load(); setImportOpen(false) }} />
             <button onClick={() => setImportOpen(false)} style={{ marginLeft: 8 }}>Close</button>
+          </div>
+        </div>
+      )}
+
+      {/* Patch CSV section — order_to_deduction & material_quota_percentage */}
+      {patchOpen && (
+        <div style={{ padding: '8px 12px', backgroundColor: '#fff8e1', borderBottom: '2px solid #ffa726' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <InventoryPatchCsv onPatchComplete={() => { load(); setPatchOpen(false) }} />
+            <button onClick={() => setPatchOpen(false)} style={{ marginLeft: 8, flexShrink: 0 }}>Close</button>
           </div>
         </div>
       )}
@@ -565,7 +583,24 @@ export default function InventoryGrid() {
              checkboxSelection={true}
              apiRef={apiRef}
              initialState={{
-               pinnedColumns: { left: ['inventoryId'] }
+               pinnedColumns: { left: ['inventoryId'] },
+               columns: {
+                 columnVisibilityModel: {
+                   visible: false,
+                   approved: false,
+                   locked: false,
+                   hsCode: false,
+                   originType: false,
+                   originCountry: false,
+                   xformNo: false,
+                   cdsNo: false,
+                   purchaseNo: false,
+                   materialQuota: false,
+                   xformDate: false,
+                   purchaseDateTime: false,
+                   cdsDateTime: false,
+                 }
+               }
              }}
              rowSelectionModel={selectionModel}
              onRowSelectionModelChange={handleSelectionModelChange}

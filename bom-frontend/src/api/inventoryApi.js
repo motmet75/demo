@@ -75,3 +75,24 @@ export async function deleteInventory(id) {
   const { res } = await apiFetchJson(url, { method: 'DELETE' })
   if (!res.ok) throw new Error(`Failed to delete inventory: ${res.status}`)
 }
+
+export async function patchInventoryCsv(file) {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await apiFetch('/bom/inventory/patch-csv', { method: 'POST', body: form })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(text || 'Patch upload failed')
+  }
+  return res.json()
+}
+
+export async function downloadPatchTemplate(tenantId, companyId) {
+  const params = new URLSearchParams()
+  if (tenantId)  params.set('tenantId',  tenantId)
+  if (companyId) params.set('companyId', companyId)
+  const qs = params.toString()
+  const res = await apiFetch(`/bom/inventory/template/patch-csv${qs ? '?' + qs : ''}`)
+  if (!res.ok) throw new Error('Template download failed')
+  return res.blob()
+}

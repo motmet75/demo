@@ -59,6 +59,7 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
     originType: i?.originType ?? '',
     originCountry: i?.originCountry ?? '',
     orderToDeduction: i?.orderToDeduction ?? '',
+    materialQuotaPercentage: i?.materialQuotaPercentage ?? '',
     userName: i?.userName ?? 'system',
     reason: i ? 'Manual adjustment' : 'Manual add stock',
     createdBy: i?.userName ?? 'system',
@@ -293,6 +294,7 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
       originType: form.originType || null,
       originCountry: form.originCountry || null,
       orderToDeduction: form.orderToDeduction || null,
+      materialQuotaPercentage: coerceNumber(form.materialQuotaPercentage) ?? null,
       expirationDateTime: toIso(form.expirationLocal),
       productionDateTime: toIso(form.productionLocal),
       reason: form.reason || (isEditing ? 'Manual adjustment' : 'Manual add stock'),
@@ -434,7 +436,23 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
             <TextField label="HS Code" value={form.hsCode} onChange={handleChange('hsCode')} disabled={isSubmitting} />
             <TextField label="Origin Type" value={form.originType} onChange={handleChange('originType')} disabled={isSubmitting} />
             <TextField label="Origin Country" value={form.originCountry} onChange={handleChange('originCountry')} disabled={isSubmitting} />
-            <TextField label="Order/Deduction" value={form.orderToDeduction} onChange={handleChange('orderToDeduction')} disabled={isSubmitting} />
+
+            <TextField
+              label="Order To Deduction"
+              value={form.orderToDeduction}
+              onChange={handleChange('orderToDeduction')}
+              disabled={isSubmitting}
+              helperText="Physical qty tagged for deduction — also managed automatically by the deduction system"
+            />
+            <TextField
+              label="Quota % (materialQuotaPercentage)"
+              type="number"
+              value={form.materialQuotaPercentage}
+              onChange={handleChange('materialQuotaPercentage')}
+              disabled={isSubmitting}
+              inputProps={{ step: 'any', min: 0 }}
+              helperText="Scrap/waste factor: 100 = no extra, 105 = 5% extra physical stock consumed per base unit"
+            />
 
             <TextField label="Expiration Date" type="datetime-local" value={form.expirationLocal}
               onChange={handleChange('expirationLocal')} InputLabelProps={{ shrink: true }} disabled={isSubmitting} />
