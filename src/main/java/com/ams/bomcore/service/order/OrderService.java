@@ -1,7 +1,6 @@
 package com.ams.bomcore.service.order;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -599,15 +598,24 @@ public class OrderService {
             Material material = bomItem.getMaterial();
             // planned_qty = bom_item.quantity * ordered_qty
             BigDecimal plannedQty = bomItem.getQuantity()
-                    .multiply(orderedQty)
-                    .setScale(4, RoundingMode.HALF_UP);
+                    .multiply(orderedQty);
 
-            // effective_planned_qty = planned_qty * compensation_rate
-            // We use DEFAULT_COMPENSATION_RATE (1.0) — could be read from material config
-            BigDecimal compensationRate = DEFAULT_COMPENSATION_RATE;
+            // effective_planned_qty = planned_qty × (1 − quota%/100)
+            // Read materialQuotaPercentage from the first available inventory row for this material.
+            // quota% represents the waste/scrap buffer: e.g. 10% means only 90% of onHand
+            // is usable, so we only request 90% of the nominal planned qty from stock.
+            BigDecimal quotaPct = inventoryRepository.findByTenantIdAndCompanyId(tenantId, companyId)
+                    .stream()
+                    .filter(e -> e.getMaterial() != null && e.getMaterial().getId().equals(material.getId())
+                            && e.getMaterialQuotaPercentage() != null)
+                    .map(InventoryEntity::getMaterialQuotaPercentage)
+                    .findFirst()
+                    .orElse(BigDecimal.ZERO);
+            // quotaFactor = quota% / 100  (e.g. 10% → 0.10)
+            BigDecimal quotaFactor = quotaPct.divide(new BigDecimal("100"), java.math.MathContext.DECIMAL128);
+            // effectivePlannedQty = plannedQty × (1 − quotaFactor)
             BigDecimal effectivePlannedQty = plannedQty
-                    .multiply(compensationRate)
-                    .setScale(4, RoundingMode.HALF_UP);
+                    .multiply(BigDecimal.ONE.subtract(quotaFactor));
 
             // No hard inventory check here — use checkInventory action instead
 
@@ -682,24 +690,92 @@ public class OrderService {
         }
     }
 
-    /** Deduct realQty from inventory (quantityOnHand) across FIFO batches. */
+    /**
+     * Deduct {@code qty} from inventory for a given material using the
+     * <strong>orderToDeduction-alpha + quota-cap</strong> algorithm:
+     *
+     * <ol>
+     *   <li>Sort eligible rows by {@code orderToDeduction} label alphabetically
+     *       ascending (null / blank → placed last), then FEFO as tiebreaker.</li>
+     *   <li>For each row compute the deductible ceiling:
+     *       <pre>deductible = availableQty - quotaPercentage * availableQty
+     *              = onHand × (1 - quota% / 100) - locked</pre>
+     *       The quota fraction is the scrap/waste buffer that must stay in the warehouse.</li>
+     *   <li>Take {@code min(remaining demand, deductible)} from this row, advance to the
+     *       next row when the current row is exhausted.</li>
+     * </ol>
+     *
+     * Only {@code quantity_on_hand} and {@code updated_at} are written — no other columns
+     * are touched (avoids overwriting {@code orderToDeduction} labels, etc.).
+     *
+     * @param materialId material to deduct
+     * @param qty        total demand quantity to satisfy
+     * @param tenantId   tenant scope
+     * @param companyId  company scope
+     */
     private void deductInventory(UUID materialId, BigDecimal qty, UUID tenantId, UUID companyId) {
+        // 1. Load and sort rows: alpha by orderToDeduction (null/blank last), then FEFO
         List<InventoryEntity> entries = inventoryRepository.findByTenantIdAndCompanyId(tenantId, companyId)
                 .stream()
-                .filter(e -> e.getMaterial().getId().equals(materialId)
+                .filter(e -> e.getMaterial() != null
+                        && e.getMaterial().getId().equals(materialId)
+                        && Boolean.TRUE.equals(e.getVisible())
+                        && !Boolean.TRUE.equals(e.getLocked())
                         && e.getQuantityOnHand() != null
                         && e.getQuantityOnHand().compareTo(BigDecimal.ZERO) > 0)
+                .sorted(java.util.Comparator
+                        // Group 2 (tagged) first, Group 1 (null/blank) last
+                        .<InventoryEntity>comparingInt(e ->
+                                (e.getOrderToDeduction() == null || e.getOrderToDeduction().isBlank()) ? 1 : 0)
+                        // Within Group 2: sort by orderToDeduction A→Z
+                        .thenComparing(e ->
+                                (e.getOrderToDeduction() == null || e.getOrderToDeduction().isBlank())
+                                        ? "" : e.getOrderToDeduction().trim(),
+                                String.CASE_INSENSITIVE_ORDER)
+                        // Then by materialCode A→Z (both groups)
+                        .thenComparing(e ->
+                                e.getMaterial() != null && e.getMaterial().getMaterialCode() != null
+                                        ? e.getMaterial().getMaterialCode() : "",
+                                String.CASE_INSENSITIVE_ORDER))
                 .toList();
 
         BigDecimal remaining = qty;
+        Instant now = Instant.now();
+
+        
+        
         for (InventoryEntity entry : entries) {
+        	
             if (remaining.compareTo(BigDecimal.ZERO) <= 0) break;
-            BigDecimal deduct = remaining.min(entry.getQuantityOnHand());
-            entry.setQuantityOnHand(entry.getQuantityOnHand().subtract(deduct));
-            inventoryRepository.save(entry);
-            remaining = remaining.subtract(deduct);
+
+            BigDecimal onHand = entry.getQuantityOnHand();
+            BigDecimal locked = entry.getQuantityLocked() != null ? entry.getQuantityLocked() : BigDecimal.ZERO;
+
+            // quota% is a waste/scrap buffer applied only to the FREE stock (onHand - locked).
+            // freeStock             = max(0, onHand - locked)
+            // deductible            = freeStock × (1 - quota%/100)
+            BigDecimal quotaPct = entry.getMaterialQuotaPercentage() != null
+                    ? entry.getMaterialQuotaPercentage() : BigDecimal.ZERO;
+            BigDecimal quotaFactor = quotaPct.divide(new BigDecimal("100"), java.math.MathContext.DECIMAL128);
+            BigDecimal freeStock = onHand.subtract(locked).max(BigDecimal.ZERO);
+            BigDecimal deductible = freeStock
+                    .multiply(BigDecimal.ONE.subtract(quotaFactor))
+                    .max(BigDecimal.ZERO);
+
+            if (deductible.compareTo(BigDecimal.ZERO) <= 0) continue;  // row fully reserved — skip
+
+            // How much we actually take from this row
+            BigDecimal take = remaining.min(deductible);
+
+            // Targeted update: only quantity_on_hand and updated_at are written
+            inventoryRepository.updateQuantityOnHand(
+                    entry.getId(),
+                    onHand.subtract(take),
+                    now);
+
+            remaining = remaining.subtract(take);
         }
-        // If remaining > 0 here, stock was not enough — but we already checked earlier.
+        // If remaining > 0 here, stock was insufficient — checkInventory should have caught this.
     }
 
     /** Deduct plannedQty from the material quota consumed_quota for the current period. */
@@ -794,8 +870,30 @@ public class OrderService {
         for (Map.Entry<UUID, BigDecimal> entry : requiredQtyByMaterial.entrySet()) {
             UUID matId = entry.getKey();
             BigDecimal required = entry.getValue();
-            BigDecimal available = inventoryRepository.sumAvailableByMaterialId(matId);
-            if (available == null) available = BigDecimal.ZERO;
+
+            // Fetch inventory rows for this material to get quota% and compute
+            // quota-adjusted available: each row contributes max(0, (onHand - locked) × (1 − quota%/100))
+            // Using per-row quotaPct — quota% only bites into the FREE stock, not the locked portion.
+            List<InventoryEntity> invRows = inventoryRepository.findByTenantIdAndCompanyId(tenantId, companyId)
+                    .stream().filter(e -> e.getMaterial() != null && e.getMaterial().getId().equals(matId)).toList();
+
+            // available = sum over rows of max(0, (onHand - locked) × (1 − quota%/100))
+            BigDecimal available = invRows.stream().map(e -> {
+                BigDecimal oh  = e.getQuantityOnHand()          == null ? BigDecimal.ZERO : e.getQuantityOnHand();
+                BigDecimal lk  = e.getQuantityLocked()          == null ? BigDecimal.ZERO : e.getQuantityLocked();
+                BigDecimal qp  = e.getMaterialQuotaPercentage() == null ? BigDecimal.ZERO : e.getMaterialQuotaPercentage();
+                BigDecimal qf  = qp.divide(new BigDecimal("100"), java.math.MathContext.DECIMAL128);
+                BigDecimal free = oh.subtract(lk).max(BigDecimal.ZERO);
+                return free.multiply(BigDecimal.ONE.subtract(qf)).max(BigDecimal.ZERO);
+            }).reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            // Use quota% of first row as representative for display/adjustedQty only
+            BigDecimal quotaPct = invRows.stream()
+                    .filter(e -> e.getMaterialQuotaPercentage() != null)
+                    .map(InventoryEntity::getMaterialQuotaPercentage)
+                    .findFirst().orElse(BigDecimal.ZERO);
+            BigDecimal quotaFactor = quotaPct.divide(new BigDecimal("100"), java.math.MathContext.DECIMAL128);
+
             boolean sufficient = available.compareTo(required) >= 0;
             if (!sufficient) allSufficient = false;
 
@@ -806,16 +904,8 @@ public class OrderService {
                     mat != null ? mat.getMaterialName() : "",
                     required, available, sufficient));
 
-            // Persist per-order consumption records
-            BigDecimal quotaPercentage = null;
-            // Use materialQuotaPercentage from inventory row if available (first matching row)
-            List<InventoryEntity> invRows = inventoryRepository.findByTenantIdAndCompanyId(tenantId, companyId)
-                    .stream().filter(e -> e.getMaterial() != null && e.getMaterial().getId().equals(matId)).toList();
-            if (!invRows.isEmpty() && invRows.get(0).getMaterialQuotaPercentage() != null) {
-                quotaPercentage = invRows.get(0).getMaterialQuotaPercentage();
-            }
-            final BigDecimal qp = quotaPercentage != null ? quotaPercentage : BigDecimal.ONE;
-
+            // Persist per-order consumption records.
+            // adjustedQty = effectivePlannedQty × (1 − quota%/100) for display
             for (UUID orderId : orderIds) {
                 List<OrderConsumptionLogEntity> orderLogs = consumptionLogRepository.findByOrderId(orderId);
                 for (OrderConsumptionLogEntity log : orderLogs) {
@@ -824,8 +914,9 @@ public class OrderService {
                         oc.setOrderId(orderId);
                         oc.setMaterial(mat);
                         oc.setPlannedQty(log.getEffectivePlannedQty());
+                        // adjustedQty = what will actually be pulled from stock after quota cap
                         oc.setAdjustedQty(log.getEffectivePlannedQty()
-                                .multiply(qp).setScale(4, RoundingMode.HALF_UP));
+                                .multiply(BigDecimal.ONE.subtract(quotaFactor)));
                         oc.setAvailableQty(available);
                         oc.setCheckResult(sufficient ? "SUFFICIENT" : "INSUFFICIENT");
                         oc.setTenantId(tenantId);
@@ -894,8 +985,7 @@ public class OrderService {
      * </ol>
      */
     @Transactional(rollbackFor = Exception.class)
-    public List<OrderResponseDto> moveToProduction(List<UUID> orderIds, Instant deliveryDateTime,
-                                                    String issuedBy, UUID tenantId, UUID companyId) {
+    public List<OrderResponseDto> moveToProduction(List<UUID> orderIds, Instant deliveryDateTime, String issuedBy, UUID tenantId, UUID companyId) {
         // Resolve issuedBy: prefer explicit param, fall back to UserContext
         String resolvedIssuedBy = (issuedBy != null && !issuedBy.isBlank())
                 ? issuedBy : UserContext.getUsernameOrDefault();
@@ -909,11 +999,18 @@ public class OrderService {
             throw new InsufficientStockException(String.join("; ", shortages), 0, 0);
         }
 
-        // 2. Aggregate required qty per material with FEFO deduction
+        // 2. Aggregate required qty per material with FEFO deduction.
+        // Load ALL logs upfront — avoids repeated DB/cache round-trips inside the deduction loop
+        // and ensures we work from a clean snapshot AFTER checkInventory's bulk-delete has flushed.
+        Map<UUID, List<OrderConsumptionLogEntity>> logsByOrderId = new HashMap<>();
+        for (UUID orderId : orderIds) {
+            logsByOrderId.put(orderId, consumptionLogRepository.findByOrderId(orderId));
+        }
+
         Map<UUID, BigDecimal> requiredByMaterial = new java.util.LinkedHashMap<>();
         Map<UUID, Material> materialById = new HashMap<>();
         for (UUID orderId : orderIds) {
-            for (OrderConsumptionLogEntity log : consumptionLogRepository.findByOrderId(orderId)) {
+            for (OrderConsumptionLogEntity log : logsByOrderId.get(orderId)) {
                 if ("CANCELLED".equals(log.getStatus())) continue;
                 UUID matId = log.getMaterial().getId();
                 materialById.put(matId, log.getMaterial());
@@ -921,44 +1018,120 @@ public class OrderService {
             }
         }
 
-        // 3. Deduct FEFO per material, create ISSUE_TO_PRODUCTION movements.
+        // 3. Deduct per material, create ISSUE_TO_PRODUCTION movements.
         //    Only quantityOnHand is touched — quantityTotal is NEVER modified here.
+        //
+        //    Two-group strategy:
+        //      Group 1 — orderToDeduction non-null/non-empty : sort by orderToDeduction A→Z, then materialCode A→Z
+        //      Group 2 — orderToDeduction null/blank         : sort by materialCode A→Z
+        //    Group 1 is processed first, then Group 2.
         for (Map.Entry<UUID, BigDecimal> entry : requiredByMaterial.entrySet()) {
             UUID matId = entry.getKey();
             BigDecimal remaining = entry.getValue();
 
-            // Fetch inventory rows ordered by expiration date (FEFO)
-            List<InventoryEntity> invRows = inventoryRepository.findByTenantIdAndCompanyId(tenantId, companyId)
+            // Base filter: visible, not locked, belongs to this material
+            java.util.function.Predicate<InventoryEntity> baseFilter = e ->
+                    e.getMaterial() != null && e.getMaterial().getId().equals(matId)
+                    && Boolean.TRUE.equals(e.getVisible())
+                    && !Boolean.TRUE.equals(e.getLocked());
+
+            // Shared secondary comparator: materialCode A→Z
+            java.util.Comparator<InventoryEntity> byMaterialCode = java.util.Comparator.comparing(
+                    e -> e.getMaterial() != null && e.getMaterial().getMaterialCode() != null
+                            ? e.getMaterial().getMaterialCode() : "",
+                    String.CASE_INSENSITIVE_ORDER);
+
+            // Group 1: tagged rows — sort by orderToDeduction A→Z, then materialCode A→Z
+            List<InventoryEntity> taggedRows = inventoryRepository.findByTenantIdAndCompanyId(tenantId, companyId)
                     .stream()
-                    .filter(e -> e.getMaterial() != null && e.getMaterial().getId().equals(matId)
-                            && Boolean.TRUE.equals(e.getVisible()) && !Boolean.TRUE.equals(e.getLocked()))
-                    .sorted(java.util.Comparator.comparing(
-                            e -> e.getExpirationDateTime() == null ? java.time.Instant.MAX : e.getExpirationDateTime()))
+                    .filter(baseFilter)
+                    .filter(e -> e.getOrderToDeduction() != null && !e.getOrderToDeduction().isBlank())
+                    .sorted(java.util.Comparator
+                            .<InventoryEntity, String>comparing(
+                                    e -> e.getOrderToDeduction().trim(), String.CASE_INSENSITIVE_ORDER)
+                            .thenComparing(byMaterialCode))
                     .toList();
+
+            // Group 2: untagged rows — sort by materialCode A→Z
+            List<InventoryEntity> untaggedRows = inventoryRepository.findByTenantIdAndCompanyId(tenantId, companyId)
+                    .stream()
+                    .filter(baseFilter)
+                    .filter(e -> e.getOrderToDeduction() == null || e.getOrderToDeduction().isBlank())
+                    .sorted(byMaterialCode)
+                    .toList();
+
+            // Merge: Group 1 first, Group 2 last
+            List<InventoryEntity> invRows = new java.util.ArrayList<>();
+            invRows.addAll(taggedRows);
+            invRows.addAll(untaggedRows);
 
             for (InventoryEntity inv : invRows) {
                 if (remaining.compareTo(BigDecimal.ZERO) <= 0) break;
-                BigDecimal onHand  = inv.getQuantityOnHand()  == null ? BigDecimal.ZERO : inv.getQuantityOnHand();
-                BigDecimal locked  = inv.getQuantityLocked()  == null ? BigDecimal.ZERO : inv.getQuantityLocked();
-                BigDecimal usable  = onHand.subtract(locked);
-                if (usable.compareTo(BigDecimal.ZERO) <= 0) continue;
 
-                // How much we actually take from this inventory row
-                BigDecimal deductFromRow = remaining.min(usable);
+                BigDecimal onHand = inv.getQuantityOnHand() == null ? BigDecimal.ZERO : inv.getQuantityOnHand();
+                BigDecimal locked = inv.getQuantityLocked() == null ? BigDecimal.ZERO : inv.getQuantityLocked();
 
-                // Deduct quantityOnHand ONLY — quantityTotal must not change
-                inv.setQuantityOnHand(onHand.subtract(deductFromRow));
-                inv.setOrderToDeduction(null); // clear deduction tag
-                inventoryRepository.save(inv);
+                // quota% is a waste/scrap buffer applied only to FREE stock (onHand - locked).
+                // freeStock            = max(0, onHand - locked)
+                // availableForDeduction = freeStock × (1 - quota%/100)
+                BigDecimal quotaPct = inv.getMaterialQuotaPercentage() != null
+                        ? inv.getMaterialQuotaPercentage() : BigDecimal.ZERO;
+                BigDecimal quotaFactor = quotaPct.divide(new BigDecimal("100"), java.math.MathContext.DECIMAL128);
+                BigDecimal freeStock = onHand.subtract(locked).max(BigDecimal.ZERO);
+                BigDecimal availableForDeduction = freeStock
+                        .multiply(BigDecimal.ONE.subtract(quotaFactor))
+                        .max(BigDecimal.ZERO);
+
+                BigDecimal couldBeDeducted = remaining.min(availableForDeduction);
+
+                // Soft-reserve the waste buffer portion that stays in the warehouse.
+                // lockedAdd = couldBeDeducted × quota% / (1 - quota%)
+                BigDecimal lockedAdd = (quotaFactor.compareTo(BigDecimal.ZERO) > 0
+                        && quotaFactor.compareTo(BigDecimal.ONE) < 0)
+                        ? couldBeDeducted.multiply(quotaFactor)
+                                .divide(BigDecimal.ONE.subtract(quotaFactor), java.math.MathContext.DECIMAL128)
+                        : BigDecimal.ZERO;
+
+                System.out.println("[MTP-DEDUCT] ─────────────────────────────────────────────────");
+                System.out.println("[MTP-DEDUCT] inventoryId       = " + inv.getId());
+                System.out.println("[MTP-DEDUCT] materialCode      = " + (inv.getMaterial() != null ? inv.getMaterial().getMaterialCode() : "null"));
+                System.out.println("[MTP-DEDUCT] orderToDeduction  = " + inv.getOrderToDeduction());
+                System.out.println("[MTP-DEDUCT] group             = " + (inv.getOrderToDeduction() != null && !inv.getOrderToDeduction().isBlank() ? "TAGGED" : "UNTAGGED"));
+                System.out.println("[MTP-DEDUCT] onHand            = " + onHand);
+                System.out.println("[MTP-DEDUCT] locked            = " + locked);
+                System.out.println("[MTP-DEDUCT] freeStock         = " + freeStock);
+                System.out.println("[MTP-DEDUCT] quotaPct          = " + quotaPct + "%");
+                System.out.println("[MTP-DEDUCT] quotaFactor       = " + quotaFactor);
+                System.out.println("[MTP-DEDUCT] availableForDeduct= " + availableForDeduction);
+                System.out.println("[MTP-DEDUCT] remainingDemand   = " + remaining);
+                System.out.println("[MTP-DEDUCT] couldBeDeducted   = " + couldBeDeducted);
+                System.out.println("[MTP-DEDUCT] lockedAdd         = " + lockedAdd);
+                System.out.println("[MTP-DEDUCT] onHandAfter       = " + onHand.subtract(couldBeDeducted));
+                System.out.println("[MTP-DEDUCT] lockedAfter       = " + locked.add(lockedAdd));
+                System.out.println("[MTP-DEDUCT] skip?             = " + (availableForDeduction.compareTo(BigDecimal.ZERO) <= 0 || couldBeDeducted.compareTo(BigDecimal.ZERO) <= 0));
+
+                if (availableForDeduction.compareTo(BigDecimal.ZERO) <= 0) continue;
+                if (couldBeDeducted.compareTo(BigDecimal.ZERO) <= 0) continue;
+
+                // Apply updates — only quantityOnHand (and optionally quantityLocked) touched
+                inventoryRepository.updateQuantityOnHand(inv.getId(), onHand.subtract(couldBeDeducted), Instant.now());
+                if (lockedAdd.compareTo(BigDecimal.ZERO) > 0) {
+                    inventoryRepository.updateQuantityLocked(inv.getId(), locked.add(lockedAdd), Instant.now());
+                }
 
                 // Distribute this row's deduction across orders that need this material
-                BigDecimal rowRemaining = deductFromRow;
+                BigDecimal rowRemaining = couldBeDeducted;
+
                 for (UUID orderId : orderIds) {
                     if (rowRemaining.compareTo(BigDecimal.ZERO) <= 0) break;
-                    BigDecimal orderNeed = consumptionLogRepository.findByOrderId(orderId)
+
+                    List<OrderConsumptionLogEntity> orderMatLogs = logsByOrderId.get(orderId)
                             .stream()
                             .filter(l -> !"CANCELLED".equals(l.getStatus())
                                     && l.getMaterial().getId().equals(matId))
+                            .toList();
+
+                    BigDecimal orderNeed = orderMatLogs.stream()
                             .map(OrderConsumptionLogEntity::getEffectivePlannedQty)
                             .reduce(BigDecimal.ZERO, BigDecimal::add);
                     if (orderNeed.compareTo(BigDecimal.ZERO) <= 0) continue;
@@ -973,7 +1146,7 @@ public class OrderService {
                     mvt.setCompanyId(companyId);
                     mvt.setMaterial(mat);
                     mvt.setFromWarehouse(inv.getWarehouse());
-                    mvt.setQuantity(forOrder.negate());  // negative — stock leaving inventory to production
+                    mvt.setQuantity(forOrder.negate()); // negative — stock leaving inventory to production
                     mvt.setUnit(mat != null && mat.getUnit() != null ? mat.getUnit() : "pcs");
                     mvt.setMovementType(MVT_ISSUE_TO_PRODUCTION);
                     mvt.setReason("Move to production: order batch");
@@ -986,12 +1159,6 @@ public class OrderService {
                     movementRepository.save(mvt);
 
                     // Stamp deducted_inventory_id on every consumption log for this order+material
-                    // so operators can trace which inventory batch was consumed.
-                    List<OrderConsumptionLogEntity> orderMatLogs = consumptionLogRepository.findByOrderId(orderId)
-                            .stream()
-                            .filter(l -> !"CANCELLED".equals(l.getStatus())
-                                    && l.getMaterial().getId().equals(matId))
-                            .toList();
                     for (OrderConsumptionLogEntity cLog : orderMatLogs) {
                         cLog.setDeductedInventoryId(inv.getId());
                         consumptionLogRepository.save(cLog);
@@ -1000,8 +1167,7 @@ public class OrderService {
                     rowRemaining = rowRemaining.subtract(forOrder);
                 }
 
-                // Advance the global remaining counter by exactly what was taken from this row
-                remaining = remaining.subtract(deductFromRow);
+                remaining = remaining.subtract(couldBeDeducted);
             }
         }
 
@@ -1069,5 +1235,38 @@ public class OrderService {
         dto.setBomCalculationId(line.getBomCalculationId());
         dto.setNotes(line.getNotes());
         return dto;
+    }
+
+    // ═════════════════════════════════════════════════════════════════
+    // SORT HELPERS — numeric-aware orderToDeduction comparator
+    // ═════════════════════════════════════════════════════════════════
+
+    /**
+     * Primary sort key: if the label is a pure integer return its int value (0-based),
+     * so "2" < "3" < "10" < "64" numerically.
+     * Non-numeric labels and null/blank get Integer.MAX_VALUE (sorted last after all numbers).
+     */
+    private static int orderToDeductionSortKey(String label) {
+        if (label == null || label.isBlank()) return Integer.MAX_VALUE;
+        try {
+            return Integer.parseInt(label.trim());
+        } catch (NumberFormatException e) {
+            return Integer.MAX_VALUE; // non-numeric → goes after all numeric labels
+        }
+    }
+
+    /**
+     * Secondary sort key: for non-numeric (or null/blank) labels fall back to
+     * case-insensitive string order. Numeric labels all return "" so they stay
+     * grouped together and ranked only by {@link #orderToDeductionSortKey}.
+     */
+    private static String orderToDeductionStrKey(String label) {
+        if (label == null || label.isBlank()) return "\uFFFF";
+        try {
+            Integer.parseInt(label.trim());
+            return ""; // numeric — primary key already handles ordering
+        } catch (NumberFormatException e) {
+            return label.trim().toUpperCase();
+        }
     }
 }

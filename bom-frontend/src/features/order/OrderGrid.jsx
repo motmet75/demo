@@ -34,6 +34,7 @@ import OrderCreateModal from './OrderCreateModal'
 import OrderDetailModal from './OrderDetailModal'
 import FinishOrderModal from './FinishOrderModal'
 import OrderEditModal from './OrderEditModal'
+import { numFmt, dateFmt } from '../../utils/format'
 
 const STATUS_COLOR = {
   DRAFT: 'default', CONFIRMED: 'primary', IN_PRODUCTION: 'warning',
@@ -194,14 +195,14 @@ export default function OrderGrid() {
     { field: 'status', headerName: 'Status', width: 160,
       renderCell: ({ value }) => <Chip label={value} size="small" color={STATUS_COLOR[value] || 'default'} /> },
     { field: 'deliveryDateTime', headerName: 'Delivery', width: 170,
-      renderCell: ({ value }) => value ? new Date(value).toLocaleString() : '—' },
+      renderCell: ({ value }) => dateFmt(value, '—') },
     { field: 'plannedStartDate', headerName: 'Planned Start', width: 130 },
     { field: 'plannedEndDate',   headerName: 'Planned End',   width: 130 },
-    { field: 'totalPlannedQty',  headerName: 'Planned Qty',   width: 120, type: 'number', valueFormatter: (value) => value == null ? '' : Number(value).toLocaleString(undefined, { maximumFractionDigits: 9 }) },
-    { field: 'totalActualQty',   headerName: 'Actual Qty',    width: 110, type: 'number', valueFormatter: (value) => value == null ? '' : Number(value).toLocaleString(undefined, { maximumFractionDigits: 9 }) },
+    { field: 'totalPlannedQty',  headerName: 'Planned Qty',   width: 120, type: 'number', valueFormatter: numFmt },
+    { field: 'totalActualQty',   headerName: 'Actual Qty',    width: 110, type: 'number', valueFormatter: numFmt },
     { field: 'createdBy',        headerName: 'Created By',    width: 120 },
     { field: 'createdAt',        headerName: 'Created At',    width: 180,
-      renderCell: ({ value }) => value ? new Date(value).toLocaleString() : '—' },
+      renderCell: ({ value }) => dateFmt(value, '—') },
     {
       field: '_actions', headerName: 'Actions', width: 260, sortable: false, filterable: false,
       renderCell: ({ row }) => {
@@ -350,8 +351,8 @@ export default function OrderGrid() {
                   <TableRow key={r.materialId}>
                     <TableCell sx={{ fontFamily: 'monospace' }}>{r.materialCode}</TableCell>
                     <TableCell>{r.materialName}</TableCell>
-                    <TableCell align="right">{Number(r.requiredQty).toLocaleString(undefined, { maximumFractionDigits: 9 })}</TableCell>
-                    <TableCell align="right">{Number(r.availableQty).toLocaleString(undefined, { maximumFractionDigits: 9 })}</TableCell>
+                    <TableCell align="right">{numFmt(r.requiredQty)}</TableCell>
+                    <TableCell align="right">{numFmt(r.availableQty)}</TableCell>
                     <TableCell>
                       <Chip label={r.sufficient ? 'OK' : 'SHORT'} size="small"
                         color={r.sufficient ? 'success' : 'error'} />

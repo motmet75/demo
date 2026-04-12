@@ -19,6 +19,7 @@ import DeleteIcon from '@mui/icons-material/Delete'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import { useAppContext } from '../../context/AppContext'
 import { fetchInvoices, createInvoice, updateInvoice, deleteInvoice } from '../../api/invoiceApi'
+import { numFmt } from '../../utils/format'
 
 const TYPE_COLOR = { PURCHASE: 'info', SALE: 'success' }
 const STATUS_COLOR = { DRAFT: 'default', ISSUED: 'primary', PAID: 'success', CANCELLED: 'error' }
@@ -150,12 +151,9 @@ export default function InvoicePage() {
     { field: 'invoiceDate', headerName: 'Date', width: 120 },
     { field: 'dueDate',     headerName: 'Due',  width: 120 },
     { field: 'currency',    headerName: 'CCY',  width: 70 },
-    { field: 'subtotal',    headerName: 'Subtotal',    width: 120, type: 'number',
-      valueFormatter: v => v != null ? Number(v).toLocaleString(undefined, { maximumFractionDigits: 9 }) : '' },
-    { field: 'taxAmount',   headerName: 'Tax',         width: 100, type: 'number',
-      valueFormatter: v => v != null ? Number(v).toLocaleString(undefined, { maximumFractionDigits: 9 }) : '' },
-    { field: 'totalAmount', headerName: 'Total',       width: 130, type: 'number',
-      valueFormatter: v => v != null ? Number(v).toLocaleString(undefined, { maximumFractionDigits: 9 }) : '' },
+    { field: 'subtotal',    headerName: 'Subtotal', width: 120, type: 'number', valueFormatter: numFmt },
+    { field: 'taxAmount',   headerName: 'Tax',      width: 100, type: 'number', valueFormatter: numFmt },
+    { field: 'totalAmount', headerName: 'Total',    width: 130, type: 'number', valueFormatter: numFmt },
     { field: 'notes', headerName: 'Notes', flex: 1 },
     { field: '_actions', headerName: '', width: 100, sortable: false,
       renderCell: ({ row }) => (

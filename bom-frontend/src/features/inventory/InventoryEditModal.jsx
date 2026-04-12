@@ -15,6 +15,7 @@ import { fetchMaterials } from '../../api/materialApi'
 import { fetchWarehouses } from '../../api/warehouseApi'
 import { fetchAllInvoices } from '../../api/invoiceApi'
 import { useAppContext } from '../../context/AppContext'
+import { fmtNum } from '../../utils/format'
 
 export default function InventoryEditModal({ open, inventory, onClose, onSave, saving }) {
   const { tenantId, companyId } = useAppContext()
@@ -209,13 +210,13 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
     : null
   const deltaLabel = delta === null ? null
     : delta === 0 ? 'No change'
-    : delta > 0 ? `+${Number(delta).toLocaleString(undefined, { maximumFractionDigits: 9 })} (stock increase)`
-    : `${Number(delta).toLocaleString(undefined, { maximumFractionDigits: 9 })} (stock decrease)`
+    : delta > 0 ? `+${fmtNum(delta, 9)} (stock increase)`
+    : `${fmtNum(delta, 9)} (stock decrease)`
   const deltaColor = delta === null || delta === 0 ? 'default' : delta > 0 ? 'success' : 'error'
 
   // Constraint: only block if new on-hand would be negative (< 0).
   // Reserved/locked are shown as info but do NOT block — the backend handles reconciliation.
-  const fmtN = (n) => Number(n).toLocaleString(undefined, { maximumFractionDigits: 9 })
+  const fmtN = (n) => fmtNum(n, 9)
   const availableAfter = (isEditing && newQty !== null && !Number.isNaN(newQty))
     ? newQty - origReserved - origLocked
     : null
@@ -364,7 +365,7 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1, py: 0.5, bgcolor: 'grey.50', borderRadius: 1, border: '1px solid', borderColor: 'grey.200' }}>
                 <Typography variant="caption" color="text.secondary" sx={{ minWidth: 110 }}>Original Qty:</Typography>
                 <Typography variant="body2" fontWeight={600} fontFamily="monospace">
-                  {Number(origQty).toLocaleString(undefined, { maximumFractionDigits: 9 })}
+                  {fmtNum(origQty, 9)}
                 </Typography>
               </Box>
             )}
@@ -417,16 +418,16 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
 
             <TextField label="Total Qty" type="number" value={form.quantityTotal} disabled
               helperText="Total quantity ever received — set at import/creation, not editable" InputProps={{ readOnly: true }} />
-            <TextField label="Quantity Reserved" type="number" value={form.quantityReserved}
+            <TextField label="Quantity Reserved (info only)" type="number" value={form.quantityReserved}
               onChange={isEditing ? undefined : handleChange('quantityReserved')}
               disabled={isSubmitting || isEditing}
               InputProps={{ readOnly: isEditing }}
-              helperText={isEditing ? 'Managed by reserve/release — not editable here' : undefined} />
-            <TextField label="Quantity Locked" type="number" value={form.quantityLocked}
+              helperText={isEditing ? 'Informational field from import — not used in availability checks' : 'Optional: informational reserved qty (not deducted from available)'} />
+            <TextField label="Quantity Locked (soft-reserve)" type="number" value={form.quantityLocked}
               onChange={isEditing ? undefined : handleChange('quantityLocked')}
               disabled={isSubmitting || isEditing}
               InputProps={{ readOnly: isEditing }}
-              helperText={isEditing ? 'Managed by reserve/release — not editable here' : undefined} />
+              helperText={isEditing ? 'Managed by Reserve/Release actions — Available = On Hand − Locked' : 'Qty blocked from use: Available = On Hand − Locked'} />
 
             <TextField label="Contract Code" value={form.contractCode} onChange={handleChange('contractCode')} disabled={isSubmitting} />
             <TextField label="Unit" value={form.unit} onChange={handleChange('unit')} disabled={isSubmitting} />
@@ -491,7 +492,7 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
           <Button type="submit" variant="contained" disabled={isSubmitting || saving || isNegativeOnHand}
             color={isEditing && delta !== null && delta !== 0 ? (delta > 0 ? 'success' : 'error') : 'primary'}>
             {isSubmitting ? 'Saving...' : isEditing && delta !== null && delta !== 0
-              ? `Save & Record Adjustment (${delta > 0 ? '+' : ''}${Number(delta).toLocaleString(undefined, { maximumFractionDigits: 9 })})`
+              ? `Save & Record Adjustment (${delta > 0 ? '+' : ''}${fmtNum(delta, 9)})`
               : 'Save'}
           </Button>
         </DialogActions>

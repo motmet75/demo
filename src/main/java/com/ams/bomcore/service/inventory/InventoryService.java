@@ -75,6 +75,20 @@ public class InventoryService {
                                      Instant expirationDateTime, Instant productionDateTime, BigDecimal quantityReserved,
                                      UUID tenantId, UUID companyId, String reason, String createdBy, String notes,
                                      UUID invoiceId) {
+        return addStock(materialCode, warehouseCode, qty, batchNo, expirationDateTime, productionDateTime,
+                quantityReserved, null, null, tenantId, companyId, reason, createdBy, notes, invoiceId);
+    }
+
+    /**
+     * Full addStock overload that also persists {@code orderToDeduction}
+     * and {@code materialQuotaPercentage} on the inventory row.
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public InventoryEntity addStock(String materialCode, String warehouseCode, BigDecimal qty, String batchNo,
+                                     Instant expirationDateTime, Instant productionDateTime, BigDecimal quantityReserved,
+                                     String orderToDeduction, BigDecimal materialQuotaPercentage,
+                                     UUID tenantId, UUID companyId, String reason, String createdBy, String notes,
+                                     UUID invoiceId) {
         if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) throw new InventoryException("Quantity to add must be positive");
         if (batchNo == null || batchNo.trim().isEmpty()) throw new InventoryException("batchNo is required");
 
@@ -119,6 +133,14 @@ public class InventoryService {
             throw new InventoryException("Resulting quantity would be negative");
         }
 
+        // Apply optional fields — set on both new and existing rows when provided
+        if (orderToDeduction != null) {
+            inv.setOrderToDeduction(orderToDeduction.isBlank() ? null : orderToDeduction.trim());
+        }
+        if (materialQuotaPercentage != null) {
+            inv.setMaterialQuotaPercentage(materialQuotaPercentage);
+        }
+
         InventoryEntity saved = inventoryRepository.save(inv);
 
         // Record IN movement — inventoryId = this row, referenceId = invoice (if provided)
@@ -158,6 +180,21 @@ public class InventoryService {
     public InventoryEntity addStockByIds(UUID materialId, UUID warehouseId, BigDecimal qty, String batchNo,
                                           Instant expirationDateTime, Instant productionDateTime,
                                           BigDecimal quantityReserved, UUID tenantId, UUID companyId,
+                                          String reason, String createdBy, String notes, UUID invoiceId) {
+        return addStockByIds(materialId, warehouseId, qty, batchNo, expirationDateTime, productionDateTime,
+                quantityReserved, null, null, tenantId, companyId, reason, createdBy, notes, invoiceId);
+    }
+
+    /**
+     * Full addStockByIds overload that also persists {@code orderToDeduction}
+     * and {@code materialQuotaPercentage} on the inventory row.
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public InventoryEntity addStockByIds(UUID materialId, UUID warehouseId, BigDecimal qty, String batchNo,
+                                          Instant expirationDateTime, Instant productionDateTime,
+                                          BigDecimal quantityReserved,
+                                          String orderToDeduction, BigDecimal materialQuotaPercentage,
+                                          UUID tenantId, UUID companyId,
                                           String reason, String createdBy, String notes, UUID invoiceId) {
         if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) throw new InventoryException("Quantity to add must be positive");
         if (batchNo == null || batchNo.trim().isEmpty()) throw new InventoryException("batchNo is required");
@@ -201,6 +238,14 @@ public class InventoryService {
 
         if (inv.getQuantityOnHand().compareTo(BigDecimal.ZERO) < 0) {
             throw new InventoryException("Resulting quantity would be negative");
+        }
+
+        // Apply optional fields — set on both new and existing rows when provided
+        if (orderToDeduction != null) {
+            inv.setOrderToDeduction(orderToDeduction.isBlank() ? null : orderToDeduction.trim());
+        }
+        if (materialQuotaPercentage != null) {
+            inv.setMaterialQuotaPercentage(materialQuotaPercentage);
         }
 
         InventoryEntity savedById = inventoryRepository.save(inv);
@@ -322,13 +367,15 @@ public class InventoryService {
         Material m = materialRepository.findByMaterialCode(materialCode).orElseThrow(() -> new InventoryException("Material not found: " + materialCode));
         InventoryEntity inv = inventoryRepository.findByMaterialAndWarehouseCode(m, warehouseCode).orElseThrow(() -> new InventoryException("Inventory not found for material " + materialCode + " in warehouse " + warehouseCode));
 
-        BigDecimal available = inv.getQuantityOnHand().subtract(inv.getQuantityLocked() == null ? BigDecimal.ZERO : inv.getQuantityLocked());
+        BigDecimal currentLocked = inv.getQuantityLocked() == null ? BigDecimal.ZERO : inv.getQuantityLocked();
+        BigDecimal available = inv.getQuantityOnHand().subtract(currentLocked);
         if (available.compareTo(qty) < 0) {
             throw new InventoryException("Insufficient available quantity to reserve");
         }
-
-        inv.setQuantityLocked((inv.getQuantityLocked() == null ? BigDecimal.ZERO : inv.getQuantityLocked()).add(qty));
-        return inventoryRepository.save(inv);
+        // Targeted update — only quantity_locked and updated_at are written
+        inventoryRepository.updateQuantityLocked(inv.getId(), currentLocked.add(qty), Instant.now());
+        inv.setQuantityLocked(currentLocked.add(qty));
+        return inv;
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -340,9 +387,10 @@ public class InventoryService {
 
         BigDecimal locked = inv.getQuantityLocked() == null ? BigDecimal.ZERO : inv.getQuantityLocked();
         if (locked.compareTo(qty) < 0) throw new InventoryException("Cannot release more than locked quantity");
-
+        // Targeted update — only quantity_locked and updated_at are written
+        inventoryRepository.updateQuantityLocked(inv.getId(), locked.subtract(qty), Instant.now());
         inv.setQuantityLocked(locked.subtract(qty));
-        return inventoryRepository.save(inv);
+        return inv;
     }
 
     // Reserve by inventory id (for controller endpoint convenience)
@@ -354,10 +402,13 @@ public class InventoryService {
         if (inv.getTenantId() == null || !inv.getTenantId().equals(tenantId)) throw new InventoryException("inventory does not belong to tenant");
         if (inv.getCompanyId() == null || !inv.getCompanyId().equals(companyId)) throw new InventoryException("inventory does not belong to company");
 
-        BigDecimal available = inv.getQuantityOnHand().subtract(inv.getQuantityLocked() == null ? BigDecimal.ZERO : inv.getQuantityLocked());
+        BigDecimal currentLocked = inv.getQuantityLocked() == null ? BigDecimal.ZERO : inv.getQuantityLocked();
+        BigDecimal available = inv.getQuantityOnHand().subtract(currentLocked);
         if (available.compareTo(qty) < 0) throw new InventoryException("Insufficient available quantity to reserve");
-        inv.setQuantityLocked((inv.getQuantityLocked() == null ? BigDecimal.ZERO : inv.getQuantityLocked()).add(qty));
-        return inventoryRepository.save(inv);
+        // Targeted update — only quantity_locked and updated_at are written
+        inventoryRepository.updateQuantityLocked(inv.getId(), currentLocked.add(qty), Instant.now());
+        inv.setQuantityLocked(currentLocked.add(qty));
+        return inv;
     }
 
     // Release by inventory id
@@ -371,8 +422,10 @@ public class InventoryService {
 
         BigDecimal locked = inv.getQuantityLocked() == null ? BigDecimal.ZERO : inv.getQuantityLocked();
         if (locked.compareTo(qty) < 0) throw new InventoryException("Cannot release more than locked quantity");
+        // Targeted update — only quantity_locked and updated_at are written
+        inventoryRepository.updateQuantityLocked(inv.getId(), locked.subtract(qty), Instant.now());
         inv.setQuantityLocked(locked.subtract(qty));
-        return inventoryRepository.save(inv);
+        return inv;
     }
 
     /**

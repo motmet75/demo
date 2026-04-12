@@ -32,6 +32,7 @@ public class InventoryViewDTO {
     private Instant expirationDateTime;
     private Instant productionDateTime;
     private Instant createdAt;
+    private Instant updatedAt;
     private Boolean visible;
     private Boolean approved;
     private Boolean locked;
@@ -41,7 +42,7 @@ public class InventoryViewDTO {
                             UUID warehouseId, String warehouseCode, String warehouseName,
                             BigDecimal quantityOnHand, BigDecimal quantityTotal, BigDecimal quantityReserved, BigDecimal quantityLocked, String batchNo,
                             String contractCode, String orderToDeduction, String unit, BigDecimal unitPrice, String currency,
-                            Instant expirationDateTime, Instant productionDateTime, Instant createdAt,
+                            Instant expirationDateTime, Instant productionDateTime, Instant createdAt, Instant updatedAt,
                             Boolean visible, Boolean approved, Boolean locked,
                             BigDecimal materialQuotaPercentage) {
         this.inventoryId = inventoryId;
@@ -66,6 +67,7 @@ public class InventoryViewDTO {
         this.expirationDateTime = expirationDateTime;
         this.productionDateTime = productionDateTime;
         this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
         this.visible = visible;
         this.approved = approved;
         this.locked = locked;
@@ -95,6 +97,7 @@ public class InventoryViewDTO {
     public Instant getExpirationDateTime() { return expirationDateTime; }
     public Instant getProductionDateTime() { return productionDateTime; }
     public Instant getCreatedAt() { return createdAt; }
+    public Instant getUpdatedAt() { return updatedAt; }
     public Boolean getVisible() { return visible; }
     public Boolean getApproved() { return approved; }
     public Boolean getLocked() { return locked; }

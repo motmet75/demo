@@ -20,12 +20,12 @@ export async function fetchInventoryView() {
 }
 
 export async function addStock(payload) {
-  const { res } = await apiFetchJson('/bom/inventory', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+  const { res, data } = await apiFetchJson('/bom/inventory', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
   if (!res.ok) {
-    const text = await res.text()
-    throw new Error(text || 'Add stock failed')
+    const message = (data && (data.message || data.error)) || (typeof data === 'string' ? data : null) || `Add stock failed (${res.status})`
+    throw new Error(message)
   }
-  return res.json()
+  return data
 }
 
 export async function updateInventory(id, payload) {

@@ -6,6 +6,7 @@ import { fetchMaterials, updateMaterial, deleteMaterial } from '../../api/materi
 import { apiFetch } from '../../api/client'
 import MaterialEditModal from './MaterialEditModal'
 import * as XLSX from 'xlsx'
+import { dateFmt } from '../../utils/format'
 
 export default function MaterialGrid({ refreshKey }) {
   const [rows, setRows] = useState([])
@@ -277,7 +278,7 @@ export default function MaterialGrid({ refreshKey }) {
     { field: 'materialType', headerName: 'Type', width: 160, editable: false, resizable: true },
     { field: 'description', headerName: 'Description', flex: 1, editable: false, minWidth: 200, resizable: true },
     { field: 'createdAt', headerName: 'Created At', width: 180, editable: false, resizable: true,
-      valueFormatter: (value) => value ? new Date(value).toLocaleString() : '' },
+      valueFormatter: (value) => dateFmt(value) },
     {
       field: 'actions', type: 'actions', headerName: 'Actions', width: 120, resizable: false, getActions: (params) => [
         <GridActionsCellItem

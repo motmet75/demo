@@ -123,10 +123,13 @@ public class InventoryController {
             String createdBy  = body.get("createdBy")  != null ? String.valueOf(body.get("createdBy"))  : "system";
             String notes      = body.get("notes")      != null ? String.valueOf(body.get("notes"))      : null;
             UUID invoiceId    = body.get("invoiceId")  != null ? UUID.fromString(String.valueOf(body.get("invoiceId"))) : null;
+            String orderToDeduction = body.get("orderToDeduction") != null ? String.valueOf(body.get("orderToDeduction")) : null;
+            String mqp = body.get("materialQuotaPercentage") != null ? String.valueOf(body.get("materialQuotaPercentage")) : null;
 
             Instant expirationDateTime = exp == null || exp.trim().isEmpty() ? null : Instant.parse(exp);
             Instant productionDateTime = prod == null || prod.trim().isEmpty() ? null : Instant.parse(prod);
             BigDecimal quantityReserved = qres == null || qres.trim().isEmpty() ? null : new BigDecimal(qres);
+            BigDecimal materialQuotaPercentage = mqp == null || mqp.trim().isEmpty() ? null : new BigDecimal(mqp);
 
             // prefer ids when provided
             Object mid = body.get("materialId");
@@ -135,11 +138,11 @@ public class InventoryController {
             if (mid != null && wid != null) {
                 UUID materialId = UUID.fromString(String.valueOf(mid));
                 UUID warehouseId = UUID.fromString(String.valueOf(wid));
-                saved = inventoryService.addStockByIds(materialId, warehouseId, qty, batchNo, expirationDateTime, productionDateTime, quantityReserved, tenantId, companyId, reason, createdBy, notes, invoiceId);
+                saved = inventoryService.addStockByIds(materialId, warehouseId, qty, batchNo, expirationDateTime, productionDateTime, quantityReserved, orderToDeduction, materialQuotaPercentage, tenantId, companyId, reason, createdBy, notes, invoiceId);
             } else {
                 String materialCode = (String) body.get("materialCode");
                 String warehouseCode = (String) body.get("warehouseCode");
-                saved = inventoryService.addStock(materialCode, warehouseCode, qty, batchNo, expirationDateTime, productionDateTime, quantityReserved, tenantId, companyId, reason, createdBy, notes, invoiceId);
+                saved = inventoryService.addStock(materialCode, warehouseCode, qty, batchNo, expirationDateTime, productionDateTime, quantityReserved, orderToDeduction, materialQuotaPercentage, tenantId, companyId, reason, createdBy, notes, invoiceId);
             }
             return ResponseEntity.status(HttpStatus.CREATED).body(saved);
         } catch (InventoryException ex) {

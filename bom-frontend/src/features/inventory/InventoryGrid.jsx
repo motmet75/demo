@@ -9,6 +9,7 @@ import InventoryEditModal from './InventoryEditModal'
 import InventoryImport from './InventoryImport'
 import InventoryPatchCsv from './InventoryPatchCsv'
 import * as XLSX from 'xlsx'
+import { numFmt, dateFmt } from '../../utils/format'
 
 export default function InventoryGrid() {
   const [rows, setRows] = useState([])
@@ -193,27 +194,27 @@ export default function InventoryGrid() {
   }
 
   const handleReserve = async (id) => {
-    const qty = prompt('Quantity to reserve:')
+    const qty = prompt('Quantity to soft-reserve (adds to Qty Locked):')
     if (qty == null) return
     const num = Number(qty)
     if (!Number.isFinite(num) || num <= 0) { alert('Invalid quantity'); return }
     try {
       await reserveInventory(id, num)
       await load()
-      alert('Reserved')
-    } catch { alert('Reserve failed') }
+      alert('Soft-reserved: Qty Locked increased by ' + num)
+    } catch (e) { alert('Reserve failed: ' + (e?.message || e)) }
   }
 
   const handleRelease = async (id) => {
-    const qty = prompt('Quantity to release:')
+    const qty = prompt('Quantity to release (subtracts from Qty Locked):')
     if (qty == null) return
     const num = Number(qty)
     if (!Number.isFinite(num) || num <= 0) { alert('Invalid quantity'); return }
     try {
       await releaseInventory(id, num)
       await load()
-      alert('Released')
-    } catch { alert('Release failed') }
+      alert('Released: Qty Locked decreased by ' + num)
+    } catch (e) { alert('Release failed: ' + (e?.message || e)) }
   }
 
   const handleDeleteSelected = async () => {
@@ -391,33 +392,33 @@ export default function InventoryGrid() {
     { field: 'warehouseUuid', headerName: 'Warehouse UUID', width: 240, flex:1 },
     { field: 'warehouseCode', headerName: 'Warehouse Code', width: 160 },
     { field: 'warehouseName', headerName: 'Warehouse Name', width: 200 },
-    { field: 'quantityOnHand', headerName: 'Qty On Hand', width: 140, type: 'number', valueFormatter: (value) => value == null ? '' : Number(value).toLocaleString(undefined, { maximumFractionDigits: 9 }) },
-    { field: 'quantityTotal', headerName: 'Total Qty', width: 140, type: 'number', valueFormatter: (value) => value == null ? '' : Number(value).toLocaleString(undefined, { maximumFractionDigits: 9 }) },
-    { field: 'quantityReserved', headerName: 'Qty Reserved', width: 140, type: 'number', valueFormatter: (value) => value == null ? '' : Number(value).toLocaleString(undefined, { maximumFractionDigits: 9 }) },
-    { field: 'quantityLocked', headerName: 'Qty Locked', width: 140, type: 'number', valueFormatter: (value) => value == null ? '' : Number(value).toLocaleString(undefined, { maximumFractionDigits: 9 }) },
-    { field: 'availableQuantity', headerName: 'Available', width: 140, type: 'number', valueFormatter: (value) => value == null ? '' : Number(value).toLocaleString(undefined, { maximumFractionDigits: 9 }) },
-    { field: 'batchNo', headerName: 'Batch', width: 180 },
-    { field: 'contractCode', headerName: 'Contract', width: 150 },
-    { field: 'orderToDeduction', headerName: 'Order To Deduction', width: 150 },
-    { field: 'userName', headerName: 'User Name', width: 120 },
-    { field: 'unit', headerName: 'Unit', width: 100 },
-    { field: 'unitPrice', headerName: 'Unit Price', width: 120, type: 'number', valueFormatter: (value) => value == null ? '' : Number(value).toLocaleString(undefined, { maximumFractionDigits: 9 }) },
-    { field: 'currency', headerName: 'Currency', width: 100 },
-    { field: 'hsCode', headerName: 'HS Code', width: 120 },
-    { field: 'originType', headerName: 'Origin Type', width: 120 },
-    { field: 'originCountry', headerName: 'Origin Country', width: 130 },
-    { field: 'xformNo', headerName: 'Xform No', width: 120 },
-    { field: 'cdsNo', headerName: 'CDS No', width: 120 },
-    { field: 'purchaseNo', headerName: 'Purchase No', width: 120 },
-    { field: 'materialQuota', headerName: 'Material Quota', width: 140, type: 'number', valueFormatter: (value) => value == null ? '' : Number(value).toLocaleString(undefined, { maximumFractionDigits: 9 }), hide: true },
-    { field: 'materialQuotaPercentage', headerName: 'Quota %', width: 120, type: 'number', valueFormatter: (value) => value == null ? '' : Number(value).toLocaleString(undefined, { maximumFractionDigits: 9 }) },
-    { field: 'xformDate', headerName: 'Xform Date', width: 150, hide: true },
-    { field: 'purchaseDateTime', headerName: 'Purchase Date', width: 180, hide: true },
-    { field: 'cdsDateTime', headerName: 'CDS Date', width: 180, hide: true },
-    { field: 'expirationDateTime', headerName: 'Expiration', width: 180 },
-    { field: 'productionDateTime', headerName: 'Production', width: 180 },
-    { field: 'createdAt', headerName: 'Created At', width: 180 },
-    { field: 'updatedAt', headerName: 'Updated At', width: 180 }
+    { field: 'quantityOnHand',    headerName: 'Qty On Hand',              width: 140, type: 'number', valueFormatter: numFmt },
+    { field: 'quantityTotal',     headerName: 'Total Qty',                width: 140, type: 'number', valueFormatter: numFmt },
+    { field: 'quantityReserved',  headerName: 'Qty Reserved (info only)', width: 170, type: 'number', valueFormatter: numFmt },
+    { field: 'quantityLocked',    headerName: 'Qty Locked (soft-reserve)',width: 175, type: 'number', valueFormatter: numFmt },
+    { field: 'availableQuantity', headerName: 'Available (on hand−locked)',width: 175, type: 'number', valueFormatter: numFmt },
+    { field: 'batchNo',                headerName: 'Batch',        width: 180 },
+    { field: 'contractCode',           headerName: 'Contract',     width: 150 },
+    { field: 'orderToDeduction',       headerName: 'Order To Deduction', width: 150 },
+    { field: 'userName',               headerName: 'User Name',    width: 120 },
+    { field: 'unit',                   headerName: 'Unit',         width: 100 },
+    { field: 'unitPrice',              headerName: 'Unit Price',   width: 120, type: 'number', valueFormatter: numFmt },
+    { field: 'currency',               headerName: 'Currency',     width: 100 },
+    { field: 'hsCode',                 headerName: 'HS Code',      width: 120 },
+    { field: 'originType',             headerName: 'Origin Type',  width: 120 },
+    { field: 'originCountry',          headerName: 'Origin Country', width: 130 },
+    { field: 'xformNo',                headerName: 'Xform No',     width: 120 },
+    { field: 'cdsNo',                  headerName: 'CDS No',       width: 120 },
+    { field: 'purchaseNo',             headerName: 'Purchase No',  width: 120 },
+    { field: 'materialQuota',          headerName: 'Material Quota', width: 140, type: 'number', valueFormatter: numFmt, hide: true },
+    { field: 'materialQuotaPercentage',headerName: 'Quota %',      width: 120, type: 'number', valueFormatter: numFmt },
+    { field: 'xformDate',              headerName: 'Xform Date',   width: 150, hide: true },
+    { field: 'purchaseDateTime',       headerName: 'Purchase Date',width: 180, hide: true },
+    { field: 'cdsDateTime',            headerName: 'CDS Date',     width: 180, hide: true },
+    { field: 'expirationDateTime',     headerName: 'Expiration',   width: 180 },
+    { field: 'productionDateTime',     headerName: 'Production',   width: 180 },
+    { field: 'createdAt', headerName: 'Created At', width: 180, valueFormatter: dateFmt },
+    { field: 'updatedAt', headerName: 'Updated At', width: 180, valueFormatter: dateFmt }
   ]
 
   // apply simple client-side filters

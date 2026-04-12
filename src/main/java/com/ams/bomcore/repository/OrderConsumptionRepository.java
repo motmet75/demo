@@ -44,11 +44,11 @@ public interface OrderConsumptionRepository extends JpaRepository<OrderConsumpti
     List<OrderConsumptionDto> findDtoByTenantIdAndCompanyId(@Param("tenantId") UUID tenantId,
                                                              @Param("companyId") UUID companyId);
 
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("DELETE FROM OrderConsumption c WHERE c.orderId = :orderId")
     void deleteByOrderId(@Param("orderId") UUID orderId);
 
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("DELETE FROM OrderConsumption c WHERE c.orderId IN :orderIds")
     void deleteByOrderIds(@Param("orderIds") List<UUID> orderIds);
 }

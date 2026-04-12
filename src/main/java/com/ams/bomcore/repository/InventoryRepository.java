@@ -49,7 +49,7 @@ public interface InventoryRepository extends JpaRepository<InventoryEntity, UUID
     @Query("SELECT new com.ams.bomcore.controller.inventory.dto.InventoryViewDTO("
             + "i.id, i.tenantId, i.companyId, m.id, m.materialCode, m.materialName, w.id, w.code, w.name, "
             + "i.quantityOnHand, i.quantityTotal, i.quantityReserved, i.quantityLocked, i.batchNo, i.contractCode, i.orderToDeduction, i.unit, i.unitPrice, i.currency, "
-            + "i.expirationDateTime, i.productionDateTime, i.createdAt, i.visible, i.approved, i.locked, i.materialQuotaPercentage) "
+            + "i.expirationDateTime, i.productionDateTime, i.createdAt, i.updatedAt, i.visible, i.approved, i.locked, i.materialQuotaPercentage) "
             + "FROM InventoryEntity i "
             + "JOIN i.material m "
             + "JOIN i.warehouse w "
@@ -60,7 +60,7 @@ public interface InventoryRepository extends JpaRepository<InventoryEntity, UUID
     @Query("SELECT new com.ams.bomcore.controller.inventory.dto.InventoryViewDTO("
             + "i.id, i.tenantId, i.companyId, m.id, m.materialCode, m.materialName, w.id, w.code, w.name, "
             + "i.quantityOnHand, i.quantityTotal, i.quantityReserved, i.quantityLocked, i.batchNo, i.contractCode, i.orderToDeduction, i.unit, i.unitPrice, i.currency, "
-            + "i.expirationDateTime, i.productionDateTime, i.createdAt, i.visible, i.approved, i.locked, i.materialQuotaPercentage) "
+            + "i.expirationDateTime, i.productionDateTime, i.createdAt, i.updatedAt, i.visible, i.approved, i.locked, i.materialQuotaPercentage) "
             + "FROM InventoryEntity i "
             + "JOIN i.material m "
             + "JOIN i.warehouse w "
@@ -71,7 +71,7 @@ public interface InventoryRepository extends JpaRepository<InventoryEntity, UUID
     @Query("SELECT new com.ams.bomcore.controller.inventory.dto.InventoryViewDTO("
             + "i.id, i.tenantId, i.companyId, m.id, m.materialCode, m.materialName, w.id, w.code, w.name, "
             + "i.quantityOnHand, i.quantityTotal, i.quantityReserved, i.quantityLocked, i.batchNo, i.contractCode, i.orderToDeduction, i.unit, i.unitPrice, i.currency, "
-            + "i.expirationDateTime, i.productionDateTime, i.createdAt, i.visible, i.approved, i.locked, i.materialQuotaPercentage) "
+            + "i.expirationDateTime, i.productionDateTime, i.createdAt, i.updatedAt, i.visible, i.approved, i.locked, i.materialQuotaPercentage) "
             + "FROM InventoryEntity i "
             + "JOIN i.material m "
             + "JOIN i.warehouse w "
@@ -113,8 +113,19 @@ public interface InventoryRepository extends JpaRepository<InventoryEntity, UUID
                               @Param("now") Instant now);
 
     /**
+     * Update ONLY quantity_locked (soft-reservation) and updated_at — no other fields are touched.
+     * This is the field used by reserve/release operations and deducted from availability checks.
+     */
+    @Modifying
+    @Query("UPDATE InventoryEntity i SET i.quantityLocked = :qty, i.updatedAt = :now WHERE i.id = :id")
+    void updateQuantityLocked(@Param("id") UUID id,
+                              @Param("qty") BigDecimal qty,
+                              @Param("now") Instant now);
+
+    /**
      * Update ONLY quantity_reserved and updated_at — no other fields are touched.
-     * Used to reserve the extra scrap/waste qty arising from materialQuotaPercentage > 100.
+     * quantity_reserved is an informational/import-time field and is NOT deducted from
+     * availability; use quantity_locked for operational soft-reservations.
      */
     @Modifying
     @Query("UPDATE InventoryEntity i SET i.quantityReserved = :qty, i.updatedAt = :now WHERE i.id = :id")

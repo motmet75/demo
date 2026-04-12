@@ -24,6 +24,7 @@ import DeleteIcon from '@mui/icons-material/Delete'
 import EditIcon from '@mui/icons-material/Edit'
 import { useAppContext } from '../../context/AppContext'
 import { fetchBoms, createBom, updateBomName, updateBomStatus, deleteBom, syncBomFromModelBoms } from '../../api/bomApi'
+import { dateFmt } from '../../utils/format'
 import { apiFetchJson } from '../../api/client'
 import BomItemsDialog from './BomItemsDialog'
 
@@ -221,7 +222,7 @@ export default function BomGrid() {
     },
     {
       field: 'createdAt', headerName: 'Created At', width: 170,
-      renderCell: ({ value }) => value ? new Date(value).toLocaleString() : '—'
+      renderCell: ({ value }) => dateFmt(value, '—')
     },
     {
       field: '_actions', headerName: 'Actions', width: 240, sortable: false,

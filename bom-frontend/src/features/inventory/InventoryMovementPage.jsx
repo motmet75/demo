@@ -11,6 +11,7 @@ import MenuItem from '@mui/material/MenuItem'
 import Chip from '@mui/material/Chip'
 import CircularProgress from '@mui/material/CircularProgress'
 import * as XLSX from 'xlsx'
+import { numFmt, dateFmt } from '../../utils/format'
 import { useAppContext } from '../../context/AppContext'
 import { useAuth } from '../../context/useAuth'
 import { fetchMovements, recordMovementIn, recordMovementOut, recordMovementTransfer, recordMovementAdjustment, deleteMovement } from '../../api/inventoryMovementApi'
@@ -158,7 +159,7 @@ export default function InventoryMovementPage() {
     const idSet = new Set(ids)
     return filteredRows.filter(r => idSet.has(r.id)).map(r => ({
       ID: r.id ?? '',
-      Date: r.createdAt ? new Date(r.createdAt).toLocaleString() : '',
+      Date: dateFmt(r.createdAt),
       Type: r.movementType ?? '',
       Material: r.material ? `${r.material.materialCode ?? ''} — ${r.material.materialName ?? ''}` : (matMap[r.materialId] ? `${matMap[r.materialId].materialCode} — ${matMap[r.materialId].materialName ?? ''}` : r.materialId ?? ''),
       'From Warehouse': r.fromWarehouse ? r.fromWarehouse.code : (whMap[r.fromWarehouseId] ? whMap[r.fromWarehouseId].code : r.fromWarehouseId ?? ''),
@@ -243,12 +244,12 @@ export default function InventoryMovementPage() {
         ? <span title={value} style={{ fontFamily: 'monospace', fontSize: 12, cursor: 'pointer' }} onClick={() => navigator.clipboard?.writeText(value)}>{value}</span>
         : ''
     },
-    { field: 'createdAt', headerName: 'Date', width: 170, valueFormatter: (value) => value ? new Date(value).toLocaleString() : '' },
+    { field: 'createdAt', headerName: 'Date', width: 170, valueFormatter: dateFmt },
     { field: 'movementType', headerName: 'Type', width: 130, renderCell: ({ value }) => <Chip label={value} color={TYPE_COLORS[value] || 'default'} size="small" /> },
     { field: 'materialId', headerName: 'Material', width: 180, valueGetter: (value, row) => row?.material ? `${row.material.materialCode ?? ''} — ${row.material.materialName ?? ''}` : (row && matMap[row.materialId] ? `${matMap[row.materialId].materialCode}` : value ?? '') },
     { field: 'fromWarehouseId', headerName: 'From WH', width: 130, valueGetter: (value, row) => row?.fromWarehouse ? row.fromWarehouse.code : (row && whMap[row.fromWarehouseId] ? whMap[row.fromWarehouseId].code : '') },
     { field: 'toWarehouseId', headerName: 'To WH', width: 130, valueGetter: (value, row) => row?.toWarehouse ? row.toWarehouse.code : (row && whMap[row.toWarehouseId] ? whMap[row.toWarehouseId].code : '') },
-    { field: 'quantity', headerName: 'Qty', width: 100, type: 'number', valueFormatter: (value) => value == null ? '' : Number(value).toLocaleString(undefined, { maximumFractionDigits: 9 }) },
+    { field: 'quantity', headerName: 'Qty', width: 100, type: 'number', valueFormatter: numFmt },
     { field: 'unit', headerName: 'Unit', width: 80 },
     { field: 'batchNo', headerName: 'Batch', width: 120 },
     { field: 'reason', headerName: 'Reason', width: 150 },

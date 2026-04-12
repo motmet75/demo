@@ -10,6 +10,7 @@ import Button from '@mui/material/Button'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import { useAppContext } from '../../context/AppContext'
 import { apiFetchJson } from '../../api/client'
+import { numFmt4, dateFmt } from '../../utils/format'
 
 const STATUS_COLORS = {
   PROVISIONAL: 'default',
@@ -93,14 +94,10 @@ export default function ConsumptionLogPage() {
       )},
     { field: 'materialCode', headerName: 'Material Code', width: 150 },
     { field: 'materialName', headerName: 'Material Name', width: 200 },
-    { field: 'plannedQty', headerName: 'Planned Qty', width: 120, type: 'number',
-      valueFormatter: v => v != null ? Number(v).toLocaleString(undefined, { maximumFractionDigits: 4 }) : '' },
-    { field: 'effectivePlannedQty', headerName: 'Eff. Planned Qty', width: 140, type: 'number',
-      valueFormatter: v => v != null ? Number(v).toLocaleString(undefined, { maximumFractionDigits: 4 }) : '' },
-    { field: 'realConsumptionQty', headerName: 'Real Qty', width: 120, type: 'number',
-      valueFormatter: v => v != null ? Number(v).toLocaleString(undefined, { maximumFractionDigits: 4 }) : '—' },
-    { field: 'varianceQty', headerName: 'Variance', width: 110, type: 'number',
-      valueFormatter: v => v != null ? Number(v).toLocaleString(undefined, { maximumFractionDigits: 4 }) : '—',
+    { field: 'plannedQty',         headerName: 'Planned Qty',     width: 120, type: 'number', valueFormatter: numFmt4 },
+    { field: 'effectivePlannedQty',headerName: 'Eff. Planned Qty',width: 140, type: 'number', valueFormatter: numFmt4 },
+    { field: 'realConsumptionQty', headerName: 'Real Qty',        width: 120, type: 'number', valueFormatter: v => numFmt4(v) || '—' },
+    { field: 'varianceQty',        headerName: 'Variance',        width: 110, type: 'number', valueFormatter: v => numFmt4(v) || '—',
       cellClassName: ({ value }) => value != null && Number(value) !== 0 ? 'variance-nonzero' : '' },
     {
       field: 'deductedInventoryId',
@@ -122,10 +119,8 @@ export default function ConsumptionLogPage() {
           color={STATUS_COLORS[value] || 'default'}
           variant="outlined" />
       )},
-    { field: 'createdAt', headerName: 'Created At', width: 170,
-      valueFormatter: v => v ? new Date(v).toLocaleString() : '' },
-    { field: 'updatedAt', headerName: 'Updated At', width: 170,
-      valueFormatter: v => v ? new Date(v).toLocaleString() : '' },
+    { field: 'createdAt', headerName: 'Created At', width: 170, valueFormatter: dateFmt },
+    { field: 'updatedAt', headerName: 'Updated At', width: 170, valueFormatter: dateFmt },
   ]
 
   const filteredRows = rows.filter(r => {

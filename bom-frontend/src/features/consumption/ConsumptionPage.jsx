@@ -12,6 +12,7 @@ import RefreshIcon from '@mui/icons-material/Refresh'
 import DownloadIcon from '@mui/icons-material/Download'
 import { useAppContext } from '../../context/AppContext'
 import { apiFetchJson } from '../../api/client'
+import { numFmt, dateFmt } from '../../utils/format'
 
 export default function ConsumptionPage() {
   const { tenantId, companyId } = useAppContext()
@@ -71,7 +72,7 @@ export default function ConsumptionPage() {
         return <Chip label={value} size="small" color={color[value] || 'default'} />
       }},
     { field: 'deliveryDateTime', headerName: 'Delivery', width: 170,
-      valueFormatter: v => v ? new Date(v).toLocaleString() : '—' },
+      valueFormatter: v => dateFmt(v, '—') },
     { field: 'materialCode', headerName: 'Material Code', width: 150 },
     { field: 'materialName', headerName: 'Material Name', width: 200 },
     { field: 'materialId', headerName: 'Material UUID', flex: 1, minWidth: 200,
@@ -82,12 +83,9 @@ export default function ConsumptionPage() {
       renderCell: ({ value }) => value
         ? <Tooltip title={value}><span style={{ fontFamily: 'monospace', fontSize: 11, color: '#1565c0' }}>{value}</span></Tooltip>
         : <span style={{ color: '#bbb' }}>—</span> },
-    { field: 'plannedQty', headerName: 'Planned Qty', width: 120, type: 'number',
-      valueFormatter: v => v != null ? Number(v).toLocaleString(undefined, { maximumFractionDigits: 9 }) : '' },
-    { field: 'adjustedQty', headerName: 'Adjusted Qty', width: 130, type: 'number',
-      valueFormatter: v => v != null ? Number(v).toLocaleString(undefined, { maximumFractionDigits: 9 }) : '' },
-    { field: 'availableQty', headerName: 'Available Qty', width: 130, type: 'number',
-      valueFormatter: v => v != null ? Number(v).toLocaleString(undefined, { maximumFractionDigits: 9 }) : '' },
+    { field: 'plannedQty',   headerName: 'Planned Qty',   width: 120, type: 'number', valueFormatter: numFmt },
+    { field: 'adjustedQty',  headerName: 'Adjusted Qty',  width: 130, type: 'number', valueFormatter: numFmt },
+    { field: 'availableQty', headerName: 'Available Qty', width: 130, type: 'number', valueFormatter: numFmt },
     { field: 'checkResult', headerName: 'Check', width: 120,
       renderCell: ({ value }) => value
         ? <Chip label={value} size="small"
@@ -98,8 +96,7 @@ export default function ConsumptionPage() {
       renderCell: ({ value }) => value
         ? <span style={{ fontWeight: 500 }}>{value}</span>
         : <span style={{ color: '#aaa' }}>—</span> },
-    { field: 'createdAt', headerName: 'Checked At', width: 170,
-      valueFormatter: v => v ? new Date(v).toLocaleString() : '' },
+    { field: 'createdAt', headerName: 'Checked At', width: 170, valueFormatter: dateFmt },
   ]
 
   const filteredRows = rows.filter(r => {
@@ -131,7 +128,7 @@ export default function ConsumptionPage() {
     'Order #':                 r.orderNumber ?? '',
     'Order UUID':              r.orderId ?? '',
     'Order Status':            r.orderStatus ?? '',
-    'Delivery':                r.deliveryDateTime ? new Date(r.deliveryDateTime).toLocaleString() : '',
+    'Delivery':                dateFmt(r.deliveryDateTime),
     'Material Code':           r.materialCode ?? '',
     'Material Name':           r.materialName ?? '',
     'Material UUID':           r.materialId ?? '',
@@ -141,7 +138,7 @@ export default function ConsumptionPage() {
     'Available Qty':           r.availableQty ?? '',
     'Check Result':            r.checkResult ?? '',
     'Checked By':              r.updatedBy ?? '',
-    'Checked At':              r.createdAt ? new Date(r.createdAt).toLocaleString() : '',
+    'Checked At':              dateFmt(r.createdAt),
   }))
 
   const handleDownloadXlsx = () => {
