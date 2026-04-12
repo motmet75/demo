@@ -31,6 +31,7 @@ import ContractPage from './features/contract/ContractPage'
 import InventoryMovementPage from './features/inventory/InventoryMovementPage'
 import InvoicePage from './features/invoice/InvoicePage'
 import ConsumptionPage from './features/consumption/ConsumptionPage'
+import ConsumptionLogPage from './features/consumption/ConsumptionLogPage'
 import LoginForm from './components/LoginForm'
 import RequireAuth from './components/RequireAuth'
 import AdminPage from './features/admin/AdminPage'
@@ -54,6 +55,7 @@ const NAV_ITEMS = [
   { label: 'Orders',      path: '/orders',               icon: '🛒' },
   { label: 'Invoices',    path: '/invoices',             icon: '🧾' },
   { label: 'Consumption', path: '/consumption',          icon: '📊' },
+  { label: 'Cons. Log',   path: '/consumption-log',      icon: '🗒️' },
   { divider: true },
   { label: 'Companies',   path: '/companies',            icon: '🏢' },
 ]
@@ -198,6 +200,7 @@ function AppShell() {
               <Route path="/orders" element={<RequireAuth><RequireContext><OrderPage /></RequireContext></RequireAuth>} />
               <Route path="/invoices" element={<RequireAuth><RequireContext><InvoicePage /></RequireContext></RequireAuth>} />
               <Route path="/consumption" element={<RequireAuth><RequireContext><ConsumptionPage /></RequireContext></RequireAuth>} />
+              <Route path="/consumption-log" element={<RequireAuth><RequireContext><ConsumptionLogPage /></RequireContext></RequireAuth>} />
               <Route path="/boms" element={<RequireAuth><RequireContext><BomPage /></RequireContext></RequireAuth>} />
               <Route path="/viettelpost" element={<RequireAuth><ViettelPostPage /></RequireAuth>} />
               <Route path="/admin" element={<RequireAuth adminOnly><AdminPage /></RequireAuth>} />

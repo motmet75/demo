@@ -29,10 +29,15 @@ public interface OrderConsumptionRepository extends JpaRepository<OrderConsumpti
             c.material.id, c.material.materialCode, c.material.materialName,
             c.plannedQty, c.adjustedQty, c.availableQty,
             c.checkResult, c.tenantId, c.companyId, c.createdAt,
-            c.updatedBy
+            c.updatedBy,
+            ocl.deductedInventoryId
         )
         FROM OrderConsumption c
         JOIN OrderHeader oh ON oh.id = c.orderId
+        LEFT JOIN OrderConsumptionLogEntity ocl
+            ON ocl.orderId = c.orderId
+            AND ocl.material.id = c.material.id
+            AND ocl.deductedInventoryId IS NOT NULL
         WHERE c.tenantId = :tenantId AND c.companyId = :companyId
         ORDER BY c.createdAt DESC
         """)

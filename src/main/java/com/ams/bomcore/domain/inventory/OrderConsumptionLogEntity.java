@@ -54,6 +54,14 @@ public class OrderConsumptionLogEntity {
     @Column(name = "variance_qty", insertable = false, updatable = false, columnDefinition = "numeric")
     private BigDecimal varianceQty;
 
+    /**
+     * UUID of the inventory row that was deducted when this material was issued
+     * to production (set during moveToProduction / ISSUE_TO_PRODUCTION).
+     * Null until the order reaches MATERIAL_READY status.
+     */
+    @Column(name = "deducted_inventory_id")
+    private UUID deductedInventoryId;
+
     @Column(name = "status", nullable = false, length = 20)
     private String status = "PROVISIONAL";
 
@@ -94,6 +102,9 @@ public class OrderConsumptionLogEntity {
     public void setRealConsumptionQty(BigDecimal realConsumptionQty) { this.realConsumptionQty = realConsumptionQty; }
 
     public BigDecimal getVarianceQty() { return varianceQty; }
+
+    public UUID getDeductedInventoryId() { return deductedInventoryId; }
+    public void setDeductedInventoryId(UUID deductedInventoryId) { this.deductedInventoryId = deductedInventoryId; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
@@ -144,6 +155,7 @@ public class OrderConsumptionLogEntity {
                 ", plannedQty=" + plannedQty +
                 ", effectivePlannedQty=" + effectivePlannedQty +
                 ", realConsumptionQty=" + realConsumptionQty +
+                ", deductedInventoryId=" + deductedInventoryId +
                 ", status='" + status + '\'' +
                 ", tenantId=" + tenantId +
                 ", companyId=" + companyId +

@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import com.ams.bomcore.controller.order.dto.OrderConsumptionLogDto;
 import com.ams.bomcore.domain.inventory.OrderConsumptionLogEntity;
 
 @Repository
@@ -23,4 +24,48 @@ public interface OrderConsumptionLogRepository extends JpaRepository<OrderConsum
     List<OrderConsumptionLogEntity> findByTenantIdAndCompanyIdAndMaterialId(@Param("tenantId") UUID tenantId, @Param("companyId") UUID companyId, @Param("materialId") UUID materialId);
 
     List<OrderConsumptionLogEntity> findByTenantIdAndCompanyIdAndStatus(UUID tenantId, UUID companyId, String status);
+
+    /**
+     * Returns full consumption log rows joined with order_header and material,
+     * including deducted_inventory_id for traceability.
+     */
+    @Query("""
+            SELECT new com.ams.bomcore.controller.order.dto.OrderConsumptionLogDto(
+                l.id, l.orderId,
+                h.orderNumber, h.status,
+                l.bomCalculationId,
+                l.material.id, l.material.materialCode, l.material.materialName,
+                l.plannedQty, l.effectivePlannedQty,
+                l.realConsumptionQty, l.varianceQty,
+                l.deductedInventoryId,
+                l.status,
+                l.tenantId, l.companyId,
+                l.createdAt, l.updatedAt)
+            FROM OrderConsumptionLogEntity l
+            JOIN OrderHeader h ON h.id = l.orderId
+            WHERE l.tenantId = :tenantId AND l.companyId = :companyId
+            ORDER BY l.createdAt DESC
+            """)
+    List<OrderConsumptionLogDto> findDtoByTenantIdAndCompanyId(
+            @Param("tenantId") UUID tenantId,
+            @Param("companyId") UUID companyId);
+
+    @Query("""
+            SELECT new com.ams.bomcore.controller.order.dto.OrderConsumptionLogDto(
+                l.id, l.orderId,
+                h.orderNumber, h.status,
+                l.bomCalculationId,
+                l.material.id, l.material.materialCode, l.material.materialName,
+                l.plannedQty, l.effectivePlannedQty,
+                l.realConsumptionQty, l.varianceQty,
+                l.deductedInventoryId,
+                l.status,
+                l.tenantId, l.companyId,
+                l.createdAt, l.updatedAt)
+            FROM OrderConsumptionLogEntity l
+            JOIN OrderHeader h ON h.id = l.orderId
+            WHERE l.orderId = :orderId
+            ORDER BY l.createdAt DESC
+            """)
+    List<OrderConsumptionLogDto> findDtoByOrderId(@Param("orderId") UUID orderId);
 }

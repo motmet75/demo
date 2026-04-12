@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react'
+import * as XLSX from 'xlsx'
 import { DataGrid } from '@mui/x-data-grid'
 import Box from '@mui/material/Box'
 import Chip from '@mui/material/Chip'
@@ -8,6 +9,7 @@ import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import Tooltip from '@mui/material/Tooltip'
 import RefreshIcon from '@mui/icons-material/Refresh'
+import DownloadIcon from '@mui/icons-material/Download'
 import { useAppContext } from '../../context/AppContext'
 import { apiFetchJson } from '../../api/client'
 
@@ -20,6 +22,9 @@ export default function ConsumptionPage() {
   // filter state
   const [filterOrderNumber, setFilterOrderNumber] = useState('')
   const [filterMaterial, setFilterMaterial] = useState('')
+  const [filterMaterialId, setFilterMaterialId] = useState('')
+  const [filterInventoryId, setFilterInventoryId] = useState('')
+  const [filterCheckedBy, setFilterCheckedBy] = useState('')
   const [filterCreatedFrom, setFilterCreatedFrom] = useState('')
   const [filterCreatedTo, setFilterCreatedTo] = useState('')
   const [createdRangePreset, setCreatedRangePreset] = useState('')
@@ -55,6 +60,10 @@ export default function ConsumptionPage() {
   const columns = [
     { field: 'orderNumber', headerName: 'Order #', width: 160,
       renderCell: ({ value }) => <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{value}</span> },
+    { field: 'orderId', headerName: 'Order UUID', flex: 1, minWidth: 200,
+      renderCell: ({ value }) => value
+        ? <Tooltip title={value}><span style={{ fontFamily: 'monospace', fontSize: 11, color: '#555' }}>{value}</span></Tooltip>
+        : '—' },
     { field: 'orderStatus', headerName: 'Order Status', width: 150,
       renderCell: ({ value }) => {
         const color = { DRAFT:'default', CONFIRMED:'primary', MATERIAL_READY:'warning',
@@ -65,6 +74,14 @@ export default function ConsumptionPage() {
       valueFormatter: v => v ? new Date(v).toLocaleString() : '—' },
     { field: 'materialCode', headerName: 'Material Code', width: 150 },
     { field: 'materialName', headerName: 'Material Name', width: 200 },
+    { field: 'materialId', headerName: 'Material UUID', flex: 1, minWidth: 200,
+      renderCell: ({ value }) => value
+        ? <Tooltip title={value}><span style={{ fontFamily: 'monospace', fontSize: 11, color: '#555' }}>{value}</span></Tooltip>
+        : '—' },
+    { field: 'deductedInventoryId', headerName: 'Deducted Inventory UUID', flex: 1, minWidth: 200,
+      renderCell: ({ value }) => value
+        ? <Tooltip title={value}><span style={{ fontFamily: 'monospace', fontSize: 11, color: '#1565c0' }}>{value}</span></Tooltip>
+        : <span style={{ color: '#bbb' }}>—</span> },
     { field: 'plannedQty', headerName: 'Planned Qty', width: 120, type: 'number',
       valueFormatter: v => v != null ? Number(v).toLocaleString(undefined, { maximumFractionDigits: 9 }) : '' },
     { field: 'adjustedQty', headerName: 'Adjusted Qty', width: 130, type: 'number',
@@ -89,6 +106,9 @@ export default function ConsumptionPage() {
     const s = v => (v == null ? '' : String(v)).toLowerCase()
     if (filterOrderNumber && !s(r.orderNumber).includes(filterOrderNumber.toLowerCase())) return false
     if (filterMaterial && !s(r.materialCode).includes(filterMaterial.toLowerCase()) && !s(r.materialName).includes(filterMaterial.toLowerCase())) return false
+    if (filterMaterialId && !s(r.materialId).includes(filterMaterialId.toLowerCase())) return false
+    if (filterInventoryId && !s(r.deductedInventoryId).includes(filterInventoryId.toLowerCase())) return false
+    if (filterCheckedBy && !s(r.updatedBy).includes(filterCheckedBy.toLowerCase())) return false
     if (filterCreatedFrom || filterCreatedTo) {
       const d = r.createdAt ? new Date(r.createdAt) : null
       if (!d || isNaN(d)) return false
@@ -102,6 +122,46 @@ export default function ConsumptionPage() {
   const selectedIds = selectionModel.type === 'exclude'
     ? filteredRows.map(r => r._id).filter(id => !selectionModel.ids.has(id))
     : Array.from(selectionModel.ids ?? []).filter(id => filteredIds.has(id))
+
+  const exportRows = selectedIds.length > 0
+    ? filteredRows.filter(r => selectedIds.includes(r._id))
+    : filteredRows
+
+  const buildExportData = () => exportRows.map(r => ({
+    'Order #':                 r.orderNumber ?? '',
+    'Order UUID':              r.orderId ?? '',
+    'Order Status':            r.orderStatus ?? '',
+    'Delivery':                r.deliveryDateTime ? new Date(r.deliveryDateTime).toLocaleString() : '',
+    'Material Code':           r.materialCode ?? '',
+    'Material Name':           r.materialName ?? '',
+    'Material UUID':           r.materialId ?? '',
+    'Deducted Inventory UUID': r.deductedInventoryId ?? '',
+    'Planned Qty':             r.plannedQty ?? '',
+    'Adjusted Qty':            r.adjustedQty ?? '',
+    'Available Qty':           r.availableQty ?? '',
+    'Check Result':            r.checkResult ?? '',
+    'Checked By':              r.updatedBy ?? '',
+    'Checked At':              r.createdAt ? new Date(r.createdAt).toLocaleString() : '',
+  }))
+
+  const handleDownloadXlsx = () => {
+    const ws = XLSX.utils.json_to_sheet(buildExportData())
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Consumption')
+    XLSX.writeFile(wb, `order_consumption_${new Date().toISOString().slice(0,10)}.xlsx`)
+  }
+
+  const handleDownloadCsv = () => {
+    const ws = XLSX.utils.json_to_sheet(buildExportData())
+    const csv = XLSX.utils.sheet_to_csv(ws)
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `order_consumption_${new Date().toISOString().slice(0,10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   const handleDeleteSelected = async () => {
     if (selectedIds.length === 0) return
@@ -127,6 +187,8 @@ export default function ConsumptionPage() {
     } else { setSelectionModel(model) }
   }
 
+  const inputStyle = { fontSize: 12, padding: '3px 6px' }
+
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
@@ -136,17 +198,24 @@ export default function ConsumptionPage() {
 
       {/* Filter bar */}
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2, alignItems: 'flex-end' }}>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-          <Typography variant="caption" color="text.secondary">Order #</Typography>
-          <input value={filterOrderNumber} onChange={e => setFilterOrderNumber(e.target.value)} placeholder="Filter Order #" style={{ fontSize: 12, padding: '3px 6px', width: 140 }} />
-        </Box>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-          <Typography variant="caption" color="text.secondary">Material</Typography>
-          <input value={filterMaterial} onChange={e => setFilterMaterial(e.target.value)} placeholder="Filter Material" style={{ fontSize: 12, padding: '3px 6px', width: 140 }} />
-        </Box>
+
+        {[
+          { label: 'Order #',       value: filterOrderNumber,  set: setFilterOrderNumber,  ph: 'Filter Order #',      w: 130 },
+          { label: 'Material Code', value: filterMaterial,     set: setFilterMaterial,     ph: 'Code / Name',         w: 130 },
+          { label: 'Material UUID', value: filterMaterialId,   set: setFilterMaterialId,   ph: 'Material UUID',       w: 160 },
+          { label: 'Inventory UUID',value: filterInventoryId,  set: setFilterInventoryId,  ph: 'Order / Inv. UUID',   w: 160 },
+          { label: 'Checked By',    value: filterCheckedBy,    set: setFilterCheckedBy,    ph: 'Checked By',          w: 120 },
+        ].map(({ label, value, set, ph, w }) => (
+          <Box key={label} sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+            <Typography variant="caption" color="text.secondary">{label}</Typography>
+            <input value={value} onChange={e => set(e.target.value)} placeholder={ph}
+              style={{ ...inputStyle, width: w }} />
+          </Box>
+        ))}
+
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
           <Typography variant="caption" color="text.secondary">Quick Range</Typography>
-          <select value={createdRangePreset} onChange={e => applyCreatedRangePreset(e.target.value)} style={{ fontSize: 12, padding: '3px 6px', height: 24 }}>
+          <select value={createdRangePreset} onChange={e => applyCreatedRangePreset(e.target.value)} style={{ ...inputStyle, height: 24 }}>
             <option value="">— All —</option>
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
@@ -158,27 +227,58 @@ export default function ConsumptionPage() {
             <option value="last_90">Last 90 Days</option>
           </select>
         </Box>
+
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
           <Typography variant="caption" color="text.secondary">Created From</Typography>
-          <input type="datetime-local" value={filterCreatedFrom} onChange={e => { setCreatedRangePreset(''); setFilterCreatedFrom(e.target.value) }} style={{ fontSize: 12, padding: '3px 6px' }} />
+          <input type="datetime-local" value={filterCreatedFrom}
+            onChange={e => { setCreatedRangePreset(''); setFilterCreatedFrom(e.target.value) }}
+            style={inputStyle} />
         </Box>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
           <Typography variant="caption" color="text.secondary">Created To</Typography>
-          <input type="datetime-local" value={filterCreatedTo} onChange={e => { setCreatedRangePreset(''); setFilterCreatedTo(e.target.value) }} style={{ fontSize: 12, padding: '3px 6px' }} />
+          <input type="datetime-local" value={filterCreatedTo}
+            onChange={e => { setCreatedRangePreset(''); setFilterCreatedTo(e.target.value) }}
+            style={inputStyle} />
         </Box>
+
         <Button size="small" variant="outlined" sx={{ alignSelf: 'flex-end' }}
-          onClick={() => { setFilterOrderNumber(''); setFilterMaterial(''); setFilterCreatedFrom(''); setFilterCreatedTo(''); setCreatedRangePreset('') }}>
+          onClick={() => {
+            setFilterOrderNumber(''); setFilterMaterial(''); setFilterMaterialId('')
+            setFilterInventoryId(''); setFilterCheckedBy('')
+            setFilterCreatedFrom(''); setFilterCreatedTo(''); setCreatedRangePreset('')
+          }}>
           Clear
         </Button>
-        <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'flex-end' }}>{filteredRows.length} / {rows.length}</Typography>
+
+        <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'flex-end' }}>
+          {filteredRows.length} / {rows.length}
+        </Typography>
+
+        {/* Export buttons */}
+        <Tooltip title={selectedIds.length > 0 ? `Export ${selectedIds.length} selected rows` : `Export all ${filteredRows.length} filtered rows`}>
+          <span>
+            <Button size="small" variant="outlined" color="success" startIcon={<DownloadIcon />}
+              onClick={handleDownloadXlsx} disabled={filteredRows.length === 0}
+              sx={{ alignSelf: 'flex-end' }}>
+              XLSX
+            </Button>
+          </span>
+        </Tooltip>
+        <Tooltip title={selectedIds.length > 0 ? `Export ${selectedIds.length} selected rows` : `Export all ${filteredRows.length} filtered rows`}>
+          <span>
+            <Button size="small" variant="outlined" color="success" startIcon={<DownloadIcon />}
+              onClick={handleDownloadCsv} disabled={filteredRows.length === 0}
+              sx={{ alignSelf: 'flex-end' }}>
+              CSV
+            </Button>
+          </span>
+        </Tooltip>
+
         <Button
-          size="small"
-          variant="outlined"
-          color="error"
+          size="small" variant="outlined" color="error"
           disabled={selectedIds.length === 0}
           onClick={handleDeleteSelected}
-          sx={{ alignSelf: 'flex-end' }}
-        >
+          sx={{ alignSelf: 'flex-end' }}>
           Delete Selected ({selectedIds.length})
         </Button>
       </Box>

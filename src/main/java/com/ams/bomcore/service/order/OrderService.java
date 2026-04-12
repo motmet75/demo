@@ -985,6 +985,18 @@ public class OrderService {
                     mvt.setStatus("COMPLETED");
                     movementRepository.save(mvt);
 
+                    // Stamp deducted_inventory_id on every consumption log for this order+material
+                    // so operators can trace which inventory batch was consumed.
+                    List<OrderConsumptionLogEntity> orderMatLogs = consumptionLogRepository.findByOrderId(orderId)
+                            .stream()
+                            .filter(l -> !"CANCELLED".equals(l.getStatus())
+                                    && l.getMaterial().getId().equals(matId))
+                            .toList();
+                    for (OrderConsumptionLogEntity cLog : orderMatLogs) {
+                        cLog.setDeductedInventoryId(inv.getId());
+                        consumptionLogRepository.save(cLog);
+                    }
+
                     rowRemaining = rowRemaining.subtract(forOrder);
                 }
 

@@ -29,6 +29,9 @@ public class OrderConsumptionDto {
     private Instant createdAt;
     private String updatedBy;
 
+    /** Inventory row UUID that was physically deducted (from order_consumption_log). */
+    private UUID deductedInventoryId;
+
     public OrderConsumptionDto() {}
 
     public OrderConsumptionDto(
@@ -37,7 +40,8 @@ public class OrderConsumptionDto {
             UUID materialId, String materialCode, String materialName,
             BigDecimal plannedQty, BigDecimal adjustedQty, BigDecimal availableQty,
             String checkResult, UUID tenantId, UUID companyId, Instant createdAt,
-            String updatedBy) {
+            String updatedBy,
+            UUID deductedInventoryId) {
         this.id = id;
         this.orderId = orderId;
         this.orderNumber = orderNumber;
@@ -54,6 +58,7 @@ public class OrderConsumptionDto {
         this.companyId = companyId;
         this.createdAt = createdAt;
         this.updatedBy = updatedBy;
+        this.deductedInventoryId = deductedInventoryId;
     }
 
     // ── Getters ────────────────────────────────────────────────────────
@@ -74,4 +79,5 @@ public class OrderConsumptionDto {
     public UUID getCompanyId() { return companyId; }
     public Instant getCreatedAt() { return createdAt; }
     public String getUpdatedBy() { return updatedBy; }
+    public UUID getDeductedInventoryId() { return deductedInventoryId; }
 }
