@@ -905,7 +905,9 @@ public class OrderService {
                     required, available, sufficient));
 
             // Persist per-order consumption records.
-            // adjustedQty = effectivePlannedQty × (1 − quota%/100) for display
+            // adjustedQty: if available >= required, will pull full planned qty.
+            // Otherwise, distribute available proportionally across each log's planned qty.
+            // This preserves precision using BigDecimal (no flooring/truncation).
             for (UUID orderId : orderIds) {
                 List<OrderConsumptionLogEntity> orderLogs = consumptionLogRepository.findByOrderId(orderId);
                 for (OrderConsumptionLogEntity log : orderLogs) {
@@ -914,9 +916,25 @@ public class OrderService {
                         oc.setOrderId(orderId);
                         oc.setMaterial(mat);
                         oc.setPlannedQty(log.getEffectivePlannedQty());
-                        // adjustedQty = what will actually be pulled from stock after quota cap
-                        oc.setAdjustedQty(log.getEffectivePlannedQty()
-                                .multiply(BigDecimal.ONE.subtract(quotaFactor)));
+                        
+                        // adjustedQty = what will actually be pulled from stock
+                        // If sufficient stock, pull full planned qty.
+                        // If insufficient, distribute available proportionally.
+                        BigDecimal adjusted;
+                        if (available.compareTo(required) >= 0) {
+                            // Stock is sufficient - can pull full amount
+                            adjusted = log.getEffectivePlannedQty();
+                        } else if (required.compareTo(BigDecimal.ZERO) > 0) {
+                            // Stock is insufficient - distribute available proportionally
+                            // adjustedQty = plannedQty × (available / required)
+                            adjusted = log.getEffectivePlannedQty()
+                                    .multiply(available)
+                                    .divide(required, java.math.MathContext.DECIMAL128);
+                        } else {
+                            adjusted = BigDecimal.ZERO;
+                        }
+                        
+                        oc.setAdjustedQty(adjusted);
                         oc.setAvailableQty(available);
                         oc.setCheckResult(sufficient ? "SUFFICIENT" : "INSUFFICIENT");
                         oc.setTenantId(tenantId);
