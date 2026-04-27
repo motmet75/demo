@@ -600,22 +600,11 @@ public class OrderService {
             BigDecimal plannedQty = bomItem.getQuantity()
                     .multiply(orderedQty);
 
-            // effective_planned_qty = planned_qty × (1 − quota%/100)
-            // Read materialQuotaPercentage from the first available inventory row for this material.
-            // quota% represents the waste/scrap buffer: e.g. 10% means only 90% of onHand
-            // is usable, so we only request 90% of the nominal planned qty from stock.
-            BigDecimal quotaPct = inventoryRepository.findByTenantIdAndCompanyId(tenantId, companyId)
-                    .stream()
-                    .filter(e -> e.getMaterial() != null && e.getMaterial().getId().equals(material.getId())
-                            && e.getMaterialQuotaPercentage() != null)
-                    .map(InventoryEntity::getMaterialQuotaPercentage)
-                    .findFirst()
-                    .orElse(BigDecimal.ZERO);
-            // quotaFactor = quota% / 100  (e.g. 10% → 0.10)
-            BigDecimal quotaFactor = quotaPct.divide(new BigDecimal("100"), java.math.MathContext.DECIMAL128);
-            // effectivePlannedQty = plannedQty × (1 − quotaFactor)
-            BigDecimal effectivePlannedQty = plannedQty
-                    .multiply(BigDecimal.ONE.subtract(quotaFactor));
+            // ✅ FIXED: effectivePlannedQty = plannedQty (full BOM demand)
+            // Quota percentage is ONLY for deduction logic (limits how much can be pulled from inventory).
+            // It does NOT reduce the actual planned requirement.
+            // This is the full quantity needed for production.
+            BigDecimal effectivePlannedQty = plannedQty;
 
             // No hard inventory check here — use checkInventory action instead
 
