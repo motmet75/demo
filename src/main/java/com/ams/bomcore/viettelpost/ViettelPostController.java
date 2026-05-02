@@ -3,6 +3,7 @@ package com.ams.bomcore.viettelpost;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.RestController;
 
 import com.ams.bomcore.viettelpost.ViettelPostDTO.*;
 
@@ -16,8 +17,9 @@ import java.util.Map;
 // This controller is superseded by com.demo.viettelpost.ViettelPostController.
 // @RestController annotation removed to avoid bean name and URL mapping conflicts.
 // @RestController("bomCoreViettelPostController")
+@RestController("bomCoreViettelPostController")
 @RequestMapping("/viettelpost")
-@CrossOrigin(origins = "*")
+@CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173"})
 public class ViettelPostController {
 
     @Autowired
