@@ -385,7 +385,7 @@ public class InventoryController {
 
         StringBuilder csv = new StringBuilder();
         // header
-        csv.append("id,material_code,batch_no,warehouse_code,order_to_deduction,material_quota_percentage\n");
+        csv.append("id,material_code,batch_no,warehouse_code,order_to_deduction,material_quota_percentage,unit_price\n");
 
         if (tenantId != null && companyId != null) {
             // pre-fill with live rows
@@ -397,6 +397,7 @@ public class InventoryController {
                    .append(inv.getWarehouseCode()     == null ? "" : inv.getWarehouseCode()).append(',')
                    .append(inv.getOrderToDeduction()  == null ? "" : inv.getOrderToDeduction()).append(',')
                    .append(inv.getMaterialQuotaPercentage() == null ? "" : inv.getMaterialQuotaPercentage().toPlainString())
+                   .append(inv.getUnitPrice() == null ? "" : inv.getUnitPrice().toPlainString())
                    .append('\n');
             }
         } else {

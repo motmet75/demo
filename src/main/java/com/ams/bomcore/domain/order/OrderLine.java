@@ -5,6 +5,9 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
+import com.fasterxml.jackson.annotation.JsonIdentityInfo;
+import com.fasterxml.jackson.annotation.JsonIdentityReference;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -38,6 +41,7 @@ public class OrderLine {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "order_id", nullable = false)
+    @JsonIdentityReference(alwaysAsId = true) // This forces Jackson to send just the ID number
     private OrderHeader order;
 
     @Column(name = "line_number", nullable = false)

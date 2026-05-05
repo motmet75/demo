@@ -21,6 +21,12 @@ public interface OrderLineRepository extends JpaRepository<OrderLine, UUID> {
 
     Optional<OrderLine> findByIdAndTenantIdAndCompanyId(UUID id, UUID tenantId, UUID companyId);
 
+    /**
+     * All lines for a tenant/company — used by OrderLineService.listLines()
+     * when no orderId filter is supplied (cross-order view).
+     */
+    List<OrderLine> findByTenantIdAndCompanyId(UUID tenantId, UUID companyId);
+
     // Find MODEL lines for a given order (for BOM explosion)
     @Query("SELECT l FROM OrderLine l WHERE l.order.id = :orderId AND l.lineType = 'MODEL'")
     List<OrderLine> findModelLinesByOrderId(@Param("orderId") UUID orderId);

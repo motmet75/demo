@@ -72,8 +72,9 @@ public class InventoryPatchCsvService {
 
             boolean hasOrderCol    = colMap.containsKey("order_to_deduction");
             boolean hasQuotaCol    = colMap.containsKey("material_quota_percentage");
+            boolean hasUnitPriceCol    = colMap.containsKey("unit_price");
 
-            if (!hasOrderCol && !hasQuotaCol) {
+            if (!hasOrderCol && !hasQuotaCol && !hasUnitPriceCol) {
                 result.setSuccess(false);
                 result.setMessage("CSV must contain at least one of: order_to_deduction, material_quota_percentage");
                 return result;
@@ -145,6 +146,25 @@ public class InventoryPatchCsvService {
                             changed = true;
                         } catch (NumberFormatException e) {
                             errors.add("Line " + lineNumber + ": invalid number for material_quota_percentage: '" + val + "'");
+                            continue;
+                        }
+                    }
+                    // blank value → leave unchanged
+                }
+                
+                if (hasUnitPriceCol) {
+                    String val = getCol(values, colMap, "unit_price");
+                    if (val != null && !val.isBlank()) {
+                        try {
+                            BigDecimal price = new BigDecimal(val.trim());
+                            if (price.compareTo(BigDecimal.ZERO) < 0) {
+                                errors.add("Line " + lineNumber + ": unit_price cannot be negative");
+                                continue;
+                            }
+                            inv.setUnitPrice(price);
+                            changed = true;
+                        } catch (NumberFormatException e) {
+                            errors.add("Line " + lineNumber + ": invalid number for unit_price: '" + val + "'");
                             continue;
                         }
                     }
