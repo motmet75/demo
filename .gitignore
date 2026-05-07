@@ -96,3 +96,4 @@ id_ed25519_demo.pub
 src/main/resources/google/**
 src/main/resources/application.properties
 src/main/resources/google/
+bom-frontend/eslint.config.js
