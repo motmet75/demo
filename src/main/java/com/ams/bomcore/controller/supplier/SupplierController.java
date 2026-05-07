@@ -1,11 +1,8 @@
 package com.ams.bomcore.controller.supplier;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
-import java.util.Optional;
-import java.util.Collections;
-
-import jakarta.validation.Valid;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -22,14 +19,16 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.ams.bomcore.domain.supplier.Supplier;
-import com.ams.bomcore.repository.SupplierRepository;
-import com.ams.bomcore.repository.SupplierIssueRepository;
-import com.ams.bomcore.service.supplier.SupplierService;
-import com.ams.bomcore.repository.TenantRepository;
-import com.ams.bomcore.repository.CompanyRepository;
-import com.ams.bomcore.domain.tenant.Tenant;
 import com.ams.bomcore.domain.company.Company;
+import com.ams.bomcore.domain.supplier.Supplier;
+import com.ams.bomcore.domain.tenant.Tenant;
+import com.ams.bomcore.repository.CompanyRepository;
+import com.ams.bomcore.repository.SupplierIssueRepository;
+import com.ams.bomcore.repository.SupplierRepository;
+import com.ams.bomcore.repository.TenantRepository;
+import com.ams.bomcore.service.supplier.SupplierService;
+
+import jakarta.validation.Valid;
 
 @CrossOrigin(origins = "http://localhost:5173")
 @RestController
@@ -95,7 +94,9 @@ public class SupplierController {
             tenantId = resolveTenant(tenantId, headerTenantId);
             companyId = resolveCompany(companyId, headerCompanyId);
 
-            if (tenantId == null || companyId == null) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Collections.singletonMap("message", "tenantId and companyId are required"));
+            if (tenantId == null || companyId == null) {
+				return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Collections.singletonMap("message", "tenantId and companyId are required"));
+			}
 
             Tenant tenant = tenantRepository.findById(tenantId).orElseThrow(() -> new IllegalArgumentException("tenant not found"));
             Company company = companyRepository.findById(companyId).orElseThrow(() -> new IllegalArgumentException("company not found"));
@@ -132,7 +133,9 @@ public class SupplierController {
             }
             tenantId = resolveTenant(tenantId, headerTenantId);
             companyId = resolveCompany(companyId, headerCompanyId);
-            if (tenantId == null || companyId == null) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Collections.singletonMap("message", "tenantId and companyId are required"));
+            if (tenantId == null || companyId == null) {
+				return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Collections.singletonMap("message", "tenantId and companyId are required"));
+			}
 
             Tenant tenant = tenantRepository.findById(tenantId).orElseThrow(() -> new IllegalArgumentException("tenant not found"));
             Company company = companyRepository.findById(companyId).orElseThrow(() -> new IllegalArgumentException("company not found"));

@@ -16,8 +16,8 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.Transient;
+import jakarta.persistence.UniqueConstraint;
 
 /**
  * Entity mapping for table `inventory`.
@@ -541,8 +541,12 @@ public class InventoryEntity {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+			return true;
+		}
+        if (o == null || getClass() != o.getClass()) {
+			return false;
+		}
         InventoryEntity that = (InventoryEntity) o;
         return Objects.equals(id, that.id);
     }

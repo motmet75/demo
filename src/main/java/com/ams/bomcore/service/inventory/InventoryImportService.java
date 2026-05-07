@@ -96,7 +96,9 @@ public class InventoryImportService {
 
             while ((line = reader.readLine()) != null) {
                 lineNumber++;
-                if (line.trim().isEmpty()) continue;
+                if (line.trim().isEmpty()) {
+					continue;
+				}
 
                 try {
                     String[] values = parseCsvLine(line);
@@ -189,21 +191,21 @@ public class InventoryImportService {
                     // First check if there's any existing record with this business key
                     Optional<InventoryEntity> anyExisting = inventoryRepository.findByMaterialAndWarehouseCodeAndBatchNo(
                             material, warehouse.getCode(), row.batchNo);
-                    
+
                     // If a record exists, verify it belongs to the same tenant+company
                     if (anyExisting.isPresent()) {
                         InventoryEntity existingRecord = anyExisting.get();
                         if (!existingRecord.getTenantId().equals(tenantId) || !existingRecord.getCompanyId().equals(companyId)) {
                             throw new RuntimeException(
                                 "Cannot import: An inventory record already exists for a different tenant/company. " +
-                                "Material: " + row.materialCode + 
-                                ", Warehouse: " + row.warehouseCode + 
-                                ", Batch: " + row.batchNo + 
+                                "Material: " + row.materialCode +
+                                ", Warehouse: " + row.warehouseCode +
+                                ", Batch: " + row.batchNo +
                                 ". This violates the unique constraint (tenant_id, company_id, warehouse_id, material_id, batch_no)."
                             );
                         }
                     }
-                    
+
                     // Now find with tenant+company scope to get or create
                     Optional<InventoryEntity> existing = inventoryRepository.findByMaterialAndWarehouseCodeAndBatchNoAndTenantIdAndCompanyId(
                             material, warehouse.getCode(), row.batchNo, tenantId, companyId);
@@ -235,7 +237,7 @@ public class InventoryImportService {
                     inv.setQuantityLocked(row.quantityLocked != null ? row.quantityLocked : BigDecimal.ZERO);
                     inv.setMaterialQuota(row.materialQuota);
                     inv.setMaterialQuotaPercentage(row.materialQuotaPercentage);
-                    
+
                     inv.setContractId(contractId);
                     inv.setContractCode(row.contractCode);
                     inv.setOrderToDeduction(row.orderToDeduction);
@@ -243,25 +245,25 @@ public class InventoryImportService {
                     inv.setUnit(row.unit != null && !row.unit.trim().isEmpty() ? row.unit : "pcs");
                     inv.setUnitPrice(row.unitPrice != null ? row.unitPrice : BigDecimal.ZERO);
                     inv.setCurrency(row.currency != null && !row.currency.trim().isEmpty() ? row.currency : "USD");
-                    
+
                     inv.setHsCode(row.hsCode);
                     inv.setOriginType(row.originType);
                     inv.setOriginCountry(row.originCountry);
-                    
+
                     inv.setXformNo(row.xformNo);
                     inv.setCdsNo(row.cdsNo);
                     inv.setPurchaseNo(row.purchaseNo);
-                    
+
                     inv.setXformDate(row.xformDate);
                     inv.setPurchaseDateTime(row.purchaseDateTime);
                     inv.setCdsDateTime(row.cdsDateTime);
                     inv.setProductionDateTime(row.productionDateTime);
                     inv.setExpirationDateTime(row.expirationDateTime);
-                    
+
                     inv.setVisible(row.visible != null ? row.visible : true);
                     inv.setApproved(row.approved != null ? row.approved : false);
                     inv.setLocked(row.locked != null ? row.locked : false);
-                    
+
                     // Sync denormalized codes
                     inv.setMaterialCodeDenorm(material.getMaterialCode());
                     inv.setWarehouseCodeDenorm(warehouse.getCode());
@@ -315,7 +317,7 @@ public class InventoryImportService {
             result.setCreated(createdCount);
             result.setUpdated(updatedCount);
             result.setErrors(errors);
-            result.setMessage(String.format("Import completed: %d created, %d updated, %d errors", 
+            result.setMessage(String.format("Import completed: %d created, %d updated, %d errors",
                     createdCount, updatedCount, errors.size()));
 
         } catch (Exception e) {
@@ -343,7 +345,7 @@ public class InventoryImportService {
     private CsvRow parseRow(String[] values, Map<String, Integer> columnMap, int lineNumber) {
         CsvRow row = new CsvRow();
         row.lineNumber = lineNumber;
-        
+
         row.materialCode = getColumnValue(values, columnMap, "material_code");
         row.warehouseCode = getColumnValue(values, columnMap, "warehouse_code");
         row.batchNo = getColumnValue(values, columnMap, "batch_no");
@@ -358,7 +360,7 @@ public class InventoryImportService {
         row.xformNo = getColumnValue(values, columnMap, "xform_no");
         row.cdsNo = getColumnValue(values, columnMap, "cds_no");
         row.purchaseNo = getColumnValue(values, columnMap, "purchase_no");
-        
+
         row.quantityOnHand = parseBigDecimal(getColumnValue(values, columnMap, "quantity_on_hand"));
         row.quantityTotal = parseBigDecimal(getColumnValue(values, columnMap, "quantity_total"));
         row.quantityReserved = parseBigDecimal(getColumnValue(values, columnMap, "quantity_reserved"));
@@ -366,29 +368,33 @@ public class InventoryImportService {
         row.materialQuota = parseBigDecimal(getColumnValue(values, columnMap, "material_quota"));
         row.materialQuotaPercentage = parseBigDecimal(getColumnValue(values, columnMap, "material_quota_percentage"));
         row.unitPrice = parseBigDecimal(getColumnValue(values, columnMap, "unit_price"));
-        
+
         row.xformDate = parseLocalDate(getColumnValue(values, columnMap, "xform_date"));
         row.purchaseDateTime = parseInstant(getColumnValue(values, columnMap, "purchase_date_time"));
         row.cdsDateTime = parseInstant(getColumnValue(values, columnMap, "cds_date_time"));
         row.productionDateTime = parseInstant(getColumnValue(values, columnMap, "production_date_time"));
         row.expirationDateTime = parseInstant(getColumnValue(values, columnMap, "expiration_date_time"));
-        
+
         row.visible = parseBoolean(getColumnValue(values, columnMap, "visible"));
         row.approved = parseBoolean(getColumnValue(values, columnMap, "approved"));
         row.locked = parseBoolean(getColumnValue(values, columnMap, "locked"));
-        
+
         return row;
     }
 
     private String getColumnValue(String[] values, Map<String, Integer> columnMap, String columnName) {
         Integer idx = columnMap.get(columnName);
-        if (idx == null || idx >= values.length) return null;
+        if (idx == null || idx >= values.length) {
+			return null;
+		}
         String val = values[idx].trim();
         return val.isEmpty() ? null : val;
     }
 
     private BigDecimal parseBigDecimal(String value) {
-        if (value == null || value.trim().isEmpty()) return null;
+        if (value == null || value.trim().isEmpty()) {
+			return null;
+		}
         try {
             return new BigDecimal(value.trim());
         } catch (NumberFormatException e) {
@@ -397,7 +403,9 @@ public class InventoryImportService {
     }
 
     private LocalDate parseLocalDate(String value) {
-        if (value == null || value.trim().isEmpty()) return null;
+        if (value == null || value.trim().isEmpty()) {
+			return null;
+		}
         try {
             return LocalDate.parse(value.trim(), DateTimeFormatter.ISO_LOCAL_DATE);
         } catch (DateTimeParseException e) {
@@ -406,7 +414,9 @@ public class InventoryImportService {
     }
 
     private Instant parseInstant(String value) {
-        if (value == null || value.trim().isEmpty()) return null;
+        if (value == null || value.trim().isEmpty()) {
+			return null;
+		}
         try {
             return Instant.parse(value.trim());
         } catch (DateTimeParseException e) {
@@ -420,7 +430,9 @@ public class InventoryImportService {
     }
 
     private Boolean parseBoolean(String value) {
-        if (value == null || value.trim().isEmpty()) return null;
+        if (value == null || value.trim().isEmpty()) {
+			return null;
+		}
         String v = value.trim().toLowerCase();
         return v.equals("true") || v.equals("1") || v.equals("yes") || v.equals("y");
     }

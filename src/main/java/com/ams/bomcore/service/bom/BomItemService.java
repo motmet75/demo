@@ -60,7 +60,7 @@ public class BomItemService {
                                  UUID parentItemId, UUID tenantId, UUID companyId) {
         BomEntity bom = bomRepository.findById(bomId)
                 .orElseThrow(() -> new IllegalArgumentException("BOM not found: " + bomId));
-        
+
         Material material = materialRepository.findById(materialId)
                 .orElseThrow(() -> new IllegalArgumentException("Material not found: " + materialId));
 

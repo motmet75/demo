@@ -16,7 +16,9 @@ public class TenantValidationService {
     }
 
     public boolean existsAndActive(String tenantId) {
-        if (tenantId == null) return false;
+        if (tenantId == null) {
+			return false;
+		}
         try {
             UUID id = UUID.fromString(tenantId);
             var opt = tenantRepository.findById(id);

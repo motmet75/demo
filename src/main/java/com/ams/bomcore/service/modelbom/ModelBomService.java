@@ -21,8 +21,8 @@ import com.ams.bomcore.domain.modelbom.ModelBom;
 import com.ams.bomcore.repository.MaterialRepository;
 import com.ams.bomcore.repository.ModelBomRepository;
 import com.ams.bomcore.repository.ModelRepository;
-import com.ams.bomcore.service.model.ModelService;
 import com.ams.bomcore.service.bom.BomService;
+import com.ams.bomcore.service.model.ModelService;
 
 @Service
 public class ModelBomService {
@@ -176,7 +176,9 @@ public class ModelBomService {
     @Transactional(rollbackFor = Exception.class)
     public ImportResult importFromParsedRows(List<ModelBomCsvRow> rows, UUID tenantId, UUID companyId) {
         ImportResult result = new ImportResult();
-        if (rows == null || rows.isEmpty()) return result;
+        if (rows == null || rows.isEmpty()) {
+			return result;
+		}
 
         // Validate duplicates in input: modelCode + materialCode combos
         Set<String> seenCombos = new HashSet<>();
@@ -189,7 +191,9 @@ public class ModelBomService {
                 seenCombos.add(key);
             }
         }
-        if (result.hasErrors()) return result; // fail fast on duplicate inputs
+        if (result.hasErrors()) {
+			return result; // fail fast on duplicate inputs
+		}
 
         // Gather distinct material codes and verify they exist
         Set<String> materialCodes = rows.stream().map(r -> r.getMaterialCode().trim()).collect(Collectors.toSet());
@@ -226,7 +230,9 @@ public class ModelBomService {
         for (Map.Entry<String, List<ModelBomCsvRow>> e : byModel.entrySet()) {
             String modelCode = e.getKey();
             Model model = existingModels.get(modelCode);
-            if (model == null) continue; // nothing to check for models that will be created
+            if (model == null) {
+				continue; // nothing to check for models that will be created
+			}
             List<ModelBomCsvRow> modelRows = e.getValue();
             for (ModelBomCsvRow row : modelRows) {
                 String mcode = row.getMaterialCode().trim();
@@ -237,7 +243,9 @@ public class ModelBomService {
                 }
             }
         }
-        if (result.hasErrors()) return result; // fail fast if DB is inconsistent
+        if (result.hasErrors()) {
+			return result; // fail fast if DB is inconsistent
+		}
 
         // Now perform creation/upsert within the transaction
         for (Map.Entry<String, List<ModelBomCsvRow>> e : byModel.entrySet()) {
@@ -260,15 +268,23 @@ public class ModelBomService {
                     newModel.setModelCode(first.getModelCode());
                     newModel.setModelName(first.getModelName());
                     newModel.setTenantId(tenantId);
-                    if (companyId != null) newModel.setCompanyId(companyId);
+                    if (companyId != null) {
+						newModel.setCompanyId(companyId);
+					}
                     // Apply new fields from SQL schema
-                    if (first.getHsCode() != null) newModel.setHsCode(first.getHsCode());
-                    if (first.getCoCriteria() != null) newModel.setCoCriteria(first.getCoCriteria());
+                    if (first.getHsCode() != null) {
+						newModel.setHsCode(first.getHsCode());
+					}
+                    if (first.getCoCriteria() != null) {
+						newModel.setCoCriteria(first.getCoCriteria());
+					}
                 } else {
                     newModel.setModelCode(modelCode);
                     newModel.setModelName(modelCode);
                     newModel.setTenantId(tenantId);
-                    if (companyId != null) newModel.setCompanyId(companyId);
+                    if (companyId != null) {
+						newModel.setCompanyId(companyId);
+					}
                 }
                 model = modelService.createForTenant(newModel, tenantId);
                 createdModel = true;
@@ -330,7 +346,9 @@ public class ModelBomService {
     @Transactional(rollbackFor = Exception.class)
     public ImportResult importIntoModel(List<ModelBomCsvRow> rows, UUID tenantId, UUID companyId, UUID modelId) {
         ImportResult result = new ImportResult();
-        if (rows == null || rows.isEmpty()) return result;
+        if (rows == null || rows.isEmpty()) {
+			return result;
+		}
 
         // Validate tenant and model existence
         Model model = modelRepository.findById(modelId).orElse(null);
@@ -357,7 +375,9 @@ public class ModelBomService {
                 seenMaterials.add(mcode);
             }
         }
-        if (result.hasErrors()) return result;
+        if (result.hasErrors()) {
+			return result;
+		}
 
         // Gather distinct material codes and verify they exist
         Set<String> materialCodes = rows.stream().map(r -> r.getMaterialCode().trim()).collect(Collectors.toSet());
@@ -383,7 +403,9 @@ public class ModelBomService {
                 result.getErrors().add("Database contains duplicate ModelBom records for modelId='" + modelId + "' and materialCode='" + mc + "' -- clean DB first");
             }
         }
-        if (result.hasErrors()) return result;
+        if (result.hasErrors()) {
+			return result;
+		}
 
         // Now create/update records
         for (ModelBomCsvRow row : rows) {

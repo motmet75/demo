@@ -1,6 +1,5 @@
 package com.ams.bomcore.controller.order.dto;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -8,7 +7,6 @@ import java.util.UUID;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Positive;
 
 /**
  * DTO for updating an order header (fields + optionally replace lines).

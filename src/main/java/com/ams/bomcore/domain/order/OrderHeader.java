@@ -113,10 +113,16 @@ public class OrderHeader {
 
     @PrePersist
     private void prePersist() {
-        if (id == null) id = UUID.randomUUID();
-        if (createdAt == null) createdAt = Instant.now();
+        if (id == null) {
+			id = UUID.randomUUID();
+		}
+        if (createdAt == null) {
+			createdAt = Instant.now();
+		}
         updatedAt = Instant.now();
-        if (status == null) status = STATUS_DRAFT;
+        if (status == null) {
+			status = STATUS_DRAFT;
+		}
     }
 
     @PreUpdate
@@ -191,8 +197,12 @@ public class OrderHeader {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+			return true;
+		}
+        if (o == null || getClass() != o.getClass()) {
+			return false;
+		}
         OrderHeader that = (OrderHeader) o;
         return Objects.equals(id, that.id);
     }

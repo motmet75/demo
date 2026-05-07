@@ -52,6 +52,6 @@ public class CartItem {
     }
 
     public long getLineTotalMinor() {
-        return unitPriceMinor * (long) quantity;
+        return unitPriceMinor * quantity;
     }
 }

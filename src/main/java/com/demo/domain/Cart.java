@@ -14,7 +14,9 @@ public class Cart {
     public Cart() {}
 
     public void addItem(CartItem item) {
-        if (item == null) return;
+        if (item == null) {
+			return;
+		}
         // Merge quantities for same product
         Optional<CartItem> existing = items.stream().filter(i -> i.getProductId().equals(item.getProductId())).findFirst();
         if (existing.isPresent()) {

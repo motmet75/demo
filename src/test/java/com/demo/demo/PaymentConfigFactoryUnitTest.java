@@ -3,13 +3,13 @@ package com.demo.demo;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import org.junit.jupiter.api.Test;
+
 import com.demo.payment.PaymentService;
 import com.demo.payment.impl.CreditCardPaymentService;
+import com.demo.payment.impl.DisabledPaymentService;
 import com.demo.payment.impl.PayPalPaymentService;
 import com.demo.payment.impl.PaymentConfig;
-import com.demo.payment.impl.DisabledPaymentService;
-
-import org.junit.jupiter.api.Test;
 
 public class PaymentConfigFactoryUnitTest {
 

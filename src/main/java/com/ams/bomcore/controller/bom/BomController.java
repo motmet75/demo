@@ -32,10 +32,16 @@ public class BomController {
                              @RequestParam(value = "companyId", required = false) String companyId,
                              @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenant,
                              @RequestHeader(value = "X-Company-Id", required = false) String headerCompany) {
-        if (headerTenant != null && !headerTenant.isBlank()) tenantId = headerTenant;
-        if (headerCompany != null && !headerCompany.isBlank()) companyId = headerCompany;
+        if (headerTenant != null && !headerTenant.isBlank()) {
+			tenantId = headerTenant;
+		}
+        if (headerCompany != null && !headerCompany.isBlank()) {
+			companyId = headerCompany;
+		}
 
-        if (tenantId == null || companyId == null) throw new IllegalArgumentException("tenantId and companyId are required");
+        if (tenantId == null || companyId == null) {
+			throw new IllegalArgumentException("tenantId and companyId are required");
+		}
 
         UUID tenantUuid = UUID.fromString(tenantId);
         UUID companyUuid = UUID.fromString(companyId);
@@ -51,10 +57,16 @@ public class BomController {
                                 @RequestParam(value = "companyId", required = false) String companyId,
                                 @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenant,
                                 @RequestHeader(value = "X-Company-Id", required = false) String headerCompany) {
-        if (headerTenant != null && !headerTenant.isBlank()) tenantId = headerTenant;
-        if (headerCompany != null && !headerCompany.isBlank()) companyId = headerCompany;
+        if (headerTenant != null && !headerTenant.isBlank()) {
+			tenantId = headerTenant;
+		}
+        if (headerCompany != null && !headerCompany.isBlank()) {
+			companyId = headerCompany;
+		}
 
-        if (tenantId == null || companyId == null) throw new IllegalArgumentException("tenantId and companyId are required");
+        if (tenantId == null || companyId == null) {
+			throw new IllegalArgumentException("tenantId and companyId are required");
+		}
 
         UUID tenantUuid = UUID.fromString(tenantId);
         UUID companyUuid = UUID.fromString(companyId);

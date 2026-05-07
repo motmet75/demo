@@ -16,7 +16,9 @@ public final class PaymentServiceFactory {
         if (!enabled) {
             return new com.demo.payment.impl.DisabledPaymentService();
         }
-        if (type == null) throw new IllegalArgumentException("payment type must not be null");
+        if (type == null) {
+			throw new IllegalArgumentException("payment type must not be null");
+		}
         PaymentAbstractFactory factory;
         switch (type.toLowerCase()) {
             case "paypal":

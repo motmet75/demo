@@ -1,11 +1,8 @@
 package com.ams.bomcore.controller.warehouse;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
-import java.util.Optional;
-import java.util.Collections;
-
-import jakarta.validation.Valid;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -22,13 +19,15 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.ams.bomcore.domain.company.Company;
 import com.ams.bomcore.domain.inventory.WarehouseEntity;
+import com.ams.bomcore.domain.tenant.Tenant;
+import com.ams.bomcore.repository.CompanyRepository;
+import com.ams.bomcore.repository.TenantRepository;
 import com.ams.bomcore.repository.WarehouseRepository;
 import com.ams.bomcore.service.warehouse.WarehouseService;
-import com.ams.bomcore.repository.TenantRepository;
-import com.ams.bomcore.repository.CompanyRepository;
-import com.ams.bomcore.domain.tenant.Tenant;
-import com.ams.bomcore.domain.company.Company;
+
+import jakarta.validation.Valid;
 
 @CrossOrigin(origins = "http://localhost:5173")
 @RestController
@@ -92,7 +91,9 @@ public class WarehouseController {
             tenantId = resolveTenant(tenantId, headerTenantId);
             companyId = resolveCompany(companyId, headerCompanyId);
 
-            if (tenantId == null || companyId == null) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Collections.singletonMap("message", "tenantId and companyId are required"));
+            if (tenantId == null || companyId == null) {
+				return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Collections.singletonMap("message", "tenantId and companyId are required"));
+			}
 
             Tenant tenant = tenantRepository.findById(tenantId).orElseThrow(() -> new IllegalArgumentException("tenant not found"));
             Company company = companyRepository.findById(companyId).orElseThrow(() -> new IllegalArgumentException("company not found"));
@@ -129,7 +130,9 @@ public class WarehouseController {
             }
             tenantId = resolveTenant(tenantId, headerTenantId);
             companyId = resolveCompany(companyId, headerCompanyId);
-            if (tenantId == null || companyId == null) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Collections.singletonMap("message", "tenantId and companyId are required"));
+            if (tenantId == null || companyId == null) {
+				return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Collections.singletonMap("message", "tenantId and companyId are required"));
+			}
 
             Tenant tenant = tenantRepository.findById(tenantId).orElseThrow(() -> new IllegalArgumentException("tenant not found"));
             Company company = companyRepository.findById(companyId).orElseThrow(() -> new IllegalArgumentException("company not found"));
@@ -174,7 +177,9 @@ public class WarehouseController {
 
     // Defensive sanitation: convert literal strings "null"/"undefined"/empty into real nulls and trim values
     private void sanitize(WarehouseEntity w) {
-        if (w == null) return;
+        if (w == null) {
+			return;
+		}
 
         w.setCode(nullIfLiteral(w.getCode()));
         w.setName(nullIfLiteral(w.getName()));
@@ -183,11 +188,17 @@ public class WarehouseController {
     }
 
     private String nullIfLiteral(String s) {
-        if (s == null) return null;
+        if (s == null) {
+			return null;
+		}
         String t = s.trim();
-        if (t.isEmpty()) return null;
+        if (t.isEmpty()) {
+			return null;
+		}
         String low = t.toLowerCase();
-        if ("null".equals(low) || "undefined".equals(low)) return null;
+        if ("null".equals(low) || "undefined".equals(low)) {
+			return null;
+		}
         return t;
     }
 }

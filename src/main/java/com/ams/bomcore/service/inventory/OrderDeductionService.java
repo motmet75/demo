@@ -111,12 +111,16 @@ public class OrderDeductionService {
         List<InventoryEntity> updated = new ArrayList<>();
 
         for (InventoryEntity row : rows) {
-            if (remaining.compareTo(BigDecimal.ZERO) <= 0) break;
+            if (remaining.compareTo(BigDecimal.ZERO) <= 0) {
+				break;
+			}
 
             BigDecimal available = orZero(row.getQuantityOnHand());
             BigDecimal locked    = orZero(row.getQuantityLocked());
             BigDecimal usable    = available.subtract(locked);
-            if (usable.compareTo(BigDecimal.ZERO) <= 0) continue;
+            if (usable.compareTo(BigDecimal.ZERO) <= 0) {
+				continue;
+			}
 
             // quota factor for this row
             BigDecimal factor = quotaFactor(row.getMaterialQuotaPercentage());
@@ -217,12 +221,16 @@ public class OrderDeductionService {
         List<ConsumptionLine> lines = new ArrayList<>();
 
         for (InventoryEntity row : rows) {
-            if (remaining.compareTo(BigDecimal.ZERO) <= 0) break;
+            if (remaining.compareTo(BigDecimal.ZERO) <= 0) {
+				break;
+			}
 
             BigDecimal available = orZero(row.getQuantityOnHand());
             BigDecimal locked    = orZero(row.getQuantityLocked());
             BigDecimal usable    = available.subtract(locked);
-            if (usable.compareTo(BigDecimal.ZERO) <= 0) continue;
+            if (usable.compareTo(BigDecimal.ZERO) <= 0) {
+				continue;
+			}
 
             BigDecimal factor = quotaFactor(row.getMaterialQuotaPercentage());
 

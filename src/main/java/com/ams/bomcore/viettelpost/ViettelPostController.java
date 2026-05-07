@@ -1,15 +1,30 @@
 package com.ams.bomcore.viettelpost;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.web.bind.annotation.RestController;
-
-import com.ams.bomcore.viettelpost.ViettelPostDTO.*;
-
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.ams.bomcore.viettelpost.ViettelPostDTO.CompleteAddress;
+import com.ams.bomcore.viettelpost.ViettelPostDTO.District;
+import com.ams.bomcore.viettelpost.ViettelPostDTO.LoginRequest;
+import com.ams.bomcore.viettelpost.ViettelPostDTO.PriceData;
+import com.ams.bomcore.viettelpost.ViettelPostDTO.PriceRequest;
+import com.ams.bomcore.viettelpost.ViettelPostDTO.Province;
+import com.ams.bomcore.viettelpost.ViettelPostDTO.ShipmentOption;
+import com.ams.bomcore.viettelpost.ViettelPostDTO.TokenRequest;
+import com.ams.bomcore.viettelpost.ViettelPostDTO.Ward;
 
 /**
  * REST Controller for Viettel Post API endpoints
@@ -45,7 +60,7 @@ public class ViettelPostController {
     @PostMapping("/token")
     public ResponseEntity<?> setToken(@RequestBody TokenRequest request) {
         Map<String, Object> response = new HashMap<>();
-        
+
         if (request.getToken() == null || request.getToken().isEmpty()) {
             response.put("success", false);
             response.put("message", "Token is required");
@@ -98,7 +113,7 @@ public class ViettelPostController {
     public ResponseEntity<?> checkToken(@PathVariable String userId) {
         Map<String, Object> response = new HashMap<>();
         boolean isValid = viettelPostService.hasValidToken(userId);
-        
+
         response.put("success", true);
         response.put("isValid", isValid);
         if (isValid) {
@@ -238,10 +253,10 @@ public class ViettelPostController {
 
         try {
             // Validate required fields
-            if (request.getProductWeight() <= 0 || 
-                request.getSenderProvince() <= 0 || 
+            if (request.getProductWeight() <= 0 ||
+                request.getSenderProvince() <= 0 ||
                 request.getSenderDistrict() <= 0 ||
-                request.getReceiverProvince() <= 0 || 
+                request.getReceiverProvince() <= 0 ||
                 request.getReceiverDistrict() <= 0) {
                 response.put("success", false);
                 response.put("message", "Missing required fields");
@@ -249,7 +264,7 @@ public class ViettelPostController {
             }
 
             List<ShipmentOption> options = viettelPostService.getShipmentOptions(token, request);
-            
+
             response.put("success", true);
             response.put("count", options.size());
             response.put("data", options);
@@ -270,7 +285,7 @@ public class ViettelPostController {
     @GetMapping("/admin/tokens")
     public ResponseEntity<?> getAdminTokens() {
         Map<String, Object> response = new HashMap<>();
-        
+
         var tokens = viettelPostService.getAllTokens();
         var sanitized = tokens.entrySet().stream()
             .map(e -> Map.of(

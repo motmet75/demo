@@ -5,7 +5,6 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -24,12 +23,12 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.ams.bomcore.domain.company.Company;
 import com.ams.bomcore.domain.model.Model;
 import com.ams.bomcore.domain.tenant.Tenant;
+import com.ams.bomcore.repository.CompanyRepository;
 import com.ams.bomcore.repository.ModelRepository;
 import com.ams.bomcore.repository.TenantRepository;
-import com.ams.bomcore.repository.CompanyRepository;
-import com.ams.bomcore.domain.company.Company;
 import com.ams.bomcore.service.model.ModelService;
 
 import jakarta.validation.Valid;
@@ -101,7 +100,9 @@ public class ModelController {
         tenantId = resolveTenant(tenantId, headerTenantId);
         companyId = resolveCompany(companyId, headerCompanyId);
 
-        if (tenantId == null || companyId == null) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+        if (tenantId == null || companyId == null) {
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+		}
 
         Tenant tenant = tenantRepository.findById(tenantId).orElseThrow(() -> new IllegalArgumentException("tenant not found"));
         Company company = companyRepository.findById(companyId).orElseThrow(() -> new IllegalArgumentException("company not found"));
@@ -112,7 +113,9 @@ public class ModelController {
 
         // uniqueness per company
         var existing = modelRepository.findByModelCodeAndTenantIdAndCompanyId(model.getModelCode(), tenant.getId(), company.getId());
-        if (existing.isPresent()) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("model code already exists for this company");
+        if (existing.isPresent()) {
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("model code already exists for this company");
+		}
 
         model.setTenantId(tenant.getId());
         model.setCompanyId(company.getId());
@@ -131,7 +134,9 @@ public class ModelController {
         tenantId = resolveTenant(tenantId, headerTenantId);
         companyId = resolveCompany(companyId, headerCompanyId);
 
-        if (tenantId == null || companyId == null) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+        if (tenantId == null || companyId == null) {
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+		}
 
         model.setId(id);
         if (!modelRepository.existsById(id)) {
@@ -207,7 +212,9 @@ public class ModelController {
             String line;
             while ((line = br.readLine()) != null) {
                 rowNum++;
-                if (line.trim().isEmpty()) continue;
+                if (line.trim().isEmpty()) {
+					continue;
+				}
                 String[] cols = line.split(",", -1);
                 // Skip header row
                 if (rowNum == 1 && (cols[0].toLowerCase().contains("model") || cols[0].toLowerCase().contains("code"))) {
@@ -234,8 +241,12 @@ public class ModelController {
                 Model m = new Model();
                 m.setModelCode(code);
                 m.setModelName(name);
-                if (!hsCode.isEmpty()) m.setHsCode(hsCode);
-                if (!coCriteria.isEmpty()) m.setCoCriteria(coCriteria);
+                if (!hsCode.isEmpty()) {
+					m.setHsCode(hsCode);
+				}
+                if (!coCriteria.isEmpty()) {
+					m.setCoCriteria(coCriteria);
+				}
                 m.setTenantId(tenant.getId());
                 m.setCompanyId(company.getId());
                 m.setIsActive(true);

@@ -1,9 +1,9 @@
 package com.ams.bomcore.domain.inventory;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
-import java.math.BigDecimal;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -192,8 +192,12 @@ public class WarehouseEntity {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+			return true;
+		}
+        if (o == null || getClass() != o.getClass()) {
+			return false;
+		}
         WarehouseEntity that = (WarehouseEntity) o;
         return Objects.equals(id, that.id);
     }

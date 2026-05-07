@@ -1,18 +1,30 @@
 package com.ams.bomcore.viettelpost;
 
-import com.ams.bomcore.viettelpost.ViettelPostDTO.*;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.stereotype.Service;
-
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+
+import org.springframework.stereotype.Service;
+
+import com.ams.bomcore.viettelpost.ViettelPostDTO.CompleteAddress;
+import com.ams.bomcore.viettelpost.ViettelPostDTO.District;
+import com.ams.bomcore.viettelpost.ViettelPostDTO.PriceData;
+import com.ams.bomcore.viettelpost.ViettelPostDTO.PriceRequest;
+import com.ams.bomcore.viettelpost.ViettelPostDTO.Province;
+import com.ams.bomcore.viettelpost.ViettelPostDTO.ShipmentOption;
+import com.ams.bomcore.viettelpost.ViettelPostDTO.Ward;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * Service for interacting with Viettel Post API
@@ -21,16 +33,16 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ViettelPostService {
 
     private static final String API_BASE = "https://partner.viettelpost.vn/v2";
-    
+
     // Pre-configured token (your token)
     private static final String DEFAULT_TOKEN = "41A7F86612D4357C125529D1878BBE38";
-    
+
     // Token storage (in-memory, can be replaced with database)
     private final Map<String, ViettelPostToken> tokenStorage = new ConcurrentHashMap<>();
-    
+
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
-    
+
     // Service code to name mapping
     private static final Map<String, String> SERVICE_NAMES = Map.of(
         "VCN", "Chuyển phát nhanh",
@@ -49,7 +61,7 @@ public class ViettelPostService {
             .connectTimeout(Duration.ofSeconds(30))
             .build();
         this.objectMapper = new ObjectMapper();
-        
+
         // Store default token
         ViettelPostToken defaultToken = new ViettelPostToken("default", DEFAULT_TOKEN, "viettelpost_user");
         tokenStorage.put("default", defaultToken);
@@ -213,7 +225,7 @@ public class ViettelPostService {
      */
     public CompleteAddress getCompleteAddress(String token, int provinceId, Integer districtId, Integer wardId) throws Exception {
         CompleteAddress address = new CompleteAddress();
-        
+
         List<Province> provinces = getProvinces(token);
         Province province = provinces.stream()
             .filter(p -> p.getProvinceId() == provinceId)

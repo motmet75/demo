@@ -32,7 +32,9 @@ public class ContextInterceptor implements HandlerInterceptor {
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
         String path = request.getRequestURI();
         // allow public endpoints
-        if (path.startsWith("/api/bom/tenants") || path.startsWith("/api/bom/companies")) return true;
+        if (path.startsWith("/api/bom/tenants") || path.startsWith("/api/bom/companies")) {
+			return true;
+		}
 
         String tenantHeader = request.getHeader("X-Tenant-Id");
         String companyHeader = request.getHeader("X-Company-Id");

@@ -19,13 +19,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.ams.bomcore.domain.modelbom.ModelBom;
-import com.ams.bomcore.repository.ModelBomRepository;
-import com.ams.bomcore.service.modelbom.ModelBomService;
-import com.ams.bomcore.repository.TenantRepository;
-import com.ams.bomcore.domain.tenant.Tenant;
 import com.ams.bomcore.controller.modelbom.dto.ModelBomView;
+import com.ams.bomcore.domain.modelbom.ModelBom;
+import com.ams.bomcore.domain.tenant.Tenant;
+import com.ams.bomcore.repository.ModelBomRepository;
 import com.ams.bomcore.repository.ModelRepository;
+import com.ams.bomcore.repository.TenantRepository;
+import com.ams.bomcore.service.modelbom.ModelBomService;
 
 import jakarta.validation.Valid;
 
@@ -72,7 +72,9 @@ public class ModelBomController {
                                                          @RequestParam(value = "companyId", required = false) UUID companyId,
                                                          @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId) {
         tenantId = resolveTenant(tenantId, headerTenantId);
-        if (tenantId == null) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(null);
+        if (tenantId == null) {
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(null);
+		}
         Tenant tenant = tenantRepository.findById(tenantId).orElseThrow(() -> new IllegalArgumentException("tenant not found"));
 
         // fetch model and verify tenant
@@ -89,7 +91,9 @@ public class ModelBomController {
         }
 
         List<ModelBom> list = modelBomRepository.findAllByModel(model);
-        if (list == null) list = java.util.Collections.emptyList();
+        if (list == null) {
+			list = java.util.Collections.emptyList();
+		}
 
         // capture final refs for lambda
         final com.ams.bomcore.domain.model.Model finalModel = model;

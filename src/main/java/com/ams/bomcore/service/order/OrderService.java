@@ -9,11 +9,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.ams.bomcore.context.UserContext;
 import com.ams.bomcore.controller.order.dto.OrderCreateDto;
 import com.ams.bomcore.controller.order.dto.OrderCreateDto.OrderLineCreateDto;
 import com.ams.bomcore.controller.order.dto.OrderFinishDto;
@@ -28,10 +30,9 @@ import com.ams.bomcore.domain.inventory.MaterialQuotaEntity;
 import com.ams.bomcore.domain.inventory.OrderConsumptionLogEntity;
 import com.ams.bomcore.domain.material.Material;
 import com.ams.bomcore.domain.model.Model;
+import com.ams.bomcore.domain.order.OrderConsumption;
 import com.ams.bomcore.domain.order.OrderHeader;
 import com.ams.bomcore.domain.order.OrderLine;
-import com.ams.bomcore.domain.order.OrderConsumption;
-import com.ams.bomcore.repository.OrderConsumptionRepository;
 import com.ams.bomcore.domain.order.ProductionConsumption;
 import com.ams.bomcore.domain.order.ProductionRun;
 import com.ams.bomcore.repository.BomItemRepository;
@@ -42,12 +43,12 @@ import com.ams.bomcore.repository.MaterialQuotaRepository;
 import com.ams.bomcore.repository.MaterialRepository;
 import com.ams.bomcore.repository.ModelRepository;
 import com.ams.bomcore.repository.OrderConsumptionLogRepository;
+import com.ams.bomcore.repository.OrderConsumptionRepository;
 import com.ams.bomcore.repository.OrderHeaderRepository;
 import com.ams.bomcore.repository.OrderLineRepository;
 import com.ams.bomcore.repository.ProductionConsumptionRepository;
 import com.ams.bomcore.repository.ProductionRunRepository;
 import com.ams.bomcore.service.bom.BomService;
-import com.ams.bomcore.context.UserContext;
 import com.ams.bomcore.service.order.exception.BomNotFoundException;
 import com.ams.bomcore.service.order.exception.InsufficientStockException;
 import com.ams.bomcore.service.order.exception.InvalidOrderStatusException;
@@ -360,7 +361,9 @@ public class OrderService {
         BigDecimal totalActual = BigDecimal.ZERO;
 
         for (OrderConsumptionLogEntity log : logs) {
-            if ("FINALIZED".equals(log.getStatus())) continue; // already finalized
+            if ("FINALIZED".equals(log.getStatus())) {
+				continue; // already finalized
+			}
 
             UUID materialId = log.getMaterial().getId();
             BigDecimal realQty = realQtyOverrides.getOrDefault(materialId, log.getEffectivePlannedQty());
@@ -731,11 +734,13 @@ public class OrderService {
         BigDecimal remaining = qty;
         Instant now = Instant.now();
 
-        
-        
+
+
         for (InventoryEntity entry : entries) {
-        	
-            if (remaining.compareTo(BigDecimal.ZERO) <= 0) break;
+
+            if (remaining.compareTo(BigDecimal.ZERO) <= 0) {
+				break;
+			}
 
             BigDecimal onHand = entry.getQuantityOnHand();
             BigDecimal locked = entry.getQuantityLocked() != null ? entry.getQuantityLocked() : BigDecimal.ZERO;
@@ -751,7 +756,9 @@ public class OrderService {
                     .multiply(BigDecimal.ONE.subtract(quotaFactor))
                     .max(BigDecimal.ZERO);
 
-            if (deductible.compareTo(BigDecimal.ZERO) <= 0) continue;  // row fully reserved — skip
+            if (deductible.compareTo(BigDecimal.ZERO) <= 0) {
+				continue;  // row fully reserved — skip
+			}
 
             // How much we actually take from this row
             BigDecimal take = remaining.min(deductible);
@@ -845,7 +852,9 @@ public class OrderService {
         for (UUID orderId : orderIds) {
             List<OrderConsumptionLogEntity> logs = consumptionLogRepository.findByOrderId(orderId);
             for (OrderConsumptionLogEntity log : logs) {
-                if ("CANCELLED".equals(log.getStatus())) continue;
+                if ("CANCELLED".equals(log.getStatus())) {
+					continue;
+				}
                 UUID matId = log.getMaterial().getId();
                 materialById.put(matId, log.getMaterial());
                 requiredQtyByMaterial.merge(matId, log.getEffectivePlannedQty(), BigDecimal::add);
@@ -884,7 +893,9 @@ public class OrderService {
             BigDecimal quotaFactor = quotaPct.divide(new BigDecimal("100"), java.math.MathContext.DECIMAL128);
 
             boolean sufficient = available.compareTo(required) >= 0;
-            if (!sufficient) allSufficient = false;
+            if (!sufficient) {
+				allSufficient = false;
+			}
 
             Material mat = materialById.get(matId);
             rows.add(new CheckInventoryResult.MaterialCheckRow(
@@ -905,7 +916,7 @@ public class OrderService {
                         oc.setOrderId(orderId);
                         oc.setMaterial(mat);
                         oc.setPlannedQty(log.getEffectivePlannedQty());
-                        
+
                         // adjustedQty = what will actually be pulled from stock
                         // If sufficient stock, pull full planned qty.
                         // If insufficient, distribute available proportionally.
@@ -922,7 +933,7 @@ public class OrderService {
                         } else {
                             adjusted = BigDecimal.ZERO;
                         }
-                        
+
                         oc.setAdjustedQty(adjusted);
                         oc.setAvailableQty(available);
                         oc.setCheckResult(sufficient ? "SUFFICIENT" : "INSUFFICIENT");
@@ -1018,7 +1029,9 @@ public class OrderService {
         Map<UUID, Material> materialById = new HashMap<>();
         for (UUID orderId : orderIds) {
             for (OrderConsumptionLogEntity log : logsByOrderId.get(orderId)) {
-                if ("CANCELLED".equals(log.getStatus())) continue;
+                if ("CANCELLED".equals(log.getStatus())) {
+					continue;
+				}
                 UUID matId = log.getMaterial().getId();
                 materialById.put(matId, log.getMaterial());
                 requiredByMaterial.merge(matId, log.getEffectivePlannedQty(), BigDecimal::add);
@@ -1073,7 +1086,9 @@ public class OrderService {
             invRows.addAll(untaggedRows);
 
             for (InventoryEntity inv : invRows) {
-                if (remaining.compareTo(BigDecimal.ZERO) <= 0) break;
+                if (remaining.compareTo(BigDecimal.ZERO) <= 0) {
+					break;
+				}
 
                 BigDecimal onHand = inv.getQuantityOnHand() == null ? BigDecimal.ZERO : inv.getQuantityOnHand();
                 BigDecimal locked = inv.getQuantityLocked() == null ? BigDecimal.ZERO : inv.getQuantityLocked();
@@ -1117,8 +1132,9 @@ public class OrderService {
                 System.out.println("[MTP-DEDUCT] lockedAfter       = " + locked.add(lockedAdd));
                 System.out.println("[MTP-DEDUCT] skip?             = " + (availableForDeduction.compareTo(BigDecimal.ZERO) <= 0 || couldBeDeducted.compareTo(BigDecimal.ZERO) <= 0));
 
-                if (availableForDeduction.compareTo(BigDecimal.ZERO) <= 0) continue;
-                if (couldBeDeducted.compareTo(BigDecimal.ZERO) <= 0) continue;
+                if ((availableForDeduction.compareTo(BigDecimal.ZERO) <= 0) || (couldBeDeducted.compareTo(BigDecimal.ZERO) <= 0)) {
+					continue;
+				}
 
                 // Apply updates — only quantityOnHand (and optionally quantityLocked) touched
                 inventoryRepository.updateQuantityOnHand(inv.getId(), onHand.subtract(couldBeDeducted), Instant.now());
@@ -1130,7 +1146,9 @@ public class OrderService {
                 BigDecimal rowRemaining = couldBeDeducted;
 
                 for (UUID orderId : orderIds) {
-                    if (rowRemaining.compareTo(BigDecimal.ZERO) <= 0) break;
+                    if (rowRemaining.compareTo(BigDecimal.ZERO) <= 0) {
+						break;
+					}
 
                     List<OrderConsumptionLogEntity> orderMatLogs = logsByOrderId.get(orderId)
                             .stream()
@@ -1141,10 +1159,14 @@ public class OrderService {
                     BigDecimal orderNeed = orderMatLogs.stream()
                             .map(OrderConsumptionLogEntity::getEffectivePlannedQty)
                             .reduce(BigDecimal.ZERO, BigDecimal::add);
-                    if (orderNeed.compareTo(BigDecimal.ZERO) <= 0) continue;
+                    if (orderNeed.compareTo(BigDecimal.ZERO) <= 0) {
+						continue;
+					}
 
                     BigDecimal forOrder = rowRemaining.min(orderNeed);
-                    if (forOrder.compareTo(BigDecimal.ZERO) <= 0) continue;
+                    if (forOrder.compareTo(BigDecimal.ZERO) <= 0) {
+						continue;
+					}
 
                     Material mat = materialById.get(matId);
                     InventoryMovementEntity mvt = new InventoryMovementEntity();
@@ -1184,7 +1206,9 @@ public class OrderService {
             OrderHeader header = orderHeaderRepository.findByIdAndTenantIdAndCompanyId(orderId, tenantId, companyId)
                     .orElseThrow(() -> new OrderNotFoundException(orderId));
             header.setStatus(OrderHeader.STATUS_MATERIAL_READY);
-            if (deliveryDateTime != null) header.setDeliveryDateTime(deliveryDateTime);
+            if (deliveryDateTime != null) {
+				header.setDeliveryDateTime(deliveryDateTime);
+			}
             header = orderHeaderRepository.save(header);
             results.add(toResponseDto(header));
         }
@@ -1254,7 +1278,9 @@ public class OrderService {
      * Non-numeric labels and null/blank get Integer.MAX_VALUE (sorted last after all numbers).
      */
     private static int orderToDeductionSortKey(String label) {
-        if (label == null || label.isBlank()) return Integer.MAX_VALUE;
+        if (label == null || label.isBlank()) {
+			return Integer.MAX_VALUE;
+		}
         try {
             return Integer.parseInt(label.trim());
         } catch (NumberFormatException e) {
@@ -1268,7 +1294,9 @@ public class OrderService {
      * grouped together and ranked only by {@link #orderToDeductionSortKey}.
      */
     private static String orderToDeductionStrKey(String label) {
-        if (label == null || label.isBlank()) return "\uFFFF";
+        if (label == null || label.isBlank()) {
+			return "\uFFFF";
+		}
         try {
             Integer.parseInt(label.trim());
             return ""; // numeric — primary key already handles ordering

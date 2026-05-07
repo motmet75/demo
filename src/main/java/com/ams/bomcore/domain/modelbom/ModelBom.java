@@ -4,6 +4,9 @@ import java.math.BigDecimal;
 import java.util.Objects;
 import java.util.UUID;
 
+import com.ams.bomcore.domain.material.Material;
+import com.ams.bomcore.domain.model.Model;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -12,9 +15,6 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
-
-import com.ams.bomcore.domain.material.Material;
-import com.ams.bomcore.domain.model.Model;
 
 /**
  * JPA entity mapping for table `model_bom` which links Model -> Material with qty per unit
@@ -106,8 +106,12 @@ public class ModelBom {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+			return true;
+		}
+        if (o == null || getClass() != o.getClass()) {
+			return false;
+		}
         ModelBom that = (ModelBom) o;
         return Objects.equals(id, that.id);
     }

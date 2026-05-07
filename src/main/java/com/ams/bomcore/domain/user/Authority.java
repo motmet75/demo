@@ -1,5 +1,8 @@
 package com.ams.bomcore.domain.user;
 
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.util.Assert;
+
 import jakarta.persistence.Access;
 import jakarta.persistence.AccessType;
 import jakarta.persistence.Column;
@@ -9,9 +12,6 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Transient;
-
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.util.Assert;
 
 
 
@@ -35,10 +35,10 @@ public class Authority implements GrantedAuthority {
 	@Column(name = "authority")
 	private String authority;
 	@Column(name = "description")
-	
+
 	@Transient
 	private String authName = "";
-	
+
 	private String description;
 	@Column(name = "visible")
 	private Boolean visible = Boolean.TRUE;
@@ -47,9 +47,9 @@ public class Authority implements GrantedAuthority {
 	/**
 	 * @return the id
 	 */
-	
+
 	public Authority() {
-	
+
 	}
 
 	public int getId() {
@@ -153,7 +153,7 @@ public class Authority implements GrantedAuthority {
 	public String toString() {
 		return this.authority;
 	}
-	
+
 	public Authority deepCopy() {
 	    Authority copy = new Authority();
 

@@ -21,7 +21,9 @@ public class Order {
 
     public Order(String id, List<CartItem> items, long totalMinor, String currency, Instant createdAt, Status status) {
         this.id = id;
-        if (items != null) this.items.addAll(items);
+        if (items != null) {
+			this.items.addAll(items);
+		}
         this.totalMinor = totalMinor;
         this.currency = currency;
         this.createdAt = createdAt;

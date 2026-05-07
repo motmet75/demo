@@ -2,11 +2,6 @@ package com.demo.security;
 
 import java.util.List;
 
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
-
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -30,6 +25,11 @@ import org.springframework.web.bind.annotation.RestController;
 import com.ams.bomcore.domain.user.Authority;
 import com.ams.bomcore.domain.user.User;
 import com.ams.bomcore.repository.UserRepository;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 
 /**
  * Auth endpoints used by the React frontend.

@@ -9,11 +9,11 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.ams.bomcore.context.UserContext;
 import com.ams.bomcore.domain.inventory.InventoryEntity;
 import com.ams.bomcore.domain.inventory.InventoryMovementEntity;
 import com.ams.bomcore.domain.inventory.WarehouseEntity;
 import com.ams.bomcore.domain.material.Material;
-import com.ams.bomcore.context.UserContext;
 import com.ams.bomcore.repository.InventoryMovementRepository;
 import com.ams.bomcore.repository.InventoryRepository;
 import com.ams.bomcore.repository.MaterialRepository;
@@ -52,7 +52,9 @@ public class InventoryMovementService {
 
     /** Resolve createdBy: prefer explicit param, fall back to UserContext (thread-local), then "system". */
     private String resolveCreatedBy(String createdBy) {
-        if (createdBy != null && !createdBy.isBlank()) return createdBy;
+        if (createdBy != null && !createdBy.isBlank()) {
+			return createdBy;
+		}
         return UserContext.getUsernameOrDefault();
     }
 
@@ -68,7 +70,9 @@ public class InventoryMovementService {
     private InventoryEntity findOrCreateInventory(Material material, WarehouseEntity warehouse, String batchNo,
                                                    UUID tenantId, UUID companyId) {
         Optional<InventoryEntity> opt = findInventory(material, warehouse, batchNo);
-        if (opt.isPresent()) return opt.get();
+        if (opt.isPresent()) {
+			return opt.get();
+		}
 
         InventoryEntity inv = new InventoryEntity();
         inv.setMaterial(material);
@@ -120,8 +124,9 @@ public class InventoryMovementService {
                                                      String unit, String batchNo, String reason, String createdBy,
                                                      String referenceType, UUID referenceId, UUID inventoryId,
                                                      String notes, UUID tenantId, UUID companyId) {
-        if (quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0)
-            throw new InventoryException("IN quantity must be positive");
+        if (quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0) {
+			throw new InventoryException("IN quantity must be positive");
+		}
 
         Material material = materialRepository.findById(materialId)
                 .orElseThrow(() -> new InventoryException("Material not found: " + materialId));
@@ -176,8 +181,9 @@ public class InventoryMovementService {
                                                       String unit, String batchNo, String reason, String createdBy,
                                                       String referenceType, UUID referenceId, UUID inventoryId,
                                                       String notes, UUID tenantId, UUID companyId) {
-        if (quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0)
-            throw new InventoryException("OUT quantity must be positive");
+        if (quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0) {
+			throw new InventoryException("OUT quantity must be positive");
+		}
 
         Material material = materialRepository.findById(materialId)
                 .orElseThrow(() -> new InventoryException("Material not found: " + materialId));
@@ -244,8 +250,9 @@ public class InventoryMovementService {
                                                            BigDecimal quantity, String unit, String batchNo,
                                                            String reason, String createdBy, String notes,
                                                            UUID tenantId, UUID companyId) {
-        if (quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0)
-            throw new InventoryException("TRANSFER quantity must be positive");
+        if (quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0) {
+			throw new InventoryException("TRANSFER quantity must be positive");
+		}
 
         Material material = materialRepository.findById(materialId)
                 .orElseThrow(() -> new InventoryException("Material not found: " + materialId));
@@ -302,8 +309,9 @@ public class InventoryMovementService {
     public InventoryMovementEntity recordAdjustmentMovement(UUID materialId, UUID warehouseId, BigDecimal quantity,
                                                              String unit, String batchNo, String reason, String createdBy,
                                                              String notes, UUID tenantId, UUID companyId) {
-        if (quantity == null)
-            throw new InventoryException("ADJUSTMENT quantity must not be null");
+        if (quantity == null) {
+			throw new InventoryException("ADJUSTMENT quantity must not be null");
+		}
 
         Material material = materialRepository.findById(materialId)
                 .orElseThrow(() -> new InventoryException("Material not found: " + materialId));
@@ -316,8 +324,9 @@ public class InventoryMovementService {
 
         BigDecimal current = inv.getQuantityOnHand() == null ? BigDecimal.ZERO : inv.getQuantityOnHand();
         BigDecimal newOnHand = current.add(quantity);   // quantity may be negative (downward adjustment)
-        if (newOnHand.compareTo(BigDecimal.ZERO) < 0)
-            throw new InventoryException("Adjustment would result in negative on-hand quantity (" + newOnHand.toPlainString() + ")");
+        if (newOnHand.compareTo(BigDecimal.ZERO) < 0) {
+			throw new InventoryException("Adjustment would result in negative on-hand quantity (" + newOnHand.toPlainString() + ")");
+		}
 
         inv.setQuantityOnHand(newOnHand);
         InventoryEntity savedInv = inventoryRepository.save(inv);
@@ -334,8 +343,9 @@ public class InventoryMovementService {
                                                                     BigDecimal quantity, String unit, String batchNo,
                                                                     String reason, String createdBy, String notes,
                                                                     UUID tenantId, UUID companyId) {
-        if (quantity == null)
-            throw new InventoryException("ADJUSTMENT quantity must not be null");
+        if (quantity == null) {
+			throw new InventoryException("ADJUSTMENT quantity must not be null");
+		}
 
         Material material = materialRepository.findById(materialId)
                 .orElseThrow(() -> new InventoryException("Material not found: " + materialId));

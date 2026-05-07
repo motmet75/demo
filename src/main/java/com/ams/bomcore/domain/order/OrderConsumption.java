@@ -73,8 +73,12 @@ public class OrderConsumption {
 
     @PrePersist
     private void prePersist() {
-        if (id == null) id = UUID.randomUUID();
-        if (createdAt == null) createdAt = Instant.now();
+        if (id == null) {
+			id = UUID.randomUUID();
+		}
+        if (createdAt == null) {
+			createdAt = Instant.now();
+		}
         updatedAt = Instant.now();
     }
 
@@ -121,8 +125,12 @@ public class OrderConsumption {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+			return true;
+		}
+        if (o == null || getClass() != o.getClass()) {
+			return false;
+		}
         OrderConsumption that = (OrderConsumption) o;
         return Objects.equals(id, that.id);
     }

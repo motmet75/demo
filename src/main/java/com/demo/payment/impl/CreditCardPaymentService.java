@@ -1,7 +1,8 @@
 package com.demo.payment.impl;
 
-import com.demo.payment.PaymentService;
 import org.springframework.stereotype.Service;
+
+import com.demo.payment.PaymentService;
 
 @Service
 public class CreditCardPaymentService implements PaymentService {

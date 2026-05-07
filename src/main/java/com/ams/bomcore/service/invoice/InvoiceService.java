@@ -46,14 +46,17 @@ public class InvoiceService {
     @Transactional(rollbackFor = Exception.class)
     public InvoiceEntity create(Map<String, Object> body, UUID tenantId, UUID companyId) {
         String invoiceNumber = str(body, "invoiceNumber");
-        if (invoiceNumber == null || invoiceNumber.isBlank())
-            throw new IllegalArgumentException("invoiceNumber is required");
-        if (invoiceRepository.existsByInvoiceNumberAndTenantIdAndCompanyId(invoiceNumber, tenantId, companyId))
-            throw new IllegalArgumentException("Invoice number already exists: " + invoiceNumber);
+        if (invoiceNumber == null || invoiceNumber.isBlank()) {
+			throw new IllegalArgumentException("invoiceNumber is required");
+		}
+        if (invoiceRepository.existsByInvoiceNumberAndTenantIdAndCompanyId(invoiceNumber, tenantId, companyId)) {
+			throw new IllegalArgumentException("Invoice number already exists: " + invoiceNumber);
+		}
 
         String invoiceType = str(body, "invoiceType");
-        if (!InvoiceEntity.TYPE_PURCHASE.equals(invoiceType) && !InvoiceEntity.TYPE_SALE.equals(invoiceType))
-            throw new IllegalArgumentException("invoiceType must be PURCHASE or SALE");
+        if (!InvoiceEntity.TYPE_PURCHASE.equals(invoiceType) && !InvoiceEntity.TYPE_SALE.equals(invoiceType)) {
+			throw new IllegalArgumentException("invoiceType must be PURCHASE or SALE");
+		}
 
         InvoiceEntity inv = new InvoiceEntity();
         inv.setTenantId(tenantId);
@@ -61,9 +64,15 @@ public class InvoiceService {
         inv.setInvoiceType(invoiceType);
         inv.setInvoiceNumber(invoiceNumber);
         inv.setPartyName(str(body, "partyName"));
-        if (body.get("partyId") != null) inv.setPartyId(UUID.fromString(str(body, "partyId")));
-        if (body.get("invoiceDate") != null) inv.setInvoiceDate(LocalDate.parse(str(body, "invoiceDate")));
-        if (body.get("dueDate") != null) inv.setDueDate(LocalDate.parse(str(body, "dueDate")));
+        if (body.get("partyId") != null) {
+			inv.setPartyId(UUID.fromString(str(body, "partyId")));
+		}
+        if (body.get("invoiceDate") != null) {
+			inv.setInvoiceDate(LocalDate.parse(str(body, "invoiceDate")));
+		}
+        if (body.get("dueDate") != null) {
+			inv.setDueDate(LocalDate.parse(str(body, "dueDate")));
+		}
         inv.setCurrency(body.get("currency") != null ? str(body, "currency") : "USD");
         inv.setSubtotal(decimal(body, "subtotal"));
         inv.setTaxAmount(decimal(body, "taxAmount"));
@@ -77,19 +86,36 @@ public class InvoiceService {
     @Transactional(rollbackFor = Exception.class)
     public InvoiceEntity update(UUID id, Map<String, Object> body, UUID tenantId, UUID companyId) {
         InvoiceEntity inv = getById(id, tenantId, companyId);
-        if (body.containsKey("partyName")) inv.setPartyName(str(body, "partyName"));
-        if (body.containsKey("partyId") && body.get("partyId") != null)
-            inv.setPartyId(UUID.fromString(str(body, "partyId")));
-        if (body.containsKey("invoiceDate") && body.get("invoiceDate") != null)
-            inv.setInvoiceDate(LocalDate.parse(str(body, "invoiceDate")));
-        if (body.containsKey("dueDate") && body.get("dueDate") != null)
-            inv.setDueDate(LocalDate.parse(str(body, "dueDate")));
-        if (body.containsKey("currency")) inv.setCurrency(str(body, "currency"));
-        if (body.containsKey("subtotal")) inv.setSubtotal(decimal(body, "subtotal"));
-        if (body.containsKey("taxAmount")) inv.setTaxAmount(decimal(body, "taxAmount"));
-        if (body.containsKey("totalAmount")) inv.setTotalAmount(decimal(body, "totalAmount"));
-        if (body.containsKey("notes")) inv.setNotes(str(body, "notes"));
-        if (body.containsKey("status")) inv.setStatus(str(body, "status"));
+        if (body.containsKey("partyName")) {
+			inv.setPartyName(str(body, "partyName"));
+		}
+        if (body.containsKey("partyId") && body.get("partyId") != null) {
+			inv.setPartyId(UUID.fromString(str(body, "partyId")));
+		}
+        if (body.containsKey("invoiceDate") && body.get("invoiceDate") != null) {
+			inv.setInvoiceDate(LocalDate.parse(str(body, "invoiceDate")));
+		}
+        if (body.containsKey("dueDate") && body.get("dueDate") != null) {
+			inv.setDueDate(LocalDate.parse(str(body, "dueDate")));
+		}
+        if (body.containsKey("currency")) {
+			inv.setCurrency(str(body, "currency"));
+		}
+        if (body.containsKey("subtotal")) {
+			inv.setSubtotal(decimal(body, "subtotal"));
+		}
+        if (body.containsKey("taxAmount")) {
+			inv.setTaxAmount(decimal(body, "taxAmount"));
+		}
+        if (body.containsKey("totalAmount")) {
+			inv.setTotalAmount(decimal(body, "totalAmount"));
+		}
+        if (body.containsKey("notes")) {
+			inv.setNotes(str(body, "notes"));
+		}
+        if (body.containsKey("status")) {
+			inv.setStatus(str(body, "status"));
+		}
         return invoiceRepository.save(inv);
     }
 

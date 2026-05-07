@@ -11,8 +11,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.ams.bomcore.controller.inventory.dto.InventoryViewDTO;
 import com.ams.bomcore.domain.inventory.InventoryEntity;
-import com.ams.bomcore.domain.material.Material;
 import com.ams.bomcore.domain.inventory.WarehouseEntity;
+import com.ams.bomcore.domain.material.Material;
 import com.ams.bomcore.repository.InventoryRepository;
 import com.ams.bomcore.repository.MaterialRepository;
 import com.ams.bomcore.repository.WarehouseRepository;
@@ -89,8 +89,12 @@ public class InventoryService {
                                      String orderToDeduction, BigDecimal materialQuotaPercentage,
                                      UUID tenantId, UUID companyId, String reason, String createdBy, String notes,
                                      UUID invoiceId) {
-        if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) throw new InventoryException("Quantity to add must be positive");
-        if (batchNo == null || batchNo.trim().isEmpty()) throw new InventoryException("batchNo is required");
+        if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) {
+			throw new InventoryException("Quantity to add must be positive");
+		}
+        if (batchNo == null || batchNo.trim().isEmpty()) {
+			throw new InventoryException("batchNo is required");
+		}
 
         Material m = materialRepository.findByMaterialCode(materialCode)
                 .orElseThrow(() -> new InventoryException("Material not found: " + materialCode));
@@ -111,7 +115,9 @@ public class InventoryService {
             inv.setQuantityOnHand(inv.getQuantityOnHand().add(qty));
             // quantityTotal is NOT changed by movements — only set at import/initial creation
             if (quantityReserved != null) {
-                if (quantityReserved.compareTo(inv.getQuantityOnHand()) > 0) throw new InventoryException("Reserved quantity cannot exceed on-hand quantity");
+                if (quantityReserved.compareTo(inv.getQuantityOnHand()) > 0) {
+					throw new InventoryException("Reserved quantity cannot exceed on-hand quantity");
+				}
                 inv.setQuantityLocked(quantityReserved);
             }
         } else {
@@ -122,7 +128,9 @@ public class InventoryService {
             inv.setQuantityOnHand(qty);
             // quantityTotal is NOT set here — only set at import/initial creation
             inv.setQuantityLocked(quantityReserved == null ? BigDecimal.ZERO : quantityReserved);
-            if (inv.getQuantityLocked().compareTo(inv.getQuantityOnHand()) > 0) throw new InventoryException("Reserved quantity cannot exceed on-hand quantity");
+            if (inv.getQuantityLocked().compareTo(inv.getQuantityOnHand()) > 0) {
+				throw new InventoryException("Reserved quantity cannot exceed on-hand quantity");
+			}
             inv.setExpirationDateTime(expirationDateTime);
             inv.setProductionDateTime(productionDateTime);
             inv.setTenantId(tenantId);
@@ -196,8 +204,12 @@ public class InventoryService {
                                           String orderToDeduction, BigDecimal materialQuotaPercentage,
                                           UUID tenantId, UUID companyId,
                                           String reason, String createdBy, String notes, UUID invoiceId) {
-        if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) throw new InventoryException("Quantity to add must be positive");
-        if (batchNo == null || batchNo.trim().isEmpty()) throw new InventoryException("batchNo is required");
+        if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) {
+			throw new InventoryException("Quantity to add must be positive");
+		}
+        if (batchNo == null || batchNo.trim().isEmpty()) {
+			throw new InventoryException("batchNo is required");
+		}
 
         Material m = materialRepository.findById(materialId)
                 .orElseThrow(() -> new InventoryException("Material not found: " + materialId));
@@ -218,7 +230,9 @@ public class InventoryService {
             inv.setQuantityOnHand(inv.getQuantityOnHand().add(qty));
             // quantityTotal is NOT changed by movements — only set at import/initial creation
             if (quantityReserved != null) {
-                if (quantityReserved.compareTo(inv.getQuantityOnHand()) > 0) throw new InventoryException("Reserved quantity cannot exceed on-hand quantity");
+                if (quantityReserved.compareTo(inv.getQuantityOnHand()) > 0) {
+					throw new InventoryException("Reserved quantity cannot exceed on-hand quantity");
+				}
                 inv.setQuantityLocked(quantityReserved);
             }
         } else {
@@ -229,7 +243,9 @@ public class InventoryService {
             inv.setQuantityOnHand(qty);
             // quantityTotal is NOT set here — only set at import/initial creation
             inv.setQuantityLocked(quantityReserved == null ? BigDecimal.ZERO : quantityReserved);
-            if (inv.getQuantityLocked().compareTo(inv.getQuantityOnHand()) > 0) throw new InventoryException("Reserved quantity cannot exceed on-hand quantity");
+            if (inv.getQuantityLocked().compareTo(inv.getQuantityOnHand()) > 0) {
+				throw new InventoryException("Reserved quantity cannot exceed on-hand quantity");
+			}
             inv.setExpirationDateTime(expirationDateTime);
             inv.setProductionDateTime(productionDateTime);
             inv.setTenantId(tenantId);
@@ -303,21 +319,33 @@ public class InventoryService {
                                         String orderToDeduction, BigDecimal materialQuotaPercentage,
                                         UUID tenantId, UUID companyId,
                                         String reason, String createdBy, String notes) {
-        if (newQuantityOnHand == null || newQuantityOnHand.compareTo(BigDecimal.ZERO) < 0) throw new InventoryException("Quantity must be non-negative");
+        if (newQuantityOnHand == null || newQuantityOnHand.compareTo(BigDecimal.ZERO) < 0) {
+			throw new InventoryException("Quantity must be non-negative");
+		}
 
         InventoryEntity inv = inventoryRepository.findById(inventoryId)
                 .orElseThrow(() -> new InventoryException("Inventory not found: " + inventoryId));
 
-        if (inv.getTenantId() == null || !inv.getTenantId().equals(tenantId)) throw new InventoryException("inventory does not belong to tenant");
-        if (inv.getCompanyId() == null || !inv.getCompanyId().equals(companyId)) throw new InventoryException("inventory does not belong to company");
+        if (inv.getTenantId() == null || !inv.getTenantId().equals(tenantId)) {
+			throw new InventoryException("inventory does not belong to tenant");
+		}
+        if (inv.getCompanyId() == null || !inv.getCompanyId().equals(companyId)) {
+			throw new InventoryException("inventory does not belong to company");
+		}
 
         BigDecimal oldQty = inv.getQuantityOnHand() == null ? BigDecimal.ZERO : inv.getQuantityOnHand();
         BigDecimal delta  = newQuantityOnHand.subtract(oldQty);
 
         inv.setQuantityOnHand(newQuantityOnHand);
-        if (batchNo != null) inv.setBatchNo(batchNo);
-        if (expirationDateTime != null) inv.setExpirationDateTime(expirationDateTime);
-        if (productionDateTime != null) inv.setProductionDateTime(productionDateTime);
+        if (batchNo != null) {
+			inv.setBatchNo(batchNo);
+		}
+        if (expirationDateTime != null) {
+			inv.setExpirationDateTime(expirationDateTime);
+		}
+        if (productionDateTime != null) {
+			inv.setProductionDateTime(productionDateTime);
+		}
         // orderToDeduction: null means "do not change"; empty string means "clear it"
         if (orderToDeduction != null) {
             inv.setOrderToDeduction(orderToDeduction.isBlank() ? null : orderToDeduction.trim());
@@ -362,7 +390,9 @@ public class InventoryService {
 
     @Transactional(rollbackFor = Exception.class)
     public InventoryEntity reserveQuantity(String materialCode, String warehouseCode, BigDecimal qty) {
-        if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) throw new InventoryException("Quantity to reserve must be positive");
+        if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) {
+			throw new InventoryException("Quantity to reserve must be positive");
+		}
 
         Material m = materialRepository.findByMaterialCode(materialCode).orElseThrow(() -> new InventoryException("Material not found: " + materialCode));
         InventoryEntity inv = inventoryRepository.findByMaterialAndWarehouseCode(m, warehouseCode).orElseThrow(() -> new InventoryException("Inventory not found for material " + materialCode + " in warehouse " + warehouseCode));
@@ -380,13 +410,17 @@ public class InventoryService {
 
     @Transactional(rollbackFor = Exception.class)
     public InventoryEntity releaseQuantity(String materialCode, String warehouseCode, BigDecimal qty) {
-        if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) throw new InventoryException("Quantity to release must be positive");
+        if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) {
+			throw new InventoryException("Quantity to release must be positive");
+		}
 
         Material m = materialRepository.findByMaterialCode(materialCode).orElseThrow(() -> new InventoryException("Material not found: " + materialCode));
         InventoryEntity inv = inventoryRepository.findByMaterialAndWarehouseCode(m, warehouseCode).orElseThrow(() -> new InventoryException("Inventory not found for material " + materialCode + " in warehouse " + warehouseCode));
 
         BigDecimal locked = inv.getQuantityLocked() == null ? BigDecimal.ZERO : inv.getQuantityLocked();
-        if (locked.compareTo(qty) < 0) throw new InventoryException("Cannot release more than locked quantity");
+        if (locked.compareTo(qty) < 0) {
+			throw new InventoryException("Cannot release more than locked quantity");
+		}
         // Targeted update — only quantity_locked and updated_at are written
         inventoryRepository.updateQuantityLocked(inv.getId(), locked.subtract(qty), Instant.now());
         inv.setQuantityLocked(locked.subtract(qty));
@@ -396,15 +430,23 @@ public class InventoryService {
     // Reserve by inventory id (for controller endpoint convenience)
     @Transactional(rollbackFor = Exception.class)
     public InventoryEntity reserveById(UUID inventoryId, BigDecimal qty, UUID tenantId, UUID companyId) {
-        if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) throw new InventoryException("Quantity to reserve must be positive");
+        if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) {
+			throw new InventoryException("Quantity to reserve must be positive");
+		}
         InventoryEntity inv = inventoryRepository.findById(inventoryId).orElseThrow(() -> new InventoryException("Inventory not found: " + inventoryId));
 
-        if (inv.getTenantId() == null || !inv.getTenantId().equals(tenantId)) throw new InventoryException("inventory does not belong to tenant");
-        if (inv.getCompanyId() == null || !inv.getCompanyId().equals(companyId)) throw new InventoryException("inventory does not belong to company");
+        if (inv.getTenantId() == null || !inv.getTenantId().equals(tenantId)) {
+			throw new InventoryException("inventory does not belong to tenant");
+		}
+        if (inv.getCompanyId() == null || !inv.getCompanyId().equals(companyId)) {
+			throw new InventoryException("inventory does not belong to company");
+		}
 
         BigDecimal currentLocked = inv.getQuantityLocked() == null ? BigDecimal.ZERO : inv.getQuantityLocked();
         BigDecimal available = inv.getQuantityOnHand().subtract(currentLocked);
-        if (available.compareTo(qty) < 0) throw new InventoryException("Insufficient available quantity to reserve");
+        if (available.compareTo(qty) < 0) {
+			throw new InventoryException("Insufficient available quantity to reserve");
+		}
         // Targeted update — only quantity_locked and updated_at are written
         inventoryRepository.updateQuantityLocked(inv.getId(), currentLocked.add(qty), Instant.now());
         inv.setQuantityLocked(currentLocked.add(qty));
@@ -414,14 +456,22 @@ public class InventoryService {
     // Release by inventory id
     @Transactional(rollbackFor = Exception.class)
     public InventoryEntity releaseById(UUID inventoryId, BigDecimal qty, UUID tenantId, UUID companyId) {
-        if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) throw new InventoryException("Quantity to release must be positive");
+        if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) {
+			throw new InventoryException("Quantity to release must be positive");
+		}
         InventoryEntity inv = inventoryRepository.findById(inventoryId).orElseThrow(() -> new InventoryException("Inventory not found: " + inventoryId));
 
-        if (inv.getTenantId() == null || !inv.getTenantId().equals(tenantId)) throw new InventoryException("inventory does not belong to tenant");
-        if (inv.getCompanyId() == null || !inv.getCompanyId().equals(companyId)) throw new InventoryException("inventory does not belong to company");
+        if (inv.getTenantId() == null || !inv.getTenantId().equals(tenantId)) {
+			throw new InventoryException("inventory does not belong to tenant");
+		}
+        if (inv.getCompanyId() == null || !inv.getCompanyId().equals(companyId)) {
+			throw new InventoryException("inventory does not belong to company");
+		}
 
         BigDecimal locked = inv.getQuantityLocked() == null ? BigDecimal.ZERO : inv.getQuantityLocked();
-        if (locked.compareTo(qty) < 0) throw new InventoryException("Cannot release more than locked quantity");
+        if (locked.compareTo(qty) < 0) {
+			throw new InventoryException("Cannot release more than locked quantity");
+		}
         // Targeted update — only quantity_locked and updated_at are written
         inventoryRepository.updateQuantityLocked(inv.getId(), locked.subtract(qty), Instant.now());
         inv.setQuantityLocked(locked.subtract(qty));
@@ -435,10 +485,12 @@ public class InventoryService {
     public void deleteById(UUID inventoryId, UUID tenantId, UUID companyId) {
         InventoryEntity inv = inventoryRepository.findById(inventoryId)
                 .orElseThrow(() -> new InventoryException("Inventory not found: " + inventoryId));
-        if (tenantId != null && !tenantId.equals(inv.getTenantId()))
-            throw new InventoryException("inventory does not belong to tenant");
-        if (companyId != null && !companyId.equals(inv.getCompanyId()))
-            throw new InventoryException("inventory does not belong to company");
+        if (tenantId != null && !tenantId.equals(inv.getTenantId())) {
+			throw new InventoryException("inventory does not belong to tenant");
+		}
+        if (companyId != null && !companyId.equals(inv.getCompanyId())) {
+			throw new InventoryException("inventory does not belong to company");
+		}
         inventoryRepository.deleteById(inventoryId);
     }
 }

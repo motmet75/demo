@@ -64,15 +64,25 @@ public class Tenant {
 
     @PrePersist
     private void prePersist() {
-        if (id == null) id = UUID.randomUUID();
-        if (createdAt == null) createdAt = Instant.now();
-        if (isActive == null) isActive = Boolean.TRUE;
+        if (id == null) {
+			id = UUID.randomUUID();
+		}
+        if (createdAt == null) {
+			createdAt = Instant.now();
+		}
+        if (isActive == null) {
+			isActive = Boolean.TRUE;
+		}
     }
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+			return true;
+		}
+        if (o == null || getClass() != o.getClass()) {
+			return false;
+		}
         Tenant tenant = (Tenant) o;
         return Objects.equals(id, tenant.id);
     }

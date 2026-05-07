@@ -6,8 +6,6 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import jakarta.validation.Valid;
-
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -26,6 +24,8 @@ import org.springframework.web.bind.annotation.RestController;
 import com.ams.bomcore.domain.bom.BomEntity;
 import com.ams.bomcore.domain.bom.BomItemEntity;
 import com.ams.bomcore.service.bom.BomService;
+
+import jakarta.validation.Valid;
 
 /**
  * Full BOM CRUD controller.
@@ -53,11 +53,15 @@ public class BomCrudController {
     }
 
     private UUID resolveTenant(UUID t, String h) {
-        if (h != null && !h.isBlank()) try { return UUID.fromString(h); } catch (Exception ignored) {}
+        if (h != null && !h.isBlank()) {
+			try { return UUID.fromString(h); } catch (Exception ignored) {}
+		}
         return t;
     }
     private UUID resolveCompany(UUID c, String h) {
-        if (h != null && !h.isBlank()) try { return UUID.fromString(h); } catch (Exception ignored) {}
+        if (h != null && !h.isBlank()) {
+			try { return UUID.fromString(h); } catch (Exception ignored) {}
+		}
         return c;
     }
 
@@ -72,8 +76,9 @@ public class BomCrudController {
 
         tenantId  = resolveTenant(tenantId, ht);
         companyId = resolveCompany(companyId, hc);
-        if (tenantId == null || companyId == null)
-            return ResponseEntity.badRequest().body("tenantId and companyId are required");
+        if (tenantId == null || companyId == null) {
+			return ResponseEntity.badRequest().body("tenantId and companyId are required");
+		}
 
         List<BomDto> dtos = bomService.listByTenantAndCompany(tenantId, companyId)
                 .stream().map(this::toDto).collect(Collectors.toList());
@@ -89,7 +94,9 @@ public class BomCrudController {
             @RequestHeader(value = "X-Tenant-Id", required = false) String ht) {
 
         tenantId = resolveTenant(tenantId, ht);
-        if (tenantId == null) return ResponseEntity.badRequest().body("tenantId is required");
+        if (tenantId == null) {
+			return ResponseEntity.badRequest().body("tenantId is required");
+		}
 
         return bomService.getActiveBomForModel(modelId, tenantId)
                 .map(b -> ResponseEntity.ok(toDto(b)))
@@ -108,8 +115,9 @@ public class BomCrudController {
         try {
             tenantId  = resolveTenant(tenantId, ht);
             companyId = resolveCompany(companyId, hc);
-            if (tenantId == null || companyId == null)
-                return ResponseEntity.badRequest().body("tenantId and companyId are required");
+            if (tenantId == null || companyId == null) {
+				return ResponseEntity.badRequest().body("tenantId and companyId are required");
+			}
 
             UUID modelId = UUID.fromString(String.valueOf(body.get("modelId")));
             Integer version = body.get("version") != null
@@ -193,8 +201,9 @@ public class BomCrudController {
 
         tenantId  = resolveTenant(tenantId, ht);
         companyId = resolveCompany(companyId, hc);
-        if (tenantId == null || companyId == null)
-            return ResponseEntity.badRequest().body("tenantId and companyId are required");
+        if (tenantId == null || companyId == null) {
+			return ResponseEntity.badRequest().body("tenantId and companyId are required");
+		}
 
         List<BomItemDto> dtos = bomService.getBomItems(id, tenantId, companyId)
                 .stream().map(this::toItemDto).collect(Collectors.toList());
@@ -212,8 +221,9 @@ public class BomCrudController {
         try {
             tenantId  = resolveTenant(tenantId, ht);
             companyId = resolveCompany(companyId, hc);
-            if (tenantId == null || companyId == null)
-                return ResponseEntity.badRequest().body("tenantId and companyId are required");
+            if (tenantId == null || companyId == null) {
+				return ResponseEntity.badRequest().body("tenantId and companyId are required");
+			}
 
             UUID materialId   = UUID.fromString(String.valueOf(body.get("materialId")));
             BigDecimal qty    = new BigDecimal(String.valueOf(body.get("quantity")));
@@ -284,8 +294,9 @@ public class BomCrudController {
         try {
             tenantId  = resolveTenant(tenantId, ht);
             companyId = resolveCompany(companyId, hc);
-            if (tenantId == null || companyId == null)
-                return ResponseEntity.badRequest().body("tenantId and companyId are required");
+            if (tenantId == null || companyId == null) {
+				return ResponseEntity.badRequest().body("tenantId and companyId are required");
+			}
 
             BomEntity bom = bomService.syncBomFromModelBoms(modelId, tenantId, companyId);
             return ResponseEntity.ok(toDto(bom));

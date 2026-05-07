@@ -23,7 +23,9 @@ public class SupplierService {
     }
 
     public Supplier create(Supplier supplier) {
-        if (supplier == null) throw new IllegalArgumentException("Supplier is required");
+        if (supplier == null) {
+			throw new IllegalArgumentException("Supplier is required");
+		}
 
         String code = supplier.getSupplierCode() == null ? null : supplier.getSupplierCode().trim();
         if (code == null || code.isEmpty()) {
@@ -54,8 +56,12 @@ public class SupplierService {
 
     @Transactional(rollbackFor = Exception.class)
     public Supplier update(UUID id, Supplier supplier) {
-        if (id == null) throw new IllegalArgumentException("id is required");
-        if (supplier == null) throw new IllegalArgumentException("Supplier is required");
+        if (id == null) {
+			throw new IllegalArgumentException("id is required");
+		}
+        if (supplier == null) {
+			throw new IllegalArgumentException("Supplier is required");
+		}
 
         if (!supplierRepository.existsById(id)) {
             throw new IllegalArgumentException("Supplier not found: " + id);
@@ -90,7 +96,9 @@ public class SupplierService {
      */
     @Transactional(rollbackFor = Exception.class)
     public void delete(UUID id) {
-        if (id == null) return;
+        if (id == null) {
+			return;
+		}
         supplierRepository.findById(id).ifPresent(s -> {
             try {
                 // try soft-delete if field exists

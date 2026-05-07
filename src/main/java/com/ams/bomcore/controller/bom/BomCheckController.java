@@ -2,7 +2,6 @@ package com.ams.bomcore.controller.bom;
 
 import java.util.List;
 
-import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -12,6 +11,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.ams.bomcore.service.bom.BomCalculationService;
+
+import jakarta.validation.Valid;
 
 /**
  * Thin controller that exposes BOM availability check API.

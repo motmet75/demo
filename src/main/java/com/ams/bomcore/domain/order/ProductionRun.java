@@ -81,13 +81,25 @@ public class ProductionRun {
 
     @PrePersist
     private void prePersist() {
-        if (id == null) id = UUID.randomUUID();
-        if (productionBatchId == null) productionBatchId = UUID.randomUUID();
-        if (createdAt == null) createdAt = Instant.now();
+        if (id == null) {
+			id = UUID.randomUUID();
+		}
+        if (productionBatchId == null) {
+			productionBatchId = UUID.randomUUID();
+		}
+        if (createdAt == null) {
+			createdAt = Instant.now();
+		}
         updatedAt = Instant.now();
-        if (status == null) status = STATUS_PLANNED;
-        if (producedQty == null) producedQty = BigDecimal.ZERO;
-        if (scrappedQty == null) scrappedQty = BigDecimal.ZERO;
+        if (status == null) {
+			status = STATUS_PLANNED;
+		}
+        if (producedQty == null) {
+			producedQty = BigDecimal.ZERO;
+		}
+        if (scrappedQty == null) {
+			scrappedQty = BigDecimal.ZERO;
+		}
     }
 
     @PreUpdate
@@ -147,8 +159,12 @@ public class ProductionRun {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+			return true;
+		}
+        if (o == null || getClass() != o.getClass()) {
+			return false;
+		}
         ProductionRun that = (ProductionRun) o;
         return Objects.equals(id, that.id);
     }

@@ -129,8 +129,12 @@ public class SupplierIssueEntity {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+			return true;
+		}
+        if (o == null || getClass() != o.getClass()) {
+			return false;
+		}
         SupplierIssueEntity that = (SupplierIssueEntity) o;
         return Objects.equals(id, that.id);
     }

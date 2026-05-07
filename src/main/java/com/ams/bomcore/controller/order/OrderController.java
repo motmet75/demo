@@ -5,8 +5,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import jakarta.validation.Valid;
-
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -37,6 +35,8 @@ import com.ams.bomcore.service.order.exception.InsufficientStockException;
 import com.ams.bomcore.service.order.exception.InvalidOrderStatusException;
 import com.ams.bomcore.service.order.exception.OrderNotFoundException;
 import com.ams.bomcore.service.order.exception.QuotaExceededException;
+
+import jakarta.validation.Valid;
 
 /**
  * REST controller for the Order + Production lifecycle.
@@ -107,7 +107,9 @@ public class OrderController {
 
         tenantId = resolveTenant(tenantId, headerTenantId);
         companyId = resolveCompany(companyId, headerCompanyId);
-        if (tenantId == null || companyId == null) return missingContext();
+        if (tenantId == null || companyId == null) {
+			return missingContext();
+		}
 
         try {
             OrderResponseDto result = orderService.createOrder(dto, tenantId, companyId);
@@ -147,7 +149,9 @@ public class OrderController {
 
         tenantId = resolveTenant(tenantId, headerTenantId);
         companyId = resolveCompany(companyId, headerCompanyId);
-        if (tenantId == null || companyId == null) return missingContext();
+        if (tenantId == null || companyId == null) {
+			return missingContext();
+		}
 
         Sort.Direction sortDir = "asc".equalsIgnoreCase(direction) ? Sort.Direction.ASC : Sort.Direction.DESC;
         Pageable pageable = PageRequest.of(page, size, Sort.by(sortDir, sort));
@@ -172,7 +176,9 @@ public class OrderController {
 
         tenantId = resolveTenant(tenantId, headerTenantId);
         companyId = resolveCompany(companyId, headerCompanyId);
-        if (tenantId == null || companyId == null) return missingContext();
+        if (tenantId == null || companyId == null) {
+			return missingContext();
+		}
 
         try {
             return ResponseEntity.ok(orderService.getById(id, tenantId, companyId));
@@ -197,7 +203,9 @@ public class OrderController {
 
         tenantId = resolveTenant(tenantId, headerTenantId);
         companyId = resolveCompany(companyId, headerCompanyId);
-        if (tenantId == null || companyId == null) return missingContext();
+        if (tenantId == null || companyId == null) {
+			return missingContext();
+		}
 
         try {
             return ResponseEntity.ok(orderService.updateOrder(id, dto, tenantId, companyId));
@@ -229,7 +237,9 @@ public class OrderController {
 
         tenantId = resolveTenant(tenantId, headerTenantId);
         companyId = resolveCompany(companyId, headerCompanyId);
-        if (tenantId == null || companyId == null) return missingContext();
+        if (tenantId == null || companyId == null) {
+			return missingContext();
+		}
 
         try {
             return ResponseEntity.ok(orderService.confirmOrder(id, tenantId, companyId));
@@ -252,7 +262,9 @@ public class OrderController {
 
         tenantId = resolveTenant(tenantId, headerTenantId);
         companyId = resolveCompany(companyId, headerCompanyId);
-        if (tenantId == null || companyId == null) return missingContext();
+        if (tenantId == null || companyId == null) {
+			return missingContext();
+		}
 
         try {
             return ResponseEntity.ok(orderService.finishOrder(id, dto, tenantId, companyId));
@@ -274,7 +286,9 @@ public class OrderController {
 
         tenantId = resolveTenant(tenantId, headerTenantId);
         companyId = resolveCompany(companyId, headerCompanyId);
-        if (tenantId == null || companyId == null) return missingContext();
+        if (tenantId == null || companyId == null) {
+			return missingContext();
+		}
 
         try {
             return ResponseEntity.ok(orderService.deliverOrder(id, tenantId, companyId));
@@ -296,7 +310,9 @@ public class OrderController {
 
         tenantId = resolveTenant(tenantId, headerTenantId);
         companyId = resolveCompany(companyId, headerCompanyId);
-        if (tenantId == null || companyId == null) return missingContext();
+        if (tenantId == null || companyId == null) {
+			return missingContext();
+		}
 
         try {
             return ResponseEntity.ok(orderService.cancelOrder(id, tenantId, companyId));
@@ -326,12 +342,15 @@ public class OrderController {
 
         tenantId  = resolveTenant(tenantId, headerTenantId);
         companyId = resolveCompany(companyId, headerCompanyId);
-        if (tenantId == null || companyId == null) return missingContext();
+        if (tenantId == null || companyId == null) {
+			return missingContext();
+		}
 
         @SuppressWarnings("unchecked")
         List<String> ids = (List<String>) body.get("orderIds");
-        if (ids == null || ids.isEmpty())
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ApiError("orderIds required"));
+        if (ids == null || ids.isEmpty()) {
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ApiError("orderIds required"));
+		}
 
         List<UUID> orderIds = ids.stream().map(UUID::fromString).toList();
         try {
@@ -362,12 +381,15 @@ public class OrderController {
 
         tenantId  = resolveTenant(tenantId, headerTenantId);
         companyId = resolveCompany(companyId, headerCompanyId);
-        if (tenantId == null || companyId == null) return missingContext();
+        if (tenantId == null || companyId == null) {
+			return missingContext();
+		}
 
         @SuppressWarnings("unchecked")
         List<String> ids = (List<String>) body.get("orderIds");
-        if (ids == null || ids.isEmpty())
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ApiError("orderIds required"));
+        if (ids == null || ids.isEmpty()) {
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ApiError("orderIds required"));
+		}
 
         List<UUID> orderIds = ids.stream().map(UUID::fromString).toList();
         String issuedBy = body.get("issuedBy") != null ? String.valueOf(body.get("issuedBy")) : "system";

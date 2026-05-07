@@ -7,16 +7,13 @@ import java.nio.charset.StandardCharsets;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 import java.util.Optional;
-
-import jakarta.validation.Valid;
+import java.util.UUID;
 
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -28,20 +25,23 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
-import com.ams.bomcore.domain.material.Material;
 import com.ams.bomcore.domain.company.Company;
+import com.ams.bomcore.domain.material.Material;
 import com.ams.bomcore.domain.tenant.Tenant;
-import com.ams.bomcore.repository.MaterialRepository;
 import com.ams.bomcore.repository.CompanyRepository;
+import com.ams.bomcore.repository.MaterialRepository;
 import com.ams.bomcore.repository.TenantRepository;
 import com.ams.bomcore.service.material.MaterialService;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import jakarta.validation.Valid;
 
 /*
  * Controller for Material CRUD and import endpoint.
@@ -118,7 +118,9 @@ public class MaterialController {
         tenantId = resolveTenant(tenantId, headerTenantId);
         companyId = resolveCompany(companyId, headerCompanyId);
 
-        if (tenantId == null || companyId == null) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+        if (tenantId == null || companyId == null) {
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+		}
 
         Tenant tenant = tenantRepository.findById(tenantId).orElseThrow(() -> new IllegalArgumentException("tenant not found"));
         Company company = companyRepository.findById(companyId).orElseThrow(() -> new IllegalArgumentException("company not found"));
@@ -129,7 +131,9 @@ public class MaterialController {
 
         // uniqueness per company
         var existing = materialRepository.findByMaterialCodeAndCompany(material.getMaterialCode(), company);
-        if (existing.isPresent()) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("material code already exists for this company");
+        if (existing.isPresent()) {
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("material code already exists for this company");
+		}
 
         Material saved = materialService.createForCompany(material, company, tenant);
         return ResponseEntity.status(HttpStatus.CREATED).body(saved);
@@ -146,7 +150,9 @@ public class MaterialController {
         tenantId = resolveTenant(tenantId, headerTenantId);
         companyId = resolveCompany(companyId, headerCompanyId);
 
-        if (tenantId == null || companyId == null) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+        if (tenantId == null || companyId == null) {
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+		}
 
         if (!materialRepository.existsById(id)) {
             return ResponseEntity.notFound().build();
@@ -209,7 +215,9 @@ public class MaterialController {
             String line;
             while ((line = br.readLine()) != null) {
                 row++;
-                if (line.trim().isEmpty()) continue;
+                if (line.trim().isEmpty()) {
+					continue;
+				}
                 // naive CSV split by comma
                 String[] cols = line.split(",");
                 // allow header detection
@@ -240,7 +248,9 @@ public class MaterialController {
                 m.setMaterialName(name);
                 m.setUnit(unit);
                 m.setMaterialType(type);
-                if (!description.isEmpty()) m.setDescription(description);
+                if (!description.isEmpty()) {
+					m.setDescription(description);
+				}
                 m.setCompany(company);
                 m.setTenant(tenant);
                 toSave.add(m);
@@ -268,7 +278,9 @@ public class MaterialController {
         List<UUID> uuidList = new ArrayList<>();
         if (incoming != null) {
             for (String s : incoming) {
-                if (s == null) continue;
+                if (s == null) {
+					continue;
+				}
                 try {
                     uuidList.add(UUID.fromString(s.trim()));
                 } catch (Exception ex) {

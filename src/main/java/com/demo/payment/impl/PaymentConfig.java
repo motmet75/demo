@@ -22,7 +22,7 @@ public class PaymentConfig {
     public PaymentService paymentService() {
         return PaymentServiceFactory.create(type, enabled, merchantId, timeoutMillis);
     }
-   
+
     private String merchantId;
     private boolean enabled = true;
     private int timeoutMillis = 30000;

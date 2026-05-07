@@ -5,6 +5,9 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
+import com.ams.bomcore.domain.company.Company;
+import com.ams.bomcore.domain.tenant.Tenant;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -13,9 +16,6 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
-
-import com.ams.bomcore.domain.company.Company;
-import com.ams.bomcore.domain.tenant.Tenant;
 
 /**
  * JPA entity mapping for table `contract` in bom_core_schema.sql
@@ -180,15 +180,25 @@ public class Contract {
 
     @PrePersist
     private void prePersist() {
-        if (id == null) id = UUID.randomUUID();
-        if (createdAt == null) createdAt = Instant.now();
-        if (isAutoRenew == null) isAutoRenew = Boolean.FALSE;
+        if (id == null) {
+			id = UUID.randomUUID();
+		}
+        if (createdAt == null) {
+			createdAt = Instant.now();
+		}
+        if (isAutoRenew == null) {
+			isAutoRenew = Boolean.FALSE;
+		}
     }
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+			return true;
+		}
+        if (o == null || getClass() != o.getClass()) {
+			return false;
+		}
         Contract that = (Contract) o;
         return Objects.equals(id, that.id);
     }

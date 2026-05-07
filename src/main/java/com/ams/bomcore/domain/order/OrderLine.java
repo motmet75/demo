@@ -5,7 +5,6 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
-import com.fasterxml.jackson.annotation.JsonIdentityInfo;
 import com.fasterxml.jackson.annotation.JsonIdentityReference;
 
 import jakarta.persistence.Column;
@@ -103,13 +102,25 @@ public class OrderLine {
 
     @PrePersist
     private void prePersist() {
-        if (id == null) id = UUID.randomUUID();
-        if (createdAt == null) createdAt = Instant.now();
+        if (id == null) {
+			id = UUID.randomUUID();
+		}
+        if (createdAt == null) {
+			createdAt = Instant.now();
+		}
         updatedAt = Instant.now();
-        if (lineStatus == null) lineStatus = LINE_STATUS_PENDING;
-        if (quantityProduced == null) quantityProduced = BigDecimal.ZERO;
-        if (quantityDelivered == null) quantityDelivered = BigDecimal.ZERO;
-        if (quantityCancelled == null) quantityCancelled = BigDecimal.ZERO;
+        if (lineStatus == null) {
+			lineStatus = LINE_STATUS_PENDING;
+		}
+        if (quantityProduced == null) {
+			quantityProduced = BigDecimal.ZERO;
+		}
+        if (quantityDelivered == null) {
+			quantityDelivered = BigDecimal.ZERO;
+		}
+        if (quantityCancelled == null) {
+			quantityCancelled = BigDecimal.ZERO;
+		}
     }
 
     @PreUpdate
@@ -178,8 +189,12 @@ public class OrderLine {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+			return true;
+		}
+        if (o == null || getClass() != o.getClass()) {
+			return false;
+		}
         OrderLine that = (OrderLine) o;
         return Objects.equals(id, that.id);
     }

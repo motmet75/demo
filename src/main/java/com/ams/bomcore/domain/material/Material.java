@@ -1,9 +1,12 @@
 package com.ams.bomcore.domain.material;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
-import java.math.BigDecimal;
+
+import com.ams.bomcore.domain.company.Company;
+import com.ams.bomcore.domain.tenant.Tenant;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -12,9 +15,6 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
-
-import com.ams.bomcore.domain.company.Company;
-import com.ams.bomcore.domain.tenant.Tenant;
 
 /**
  * JPA entity mapping for table `material` in bom_core_schema.sql
@@ -162,8 +162,12 @@ public class Material {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+			return true;
+		}
+        if (o == null || getClass() != o.getClass()) {
+			return false;
+		}
         Material material = (Material) o;
         return Objects.equals(id, material.id);
     }

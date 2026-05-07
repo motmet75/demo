@@ -1,7 +1,5 @@
 package com.ams.bomcore.controller.modelbom;
 
-import com.ams.bomcore.controller.modelbom.dto.ModelBomCsvRow;
-
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.math.BigDecimal;
@@ -11,6 +9,8 @@ import java.util.List;
 import java.util.UUID;
 
 import org.springframework.web.multipart.MultipartFile;
+
+import com.ams.bomcore.controller.modelbom.dto.ModelBomCsvRow;
 
 /**
  * Utility parser that reads a CSV MultipartFile and returns parsed DTO rows
@@ -63,7 +63,9 @@ public class ModelBomCsvParser {
             int row = 0;
             while ((line = br.readLine()) != null) {
                 row++;
-                if (line.trim().isEmpty()) continue;
+                if (line.trim().isEmpty()) {
+					continue;
+				}
                 String[] cols = line.split(",");
                 // header detection: first row containing column names or too few columns
                 if (row == 1) {

@@ -8,7 +8,17 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.util.StringUtils;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import com.ams.bomcore.domain.company.Company;
 import com.ams.bomcore.domain.tenant.Tenant;
@@ -17,7 +27,7 @@ import com.ams.bomcore.repository.CompanyRepository;
 import com.ams.bomcore.repository.TenantRepository;
 
 @RestController
-@CrossOrigin(origins = "http://localhost:5173")
+@CrossOrigin(origins = "*", allowCredentials = "false")
 @RequestMapping("/bom/companies")
 public class CompanyController {
 
@@ -75,8 +85,12 @@ public class CompanyController {
         if (headerTenantId != null && !headerTenantId.isBlank()) {
             try { tenantId = UUID.fromString(headerTenantId); } catch (Exception e) { }
         }
-        if (dto.tenantId != null) tenantId = dto.tenantId;
-        if (tenantId == null) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorDto("tenantId is required"));
+        if (dto.tenantId != null) {
+			tenantId = dto.tenantId;
+		}
+        if (tenantId == null) {
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorDto("tenantId is required"));
+		}
         Tenant tenant = tenantRepository.findById(tenantId).orElseThrow(() -> new IllegalArgumentException("tenant not found"));
 
         // enforce maxCompanies quota
@@ -89,7 +103,9 @@ public class CompanyController {
 
         // unique code check
         var existing = companyRepository.findByCompanyCodeAndTenantId(dto.companyCode, tenant.getId());
-        if (existing.isPresent()) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorDto("companyCode already exists for tenant"));
+        if (existing.isPresent()) {
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorDto("companyCode already exists for tenant"));
+		}
 
         Company c = new Company();
         c.setTenant(tenant);
@@ -102,7 +118,9 @@ public class CompanyController {
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable("id") UUID id, @RequestBody CreateCompanyDto dto) {
         var opt = companyRepository.findById(id);
-        if (opt.isEmpty()) return ResponseEntity.notFound().build();
+        if (opt.isEmpty()) {
+			return ResponseEntity.notFound().build();
+		}
         var c = opt.get();
         if (dto.companyCode != null && !dto.companyCode.equals(c.getCompanyCode())) {
             // determine tenant id to scope uniqueness check (use dto.tenantId if changing tenant)
@@ -113,7 +131,9 @@ public class CompanyController {
             }
             c.setCompanyCode(dto.companyCode);
         }
-        if (dto.companyName != null) c.setCompanyName(dto.companyName);
+        if (dto.companyName != null) {
+			c.setCompanyName(dto.companyName);
+		}
         // allow changing tenant if provided
         if (dto.tenantId != null) {
             Tenant t = tenantRepository.findById(dto.tenantId).orElseThrow(() -> new IllegalArgumentException("tenant not found"));
@@ -129,7 +149,9 @@ public class CompanyController {
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable("id") UUID id) {
         var opt = companyRepository.findById(id);
-        if (opt.isEmpty()) return ResponseEntity.notFound().build();
+        if (opt.isEmpty()) {
+			return ResponseEntity.notFound().build();
+		}
         companyRepository.delete(opt.get());
         return ResponseEntity.noContent().build();
     }

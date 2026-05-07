@@ -7,8 +7,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import jakarta.validation.Valid;
-
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -32,6 +30,8 @@ import com.ams.bomcore.service.inventory.InventoryImportService;
 import com.ams.bomcore.service.inventory.InventoryPatchCsvService;
 import com.ams.bomcore.service.inventory.InventoryService;
 import com.ams.bomcore.service.inventory.OrderDeductionService;
+
+import jakarta.validation.Valid;
 
 @CrossOrigin(origins = "http://localhost:5173")
 @RestController
@@ -111,7 +111,9 @@ public class InventoryController {
             tenantId = resolveTenant(tenantId, headerTenantId);
             companyId = resolveCompany(companyId, headerCompanyId);
 
-            if (tenantId == null || companyId == null) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+            if (tenantId == null || companyId == null) {
+				return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+			}
 
             BigDecimal qty = new BigDecimal(String.valueOf(body.get("quantity")));
 
@@ -164,7 +166,9 @@ public class InventoryController {
         try {
             tenantId = resolveTenant(tenantId, headerTenantId);
             companyId = resolveCompany(companyId, headerCompanyId);
-            if (tenantId == null || companyId == null) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+            if (tenantId == null || companyId == null) {
+				return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+			}
 
             BigDecimal qty = new BigDecimal(String.valueOf(body.get("quantity")));
             String batchNo = body.get("batchNo") == null ? null : String.valueOf(body.get("batchNo"));
@@ -204,7 +208,9 @@ public class InventoryController {
         try {
             tenantId = resolveTenant(tenantId, headerTenantId);
             companyId = resolveCompany(companyId, headerCompanyId);
-            if (tenantId == null || companyId == null) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+            if (tenantId == null || companyId == null) {
+				return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+			}
 
             BigDecimal qty = new BigDecimal(String.valueOf(body.get("quantity")));
             InventoryEntity updated = inventoryService.reserveById(id, qty, tenantId, companyId);
@@ -228,7 +234,9 @@ public class InventoryController {
         try {
             tenantId = resolveTenant(tenantId, headerTenantId);
             companyId = resolveCompany(companyId, headerCompanyId);
-            if (tenantId == null || companyId == null) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+            if (tenantId == null || companyId == null) {
+				return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+			}
 
             BigDecimal qty = new BigDecimal(String.valueOf(body.get("quantity")));
             InventoryEntity updated = inventoryService.releaseById(id, qty, tenantId, companyId);
@@ -278,7 +286,7 @@ public class InventoryController {
             }
 
             InventoryImportService.ImportResult result = inventoryImportService.importFromCsv(file, tenantId, companyId);
-            
+
             if (result.isSuccess()) {
                 return ResponseEntity.ok(result);
             } else {

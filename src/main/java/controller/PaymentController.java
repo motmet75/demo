@@ -1,12 +1,13 @@
 package controller;
 
-import com.demo.demo.PaymentRequest;
-import com.demo.payment.PaymentService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import com.demo.demo.PaymentRequest;
+import com.demo.payment.PaymentService;
 
 @RestController
 @RequestMapping("/payments")

@@ -149,8 +149,12 @@ public class Supplier {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+			return true;
+		}
+        if (o == null || getClass() != o.getClass()) {
+			return false;
+		}
         Supplier supplier = (Supplier) o;
         return Objects.equals(id, supplier.id);
     }

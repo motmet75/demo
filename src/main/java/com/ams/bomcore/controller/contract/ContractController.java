@@ -10,8 +10,6 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import jakarta.validation.Valid;
-
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
@@ -27,20 +25,22 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
-import com.ams.bomcore.domain.contract.Contract;
 import com.ams.bomcore.domain.company.Company;
+import com.ams.bomcore.domain.contract.Contract;
 import com.ams.bomcore.domain.tenant.Tenant;
-import com.ams.bomcore.repository.ContractRepository;
 import com.ams.bomcore.repository.CompanyRepository;
+import com.ams.bomcore.repository.ContractRepository;
 import com.ams.bomcore.repository.TenantRepository;
 import com.ams.bomcore.service.contract.ContractService;
+
+import jakarta.validation.Valid;
 
 @CrossOrigin(origins = "http://localhost:5173")
 @RestController
@@ -114,7 +114,9 @@ public class ContractController {
         tenantId = resolveTenant(tenantId, headerTenantId);
         companyId = resolveCompany(companyId, headerCompanyId);
 
-        if (tenantId == null || companyId == null) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+        if (tenantId == null || companyId == null) {
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+		}
 
         Tenant tenant = tenantRepository.findById(tenantId).orElseThrow(() -> new IllegalArgumentException("tenant not found"));
         Company company = companyRepository.findById(companyId).orElseThrow(() -> new IllegalArgumentException("company not found"));
@@ -145,7 +147,9 @@ public class ContractController {
         tenantId = resolveTenant(tenantId, headerTenantId);
         companyId = resolveCompany(companyId, headerCompanyId);
 
-        if (tenantId == null || companyId == null) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+        if (tenantId == null || companyId == null) {
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+		}
 
         if (!contractRepository.existsById(id)) {
             return ResponseEntity.notFound().build();
@@ -248,9 +252,15 @@ public class ContractController {
                 c.setCompany(company);
                 c.setTenant(tenant);
                 c.setStatus(status == null ? "DRAFT" : status);
-                try { if (startDateStr != null && !startDateStr.isBlank()) c.setStartDate(Instant.parse(startDateStr)); } catch (Exception ex) { errors.add("Row " + rowNum + ": invalid startDate"); }
-                try { if (endDateStr != null && !endDateStr.isBlank()) c.setEndDate(Instant.parse(endDateStr)); } catch (Exception ex) { errors.add("Row " + rowNum + ": invalid endDate"); }
-                try { if (totalValueStr != null && !totalValueStr.isBlank()) c.setTotalValue(new BigDecimal(totalValueStr)); } catch (Exception ex) { errors.add("Row " + rowNum + ": invalid totalValue"); }
+                try { if (startDateStr != null && !startDateStr.isBlank()) {
+					c.setStartDate(Instant.parse(startDateStr));
+				} } catch (Exception ex) { errors.add("Row " + rowNum + ": invalid startDate"); }
+                try { if (endDateStr != null && !endDateStr.isBlank()) {
+					c.setEndDate(Instant.parse(endDateStr));
+				} } catch (Exception ex) { errors.add("Row " + rowNum + ": invalid endDate"); }
+                try { if (totalValueStr != null && !totalValueStr.isBlank()) {
+					c.setTotalValue(new BigDecimal(totalValueStr));
+				} } catch (Exception ex) { errors.add("Row " + rowNum + ": invalid totalValue"); }
                 c.setCurrency(currency);
 
                 toSave.add(c);
@@ -303,7 +313,9 @@ public class ContractController {
                     r.createCell(10).setCellValue(c.getNotes() == null ? "" : c.getNotes());
                 }
 
-                for (int i = 0; i < headers.length; i++) sheet.autoSizeColumn(i);
+                for (int i = 0; i < headers.length; i++) {
+					sheet.autoSizeColumn(i);
+				}
                 workbook.write(os);
                 os.flush();
             }
@@ -318,7 +330,9 @@ public class ContractController {
 
     private static String getStringCell(Row row, int idx) {
         Cell c = row.getCell(idx);
-        if (c == null) return null;
+        if (c == null) {
+			return null;
+		}
         switch (c.getCellType()) {
             case STRING: return c.getStringCellValue();
             case NUMERIC: return String.valueOf(c.getNumericCellValue());

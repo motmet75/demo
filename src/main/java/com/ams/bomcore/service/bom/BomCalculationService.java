@@ -63,7 +63,9 @@ public class BomCalculationService {
 
     @Transactional
     public BomCalculationEntity calculate(Model model, UUID tenantId, UUID companyId, BigDecimal targetQty) {
-        if (model == null) throw new IllegalArgumentException("Model is required");
+        if (model == null) {
+			throw new IllegalArgumentException("Model is required");
+		}
 
         BomEntity bom = bomRepository.findByModelAndTenantIdAndStatus(model, tenantId, "ACTIVE")
                 .orElseThrow(() -> new IllegalArgumentException("No ACTIVE BOM found for model: " + model.getModelName() + " tenant: " + tenantId));
@@ -103,7 +105,9 @@ public class BomCalculationService {
             Material mat = e.getKey();
             BigDecimal required = e.getValue();
             BigDecimal available = inventoryRepository.sumAvailableByMaterialId(mat.getId());
-            if (available == null) available = BigDecimal.ZERO;
+            if (available == null) {
+				available = BigDecimal.ZERO;
+			}
             BigDecimal shortage = required.subtract(available).max(BigDecimal.ZERO);
 
             BomCalculationItemEntity ci = new BomCalculationItemEntity();

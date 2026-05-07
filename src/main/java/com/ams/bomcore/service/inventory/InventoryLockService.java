@@ -1,7 +1,6 @@
 package com.ams.bomcore.service.inventory;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -12,8 +11,8 @@ import com.ams.bomcore.domain.inventory.InventoryLockEntity;
 import com.ams.bomcore.domain.inventory.WarehouseEntity;
 import com.ams.bomcore.domain.material.Material;
 import com.ams.bomcore.repository.InventoryLockRepository;
-import com.ams.bomcore.repository.WarehouseRepository;
 import com.ams.bomcore.repository.MaterialRepository;
+import com.ams.bomcore.repository.WarehouseRepository;
 
 /**
  * Service responsible for creating and releasing inventory locks.

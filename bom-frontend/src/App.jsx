@@ -37,6 +37,7 @@ import LoginForm from './components/LoginForm'
 import RequireAuth from './components/RequireAuth'
 import AdminPage from './features/admin/AdminPage'
 import TenantsPage from './features/tenant/TenantsPage'
+import ETLPage from './features/etl/ETLPage'
 
 const SIDEBAR_FULL = 200
 const SIDEBAR_MINI = 52
@@ -65,6 +66,7 @@ const NAV_ITEMS = [
 const ADMIN_ITEMS = [
   { label: 'Admin',       path: '/admin',                icon: '🔧', adminOnly: true },
   { label: 'Tenants',     path: '/tenants',              icon: '🏗️',  adminOnly: true },
+  { label: 'ETL',         path: '/etl',                  icon: '🔬', adminOnly: true },
 ]
 
 function NavItem({ item, collapsed, active }) {
@@ -140,7 +142,7 @@ function Sidebar({ collapsed, onToggle, isAdmin }) {
 }
 
 // Routes where tenant/company context controls should be hidden
-const ADMIN_ONLY_PATHS = ['/admin', '/tenants']
+const ADMIN_ONLY_PATHS = ['/admin', '/tenants', '/etl']
 
 function HeaderBar({ user, logout }) {
   const location = useLocation()
@@ -209,6 +211,7 @@ function AppShell() {
               <Route path="/admin" element={<RequireAuth adminOnly><AdminPage /></RequireAuth>} />
               <Route path="/admin/users" element={<RequireAuth adminOnly><AdminPage /></RequireAuth>} />
               <Route path="/tenants" element={<RequireAuth adminOnly><TenantsPage /></RequireAuth>} />
+              <Route path="/etl"     element={<RequireAuth adminOnly><ETLPage /></RequireAuth>} />
             </Routes>
           </Box>
         </Box>

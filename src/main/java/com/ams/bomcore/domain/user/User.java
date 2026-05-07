@@ -9,6 +9,11 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.oauth2.core.user.OAuth2User;
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import jakarta.persistence.Access;
 import jakarta.persistence.AccessType;
 import jakarta.persistence.Column;
@@ -20,11 +25,6 @@ import jakarta.persistence.Table;
 import jakarta.persistence.Transient;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.oauth2.core.user.OAuth2User;
-
-import com.fasterxml.jackson.annotation.JsonIgnore;
 
 
 @Entity
@@ -44,7 +44,7 @@ public class User implements UserDetails, OAuth2User, Serializable {
     @GeneratedValue(strategy = GenerationType.AUTO)
     private Integer id = 0;
 
-	
+
 //	@Transient
 //    private Log loginLog;
 
@@ -91,28 +91,28 @@ public class User implements UserDetails, OAuth2User, Serializable {
 
 	@Column(name = "titleAndHonorific")
 	private String titleAndHornorific = "";
-	
+
 	@Column(name = "phoneNumber")
 	private String phoneNumber = "";
-	
+
 	@Column(name = "createdTime")
 	private LocalDateTime createdTime = LocalDateTime.now();
 
 	@Column(name = "isenabled")
 	private boolean enabled = false;
-	
+
 	@Transient
 	private boolean isSuspend = false;
-	
+
 	@Transient
 	private Boolean secondMFA = false;
-	
+
 	@Transient
 	private String secondMFAKey = "";
-	
+
 	@Transient
 	private String fullName = "";
-	
+
 	@Transient
 	private String fullNameFrench = "";
 
@@ -130,7 +130,7 @@ public class User implements UserDetails, OAuth2User, Serializable {
 
 	@Transient
 	private User user;
-	
+
 	@Transient
 	 private Map<String, Object> attributes;
 
@@ -157,7 +157,7 @@ public class User implements UserDetails, OAuth2User, Serializable {
 	private String assignedCompanyId;
 
 
-		
+
 	public String getTenantString() {
 		return tenantString;
 	}
@@ -210,7 +210,7 @@ public class User implements UserDetails, OAuth2User, Serializable {
 	 */
 	public void setLeaderId(Integer leaderId) {
 		this.leaderId = leaderId;
-	
+
 	}
 
 
@@ -234,10 +234,10 @@ public class User implements UserDetails, OAuth2User, Serializable {
 	}
 
 	public String getFullName() {
-		fullName = getFirstName() +" "+ getLastName(); 
+		fullName = getFirstName() +" "+ getLastName();
 		return fullName;
 	}
-	
+
 	public String getFullNameFrench() {
 		fullNameFrench = getLastName() +" "+ getFirstName();
 		return fullNameFrench;
@@ -293,7 +293,7 @@ public class User implements UserDetails, OAuth2User, Serializable {
 		this.username = username;
 		this.validationCode=validationCode;
 	}
-	
+
 	public User(String username,String email, String validationCode) {
 		this.username = username;
 		this.email = email;
@@ -342,7 +342,7 @@ public class User implements UserDetails, OAuth2User, Serializable {
 		this.setEmail(email2);
 		this.setUsername(email2);
 		this.setAuthorities(of);
-		
+
 	}
 
 	@Override
@@ -366,7 +366,7 @@ public class User implements UserDetails, OAuth2User, Serializable {
 		if(this.authorities!=null) {
 			Optional<Authority> opAuth = this.authorities.stream().filter(au -> au.getUsername().equals(username) && au.getAuthority().equals("gototp")).findAny();
 			if(opAuth.isPresent() &&  opAuth.get().getDescription()!=null) {
-				
+
 				if( opAuth.get().getDescription().length()>7) {
 					secondMFA = true;
 					secondMFAKey = opAuth.get().getDescription();

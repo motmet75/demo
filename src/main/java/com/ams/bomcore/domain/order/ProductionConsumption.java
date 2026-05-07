@@ -5,6 +5,8 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
+import com.ams.bomcore.domain.material.Material;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -14,8 +16,6 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
-
-import com.ams.bomcore.domain.material.Material;
 
 /**
  * JPA entity for table {@code production_consumption}.
@@ -71,10 +71,16 @@ public class ProductionConsumption {
 
     @PrePersist
     private void prePersist() {
-        if (id == null) id = UUID.randomUUID();
-        if (createdAt == null) createdAt = Instant.now();
+        if (id == null) {
+			id = UUID.randomUUID();
+		}
+        if (createdAt == null) {
+			createdAt = Instant.now();
+		}
         updatedAt = Instant.now();
-        if (effectivePlannedQty == null && plannedQty != null) effectivePlannedQty = plannedQty;
+        if (effectivePlannedQty == null && plannedQty != null) {
+			effectivePlannedQty = plannedQty;
+		}
     }
 
     @PreUpdate
@@ -119,8 +125,12 @@ public class ProductionConsumption {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+			return true;
+		}
+        if (o == null || getClass() != o.getClass()) {
+			return false;
+		}
         ProductionConsumption that = (ProductionConsumption) o;
         return Objects.equals(id, that.id);
     }

@@ -23,9 +23,13 @@ public class WarehouseService {
     }
 
     public WarehouseEntity create(WarehouseEntity warehouse) {
-        if (warehouse == null) throw new IllegalArgumentException("Warehouse is required");
+        if (warehouse == null) {
+			throw new IllegalArgumentException("Warehouse is required");
+		}
         String code = warehouse.getCode() == null ? null : warehouse.getCode().trim();
-        if (code == null || code.isEmpty()) throw new IllegalArgumentException("warehouse code is required");
+        if (code == null || code.isEmpty()) {
+			throw new IllegalArgumentException("warehouse code is required");
+		}
         // prefer tenant+company scoped uniqueness when tenantId/companyId present
         UUID tenantId = warehouse.getTenantId();
         UUID companyId = warehouse.getCompanyId();
@@ -37,7 +41,9 @@ public class WarehouseService {
         } else {
             exists = warehouseRepository.existsByCode(code);
         }
-        if (exists) throw new IllegalArgumentException("warehouse code already exists: " + code);
+        if (exists) {
+			throw new IllegalArgumentException("warehouse code already exists: " + code);
+		}
         return warehouseRepository.save(warehouse);
     }
 
@@ -47,12 +53,20 @@ public class WarehouseService {
 
     @Transactional(rollbackFor = Exception.class)
     public WarehouseEntity update(UUID id, WarehouseEntity warehouse) {
-        if (id == null) throw new IllegalArgumentException("id is required");
-        if (warehouse == null) throw new IllegalArgumentException("Warehouse is required");
-        if (!warehouseRepository.existsById(id)) throw new IllegalArgumentException("Warehouse not found: " + id);
+        if (id == null) {
+			throw new IllegalArgumentException("id is required");
+		}
+        if (warehouse == null) {
+			throw new IllegalArgumentException("Warehouse is required");
+		}
+        if (!warehouseRepository.existsById(id)) {
+			throw new IllegalArgumentException("Warehouse not found: " + id);
+		}
 
         String code = warehouse.getCode() == null ? null : warehouse.getCode().trim();
-        if (code == null || code.isEmpty()) throw new IllegalArgumentException("warehouse code is required");
+        if (code == null || code.isEmpty()) {
+			throw new IllegalArgumentException("warehouse code is required");
+		}
 
         // Use tenant+company scoped lookup if possible to ensure uniqueness within scope
         UUID tenantId = warehouse.getTenantId();
@@ -76,7 +90,9 @@ public class WarehouseService {
 
     @Transactional(rollbackFor = Exception.class)
     public void delete(UUID id) {
-        if (id == null) return;
+        if (id == null) {
+			return;
+		}
         warehouseRepository.findById(id).ifPresent(w -> {
             try {
                 try {

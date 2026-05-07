@@ -16,7 +16,6 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
-import jakarta.persistence.Transient;
 
 /**
  * Entity mapping for table `order_consumption_log`.
@@ -123,11 +122,19 @@ public class OrderConsumptionLogEntity {
 
     @PrePersist
     private void prePersist() {
-        if (id == null) id = UUID.randomUUID();
-        if (createdAt == null) createdAt = Instant.now();
+        if (id == null) {
+			id = UUID.randomUUID();
+		}
+        if (createdAt == null) {
+			createdAt = Instant.now();
+		}
         updatedAt = Instant.now();
-        if (status == null) status = "PROVISIONAL";
-        if (effectivePlannedQty == null && plannedQty != null) effectivePlannedQty = plannedQty;
+        if (status == null) {
+			status = "PROVISIONAL";
+		}
+        if (effectivePlannedQty == null && plannedQty != null) {
+			effectivePlannedQty = plannedQty;
+		}
     }
 
     @PreUpdate
@@ -137,8 +144,12 @@ public class OrderConsumptionLogEntity {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+			return true;
+		}
+        if (o == null || getClass() != o.getClass()) {
+			return false;
+		}
         OrderConsumptionLogEntity that = (OrderConsumptionLogEntity) o;
         return Objects.equals(id, that.id);
     }

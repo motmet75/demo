@@ -90,14 +90,28 @@ public class InvoiceEntity {
 
     @PrePersist
     private void prePersist() {
-        if (id == null) id = UUID.randomUUID();
-        if (createdAt == null) createdAt = Instant.now();
+        if (id == null) {
+			id = UUID.randomUUID();
+		}
+        if (createdAt == null) {
+			createdAt = Instant.now();
+		}
         updatedAt = Instant.now();
-        if (status == null) status = STATUS_DRAFT;
-        if (currency == null) currency = "USD";
-        if (subtotal == null) subtotal = BigDecimal.ZERO;
-        if (taxAmount == null) taxAmount = BigDecimal.ZERO;
-        if (totalAmount == null) totalAmount = BigDecimal.ZERO;
+        if (status == null) {
+			status = STATUS_DRAFT;
+		}
+        if (currency == null) {
+			currency = "USD";
+		}
+        if (subtotal == null) {
+			subtotal = BigDecimal.ZERO;
+		}
+        if (taxAmount == null) {
+			taxAmount = BigDecimal.ZERO;
+		}
+        if (totalAmount == null) {
+			totalAmount = BigDecimal.ZERO;
+		}
     }
 
     @PreUpdate
@@ -161,8 +175,12 @@ public class InvoiceEntity {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+			return true;
+		}
+        if (o == null || getClass() != o.getClass()) {
+			return false;
+		}
         InvoiceEntity that = (InvoiceEntity) o;
         return Objects.equals(id, that.id);
     }

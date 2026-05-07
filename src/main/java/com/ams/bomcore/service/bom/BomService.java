@@ -171,10 +171,18 @@ public class BomService {
                     .orElseThrow(() -> new IllegalArgumentException("Material not found: " + materialId));
             item.setMaterial(mat);
         }
-        if (quantity != null) item.setQuantity(quantity);
-        if (level != null) item.setLevel(level);
-        if (tenantId != null) item.setTenantId(tenantId);
-        if (companyId != null) item.setCompanyId(companyId);
+        if (quantity != null) {
+			item.setQuantity(quantity);
+		}
+        if (level != null) {
+			item.setLevel(level);
+		}
+        if (tenantId != null) {
+			item.setTenantId(tenantId);
+		}
+        if (companyId != null) {
+			item.setCompanyId(companyId);
+		}
         return bomItemRepository.save(item);
     }
 

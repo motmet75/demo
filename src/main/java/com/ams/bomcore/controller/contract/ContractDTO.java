@@ -32,10 +32,10 @@ public class ContractDTO {
     private String attachmentPath;
     private String notes;
     private Instant createdAt;
-    
+
     // Embedded company info for supplier
     private CompanyInfo supplierCompany;
-    
+
     // Embedded company info for purchasing
     private CompanyInfo purchasingCompany;
 
@@ -66,8 +66,10 @@ public class ContractDTO {
      * Convert JPA entity to DTO
      */
     public static ContractDTO fromEntity(Contract contract) {
-        if (contract == null) return null;
-        
+        if (contract == null) {
+			return null;
+		}
+
         ContractDTO dto = new ContractDTO();
         dto.id = contract.getId();
         dto.tenantId = contract.getTenant() != null ? contract.getTenant().getId() : null;
@@ -90,7 +92,7 @@ public class ContractDTO {
         dto.attachmentPath = contract.getAttachmentPath();
         dto.notes = contract.getNotes();
         dto.createdAt = contract.getCreatedAt();
-        
+
         // Map supplier company
         if (contract.getSupplierCompany() != null) {
             dto.supplierCompany = new CompanyInfo(
@@ -99,7 +101,7 @@ public class ContractDTO {
                 contract.getSupplierCompany().getCompanyName()
             );
         }
-        
+
         // Map purchasing company
         if (contract.getPurchasingCompany() != null) {
             dto.purchasingCompany = new CompanyInfo(
@@ -108,7 +110,7 @@ public class ContractDTO {
                 contract.getPurchasingCompany().getCompanyName()
             );
         }
-        
+
         return dto;
     }
 

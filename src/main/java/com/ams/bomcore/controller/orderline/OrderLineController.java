@@ -4,8 +4,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-import jakarta.validation.Valid;
-
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -22,10 +20,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.ams.bomcore.controller.order.OrderController;
 import com.ams.bomcore.controller.orderline.dto.OrderLineRequestDto;
 import com.ams.bomcore.controller.orderline.dto.OrderLineResponseDto;
 import com.ams.bomcore.service.order.exception.OrderNotFoundException;
 import com.ams.bomcore.service.orderline.OrderLineService;
+
+import jakarta.validation.Valid;
 
 /**
  * REST controller for standalone OrderLine CRUD.
@@ -93,7 +94,9 @@ public class OrderLineController {
 
         tenantId  = resolveTenant(tenantId, headerTenantId);
         companyId = resolveCompany(companyId, headerCompanyId);
-        if (tenantId == null || companyId == null) return missingContext();
+        if (tenantId == null || companyId == null) {
+			return missingContext();
+		}
 
         List<OrderLineResponseDto> result =
                 orderLineService.listLines(tenantId, companyId, orderId, lineStatus, lineType);
@@ -115,7 +118,9 @@ public class OrderLineController {
 
         tenantId  = resolveTenant(tenantId, headerTenantId);
         companyId = resolveCompany(companyId, headerCompanyId);
-        if (tenantId == null || companyId == null) return missingContext();
+        if (tenantId == null || companyId == null) {
+			return missingContext();
+		}
 
         try {
             return ResponseEntity.ok(orderLineService.getById(id, tenantId, companyId));
@@ -139,7 +144,9 @@ public class OrderLineController {
 
         tenantId  = resolveTenant(tenantId, headerTenantId);
         companyId = resolveCompany(companyId, headerCompanyId);
-        if (tenantId == null || companyId == null) return missingContext();
+        if (tenantId == null || companyId == null) {
+			return missingContext();
+		}
 
         try {
             OrderLineResponseDto created = orderLineService.createLine(dto, tenantId, companyId);
@@ -167,7 +174,9 @@ public class OrderLineController {
 
         tenantId  = resolveTenant(tenantId, headerTenantId);
         companyId = resolveCompany(companyId, headerCompanyId);
-        if (tenantId == null || companyId == null) return missingContext();
+        if (tenantId == null || companyId == null) {
+			return missingContext();
+		}
 
         try {
             return ResponseEntity.ok(orderLineService.updateLine(id, dto, tenantId, companyId));
@@ -193,7 +202,9 @@ public class OrderLineController {
 
         tenantId  = resolveTenant(tenantId, headerTenantId);
         companyId = resolveCompany(companyId, headerCompanyId);
-        if (tenantId == null || companyId == null) return missingContext();
+        if (tenantId == null || companyId == null) {
+			return missingContext();
+		}
 
         String newStatus = body.get("status");
         try {
@@ -218,7 +229,9 @@ public class OrderLineController {
 
         tenantId  = resolveTenant(tenantId, headerTenantId);
         companyId = resolveCompany(companyId, headerCompanyId);
-        if (tenantId == null || companyId == null) return missingContext();
+        if (tenantId == null || companyId == null) {
+			return missingContext();
+		}
 
         try {
             orderLineService.deleteLine(id, tenantId, companyId);

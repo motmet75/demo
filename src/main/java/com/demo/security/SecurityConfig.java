@@ -35,11 +35,13 @@ public class SecurityConfig {
             )
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                .requestMatchers("/bom/**").authenticated()
                 .requestMatchers("/auth/login", "/auth/logout", "/auth/me", "/auth/change-password", "/auth/last-context", "/error").permitAll()
                 // .requestMatchers("/api/auth/login", ...).permitAll()
-                .requestMatchers("/admin/**").hasRole("ADMIN")
+                //.requestMatchers("/admin/**").hasRole("ADMIN")
+                .requestMatchers("/bom/etl/**").authenticated()
                 .requestMatchers(HttpMethod.GET, "/bom/tenants", "/bom/tenants/**").permitAll() // Allow public GET access
-                .requestMatchers("/bom/**").authenticated()
+
                 .anyRequest().permitAll()
             )
             .formLogin(form -> form.disable())

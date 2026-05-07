@@ -1,7 +1,6 @@
 package com.ams.bomcore.controller.model;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -17,10 +16,10 @@ import org.springframework.web.multipart.MultipartFile;
 import com.ams.bomcore.controller.modelbom.ModelBomCsvParser;
 import com.ams.bomcore.controller.modelbom.ModelBomCsvParser.ParseResult;
 import com.ams.bomcore.controller.modelbom.dto.ModelBomCsvRow;
+import com.ams.bomcore.domain.tenant.Tenant;
+import com.ams.bomcore.repository.TenantRepository;
 import com.ams.bomcore.service.modelbom.ModelBomService;
 import com.ams.bomcore.service.modelbom.ModelBomService.ImportResult;
-import com.ams.bomcore.repository.TenantRepository;
-import com.ams.bomcore.domain.tenant.Tenant;
 
 @CrossOrigin(origins = "http://localhost:5173")
 @RestController
@@ -79,8 +78,9 @@ public class ModelImportBomController {
         java.util.UUID inferredCompany = null;
         for (ModelBomCsvRow r : rows) {
             if (r.getTenantId() != null) {
-                if (inferredTenant == null) inferredTenant = r.getTenantId();
-                else if (!inferredTenant.equals(r.getTenantId())) {
+                if (inferredTenant == null) {
+					inferredTenant = r.getTenantId();
+				} else if (!inferredTenant.equals(r.getTenantId())) {
                     ImportResponse resp = new ImportResponse();
                     resp.success = false;
                     resp.message = "Inconsistent tenantId values across CSV rows";
@@ -89,8 +89,9 @@ public class ModelImportBomController {
                 }
             }
             if (r.getCompanyId() != null) {
-                if (inferredCompany == null) inferredCompany = r.getCompanyId();
-                else if (!inferredCompany.equals(r.getCompanyId())) {
+                if (inferredCompany == null) {
+					inferredCompany = r.getCompanyId();
+				} else if (!inferredCompany.equals(r.getCompanyId())) {
                     ImportResponse resp = new ImportResponse();
                     resp.success = false;
                     resp.message = "Inconsistent companyId values across CSV rows";

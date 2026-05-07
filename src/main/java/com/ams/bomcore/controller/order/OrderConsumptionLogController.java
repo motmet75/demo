@@ -51,9 +51,10 @@ public class OrderConsumptionLogController {
         tenantId  = resolve(tenantId, ht);
         companyId = resolve(companyId, hc);
 
-        if (tenantId == null || companyId == null)
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+        if (tenantId == null || companyId == null) {
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body("tenantId and companyId are required");
+		}
 
         List<OrderConsumptionLogDto> rows =
                 repository.findDtoByTenantIdAndCompanyId(tenantId, companyId);

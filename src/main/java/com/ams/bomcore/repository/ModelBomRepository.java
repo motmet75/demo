@@ -9,8 +9,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import com.ams.bomcore.domain.model.Model;
 import com.ams.bomcore.domain.material.Material;
+import com.ams.bomcore.domain.model.Model;
 import com.ams.bomcore.domain.modelbom.ModelBom;
 
 @Repository

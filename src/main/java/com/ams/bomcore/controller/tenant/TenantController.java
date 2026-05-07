@@ -9,7 +9,15 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import com.ams.bomcore.domain.tenant.Tenant;
 import com.ams.bomcore.repository.TenantRepository;
@@ -45,7 +53,9 @@ public class TenantController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> create(@RequestBody CreateTenantDto dto) {
         var existing = tenantRepository.findByTenantCode(dto.tenantCode);
-        if (existing.isPresent()) return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorDto("tenantCode already exists"));
+        if (existing.isPresent()) {
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorDto("tenantCode already exists"));
+		}
         Tenant t = new Tenant();
         t.setTenantCode(dto.tenantCode);
         t.setTenantName(dto.tenantName);
@@ -59,7 +69,9 @@ public class TenantController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> update(@PathVariable("id") UUID id, @RequestBody CreateTenantDto dto) {
         var opt = tenantRepository.findById(id);
-        if (opt.isEmpty()) return ResponseEntity.notFound().build();
+        if (opt.isEmpty()) {
+			return ResponseEntity.notFound().build();
+		}
         var t = opt.get();
         if (dto.tenantCode != null && !dto.tenantCode.equals(t.getTenantCode())) {
             var conflict = tenantRepository.findByTenantCode(dto.tenantCode);
@@ -68,9 +80,15 @@ public class TenantController {
             }
             t.setTenantCode(dto.tenantCode);
         }
-        if (dto.tenantName != null) t.setTenantName(dto.tenantName);
-        if (dto.isActive != null) t.setIsActive(dto.isActive);
-        if (dto.maxCompanies != null && dto.maxCompanies >= 1) t.setMaxCompanies(dto.maxCompanies);
+        if (dto.tenantName != null) {
+			t.setTenantName(dto.tenantName);
+		}
+        if (dto.isActive != null) {
+			t.setIsActive(dto.isActive);
+		}
+        if (dto.maxCompanies != null && dto.maxCompanies >= 1) {
+			t.setMaxCompanies(dto.maxCompanies);
+		}
         tenantRepository.save(t);
         return ResponseEntity.ok(new TenantDto(t.getId(), t.getTenantCode(), t.getTenantName(), t.getIsActive(), t.getMaxCompanies(), t.getCreatedAt()));
     }
@@ -79,7 +97,9 @@ public class TenantController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> activate(@PathVariable("id") UUID id, @RequestBody ActivateDto dto) {
         var opt = tenantRepository.findById(id);
-        if (opt.isEmpty()) return ResponseEntity.notFound().build();
+        if (opt.isEmpty()) {
+			return ResponseEntity.notFound().build();
+		}
         var t = opt.get();
         t.setIsActive(dto.isActive == null ? Boolean.TRUE : dto.isActive);
         tenantRepository.save(t);

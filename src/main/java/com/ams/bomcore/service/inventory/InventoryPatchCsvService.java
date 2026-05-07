@@ -86,7 +86,9 @@ public class InventoryPatchCsvService {
 
             while ((line = reader.readLine()) != null) {
                 lineNumber++;
-                if (line.trim().isEmpty()) continue;
+                if (line.trim().isEmpty()) {
+					continue;
+				}
 
                 String[] values = parseCsvLine(line);
 
@@ -151,7 +153,7 @@ public class InventoryPatchCsvService {
                     }
                     // blank value → leave unchanged
                 }
-                
+
                 if (hasUnitPriceCol) {
                     String val = getCol(values, colMap, "unit_price");
                     if (val != null && !val.isBlank()) {
@@ -212,7 +214,9 @@ public class InventoryPatchCsvService {
 
     private String getCol(String[] values, Map<String, Integer> colMap, String name) {
         Integer idx = colMap.get(name);
-        if (idx == null || idx >= values.length) return null;
+        if (idx == null || idx >= values.length) {
+			return null;
+		}
         String v = values[idx].trim();
         return v.isEmpty() ? null : v;
     }

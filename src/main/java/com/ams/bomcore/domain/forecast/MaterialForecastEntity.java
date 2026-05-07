@@ -4,6 +4,8 @@ import java.time.LocalDate;
 import java.util.Objects;
 import java.util.UUID;
 
+import org.hibernate.annotations.Immutable;
+
 import com.ams.bomcore.domain.inventory.WarehouseEntity;
 import com.ams.bomcore.domain.material.Material;
 
@@ -15,7 +17,6 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
-import org.hibernate.annotations.Immutable;
 
 /**
  * Append-only, read-optimized entity for table `material_forecast`.
@@ -118,8 +119,12 @@ public class MaterialForecastEntity {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+			return true;
+		}
+        if (o == null || getClass() != o.getClass()) {
+			return false;
+		}
         MaterialForecastEntity that = (MaterialForecastEntity) o;
         return Objects.equals(id, that.id);
     }

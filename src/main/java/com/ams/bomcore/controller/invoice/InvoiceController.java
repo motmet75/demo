@@ -49,12 +49,16 @@ public class InvoiceController {
     }
 
     private UUID resolveTenant(UUID tenantId, String h) {
-        if (h != null && !h.isBlank()) try { return UUID.fromString(h); } catch (Exception ignored) {}
+        if (h != null && !h.isBlank()) {
+			try { return UUID.fromString(h); } catch (Exception ignored) {}
+		}
         return tenantId;
     }
 
     private UUID resolveCompany(UUID companyId, String h) {
-        if (h != null && !h.isBlank()) try { return UUID.fromString(h); } catch (Exception ignored) {}
+        if (h != null && !h.isBlank()) {
+			try { return UUID.fromString(h); } catch (Exception ignored) {}
+		}
         return companyId;
     }
 
@@ -70,8 +74,9 @@ public class InvoiceController {
             @RequestParam(value = "size",  defaultValue = "20") int size) {
         tenantId  = resolveTenant(tenantId, ht);
         companyId = resolveCompany(companyId, hc);
-        if (tenantId == null || companyId == null)
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+        if (tenantId == null || companyId == null) {
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+		}
         Page<InvoiceEntity> result = invoiceService.list(tenantId, companyId, invoiceType, status,
                 PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")));
         return ResponseEntity.ok(result);
@@ -86,8 +91,9 @@ public class InvoiceController {
             @RequestHeader(value = "X-Company-Id",required = false) String hc) {
         tenantId  = resolveTenant(tenantId, ht);
         companyId = resolveCompany(companyId, hc);
-        if (tenantId == null || companyId == null)
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+        if (tenantId == null || companyId == null) {
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+		}
         List<InvoiceEntity> result = invoiceService.listAll(tenantId, companyId);
         return ResponseEntity.ok(result);
     }
@@ -117,8 +123,9 @@ public class InvoiceController {
             @RequestHeader(value = "X-Company-Id",required = false) String hc) {
         tenantId  = resolveTenant(tenantId, ht);
         companyId = resolveCompany(companyId, hc);
-        if (tenantId == null || companyId == null)
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+        if (tenantId == null || companyId == null) {
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+		}
         try {
             InvoiceEntity saved = invoiceService.create(body, tenantId, companyId);
             return ResponseEntity.status(HttpStatus.CREATED).body(saved);
