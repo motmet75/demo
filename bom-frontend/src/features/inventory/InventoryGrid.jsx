@@ -18,6 +18,7 @@ export default function InventoryGrid() {
   const [filterMaterial, setFilterMaterial] = useState('')
   const [filterWarehouse, setFilterWarehouse] = useState('')
   const [filterInventoryUuid, setFilterInventoryUuid] = useState('')
+  const [filterBatch, setFilterBatch] = useState('')
   const [filterCreatedFrom, setFilterCreatedFrom] = useState('')
   const [filterCreatedTo, setFilterCreatedTo] = useState('')
   const [createdRangePreset, setCreatedRangePreset] = useState('')
@@ -426,6 +427,7 @@ export default function InventoryGrid() {
     if (filterMaterial && filterMaterial.trim() !== '' && !(r.materialCode || '').toLowerCase().includes(filterMaterial.trim().toLowerCase())) return false
     if (filterWarehouse && filterWarehouse.trim() !== '' && !(r.warehouseCode || '').toLowerCase().includes(filterWarehouse.trim().toLowerCase())) return false
     if (filterInventoryUuid && filterInventoryUuid.trim() !== '' && !(r.inventoryId || '').toLowerCase().includes(filterInventoryUuid.trim().toLowerCase())) return false
+    if (filterBatch && filterBatch.trim() !== '' && !(r.batchNo || '').toLowerCase().includes(filterBatch.trim().toLowerCase())) return false
     if (filterCreatedFrom || filterCreatedTo) {
       const d = r.createdAt ? new Date(r.createdAt) : null
       if (!d || isNaN(d)) return false
@@ -499,6 +501,10 @@ export default function InventoryGrid() {
           <label style={{ fontSize: 12 }}>Filter Warehouse:</label><br />
           <input value={filterWarehouse} onChange={e => setFilterWarehouse(e.target.value)} />
         </div>
+        <div>
+          <label style={{ fontSize: 12 }}>Filter Batch:</label><br />
+          <input value={filterBatch} onChange={e => setFilterBatch(e.target.value)} />
+        </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <label style={{ fontSize: 12 }}>Quick Range</label>
           <select value={createdRangePreset} onChange={e => applyCreatedRangePreset(e.target.value)} style={{ fontSize: 12, padding: '3px 6px', height: 24 }}>
@@ -521,7 +527,7 @@ export default function InventoryGrid() {
           <label style={{ fontSize: 12 }}>Created To</label>
           <input type="datetime-local" value={filterCreatedTo} onChange={e => { setCreatedRangePreset(''); setFilterCreatedTo(e.target.value) }} style={{ fontSize: 12, padding: '3px 6px' }} />
         </div>
-        <button type="button" onClick={() => { setFilterInventoryUuid(''); setFilterMaterial(''); setFilterWarehouse(''); setFilterCreatedFrom(''); setFilterCreatedTo(''); setCreatedRangePreset('') }} style={{ alignSelf: 'flex-end', fontSize: 12, padding: '4px 10px' }}>Clear</button>
+        <button type="button" onClick={() => { setFilterInventoryUuid(''); setFilterMaterial(''); setFilterWarehouse(''); setFilterBatch(''); setFilterCreatedFrom(''); setFilterCreatedTo(''); setCreatedRangePreset('') }} style={{ alignSelf: 'flex-end', fontSize: 12, padding: '4px 10px' }}>Clear</button>
         <div style={{ alignSelf: 'flex-end', color: '#666', fontSize: 12 }}>{filteredRows.length} / {rows.length}</div>
       </div>
 
