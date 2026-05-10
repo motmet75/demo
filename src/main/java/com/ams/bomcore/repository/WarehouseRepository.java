@@ -1,5 +1,6 @@
 package com.ams.bomcore.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -30,5 +31,11 @@ public interface WarehouseRepository extends JpaRepository<WarehouseEntity, UUID
     Optional<WarehouseEntity> findByCodeAndTenantIdAndCompanyId(String code, UUID tenantId, UUID companyId);
 
     boolean existsByCodeAndTenantIdAndCompanyId(String code, UUID tenantId, UUID companyId);
+
+    /**
+     * Optimized: Find all warehouses matching a list of codes.
+     * Used by InventoryImportService to avoid N+1 query performance issues.
+     */
+    List<WarehouseEntity> findAllByCodeInAndTenantIdAndCompanyId(Collection<String> codes, UUID tenantId, UUID companyId);
 
 }

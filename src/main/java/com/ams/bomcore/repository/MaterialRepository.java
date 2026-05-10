@@ -1,5 +1,6 @@
 package com.ams.bomcore.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -24,7 +25,13 @@ public interface MaterialRepository extends JpaRepository<Material, UUID> {
     // Find by code within a company to enforce uniqueness per company
     Optional<Material> findByMaterialCodeAndCompany(String materialCode, Company company);
 
-    // New: find by code scoped to company id (convenience for services that only have companyId)
+    // Find by code scoped to company id
     Optional<Material> findByMaterialCodeAndTenantIdAndCompanyId(String materialCode, UUID tenantId, UUID companyId);
+
+    /**
+     * Optimized: Find multiple materials by their codes at once for batch processing.
+     * This eliminates the "N+1" query problem.
+     */
+    List<Material> findAllByMaterialCodeInAndTenantIdAndCompanyId(Collection<String> materialCodes, UUID tenantId, UUID companyId);
 
 }
