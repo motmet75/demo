@@ -52,7 +52,7 @@ public interface InventoryRepository extends JpaRepository<InventoryEntity, UUID
     @Query("SELECT i FROM InventoryEntity i WHERE i.material = :material AND i.warehouse.code = :warehouseCode AND i.batchNo = :batchNo")
     Optional<InventoryEntity> findByMaterialAndWarehouseCodeAndBatchNo(@Param("material") Material material, @Param("warehouseCode") String warehouseCode, @Param("batchNo") String batchNo);
 
-    // Find inventory by material + warehouse code + batchNo + tenantId + companyId
+    // Find inventory by scoped business key
     @Query("SELECT i FROM InventoryEntity i WHERE i.material = :material AND i.warehouse.code = :warehouseCode AND i.batchNo = :batchNo AND i.tenantId = :tenantId AND i.companyId = :companyId")
     Optional<InventoryEntity> findByMaterialAndWarehouseCodeAndBatchNoAndTenantIdAndCompanyId(
             @Param("material") Material material, 
@@ -61,7 +61,7 @@ public interface InventoryRepository extends JpaRepository<InventoryEntity, UUID
             @Param("tenantId") UUID tenantId, 
             @Param("companyId") UUID companyId);
 
-    // Projection for grid display: join Inventory -> Material -> Warehouse in one query
+    // Projection for grid display
     @Query("SELECT new com.ams.bomcore.controller.inventory.dto.InventoryViewDTO("
             + "i.id, i.tenantId, i.companyId, m.id, m.materialCode, m.materialName, w.id, w.code, w.name, "
             + "i.quantityOnHand, i.quantityTotal, i.quantityReserved, i.quantityLocked, i.batchNo, i.contractCode, i.orderToDeduction, i.unit, i.unitPrice, i.currency, "
@@ -72,47 +72,31 @@ public interface InventoryRepository extends JpaRepository<InventoryEntity, UUID
             + "WHERE i.tenantId = :tenantId AND i.companyId = :companyId")
     List<InventoryViewDTO> findAllInventoryView(@Param("tenantId") UUID tenantId, @Param("companyId") UUID companyId);
 
-    @Query("SELECT new com.ams.bomcore.controller.inventory.dto.InventoryViewDTO("
-            + "i.id, i.tenantId, i.companyId, m.id, m.materialCode, m.materialName, w.id, w.code, w.name, "
-            + "i.quantityOnHand, i.quantityTotal, i.quantityReserved, i.quantityLocked, i.batchNo, i.contractCode, i.orderToDeduction, i.unit, i.unitPrice, i.currency, "
-            + "i.expirationDateTime, i.productionDateTime, i.createdAt, i.updatedAt, i.visible, i.approved, i.locked, i.materialQuotaPercentage) "
-            + "FROM InventoryEntity i "
-            + "JOIN i.material m "
-            + "JOIN i.warehouse w "
-            + "WHERE i.companyId = :companyId")
-    List<InventoryViewDTO> findInventoryViewByCompanyId(@Param("companyId") UUID companyId);
-
-    /**
-     * Update ONLY order_to_deduction and updated_at
-     */
     @Modifying
     @Query("UPDATE InventoryEntity i SET i.orderToDeduction = :tag, i.updatedAt = :now WHERE i.id = :id")
     void updateOrderToDeduction(@Param("id") UUID id, @Param("tag") String tag, @Param("now") Instant now);
 
-    /**
-     * Clear order_to_deduction for a single row
-     */
     @Modifying
     @Query("UPDATE InventoryEntity i SET i.orderToDeduction = NULL, i.updatedAt = :now WHERE i.id = :id")
     void clearOrderToDeduction(@Param("id") UUID id, @Param("now") Instant now);
 
     /**
-     * Update ONLY quantity_on_hand and updated_at
+     * Clear order_to_deduction for all rows of a tenant/company — restored from original.
      */
+    @Modifying
+    @Query("UPDATE InventoryEntity i SET i.orderToDeduction = NULL, i.updatedAt = :now WHERE i.tenantId = :tenantId AND i.companyId = :companyId AND i.orderToDeduction IS NOT NULL")
+    void clearAllOrderToDeduction(@Param("tenantId") UUID tenantId,
+                                  @Param("companyId") UUID companyId,
+                                  @Param("now") Instant now);
+
     @Modifying
     @Query("UPDATE InventoryEntity i SET i.quantityOnHand = :qty, i.updatedAt = :now WHERE i.id = :id")
     void updateQuantityOnHand(@Param("id") UUID id, @Param("qty") BigDecimal qty, @Param("now") Instant now);
 
-    /**
-     * Update ONLY quantity_locked (soft-reservation)
-     */
     @Modifying
     @Query("UPDATE InventoryEntity i SET i.quantityLocked = :qty, i.updatedAt = :now WHERE i.id = :id")
     void updateQuantityLocked(@Param("id") UUID id, @Param("qty") BigDecimal qty, @Param("now") Instant now);
 
-    /**
-     * Update ONLY quantity_reserved
-     */
     @Modifying
     @Query("UPDATE InventoryEntity i SET i.quantityReserved = :qty, i.updatedAt = :now WHERE i.id = :id")
     void updateQuantityReserved(@Param("id") UUID id, @Param("qty") BigDecimal qty, @Param("now") Instant now);

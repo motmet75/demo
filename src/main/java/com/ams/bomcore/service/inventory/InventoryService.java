@@ -50,7 +50,7 @@ public class InventoryService {
 
     // New tenant+company scoped listing helpers
     public List<InventoryEntity> listAllByTenantAndCompany(UUID tenantId, UUID companyId) {
-        return inventoryRepository.findByTenantIdAndCompanyId(tenantId, companyId);
+        return inventoryRepository.findAllByTenantIdAndCompanyId(tenantId, companyId);
     }
 
     public List<InventoryViewDTO> listInventoryViewByTenantAndCompany(UUID tenantId, UUID companyId) {

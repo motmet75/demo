@@ -88,7 +88,7 @@ public class OrderDeductionService {
                                                  UUID tenantId, UUID companyId) {
 
         List<InventoryEntity> rows = inventoryRepository
-                .findByTenantIdAndCompanyId(tenantId, companyId)
+                .findAllByTenantIdAndCompanyId(tenantId, companyId)
                 .stream()
                 .filter(e -> e.getMaterial() != null
                         && e.getMaterial().getId().equals(materialId)
@@ -207,7 +207,7 @@ public class OrderDeductionService {
         BigDecimal baseQty = bomItem.getQuantity().multiply(orderQty);
 
         List<InventoryEntity> rows = inventoryRepository
-                .findByTenantIdAndCompanyId(tenantId, companyId)
+                .findAllByTenantIdAndCompanyId(tenantId, companyId)
                 .stream()
                 .filter(e -> e.getMaterial() != null
                         && e.getMaterial().getId().equals(materialId)

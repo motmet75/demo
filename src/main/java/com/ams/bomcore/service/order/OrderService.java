@@ -707,7 +707,7 @@ public class OrderService {
      */
     private void deductInventory(UUID materialId, BigDecimal qty, UUID tenantId, UUID companyId) {
         // 1. Load and sort rows: alpha by orderToDeduction (null/blank last), then FEFO
-        List<InventoryEntity> entries = inventoryRepository.findByTenantIdAndCompanyId(tenantId, companyId)
+        List<InventoryEntity> entries = inventoryRepository.findAllByTenantIdAndCompanyId(tenantId, companyId)
                 .stream()
                 .filter(e -> e.getMaterial() != null
                         && e.getMaterial().getId().equals(materialId)
@@ -872,7 +872,7 @@ public class OrderService {
             // Fetch inventory rows for this material to get quota% and compute
             // quota-adjusted available: each row contributes max(0, (onHand - locked) × (1 − quota%/100))
             // Using per-row quotaPct — quota% only bites into the FREE stock, not the locked portion.
-            List<InventoryEntity> invRows = inventoryRepository.findByTenantIdAndCompanyId(tenantId, companyId)
+            List<InventoryEntity> invRows = inventoryRepository.findAllByTenantIdAndCompanyId(tenantId, companyId)
                     .stream().filter(e -> e.getMaterial() != null && e.getMaterial().getId().equals(matId)).toList();
 
             // available = sum over rows of max(0, (onHand - locked) × (1 − quota%/100))
@@ -1062,7 +1062,7 @@ public class OrderService {
                     String.CASE_INSENSITIVE_ORDER);
 
             // Group 1: tagged rows — sort by orderToDeduction A→Z, then materialCode A→Z
-            List<InventoryEntity> taggedRows = inventoryRepository.findByTenantIdAndCompanyId(tenantId, companyId)
+            List<InventoryEntity> taggedRows = inventoryRepository.findAllByTenantIdAndCompanyId(tenantId, companyId)
                     .stream()
                     .filter(baseFilter)
                     .filter(e -> e.getOrderToDeduction() != null && !e.getOrderToDeduction().isBlank())
@@ -1073,7 +1073,7 @@ public class OrderService {
                     .toList();
 
             // Group 2: untagged rows — sort by materialCode A→Z
-            List<InventoryEntity> untaggedRows = inventoryRepository.findByTenantIdAndCompanyId(tenantId, companyId)
+            List<InventoryEntity> untaggedRows = inventoryRepository.findAllByTenantIdAndCompanyId(tenantId, companyId)
                     .stream()
                     .filter(baseFilter)
                     .filter(e -> e.getOrderToDeduction() == null || e.getOrderToDeduction().isBlank())
