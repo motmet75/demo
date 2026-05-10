@@ -89,7 +89,7 @@ public class InventoryImportService {
             String[] headers = parseCsvLine(headerLine);
             Map<String, Integer> columnMap = buildColumnMap(headers);
 
-            // First pass: validate all materials exist
+            // First pass: parse and validate required fields
             List<CsvRow> rows = new ArrayList<>();
             String line;
             int lineNumber = 1;
@@ -97,54 +97,51 @@ public class InventoryImportService {
             while ((line = reader.readLine()) != null) {
                 lineNumber++;
                 if (line.trim().isEmpty()) {
-					continue;
-				}
+                    continue;
+                }
 
                 try {
                     String[] values = parseCsvLine(line);
                     CsvRow row = parseRow(values, columnMap, lineNumber);
-                    rows.add(row);
 
-                    // Validate material exists
+                    // Validate required fields
                     if (row.materialCode == null || row.materialCode.trim().isEmpty()) {
                         errors.add("Line " + lineNumber + ": material_code is required");
-                        continue;
+                        continue; // do NOT add to rows — skip in second pass
                     }
 
-                    // Check warehouse
                     if (row.warehouseCode == null || row.warehouseCode.trim().isEmpty()) {
                         errors.add("Line " + lineNumber + ": warehouse_code is required");
-                        continue;
+                        continue; // do NOT add to rows — skip in second pass
                     }
 
-                    // Check batch_no
                     if (row.batchNo == null || row.batchNo.trim().isEmpty()) {
                         errors.add("Line " + lineNumber + ": batch_no is required");
+                        continue; // do NOT add to rows — skip in second pass
                     }
+
+                    rows.add(row);
 
                 } catch (Exception e) {
                     errors.add("Line " + lineNumber + ": " + e.getMessage());
                 }
             }
 
-            // Check all materials exist before processing
+            // Check all materials and warehouses exist before processing
             for (CsvRow row : rows) {
-                if (row.materialCode != null && !row.materialCode.trim().isEmpty()) {
-                    Optional<Material> mat = materialRepository.findByMaterialCodeAndTenantIdAndCompanyId(
-                            row.materialCode, tenantId, companyId);
-                    if (mat.isEmpty()) {
-                        if (!missingMaterials.contains(row.materialCode)) {
-                            missingMaterials.add(row.materialCode);
-                        }
+                Optional<Material> mat = materialRepository.findByMaterialCodeAndTenantIdAndCompanyId(
+                        row.materialCode, tenantId, companyId);
+                if (mat.isEmpty()) {
+                    if (!missingMaterials.contains(row.materialCode)) {
+                        missingMaterials.add(row.materialCode);
                     }
                 }
-                if (row.warehouseCode != null && !row.warehouseCode.trim().isEmpty()) {
-                    Optional<WarehouseEntity> wh = warehouseRepository.findByCodeAndTenantIdAndCompanyId(
-                            row.warehouseCode, tenantId, companyId);
-                    if (wh.isEmpty()) {
-                        if (!missingWarehouses.contains(row.warehouseCode)) {
-                            missingWarehouses.add(row.warehouseCode);
-                        }
+
+                Optional<WarehouseEntity> wh = warehouseRepository.findByCodeAndTenantIdAndCompanyId(
+                        row.warehouseCode, tenantId, companyId);
+                if (wh.isEmpty()) {
+                    if (!missingWarehouses.contains(row.warehouseCode)) {
+                        missingWarehouses.add(row.warehouseCode);
                     }
                 }
             }
@@ -167,21 +164,28 @@ public class InventoryImportService {
             }
 
             // Second pass: create or update inventory records
+            // All rows here are guaranteed to have non-null materialCode, warehouseCode, batchNo
             for (CsvRow row : rows) {
+                // Defensive null guard — should never trigger after first-pass filtering above
+                if (row.materialCode == null || row.warehouseCode == null || row.batchNo == null) {
+                    errors.add("Line " + row.lineNumber + ": skipped due to missing required fields");
+                    continue;
+                }
+
                 try {
                     // Lookup entities by code with tenant+company scope
-                    Material material = materialRepository.findByMaterialCodeAndTenantIdAndCompanyId(
-                            row.materialCode, tenantId, companyId)
+                    Material material = materialRepository
+                            .findByMaterialCodeAndTenantIdAndCompanyId(row.materialCode, tenantId, companyId)
                             .orElseThrow(() -> new RuntimeException("Material not found: " + row.materialCode));
-                    WarehouseEntity warehouse = warehouseRepository.findByCodeAndTenantIdAndCompanyId(
-                            row.warehouseCode, tenantId, companyId)
+                    WarehouseEntity warehouse = warehouseRepository
+                            .findByCodeAndTenantIdAndCompanyId(row.warehouseCode, tenantId, companyId)
                             .orElseThrow(() -> new RuntimeException("Warehouse not found: " + row.warehouseCode));
 
                     // Lookup contract if provided (with tenant+company scope)
                     UUID contractId = null;
                     if (row.contractCode != null && !row.contractCode.trim().isEmpty()) {
-                        Optional<Contract> contract = contractRepository.findByContractNumberAndTenant_IdAndCompany_Id(
-                                row.contractCode, tenantId, companyId);
+                        Optional<Contract> contract = contractRepository
+                                .findByContractNumberAndTenant_IdAndCompany_Id(row.contractCode, tenantId, companyId);
                         if (contract.isPresent()) {
                             contractId = contract.get().getId();
                         }
@@ -189,26 +193,26 @@ public class InventoryImportService {
 
                     // Find existing or create new - with tenant+company scope
                     // First check if there's any existing record with this business key
-                    Optional<InventoryEntity> anyExisting = inventoryRepository.findByMaterialAndWarehouseCodeAndBatchNo(
-                            material, warehouse.getCode(), row.batchNo);
+                    Optional<InventoryEntity> anyExisting = inventoryRepository
+                            .findByMaterialAndWarehouseCodeAndBatchNo(material, warehouse.getCode(), row.batchNo);
 
                     // If a record exists, verify it belongs to the same tenant+company
                     if (anyExisting.isPresent()) {
                         InventoryEntity existingRecord = anyExisting.get();
-                        if (!existingRecord.getTenantId().equals(tenantId) || !existingRecord.getCompanyId().equals(companyId)) {
+                        if (!existingRecord.getTenantId().equals(tenantId)
+                                || !existingRecord.getCompanyId().equals(companyId)) {
                             throw new RuntimeException(
-                                "Cannot import: An inventory record already exists for a different tenant/company. " +
-                                "Material: " + row.materialCode +
-                                ", Warehouse: " + row.warehouseCode +
-                                ", Batch: " + row.batchNo +
-                                ". This violates the unique constraint (tenant_id, company_id, warehouse_id, material_id, batch_no)."
-                            );
+                                    "Cannot import: An inventory record already exists for a different tenant/company. "
+                                            + "Material: " + row.materialCode + ", Warehouse: " + row.warehouseCode
+                                            + ", Batch: " + row.batchNo
+                                            + ". This violates the unique constraint (tenant_id, company_id, warehouse_id, material_id, batch_no).");
                         }
                     }
 
                     // Now find with tenant+company scope to get or create
-                    Optional<InventoryEntity> existing = inventoryRepository.findByMaterialAndWarehouseCodeAndBatchNoAndTenantIdAndCompanyId(
-                            material, warehouse.getCode(), row.batchNo, tenantId, companyId);
+                    Optional<InventoryEntity> existing = inventoryRepository
+                            .findByMaterialAndWarehouseCodeAndBatchNoAndTenantIdAndCompanyId(material,
+                                    warehouse.getCode(), row.batchNo, tenantId, companyId);
 
                     InventoryEntity inv;
                     boolean isNew = false;
@@ -216,9 +220,11 @@ public class InventoryImportService {
                         inv = existing.get();
                         // Verify the existing record belongs to same tenant+company
                         if (!inv.getTenantId().equals(tenantId) || !inv.getCompanyId().equals(companyId)) {
-                            throw new RuntimeException("Duplicate inventory found but belongs to different tenant/company. " +
-                                    "This violates unique constraint: (company_id, tenant_id, warehouse_id, material_id, batch_no). " +
-                                    "Material: " + row.materialCode + ", Warehouse: " + row.warehouseCode + ", Batch: " + row.batchNo);
+                            throw new RuntimeException(
+                                    "Duplicate inventory found but belongs to different tenant/company. "
+                                            + "This violates unique constraint: (company_id, tenant_id, warehouse_id, material_id, batch_no). "
+                                            + "Material: " + row.materialCode + ", Warehouse: " + row.warehouseCode
+                                            + ", Batch: " + row.batchNo);
                         }
                     } else {
                         inv = new InventoryEntity();
@@ -232,7 +238,8 @@ public class InventoryImportService {
 
                     // Set all fields from CSV
                     inv.setQuantityOnHand(row.quantityOnHand != null ? row.quantityOnHand : BigDecimal.ZERO);
-                    inv.setQuantityTotal(row.quantityTotal != null ? row.quantityTotal : (row.quantityOnHand != null ? row.quantityOnHand : BigDecimal.ZERO));
+                    inv.setQuantityTotal(row.quantityTotal != null ? row.quantityTotal
+                            : (row.quantityOnHand != null ? row.quantityOnHand : BigDecimal.ZERO));
                     inv.setQuantityReserved(row.quantityReserved != null ? row.quantityReserved : BigDecimal.ZERO);
                     inv.setQuantityLocked(row.quantityLocked != null ? row.quantityLocked : BigDecimal.ZERO);
                     inv.setMaterialQuota(row.materialQuota);
@@ -300,9 +307,10 @@ public class InventoryImportService {
 
                 } catch (org.springframework.dao.DataIntegrityViolationException e) {
                     // Handle constraint violation
-                    String constraintError = "CONSTRAINT VIOLATION - Duplicate inventory record detected. " +
-                            "The combination (company_id, tenant_id, warehouse_id, material_id, batch_no) must be unique. " +
-                            "Material: " + row.materialCode + ", Warehouse: " + row.warehouseCode + ", Batch: " + row.batchNo;
+                    String constraintError = "CONSTRAINT VIOLATION - Duplicate inventory record detected. "
+                            + "The combination (company_id, tenant_id, warehouse_id, material_id, batch_no) must be unique. "
+                            + "Material: " + row.materialCode + ", Warehouse: " + row.warehouseCode + ", Batch: "
+                            + row.batchNo;
                     errors.add("Line " + row.lineNumber + ": " + constraintError);
                     // Transaction will rollback due to @Transactional(rollbackFor = Exception.class)
                     throw new RuntimeException(constraintError, e);
@@ -337,9 +345,42 @@ public class InventoryImportService {
         return map;
     }
 
+    /**
+     * RFC 4180-compliant CSV parser.
+     * Correctly handles quoted fields that contain commas (e.g. "5,919.51")
+     * and escaped double-quotes ("").
+     */
     private String[] parseCsvLine(String line) {
-        // Simple CSV parser (does not handle quotes with commas inside)
-        return line.split(",", -1);
+        List<String> fields = new ArrayList<>();
+        StringBuilder sb = new StringBuilder();
+        boolean inQuotes = false;
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            if (inQuotes) {
+                if (c == '"') {
+                    // check for escaped quote ""
+                    if (i + 1 < line.length() && line.charAt(i + 1) == '"') {
+                        sb.append('"');
+                        i++;
+                    } else {
+                        inQuotes = false;
+                    }
+                } else {
+                    sb.append(c);
+                }
+            } else {
+                if (c == '"') {
+                    inQuotes = true;
+                } else if (c == ',') {
+                    fields.add(sb.toString());
+                    sb.setLength(0);
+                } else {
+                    sb.append(c);
+                }
+            }
+        }
+        fields.add(sb.toString());
+        return fields.toArray(new String[0]);
     }
 
     private CsvRow parseRow(String[] values, Map<String, Integer> columnMap, int lineNumber) {
@@ -385,18 +426,22 @@ public class InventoryImportService {
     private String getColumnValue(String[] values, Map<String, Integer> columnMap, String columnName) {
         Integer idx = columnMap.get(columnName);
         if (idx == null || idx >= values.length) {
-			return null;
-		}
+            return null;
+        }
         String val = values[idx].trim();
         return val.isEmpty() ? null : val;
     }
 
+    /**
+     * Parses a decimal value, stripping thousand-separator commas first (e.g. "5,919.51" → 5919.51).
+     */
     private BigDecimal parseBigDecimal(String value) {
         if (value == null || value.trim().isEmpty()) {
-			return null;
-		}
+            return null;
+        }
         try {
-            return new BigDecimal(value.trim());
+            // Strip thousand-separator commas before parsing
+            return new BigDecimal(value.trim().replace(",", ""));
         } catch (NumberFormatException e) {
             return null;
         }
@@ -404,8 +449,8 @@ public class InventoryImportService {
 
     private LocalDate parseLocalDate(String value) {
         if (value == null || value.trim().isEmpty()) {
-			return null;
-		}
+            return null;
+        }
         try {
             return LocalDate.parse(value.trim(), DateTimeFormatter.ISO_LOCAL_DATE);
         } catch (DateTimeParseException e) {
@@ -415,14 +460,14 @@ public class InventoryImportService {
 
     private Instant parseInstant(String value) {
         if (value == null || value.trim().isEmpty()) {
-			return null;
-		}
+            return null;
+        }
         try {
             return Instant.parse(value.trim());
         } catch (DateTimeParseException e) {
-            // Try parsing as ISO_LOCAL_DATE_TIME and convert to instant
             try {
-                return LocalDate.parse(value.trim(), DateTimeFormatter.ISO_LOCAL_DATE).atStartOfDay().toInstant(java.time.ZoneOffset.UTC);
+                return LocalDate.parse(value.trim(), DateTimeFormatter.ISO_LOCAL_DATE)
+                        .atStartOfDay().toInstant(java.time.ZoneOffset.UTC);
             } catch (DateTimeParseException e2) {
                 return null;
             }
@@ -431,8 +476,8 @@ public class InventoryImportService {
 
     private Boolean parseBoolean(String value) {
         if (value == null || value.trim().isEmpty()) {
-			return null;
-		}
+            return null;
+        }
         String v = value.trim().toLowerCase();
         return v.equals("true") || v.equals("1") || v.equals("yes") || v.equals("y");
     }

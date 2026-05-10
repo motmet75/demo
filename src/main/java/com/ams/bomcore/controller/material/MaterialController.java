@@ -1,18 +1,24 @@
 package com.ams.bomcore.controller.material;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
+import java.io.ByteArrayOutputStream;
 import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.apache.poi.ss.usermodel.BorderStyle;
 import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.CellType;
+import org.apache.poi.ss.usermodel.FillPatternType;
+import org.apache.poi.ss.usermodel.Font;
+import org.apache.poi.ss.usermodel.IndexedColors;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -181,16 +187,76 @@ public class MaterialController {
     }
 
     /**
-     * Import materials from CSV (multipart/form-data).
-     * Simple CSV format expected: material_code,material_name,unit,material_type
-     * It will parse rows, validate minimal fields, and perform batch save.
+     * Download XLSX template for material import.
+     * GET /bom/materials/template/import
+     */
+    @GetMapping(path = "/template/import")
+    public ResponseEntity<byte[]> downloadImportTemplate() {
+        String[] headers = { "material_code", "material_name", "unit", "material_type", "description" };
+        Object[][] examples = {
+            { "MAT-001", "Steel Plate",  "kg", "RAW_MATERIAL", "Cold-rolled steel plate" },
+            { "MAT-002", "Copper Wire",  "m",  "RAW_MATERIAL", "2mm copper wire" },
+        };
+
+        try (Workbook wb = new XSSFWorkbook();
+             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+
+            Sheet sheet = wb.createSheet("material_import");
+
+            CellStyle headerStyle = wb.createCellStyle();
+            Font headerFont = wb.createFont();
+            headerFont.setBold(true);
+            headerStyle.setFont(headerFont);
+            headerStyle.setFillForegroundColor(IndexedColors.LIGHT_CORNFLOWER_BLUE.getIndex());
+            headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            headerStyle.setBorderBottom(BorderStyle.THIN);
+            headerStyle.setBorderTop(BorderStyle.THIN);
+            headerStyle.setBorderLeft(BorderStyle.THIN);
+            headerStyle.setBorderRight(BorderStyle.THIN);
+
+            CellStyle exampleStyle = wb.createCellStyle();
+            exampleStyle.setFillForegroundColor(IndexedColors.LIGHT_YELLOW.getIndex());
+            exampleStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+
+            Row headerRow = sheet.createRow(0);
+            for (int i = 0; i < headers.length; i++) {
+                Cell cell = headerRow.createCell(i);
+                cell.setCellValue(headers[i]);
+                cell.setCellStyle(headerStyle);
+                sheet.setColumnWidth(i, 22 * 256);
+            }
+
+            for (int r = 0; r < examples.length; r++) {
+                Row row = sheet.createRow(r + 1);
+                for (int c = 0; c < examples[r].length; c++) {
+                    Cell cell = row.createCell(c);
+                    cell.setCellValue(examples[r][c] == null ? "" : examples[r][c].toString());
+                    cell.setCellStyle(exampleStyle);
+                }
+            }
+
+            wb.write(out);
+            return ResponseEntity.ok()
+                    .header("Content-Disposition", "attachment; filename=\"material_import_template.xlsx\"")
+                    .header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                    .body(out.toByteArray());
+
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    /**
+     * Import materials from XLSX file (multipart/form-data).
+     * Expected columns: material_code, material_name, unit, material_type, description (optional)
+     * Header row is auto-detected and skipped.
      */
     @PostMapping(path = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<ImportResult> importCsv(@RequestParam("file") MultipartFile file,
-                                                  @RequestParam(value = "tenantId", required = false) UUID tenantId,
-                                                  @RequestParam(value = "companyId", required = false) UUID companyId,
-                                                  @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId,
-                                                  @RequestHeader(value = "X-Company-Id", required = false) String headerCompanyId) {
+    public ResponseEntity<ImportResult> importXlsx(@RequestParam("file") MultipartFile file,
+                                                   @RequestParam(value = "tenantId", required = false) UUID tenantId,
+                                                   @RequestParam(value = "companyId", required = false) UUID companyId,
+                                                   @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId,
+                                                   @RequestHeader(value = "X-Company-Id", required = false) String headerCompanyId) {
         tenantId = resolveTenant(tenantId, headerTenantId);
         companyId = resolveCompany(companyId, headerCompanyId);
 
@@ -201,72 +267,97 @@ public class MaterialController {
         Tenant tenant = tenantRepository.findById(tenantId).orElseThrow(() -> new IllegalArgumentException("tenant not found"));
         Company company = companyRepository.findById(companyId).orElseThrow(() -> new IllegalArgumentException("company not found"));
 
-        String filename = file.getOriginalFilename() != null ? file.getOriginalFilename() : "";
-        // Only accept CSV for now
-        if (!filename.toLowerCase().endsWith(".csv")) {
+        String filename = file.getOriginalFilename() != null ? file.getOriginalFilename().toLowerCase() : "";
+        if (!filename.endsWith(".xlsx") && !filename.endsWith(".xls")) {
             return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
-                    .body(ImportResult.error("Only CSV files are supported currently"));
+                    .body(ImportResult.error("Only XLSX files are supported. Please use the template."));
         }
 
         List<String> errors = new ArrayList<>();
         List<Material> toSave = new ArrayList<>();
-        int row = 0;
-        try (BufferedReader br = new BufferedReader(new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = br.readLine()) != null) {
-                row++;
-                if (line.trim().isEmpty()) {
-					continue;
-				}
-                // naive CSV split by comma
-                String[] cols = line.split(",");
-                // allow header detection
-                if (row == 1 && (cols[0].toLowerCase().contains("material") || cols[0].toLowerCase().contains("code") || cols.length < 3)) {
-                    // assume header, skip
-                    continue;
-                }
-                if (cols.length < 4) {
-                    errors.add("Row " + row + ": expected at least 4 columns (code,name,unit,type[,description])");
-                    continue;
-                }
-                String code = cols[0].trim();
-                String name = cols[1].trim();
-                String unit = cols[2].trim();
-                String type = cols[3].trim();
-                String description = cols.length > 4 ? cols[4].trim() : "";
-                if (code.isEmpty() || name.isEmpty() || unit.isEmpty() || type.isEmpty()) {
-                    errors.add("Row " + row + ": missing required fields");
-                    continue;
-                }
-                // skip duplicates in DB by code within company
-                if (materialRepository.findByMaterialCodeAndCompany(code, company).isPresent()) {
-                    errors.add("Row " + row + ": material_code already exists for company: " + code);
-                    continue;
-                }
-                Material m = new Material();
-                m.setMaterialCode(code);
-                m.setMaterialName(name);
-                m.setUnit(unit);
-                m.setMaterialType(type);
-                if (!description.isEmpty()) {
-					m.setDescription(description);
-				}
-                m.setCompany(company);
-                m.setTenant(tenant);
-                toSave.add(m);
+
+        try (Workbook wb = new XSSFWorkbook(file.getInputStream())) {
+            Sheet sheet = wb.getSheetAt(0);
+            Iterator<Row> rowIterator = sheet.iterator();
+
+            // Detect and skip header row
+            Row firstRow = rowIterator.hasNext() ? rowIterator.next() : null;
+            if (firstRow == null) {
+                return ResponseEntity.ok(ImportResult.success(0, errors));
+            }
+            String firstCell = getCellString(firstRow.getCell(0));
+            boolean isHeader = firstCell.toLowerCase().contains("material") || firstCell.toLowerCase().contains("code");
+            if (!isHeader) {
+                // First row is data — process it now
+                processXlsxRow(firstRow, company, tenant, errors, toSave, firstRow.getRowNum() + 1);
+            }
+
+            while (rowIterator.hasNext()) {
+                Row row = rowIterator.next();
+                if (isRowEmpty(row)) continue;
+                processXlsxRow(row, company, tenant, errors, toSave, row.getRowNum() + 1);
             }
 
             if (!toSave.isEmpty()) {
-                // batch save
                 List<Material> saved = materialRepository.saveAll(toSave);
                 return ResponseEntity.ok(ImportResult.success(saved.size(), errors));
             } else {
                 return ResponseEntity.ok(ImportResult.success(0, errors));
             }
+
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ImportResult.error("Failed to parse file: " + e.getMessage()));
         }
+    }
+
+    private void processXlsxRow(Row row, Company company, Tenant tenant,
+                                 List<String> errors, List<Material> toSave, int rowNum) {
+        String code        = getCellString(row.getCell(0));
+        String name        = getCellString(row.getCell(1));
+        String unit        = getCellString(row.getCell(2));
+        String type        = getCellString(row.getCell(3));
+        String description = row.getLastCellNum() > 4 ? getCellString(row.getCell(4)) : "";
+
+        if (code.isEmpty() || name.isEmpty() || unit.isEmpty() || type.isEmpty()) {
+            errors.add("Row " + rowNum + ": missing required fields (code, name, unit, type)");
+            return;
+        }
+        if (materialRepository.findByMaterialCodeAndCompany(code, company).isPresent()) {
+            errors.add("Row " + rowNum + ": material_code already exists for company: " + code);
+            return;
+        }
+        Material m = new Material();
+        m.setMaterialCode(code);
+        m.setMaterialName(name);
+        m.setUnit(unit);
+        m.setMaterialType(type);
+        if (!description.isEmpty()) {
+            m.setDescription(description);
+        }
+        m.setCompany(company);
+        m.setTenant(tenant);
+        toSave.add(m);
+    }
+
+    private String getCellString(Cell cell) {
+        if (cell == null) return "";
+        if (cell.getCellType() == CellType.NUMERIC) {
+            // Avoid scientific notation for numeric codes
+            return String.valueOf((long) cell.getNumericCellValue());
+        }
+        return cell.toString().trim();
+    }
+
+    private boolean isRowEmpty(Row row) {
+        if (row == null) return true;
+        for (int i = row.getFirstCellNum(); i < row.getLastCellNum(); i++) {
+            Cell cell = row.getCell(i);
+            if (cell != null && cell.getCellType() != CellType.BLANK && !cell.toString().trim().isEmpty()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @PostMapping(path = "/export", consumes = MediaType.APPLICATION_JSON_VALUE, produces = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

@@ -1,11 +1,23 @@
 package com.ams.bomcore.controller.inventory;
 
+import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+
+import org.apache.poi.ss.usermodel.BorderStyle;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.FillPatternType;
+import org.apache.poi.ss.usermodel.Font;
+import org.apache.poi.ss.usermodel.IndexedColors;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -341,36 +353,93 @@ public class InventoryController {
     }
 
     /**
-     * Download CSV template for full inventory import.
+     * Download XLSX template for full inventory import.
      * GET /bom/inventory/template/import
      */
-    @GetMapping(path = "/template/import", produces = "text/csv")
+    @GetMapping(path = "/template/import")
     public ResponseEntity<byte[]> downloadImportTemplate() {
-        String csv =
-            "material_code,warehouse_code,batch_no,quantity_on_hand,quantity_total," +
-            "quantity_reserved,quantity_locked,contract_code,unit,unit_price,currency," +
-            "hs_code,origin_type,origin_country,xform_no,cds_no,purchase_no," +
-            "order_to_deduction,material_quota,material_quota_percentage," +
-            "user_name,xform_date,purchase_date_time,cds_date_time," +
-            "production_date_time,expiration_date_time,visible,approved,locked\n" +
-            // example row 1
-            "MAT-001,WH-A,BATCH-2026-001,1000,1000,0,0,CTR-001,kg,5.50,USD," +
-            "3904.10,domestic,VN,XFORM-001,CDS-001,PO-001," +
-            "A,1050,105.00," +
-            "admin,2026-01-15,2026-01-15T08:00:00Z,2026-01-16T08:00:00Z," +
-            "2026-01-10T00:00:00Z,2027-01-10T00:00:00Z,true,false,false\n" +
-            // example row 2
-            "MAT-002,WH-B,BATCH-2026-002,500,500,0,0,,pcs,12.00,USD," +
-            ",,,,,,," +
-            "B,,100.00," +
-            "system,,,," +
-            ",,true,false,false\n";
+        String[] headers = {
+            "material_code","warehouse_code","batch_no","quantity_on_hand","quantity_total",
+            "quantity_reserved","quantity_locked","contract_code","unit","unit_price","currency",
+            "hs_code","origin_type","origin_country","xform_no","cds_no","purchase_no",
+            "order_to_deduction","material_quota","material_quota_percentage",
+            "user_name","xform_date","purchase_date_time","cds_date_time",
+            "production_date_time","expiration_date_time","visible","approved","locked"
+        };
+        Object[] example1 = {
+            "MAT-001","WH-A","BATCH-2026-001",1000,1000,
+            0,0,"CTR-001","kg",5.50,"USD",
+            "3904.10","domestic","VN","XFORM-001","CDS-001","PO-001",
+            "A",1050,105.00,
+            "admin","2026-01-15","2026-01-15T08:00:00Z","2026-01-16T08:00:00Z",
+            "2026-01-10T00:00:00Z","2027-01-10T00:00:00Z","true","false","false"
+        };
+        Object[] example2 = {
+            "MAT-002","WH-B","BATCH-2026-002",500,500,
+            0,0,"","pcs",12.00,"USD",
+            "","","","","","",
+            "B","",100.00,
+            "system","","","",
+            "","","true","false","false"
+        };
 
-        byte[] bytes = csv.getBytes(StandardCharsets.UTF_8);
-        return ResponseEntity.ok()
-                .header("Content-Disposition", "attachment; filename=\"inventory_import_template.csv\"")
-                .header("Content-Type", "text/csv; charset=UTF-8")
-                .body(bytes);
+        try (Workbook wb = new XSSFWorkbook();
+             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+
+            Sheet sheet = wb.createSheet("inventory_import");
+
+            // Header style: bold, light blue background, bordered
+            CellStyle headerStyle = wb.createCellStyle();
+            Font headerFont = wb.createFont();
+            headerFont.setBold(true);
+            headerStyle.setFont(headerFont);
+            headerStyle.setFillForegroundColor(IndexedColors.LIGHT_CORNFLOWER_BLUE.getIndex());
+            headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            headerStyle.setBorderBottom(BorderStyle.THIN);
+            headerStyle.setBorderTop(BorderStyle.THIN);
+            headerStyle.setBorderLeft(BorderStyle.THIN);
+            headerStyle.setBorderRight(BorderStyle.THIN);
+
+            // Example row style: light yellow background
+            CellStyle exampleStyle = wb.createCellStyle();
+            exampleStyle.setFillForegroundColor(IndexedColors.LIGHT_YELLOW.getIndex());
+            exampleStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+
+            // Write header row
+            Row headerRow = sheet.createRow(0);
+            for (int i = 0; i < headers.length; i++) {
+                Cell cell = headerRow.createCell(i);
+                cell.setCellValue(headers[i]);
+                cell.setCellStyle(headerStyle);
+                sheet.setColumnWidth(i, 20 * 256); // 20 chars wide
+            }
+
+            // Write example rows
+            Object[][] examples = {example1, example2};
+            for (int r = 0; r < examples.length; r++) {
+                Row row = sheet.createRow(r + 1);
+                for (int c = 0; c < examples[r].length; c++) {
+                    Cell cell = row.createCell(c);
+                    Object val = examples[r][c];
+                    if (val instanceof Number) {
+                        cell.setCellValue(((Number) val).doubleValue());
+                    } else {
+                        cell.setCellValue(val == null ? "" : val.toString());
+                    }
+                    cell.setCellStyle(exampleStyle);
+                }
+            }
+
+            wb.write(out);
+            byte[] bytes = out.toByteArray();
+            return ResponseEntity.ok()
+                    .header("Content-Disposition", "attachment; filename=\"inventory_import_template.xlsx\"")
+                    .header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                    .body(bytes);
+
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
     }
 
     /**
