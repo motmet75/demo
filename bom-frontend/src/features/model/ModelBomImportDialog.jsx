@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { importModelBoms } from '../../api/modelApi'
 import { useAppContext } from '../../context/AppContext'
 
-// Minimal modal dialog - keeps UI inline with existing project patterns
+// Minimal modal dialog - updated to support XLSX Excel imports
 export default function ModelBomImportDialog({ open, onClose, onSuccess }) {
   const [file, setFile] = useState(null)
   const [result, setResult] = useState(null)
@@ -41,13 +41,14 @@ export default function ModelBomImportDialog({ open, onClose, onSuccess }) {
     <div style={{ position: 'fixed', inset: 0, zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)' }}>
       <div style={{ width: 640, maxWidth: '92%', background: '#fff', borderRadius: 6, padding: 16, boxShadow: '0 6px 24px rgba(0,0,0,0.2)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h3 style={{ margin: 0 }}>Import Model BOM (CSV)</h3>
+          <h3 style={{ margin: 0 }}>Import Model BOM (Excel XLSX)</h3>
           <button onClick={handleClose} aria-label="Close">Close</button>
         </div>
 
         <form onSubmit={onSubmit}>
           <div style={{ marginBottom: 8 }}>
-            <input type="file" accept=".csv" onChange={e => setFile(e.target.files[0])} />
+            {/* Updated accept attribute for Excel files */}
+            <input type="file" accept=".xlsx, .xls" onChange={e => setFile(e.target.files[0])} />
           </div>
 
           <div style={{ display: 'flex', gap: 8 }}>
