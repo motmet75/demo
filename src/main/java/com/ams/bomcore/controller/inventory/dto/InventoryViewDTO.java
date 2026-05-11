@@ -37,6 +37,7 @@ public class InventoryViewDTO {
     private Boolean approved;
     private Boolean locked;
     private BigDecimal materialQuotaPercentage;
+	private String userName = "system";
 
     public InventoryViewDTO(UUID inventoryId, UUID tenantId, UUID companyId, UUID materialId, String materialCode, String materialName,
                             UUID warehouseId, String warehouseCode, String warehouseName,
@@ -44,7 +45,7 @@ public class InventoryViewDTO {
                             String contractCode, String orderToDeduction, String unit, BigDecimal unitPrice, String currency,
                             Instant expirationDateTime, Instant productionDateTime, Instant createdAt, Instant updatedAt,
                             Boolean visible, Boolean approved, Boolean locked,
-                            BigDecimal materialQuotaPercentage) {
+                            BigDecimal materialQuotaPercentage, String userName) {
         this.inventoryId = inventoryId;
         this.tenantId = tenantId;
         this.companyId = companyId;
@@ -72,6 +73,7 @@ public class InventoryViewDTO {
         this.approved = approved;
         this.locked = locked;
         this.materialQuotaPercentage = materialQuotaPercentage;
+        this.setUserName(userName);
     }
 
     // Getters
@@ -102,4 +104,12 @@ public class InventoryViewDTO {
     public Boolean getApproved() { return approved; }
     public Boolean getLocked() { return locked; }
     public BigDecimal getMaterialQuotaPercentage() { return materialQuotaPercentage; }
+
+	public String getUserName() {
+		return userName;
+	}
+
+	public void setUserName(String userName) {
+		this.userName = userName;
+	}
 }
