@@ -55,6 +55,10 @@ public class InventoryPatchCsvService {
 
             // --- header ---
             String headerLine = reader.readLine();
+            if (headerLine != null && headerLine.startsWith("\uFEFF")) {
+                headerLine = headerLine.substring(1);  // strip UTF-8 BOM
+            }
+            
             if (headerLine == null) {
                 result.setSuccess(false);
                 result.setMessage("CSV file is empty");
