@@ -28,6 +28,8 @@ import CancelIcon from '@mui/icons-material/Cancel'
 import InventoryIcon from '@mui/icons-material/Inventory'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import EditIcon from '@mui/icons-material/Edit'
+import DownloadIcon from '@mui/icons-material/Download'
+import * as XLSX from 'xlsx'
 import { useAppContext } from '../../context/AppContext'
 import { fetchOrders, confirmOrder, deliverOrder, cancelOrder, checkInventory, moveToProduction } from '../../api/orderApi'
 import OrderCreateModal from './OrderCreateModal'
@@ -72,7 +74,7 @@ export default function OrderGrid() {
     else if (preset.startsWith('last_')) { const d=parseInt(preset.replace('last_',''),10); const f=new Date(now); f.setDate(f.getDate()-(d-1)); setFilterFromDate(toDateLocal(f)); setFilterToDate(today) }
   }
 
-  // selected is scoped to current page rows (server-side pagination — rows is current page)
+  // selected is scoped to current page rows (server-side pagination)
   const pageIds = new Set(rows.map(r => r.id))
   const selected = selectionModel.type === 'exclude'
     ? rows.map(r => r.id).filter(id => !selectionModel.ids.has(id))
@@ -92,14 +94,14 @@ export default function OrderGrid() {
   const [actionLoading, setActionLoading] = useState({})
 
   // ── Check Inventory dialog ────────────────────────────────────────
-  const [checkOpen, setCheckOpen]     = useState(false)
-  const [checkResult, setCheckResult] = useState(null)
+  const [checkOpen, setCheckOpen]       = useState(false)
+  const [checkResult, setCheckResult]   = useState(null)
   const [checkLoading, setCheckLoading] = useState(false)
 
   // ── Move to Production dialog ─────────────────────────────────────
-  const [moveOpen, setMoveOpen]           = useState(false)
+  const [moveOpen, setMoveOpen]                 = useState(false)
   const [deliveryDateTime, setDeliveryDateTime] = useState('')
-  const [moveLoading, setMoveLoading]     = useState(false)
+  const [moveLoading, setMoveLoading]           = useState(false)
 
   const load = useCallback(async () => {
     if (!tenantId || !companyId) return
@@ -150,6 +152,75 @@ export default function OrderGrid() {
     finally { setCheckLoading(false) }
   }
 
+  // ── Download check result as XLSX ─────────────────────────────────
+  const downloadCheckResultXlsx = () => {
+    if (!checkResult) return
+
+    const overall = checkResult.sufficient ? 'SUFFICIENT' : 'INSUFFICIENT'
+    const ts      = new Date().toLocaleString()
+
+    // ── Sheet 1: Summary ──────────────────────────────────────────
+    const wsSummary = XLSX.utils.aoa_to_sheet([
+      ['Inventory Check Report'],
+      ['Generated At',    ts],
+      ['Overall Result',  overall],
+      ['Orders Checked',  selected.length],
+      ['Total Materials', (checkResult.rows || []).length],
+      ['Sufficient',      (checkResult.rows || []).filter(r => r.sufficient).length],
+      ['Short',           (checkResult.rows || []).filter(r => !r.sufficient).length],
+    ])
+
+    // ── Sheet 2: All materials ─────────────────────────────────────
+    const allRows = (checkResult.rows || []).map(r => ({
+      'Material Code': r.materialCode,
+      'Material Name': r.materialName,
+      'Required Qty':  r.requiredQty,
+      'Available Qty': r.availableQty,
+      'Shortage':      r.sufficient ? 0 : Math.max(0, r.requiredQty - r.availableQty),
+      'Result':        r.sufficient ? 'SUFFICIENT' : 'INSUFFICIENT',
+    }))
+    const wsAll = XLSX.utils.json_to_sheet(allRows)
+    wsAll['!cols'] = [{ wch: 18 }, { wch: 36 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 14 }]
+
+    // ── Sheet 3: Insufficient only ─────────────────────────────────
+    const shortRows = (checkResult.rows || [])
+      .filter(r => !r.sufficient)
+      .map(r => ({
+        'Material Code': r.materialCode,
+        'Material Name': r.materialName,
+        'Required Qty':  r.requiredQty,
+        'Available Qty': r.availableQty,
+        'Shortage':      Math.max(0, r.requiredQty - r.availableQty),
+      }))
+    const wsShort = XLSX.utils.json_to_sheet(
+      shortRows.length ? shortRows : [{ Note: 'All materials are sufficient' }]
+    )
+    wsShort['!cols'] = [{ wch: 18 }, { wch: 36 }, { wch: 14 }, { wch: 14 }, { wch: 12 }]
+
+    // ── Sheet 4: Sufficient only ───────────────────────────────────
+    const okRows = (checkResult.rows || [])
+      .filter(r => r.sufficient)
+      .map(r => ({
+        'Material Code': r.materialCode,
+        'Material Name': r.materialName,
+        'Required Qty':  r.requiredQty,
+        'Available Qty': r.availableQty,
+      }))
+    const wsOk = XLSX.utils.json_to_sheet(
+      okRows.length ? okRows : [{ Note: 'No sufficient materials' }]
+    )
+    wsOk['!cols'] = [{ wch: 18 }, { wch: 36 }, { wch: 14 }, { wch: 14 }]
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary')
+    XLSX.utils.book_append_sheet(wb, wsAll,     'All Materials')
+    XLSX.utils.book_append_sheet(wb, wsShort,   'INSUFFICIENT')
+    XLSX.utils.book_append_sheet(wb, wsOk,      'SUFFICIENT')
+
+    const fileTs = new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', '-')
+    XLSX.writeFile(wb, `inventory_check_${overall}_${fileTs}.xlsx`)
+  }
+
   // ── Move to Production ────────────────────────────────────────────
   const handleMoveToProduction = async () => {
     if (!selected.length) return
@@ -157,7 +228,6 @@ export default function OrderGrid() {
     try {
       const dt = deliveryDateTime ? new Date(deliveryDateTime).toISOString() : null
       const updated = await moveToProduction(selected, dt, 'system')
-      // Merge updated orders back
       const map = Object.fromEntries(updated.map(o => [o.id, o]))
       setRows(prev => prev.map(r => map[r.id] ? { ...map[r.id], id: r.id } : r))
       setMoveOpen(false); setSelectionModel({ type: 'include', ids: new Set() })
@@ -254,7 +324,7 @@ export default function OrderGrid() {
   ]
 
   const noContextMsg = !tenantId || !companyId
-  const hasSelected = selected.length > 0
+  const hasSelected  = selected.length > 0
 
   return (
     <Box>
@@ -300,9 +370,11 @@ export default function OrderGrid() {
           <MenuItem value="last_60">Last 60 Days</MenuItem>
           <MenuItem value="last_90">Last 90 Days</MenuItem>
         </TextField>
-        <TextField label="From Date" type="date" value={filterFromDate} onChange={e => { setDateRangePreset(''); setFilterFromDate(e.target.value) }}
+        <TextField label="From Date" type="date" value={filterFromDate}
+          onChange={e => { setDateRangePreset(''); setFilterFromDate(e.target.value) }}
           size="small" InputLabelProps={{ shrink: true }} sx={{ width: 160 }} />
-        <TextField label="To Date" type="date" value={filterToDate} onChange={e => { setDateRangePreset(''); setFilterToDate(e.target.value) }}
+        <TextField label="To Date" type="date" value={filterToDate}
+          onChange={e => { setDateRangePreset(''); setFilterToDate(e.target.value) }}
           size="small" InputLabelProps={{ shrink: true }} sx={{ width: 160 }} />
         <Tooltip title="Refresh"><IconButton onClick={load}><RefreshIcon /></IconButton></Tooltip>
         <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)} disabled={noContextMsg}>
@@ -329,46 +401,92 @@ export default function OrderGrid() {
 
       {/* ── Check Inventory Result Dialog ───────────────────────── */}
       <Dialog open={checkOpen} onClose={() => setCheckOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle>
-          Inventory Check — {checkResult?.sufficient
-            ? <Chip label="SUFFICIENT" color="success" size="small" />
-            : <Chip label="INSUFFICIENT" color="error" size="small" />}
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          Inventory Check
+          {checkResult && (
+            <Chip
+              label={checkResult.sufficient ? 'SUFFICIENT' : 'INSUFFICIENT'}
+              color={checkResult.sufficient ? 'success' : 'error'}
+              size="small"
+            />
+          )}
         </DialogTitle>
+
         <DialogContent>
           {checkResult && (
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Material Code</TableCell>
-                  <TableCell>Material Name</TableCell>
-                  <TableCell align="right">Required</TableCell>
-                  <TableCell align="right">Available</TableCell>
-                  <TableCell>Result</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {(checkResult.rows || []).map(r => (
-                  <TableRow key={r.materialId}>
-                    <TableCell sx={{ fontFamily: 'monospace' }}>{r.materialCode}</TableCell>
-                    <TableCell>{r.materialName}</TableCell>
-                    <TableCell align="right">{numFmt(r.requiredQty)}</TableCell>
-                    <TableCell align="right">{numFmt(r.availableQty)}</TableCell>
-                    <TableCell>
-                      <Chip label={r.sufficient ? 'OK' : 'SHORT'} size="small"
-                        color={r.sufficient ? 'success' : 'error'} />
-                    </TableCell>
+            <>
+              {/* ── Quick counts ──────────────────────────────────── */}
+              <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+                <Chip label={`Total: ${checkResult.rows?.length ?? 0}`} size="small" variant="outlined" />
+                <Chip
+                  label={`OK: ${(checkResult.rows || []).filter(r => r.sufficient).length}`}
+                  size="small" color="success" variant="outlined"
+                />
+                <Chip
+                  label={`Short: ${(checkResult.rows || []).filter(r => !r.sufficient).length}`}
+                  size="small" color="error" variant="outlined"
+                />
+              </Box>
+
+              <Table size="small">
+                <TableHead>
+                  <TableRow sx={{ '& th': { fontWeight: 600 } }}>
+                    <TableCell>Material Code</TableCell>
+                    <TableCell>Material Name</TableCell>
+                    <TableCell align="right">Required</TableCell>
+                    <TableCell align="right">Available</TableCell>
+                    <TableCell align="right">Shortage</TableCell>
+                    <TableCell>Result</TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHead>
+                <TableBody>
+                  {(checkResult.rows || []).map(r => (
+                    <TableRow
+                      key={r.materialId}
+                      sx={{ bgcolor: r.sufficient ? 'transparent' : 'rgba(211,47,47,0.04)' }}
+                    >
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{r.materialCode}</TableCell>
+                      <TableCell>{r.materialName}</TableCell>
+                      <TableCell align="right">{numFmt(r.requiredQty)}</TableCell>
+                      <TableCell align="right">{numFmt(r.availableQty)}</TableCell>
+                      <TableCell align="right" sx={{ color: r.sufficient ? 'inherit' : 'error.main', fontWeight: r.sufficient ? 'normal' : 700 }}>
+                        {r.sufficient ? '—' : numFmt(Math.max(0, r.requiredQty - r.availableQty))}
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={r.sufficient ? 'SUFFICIENT' : 'INSUFFICIENT'}
+                          size="small"
+                          color={r.sufficient ? 'success' : 'error'}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </>
           )}
         </DialogContent>
+
         <DialogActions>
           <Button onClick={() => setCheckOpen(false)}>Close</Button>
+
+          {/* ── Download button — always visible once result exists ── */}
+          <Button
+            variant="outlined"
+            startIcon={<DownloadIcon />}
+            onClick={downloadCheckResultXlsx}
+            disabled={!checkResult}
+          >
+            Download XLSX
+          </Button>
+
           {checkResult?.sufficient && (
-            <Button variant="contained" color="warning" startIcon={<PlayArrowIcon />}
-              onClick={() => { setCheckOpen(false); setMoveOpen(true) }}>
-              Proceed to Move to Production
+            <Button
+              variant="contained" color="warning"
+              startIcon={<PlayArrowIcon />}
+              onClick={() => { setCheckOpen(false); setMoveOpen(true) }}
+            >
+              Proceed to Production
             </Button>
           )}
         </DialogActions>
@@ -382,9 +500,11 @@ export default function OrderGrid() {
             This will check inventory, deduct stock via FEFO, create ISSUE_TO_PRODUCTION
             movements and set order status to MATERIAL_READY.
           </Typography>
-          <TextField label="Delivery Date &amp; Time" type="datetime-local" fullWidth size="small"
+          <TextField
+            label="Delivery Date &amp; Time" type="datetime-local" fullWidth size="small"
             value={deliveryDateTime} onChange={e => setDeliveryDateTime(e.target.value)}
-            InputLabelProps={{ shrink: true }} />
+            InputLabelProps={{ shrink: true }}
+          />
           {error && <Alert severity="error" sx={{ mt: 1 }}>{error}</Alert>}
         </DialogContent>
         <DialogActions>
