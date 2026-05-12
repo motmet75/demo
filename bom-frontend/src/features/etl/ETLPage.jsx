@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { Typography, Button, IconButton, CircularProgress, Chip, Alert, Tooltip, Collapse } from '@mui/material'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import DownloadIcon from '@mui/icons-material/Download'
@@ -18,43 +18,40 @@ const SKELETON_WIDTHS = [32, 72, 120, 60, 40, 55, 90, 90, 48, 80, 110, 50, 65, 9
 const SKELETON_ROWS = Array.from({ length: 22 })
 
 // ─── QUERY TEMPLATES ─────────────────────────────────────────────────────────
+// NOTE: tenant_id / company_id predicates are intentionally omitted from all
+// templates. The backend enforces these automatically using the authenticated
+// session context — clients cannot modify or bypass them.
 const TEMPLATES = [
   {
     label: 'Material + Active BOM Join',
     sql: `SELECT m.material_code, m.material_name, b.bom_name, b.status, b.created_at
 FROM material m
 JOIN bom b ON b.id = b.id
-WHERE m.tenant_id = :tenant_id 
-  AND m.company_id = :company_id 
-  AND b.status = 'ACTIVE'
+WHERE b.status = 'ACTIVE'
 ORDER BY m.material_code ASC`,
   },
   {
     label: 'Materials',
     sql: `SELECT id, material_code, material_name, unit, material_type, price
 FROM material
-WHERE tenant_id = :tenant_id AND company_id = :company_id
 ORDER BY material_code`,
   },
   {
     label: 'BOM Summary',
     sql: `SELECT id, bom_name, status, created_at
 FROM bom
-WHERE tenant_id = :tenant_id AND company_id = :company_id
 ORDER BY created_at DESC`,
   },
   {
     label: 'Inventory Status',
     sql: `SELECT m.material_code, i.batch_no, i.quantity_on_hand, i.quantity_locked
 FROM inventory i
-JOIN material m ON i.material_id = m.id
-WHERE i.tenant_id = :tenant_id AND i.company_id = :company_id`,
+JOIN material m ON i.material_id = m.id`,
   },
   {
     label: 'Orders',
     sql: `SELECT id, order_number, status, production_batch_id, delivery_date_time
 FROM order_header
-WHERE tenant_id = :tenant_id AND company_id = :company_id
 ORDER BY delivery_date_time DESC`,
   },
 ]
@@ -69,24 +66,21 @@ export default function ETLPage() {
   const [activeIdx, setActiveIdx] = useState(0)
   const [showParams, setShowParams] = useState(false)
 
-  useEffect(() => {
-    setParams(prev => {
-      try {
-        const current = JSON.parse(prev || '{}')
-        return JSON.stringify({ ...current, tenant_id: tenantId || '', company_id: companyId || '' }, null, 2)
-      } catch {
-        return JSON.stringify({ tenant_id: tenantId, company_id: companyId }, null, 2)
-      }
-    })
-  }, [tenantId, companyId])
+  // NOTE: tenant_id / company_id are NOT included in params — they are resolved
+  // server-side from the authenticated session headers and cannot be overridden
+  // by the client. Any such keys present in the params JSON will be ignored by
+  // the backend.
 
   const handleRun = async () => {
     setLoading(true)
     setError(null)
     try {
       const parsedParams = JSON.parse(params || '{}')
-      const finalParams = { ...parsedParams, tenant_id: tenantId, company_id: companyId }
-      const data = await runEtlQuery(sql, finalParams)
+      // Explicitly strip tenant_id / company_id if the user typed them in —
+      // they have no effect server-side, but we remove them to avoid confusion.
+      delete parsedParams.tenant_id
+      delete parsedParams.company_id
+      const data = await runEtlQuery(sql, parsedParams)
       setResult(data)
     } catch (err) {
       setError(err.message || 'Query Execution Failed')
@@ -105,7 +99,7 @@ export default function ETLPage() {
 
   const applyTemplate = (t, idx) => {
     setSql(t.sql)
-    setParams(JSON.stringify({ tenant_id: tenantId, company_id: companyId }, null, 2))
+    setParams('{}')
     setError(null)
     setActiveIdx(idx)
   }
@@ -132,10 +126,11 @@ export default function ETLPage() {
           <span style={{ fontWeight: 800, fontSize: 13, color: '#e2e8f0', letterSpacing: '0.06em' }}>ETL CONSOLE</span>
         </div>
 
-        {/* Context chips */}
+        {/* Context chips — display only, not editable */}
         <div style={{ padding: '10px 12px', borderBottom: '1px solid #252d45', display: 'flex', flexDirection: 'column', gap: 6 }}>
           <Tooltip title={tenantId || ''} placement="right">
             <Chip
+              icon={<LockIcon style={{ fontSize: 11, color: '#93c5fd' }} />}
               label={`Tenant: ${tenantId?.substring(0, 8) || '—'}`}
               size="small"
               style={{ fontSize: 10, height: 22, background: '#1e3a5f', color: '#93c5fd', border: '1px solid #2d5080', cursor: 'default' }}
@@ -143,6 +138,7 @@ export default function ETLPage() {
           </Tooltip>
           <Tooltip title={companyId || ''} placement="right">
             <Chip
+              icon={<LockIcon style={{ fontSize: 11, color: '#c4b5fd' }} />}
               label={`Company: ${companyId?.substring(0, 8) || '—'}`}
               size="small"
               style={{ fontSize: 10, height: 22, background: '#2d1f4e', color: '#c4b5fd', border: '1px solid #4a3580', cursor: 'default' }}
@@ -305,7 +301,7 @@ export default function ETLPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                 <LockOpenIcon style={{ fontSize: 13, color: '#d97706' }} />
                 <span style={{ fontSize: 10, fontWeight: 700, color: '#d97706', letterSpacing: '0.1em' }}>
-                  PARAMETERS (JSON) — SENSITIVE
+                  PARAMETERS (JSON) — tenant_id &amp; company_id are controlled by the server
                 </span>
               </div>
               <textarea

@@ -26,7 +26,8 @@ public class EtlController {
         this.etlQueryService = etlQueryService;
     }
 
-    // ── helpers — mirrors your InvoiceController pattern ─────────────────────
+    // ── helpers ───────────────────────────────────────────────────────────────
+
     private UUID resolveTenant(UUID param, String header) {
         if (param != null) return param;
         try { return header != null && !header.isBlank() ? UUID.fromString(header) : null; }
@@ -40,6 +41,7 @@ public class EtlController {
     }
 
     // ── GET ping ──────────────────────────────────────────────────────────────
+
     @GetMapping("/ping")
     public ResponseEntity<?> ping(
             @RequestHeader(value = "X-Tenant-Id",  required = false) String ht,
@@ -53,6 +55,7 @@ public class EtlController {
     }
 
     // ── POST simple test ──────────────────────────────────────────────────────
+
     @PostMapping(value = "/test", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> simpleTest(
             @RequestBody Map<String, Object> body,
@@ -77,6 +80,7 @@ public class EtlController {
     }
 
     // ── POST real ETL query ───────────────────────────────────────────────────
+
     @PostMapping(value = "/query", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> runQuery(
             @RequestBody EtlQueryRequest request,
@@ -85,6 +89,8 @@ public class EtlController {
             @RequestHeader(value = "X-Tenant-Id",  required = false) String ht,
             @RequestHeader(value = "X-Company-Id", required = false) String hc) {
 
+        // tenant_id / company_id come from the request context (headers / query params)
+        // ONLY — never from the request body. The service will reject null values.
         tenantId  = resolveTenant(tenantId,  ht);
         companyId = resolveCompany(companyId, hc);
 
@@ -97,7 +103,9 @@ public class EtlController {
         }
 
         try {
-            EtlQueryResult result = etlQueryService.execute(request);
+            // Pass server-resolved tenant/company — service ignores any values
+            // the client may have put in request.getParams().
+            EtlQueryResult result = etlQueryService.execute(request, tenantId, companyId);
             log.info("ETL OK — {} rows", result.getRowCount());
             return ResponseEntity.ok(result);
 
