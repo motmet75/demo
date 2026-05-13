@@ -163,10 +163,10 @@ public class OrderService {
     public OrderResponseDto createOrder(OrderCreateDto dto, UUID tenantId, UUID companyId) {
 
         // 1. Uniqueness check
-        if (orderHeaderRepository.existsByOrderNumberAndTenantIdAndCompanyId(
-                dto.getOrderNumber(), tenantId, companyId)) {
-            throw new IllegalArgumentException("Order number already exists: " + dto.getOrderNumber());
-        }
+//        if (orderHeaderRepository.existsByOrderNumberAndTenantIdAndCompanyId(
+//                dto.getOrderNumber(), tenantId, companyId)) {
+//            throw new IllegalArgumentException("Order number already exists: " + dto.getOrderNumber());
+//        }
 
         // 2. Build and persist header
         OrderHeader header = new OrderHeader();
