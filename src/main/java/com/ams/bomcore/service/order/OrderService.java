@@ -221,6 +221,7 @@ public class OrderService {
             throw new InvalidOrderStatusException("Only DRAFT orders can be updated. Current status: " + header.getStatus());
         }
 
+        header.setOrderNumber(dto.getOrderNumber());
         header.setOrderType(dto.getOrderType());
         header.setCustomerId(dto.getCustomerId());
         header.setPlannedStartDate(dto.getPlannedStartDate());

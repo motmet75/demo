@@ -29,6 +29,11 @@ public class OrderUpdateDto {
 
     // ── Getters & Setters ─────────────────────────────────────────────
 
+    private String orderNumber;
+
+    public String getOrderNumber() { return orderNumber; }
+    public void setOrderNumber(String orderNumber) { this.orderNumber = orderNumber; }
+    
     public String getOrderType() { return orderType; }
     public void setOrderType(String orderType) { this.orderType = orderType; }
 
