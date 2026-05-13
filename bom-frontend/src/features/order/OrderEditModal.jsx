@@ -164,6 +164,7 @@ export default function OrderEditModal({ open, orderId, onClose, onUpdated }) {
     fetchOrderById(orderId)
       .then(order => {
         setHeader({
+          orderNumber:      order.orderNumber || '',
           orderType:        order.orderType || 'SALES',
           customerId:       order.customerId || '',
           plannedStartDate: order.plannedStartDate || '',
@@ -245,6 +246,7 @@ export default function OrderEditModal({ open, orderId, onClose, onUpdated }) {
     setSaving(true)
     try {
       const payload = {
+        orderNumber:      header.orderNumber || null,
         orderType:        header.orderType,
         customerId:       header.customerId || null,
         plannedStartDate: header.plannedStartDate || null,
@@ -286,6 +288,9 @@ export default function OrderEditModal({ open, orderId, onClose, onUpdated }) {
               {/* ── Header ─────────────────────────────────────────────── */}
               <Typography variant="subtitle2" gutterBottom>Order Header</Typography>
               <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mb: 2 }}>
+                <TextField label="Order Number" value={header.orderNumber || ''}
+                  onChange={handleHeaderChange('orderNumber')} disabled={saving} fullWidth
+                  placeholder="e.g. ORD-2024-001" />
                 <TextField select label="Order Type *" value={header.orderType || ''}
                   onChange={handleHeaderChange('orderType')} disabled={saving} fullWidth>
                   {ORDER_TYPES.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
