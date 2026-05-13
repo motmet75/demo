@@ -22,3 +22,6 @@ CREATE INDEX IF NOT EXISTS idx_contract_tenant_company ON contract(tenant_id, co
 --     FOREIGN KEY (company_id) REFERENCES company(id) ON DELETE CASCADE;
 
 COMMENT ON COLUMN contract.company_id IS 'The owning company for this contract (for multi-company scoping)';
+
+--2026-05-12
+ALTER TABLE order_header DROP CONSTRAINT order_header_order_number_key;

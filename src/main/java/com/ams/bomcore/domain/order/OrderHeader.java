@@ -47,7 +47,7 @@ public class OrderHeader {
     @Column(name = "id", nullable = false)
     private UUID id;
 
-    @Column(name = "order_number", nullable = false, length = 50, unique = true)
+    @Column(name = "order_number", nullable = false, length = 50)
     private String orderNumber;
 
     @Column(name = "order_type", nullable = false, length = 20)
