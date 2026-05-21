@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react'
-import { patchInventoryCsv, downloadPatchTemplate } from '../../api/inventoryApi'
+import { patchInventoryXlsx, downloadPatchTemplate } from '../../api/inventoryApi'
 
 /**
  * InventoryPatchCsv
@@ -26,7 +26,7 @@ export default function InventoryPatchCsv({ onPatchComplete }) {
       const url  = URL.createObjectURL(blob)
       const a    = document.createElement('a')
       a.href     = url
-      a.download = 'inventory_patch_template.csv'
+      a.download = 'inventory_patch_template.xlsx'
       document.body.appendChild(a)
       a.click()
       a.remove()
@@ -41,11 +41,11 @@ export default function InventoryPatchCsv({ onPatchComplete }) {
   // ── upload patch csv ─────────────────────────────────────────────
   async function handleUpload(e) {
     e.preventDefault()
-    if (!file) { alert('Please choose a CSV file first'); return }
+    if (!file) { alert('Please choose a XLSX file first'); return }
     setUploading(true)
     setResult(null)
     try {
-      const res = await patchInventoryCsv(file)
+      const res = await patchInventoryXlsx(file)
       setResult(res)
       // reset file input
       setFile(null)
@@ -67,7 +67,7 @@ export default function InventoryPatchCsv({ onPatchComplete }) {
   return (
     <div style={{ padding: '12px 0' }}>
       <h3 style={{ margin: '0 0 6px 0', fontSize: 15 }}>
-        Patch Deduction &amp; Quota (CSV)
+        Patch Deduction &amp; Quota (XLSX)
       </h3>
 
       {/* description */}
@@ -94,18 +94,18 @@ export default function InventoryPatchCsv({ onPatchComplete }) {
           disabled={downloading}
           style={btnStyle('#1565c0')}
         >
-          {downloading ? '⏳ Downloading…' : '⬇ Download Template CSV'}
+          {downloading ? '⏳ Downloading…' : '⬇ Download Template XLSX'}
         </button>
       </div>
 
       {/* step 2 — upload filled csv */}
       <div style={sectionStyle}>
-        <span style={{ fontWeight: 600, fontSize: 13 }}>Step 2 — Upload filled CSV</span>
+        <span style={{ fontWeight: 600, fontSize: 13 }}>Step 2 — Upload filled XLSX</span>
         <form onSubmit={handleUpload} style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <input
             ref={fileRef}
             type="file"
-            accept=".csv,text/csv"
+            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             onChange={e => { setFile(e.target.files[0] || null); setResult(null) }}
             style={{ fontSize: 13 }}
           />

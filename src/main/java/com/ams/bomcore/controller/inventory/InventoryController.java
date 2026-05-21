@@ -39,7 +39,7 @@ import com.ams.bomcore.controller.inventory.dto.InventoryViewDTO;
 import com.ams.bomcore.domain.inventory.InventoryEntity;
 import com.ams.bomcore.service.inventory.InventoryException;
 import com.ams.bomcore.service.inventory.InventoryImportService;
-import com.ams.bomcore.service.inventory.InventoryPatchCsvService;
+import com.ams.bomcore.service.inventory.InventoryPatchXlsxService;
 import com.ams.bomcore.service.inventory.InventoryService;
 import com.ams.bomcore.service.inventory.OrderDeductionService;
 
@@ -52,16 +52,16 @@ public class InventoryController {
 
     private final InventoryService inventoryService;
     private final InventoryImportService inventoryImportService;
-    private final InventoryPatchCsvService inventoryPatchCsvService;
+    private final InventoryPatchXlsxService inventoryPatchXlsxService;
     private final OrderDeductionService orderDeductionService;
 
     public InventoryController(InventoryService inventoryService,
                                InventoryImportService inventoryImportService,
-                               InventoryPatchCsvService inventoryPatchCsvService,
+                               InventoryPatchXlsxService inventoryPatchXlsxService,
                                OrderDeductionService orderDeductionService) {
         this.inventoryService         = inventoryService;
         this.inventoryImportService   = inventoryImportService;
-        this.inventoryPatchCsvService = inventoryPatchCsvService;
+        this.inventoryPatchXlsxService = inventoryPatchXlsxService;
         this.orderDeductionService    = orderDeductionService;
     }
 
@@ -325,7 +325,7 @@ public class InventoryController {
      *   550e8400-e29b-41d4-a716-446655440001,B,
      *   550e8400-e29b-41d4-a716-446655440002,,102.50
      */
-    @PostMapping(path = "/patch-csv", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(path = "/patch-xlsx", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> patchCsv(@RequestParam("file") MultipartFile file,
                                       @RequestParam(value = "tenantId", required = false) UUID tenantId,
                                       @RequestParam(value = "companyId", required = false) UUID companyId,
@@ -337,8 +337,8 @@ public class InventoryController {
             if (tenantId == null || companyId == null) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
             }
-            InventoryPatchCsvService.PatchResult result =
-                    inventoryPatchCsvService.patchFromCsv(file, tenantId, companyId);
+            InventoryPatchXlsxService.PatchResult result =
+            		inventoryPatchXlsxService.patchFromXlsx(file, tenantId, companyId);
             if (result.isSuccess()) {
                 return ResponseEntity.ok(result);
             } else {
@@ -450,7 +450,7 @@ public class InventoryController {
      * GET /bom/inventory/template/patch-csv
      * Optional params: tenantId, companyId — if supplied, rows are pre-filled from DB.
      */
-    @GetMapping(path = "/template/patch-csv", produces = "text/csv")
+    @GetMapping(path = "/template/patch-xlsx", produces = "text/csv")
     public ResponseEntity<byte[]> downloadPatchCsvTemplate(
             @RequestParam(value = "tenantId",  required = false) UUID tenantId,
             @RequestParam(value = "companyId", required = false) UUID companyId,
@@ -460,35 +460,104 @@ public class InventoryController {
         tenantId  = resolveTenant(tenantId, headerTenantId);
         companyId = resolveCompany(companyId, headerCompanyId);
 
-        StringBuilder csv = new StringBuilder();
-        // header
-        csv.append("id,material_code,batch_no,warehouse_code,order_to_deduction,material_quota_percentage,unit_price\n");
+        try (
+                Workbook wb = new XSSFWorkbook();
+                ByteArrayOutputStream out = new ByteArrayOutputStream()
+        ) {
 
-        if (tenantId != null && companyId != null) {
-            // pre-fill with live rows
-            List<InventoryEntity> rows = inventoryService.listAllByTenantAndCompany(tenantId, companyId);
-            for (InventoryEntity inv : rows) {
-                csv.append(inv.getId()).append(',')
-                   .append(inv.getMaterialCode()     == null ? "" : inv.getMaterialCode()).append(',')
-                   .append(inv.getBatchNo()           == null ? "" : inv.getBatchNo()).append(',')
-                   .append(inv.getWarehouseCode()     == null ? "" : inv.getWarehouseCode()).append(',')
-                   .append(inv.getOrderToDeduction()  == null ? "" : inv.getOrderToDeduction()).append(',')
-                   .append(inv.getMaterialQuotaPercentage() == null ? "" : inv.getMaterialQuotaPercentage().toPlainString())
-                   .append(inv.getUnitPrice() == null ? "" : inv.getUnitPrice().toPlainString())
-                   .append('\n');
+            Sheet sheet = wb.createSheet("inventory_patch");
+
+            String[] headers = {
+                    "id",
+                    "material_code",
+                    "batch_no",
+                    "warehouse_code",
+                    "order_to_deduction",
+                    "material_quota_percentage",
+                    "unit_price"
+            };
+
+            CellStyle headerStyle = wb.createCellStyle();
+
+            Font headerFont = wb.createFont();
+            headerFont.setBold(true);
+
+            headerStyle.setFont(headerFont);
+            headerStyle.setFillForegroundColor(IndexedColors.LIGHT_CORNFLOWER_BLUE.getIndex());
+            headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+
+            Row headerRow = sheet.createRow(0);
+
+            for (int i = 0; i < headers.length; i++) {
+
+                Cell cell = headerRow.createCell(i);
+
+                cell.setCellValue(headers[i]);
+                cell.setCellStyle(headerStyle);
+
+                sheet.setColumnWidth(i, 25 * 256);
             }
-        } else {
-            // blank example rows
-            csv.append("550e8400-e29b-41d4-a716-446655440000,MAT-001,BATCH-2026-001,WH-A,A,105.00\n");
-            csv.append("550e8400-e29b-41d4-a716-446655440001,MAT-001,BATCH-2026-002,WH-A,B,102.50\n");
-            csv.append("550e8400-e29b-41d4-a716-446655440002,MAT-002,BATCH-2026-003,WH-B,,100.00\n");
+
+            int rowIndex = 1;
+
+            if (tenantId != null && companyId != null) {
+
+                List<InventoryEntity> rows =
+                        inventoryService.listAllByTenantAndCompany(
+                                tenantId,
+                                companyId
+                        );
+
+                for (InventoryEntity inv : rows) {
+
+                    Row row = sheet.createRow(rowIndex++);
+
+                    row.createCell(0).setCellValue(inv.getId().toString());
+                    row.createCell(1).setCellValue(inv.getMaterialCode());
+                    row.createCell(2).setCellValue(inv.getBatchNo());
+                    row.createCell(3).setCellValue(inv.getWarehouseCode());
+                    row.createCell(4).setCellValue(
+                            inv.getOrderToDeduction() == null
+                                    ? ""
+                                    : inv.getOrderToDeduction()
+                    );
+
+                    if (inv.getMaterialQuotaPercentage() != null) {
+                        row.createCell(5).setCellValue(
+                                inv.getMaterialQuotaPercentage().doubleValue()
+                        );
+                    }
+
+                    if (inv.getUnitPrice() != null) {
+                        row.createCell(6).setCellValue(
+                                inv.getUnitPrice().doubleValue()
+                        );
+                    }
+                }
+            }
+
+            wb.write(out);
+
+            byte[] bytes = out.toByteArray();
+
+            return ResponseEntity.ok()
+                    .header(
+                            "Content-Disposition",
+                            "attachment; filename=\"inventory_patch_template.xlsx\""
+                    )
+                    .header(
+                            "Content-Type",
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+                    .body(bytes);
+
+        } catch (Exception e) {
+
+            return ResponseEntity
+                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .build();
         }
 
-        byte[] bytes = csv.toString().getBytes(StandardCharsets.UTF_8);
-        return ResponseEntity.ok()
-                .header("Content-Disposition", "attachment; filename=\"inventory_patch_template.csv\"")
-                .header("Content-Type", "text/csv; charset=UTF-8")
-                .body(bytes);
     }
 
     /**
