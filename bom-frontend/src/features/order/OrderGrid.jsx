@@ -31,7 +31,9 @@ import EditIcon from '@mui/icons-material/Edit'
 import DownloadIcon from '@mui/icons-material/Download'
 import * as XLSX from 'xlsx'
 import { useAppContext } from '../../context/AppContext'
+import { apiFetchJson } from '../../api/client'
 import { fetchOrders, confirmOrder, deliverOrder, cancelOrder, checkInventory, moveToProduction } from '../../api/orderApi'
+import { fetchWarehouses } from '../../api/warehouseApi'
 import OrderCreateModal from './OrderCreateModal'
 import OrderDetailModal from './OrderDetailModal'
 import FinishOrderModal from './FinishOrderModal'
@@ -92,6 +94,8 @@ export default function OrderGrid() {
   const [editId, setEditId]         = useState(null)
   const [finishId, setFinishId]     = useState(null)
   const [actionLoading, setActionLoading] = useState({})
+  const [exportLoading, setExportLoading] = useState({})
+  const [warehouseMap, setWarehouseMap]   = useState({})
 
   // ── Check Inventory dialog ────────────────────────────────────────
   const [checkOpen, setCheckOpen]       = useState(false)
@@ -123,6 +127,15 @@ export default function OrderGrid() {
   }, [tenantId, companyId, filterStatus, filterOrderType, filterFromDate, filterToDate, paginationModel.page, paginationModel.pageSize])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    if (!tenantId || !companyId) return
+    fetchWarehouses().then(list => {
+      const map = {}
+      list.forEach(w => { map[w.id] = w })
+      setWarehouseMap(map)
+    }).catch(() => {})
+  }, [tenantId, companyId])
 
   const withLoading = (id, fn) => async () => {
     setActionLoading(prev => ({ ...prev, [id]: true })); setError('')
@@ -235,6 +248,49 @@ export default function OrderGrid() {
     finally { setMoveLoading(false) }
   }
 
+  // ── Export inventory import template XLSX ────────────────────────
+  const INVENTORY_IMPORT_HEADERS = [
+    'material_code', 'warehouse_code', 'batch_no', 'quantity_on_hand', 'quantity_total',
+    'quantity_reserved', 'quantity_locked', 'contract_code', 'unit', 'unit_price',
+    'currency', 'hs_code', 'origin_type', 'origin_country', 'xform_no', 'cds_no',
+    'purchase_no', 'order_to_deduction', 'material_quota', 'material_quota_percentage',
+    'user_name', 'xform_date', 'purchase_date_time', 'cds_date_time',
+    'production_date_time', 'expiration_date_time', 'visible', 'approved', 'locked'
+  ]
+
+  const handleExportInventoryXlsx = async (row) => {
+    setExportLoading(prev => ({ ...prev, [row.id]: true })); setError('')
+    try {
+      const { data: logs } = await apiFetchJson(`/bom/order-consumption-log/by-order/${row.id}`)
+      const warehouse = warehouseMap[row.destinationWarehouseId]
+      const warehouseCode = warehouse?.code || warehouse?.warehouseCode || ''
+
+      const emptyRow = () => Object.fromEntries(INVENTORY_IMPORT_HEADERS.map(h => [h, '']))
+      const dataRows = (Array.isArray(logs) ? logs : []).map(log => {
+        const r = emptyRow()
+        r.material_code    = log.materialCode || ''
+        r.warehouse_code   = warehouseCode
+        r.quantity_on_hand = log.effectivePlannedQty ?? log.plannedQty ?? ''
+        r.quantity_total   = log.effectivePlannedQty ?? log.plannedQty ?? ''
+        return r
+      })
+
+      const ws = XLSX.utils.json_to_sheet(
+        dataRows.length ? dataRows : [emptyRow()],
+        { header: INVENTORY_IMPORT_HEADERS }
+      )
+      ws['!cols'] = INVENTORY_IMPORT_HEADERS.map(h => ({ wch: Math.max(h.length + 2, 14) }))
+
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'inventory_import')
+      XLSX.writeFile(wb, `inventory_import_${row.orderNumber || row.id}_${warehouseCode || 'wh'}.xlsx`)
+    } catch (e) {
+      setError(e.message || 'Export failed')
+    } finally {
+      setExportLoading(prev => ({ ...prev, [row.id]: false }))
+    }
+  }
+
   const handleFinished = (updated) =>
     setRows(prev => prev.map(r => r.id === updated.id ? { ...updated, id: updated.id } : r))
 
@@ -274,7 +330,7 @@ export default function OrderGrid() {
     { field: 'createdAt',        headerName: 'Created At',    width: 180,
       renderCell: ({ value }) => dateFmt(value, '—') },
     {
-      field: '_actions', headerName: 'Actions', width: 260, sortable: false, filterable: false,
+      field: '_actions', headerName: 'Actions', width: 295, sortable: false, filterable: false,
       renderCell: ({ row }) => {
         const busy = !!actionLoading[row.id]; const s = row.status
         return (
@@ -314,6 +370,14 @@ export default function OrderGrid() {
               <Tooltip title="Cancel Order"><span>
                 <IconButton size="small" color="error" disabled={busy} onClick={() => handleCancel(row.id)}>
                   <CancelIcon fontSize="small" />
+                </IconButton>
+              </span></Tooltip>
+            )}
+            {row.destinationWarehouseId && (
+              <Tooltip title="Export Inventory Import XLSX"><span>
+                <IconButton size="small" color="default" disabled={!!exportLoading[row.id]}
+                  onClick={() => handleExportInventoryXlsx(row)}>
+                  <DownloadIcon fontSize="small" />
                 </IconButton>
               </span></Tooltip>
             )}
