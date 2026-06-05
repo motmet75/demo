@@ -19,6 +19,7 @@ import DeleteIcon from '@mui/icons-material/Delete'
 import PropTypes from 'prop-types'
 import { fetchMaterials } from '../../api/materialApi'
 import { fetchBomsByModel } from '../../api/modelApi'
+import { fetchWarehouses } from '../../api/warehouseApi'
 import { apiFetchJson } from '../../api/client'
 import { fetchOrderById, updateOrder } from '../../api/orderApi'
 
@@ -155,6 +156,7 @@ export default function OrderEditModal({ open, orderId, onClose, onUpdated }) {
   const [error, setError]         = useState('')
   const [materials, setMaterials] = useState([])
   const [models, setModels]       = useState([])
+  const [warehouses, setWarehouses] = useState([])
 
   // Load order data when modal opens
   useEffect(() => {
@@ -164,13 +166,14 @@ export default function OrderEditModal({ open, orderId, onClose, onUpdated }) {
     fetchOrderById(orderId)
       .then(order => {
         setHeader({
-          orderNumber:      order.orderNumber || '',
-          orderType:        order.orderType || 'SALES',
-          customerId:       order.customerId || '',
-          plannedStartDate: order.plannedStartDate || '',
-          plannedEndDate:   order.plannedEndDate || '',
-          notes:            order.notes || '',
-          updatedBy:        'system',
+          orderNumber:            order.orderNumber || '',
+          orderType:              order.orderType || 'SALES',
+          customerId:             order.customerId || '',
+          destinationWarehouseId: order.destinationWarehouseId || '',
+          plannedStartDate:       order.plannedStartDate || '',
+          plannedEndDate:         order.plannedEndDate || '',
+          notes:                  order.notes || '',
+          updatedBy:              'system',
         })
         setLines(
           (order.lines || []).map(l => ({
@@ -197,6 +200,7 @@ export default function OrderEditModal({ open, orderId, onClose, onUpdated }) {
       const list = Array.isArray(data) ? data : (data && Array.isArray(data.content) ? data.content : [])
       setModels(list)
     }).catch(() => {})
+    fetchWarehouses().then(d => setWarehouses(Array.isArray(d) ? d : [])).catch(() => {})
   }, [open])
 
   const handleHeaderChange = (field) => (e) =>
@@ -246,13 +250,14 @@ export default function OrderEditModal({ open, orderId, onClose, onUpdated }) {
     setSaving(true)
     try {
       const payload = {
-        orderNumber:      header.orderNumber || null,
-        orderType:        header.orderType,
-        customerId:       header.customerId || null,
-        plannedStartDate: header.plannedStartDate || null,
-        plannedEndDate:   header.plannedEndDate || null,
-        notes:            header.notes || null,
-        updatedBy:        header.updatedBy || 'system',
+        orderNumber:            header.orderNumber || null,
+        orderType:              header.orderType,
+        customerId:             header.customerId || null,
+        destinationWarehouseId: header.destinationWarehouseId || null,
+        plannedStartDate:       header.plannedStartDate || null,
+        plannedEndDate:         header.plannedEndDate || null,
+        notes:                  header.notes || null,
+        updatedBy:              header.updatedBy || 'system',
         lines: lines.map(l => ({
           lineType:        l.lineType,
           modelId:         l.lineType === 'MODEL'    ? (l.modelId || null)    : null,
@@ -297,6 +302,15 @@ export default function OrderEditModal({ open, orderId, onClose, onUpdated }) {
                 </TextField>
                 <TextField label="Customer ID (UUID)" value={header.customerId || ''}
                   onChange={handleHeaderChange('customerId')} disabled={saving} fullWidth />
+                <TextField select label="Destination Warehouse" value={header.destinationWarehouseId || ''}
+                  onChange={handleHeaderChange('destinationWarehouseId')} disabled={saving} fullWidth>
+                  <MenuItem value=""><em>None</em></MenuItem>
+                  {warehouses.map(w => (
+                    <MenuItem key={w.id} value={w.id}>
+                      {w.code || w.warehouseCode} — {w.name || w.warehouseName}
+                    </MenuItem>
+                  ))}
+                </TextField>
                 <TextField label="Planned Start Date" type="date" value={header.plannedStartDate || ''}
                   onChange={handleHeaderChange('plannedStartDate')} disabled={saving} fullWidth
                   InputLabelProps={{ shrink: true }} />

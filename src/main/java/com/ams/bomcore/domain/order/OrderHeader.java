@@ -104,6 +104,9 @@ public class OrderHeader {
     @Column(name = "updated_by", length = 100)
     private String updatedBy;
 
+    @Column(name = "destination_warehouse_id")
+    private UUID destinationWarehouseId;
+
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @OrderBy("lineNumber ASC")
     private List<OrderLine> lines = new ArrayList<>();
@@ -191,6 +194,9 @@ public class OrderHeader {
 
     public String getUpdatedBy() { return updatedBy; }
     public void setUpdatedBy(String updatedBy) { this.updatedBy = updatedBy; }
+
+    public UUID getDestinationWarehouseId() { return destinationWarehouseId; }
+    public void setDestinationWarehouseId(UUID destinationWarehouseId) { this.destinationWarehouseId = destinationWarehouseId; }
 
     public List<OrderLine> getLines() { return lines; }
     public void setLines(List<OrderLine> lines) { this.lines = lines; }

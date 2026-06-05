@@ -180,6 +180,7 @@ public class OrderService {
         header.setDeliveryDateTime(dto.getDeliveryDateTime());
         header.setNotes(dto.getNotes());
         header.setCreatedBy(dto.getCreatedBy());
+        header.setDestinationWarehouseId(dto.getDestinationWarehouseId());
         header.setTenantId(tenantId);
         header.setCompanyId(companyId);
 
@@ -227,6 +228,7 @@ public class OrderService {
         header.setPlannedStartDate(dto.getPlannedStartDate());
         header.setPlannedEndDate(dto.getPlannedEndDate());
         header.setNotes(dto.getNotes());
+        header.setDestinationWarehouseId(dto.getDestinationWarehouseId());
         header.setUpdatedBy(dto.getUpdatedBy());
 
         if (dto.getLines() != null && !dto.getLines().isEmpty()) {
@@ -1241,6 +1243,7 @@ public class OrderService {
         dto.setCreatedBy(header.getCreatedBy());
         dto.setCreatedAt(header.getCreatedAt());
         dto.setUpdatedAt(header.getUpdatedAt());
+        dto.setDestinationWarehouseId(header.getDestinationWarehouseId());
 
         List<OrderLineResponseDto> lineDtos = header.getLines().stream()
                 .map(this::toLineResponseDto)

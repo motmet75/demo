@@ -19,6 +19,7 @@ import PropTypes from 'prop-types'
 import { fetchOrderById } from '../../api/orderApi'
 import { apiFetchJson } from '../../api/client'
 import { fetchMaterials } from '../../api/materialApi'
+import { fetchWarehouses } from '../../api/warehouseApi'
 
 const STATUS_COLOR = {
   DRAFT: 'default', CONFIRMED: 'primary', IN_PRODUCTION: 'warning',
@@ -43,8 +44,9 @@ export default function OrderDetailModal({ open, orderId, onClose }) {
   const [order, setOrder] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError]   = useState('')
-  const [modelMap, setModelMap] = useState({})   // id → { modelCode, modelName }
-  const [materialMap, setMaterialMap] = useState({}) // id → { materialCode, materialName }
+  const [modelMap, setModelMap] = useState({})
+  const [materialMap, setMaterialMap] = useState({})
+  const [warehouseMap, setWarehouseMap] = useState({})
 
   useEffect(() => {
     if (!open || !orderId) return
@@ -69,6 +71,11 @@ export default function OrderDetailModal({ open, orderId, onClose }) {
       const map = {}
       list.forEach(m => { map[m.id] = m })
       setMaterialMap(map)
+    }).catch(() => {})
+    fetchWarehouses().then(list => {
+      const map = {}
+      list.forEach(w => { map[w.id] = w })
+      setWarehouseMap(map)
     }).catch(() => {})
   }, [open])
 
@@ -100,6 +107,14 @@ export default function OrderDetailModal({ open, orderId, onClose }) {
               <LabelValue label="Total Actual Qty"   value={order.totalActualQty} />
               <LabelValue label="Created By"         value={order.createdBy} />
               <LabelValue label="Created At"         value={order.createdAt} />
+              <LabelValue label="Destination Warehouse" value={
+                order.destinationWarehouseId
+                  ? (() => {
+                      const w = warehouseMap[order.destinationWarehouseId]
+                      return w ? `${w.code || w.warehouseCode} — ${w.name || w.warehouseName}` : order.destinationWarehouseId
+                    })()
+                  : null
+              } />
               <LabelValue label="Notes"              value={order.notes} />
             </Box>
 

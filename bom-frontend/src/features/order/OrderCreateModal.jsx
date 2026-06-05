@@ -19,6 +19,7 @@ import DeleteIcon from '@mui/icons-material/Delete'
 import PropTypes from 'prop-types'
 import { fetchMaterials } from '../../api/materialApi'
 import { fetchBomsByModel } from '../../api/modelApi'
+import { fetchWarehouses } from '../../api/warehouseApi'
 import { apiFetchJson } from '../../api/client'
 
 const ORDER_TYPES = ['SALES', 'PRODUCTION', 'TRANSFER', 'INTERNAL']
@@ -41,6 +42,7 @@ function makeEmptyLine() {
 function makeEmptyHeader() {
   return {
     orderNumber: '', orderType: 'SALES', customerId: '',
+    destinationWarehouseId: '',
     plannedStartDate: '', plannedEndDate: '', notes: '', createdBy: 'system'
   }
 }
@@ -152,6 +154,7 @@ export default function OrderCreateModal({ open, onClose, onCreated }) {
   const [error, setError]       = useState('')
   const [materials, setMaterials] = useState([])
   const [models, setModels]     = useState([])
+  const [warehouses, setWarehouses] = useState([])
 
   // Reset on open
   useEffect(() => {
@@ -170,6 +173,7 @@ export default function OrderCreateModal({ open, onClose, onCreated }) {
       const list = Array.isArray(data) ? data : (data && Array.isArray(data.content) ? data.content : [])
       setModels(list)
     }).catch(() => {})
+    fetchWarehouses().then(d => setWarehouses(Array.isArray(d) ? d : [])).catch(() => {})
   }, [open])
 
   const handleHeaderChange = (field) => (e) =>
@@ -233,13 +237,14 @@ export default function OrderCreateModal({ open, onClose, onCreated }) {
       }
 
       const payload = {
-        orderNumber:      header.orderNumber.trim(),
-        orderType:        header.orderType,
-        customerId:       header.customerId || null,
-        plannedStartDate: header.plannedStartDate || null,
-        plannedEndDate:   header.plannedEndDate || null,
-        notes:            header.notes || null,
-        createdBy:        header.createdBy || 'system',
+        orderNumber:             header.orderNumber.trim(),
+        orderType:               header.orderType,
+        customerId:              header.customerId || null,
+        destinationWarehouseId:  header.destinationWarehouseId || null,
+        plannedStartDate:        header.plannedStartDate || null,
+        plannedEndDate:          header.plannedEndDate || null,
+        notes:                   header.notes || null,
+        createdBy:               header.createdBy || 'system',
         lines: lines.map(l => ({
           lineType:        l.lineType,
           modelId:         l.lineType === 'MODEL'     ? (l.modelId || null)    : null,
@@ -291,6 +296,15 @@ export default function OrderCreateModal({ open, onClose, onCreated }) {
               InputLabelProps={{ shrink: true }} />
             <TextField label="Customer ID (UUID)" value={header.customerId}
               onChange={handleHeaderChange('customerId')} disabled={saving} fullWidth />
+            <TextField select label="Destination Warehouse" value={header.destinationWarehouseId}
+              onChange={handleHeaderChange('destinationWarehouseId')} disabled={saving} fullWidth>
+              <MenuItem value=""><em>None</em></MenuItem>
+              {warehouses.map(w => (
+                <MenuItem key={w.id} value={w.id}>
+                  {w.code || w.warehouseCode} — {w.name || w.warehouseName}
+                </MenuItem>
+              ))}
+            </TextField>
             <TextField label="Created By" value={header.createdBy}
               onChange={handleHeaderChange('createdBy')} disabled={saving} fullWidth />
             <TextField label="Notes" value={header.notes}

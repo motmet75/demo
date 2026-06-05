@@ -18,6 +18,7 @@ public class OrderUpdateDto {
     private String orderType;
 
     private UUID customerId;
+    private UUID destinationWarehouseId;
     private LocalDate plannedStartDate;
     private LocalDate plannedEndDate;
     private String notes;
@@ -39,6 +40,9 @@ public class OrderUpdateDto {
 
     public UUID getCustomerId() { return customerId; }
     public void setCustomerId(UUID customerId) { this.customerId = customerId; }
+
+    public UUID getDestinationWarehouseId() { return destinationWarehouseId; }
+    public void setDestinationWarehouseId(UUID destinationWarehouseId) { this.destinationWarehouseId = destinationWarehouseId; }
 
     public LocalDate getPlannedStartDate() { return plannedStartDate; }
     public void setPlannedStartDate(LocalDate plannedStartDate) { this.plannedStartDate = plannedStartDate; }

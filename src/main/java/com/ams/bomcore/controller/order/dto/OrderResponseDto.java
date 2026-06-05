@@ -16,6 +16,7 @@ public class OrderResponseDto {
     private String orderType;
     private String status;
     private UUID customerId;
+    private UUID destinationWarehouseId;
     private UUID productionBatchId;
     private LocalDate plannedStartDate;
     private LocalDate plannedEndDate;
@@ -48,6 +49,9 @@ public class OrderResponseDto {
 
     public UUID getCustomerId() { return customerId; }
     public void setCustomerId(UUID customerId) { this.customerId = customerId; }
+
+    public UUID getDestinationWarehouseId() { return destinationWarehouseId; }
+    public void setDestinationWarehouseId(UUID destinationWarehouseId) { this.destinationWarehouseId = destinationWarehouseId; }
 
     public UUID getProductionBatchId() { return productionBatchId; }
     public void setProductionBatchId(UUID productionBatchId) { this.productionBatchId = productionBatchId; }

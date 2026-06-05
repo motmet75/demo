@@ -26,6 +26,8 @@ public class OrderCreateDto {
 
     private UUID customerId;
 
+    private UUID destinationWarehouseId;
+
     private LocalDate plannedStartDate;
 
     private LocalDate plannedEndDate;
@@ -50,6 +52,9 @@ public class OrderCreateDto {
 
     public UUID getCustomerId() { return customerId; }
     public void setCustomerId(UUID customerId) { this.customerId = customerId; }
+
+    public UUID getDestinationWarehouseId() { return destinationWarehouseId; }
+    public void setDestinationWarehouseId(UUID destinationWarehouseId) { this.destinationWarehouseId = destinationWarehouseId; }
 
     public LocalDate getPlannedStartDate() { return plannedStartDate; }
     public void setPlannedStartDate(LocalDate plannedStartDate) { this.plannedStartDate = plannedStartDate; }
