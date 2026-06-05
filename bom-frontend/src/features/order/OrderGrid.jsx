@@ -266,14 +266,27 @@ export default function OrderGrid() {
       const warehouseCode = warehouse?.code || warehouse?.warehouseCode || ''
 
       const emptyRow = () => Object.fromEntries(INVENTORY_IMPORT_HEADERS.map(h => [h, '']))
-      const dataRows = (Array.isArray(logs) ? logs : []).map(log => {
-        const r = emptyRow()
-        r.material_code    = log.materialCode || ''
-        r.warehouse_code   = warehouseCode
-        r.quantity_on_hand = log.effectivePlannedQty ?? log.plannedQty ?? ''
-        r.quantity_total   = log.effectivePlannedQty ?? log.plannedQty ?? ''
-        return r
+
+      // Aggregate by material_code: multiple consumption log entries for the same
+      // material must be merged so the import never hits the unique constraint
+      // (company, tenant, warehouse, material, batch_no).
+      const aggregated = {}
+      ;(Array.isArray(logs) ? logs : []).forEach(log => {
+        const key = log.materialCode || ''
+        const qty = Number(log.effectivePlannedQty ?? log.plannedQty ?? 0)
+        if (aggregated[key]) {
+          aggregated[key].quantity_on_hand += qty
+          aggregated[key].quantity_total   += qty
+        } else {
+          const r = emptyRow()
+          r.material_code    = key
+          r.warehouse_code   = warehouseCode
+          r.quantity_on_hand = qty
+          r.quantity_total   = qty
+          aggregated[key] = r
+        }
       })
+      const dataRows = Object.values(aggregated)
 
       const ws = XLSX.utils.json_to_sheet(
         dataRows.length ? dataRows : [emptyRow()],
