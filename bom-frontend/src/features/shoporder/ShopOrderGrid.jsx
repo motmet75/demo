@@ -129,6 +129,14 @@ export default function ShopOrderGrid() {
       ),
     },
     {
+      field: 'orderCode',
+      headerName: 'Code',
+      width: 100,
+      renderCell: ({ value }) => value
+        ? <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 700, letterSpacing: 1, color: '#555' }}>{value}</Typography>
+        : null,
+    },
+    {
       field: 'tableName',
       headerName: 'Table',
       width: 90,
