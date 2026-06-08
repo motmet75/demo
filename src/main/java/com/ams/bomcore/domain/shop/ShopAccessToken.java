@@ -9,7 +9,8 @@ import java.util.UUID;
        indexes = @Index(name = "idx_shop_access_token_token", columnList = "token", unique = true))
 public class ShopAccessToken {
 
-    public static final String TYPE_TABLE_QR = "TABLE_QR";
+    public static final String TYPE_TABLE_QR     = "TABLE_QR";
+    public static final String TYPE_DISPLAY_BOARD = "DISPLAY_BOARD";
 
     @Id
     @Column(name = "id", nullable = false)

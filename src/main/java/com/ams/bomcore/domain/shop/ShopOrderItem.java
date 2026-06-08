@@ -36,6 +36,13 @@ public class ShopOrderItem {
     @Column(name = "line_total", columnDefinition = "numeric")
     private BigDecimal lineTotal;
 
+    /** JSON object of selected option groups, e.g. {"Sugar":"70%","Ice":"Less"} */
+    @Column(name = "selected_options", columnDefinition = "TEXT")
+    private String selectedOptions;
+
+    @Column(name = "item_notes", columnDefinition = "TEXT")
+    private String itemNotes;
+
     public ShopOrderItem() {}
 
     @PrePersist
@@ -59,4 +66,8 @@ public class ShopOrderItem {
     public void setUnitRawCost(BigDecimal unitRawCost) { this.unitRawCost = unitRawCost; }
     public BigDecimal getLineTotal() { return lineTotal; }
     public void setLineTotal(BigDecimal lineTotal) { this.lineTotal = lineTotal; }
+    public String getSelectedOptions() { return selectedOptions; }
+    public void setSelectedOptions(String selectedOptions) { this.selectedOptions = selectedOptions; }
+    public String getItemNotes() { return itemNotes; }
+    public void setItemNotes(String itemNotes) { this.itemNotes = itemNotes; }
 }

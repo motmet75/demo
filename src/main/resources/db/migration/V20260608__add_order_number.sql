@@ -1,0 +1,2 @@
+ALTER TABLE shop_order ADD COLUMN IF NOT EXISTS order_number INTEGER;
+ALTER TABLE company   ADD COLUMN IF NOT EXISTS last_order_number INTEGER DEFAULT 0;

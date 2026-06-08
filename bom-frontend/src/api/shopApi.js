@@ -60,6 +60,22 @@ export function cancelShopOrder(orderId) {
   return apiFetchJson(`/shop/staff/orders/${orderId}/cancel`, { method: 'PATCH' })
 }
 
+export function resetOrderSequence(resetTo = 0) {
+  return apiFetchJson('/shop/staff/orders/sequence/reset', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ resetTo })
+  })
+}
+
+export function setShopOrderNumber(orderId, orderNumber) {
+  return apiFetchJson(`/shop/staff/orders/${orderId}/number`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ orderNumber })
+  })
+}
+
 // ── Tables ─────────────────────────────────────────────────────────
 
 export function fetchShopTables() {
@@ -88,4 +104,54 @@ export function deleteShopTable(tableId) {
 
 export function fetchTableQr(tableId) {
   return apiFetchJson(`/shop/staff/tables/${tableId}/qrcode`)
+}
+
+// ── Menu options ───────────────────────────────────────────────────
+
+export function fetchPublicMenuOptions(tenantId, companyId) {
+  return apiFetchJsonNoContext('/shop/public/menu-options' + qs({ tenantId, companyId }))
+}
+
+export function fetchMenuOptions(modelId) {
+  return apiFetchJson('/shop/staff/menu-options' + qs({ modelId }))
+}
+
+export function createMenuOption(body) {
+  return apiFetchJson('/shop/staff/menu-options', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+  })
+}
+
+export function updateMenuOption(id, body) {
+  return apiFetchJson(`/shop/staff/menu-options/${id}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+  })
+}
+
+export function deleteMenuOption(id) {
+  return apiFetchJson(`/shop/staff/menu-options/${id}`, { method: 'DELETE' })
+}
+
+// ── Display board ──────────────────────────────────────────────────
+
+export function generateDisplayBoardToken() {
+  return apiFetchJson('/shop/staff/display-board/token', { method: 'POST' })
+}
+
+export function fetchDisplayBoard(token) {
+  return apiFetchJsonNoContext(`/shop/public/display-board/${encodeURIComponent(token)}`)
+}
+
+// ── Bank config ────────────────────────────────────────────────────
+
+export function fetchBankConfig() {
+  return apiFetchJson('/shop/staff/bank-config')
+}
+
+export function updateBankConfig(body) {
+  return apiFetchJson('/shop/staff/bank-config', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  })
 }

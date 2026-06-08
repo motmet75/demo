@@ -14,6 +14,24 @@ public class VietQrBuilder {
 
     private VietQrBuilder() {}
 
+    /**
+     * Builds a VietQR image URL using the img.vietqr.io API.
+     * bankCode can be the 6-digit BIN (e.g. "970415") or the short code (e.g. "VCB").
+     */
+    public static String buildUrl(String bankCode, String accountNumber, String accountName,
+                                   BigDecimal amount, String orderRef) {
+        String encoded;
+        try {
+            encoded = "https://img.vietqr.io/image/" + bankCode + "-" + accountNumber + "-qr_only.png"
+                    + "?amount=" + (amount != null ? amount.longValue() : 0)
+                    + "&addInfo=" + java.net.URLEncoder.encode(orderRef != null ? orderRef : "", StandardCharsets.UTF_8)
+                    + "&accountName=" + java.net.URLEncoder.encode(accountName != null ? accountName : "", StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            encoded = "https://img.vietqr.io/image/" + bankCode + "-" + accountNumber + "-qr_only.png";
+        }
+        return encoded;
+    }
+
     public static String build(String bankBin, String accountNumber, BigDecimal amount, String orderCode) {
         StringBuilder sb = new StringBuilder();
 

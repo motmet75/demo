@@ -4,6 +4,7 @@ import com.ams.bomcore.controller.shop.dto.ShopOrderResponseDto;
 import com.ams.bomcore.domain.bom.BomItemEntity;
 import com.ams.bomcore.domain.company.Company;
 import com.ams.bomcore.domain.model.Model;
+import com.ams.bomcore.domain.shop.ModelMenuOption;
 import com.ams.bomcore.domain.shop.ShopAccessToken;
 import com.ams.bomcore.domain.shop.ShopOrder;
 import com.ams.bomcore.domain.shop.ShopOrderItem;
@@ -21,6 +22,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.*;
+import java.util.Map;
 
 @Service
 public class ShopOrderService {
@@ -29,6 +31,7 @@ public class ShopOrderService {
     private final ShopOrderItemRepository shopOrderItemRepository;
     private final ShopTableRepository shopTableRepository;
     private final ShopAccessTokenRepository shopAccessTokenRepository;
+    private final ModelMenuOptionRepository menuOptionRepository;
     private final ModelRepository modelRepository;
     private final CompanyRepository companyRepository;
     private final TenantRepository tenantRepository;
@@ -43,6 +46,7 @@ public class ShopOrderService {
                             ShopOrderItemRepository shopOrderItemRepository,
                             ShopTableRepository shopTableRepository,
                             ShopAccessTokenRepository shopAccessTokenRepository,
+                            ModelMenuOptionRepository menuOptionRepository,
                             ModelRepository modelRepository,
                             CompanyRepository companyRepository,
                             TenantRepository tenantRepository,
@@ -53,6 +57,7 @@ public class ShopOrderService {
         this.shopOrderItemRepository = shopOrderItemRepository;
         this.shopTableRepository = shopTableRepository;
         this.shopAccessTokenRepository = shopAccessTokenRepository;
+        this.menuOptionRepository = menuOptionRepository;
         this.modelRepository = modelRepository;
         this.companyRepository = companyRepository;
         this.tenantRepository = tenantRepository;
@@ -79,6 +84,13 @@ public class ShopOrderService {
         order.setTenantId(tenantId);
         order.setCompanyId(companyId);
         order.setOrderCode(String.valueOf(System.currentTimeMillis()));
+
+        // Auto-assign per-company sequence number
+        companyRepository.incrementOrderNumber(companyId);
+        companyRepository.flush();
+        Integer nextNum = companyRepository.findById(companyId)
+                .map(c -> c.getLastOrderNumber()).orElse(null);
+        order.setOrderNumber(nextNum);
         order.setFulfillmentType(req.fulfillmentType());
         order.setCustomerName(req.customerName());
         order.setCustomerPhone(req.customerPhone());
@@ -124,6 +136,8 @@ public class ShopOrderService {
             item.setUnitPrice(unitPrice);
             item.setUnitRawCost(unitRawCost);
             item.setLineTotal(lineTotal);
+            item.setSelectedOptions(lineReq.selectedOptions());
+            item.setItemNotes(lineReq.itemNotes());
             shopOrderItemRepository.save(item);
             items.add(item);
 
@@ -182,16 +196,18 @@ public class ShopOrderService {
         order.setStatus(ShopOrder.STATUS_READY);
         order.setReadyAt(Instant.now());
 
-        // Generate payment QR
+        // Generate payment QR via VietQR image URL
         Company company = companyRepository.findById(companyId).orElse(null);
-        if (company != null && company.getBankBin() != null && company.getBankAccountNumber() != null) {
-            String payload = VietQrBuilder.build(
+        if (company != null && company.getBankBin() != null && !company.getBankBin().isBlank()
+                && company.getBankAccountNumber() != null && !company.getBankAccountNumber().isBlank()) {
+            String url = VietQrBuilder.buildUrl(
                     company.getBankBin(),
                     company.getBankAccountNumber(),
+                    company.getBankAccountName(),
                     order.getTotalAmount(),
                     order.getOrderCode()
             );
-            order.setPaymentQr(QrCodeUtil.generateBase64Png(payload, 300));
+            order.setPaymentQr(url);
         } else {
             String fallback = "ORDER:" + order.getOrderCode() + " AMOUNT:" + order.getTotalAmount();
             order.setPaymentQr(QrCodeUtil.generateBase64Png(fallback, 300));
@@ -312,6 +328,62 @@ public class ShopOrderService {
         return QrCodeUtil.generateBase64Png(url, 300);
     }
 
+    // ── Display board ─────────────────────────────────────────────────
+
+    @Transactional
+    public ShopAccessToken generateDisplayBoardToken(UUID tenantId, UUID companyId) {
+        // Reuse existing valid token or create a fresh one with 24-hour expiry
+        return shopAccessTokenRepository
+                .findAllByTenantIdAndCompanyId(tenantId, companyId)
+                .stream()
+                .filter(t -> ShopAccessToken.TYPE_DISPLAY_BOARD.equals(t.getTokenType()))
+                .filter(ShopAccessToken::isValid)
+                .findFirst()
+                .orElseGet(() -> {
+                    ShopAccessToken sat = new ShopAccessToken();
+                    sat.setToken(UUID.randomUUID().toString());
+                    sat.setTenantId(tenantId);
+                    sat.setCompanyId(companyId);
+                    sat.setTokenType(ShopAccessToken.TYPE_DISPLAY_BOARD);
+                    sat.setExpiresAt(java.time.Instant.now().plus(24, java.time.temporal.ChronoUnit.HOURS));
+                    sat.setDescription("Display board token");
+                    return shopAccessTokenRepository.save(sat);
+                });
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> getDisplayBoardOrders(String token) {
+        ShopAccessToken sat = shopAccessTokenRepository.findByToken(token)
+                .orElseThrow(() -> new NoSuchElementException("Token not found"));
+        if (!sat.isValid()) throw new IllegalStateException("Token expired or disabled");
+
+        List<String> active  = List.of(ShopOrder.STATUS_PENDING, ShopOrder.STATUS_CONFIRMED, ShopOrder.STATUS_PREPARING);
+        List<String> ready   = List.of(ShopOrder.STATUS_READY);
+
+        List<ShopOrderResponseDto> preparing = shopOrderRepository
+                .findAllByTenantIdAndCompanyIdAndStatusInOrderByOrderNumberAsc(sat.getTenantId(), sat.getCompanyId(), active)
+                .stream().map(this::dto).toList();
+
+        List<ShopOrderResponseDto> readyList = shopOrderRepository
+                .findAllByTenantIdAndCompanyIdAndStatusInOrderByOrderNumberAsc(sat.getTenantId(), sat.getCompanyId(), ready)
+                .stream().map(this::dto).toList();
+
+        return Map.of("preparing", preparing, "ready", readyList);
+    }
+
+    @Transactional
+    public void resetOrderSequence(int resetTo, UUID tenantId, UUID companyId) {
+        companyRepository.resetOrderNumber(companyId, resetTo);
+    }
+
+    @Transactional
+    public ShopOrderResponseDto setOrderNumber(UUID orderId, int number, UUID tenantId, UUID companyId) {
+        ShopOrder order = requireOrder(orderId, tenantId, companyId);
+        order.setOrderNumber(number);
+        shopOrderRepository.save(order);
+        return dto(order);
+    }
+
     public BigDecimal estimateShopeeExpressFee(BigDecimal weightKg) {
         // TODO: replace with real Shopee Open-Platform credentials and API call
         if (weightKg == null || weightKg.compareTo(BigDecimal.ZERO) <= 0) return BigDecimal.valueOf(20000);
@@ -343,7 +415,31 @@ public class ShopOrderService {
 
     // ── Request records ───────────────────────────────────────────────
 
-    public record ItemRequest(UUID modelId, BigDecimal quantity) {}
+    public record ItemRequest(UUID modelId, BigDecimal quantity, String selectedOptions, String itemNotes) {}
+
+    // ── Menu options (admin) ───────────────────────────────────────────
+
+    public List<ModelMenuOption> listMenuOptions(UUID modelId, UUID tenantId, UUID companyId) {
+        return menuOptionRepository.findAllByModelIdAndTenantIdAndCompanyIdOrderByDisplayOrderAsc(modelId, tenantId, companyId);
+    }
+
+    public List<ModelMenuOption> listAllMenuOptions(UUID tenantId, UUID companyId) {
+        return menuOptionRepository.findAllByTenantIdAndCompanyIdOrderByDisplayOrderAsc(tenantId, companyId);
+    }
+
+    @Transactional
+    public ModelMenuOption saveMenuOption(ModelMenuOption opt) {
+        return menuOptionRepository.save(opt);
+    }
+
+    @Transactional
+    public void deleteMenuOption(UUID optionId, UUID tenantId, UUID companyId) {
+        ModelMenuOption opt = menuOptionRepository.findById(optionId)
+                .orElseThrow(() -> new NoSuchElementException("Option not found"));
+        if (!opt.getTenantId().equals(tenantId) || !opt.getCompanyId().equals(companyId))
+            throw new IllegalArgumentException("Not your option");
+        menuOptionRepository.delete(opt);
+    }
 
     public record CreateOrderRequest(
             String fulfillmentType,

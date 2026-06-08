@@ -38,6 +38,9 @@ public class Company {
     @Column(name = "created_at")
     private Instant createdAt;
 
+    @Column(name = "last_order_number")
+    private Integer lastOrderNumber = 0;
+
     @Column(name = "bank_bin", length = 20)
     private String bankBin;
 
@@ -64,6 +67,8 @@ public class Company {
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
 
+    public Integer getLastOrderNumber() { return lastOrderNumber; }
+    public void setLastOrderNumber(Integer lastOrderNumber) { this.lastOrderNumber = lastOrderNumber; }
     public String getBankBin() { return bankBin; }
     public void setBankBin(String bankBin) { this.bankBin = bankBin; }
 

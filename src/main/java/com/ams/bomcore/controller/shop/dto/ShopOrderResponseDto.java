@@ -12,6 +12,7 @@ public class ShopOrderResponseDto {
 
     private UUID id;
     private String orderCode;
+    private Integer orderNumber;
     private UUID tenantId;
     private UUID companyId;
     private String tableId;
@@ -43,6 +44,8 @@ public class ShopOrderResponseDto {
         private BigDecimal unitPrice;
         private BigDecimal unitRawCost;
         private BigDecimal lineTotal;
+        private String selectedOptions;
+        private String itemNotes;
 
         public static ItemDto from(ShopOrderItem item) {
             ItemDto dto = new ItemDto();
@@ -53,6 +56,8 @@ public class ShopOrderResponseDto {
             dto.unitPrice = item.getUnitPrice();
             dto.unitRawCost = item.getUnitRawCost();
             dto.lineTotal = item.getLineTotal();
+            dto.selectedOptions = item.getSelectedOptions();
+            dto.itemNotes = item.getItemNotes();
             return dto;
         }
 
@@ -63,12 +68,15 @@ public class ShopOrderResponseDto {
         public BigDecimal getUnitPrice() { return unitPrice; }
         public BigDecimal getUnitRawCost() { return unitRawCost; }
         public BigDecimal getLineTotal() { return lineTotal; }
+        public String getSelectedOptions() { return selectedOptions; }
+        public String getItemNotes() { return itemNotes; }
     }
 
     public static ShopOrderResponseDto from(ShopOrder order, List<ShopOrderItem> items) {
         ShopOrderResponseDto dto = new ShopOrderResponseDto();
         dto.id = order.getId();
         dto.orderCode = order.getOrderCode();
+        dto.orderNumber = order.getOrderNumber();
         dto.tenantId = order.getTenantId();
         dto.companyId = order.getCompanyId();
         if (order.getTable() != null) {
@@ -98,6 +106,7 @@ public class ShopOrderResponseDto {
 
     public UUID getId() { return id; }
     public String getOrderCode() { return orderCode; }
+    public Integer getOrderNumber() { return orderNumber; }
     public UUID getTenantId() { return tenantId; }
     public UUID getCompanyId() { return companyId; }
     public String getTableId() { return tableId; }

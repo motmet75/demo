@@ -168,6 +168,33 @@ public class ShopOrderController {
         return ResponseEntity.ok(shopOrderService.completeOrder(orderId, tId, cId));
     }
 
+    @PostMapping("/shop/staff/orders/sequence/reset")
+    public ResponseEntity<?> resetSequence(@RequestBody(required = false) Map<String, Object> body,
+                                            @RequestParam(required = false) UUID tenantId,
+                                            @RequestParam(required = false) UUID companyId,
+                                            @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                            @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        int resetTo = 0;
+        if (body != null && body.get("resetTo") instanceof Number n) resetTo = n.intValue();
+        shopOrderService.resetOrderSequence(resetTo, tId, cId);
+        return ResponseEntity.ok(Map.of("resetTo", resetTo, "nextOrderNumber", resetTo + 1));
+    }
+
+    @PatchMapping("/shop/staff/orders/{orderId}/number")
+    public ResponseEntity<?> setOrderNumber(@PathVariable UUID orderId,
+                                             @RequestBody Map<String, Object> body,
+                                             @RequestParam(required = false) UUID tenantId,
+                                             @RequestParam(required = false) UUID companyId,
+                                             @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                             @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        int number = ((Number) body.get("orderNumber")).intValue();
+        return ResponseEntity.ok(shopOrderService.setOrderNumber(orderId, number, tId, cId));
+    }
+
     @PatchMapping("/shop/staff/orders/{orderId}/cancel")
     public ResponseEntity<?> cancel(@PathVariable UUID orderId,
                                      @RequestParam(required = false) UUID tenantId,
@@ -239,6 +266,135 @@ public class ShopOrderController {
         validateScope(tId, cId);
         String qr = shopOrderService.generateTableQr(tableId, tId, cId);
         return ResponseEntity.ok(Map.of("qrBase64", qr));
+    }
+
+    // ── Menu options (/shop/staff/menu-options) ───────────────────────
+
+    @GetMapping("/shop/public/menu-options")
+    public ResponseEntity<?> publicMenuOptions(@RequestParam UUID tenantId, @RequestParam UUID companyId) {
+        validateScope(tenantId, companyId);
+        var all = shopOrderService.listAllMenuOptions(tenantId, companyId);
+        // group by modelId for easy frontend lookup
+        var grouped = new java.util.LinkedHashMap<String, java.util.List<?>>();
+        for (var opt : all) {
+            grouped.computeIfAbsent(opt.getModelId().toString(), k -> new java.util.ArrayList<>())
+                   .add(opt);
+        }
+        return ResponseEntity.ok(grouped);
+    }
+
+    @GetMapping("/shop/staff/menu-options")
+    public ResponseEntity<?> listMenuOptions(@RequestParam UUID modelId,
+                                              @RequestParam(required = false) UUID tenantId,
+                                              @RequestParam(required = false) UUID companyId,
+                                              @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                              @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        return ResponseEntity.ok(shopOrderService.listMenuOptions(modelId, tId, cId));
+    }
+
+    @PostMapping("/shop/staff/menu-options")
+    public ResponseEntity<?> createMenuOption(@RequestBody com.ams.bomcore.domain.shop.ModelMenuOption body,
+                                               @RequestParam(required = false) UUID tenantId,
+                                               @RequestParam(required = false) UUID companyId,
+                                               @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                               @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        body.setId(null); body.setTenantId(tId); body.setCompanyId(cId);
+        return ResponseEntity.status(201).body(shopOrderService.saveMenuOption(body));
+    }
+
+    @PutMapping("/shop/staff/menu-options/{optId}")
+    public ResponseEntity<?> updateMenuOption(@PathVariable UUID optId,
+                                               @RequestBody com.ams.bomcore.domain.shop.ModelMenuOption body,
+                                               @RequestParam(required = false) UUID tenantId,
+                                               @RequestParam(required = false) UUID companyId,
+                                               @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                               @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        body.setId(optId); body.setTenantId(tId); body.setCompanyId(cId);
+        return ResponseEntity.ok(shopOrderService.saveMenuOption(body));
+    }
+
+    @DeleteMapping("/shop/staff/menu-options/{optId}")
+    public ResponseEntity<Void> deleteMenuOption(@PathVariable UUID optId,
+                                                  @RequestParam(required = false) UUID tenantId,
+                                                  @RequestParam(required = false) UUID companyId,
+                                                  @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                                  @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        shopOrderService.deleteMenuOption(optId, tId, cId);
+        return ResponseEntity.noContent().build();
+    }
+
+    // ── Display board ─────────────────────────────────────────────────
+
+    @Transactional
+    @PostMapping("/shop/staff/display-board/token")
+    public ResponseEntity<?> generateDisplayBoardToken(
+            @RequestParam(required = false) UUID tenantId,
+            @RequestParam(required = false) UUID companyId,
+            @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+            @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        var sat = shopOrderService.generateDisplayBoardToken(tId, cId);
+        return ResponseEntity.ok(Map.of(
+                "token",     sat.getToken(),
+                "expiresAt", sat.getExpiresAt() != null ? sat.getExpiresAt().toString() : ""
+        ));
+    }
+
+    @GetMapping("/shop/public/display-board/{token}")
+    public ResponseEntity<?> getDisplayBoard(@PathVariable String token) {
+        try {
+            return ResponseEntity.ok(shopOrderService.getDisplayBoardOrders(token));
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(410).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // ── Bank config (/shop/staff/bank-config) ─────────────────────────
+
+    @GetMapping("/shop/staff/bank-config")
+    public ResponseEntity<?> getBankConfig(@RequestParam(required = false) UUID tenantId,
+                                            @RequestParam(required = false) UUID companyId,
+                                            @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                            @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        var company = companyRepository.findById(cId).orElseThrow();
+        return ResponseEntity.ok(Map.of(
+                "bankBin",           company.getBankBin()           != null ? company.getBankBin()           : "",
+                "bankAccountNumber", company.getBankAccountNumber() != null ? company.getBankAccountNumber() : "",
+                "bankAccountName",   company.getBankAccountName()   != null ? company.getBankAccountName()   : ""
+        ));
+    }
+
+    @PutMapping("/shop/staff/bank-config")
+    public ResponseEntity<?> updateBankConfig(@RequestBody Map<String, String> body,
+                                               @RequestParam(required = false) UUID tenantId,
+                                               @RequestParam(required = false) UUID companyId,
+                                               @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                               @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        var company = companyRepository.findById(cId).orElseThrow();
+        if (body.containsKey("bankBin"))           company.setBankBin(body.get("bankBin"));
+        if (body.containsKey("bankAccountNumber")) company.setBankAccountNumber(body.get("bankAccountNumber"));
+        if (body.containsKey("bankAccountName"))   company.setBankAccountName(body.get("bankAccountName"));
+        companyRepository.save(company);
+        return ResponseEntity.ok(Map.of(
+                "bankBin",           company.getBankBin()           != null ? company.getBankBin()           : "",
+                "bankAccountNumber", company.getBankAccountNumber() != null ? company.getBankAccountNumber() : "",
+                "bankAccountName",   company.getBankAccountName()   != null ? company.getBankAccountName()   : ""
+        ));
     }
 
     // ── Delivery fee estimate ──────────────────────────────────────────

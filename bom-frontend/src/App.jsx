@@ -43,6 +43,8 @@ import ShopOrderStatusPage from './features/shopfront/ShopOrderStatusPage'
 import ShopOrderPage from './features/shoporder/ShopOrderPage'
 import ShopTablePage from './features/shoptable/ShopTablePage'
 import ShopMenuManagePage from './features/shopmenu/ShopMenuManagePage'
+import ShopBankConfigPage from './features/shopbank/ShopBankConfigPage'
+import DisplayBoardPage from './features/shopboard/DisplayBoardPage'
 
 const SIDEBAR_FULL = 200
 const SIDEBAR_MINI = 52
@@ -70,6 +72,7 @@ const NAV_ITEMS = [
   { label: 'Shop Orders', path: '/shop-orders',           icon: '🧋' },
   { label: 'Tables',      path: '/shop-tables',           icon: '🪑' },
   { label: 'Menu Setup',  path: '/shop-menu',             icon: '🍽️' },
+  { label: 'Bank Setup',  path: '/shop-bank',             icon: '🏦' },
 ]
 
 const ADMIN_ITEMS = [
@@ -209,6 +212,7 @@ function MainShell({ user, logout, isAdmin }) {
             <Route path="/shop-orders" element={<RequireAuth><RequireContext><ShopOrderPage /></RequireContext></RequireAuth>} />
             <Route path="/shop-tables" element={<RequireAuth><RequireContext><ShopTablePage /></RequireContext></RequireAuth>} />
             <Route path="/shop-menu"   element={<RequireAuth><RequireContext><ShopMenuManagePage /></RequireContext></RequireAuth>} />
+            <Route path="/shop-bank"   element={<RequireAuth><RequireContext><ShopBankConfigPage /></RequireContext></RequireAuth>} />
             <Route path="/admin" element={<RequireAuth adminOnly><AdminPage /></RequireAuth>} />
             <Route path="/admin/users" element={<RequireAuth adminOnly><AdminPage /></RequireAuth>} />
             <Route path="/tenants" element={<RequireAuth adminOnly><TenantsPage /></RequireAuth>} />
@@ -229,6 +233,7 @@ function AppShell() {
         {/* Public customer-facing shop routes — no sidebar/header */}
         <Route path="/shop/menu" element={<ShopMenuPage />} />
         <Route path="/shop/order/:orderCode" element={<ShopOrderStatusPage />} />
+        <Route path="/shop/board" element={<DisplayBoardPage />} />
         {/* Everything else — existing authenticated shell */}
         <Route path="/*" element={<MainShell user={user} logout={logout} isAdmin={isAdmin} />} />
       </Routes>

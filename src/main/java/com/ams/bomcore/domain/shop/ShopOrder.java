@@ -39,6 +39,9 @@ public class ShopOrder {
     @Column(name = "order_code", nullable = false, length = 50)
     private String orderCode;
 
+    @Column(name = "order_number")
+    private Integer orderNumber;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "table_id")
     private ShopTable table;
@@ -112,6 +115,8 @@ public class ShopOrder {
     public void setCompanyId(UUID companyId) { this.companyId = companyId; }
     public String getOrderCode() { return orderCode; }
     public void setOrderCode(String orderCode) { this.orderCode = orderCode; }
+    public Integer getOrderNumber() { return orderNumber; }
+    public void setOrderNumber(Integer orderNumber) { this.orderNumber = orderNumber; }
     public ShopTable getTable() { return table; }
     public void setTable(ShopTable table) { this.table = table; }
     public String getFulfillmentType() { return fulfillmentType; }

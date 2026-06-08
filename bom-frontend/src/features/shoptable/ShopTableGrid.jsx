@@ -16,6 +16,7 @@ import RefreshIcon from '@mui/icons-material/Refresh'
 import EditIcon from '@mui/icons-material/Edit'
 import DeleteIcon from '@mui/icons-material/Delete'
 import QrCode2Icon from '@mui/icons-material/QrCode2'
+import PrintIcon from '@mui/icons-material/Print'
 import { fetchShopTables, deleteShopTable, fetchTableQr } from '../../api/shopApi'
 import ShopTableEditModal from './ShopTableEditModal'
 
@@ -51,6 +52,36 @@ export default function ShopTableGrid() {
     } catch { setError('Failed to load QR') }
   }
 
+  const handlePrint = async (row) => {
+    try {
+      const { data } = await fetchTableQr(row.id)
+      const qr = data?.qrBase64 || ''
+      const win = window.open('', '_blank', 'width=500,height=600')
+      win.document.write(`<!DOCTYPE html><html><head>
+        <title>Table QR — ${row.tableName}</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; background: #fff; padding: 24px; }
+          .box { border: 3px solid #000; border-radius: 16px; padding: 32px 40px; text-align: center; max-width: 360px; width: 100%; }
+          h1 { font-size: 42px; font-weight: 900; margin-bottom: 4px; }
+          .sub { font-size: 16px; color: #555; margin-bottom: 24px; }
+          img { width: 260px; height: 260px; display: block; margin: 0 auto 20px; }
+          .footer { font-size: 13px; color: #888; border-top: 1px solid #eee; padding-top: 12px; margin-top: 4px; }
+          @media print { body { padding: 0; } }
+        </style>
+      </head><body>
+        <div class="box">
+          <h1>${row.tableName}</h1>
+          <p class="sub">Scan to order</p>
+          <img src="data:image/png;base64,${qr}" alt="QR" />
+          <p class="footer">Point your camera at the QR code</p>
+        </div>
+        <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 800) }</script>
+      </body></html>`)
+      win.document.close()
+    } catch { setError('Failed to load QR for printing') }
+  }
+
   const columns = [
     { field: 'tableName', headerName: 'Table Name', flex: 1 },
     { field: 'isActive', headerName: 'Active', width: 80, renderCell: ({ value }) => <Chip label={value ? 'Yes' : 'No'} color={value ? 'success' : 'default'} size="small" /> },
@@ -59,6 +90,7 @@ export default function ShopTableGrid() {
       renderCell: ({ row }) => (
         <Box sx={{ display: 'flex', gap: 0.5 }}>
           <Tooltip title="QR Code"><IconButton size="small" onClick={() => handleQr(row)}><QrCode2Icon fontSize="small" /></IconButton></Tooltip>
+          <Tooltip title="Print QR"><IconButton size="small" onClick={() => handlePrint(row)}><PrintIcon fontSize="small" /></IconButton></Tooltip>
           <Tooltip title="Edit"><IconButton size="small" onClick={() => setEditTable(row)}><EditIcon fontSize="small" /></IconButton></Tooltip>
           <Tooltip title="Delete"><IconButton size="small" color="error" onClick={() => handleDelete(row.id)}><DeleteIcon fontSize="small" /></IconButton></Tooltip>
         </Box>
