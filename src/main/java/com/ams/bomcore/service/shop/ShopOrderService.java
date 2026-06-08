@@ -411,7 +411,7 @@ public class ShopOrderService {
                 .orElseThrow(() -> new NoSuchElementException("Token not found"));
         if (!sat.isValid()) throw new IllegalStateException("Token expired or disabled");
 
-        List<String> active  = List.of(ShopOrder.STATUS_PENDING, ShopOrder.STATUS_CONFIRMED, ShopOrder.STATUS_PREPARING);
+        List<String> active  = List.of(ShopOrder.STATUS_CONFIRMED, ShopOrder.STATUS_PREPARING);
         List<String> ready   = List.of(ShopOrder.STATUS_READY);
 
         List<ShopOrderResponseDto> preparing = shopOrderRepository
