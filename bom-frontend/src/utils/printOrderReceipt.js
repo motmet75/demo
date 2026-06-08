@@ -1,5 +1,46 @@
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : '0 đ'
 
+export function printWalkUpQr(seq, qrBase64) {
+  if (!qrBase64) return
+  const numLine = seq != null
+    ? `<div class="num">#${seq}</div><div class="sub">Your order number</div>`
+    : `<div class="sub-big">Scan to Order</div>`
+
+  const html = `<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Order QR${seq != null ? ' #' + seq : ''}</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: Arial, sans-serif;
+    width: 260px; margin: 0 auto; padding: 20px 14px;
+    text-align: center; color: #111;
+  }
+  .num     { font-size: 88px; font-weight: 900; line-height: 1; letter-spacing: -4px; color: #1976d2; }
+  .sub     { font-size: 13px; color: #666; margin-bottom: 14px; font-weight: 500; }
+  .sub-big { font-size: 22px; font-weight: 800; margin-bottom: 14px; }
+  .qr-box  { display: inline-block; padding: 10px; border: 2px solid #111; border-radius: 10px; }
+  img      { width: 210px; height: 210px; display: block; }
+  .hint    { font-size: 12px; color: #888; margin-top: 12px; }
+  .divider { border-top: 1px dashed #ccc; margin: 12px 0; }
+  @media print { @page { margin: 0; } }
+</style>
+</head>
+<body>
+  ${numLine}
+  <div class="qr-box"><img src="data:image/png;base64,${qrBase64}" alt="QR" /></div>
+  <div class="hint">Scan QR code to view menu &amp; order</div>
+</body>
+</html>`
+
+  const win = window.open('', '_blank', 'width=300,height=550')
+  win.document.write(html)
+  win.document.close()
+  win.onload = () => { win.focus(); win.print(); setTimeout(() => win.close(), 800) }
+}
+
 export function printOrderTag(order, qrBase64) {
   if (!order) return
   const num   = order.orderNumber ? `#${order.orderNumber}` : order.orderCode

@@ -21,6 +21,7 @@ import TableBarIcon from '@mui/icons-material/TableBar'
 import TvIcon from '@mui/icons-material/Tv'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline'
+import QrCode2Icon from '@mui/icons-material/QrCode2'
 import {
   fetchShopOrders, confirmShopOrder, prepareShopOrder, readyShopOrder,
   completeShopOrder, cancelShopOrder, resetOrderSequence, setShopOrderNumber,
@@ -28,6 +29,7 @@ import {
 } from '../../api/shopApi'
 import ShopOrderDetailModal from './ShopOrderDetailModal'
 import ManualOrderDialog from './ManualOrderDialog'
+import QrOrderDialog from './QrOrderDialog'
 
 const BOARD_CHANNEL = 'shop_display_board'
 function broadcastReady() {
@@ -50,6 +52,7 @@ export default function ShopOrderGrid() {
   const [resetTo, setResetTo]           = useState(0)
   const [resetting, setResetting]       = useState(false)
   const [manualOpen, setManualOpen]      = useState(false)
+  const [qrOrderOpen, setQrOrderOpen]   = useState(false)
   const [boardOpen, setBoardOpen]       = useState(false)
   const [boardUrl, setBoardUrl]         = useState('')
   const [boardLoading, setBoardLoading] = useState(false)
@@ -223,6 +226,10 @@ export default function ShopOrderGrid() {
           variant="contained" size="small" color="success" sx={{ textTransform: 'none', fontWeight: 700 }}>
           New Order
         </Button>
+        <Button startIcon={<QrCode2Icon />} onClick={() => setQrOrderOpen(true)}
+          variant="outlined" size="small" color="primary" sx={{ textTransform: 'none', fontWeight: 700 }}>
+          QR Order
+        </Button>
         <Box sx={{ flex: 1 }} />
         <Tooltip title="Open display board for customers">
           <Button startIcon={<TvIcon />} onClick={handleOpenBoard} variant="outlined" size="small" color="info">
@@ -260,6 +267,11 @@ export default function ShopOrderGrid() {
         open={manualOpen}
         onClose={() => setManualOpen(false)}
         onCreated={load}
+      />
+
+      <QrOrderDialog
+        open={qrOrderOpen}
+        onClose={() => setQrOrderOpen(false)}
       />
 
       {/* Detail modal */}

@@ -368,6 +368,20 @@ public class ShopOrderService {
         return QrCodeUtil.generateBase64Png(url, 300);
     }
 
+    @Transactional
+    public String generateWalkUpQr(Integer seq, UUID tenantId, UUID companyId) {
+        ShopAccessToken sat = new ShopAccessToken();
+        sat.setToken(UUID.randomUUID().toString());
+        sat.setTenantId(tenantId);
+        sat.setCompanyId(companyId);
+        sat.setTokenType(ShopAccessToken.TYPE_TABLE_QR);
+        sat.setDescription("Walk-up QR" + (seq != null ? " #" + seq : ""));
+        shopAccessTokenRepository.save(sat);
+        String url = publicBaseUrl + "/shop/menu?t=" + sat.getToken()
+                   + (seq != null ? "&seq=" + seq : "");
+        return QrCodeUtil.generateBase64Png(url, 400);
+    }
+
     // ── Display board ─────────────────────────────────────────────────
 
     @Transactional

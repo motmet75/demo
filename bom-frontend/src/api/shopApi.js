@@ -44,6 +44,14 @@ export function fetchOrderTagQr(orderId) {
   return apiFetchJson(`/shop/staff/orders/${orderId}/tag-qr`)
 }
 
+export function generateWalkUpQr(seq) {
+  return apiFetchJson('/shop/staff/qr-order', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(seq != null ? { seq } : {})
+  })
+}
+
 export function fetchShopOrders(status) {
   return apiFetchJson('/shop/staff/orders' + (status ? qs({ status }) : ''))
 }

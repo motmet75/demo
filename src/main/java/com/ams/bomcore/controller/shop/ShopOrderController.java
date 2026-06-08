@@ -292,6 +292,23 @@ public class ShopOrderController {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping("/shop/staff/qr-order")
+    public ResponseEntity<?> generateWalkUpQr(
+            @RequestBody(required = false) Map<String, Object> body,
+            @RequestParam(required = false) UUID tenantId,
+            @RequestParam(required = false) UUID companyId,
+            @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+            @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        Integer seq = body != null && body.get("seq") != null ? ((Number) body.get("seq")).intValue() : null;
+        String qrBase64 = shopOrderService.generateWalkUpQr(seq, tId, cId);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("qrBase64", qrBase64);
+        if (seq != null) result.put("seq", seq);
+        return ResponseEntity.ok(result);
+    }
+
     @GetMapping("/shop/staff/tables/{tableId}/qrcode")
     public ResponseEntity<?> tableQr(@PathVariable UUID tableId,
                                       @RequestParam(required = false) UUID tenantId,

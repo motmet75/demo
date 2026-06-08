@@ -57,6 +57,7 @@ export default function ShopMenuPage() {
   const rawTenantId  = params.get('tenantId')
   const rawCompanyId = params.get('companyId')
   const rawTableId   = params.get('tableId')
+  const seqParam     = params.get('seq')    // pre-assigned order sequence number
 
   const [ctx, setCtx] = useState(
     tokenParam ? null : { tenantId: rawTenantId, companyId: rawCompanyId, tableId: rawTableId }
@@ -155,6 +156,7 @@ export default function ShopMenuPage() {
       deliveryFee: null,
       paymentMethod: form.paymentMethod,
       notes: notes || null,
+      manualOrderNumber: seqParam ? Number(seqParam) : null,
       items,
     }
     try {
