@@ -29,7 +29,7 @@ import TakeoutDiningIcon from '@mui/icons-material/TakeoutDining'
 import DeliveryDiningIcon from '@mui/icons-material/DeliveryDining'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import { fetchModels } from '../../api/modelApi'
-import { fetchShopTables, createStaffOrder, fetchOrderTagQr } from '../../api/shopApi'
+import { fetchShopTables, createStaffOrder, fetchOrderTagQr, fetchMenuOptions } from '../../api/shopApi'
 import { printOrderReceipt } from '../../utils/printOrderReceipt'
 import { printOrderTag } from '../../utils/printOrderReceipt'
 
@@ -55,8 +55,9 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
   const [customer, setCustomer]       = useState({ name: '', phone: '' })
   const [payment, setPayment]         = useState('CASH')
   const [notes, setNotes]             = useState('')
-  const [items, setItems]             = useState([])   // [{ modelId, modelName, sellingPrice, qty }]
+  const [items, setItems]             = useState([])   // [{ modelId, modelName, sellingPrice, qty, selectedOptions:{}, itemNotes:'' }]
   const [selectedModel, setSelectedModel] = useState(null)
+  const [optsByModel, setOptsByModel] = useState({})  // { [modelId]: ModelMenuOption[] }
 
   // success state
   const [createdOrder, setCreatedOrder]   = useState(null)
@@ -79,19 +80,49 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
     setManualNum(''); setFulfillment(defaultTable ? 'DINE_IN' : 'PICKUP'); setTableId(defaultTable?.id || '')
     setCustomer({ name: '', phone: '' }); setPayment('CASH'); setNotes('')
     setItems([]); setSelectedModel(null); setError('')
-    setCreatedOrder(null); setTagQr('')
+    setCreatedOrder(null); setTagQr(''); setOptsByModel({})
   }
 
   const handleClose = () => { reset(); onClose() }
 
   const addItem = () => {
     if (!selectedModel) return
+    const mid = selectedModel.id
     setItems(prev => {
-      const existing = prev.find(i => i.modelId === selectedModel.id)
-      if (existing) return prev.map(i => i.modelId === selectedModel.id ? { ...i, qty: i.qty + 1 } : i)
-      return [...prev, { modelId: selectedModel.id, modelName: selectedModel.modelName, sellingPrice: selectedModel.sellingPrice, qty: 1 }]
+      const existing = prev.find(i => i.modelId === mid)
+      if (existing) return prev.map(i => i.modelId === mid ? { ...i, qty: i.qty + 1 } : i)
+      return [...prev, { modelId: mid, modelName: selectedModel.modelName, sellingPrice: selectedModel.sellingPrice, qty: 1, selectedOptions: {}, itemNotes: '' }]
     })
+    // fetch options for this model if not already loaded
+    if (!optsByModel[mid]) {
+      fetchMenuOptions(mid)
+        .then(({ data }) => setOptsByModel(prev => ({ ...prev, [mid]: Array.isArray(data) ? data : [] })))
+        .catch(() => setOptsByModel(prev => ({ ...prev, [mid]: [] })))
+    }
     setSelectedModel(null)
+  }
+
+  const toggleOption = (modelId, groupName, value, multiSelect) => {
+    setItems(prev => prev.map(item => {
+      if (item.modelId !== modelId) return item
+      const cur = item.selectedOptions[groupName]
+      let next
+      if (multiSelect) {
+        const arr = Array.isArray(cur) ? cur : (cur ? [cur] : [])
+        next = arr.includes(value) ? arr.filter(v => v !== value) : [...arr, value]
+        if (!next.length) next = undefined
+      } else {
+        next = cur === value ? undefined : value
+      }
+      const opts = { ...item.selectedOptions }
+      if (next === undefined) delete opts[groupName]
+      else opts[groupName] = next
+      return { ...item, selectedOptions: opts }
+    }))
+  }
+
+  const setItemNotes = (modelId, notes) => {
+    setItems(prev => prev.map(i => i.modelId === modelId ? { ...i, itemNotes: notes } : i))
   }
 
   const changeQty = (modelId, delta) => {
@@ -114,7 +145,12 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
       paymentMethod: payment,
       notes: notes || null,
       manualOrderNumber: manualNum !== '' ? Number(manualNum) : null,
-      items: items.map(i => ({ modelId: i.modelId, quantity: i.qty })),
+      items: items.map(i => ({
+        modelId: i.modelId,
+        quantity: i.qty,
+        selectedOptions: Object.keys(i.selectedOptions || {}).length > 0 ? JSON.stringify(i.selectedOptions) : null,
+        itemNotes: i.itemNotes || null,
+      })),
     }
     try {
       const { res, data } = await createStaffOrder(body)
@@ -288,38 +324,87 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
 
             {/* Items list */}
             {items.length > 0 ? (
-              <Stack spacing={0.5}>
-                {items.map(item => (
-                  <Box key={item.modelId} sx={{
-                    display: 'flex', alignItems: 'center', gap: 1,
-                    bgcolor: '#f9f9f9', borderRadius: 1.5, px: 1.25, py: 0.75,
-                  }}>
-                    <Typography variant="body2" fontWeight={600} sx={{ flex: 1, minWidth: 0 }} noWrap>
-                      {item.modelName}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: 12 }}>
-                      {fmt(item.sellingPrice)}
-                    </Typography>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
-                      <IconButton size="small" onClick={() => changeQty(item.modelId, -1)} sx={{ p: 0.25 }}>
-                        <RemoveIcon sx={{ fontSize: 14 }} />
-                      </IconButton>
-                      <Typography variant="body2" fontWeight={700} sx={{ minWidth: 20, textAlign: 'center' }}>
-                        {item.qty}
-                      </Typography>
-                      <IconButton size="small" onClick={() => changeQty(item.modelId, 1)}
-                        sx={{ p: 0.25, bgcolor: '#1976d2', color: '#fff', '&:hover': { bgcolor: '#1565c0' } }}>
-                        <AddIcon sx={{ fontSize: 14 }} />
-                      </IconButton>
+              <Stack spacing={0.75}>
+                {items.map(item => {
+                  const modelOpts = optsByModel[item.modelId] || []
+                  return (
+                    <Box key={item.modelId} sx={{ bgcolor: '#f9f9f9', borderRadius: 1.5, px: 1.25, pt: 0.75, pb: 0.5 }}>
+                      {/* Item row */}
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="body2" fontWeight={600} sx={{ flex: 1, minWidth: 0 }} noWrap>
+                          {item.modelName}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ fontSize: 12 }}>
+                          {fmt(item.sellingPrice)}
+                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+                          <IconButton size="small" onClick={() => changeQty(item.modelId, -1)} sx={{ p: 0.25 }}>
+                            <RemoveIcon sx={{ fontSize: 14 }} />
+                          </IconButton>
+                          <Typography variant="body2" fontWeight={700} sx={{ minWidth: 20, textAlign: 'center' }}>
+                            {item.qty}
+                          </Typography>
+                          <IconButton size="small" onClick={() => changeQty(item.modelId, 1)}
+                            sx={{ p: 0.25, bgcolor: '#1976d2', color: '#fff', '&:hover': { bgcolor: '#1565c0' } }}>
+                            <AddIcon sx={{ fontSize: 14 }} />
+                          </IconButton>
+                        </Box>
+                        <Typography variant="body2" color="primary" fontWeight={700} sx={{ minWidth: 64, textAlign: 'right', fontSize: 13 }}>
+                          {fmt(item.qty * Number(item.sellingPrice || 0))}
+                        </Typography>
+                        <IconButton size="small" color="error" onClick={() => setItems(prev => prev.filter(i => i.modelId !== item.modelId))} sx={{ p: 0.25, ml: 0.25 }}>
+                          <DeleteIcon sx={{ fontSize: 14 }} />
+                        </IconButton>
+                      </Box>
+
+                      {/* Option groups (chips) */}
+                      {modelOpts.map(grp => {
+                        const choices = (() => { try { return JSON.parse(grp.choices) } catch { return [] } })()
+                        if (!choices.length) return null
+                        const curVal = item.selectedOptions[grp.groupName]
+                        const selArr = Array.isArray(curVal) ? curVal : (curVal ? [curVal] : [])
+                        return (
+                          <Box key={grp.id} sx={{ mt: 0.5 }}>
+                            <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                              {grp.groupName}
+                            </Typography>
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.25 }}>
+                              {choices.map(choice => {
+                                const active = selArr.includes(choice)
+                                return (
+                                  <Chip
+                                    key={choice}
+                                    label={choice}
+                                    size="small"
+                                    onClick={() => toggleOption(item.modelId, grp.groupName, choice, grp.multiSelect)}
+                                    sx={{
+                                      height: 22, fontSize: 11, cursor: 'pointer',
+                                      bgcolor: active ? '#1976d2' : '#fff',
+                                      color: active ? '#fff' : '#555',
+                                      border: `1px solid ${active ? '#1976d2' : '#ddd'}`,
+                                      fontWeight: active ? 700 : 400,
+                                      '&:hover': { bgcolor: active ? '#1565c0' : '#f0f4ff' },
+                                    }}
+                                  />
+                                )
+                              })}
+                            </Box>
+                          </Box>
+                        )
+                      })}
+
+                      {/* Per-item notes */}
+                      <TextField
+                        size="small" variant="standard" fullWidth
+                        placeholder="Item note (e.g. no sugar, extra spicy…)"
+                        value={item.itemNotes || ''}
+                        onChange={e => setItemNotes(item.modelId, e.target.value)}
+                        InputProps={{ disableUnderline: false, sx: { fontSize: 12 } }}
+                        sx={{ mt: 0.5, mb: 0.25 }}
+                      />
                     </Box>
-                    <Typography variant="body2" color="primary" fontWeight={700} sx={{ minWidth: 64, textAlign: 'right', fontSize: 13 }}>
-                      {fmt(item.qty * Number(item.sellingPrice || 0))}
-                    </Typography>
-                    <IconButton size="small" color="error" onClick={() => setItems(prev => prev.filter(i => i.modelId !== item.modelId))} sx={{ p: 0.25, ml: 0.25 }}>
-                      <DeleteIcon sx={{ fontSize: 14 }} />
-                    </IconButton>
-                  </Box>
-                ))}
+                  )
+                })}
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 0.5, px: 1 }}>
                   <Typography fontWeight={800}>Total</Typography>
                   <Typography fontWeight={800} color="primary">{fmt(total)}</Typography>
