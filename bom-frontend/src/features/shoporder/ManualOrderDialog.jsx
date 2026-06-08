@@ -41,7 +41,7 @@ const FULFILLMENT = [
   { value: 'DELIVERY', label: 'Delivery', icon: <DeliveryDiningIcon fontSize="small" /> },
 ]
 
-export default function ManualOrderDialog({ open, onClose, onCreated, defaultTable }) {
+export default function ManualOrderDialog({ open, onClose, onCreated, defaultTable, defaultItems }) {
   const [models, setModels]     = useState([])
   const [tables, setTables]     = useState([])
   const [loading, setLoading]   = useState(false)
@@ -67,6 +67,14 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
   useEffect(() => {
     if (!open) return
     setLoading(true)
+    // Pre-populate items from stock if provided
+    if (defaultItems?.length) {
+      setItems(defaultItems.map(i => ({
+        modelId: i.modelId, modelName: i.modelName,
+        sellingPrice: i.sellingPrice, qty: i.qty,
+        selectedOptions: i.selectedOptions || {}, itemNotes: i.itemNotes || '',
+      })))
+    }
     Promise.all([fetchModels(), fetchShopTables()])
       .then(([mList, tRes]) => {
         setModels((mList || []).filter(m => m.sellingPrice != null))
@@ -74,7 +82,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
       })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [open])
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const reset = () => {
     setManualNum(''); setFulfillment(defaultTable ? 'DINE_IN' : 'PICKUP'); setTableId(defaultTable?.id || '')
@@ -303,7 +311,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
               <Typography variant="caption" color="text.secondary" fontWeight={600}>Items</Typography>
             </Divider>
 
-            {/* Item search + add */}
+            {/* Item search + add (also a drop zone) */}
             <Box sx={{ display: 'flex', gap: 1 }}>
               <Autocomplete
                 size="small"
@@ -322,9 +330,22 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
               </Button>
             </Box>
 
-            {/* Items list */}
+            {/* Items list — also a drop zone for stock items */}
             {items.length > 0 ? (
-              <Stack spacing={0.75}>
+              <Stack spacing={0.75}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => {
+                  e.preventDefault()
+                  try {
+                    const item = JSON.parse(e.dataTransfer.getData('application/json'))
+                    setItems(prev => {
+                      const existing = prev.find(i => i.modelId === item.modelId)
+                      if (existing) return prev.map(i => i.modelId === item.modelId ? { ...i, qty: i.qty + (item.qty || 1) } : i)
+                      return [...prev, { modelId: item.modelId, modelName: item.modelName, sellingPrice: item.sellingPrice, qty: item.qty || 1, selectedOptions: {}, itemNotes: '' }]
+                    })
+                  } catch { /* ignore */ }
+                }}
+              >
                 {items.map(item => {
                   const modelOpts = optsByModel[item.modelId] || []
                   return (

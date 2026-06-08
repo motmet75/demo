@@ -231,6 +231,29 @@ public class ShopOrderController {
         return ResponseEntity.ok(shopOrderService.setOrderNumber(orderId, number, tId, cId));
     }
 
+    @PatchMapping("/shop/staff/orders/{orderId}/revert")
+    public ResponseEntity<?> revert(@PathVariable UUID orderId,
+                                     @RequestParam(required = false) UUID tenantId,
+                                     @RequestParam(required = false) UUID companyId,
+                                     @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                     @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        return ResponseEntity.ok(shopOrderService.revertOrder(orderId, tId, cId));
+    }
+
+    @PutMapping("/shop/staff/orders/{orderId}/items")
+    public ResponseEntity<?> updateOrderItems(@PathVariable UUID orderId,
+                                               @RequestBody List<ShopOrderService.ItemRequest> items,
+                                               @RequestParam(required = false) UUID tenantId,
+                                               @RequestParam(required = false) UUID companyId,
+                                               @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                               @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        return ResponseEntity.ok(shopOrderService.updateOrderItems(orderId, items, tId, cId));
+    }
+
     @PatchMapping("/shop/staff/orders/{orderId}/cancel")
     public ResponseEntity<?> cancel(@PathVariable UUID orderId,
                                      @RequestParam(required = false) UUID tenantId,
@@ -404,6 +427,56 @@ public class ShopOrderController {
         } catch (IllegalStateException e) {
             return ResponseEntity.status(410).body(Map.of("error", e.getMessage()));
         }
+    }
+
+    // ── Token management (/shop/staff/tokens) ────────────────────────
+
+    @GetMapping("/shop/staff/tokens")
+    public ResponseEntity<?> listTokens(
+            @RequestParam(required = false) UUID tenantId,
+            @RequestParam(required = false) UUID companyId,
+            @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+            @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        return ResponseEntity.ok(shopOrderService.listTokens(tId, cId));
+    }
+
+    @PatchMapping("/shop/staff/tokens/{tokenId}/enable")
+    public ResponseEntity<?> enableToken(
+            @PathVariable UUID tokenId,
+            @RequestParam(required = false) UUID tenantId,
+            @RequestParam(required = false) UUID companyId,
+            @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+            @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        return ResponseEntity.ok(shopOrderService.setTokenEnabled(tokenId, true, tId, cId));
+    }
+
+    @PatchMapping("/shop/staff/tokens/{tokenId}/disable")
+    public ResponseEntity<?> disableToken(
+            @PathVariable UUID tokenId,
+            @RequestParam(required = false) UUID tenantId,
+            @RequestParam(required = false) UUID companyId,
+            @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+            @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        return ResponseEntity.ok(shopOrderService.setTokenEnabled(tokenId, false, tId, cId));
+    }
+
+    @DeleteMapping("/shop/staff/tokens/{tokenId}")
+    public ResponseEntity<Void> deleteToken(
+            @PathVariable UUID tokenId,
+            @RequestParam(required = false) UUID tenantId,
+            @RequestParam(required = false) UUID companyId,
+            @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+            @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        shopOrderService.deleteToken(tokenId, tId, cId);
+        return ResponseEntity.noContent().build();
     }
 
     // ── Bank config (/shop/staff/bank-config) ─────────────────────────

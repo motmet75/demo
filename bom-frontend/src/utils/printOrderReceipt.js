@@ -92,7 +92,7 @@ function parseOpts(str) {
   } catch { return null }
 }
 
-export function printOrderReceipt(order) {
+export function printOrderReceipt(order, trackingQrBase64 = null) {
   if (!order) return
 
   const num     = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
@@ -210,6 +210,11 @@ export function printOrderReceipt(order) {
   ${paymentSection}
 
   <div class="divider"></div>
+  ${trackingQrBase64 ? `
+    <div class="center" style="margin-bottom:4px;font-size:11px;color:#888">Scan to track your order</div>
+    <div class="center"><img src="data:image/png;base64,${trackingQrBase64}" width="130" height="130" style="display:block;margin:0 auto" /></div>
+    <div class="divider"></div>
+  ` : ''}
   <div class="footer">★ Thank you! See you again ★</div>
 </body>
 </html>`

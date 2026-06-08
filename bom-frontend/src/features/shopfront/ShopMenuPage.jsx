@@ -157,6 +157,7 @@ export default function ShopMenuPage() {
       paymentMethod: form.paymentMethod,
       notes: notes || null,
       manualOrderNumber: seqParam ? Number(seqParam) : null,
+      token: tokenParam || null,
       items,
     }
     try {

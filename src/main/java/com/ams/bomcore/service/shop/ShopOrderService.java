@@ -113,6 +113,10 @@ public class ShopOrderService {
             order.setTable(table);
         }
 
+        if (req.token() != null && !req.token().isBlank()) {
+            order.setSourceToken(req.token());
+        }
+
         shopOrderRepository.save(order);
 
         List<ShopOrderItem> items = new ArrayList<>();
@@ -240,6 +244,7 @@ public class ShopOrderService {
         order.setCompletedAt(Instant.now());
         order.setPaymentStatus(ShopOrder.PAY_STATUS_PAID);
         shopOrderRepository.save(order);
+        disableSourceToken(order);
         return dto(order);
     }
 
@@ -251,6 +256,7 @@ public class ShopOrderService {
         order.setCompletedAt(Instant.now());
         order.setPaymentStatus(ShopOrder.PAY_STATUS_PAID);
         shopOrderRepository.save(order);
+        disableSourceToken(order);
         return dto(order);
     }
 
@@ -446,7 +452,115 @@ public class ShopOrderService {
         return BigDecimal.valueOf(40000);
     }
 
+    // ── Order editing & revert ────────────────────────────────────────
+
+    @Transactional
+    public ShopOrderResponseDto revertOrder(UUID orderId, UUID tenantId, UUID companyId) {
+        ShopOrder order = requireOrder(orderId, tenantId, companyId);
+        requireStatus(order, ShopOrder.STATUS_CONFIRMED);
+        order.setStatus(ShopOrder.STATUS_PENDING);
+        order.setConfirmedAt(null);
+        shopOrderRepository.save(order);
+        return dto(order);
+    }
+
+    @Transactional
+    public ShopOrderResponseDto updateOrderItems(UUID orderId, List<ItemRequest> newItems, UUID tenantId, UUID companyId) {
+        ShopOrder order = requireOrder(orderId, tenantId, companyId);
+        requireStatus(order, ShopOrder.STATUS_PENDING);
+
+        shopOrderItemRepository.deleteAll(shopOrderItemRepository.findAllByOrder_Id(orderId));
+
+        List<ShopOrderItem> items = new ArrayList<>();
+        BigDecimal totalAmount = BigDecimal.ZERO;
+        BigDecimal totalRawCost = BigDecimal.ZERO;
+
+        for (var lineReq : newItems) {
+            Model model = modelRepository.findById(lineReq.modelId())
+                    .orElseThrow(() -> new IllegalArgumentException("Model not found: " + lineReq.modelId()));
+            BigDecimal qty = lineReq.quantity();
+            BigDecimal unitPrice = model.getSellingPrice() != null ? model.getSellingPrice() : BigDecimal.ZERO;
+            ShopPricingService.RawCostBreakdown costBreakdown =
+                    shopPricingService.calculateRawCost(model.getId(), qty, tenantId, companyId);
+            BigDecimal unitRawCost = qty.compareTo(BigDecimal.ZERO) > 0
+                    ? costBreakdown.total().divide(qty, 4, RoundingMode.HALF_UP)
+                    : BigDecimal.ZERO;
+            BigDecimal lineTotal = unitPrice.multiply(qty);
+
+            ShopOrderItem item = new ShopOrderItem();
+            item.setOrder(order);
+            item.setModel(model);
+            item.setModelName(model.getModelName());
+            item.setQuantity(qty);
+            item.setUnitPrice(unitPrice);
+            item.setUnitRawCost(unitRawCost);
+            item.setLineTotal(lineTotal);
+            item.setSelectedOptions(lineReq.selectedOptions());
+            item.setItemNotes(lineReq.itemNotes());
+            shopOrderItemRepository.save(item);
+            items.add(item);
+            totalAmount = totalAmount.add(lineTotal);
+            totalRawCost = totalRawCost.add(costBreakdown.total());
+        }
+
+        BigDecimal fee = order.getDeliveryFee() != null ? order.getDeliveryFee() : BigDecimal.ZERO;
+        order.setTotalAmount(totalAmount.add(fee));
+        order.setTotalRawCost(totalRawCost);
+
+        if ("BANK_QR".equals(order.getPaymentMethod())) {
+            Company company = companyRepository.findById(companyId).orElse(null);
+            if (company != null && company.getBankBin() != null && !company.getBankBin().isBlank()
+                    && company.getBankAccountNumber() != null && !company.getBankAccountNumber().isBlank()) {
+                order.setPaymentQr(VietQrBuilder.buildUrl(
+                        company.getBankBin(), company.getBankAccountNumber(),
+                        company.getBankAccountName(), order.getTotalAmount(), order.getOrderCode()));
+            }
+        }
+
+        shopOrderRepository.save(order);
+        return ShopOrderResponseDto.from(order, items);
+    }
+
+    // ── Token management ──────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public List<ShopAccessToken> listTokens(UUID tenantId, UUID companyId) {
+        return shopAccessTokenRepository.findAllByTenantIdAndCompanyId(tenantId, companyId);
+    }
+
+    @Transactional
+    public ShopAccessToken setTokenEnabled(UUID tokenId, boolean enabled, UUID tenantId, UUID companyId) {
+        ShopAccessToken sat = shopAccessTokenRepository.findById(tokenId)
+                .orElseThrow(() -> new NoSuchElementException("Token not found"));
+        if (!sat.getTenantId().equals(tenantId) || !sat.getCompanyId().equals(companyId)) {
+            throw new IllegalArgumentException("Token does not belong to this company");
+        }
+        sat.setEnabled(enabled);
+        return shopAccessTokenRepository.save(sat);
+    }
+
+    @Transactional
+    public void deleteToken(UUID tokenId, UUID tenantId, UUID companyId) {
+        ShopAccessToken sat = shopAccessTokenRepository.findById(tokenId)
+                .orElseThrow(() -> new NoSuchElementException("Token not found"));
+        if (!sat.getTenantId().equals(tenantId) || !sat.getCompanyId().equals(companyId)) {
+            throw new IllegalArgumentException("Token does not belong to this company");
+        }
+        shopAccessTokenRepository.delete(sat);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────
+
+    private void disableSourceToken(ShopOrder order) {
+        if (order.getSourceToken() == null || order.getSourceToken().isBlank()) return;
+        shopAccessTokenRepository.findByToken(order.getSourceToken()).ifPresent(sat -> {
+            // Only disable walk-up QR tokens (TABLE_QR with no table assigned)
+            if (ShopAccessToken.TYPE_TABLE_QR.equals(sat.getTokenType()) && sat.getTableId() == null) {
+                sat.setEnabled(false);
+                shopAccessTokenRepository.save(sat);
+            }
+        });
+    }
 
     private ShopOrder requireOrder(UUID orderId, UUID tenantId, UUID companyId) {
         ShopOrder order = shopOrderRepository.findById(orderId)
@@ -506,7 +620,8 @@ public class ShopOrderService {
             String paymentMethod,
             String notes,
             List<ItemRequest> items,
-            Integer manualOrderNumber
+            Integer manualOrderNumber,
+            String token
     ) {}
 
     public String generateOrderTagQr(UUID orderId, UUID tenantId, UUID companyId) {

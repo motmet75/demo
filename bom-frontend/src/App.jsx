@@ -45,6 +45,7 @@ import ShopTablePage from './features/shoptable/ShopTablePage'
 import ShopMenuManagePage from './features/shopmenu/ShopMenuManagePage'
 import ShopBankConfigPage from './features/shopbank/ShopBankConfigPage'
 import DisplayBoardPage from './features/shopboard/DisplayBoardPage'
+import ShopTokenManagePage from './features/shoptoken/ShopTokenManagePage'
 
 const SIDEBAR_FULL = 200
 const SIDEBAR_MINI = 52
@@ -73,6 +74,7 @@ const NAV_ITEMS = [
   { label: 'Tables',      path: '/shop-tables',           icon: '🪑' },
   { label: 'Menu Setup',  path: '/shop-menu',             icon: '🍽️' },
   { label: 'Bank Setup',  path: '/shop-bank',             icon: '🏦' },
+  { label: 'QR Tokens',   path: '/shop-tokens',           icon: '🔑' },
 ]
 
 const ADMIN_ITEMS = [
@@ -213,6 +215,7 @@ function MainShell({ user, logout, isAdmin }) {
             <Route path="/shop-tables" element={<RequireAuth><RequireContext><ShopTablePage /></RequireContext></RequireAuth>} />
             <Route path="/shop-menu"   element={<RequireAuth><RequireContext><ShopMenuManagePage /></RequireContext></RequireAuth>} />
             <Route path="/shop-bank"   element={<RequireAuth><RequireContext><ShopBankConfigPage /></RequireContext></RequireAuth>} />
+            <Route path="/shop-tokens" element={<RequireAuth><RequireContext><ShopTokenManagePage /></RequireContext></RequireAuth>} />
             <Route path="/admin" element={<RequireAuth adminOnly><AdminPage /></RequireAuth>} />
             <Route path="/admin/users" element={<RequireAuth adminOnly><AdminPage /></RequireAuth>} />
             <Route path="/tenants" element={<RequireAuth adminOnly><TenantsPage /></RequireAuth>} />

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { DataGrid } from '@mui/x-data-grid'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -14,6 +14,13 @@ import DialogActions from '@mui/material/DialogActions'
 import Typography from '@mui/material/Typography'
 import Tooltip from '@mui/material/Tooltip'
 import IconButton from '@mui/material/IconButton'
+import Tabs from '@mui/material/Tabs'
+import Tab from '@mui/material/Tab'
+import Card from '@mui/material/Card'
+import CardContent from '@mui/material/CardContent'
+import Divider from '@mui/material/Divider'
+import Badge from '@mui/material/Badge'
+import Stack from '@mui/material/Stack'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
@@ -22,10 +29,15 @@ import TvIcon from '@mui/icons-material/Tv'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline'
 import QrCode2Icon from '@mui/icons-material/QrCode2'
+import UndoIcon from '@mui/icons-material/Undo'
+import KitchenIcon from '@mui/icons-material/Kitchen'
+import CloseIcon from '@mui/icons-material/Close'
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
+import AddShoppingCartIcon from '@mui/icons-material/AddShoppingCart'
 import {
   fetchShopOrders, confirmShopOrder, prepareShopOrder, readyShopOrder,
   completeShopOrder, cancelShopOrder, resetOrderSequence, setShopOrderNumber,
-  generateDisplayBoardToken, pickupShopOrder
+  generateDisplayBoardToken, pickupShopOrder, revertShopOrder
 } from '../../api/shopApi'
 import ShopOrderDetailModal from './ShopOrderDetailModal'
 import ManualOrderDialog from './ManualOrderDialog'
@@ -41,6 +53,273 @@ const STATUS_LABEL  = { PENDING: 'Placed', CONFIRMED: 'Confirmed', PREPARING: 'P
 const STATUSES      = ['', 'PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'PICKED_UP', 'COMPLETED', 'CANCELLED']
 const fmt           = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 const dateFmt       = (v) => v ? new Date(v).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) + ' ' + new Date(v).toLocaleDateString('vi-VN') : ''
+const elapsed       = (v) => {
+  if (!v) return ''
+  const m = Math.floor((Date.now() - new Date(v)) / 60000)
+  return m < 60 ? `${m}m ago` : `${Math.floor(m / 60)}h ${m % 60}m ago`
+}
+
+function parseOpts(str) {
+  if (!str) return {}
+  try { return JSON.parse(str) } catch { return {} }
+}
+
+// ── Stock panel ─────────────────────────────────────────────────────
+
+function StockPanel({ items, onUseInOrder, onClear }) {
+  const [queued, setQueued]       = useState([])
+  const [dragOver, setDragOver]   = useState(false)
+
+  const handleDragStart = (e, item) => {
+    e.dataTransfer.setData('application/json', JSON.stringify(item))
+    e.dataTransfer.effectAllowed = 'copy'
+  }
+
+  const handleDrop = (e) => {
+    e.preventDefault(); setDragOver(false)
+    try {
+      const item = JSON.parse(e.dataTransfer.getData('application/json'))
+      setQueued(prev => {
+        const existing = prev.find(i => i.modelId === item.modelId)
+        if (existing) return prev.map(i => i.modelId === item.modelId ? { ...i, qty: i.qty + item.qty } : i)
+        return [...prev, { ...item }]
+      })
+    } catch { /* ignore */ }
+  }
+
+  const addToQueue = (item) => {
+    setQueued(prev => {
+      const existing = prev.find(i => i.modelId === item.modelId)
+      if (existing) return prev.map(i => i.modelId === item.modelId ? { ...i, qty: i.qty + 1 } : i)
+      return [...prev, { ...item, qty: 1 }]
+    })
+  }
+
+  const removeFromQueue = (modelId) => {
+    setQueued(prev => prev.filter(i => i.modelId !== modelId))
+  }
+
+  const queuedTotal = queued.reduce((s, i) => s + i.qty * Number(i.sellingPrice || 0), 0)
+
+  return (
+    <Box sx={{
+      width: 220, flexShrink: 0, borderRight: '1px solid #e0e0e0',
+      display: 'flex', flexDirection: 'column', height: '100%', bgcolor: '#fffde7',
+    }}>
+      <Box sx={{ p: 1.25, borderBottom: '1px solid #e0e0e0', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        <Typography variant="subtitle2" fontWeight={800} sx={{ flex: 1, fontSize: 12 }}>
+          Stock from Cancellations
+        </Typography>
+        <Tooltip title="Clear all stock items">
+          <IconButton size="small" onClick={onClear} sx={{ p: 0.25 }}>
+            <CloseIcon sx={{ fontSize: 14 }} />
+          </IconButton>
+        </Tooltip>
+      </Box>
+
+      {/* Available items */}
+      <Box sx={{ flex: 1, overflowY: 'auto', px: 1, py: 0.75 }}>
+        <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          Available (drag or click +)
+        </Typography>
+        <Stack spacing={0.5} sx={{ mt: 0.5 }}>
+          {items.map((item, idx) => (
+            <Box
+              key={`${item.modelId}-${idx}`}
+              draggable
+              onDragStart={e => handleDragStart(e, item)}
+              sx={{
+                display: 'flex', alignItems: 'center', gap: 0.5,
+                bgcolor: '#fff', borderRadius: 1, px: 0.75, py: 0.5,
+                border: '1px solid #e0e0e0', cursor: 'grab',
+                '&:active': { cursor: 'grabbing' },
+                '&:hover': { bgcolor: '#fff9c4', borderColor: '#f9a825' },
+              }}
+            >
+              <DragIndicatorIcon sx={{ fontSize: 14, color: '#bdbdbd', flexShrink: 0 }} />
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant="caption" fontWeight={600} noWrap display="block">
+                  {item.modelName}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
+                  {item.qty > 1 ? `×${item.qty} ` : ''}{fmt(item.sellingPrice)}
+                </Typography>
+              </Box>
+              <Tooltip title="Add to new order">
+                <IconButton size="small" onClick={() => addToQueue(item)}
+                  sx={{ p: 0.25, color: '#1976d2', flexShrink: 0 }}>
+                  <AddShoppingCartIcon sx={{ fontSize: 14 }} />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          ))}
+        </Stack>
+      </Box>
+
+      {/* Drop zone + queued items */}
+      <Box sx={{ borderTop: '1px solid #e0e0e0', p: 1 }}>
+        <Box
+          onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={handleDrop}
+          sx={{
+            border: `2px dashed ${dragOver ? '#1976d2' : '#bbb'}`,
+            borderRadius: 1.5, p: 1, textAlign: 'center', transition: 'all 0.15s',
+            bgcolor: dragOver ? '#e3f2fd' : 'transparent', mb: queued.length ? 1 : 0,
+          }}
+        >
+          <Typography variant="caption" color={dragOver ? 'primary' : 'text.disabled'} sx={{ fontSize: 11 }}>
+            {dragOver ? '↓ Drop here' : 'Drop items here for new order'}
+          </Typography>
+        </Box>
+
+        {queued.length > 0 && (
+          <>
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              New order ({queued.length} item{queued.length > 1 ? 's' : ''})
+            </Typography>
+            <Stack spacing={0.25} sx={{ mt: 0.25, mb: 0.75 }}>
+              {queued.map(i => (
+                <Box key={i.modelId} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <Typography variant="caption" sx={{ flex: 1 }} noWrap>{i.qty}× {i.modelName}</Typography>
+                  <IconButton size="small" onClick={() => removeFromQueue(i.modelId)} sx={{ p: 0.125 }}>
+                    <CloseIcon sx={{ fontSize: 12, color: '#bbb' }} />
+                  </IconButton>
+                </Box>
+              ))}
+              <Typography variant="caption" color="primary" fontWeight={700} sx={{ fontSize: 11 }}>
+                {fmt(queuedTotal)}
+              </Typography>
+            </Stack>
+            <Button
+              variant="contained"
+              size="small"
+              fullWidth
+              startIcon={<AddCircleOutlineIcon />}
+              onClick={() => { onUseInOrder(queued); setQueued([]) }}
+              sx={{ textTransform: 'none', fontWeight: 700, fontSize: 11 }}
+            >
+              Create Order
+            </Button>
+          </>
+        )}
+      </Box>
+    </Box>
+  )
+}
+
+// ── Production Board ────────────────────────────────────────────────
+
+function ProductionBoard({ orders, onRefresh, onPrepare, onRevert, onDetail }) {
+  if (!orders.length) {
+    return (
+      <Box sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}>
+        <KitchenIcon sx={{ fontSize: 48, opacity: 0.2, mb: 1 }} />
+        <Typography variant="body2">No confirmed orders waiting for production</Typography>
+      </Box>
+    )
+  }
+
+  return (
+    <Box sx={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+      gap: 1.5, p: 1.5,
+    }}>
+      {orders.map(order => {
+        const since = elapsed(order.confirmedAt || order.createdAt)
+        return (
+          <Card key={order.id} elevation={2} sx={{
+            borderRadius: 2, border: '2px solid #1976d2',
+            bgcolor: '#f0f7ff',
+          }}>
+            <CardContent sx={{ pb: '8px !important', pt: 1.5, px: 1.5 }}>
+              {/* Header */}
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1 }}>
+                <Box sx={{
+                  width: 48, height: 48, borderRadius: '50%', bgcolor: '#1976d2', color: '#fff',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontWeight: 900, fontSize: 20, flexShrink: 0, mr: 1,
+                }}>
+                  {order.orderNumber ?? '?'}
+                </Box>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  {order.tableName && (
+                    <Chip icon={<TableBarIcon sx={{ fontSize: 12 }} />}
+                      label={order.tableName} size="small" color="info" variant="outlined"
+                      sx={{ height: 20, fontSize: 11, mb: 0.25 }} />
+                  )}
+                  {order.customerName && (
+                    <Typography variant="caption" display="block" noWrap>{order.customerName}</Typography>
+                  )}
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>{since}</Typography>
+                </Box>
+                <Tooltip title="View full detail">
+                  <IconButton size="small" onClick={() => onDetail(order)} sx={{ p: 0.25 }}>
+                    <VisibilityIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+
+              <Divider sx={{ mb: 0.75 }} />
+
+              {/* Items */}
+              <Stack spacing={0.25} sx={{ mb: 1 }}>
+                {(order.items || []).map(item => {
+                  const opts = parseOpts(item.selectedOptions)
+                  const optStr = Object.entries(opts).map(([k, v]) =>
+                    `${k}: ${Array.isArray(v) ? v.join('+') : v}`).join(' · ')
+                  return (
+                    <Box key={item.id}>
+                      <Typography variant="body2" fontWeight={700} sx={{ fontSize: 13 }}>
+                        {Number(item.quantity)}× {item.modelName}
+                      </Typography>
+                      {optStr && (
+                        <Typography variant="caption" color="primary" sx={{ fontSize: 11, pl: 1.5, display: 'block' }}>
+                          {optStr}
+                        </Typography>
+                      )}
+                      {item.itemNotes && (
+                        <Typography variant="caption" color="warning.main" sx={{ fontSize: 11, pl: 1.5, fontStyle: 'italic', display: 'block' }}>
+                          ⚠ {item.itemNotes}
+                        </Typography>
+                      )}
+                    </Box>
+                  )
+                })}
+              </Stack>
+
+              {order.notes && (
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11, fontStyle: 'italic', display: 'block', mb: 0.75 }}>
+                  Order note: {order.notes}
+                </Typography>
+              )}
+
+              {/* Actions */}
+              <Box sx={{ display: 'flex', gap: 0.75 }}>
+                <Button size="small" variant="contained" color="warning" fullWidth
+                  onClick={() => onPrepare(order.id)}
+                  sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>
+                  Start Preparing
+                </Button>
+                <Tooltip title="Revert to Pending">
+                  <Button size="small" variant="outlined" color="error"
+                    onClick={() => onRevert(order.id)}
+                    startIcon={<UndoIcon sx={{ fontSize: 14 }} />}
+                    sx={{ textTransform: 'none', fontSize: 11, minWidth: 80 }}>
+                    Revert
+                  </Button>
+                </Tooltip>
+              </Box>
+            </CardContent>
+          </Card>
+        )
+      })}
+    </Box>
+  )
+}
+
+// ── Main ShopOrderGrid ──────────────────────────────────────────────
 
 export default function ShopOrderGrid() {
   const [rows, setRows]             = useState([])
@@ -51,12 +330,15 @@ export default function ShopOrderGrid() {
   const [resetOpen, setResetOpen]       = useState(false)
   const [resetTo, setResetTo]           = useState(0)
   const [resetting, setResetting]       = useState(false)
-  const [manualOpen, setManualOpen]      = useState(false)
+  const [manualOpen, setManualOpen]     = useState(false)
+  const [manualDefaults, setManualDefaults] = useState(null) // pre-populated items
   const [qrOrderOpen, setQrOrderOpen]   = useState(false)
   const [boardOpen, setBoardOpen]       = useState(false)
   const [boardUrl, setBoardUrl]         = useState('')
   const [boardLoading, setBoardLoading] = useState(false)
   const [copied, setCopied]             = useState(false)
+  const [tab, setTab]                   = useState(0)
+  const [stockItems, setStockItems]     = useState([]) // cancelled order items pool
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
@@ -69,8 +351,38 @@ export default function ShopOrderGrid() {
 
   useEffect(() => { load() }, [load])
 
+  const confirmedOrders = rows.filter(r => r.status === 'CONFIRMED')
+
   const act = async (fn, id) => {
     try { await fn(id); load() } catch (e) { setError(e.message || 'Action failed') }
+  }
+
+  // Cancel with stock capture
+  const handleCancel = async (row) => {
+    try {
+      await cancelShopOrder(row.id)
+      // Add items to stock pool
+      if (row.items?.length) {
+        const newStock = row.items.map(item => ({
+          modelId: item.modelId,
+          modelName: item.modelName,
+          sellingPrice: item.unitPrice,
+          qty: Number(item.quantity),
+          selectedOptions: {},
+          itemNotes: '',
+        }))
+        setStockItems(prev => {
+          const merged = [...prev]
+          newStock.forEach(ns => {
+            const existing = merged.find(s => s.modelId === ns.modelId)
+            if (existing) existing.qty += ns.qty
+            else merged.push(ns)
+          })
+          return [...merged]
+        })
+      }
+      load()
+    } catch (e) { setError(e.message || 'Failed to cancel') }
   }
 
   const handleOpenBoard = async () => {
@@ -91,13 +403,11 @@ export default function ShopOrderGrid() {
     setResetting(true)
     try {
       await resetOrderSequence(Number(resetTo))
-      setResetOpen(false)
-      setResetTo(0)
+      setResetOpen(false); setResetTo(0)
     } catch (e) { setError(e.message || 'Reset failed') }
     setResetting(false)
   }
 
-  // Inline order-number editing via DataGrid processRowUpdate
   const processRowUpdate = useCallback(async (newRow, oldRow) => {
     if (newRow.orderNumber === oldRow.orderNumber) return oldRow
     const num = parseInt(newRow.orderNumber, 10)
@@ -105,27 +415,23 @@ export default function ShopOrderGrid() {
     try {
       const { data } = await setShopOrderNumber(newRow.id, num)
       return data ?? { ...newRow, orderNumber: num }
-    } catch (e) {
-      setError(e.message || 'Failed to update number')
-      return oldRow
-    }
+    } catch (e) { setError(e.message || 'Failed to update number'); return oldRow }
   }, [])
+
+  const handleUseInOrder = (items) => {
+    setManualDefaults(items)
+    setManualOpen(true)
+  }
 
   const columns = [
     {
-      field: 'orderNumber',
-      headerName: '#',
-      width: 64,
-      editable: true,
-      type: 'number',
-      headerAlign: 'center',
-      align: 'center',
+      field: 'orderNumber', headerName: '#', width: 64, editable: true, type: 'number',
+      headerAlign: 'center', align: 'center',
       renderCell: ({ value }) => (
         <Tooltip title="Click to edit number">
           <Box sx={{
             width: 36, height: 36, borderRadius: '50%',
-            bgcolor: value ? '#1976d2' : '#e0e0e0',
-            color: value ? '#fff' : '#9e9e9e',
+            bgcolor: value ? '#1976d2' : '#e0e0e0', color: value ? '#fff' : '#9e9e9e',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontWeight: 800, fontSize: 14, cursor: 'pointer',
           }}>
@@ -135,53 +441,47 @@ export default function ShopOrderGrid() {
       ),
     },
     {
-      field: 'orderCode',
-      headerName: 'Code',
-      flex: 1,
-      minWidth: 110,
+      field: 'orderCode', headerName: 'Code', flex: 1, minWidth: 110,
       renderCell: ({ value }) => value
         ? <Typography sx={{ fontFamily: 'monospace', fontWeight: 800, fontSize: 13, letterSpacing: 0.5 }}>{value}</Typography>
         : null,
     },
     {
-      field: 'tableName',
-      headerName: 'Table',
-      width: 90,
+      field: 'tableName', headerName: 'Table', width: 90,
       renderCell: ({ value }) => value
         ? <Chip icon={<TableBarIcon sx={{ fontSize: 14 }} />} label={value} size="small" variant="outlined" color="info" />
         : <Typography variant="caption" color="text.disabled">—</Typography>
     },
     {
-      field: 'status',
-      headerName: 'Status',
-      width: 115,
+      field: 'status', headerName: 'Status', width: 115,
       renderCell: ({ value }) => (
-        <Chip
-          label={STATUS_LABEL[value] || value}
-          color={STATUS_COLOR[value] || 'default'}
-          size="small"
-          sx={{ fontWeight: 700, minWidth: 90 }}
-        />
+        <Chip label={STATUS_LABEL[value] || value} color={STATUS_COLOR[value] || 'default'}
+          size="small" sx={{ fontWeight: 700, minWidth: 90 }} />
       )
     },
-    { field: 'fulfillmentType', headerName: 'Type', width: 80,
+    {
+      field: 'fulfillmentType', headerName: 'Type', width: 80,
       renderCell: ({ value }) => {
         const map = { DINE_IN: '🪑 Dine', PICKUP: '🥡 Pick', DELIVERY: '🛵 Del' }
         return <Typography variant="caption">{map[value] || value}</Typography>
       }
     },
-    { field: 'customerName', headerName: 'Customer', width: 120,
+    {
+      field: 'customerName', headerName: 'Customer', width: 120,
       renderCell: ({ value }) => <Typography variant="body2" noWrap>{value || '—'}</Typography>
     },
-    { field: 'notes', headerName: 'Notes', width: 130,
+    {
+      field: 'notes', headerName: 'Notes', width: 130,
       renderCell: ({ value }) => value
         ? <Tooltip title={value}><Typography variant="caption" noWrap sx={{ maxWidth: 120, display: 'block' }}>{value}</Typography></Tooltip>
         : <Typography variant="caption" color="text.disabled">—</Typography>
     },
-    { field: 'totalAmount', headerName: 'Total', width: 100,
+    {
+      field: 'totalAmount', headerName: 'Total', width: 100,
       renderCell: ({ value }) => <Typography variant="body2" fontWeight={600} color="primary">{fmt(value)}</Typography>
     },
-    { field: 'paymentStatus', headerName: 'Paid', width: 72,
+    {
+      field: 'paymentStatus', headerName: 'Paid', width: 72,
       renderCell: ({ value }) => (
         <Chip label={value === 'PAID' ? '✓' : '…'} size="small"
           color={value === 'PAID' ? 'success' : 'default'} variant={value === 'PAID' ? 'filled' : 'outlined'} />
@@ -189,10 +489,7 @@ export default function ShopOrderGrid() {
     },
     { field: 'createdAt', headerName: 'Time', width: 130, renderCell: ({ value }) => dateFmt(value) },
     {
-      field: 'actions',
-      headerName: 'Actions',
-      width: 330,
-      sortable: false,
+      field: 'actions', headerName: 'Actions', width: 330, sortable: false,
       renderCell: ({ row }) => (
         <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', flexWrap: 'nowrap' }}>
           <Tooltip title="Detail">
@@ -200,6 +497,12 @@ export default function ShopOrderGrid() {
           </Tooltip>
           {row.status === 'PENDING'    && <Button size="small" variant="outlined" onClick={() => act(confirmShopOrder, row.id)}>Confirm</Button>}
           {row.status === 'CONFIRMED'  && <Button size="small" variant="outlined" color="warning" onClick={() => act(prepareShopOrder, row.id)}>Prepare</Button>}
+          {row.status === 'CONFIRMED'  && (
+            <Tooltip title="Revert to Pending">
+              <Button size="small" variant="outlined" color="error" startIcon={<UndoIcon sx={{ fontSize: 13 }} />}
+                onClick={() => act(revertShopOrder, row.id)}>Revert</Button>
+            </Tooltip>
+          )}
           {row.status === 'PREPARING'  && <Button size="small" variant="outlined" color="success" onClick={() => { act(readyShopOrder, row.id).then(broadcastReady) }}>Ready</Button>}
           {row.status === 'READY' && row.paymentMethod === 'BANK_QR' && (
             <Button size="small" variant="contained" color="info" onClick={() => act(pickupShopOrder, row.id)}>Picked Up</Button>
@@ -207,76 +510,123 @@ export default function ShopOrderGrid() {
           {row.status === 'READY' && row.paymentMethod !== 'BANK_QR' && (
             <Button size="small" variant="contained" color="success" onClick={() => act(completeShopOrder, row.id)}>Complete</Button>
           )}
-          {!['PICKED_UP','COMPLETED','CANCELLED'].includes(row.status) && <Button size="small" color="error" onClick={() => act(cancelShopOrder, row.id)}>✕</Button>}
+          {!['PICKED_UP','COMPLETED','CANCELLED'].includes(row.status) && (
+            <Button size="small" color="error" onClick={() => handleCancel(row)}>✕</Button>
+          )}
         </Box>
       )
     }
   ]
 
   return (
-    <Box sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column', gap: 1 }}>
-
-      {/* Toolbar */}
-      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-        <TextField select label="Status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} size="small" sx={{ width: 150 }}>
-          {STATUSES.map(s => <MenuItem key={s} value={s}>{s ? (STATUS_LABEL[s] || s) : 'All'}</MenuItem>)}
-        </TextField>
-        <Button startIcon={<RefreshIcon />} onClick={load} variant="outlined" size="small">Refresh</Button>
-        <Button startIcon={<AddCircleOutlineIcon />} onClick={() => setManualOpen(true)}
-          variant="contained" size="small" color="success" sx={{ textTransform: 'none', fontWeight: 700 }}>
-          New Order
-        </Button>
-        <Button startIcon={<QrCode2Icon />} onClick={() => setQrOrderOpen(true)}
-          variant="outlined" size="small" color="primary" sx={{ textTransform: 'none', fontWeight: 700 }}>
-          QR Order
-        </Button>
-        <Box sx={{ flex: 1 }} />
-        <Tooltip title="Open display board for customers">
-          <Button startIcon={<TvIcon />} onClick={handleOpenBoard} variant="outlined" size="small" color="info">
-            Display Board
-          </Button>
-        </Tooltip>
-        <Tooltip title="Reset the order counter (e.g. start of day)">
-          <Button startIcon={<RestartAltIcon />} onClick={() => setResetOpen(true)} variant="outlined" size="small" color="warning">
-            Reset Counter
-          </Button>
-        </Tooltip>
-      </Box>
-
-      {error && <Alert severity="error" onClose={() => setError('')}>{error}</Alert>}
-
-      {/* Grid */}
-      <Box sx={{ flex: 1, minHeight: 400 }}>
-        <DataGrid
-          rows={rows}
-          columns={columns}
-          loading={loading}
-          getRowId={r => r.id}
-          pageSizeOptions={[25, 50, 100]}
-          density="compact"
-          processRowUpdate={processRowUpdate}
-          onProcessRowUpdateError={e => setError(e.message)}
-          sx={{
-            '& .MuiDataGrid-cell--editable': { cursor: 'cell' },
-            '& .MuiDataGrid-row:hover': { bgcolor: '#f5f9ff' },
-          }}
+    <Box sx={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+      {/* Left: stock panel */}
+      {stockItems.length > 0 && (
+        <StockPanel
+          items={stockItems}
+          onUseInOrder={handleUseInOrder}
+          onClear={() => setStockItems([])}
         />
+      )}
+
+      {/* Main content */}
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+        {/* Toolbar */}
+        <Box sx={{ p: 1.5, display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', borderBottom: '1px solid #e0e0e0' }}>
+          <TextField select label="Status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} size="small" sx={{ width: 150 }}>
+            {STATUSES.map(s => <MenuItem key={s} value={s}>{s ? (STATUS_LABEL[s] || s) : 'All'}</MenuItem>)}
+          </TextField>
+          <Button startIcon={<RefreshIcon />} onClick={load} variant="outlined" size="small">Refresh</Button>
+          <Button startIcon={<AddCircleOutlineIcon />} onClick={() => { setManualDefaults(null); setManualOpen(true) }}
+            variant="contained" size="small" color="success" sx={{ textTransform: 'none', fontWeight: 700 }}>
+            New Order
+          </Button>
+          <Button startIcon={<QrCode2Icon />} onClick={() => setQrOrderOpen(true)}
+            variant="outlined" size="small" color="primary" sx={{ textTransform: 'none', fontWeight: 700 }}>
+            QR Order
+          </Button>
+          <Box sx={{ flex: 1 }} />
+          <Tooltip title="Open display board for customers">
+            <Button startIcon={<TvIcon />} onClick={handleOpenBoard} variant="outlined" size="small" color="info">
+              Display Board
+            </Button>
+          </Tooltip>
+          <Tooltip title="Reset the order counter (e.g. start of day)">
+            <Button startIcon={<RestartAltIcon />} onClick={() => setResetOpen(true)} variant="outlined" size="small" color="warning">
+              Reset Counter
+            </Button>
+          </Tooltip>
+        </Box>
+
+        {error && <Alert severity="error" onClose={() => setError('')} sx={{ mx: 1.5, mt: 0.75 }}>{error}</Alert>}
+
+        {/* Tabs */}
+        <Box sx={{ borderBottom: '1px solid #e0e0e0', px: 1.5 }}>
+          <Tabs value={tab} onChange={(_, v) => setTab(v)} size="small">
+            <Tab label="Orders" sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40 }} />
+            <Tab
+              label={
+                <Badge badgeContent={confirmedOrders.length} color="primary" max={99}>
+                  Production Board
+                </Badge>
+              }
+              sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, pr: confirmedOrders.length ? 2.5 : 1.5 }}
+            />
+          </Tabs>
+        </Box>
+
+        {/* Tab content */}
+        <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+          {tab === 0 && (
+            <Box sx={{ height: '100%', p: 1.5, boxSizing: 'border-box' }}>
+              <DataGrid
+                rows={rows}
+                columns={columns}
+                loading={loading}
+                getRowId={r => r.id}
+                pageSizeOptions={[25, 50, 100]}
+                density="compact"
+                processRowUpdate={processRowUpdate}
+                onProcessRowUpdateError={e => setError(e.message)}
+                sx={{
+                  height: '100%',
+                  '& .MuiDataGrid-cell--editable': { cursor: 'cell' },
+                  '& .MuiDataGrid-row:hover': { bgcolor: '#f5f9ff' },
+                }}
+              />
+            </Box>
+          )}
+
+          {tab === 1 && (
+            <ProductionBoard
+              orders={confirmedOrders}
+              onRefresh={load}
+              onPrepare={id => act(prepareShopOrder, id)}
+              onRevert={id => act(revertShopOrder, id)}
+              onDetail={order => setDetailOrder(order)}
+            />
+          )}
+        </Box>
       </Box>
 
+      {/* Dialogs */}
       <ManualOrderDialog
         open={manualOpen}
-        onClose={() => setManualOpen(false)}
+        onClose={() => { setManualOpen(false); setManualDefaults(null) }}
         onCreated={load}
+        defaultItems={manualDefaults}
       />
 
-      <QrOrderDialog
-        open={qrOrderOpen}
-        onClose={() => setQrOrderOpen(false)}
-      />
+      <QrOrderDialog open={qrOrderOpen} onClose={() => setQrOrderOpen(false)} />
 
-      {/* Detail modal */}
       {detailOrder && (
-        <ShopOrderDetailModal open order={detailOrder} onClose={() => setDetailOrder(null)} onRefresh={load} />
+        <ShopOrderDetailModal
+          open
+          order={detailOrder}
+          onClose={() => setDetailOrder(null)}
+          onRefresh={() => { load(); setDetailOrder(null) }}
+        />
       )}
 
       {/* Display board dialog */}
@@ -294,11 +644,9 @@ export default function ShopOrderGrid() {
                 The link is valid for <strong>24 hours</strong>.
               </Typography>
               <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                <TextField
-                  value={boardUrl} size="small" fullWidth
+                <TextField value={boardUrl} size="small" fullWidth
                   inputProps={{ readOnly: true, style: { fontSize: 13 } }}
-                  onClick={e => e.target.select()}
-                />
+                  onClick={e => e.target.select()} />
                 <Tooltip title={copied ? 'Copied!' : 'Copy URL'}>
                   <IconButton onClick={handleCopy} color={copied ? 'success' : 'default'}>
                     <ContentCopyIcon fontSize="small" />
@@ -323,16 +671,9 @@ export default function ShopOrderGrid() {
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             Set the counter to a specific number. The next new order will be <strong>#{Number(resetTo) + 1}</strong>.
           </Typography>
-          <TextField
-            label="Reset counter to"
-            type="number"
-            size="small"
-            fullWidth
-            value={resetTo}
-            onChange={e => setResetTo(e.target.value)}
-            inputProps={{ min: 0 }}
-            helperText="Use 0 to restart from #1"
-          />
+          <TextField label="Reset counter to" type="number" size="small" fullWidth
+            value={resetTo} onChange={e => setResetTo(e.target.value)}
+            inputProps={{ min: 0 }} helperText="Use 0 to restart from #1" />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setResetOpen(false)} disabled={resetting}>Cancel</Button>

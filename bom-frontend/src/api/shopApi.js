@@ -88,6 +88,18 @@ export function cancelShopOrder(orderId) {
   return apiFetchJson(`/shop/staff/orders/${orderId}/cancel`, { method: 'PATCH' })
 }
 
+export function revertShopOrder(orderId) {
+  return apiFetchJson(`/shop/staff/orders/${orderId}/revert`, { method: 'PATCH' })
+}
+
+export function updateOrderItems(orderId, items) {
+  return apiFetchJson(`/shop/staff/orders/${orderId}/items`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(items)
+  })
+}
+
 export function resetOrderSequence(resetTo = 0) {
   return apiFetchJson('/shop/staff/orders/sequence/reset', {
     method: 'POST',
@@ -168,6 +180,24 @@ export function generateDisplayBoardToken() {
 
 export function fetchDisplayBoard(token) {
   return apiFetchJsonNoContext(`/shop/public/display-board/${encodeURIComponent(token)}`)
+}
+
+// ── Token management ──────────────────────────────────────────────
+
+export function fetchTokens() {
+  return apiFetchJson('/shop/staff/tokens')
+}
+
+export function enableToken(tokenId) {
+  return apiFetchJson(`/shop/staff/tokens/${tokenId}/enable`, { method: 'PATCH' })
+}
+
+export function disableToken(tokenId) {
+  return apiFetchJson(`/shop/staff/tokens/${tokenId}/disable`, { method: 'PATCH' })
+}
+
+export function deleteToken(tokenId) {
+  return apiFetchJson(`/shop/staff/tokens/${tokenId}`, { method: 'DELETE' })
 }
 
 // ── Bank config ────────────────────────────────────────────────────
