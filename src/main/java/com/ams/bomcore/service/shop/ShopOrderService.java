@@ -158,13 +158,13 @@ public class ShopOrderService {
             Company company = companyRepository.findById(companyId).orElse(null);
             if (company != null && company.getBankBin() != null && !company.getBankBin().isBlank()
                     && company.getBankAccountNumber() != null && !company.getBankAccountNumber().isBlank()) {
-                String payload = VietQrBuilder.build(
+                order.setPaymentQr(VietQrBuilder.buildUrl(
                         company.getBankBin(),
                         company.getBankAccountNumber(),
+                        company.getBankAccountName(),
                         order.getTotalAmount(),
                         order.getOrderCode()
-                );
-                order.setPaymentQr(QrCodeUtil.generateBase64Png(payload, 300));
+                ));
             }
         }
 
@@ -216,20 +216,17 @@ public class ShopOrderService {
         order.setStatus(ShopOrder.STATUS_READY);
         order.setReadyAt(Instant.now());
 
-        // Generate payment QR as clean local PNG (no logo)
+        // Regenerate VietQR URL at ready time (ensures amount is final)
         Company company = companyRepository.findById(companyId).orElse(null);
         if (company != null && company.getBankBin() != null && !company.getBankBin().isBlank()
                 && company.getBankAccountNumber() != null && !company.getBankAccountNumber().isBlank()) {
-            String payload = VietQrBuilder.build(
+            order.setPaymentQr(VietQrBuilder.buildUrl(
                     company.getBankBin(),
                     company.getBankAccountNumber(),
+                    company.getBankAccountName(),
                     order.getTotalAmount(),
                     order.getOrderCode()
-            );
-            order.setPaymentQr(QrCodeUtil.generateBase64Png(payload, 300));
-        } else {
-            String fallback = "ORDER:" + order.getOrderCode() + " AMOUNT:" + order.getTotalAmount();
-            order.setPaymentQr(QrCodeUtil.generateBase64Png(fallback, 300));
+            ));
         }
         shopOrderRepository.save(order);
         return dto(order);

@@ -25,12 +25,14 @@ function parseOpts(str) {
 export default function OrderReceiptDialog({ open, order, onClose, onTrack }) {
   if (!order) return null
 
-  const isBankQr  = order.paymentMethod === 'BANK_QR'
-  const isQrUrl   = order.paymentQr?.startsWith('https://')
-  const qrSrc     = order.paymentQr
+  const isBankQr   = order.paymentMethod === 'BANK_QR'
+  const isQrUrl    = order.paymentQr?.startsWith('https://')
+  const qrSrc      = order.paymentQr
     ? (isQrUrl ? order.paymentQr : `data:image/png;base64,${order.paymentQr}`)
     : null
   const displayNum = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
+  const bankCode   = isQrUrl ? order.paymentQr.split('/image/')[1]?.split('-')[0] : null
+  const bankLogoUrl = bankCode ? `https://img.vietqr.io/img/${bankCode}.png` : null
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs"
@@ -54,6 +56,12 @@ export default function OrderReceiptDialog({ open, order, onClose, onTrack }) {
         {/* Payment QR section — shown for BANK_QR prepayment */}
         {isBankQr && qrSrc && (
           <Box sx={{ textAlign: 'center', bgcolor: '#f0fdf4', borderBottom: '1px solid #bbf7d0', px: 2, py: 2 }}>
+            {bankLogoUrl && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1 }}>
+                <img src={bankLogoUrl} alt="Bank"
+                  style={{ height: 36, maxWidth: 120, objectFit: 'contain', borderRadius: 4 }} />
+              </Box>
+            )}
             <Typography variant="subtitle2" fontWeight={800} color="#15803d" sx={{ mb: 1 }}>
               Scan to Pay Now
             </Typography>

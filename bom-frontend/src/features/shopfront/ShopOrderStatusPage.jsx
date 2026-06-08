@@ -93,7 +93,9 @@ export default function ShopOrderStatusPage() {
   const isDone    = status === 'COMPLETED' || status === 'PICKED_UP'
   const activeIdx = cancelled ? -1 : (STATUS_IDX[status] ?? 0)
   const style     = STATUS_STYLE[status] || STATUS_STYLE.PENDING
-  const isQrUrl   = order.paymentQr?.startsWith('https://')
+  const isQrUrl    = order.paymentQr?.startsWith('https://')
+  const bankCode   = isQrUrl ? order.paymentQr.split('/image/')[1]?.split('-')[0] : null
+  const bankLogoUrl = bankCode ? `https://img.vietqr.io/img/${bankCode}.png` : null
   const displayNum = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
 
   return (
@@ -155,13 +157,19 @@ export default function ShopOrderStatusPage() {
       {/* ── Payment QR — shown at READY ──────────────────── */}
       {status === 'READY' && order.paymentQr && (
         <Box sx={{ textAlign: 'center', px: { xs: 2, md: 4 }, pt: 3, pb: 1 }}>
+          {bankLogoUrl && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1 }}>
+              <img src={bankLogoUrl} alt="Bank"
+                style={{ height: 40, maxWidth: 140, objectFit: 'contain', borderRadius: 6 }} />
+            </Box>
+          )}
           <Typography variant="subtitle2" fontWeight={700} color="#0277bd" sx={{ mb: 1.5 }}>
             Scan to Pay
           </Typography>
           <img
             src={isQrUrl ? order.paymentQr : `data:image/png;base64,${order.paymentQr}`}
             alt="Payment QR"
-            style={{ width: 180, height: 180, display: 'block', margin: '0 auto', borderRadius: 8 }}
+            style={{ width: 200, height: 200, display: 'block', margin: '0 auto', borderRadius: 8 }}
           />
           <Typography variant="h6" fontWeight={800} color="primary" sx={{ mt: 1.25 }}>
             {fmt(order.totalAmount)}

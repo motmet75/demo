@@ -84,12 +84,17 @@ export function printOrderReceipt(order) {
     ? `<div class="row"><span>Delivery fee</span><span>${fmt(order.deliveryFee)}</span></div>`
     : ''
 
-  const isQrUrl   = order.paymentQr?.startsWith('https://')
-  const qrSrc     = order.paymentQr
+  const isQrUrl    = order.paymentQr?.startsWith('https://')
+  const qrSrc      = order.paymentQr
     ? (isQrUrl ? order.paymentQr : `data:image/png;base64,${order.paymentQr}`)
     : null
+  const bankCode   = isQrUrl ? order.paymentQr.split('/image/')[1]?.split('-')[0] : null
+  const bankLogoTag = bankCode
+    ? `<div class="center" style="margin-bottom:6px"><img src="https://img.vietqr.io/img/${bankCode}.png" height="36" style="max-width:120px;object-fit:contain" /></div>`
+    : ''
 
   const paymentSection = order.paymentMethod === 'BANK_QR' ? `
+    ${bankLogoTag}
     <div class="center bold" style="margin-bottom:6px">Scan to Pay</div>
     ${qrSrc ? `<div class="center"><img src="${qrSrc}" width="190" height="190" style="display:block;margin:0 auto" /></div>` : ''}
     <div class="center grey" style="margin-top:6px">Transfer exact amount</div>
