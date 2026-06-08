@@ -21,6 +21,7 @@ import com.ams.bomcore.repository.CompanyRepository;
 import com.ams.bomcore.repository.ModelRepository;
 import com.ams.bomcore.repository.TenantRepository;
 import com.ams.bomcore.service.model.ModelService;
+import com.ams.bomcore.service.shop.ShopPricingService;
 
 import jakarta.validation.Valid;
 
@@ -37,11 +38,14 @@ public class ModelController {
     private final TenantRepository tenantRepository;
     private final CompanyRepository companyRepository;
 
-    public ModelController(ModelService modelService, ModelRepository modelRepository, TenantRepository tenantRepository, CompanyRepository companyRepository) {
+    private final ShopPricingService shopPricingService;
+
+    public ModelController(ModelService modelService, ModelRepository modelRepository, TenantRepository tenantRepository, CompanyRepository companyRepository, ShopPricingService shopPricingService) {
         this.modelService = modelService;
         this.modelRepository = modelRepository;
         this.tenantRepository = tenantRepository;
         this.companyRepository = companyRepository;
+        this.shopPricingService = shopPricingService;
     }
 
     private UUID resolveTenant(UUID tenantId, String headerTenantId) {
@@ -141,6 +145,22 @@ public class ModelController {
         model.setCompanyId(company.getId());
         Model saved = modelService.updateForTenantAndCompany(model, tenant.getId(), company.getId());
         return ResponseEntity.ok(saved);
+    }
+
+    @GetMapping("/{id}/cost-estimate")
+    public ResponseEntity<?> costEstimate(@PathVariable("id") UUID id,
+                                          @RequestParam(value = "quantity", defaultValue = "1") java.math.BigDecimal quantity,
+                                          @RequestParam(value = "tenantId", required = false) UUID tenantId,
+                                          @RequestParam(value = "companyId", required = false) UUID companyId,
+                                          @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId,
+                                          @RequestHeader(value = "X-Company-Id", required = false) String headerCompanyId) {
+        tenantId = resolveTenant(tenantId, headerTenantId);
+        companyId = resolveCompany(companyId, headerCompanyId);
+        if (tenantId == null || companyId == null) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+        }
+        var breakdown = shopPricingService.calculateRawCost(id, quantity, tenantId, companyId);
+        return ResponseEntity.ok(breakdown);
     }
 
     @DeleteMapping("/{id}")

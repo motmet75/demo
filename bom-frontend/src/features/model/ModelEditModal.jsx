@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
@@ -6,7 +6,11 @@ import DialogActions from '@mui/material/DialogActions'
 import TextField from '@mui/material/TextField'
 import Button from '@mui/material/Button'
 import Box from '@mui/material/Box'
+import Typography from '@mui/material/Typography'
+import Divider from '@mui/material/Divider'
+import CircularProgress from '@mui/material/CircularProgress'
 import PropTypes from 'prop-types'
+import { apiFetchJson } from '../../api/client'
 
 export default function ModelEditModal({ open, model, onClose, onSave, saving: parentSaving }) {
   const makeInitialForm = (m) => ({
@@ -14,12 +18,27 @@ export default function ModelEditModal({ open, model, onClose, onSave, saving: p
     modelName: m?.modelName ?? '',
     isActive: m?.isActive ?? true,
     hsCode: m?.hsCode ?? '',
-    coCriteria: m?.coCriteria ?? ''
+    coCriteria: m?.coCriteria ?? '',
+    sellingPrice: m?.sellingPrice ?? '',
+    category: m?.category ?? '',
+    imageUrl: m?.imageUrl ?? ''
   })
+
+  const [costEstimate, setCostEstimate] = useState(null)
+  const [loadingCost, setLoadingCost] = useState(false)
 
   const [form, setForm] = useState(() => makeInitialForm(model))
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+
+  // Load cost estimate when model changes or sellingPrice changes
+  useEffect(() => {
+    if (!model?.id) return
+    setLoadingCost(true)
+    apiFetchJson(`/bom/models/${model.id}/cost-estimate?quantity=1`).then(({ data }) => {
+      setCostEstimate(data)
+    }).catch(() => setCostEstimate(null)).finally(() => setLoadingCost(false))
+  }, [model?.id])
 
   const handleChange = (field) => (e) => {
     const value = e?.target ? e.target.value : e
@@ -38,7 +57,10 @@ export default function ModelEditModal({ open, model, onClose, onSave, saving: p
       modelName: form.modelName,
       isActive: form.isActive,
       hsCode: form.hsCode || null,
-      coCriteria: form.coCriteria || null
+      coCriteria: form.coCriteria || null,
+      sellingPrice: form.sellingPrice !== '' ? Number(form.sellingPrice) : null,
+      category: form.category || null,
+      imageUrl: form.imageUrl || null
     }
 
     try {
@@ -100,6 +122,53 @@ export default function ModelEditModal({ open, model, onClose, onSave, saving: p
               disabled={isBusy}
               placeholder="e.g. WO, CTH"
             />
+
+            <Divider sx={{ my: 1 }} />
+            <Typography variant="subtitle2" color="text.secondary">Shop / Menu</Typography>
+
+            <TextField
+              label="Selling Price (VND)"
+              type="number"
+              value={form.sellingPrice}
+              onChange={handleChange('sellingPrice')}
+              fullWidth
+              disabled={isBusy}
+              placeholder="Leave blank to hide from menu"
+            />
+
+            {costEstimate && (
+              <Box sx={{ background: '#f5f5f5', borderRadius: 1, p: 1, fontSize: 13 }}>
+                {loadingCost ? <CircularProgress size={14} /> : (
+                  <>
+                    <Typography variant="caption">Raw cost: <strong>{Number(costEstimate.total || 0).toLocaleString('vi-VN')} đ</strong></Typography>
+                    {form.sellingPrice > 0 && (
+                      <Typography variant="caption" sx={{ ml: 1 }}>
+                        Margin: <strong>{((form.sellingPrice - (costEstimate.total || 0)) / form.sellingPrice * 100).toFixed(1)}%</strong>
+                      </Typography>
+                    )}
+                  </>
+                )}
+              </Box>
+            )}
+
+            <TextField
+              label="Category"
+              value={form.category}
+              onChange={handleChange('category')}
+              fullWidth
+              disabled={isBusy}
+              placeholder="e.g. Coffee, Tea, Snacks"
+            />
+
+            <TextField
+              label="Image URL"
+              value={form.imageUrl}
+              onChange={handleChange('imageUrl')}
+              fullWidth
+              disabled={isBusy}
+              placeholder="https://..."
+            />
+            {form.imageUrl && <img src={form.imageUrl} alt="preview" style={{ maxHeight: 80, objectFit: 'contain', borderRadius: 4 }} onError={e => e.target.style.display = 'none'} />}
 
             <label>
               <input type="checkbox" checked={!!form.isActive} onChange={(e) => setForm(prev => ({ ...prev, isActive: e.target.checked }))} disabled={isBusy} /> Active

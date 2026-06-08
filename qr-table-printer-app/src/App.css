@@ -1,0 +1,399 @@
+.page {
+  padding: 20px;
+  text-align: left;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* ---- Shared panels / controls ---- */
+
+.panel,
+.controls {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.panel h2 {
+  font-size: 15px;
+  margin: 0 0 10px;
+}
+
+.panel-row,
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: end;
+}
+
+.panel label,
+.controls label {
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  gap: 4px;
+}
+
+.checkbox-label {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 6px !important;
+}
+
+.panel input,
+.controls input,
+.controls select {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 14px;
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text-h);
+}
+
+.panel button,
+.controls button,
+.picker-row button {
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text-h);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.panel button:hover,
+.controls button:hover {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
+.controls button#printBtn {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: bold;
+}
+
+.hint {
+  width: 100%;
+  font-size: 12px;
+  color: var(--text);
+  margin-top: 8px;
+}
+
+.hint strong,
+.hint code {
+  color: var(--text-h);
+}
+
+.empty-hint {
+  color: var(--text);
+  font-size: 14px;
+}
+
+/* ---- Tabs ---- */
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.tabs button {
+  padding: 10px 20px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.tabs button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: bold;
+}
+
+/* ---- Table picker ---- */
+
+.random-pick {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.picker-count {
+  font-size: 13px;
+  color: var(--text);
+  margin-left: auto;
+  align-self: center;
+}
+
+.table-checks {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-top: 10px;
+  margin-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.table-check {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.table-check.checked {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+  color: var(--text-h);
+  font-weight: bold;
+}
+
+.table-check input {
+  margin: 0;
+}
+
+/* ---- Order item editor ---- */
+
+.item-editor {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 10px;
+}
+
+.item-editor th {
+  text-align: left;
+  font-size: 12px;
+  color: var(--text);
+  font-weight: normal;
+  padding: 4px 6px;
+}
+
+.item-editor td {
+  padding: 4px 6px;
+}
+
+.item-editor input {
+  width: 100%;
+}
+
+.item-total-cell {
+  font-size: 14px;
+  font-weight: bold;
+  color: var(--text-h);
+  white-space: nowrap;
+}
+
+.remove-btn {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 8px;
+}
+
+.remove-btn:hover {
+  color: #c0392b;
+}
+
+/* ---- Receipt card (modern, minimal restaurant look) ---- */
+
+.receipt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.receipt {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 16px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.logo-badge {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--text-h);
+  color: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 15px;
+  letter-spacing: 0.5px;
+}
+
+.receipt-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.receipt-name {
+  font-size: 18px;
+  font-weight: bold;
+  letter-spacing: 0.4px;
+  color: var(--text-h);
+}
+
+.receipt-meta {
+  font-size: 11px;
+  color: var(--text);
+}
+
+.receipt-divider {
+  width: 100%;
+  border-top: 1px dashed var(--border);
+  margin: 4px 0;
+}
+
+.receipt-table-label {
+  font-size: 20px;
+  font-weight: bold;
+  color: var(--text-h);
+}
+
+.receipt-sub {
+  font-size: 12px;
+  color: var(--text);
+  font-style: italic;
+}
+
+.receipt-wifi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.receipt-url {
+  font-size: 10px;
+  color: var(--text);
+  word-break: break-all;
+  margin-top: 4px;
+}
+
+.receipt-items {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.receipt-item-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-h);
+}
+
+.receipt-item-row .item-name {
+  text-align: left;
+}
+
+.receipt-item-row .item-amount {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.receipt-totals {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.totals-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.totals-row.total {
+  font-size: 16px;
+  font-weight: bold;
+  color: var(--text-h);
+}
+
+.receipt-footer {
+  font-size: 13px;
+  font-style: italic;
+  color: var(--text);
+  margin-top: 4px;
+}
+
+/* ---- Print ---- */
+
+@media print {
+  body {
+    background: #fff;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .receipt-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  .receipt {
+    border: 1px dashed #999;
+    border-radius: 0;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .logo-badge {
+    background: #000;
+    color: #fff;
+  }
+
+  /* POS receipt mode: one slip per page, sized to the configured slip
+     dimensions via the injected @page rule — width is relative so it
+     tracks that size rather than a hardcoded value. */
+  .pos-mode .receipt-grid {
+    display: block;
+  }
+  .pos-mode .receipt {
+    width: 92%;
+    margin: 0 auto;
+    border: none;
+    page-break-after: always;
+    break-after: page;
+  }
+  .pos-mode .receipt:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+}

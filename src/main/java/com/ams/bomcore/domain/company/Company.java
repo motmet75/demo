@@ -38,6 +38,15 @@ public class Company {
     @Column(name = "created_at")
     private Instant createdAt;
 
+    @Column(name = "bank_bin", length = 20)
+    private String bankBin;
+
+    @Column(name = "bank_account_number", length = 50)
+    private String bankAccountNumber;
+
+    @Column(name = "bank_account_name", length = 100)
+    private String bankAccountName;
+
     public Company() {}
 
     public UUID getId() { return id; }
@@ -54,6 +63,15 @@ public class Company {
 
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
+
+    public String getBankBin() { return bankBin; }
+    public void setBankBin(String bankBin) { this.bankBin = bankBin; }
+
+    public String getBankAccountNumber() { return bankAccountNumber; }
+    public void setBankAccountNumber(String bankAccountNumber) { this.bankAccountNumber = bankAccountNumber; }
+
+    public String getBankAccountName() { return bankAccountName; }
+    public void setBankAccountName(String bankAccountName) { this.bankAccountName = bankAccountName; }
 
     @PrePersist
     private void prePersist() {

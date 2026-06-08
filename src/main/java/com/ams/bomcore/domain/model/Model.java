@@ -1,5 +1,6 @@
 package com.ams.bomcore.domain.model;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
@@ -45,6 +46,15 @@ public class Model {
 
     @Column(name = "created_at")
     private Instant createdAt;
+
+    @Column(name = "selling_price", columnDefinition = "numeric")
+    private BigDecimal sellingPrice;
+
+    @Column(name = "category", length = 50)
+    private String category;
+
+    @Column(name = "image_url", columnDefinition = "TEXT")
+    private String imageUrl;
 
     public Model() {
         // default constructor required by JPA
@@ -121,6 +131,15 @@ public class Model {
     public void setCreatedAt(Instant createdAt) {
         this.createdAt = createdAt;
     }
+
+    public BigDecimal getSellingPrice() { return sellingPrice; }
+    public void setSellingPrice(BigDecimal sellingPrice) { this.sellingPrice = sellingPrice; }
+
+    public String getCategory() { return category; }
+    public void setCategory(String category) { this.category = category; }
+
+    public String getImageUrl() { return imageUrl; }
+    public void setImageUrl(String imageUrl) { this.imageUrl = imageUrl; }
 
     @PrePersist
     private void prePersist() {

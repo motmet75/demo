@@ -88,3 +88,15 @@ export async function apiFetchJson(url, opts = {}) {
   }
   return { res, data }
 }
+
+export async function apiFetchJsonNoContext(url, opts = {}) {
+  const res = await apiFetchNoContext(url, opts)
+  const text = await res.text()
+  let data = null
+  try {
+    data = text ? JSON.parse(text) : null
+  } catch {
+    data = text
+  }
+  return { res, data }
+}

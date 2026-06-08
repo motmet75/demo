@@ -41,6 +41,8 @@ public class SecurityConfig {
                 //.requestMatchers("/admin/**").hasRole("ADMIN")
                 .requestMatchers("/bom/etl/**").authenticated()
                 .requestMatchers(HttpMethod.GET, "/bom/tenants", "/bom/tenants/**").permitAll() // Allow public GET access
+                .requestMatchers("/shop/public/**").permitAll()
+                .requestMatchers("/shop/staff/**").authenticated()
 
                 .anyRequest().permitAll()
             )

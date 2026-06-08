@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Tooltip from '@mui/material/Tooltip'
 import IconButton from '@mui/material/IconButton'
@@ -38,6 +38,10 @@ import RequireAuth from './components/RequireAuth'
 import AdminPage from './features/admin/AdminPage'
 import TenantsPage from './features/tenant/TenantsPage'
 import ETLPage from './features/etl/ETLPage'
+import ShopMenuPage from './features/shopfront/ShopMenuPage'
+import ShopOrderStatusPage from './features/shopfront/ShopOrderStatusPage'
+import ShopOrderPage from './features/shoporder/ShopOrderPage'
+import ShopTablePage from './features/shoptable/ShopTablePage'
 
 const SIDEBAR_FULL = 200
 const SIDEBAR_MINI = 52
@@ -61,6 +65,9 @@ const NAV_ITEMS = [
   { label: 'Cons. Log',   path: '/consumption-log',      icon: '🗒️' },
   { divider: true },
   { label: 'Companies',   path: '/companies',            icon: '🏢' },
+  { divider: true },
+  { label: 'Shop Orders', path: '/shop-orders',           icon: '🧋' },
+  { label: 'Tables',      path: '/shop-tables',           icon: '🪑' },
 ]
 
 const ADMIN_ITEMS = [
@@ -169,53 +176,59 @@ function HeaderBar({ user, logout }) {
   )
 }
 
+function MainShell({ user, logout, isAdmin }) {
+  const [collapsed, setCollapsed] = useState(false)
+  return (
+    <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+      {user && <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} isAdmin={isAdmin} />}
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+        <Box sx={{ flexShrink: 0, borderBottom: '1px solid #e0e0e0', px: 2, py: 0.75, display: 'flex', alignItems: 'center', gap: 1.5, background: '#fff', flexWrap: 'wrap' }}>
+          <HeaderBar user={user} logout={logout} />
+        </Box>
+        <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+          <Routes>
+            <Route path="/login" element={<LoginForm />} />
+            <Route path="/" element={<RequireAuth><RequireContext><MaterialPage /></RequireContext></RequireAuth>} />
+            <Route path="/materials" element={<RequireAuth><RequireContext><MaterialPage /></RequireContext></RequireAuth>} />
+            <Route path="/models" element={<RequireAuth><ModelPage /></RequireAuth>} />
+            <Route path="/inventory" element={<RequireAuth><RequireContext><InventoryPage /></RequireContext></RequireAuth>} />
+            <Route path="/inventory-movements" element={<RequireAuth><RequireContext><InventoryMovementPage /></RequireContext></RequireAuth>} />
+            <Route path="/warehouses" element={<RequireAuth><WarehousePage /></RequireAuth>} />
+            <Route path="/suppliers" element={<RequireAuth><SupplierPage /></RequireAuth>} />
+            <Route path="/companies" element={<RequireAuth><CompanyPage /></RequireAuth>} />
+            <Route path="/contracts" element={<RequireAuth><RequireContext><ContractPage /></RequireContext></RequireAuth>} />
+            <Route path="/orders" element={<RequireAuth><RequireContext><OrderPage /></RequireContext></RequireAuth>} />
+            <Route path="/order-lines" element={<RequireAuth><RequireContext><OrderLinePage /></RequireContext></RequireAuth>} />
+            <Route path="/invoices" element={<RequireAuth><RequireContext><InvoicePage /></RequireContext></RequireAuth>} />
+            <Route path="/consumption" element={<RequireAuth><RequireContext><ConsumptionPage /></RequireContext></RequireAuth>} />
+            <Route path="/consumption-log" element={<RequireAuth><RequireContext><ConsumptionLogPage /></RequireContext></RequireAuth>} />
+            <Route path="/boms" element={<RequireAuth><RequireContext><BomPage /></RequireContext></RequireAuth>} />
+            <Route path="/viettelpost" element={<RequireAuth><ViettelPostPage /></RequireAuth>} />
+            <Route path="/shop-orders" element={<RequireAuth><RequireContext><ShopOrderPage /></RequireContext></RequireAuth>} />
+            <Route path="/shop-tables" element={<RequireAuth><RequireContext><ShopTablePage /></RequireContext></RequireAuth>} />
+            <Route path="/admin" element={<RequireAuth adminOnly><AdminPage /></RequireAuth>} />
+            <Route path="/admin/users" element={<RequireAuth adminOnly><AdminPage /></RequireAuth>} />
+            <Route path="/tenants" element={<RequireAuth adminOnly><TenantsPage /></RequireAuth>} />
+            <Route path="/etl"     element={<RequireAuth adminOnly><ETLPage /></RequireAuth>} />
+          </Routes>
+        </Box>
+      </Box>
+    </Box>
+  )
+}
+
 function AppShell() {
   const { user, logout, isAdmin } = useAuth()
-  const [collapsed, setCollapsed] = useState(false)
 
   return (
     <BrowserRouter basename="/bom-inventory">
-      <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-
-        {/* Sidebar */}
-        {user && <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} isAdmin={isAdmin} />}
-
-        {/* Main area */}
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
-
-          {/* Top header bar */}
-          <Box sx={{ flexShrink: 0, borderBottom: '1px solid #e0e0e0', px: 2, py: 0.75, display: 'flex', alignItems: 'center', gap: 1.5, background: '#fff', flexWrap: 'wrap' }}>
-            <HeaderBar user={user} logout={logout} />
-          </Box>
-
-          {/* Page content — scrollable */}
-          <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-            <Routes>
-              <Route path="/login" element={<LoginForm />} />
-              <Route path="/" element={<RequireAuth><RequireContext><MaterialPage /></RequireContext></RequireAuth>} />
-              <Route path="/materials" element={<RequireAuth><RequireContext><MaterialPage /></RequireContext></RequireAuth>} />
-              <Route path="/models" element={<RequireAuth><ModelPage /></RequireAuth>} />
-              <Route path="/inventory" element={<RequireAuth><RequireContext><InventoryPage /></RequireContext></RequireAuth>} />
-              <Route path="/inventory-movements" element={<RequireAuth><RequireContext><InventoryMovementPage /></RequireContext></RequireAuth>} />
-              <Route path="/warehouses" element={<RequireAuth><WarehousePage /></RequireAuth>} />
-              <Route path="/suppliers" element={<RequireAuth><SupplierPage /></RequireAuth>} />
-              <Route path="/companies" element={<RequireAuth><CompanyPage /></RequireAuth>} />
-              <Route path="/contracts" element={<RequireAuth><RequireContext><ContractPage /></RequireContext></RequireAuth>} />
-              <Route path="/orders" element={<RequireAuth><RequireContext><OrderPage /></RequireContext></RequireAuth>} />
-              <Route path="/order-lines" element={<RequireAuth><RequireContext><OrderLinePage /></RequireContext></RequireAuth>} />
-              <Route path="/invoices" element={<RequireAuth><RequireContext><InvoicePage /></RequireContext></RequireAuth>} />
-              <Route path="/consumption" element={<RequireAuth><RequireContext><ConsumptionPage /></RequireContext></RequireAuth>} />
-              <Route path="/consumption-log" element={<RequireAuth><RequireContext><ConsumptionLogPage /></RequireContext></RequireAuth>} />
-              <Route path="/boms" element={<RequireAuth><RequireContext><BomPage /></RequireContext></RequireAuth>} />
-              <Route path="/viettelpost" element={<RequireAuth><ViettelPostPage /></RequireAuth>} />
-              <Route path="/admin" element={<RequireAuth adminOnly><AdminPage /></RequireAuth>} />
-              <Route path="/admin/users" element={<RequireAuth adminOnly><AdminPage /></RequireAuth>} />
-              <Route path="/tenants" element={<RequireAuth adminOnly><TenantsPage /></RequireAuth>} />
-              <Route path="/etl"     element={<RequireAuth adminOnly><ETLPage /></RequireAuth>} />
-            </Routes>
-          </Box>
-        </Box>
-      </Box>
+      <Routes>
+        {/* Public customer-facing shop routes — no sidebar/header */}
+        <Route path="/shop/menu" element={<ShopMenuPage />} />
+        <Route path="/shop/order/:orderCode" element={<ShopOrderStatusPage />} />
+        {/* Everything else — existing authenticated shell */}
+        <Route path="/*" element={<MainShell user={user} logout={logout} isAdmin={isAdmin} />} />
+      </Routes>
     </BrowserRouter>
   )
 }
