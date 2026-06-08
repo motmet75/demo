@@ -92,6 +92,114 @@ function parseOpts(str) {
   } catch { return null }
 }
 
+function parseOptsObj(str) {
+  if (!str) return {}
+  try { return JSON.parse(str) } catch { return {} }
+}
+
+export function printCupLabels(order) {
+  if (!order?.items?.length) return
+  const num = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
+
+  const labelHtml = order.items.flatMap(item => {
+    const qty = Number(item.quantity) || 1
+    const opts = parseOptsObj(item.selectedOptions)
+    const optLines = Object.entries(opts)
+      .map(([k, v]) => `<div class="opt"><span class="opt-key">${k}:</span> <span class="opt-val">${Array.isArray(v) ? v.join(', ') : v}</span></div>`)
+      .join('')
+    const noteHtml = item.itemNotes
+      ? `<div class="note">⚠ ${item.itemNotes}</div>`
+      : ''
+    return Array.from({ length: qty }, (_, i) => `
+      <div class="label">
+        <div class="order-num">${num}</div>
+        <div class="item-name">${item.modelName}</div>
+        ${optLines}
+        ${noteHtml}
+        ${qty > 1 ? `<div class="counter">${i + 1} / ${qty}</div>` : ''}
+      </div>
+    `)
+  }).join('')
+
+  const html = `<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Cup Labels ${num}</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: Arial, sans-serif;
+    background: #fff;
+  }
+  .label {
+    width: 220px;
+    min-height: 90px;
+    border: 1.5px solid #111;
+    border-radius: 6px;
+    padding: 8px 10px 6px;
+    margin: 6px;
+    display: inline-block;
+    vertical-align: top;
+    page-break-inside: avoid;
+  }
+  .order-num {
+    font-size: 22px;
+    font-weight: 900;
+    color: #1976d2;
+    line-height: 1;
+    letter-spacing: -1px;
+    border-bottom: 1px dashed #ccc;
+    padding-bottom: 4px;
+    margin-bottom: 4px;
+  }
+  .item-name {
+    font-size: 15px;
+    font-weight: 800;
+    line-height: 1.2;
+    margin-bottom: 4px;
+    color: #111;
+  }
+  .opt {
+    font-size: 12px;
+    color: #333;
+    line-height: 1.4;
+  }
+  .opt-key { color: #666; }
+  .opt-val { font-weight: 700; color: #111; }
+  .note {
+    font-size: 12px;
+    font-weight: 700;
+    color: #c62828;
+    margin-top: 4px;
+    padding: 2px 4px;
+    background: #fff3e0;
+    border-radius: 3px;
+    border-left: 3px solid #ff6f00;
+  }
+  .counter {
+    font-size: 10px;
+    color: #aaa;
+    text-align: right;
+    margin-top: 4px;
+  }
+  @media print {
+    @page { margin: 6mm; }
+    body { width: 100%; }
+  }
+</style>
+</head>
+<body>
+  ${labelHtml}
+</body>
+</html>`
+
+  const win = window.open('', '_blank', 'width=520,height=600')
+  win.document.write(html)
+  win.document.close()
+  win.onload = () => { win.focus(); win.print(); setTimeout(() => win.close(), 1000) }
+}
+
 export function printOrderReceipt(order, trackingQrBase64 = null) {
   if (!order) return
 

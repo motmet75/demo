@@ -57,13 +57,21 @@ function OrderCard({ order, ready }) {
   )
 }
 
-function Panel({ title, count, ready, orders, emptyText }) {
+const PANEL_THEME = {
+  ready: { bg: '#f0fdf4', hBg: '#dcfce7', border: '#bbf7d0', titleColor: '#15803d', badgeBg: '#16a34a' },
+  info:  { bg: '#eff6ff', hBg: '#dbeafe', border: '#bfdbfe', titleColor: '#1d4ed8', badgeBg: '#2563eb' },
+  done:  { bg: '#f0f9ff', hBg: '#e0f2fe', border: '#bae6fd', titleColor: '#0369a1', badgeBg: '#0284c7' },
+  default: { bg: '#f8fafc', hBg: '#f1f5f9', border: '#e2e8f0', titleColor: '#374151', badgeBg: '#94a3b8' },
+}
+
+function Panel({ title, count, ready, orders, emptyText, color }) {
+  const theme = ready ? PANEL_THEME.ready : (PANEL_THEME[color] || PANEL_THEME.default)
   return (
     <Box sx={{
       flex: 1,
       display: 'flex',
       flexDirection: 'column',
-      bgcolor: ready ? '#f0fdf4' : '#f8fafc',
+      bgcolor: theme.bg,
       minHeight: 0,
       overflow: 'hidden',
     }}>
@@ -71,8 +79,8 @@ function Panel({ title, count, ready, orders, emptyText }) {
       <Box sx={{
         px: { xs: 2, md: 4 },
         py: { xs: 1.5, md: 2 },
-        bgcolor: ready ? '#dcfce7' : '#f1f5f9',
-        borderBottom: `2px solid ${ready ? '#bbf7d0' : '#e2e8f0'}`,
+        bgcolor: theme.hBg,
+        borderBottom: `2px solid ${theme.border}`,
         display: 'flex',
         alignItems: 'center',
         gap: 1.5,
@@ -81,7 +89,7 @@ function Panel({ title, count, ready, orders, emptyText }) {
         <Typography sx={{
           fontSize: { xs: 18, md: 22, lg: 26 },
           fontWeight: 900,
-          color: ready ? '#15803d' : '#374151',
+          color: theme.titleColor,
           textTransform: 'uppercase',
           letterSpacing: 1,
           flex: 1,
@@ -89,7 +97,7 @@ function Panel({ title, count, ready, orders, emptyText }) {
           {title}
         </Typography>
         <Box sx={{
-          bgcolor: ready ? '#16a34a' : '#94a3b8',
+          bgcolor: theme.badgeBg,
           color: '#fff',
           borderRadius: 99,
           px: 1.75, py: 0.25,
@@ -118,7 +126,7 @@ function Panel({ title, count, ready, orders, emptyText }) {
         '&::-webkit-scrollbar': { width: 4 },
         '&::-webkit-scrollbar-thumb': { bgcolor: '#cbd5e1', borderRadius: 4 },
       }}>
-        {orders.length === 0 ? (
+        {orders.length === 0 && emptyText ? (
           <Box sx={{ gridColumn: '1 / -1', textAlign: 'center', py: 8 }}>
             <Typography sx={{ fontSize: 40, mb: 1 }}>{ready ? '✓' : '🕐'}</Typography>
             <Typography sx={{ color: '#9ca3af', fontSize: 15 }}>{emptyText}</Typography>
@@ -135,10 +143,12 @@ export default function DisplayBoardPage() {
   const [searchParams] = useSearchParams()
   const token = searchParams.get('t')
 
-  const [preparing, setPreparing] = useState([])
-  const [ready, setReady]         = useState([])
-  const [error, setError]         = useState('')
-  const [loading, setLoading]     = useState(true)
+  const [confirmed, setConfirmed] = useState([])
+  const [processing, setProcessing] = useState([])
+  const [ready, setReady]           = useState([])
+  const [pickedUp, setPickedUp]     = useState([])
+  const [error, setError]           = useState('')
+  const [loading, setLoading]       = useState(true)
   const [lastUpdate, setLastUpdate] = useState(null)
   const channelRef = useRef(null)
 
@@ -151,8 +161,10 @@ export default function DisplayBoardPage() {
         return
       }
       if (!res.ok) { setError('Failed to load orders'); return }
-      setPreparing(Array.isArray(data.preparing) ? data.preparing : [])
-      setReady(Array.isArray(data.ready) ? data.ready : [])
+      setConfirmed(Array.isArray(data.confirmed)   ? data.confirmed   : [])
+      setProcessing(Array.isArray(data.processing) ? data.processing  : [])
+      setReady(Array.isArray(data.ready)           ? data.ready       : [])
+      setPickedUp(Array.isArray(data.pickedUp)     ? data.pickedUp    : [])
       setLastUpdate(new Date())
       setLoading(false)
     } catch { setError('Network error') }
@@ -229,11 +241,24 @@ export default function DisplayBoardPage() {
 
       {/* Split panels */}
       <Box sx={{ flex: 1, display: 'flex', minHeight: 0 }}>
+        {confirmed.length > 0 && (
+          <>
+            <Panel
+              title="Confirmed"
+              count={confirmed.length}
+              ready={false}
+              orders={confirmed}
+              emptyText=""
+              color="info"
+            />
+            <Box sx={{ width: 2, bgcolor: '#e2e8f0', flexShrink: 0 }} />
+          </>
+        )}
         <Panel
-          title="In Progress"
-          count={preparing.length}
+          title="Preparing"
+          count={processing.length}
           ready={false}
-          orders={preparing}
+          orders={processing}
           emptyText="All orders are ready!"
         />
         <Box sx={{ width: 2, bgcolor: '#e2e8f0', flexShrink: 0 }} />
@@ -244,6 +269,19 @@ export default function DisplayBoardPage() {
           orders={ready}
           emptyText="Nothing ready yet"
         />
+        {pickedUp.length > 0 && (
+          <>
+            <Box sx={{ width: 2, bgcolor: '#e2e8f0', flexShrink: 0 }} />
+            <Panel
+              title="Picked Up ✓"
+              count={pickedUp.length}
+              ready={false}
+              orders={pickedUp}
+              emptyText=""
+              color="done"
+            />
+          </>
+        )}
       </Box>
     </Box>
   )

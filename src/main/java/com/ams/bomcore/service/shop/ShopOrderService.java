@@ -417,18 +417,38 @@ public class ShopOrderService {
                 .orElseThrow(() -> new NoSuchElementException("Token not found"));
         if (!sat.isValid()) throw new IllegalStateException("Token expired or disabled");
 
-        List<String> active  = List.of(ShopOrder.STATUS_CONFIRMED, ShopOrder.STATUS_PREPARING);
-        List<String> ready   = List.of(ShopOrder.STATUS_READY);
+        UUID tId = sat.getTenantId();
+        UUID cId = sat.getCompanyId();
+
+        List<ShopOrderResponseDto> confirmed = shopOrderRepository
+                .findAllByTenantIdAndCompanyIdAndStatusInOrderByOrderNumberAsc(tId, cId, List.of(ShopOrder.STATUS_CONFIRMED))
+                .stream().map(this::dto).toList();
 
         List<ShopOrderResponseDto> preparing = shopOrderRepository
-                .findAllByTenantIdAndCompanyIdAndStatusInOrderByOrderNumberAsc(sat.getTenantId(), sat.getCompanyId(), active)
+                .findAllByTenantIdAndCompanyIdAndStatusInOrderByOrderNumberAsc(tId, cId, List.of(ShopOrder.STATUS_PREPARING))
                 .stream().map(this::dto).toList();
 
         List<ShopOrderResponseDto> readyList = shopOrderRepository
-                .findAllByTenantIdAndCompanyIdAndStatusInOrderByOrderNumberAsc(sat.getTenantId(), sat.getCompanyId(), ready)
+                .findAllByTenantIdAndCompanyIdAndStatusInOrderByOrderNumberAsc(tId, cId, List.of(ShopOrder.STATUS_READY))
                 .stream().map(this::dto).toList();
 
-        return Map.of("preparing", preparing, "ready", readyList);
+        List<ShopOrderResponseDto> pickedUp = shopOrderRepository
+                .findAllByTenantIdAndCompanyIdAndStatusInOrderByOrderNumberAsc(tId, cId, List.of(ShopOrder.STATUS_PICKED_UP))
+                .stream().map(this::dto).toList();
+
+        // "preparing" key keeps backward compat (confirmed+preparing combined for old board)
+        var inProgress = new java.util.ArrayList<ShopOrderResponseDto>();
+        inProgress.addAll(confirmed);
+        inProgress.addAll(preparing);
+        inProgress.sort(java.util.Comparator.comparingInt(d -> d.getOrderNumber() != null ? d.getOrderNumber() : Integer.MAX_VALUE));
+
+        return Map.of(
+                "preparing",  inProgress,
+                "ready",      readyList,
+                "confirmed",  confirmed,
+                "processing", preparing,
+                "pickedUp",   pickedUp
+        );
     }
 
     @Transactional

@@ -21,8 +21,9 @@ import PrintIcon from '@mui/icons-material/Print'
 import QrCode2Icon from '@mui/icons-material/QrCode2'
 import EditIcon from '@mui/icons-material/Edit'
 import UndoIcon from '@mui/icons-material/Undo'
+import LabelIcon from '@mui/icons-material/Label'
 import { fetchOrderTagQr, revertShopOrder } from '../../api/shopApi'
-import { printOrderReceipt, printOrderTag } from '../../utils/printOrderReceipt'
+import { printOrderReceipt, printOrderTag, printCupLabels } from '../../utils/printOrderReceipt'
 import EditOrderDialog from './EditOrderDialog'
 
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : '—'
@@ -250,6 +251,17 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
             >
               Print Receipt
             </Button>
+            <Tooltip title="Print one cup label per item unit">
+              <Button
+                variant="outlined"
+                color="secondary"
+                startIcon={<LabelIcon />}
+                onClick={() => printCupLabels(order)}
+                sx={{ textTransform: 'none' }}
+              >
+                Cup Labels
+              </Button>
+            </Tooltip>
             <Button onClick={onClose} sx={{ textTransform: 'none' }}>Close</Button>
           </Box>
         </DialogActions>
