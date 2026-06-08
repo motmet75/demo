@@ -92,6 +92,10 @@ export function revertShopOrder(orderId) {
   return apiFetchJson(`/shop/staff/orders/${orderId}/revert`, { method: 'PATCH' })
 }
 
+export function markOrderPaid(orderId) {
+  return apiFetchJson(`/shop/staff/orders/${orderId}/pay`, { method: 'PATCH' })
+}
+
 export function updateOrderItems(orderId, items) {
   return apiFetchJson(`/shop/staff/orders/${orderId}/items`, {
     method: 'PUT',

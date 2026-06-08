@@ -472,6 +472,19 @@ public class ShopOrderService {
         return BigDecimal.valueOf(40000);
     }
 
+    // ── Payment ───────────────────────────────────────────────────────
+
+    @Transactional
+    public ShopOrderResponseDto markAsPaid(UUID orderId, UUID tenantId, UUID companyId) {
+        ShopOrder order = requireOrder(orderId, tenantId, companyId);
+        if (ShopOrder.STATUS_CANCELLED.equals(order.getStatus())) {
+            throw new IllegalStateException("Cannot mark cancelled order as paid");
+        }
+        order.setPaymentStatus(ShopOrder.PAY_STATUS_PAID);
+        shopOrderRepository.save(order);
+        return dto(order);
+    }
+
     // ── Order editing & revert ────────────────────────────────────────
 
     @Transactional

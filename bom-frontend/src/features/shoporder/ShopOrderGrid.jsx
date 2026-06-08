@@ -38,10 +38,11 @@ import CloseIcon from '@mui/icons-material/Close'
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
 import AddShoppingCartIcon from '@mui/icons-material/AddShoppingCart'
 import LabelIcon from '@mui/icons-material/Label'
+import PaidIcon from '@mui/icons-material/Paid'
 import {
   fetchShopOrders, fetchActiveOrders, confirmShopOrder, prepareShopOrder, readyShopOrder,
   completeShopOrder, cancelShopOrder, resetOrderSequence, setShopOrderNumber,
-  generateDisplayBoardToken, pickupShopOrder, revertShopOrder
+  generateDisplayBoardToken, pickupShopOrder, revertShopOrder, markOrderPaid
 } from '../../api/shopApi'
 import { printCupLabels } from '../../utils/printOrderReceipt'
 import ShopOrderDetailModal from './ShopOrderDetailModal'
@@ -206,7 +207,13 @@ function StatusBoard({ status, orders, onAction, onDetail }) {
                   {order.orderNumber ?? '?'}
                 </Box>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  {order.tableName && <Chip icon={<TableBarIcon sx={{ fontSize: 12 }} />} label={order.tableName} size="small" color="info" variant="outlined" sx={{ height: 20, fontSize: 11, mb: 0.25 }} />}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap', mb: 0.25 }}>
+                    {order.tableName && <Chip icon={<TableBarIcon sx={{ fontSize: 12 }} />} label={order.tableName} size="small" color="info" variant="outlined" sx={{ height: 20, fontSize: 11 }} />}
+                    {order.paymentStatus === 'PAID'
+                      ? <Chip icon={<PaidIcon sx={{ fontSize: 12 }} />} label="PAID" size="small" color="success" sx={{ height: 20, fontSize: 11, fontWeight: 800 }} />
+                      : <Chip label="UNPAID" size="small" color="warning" variant="outlined" sx={{ height: 20, fontSize: 10, fontWeight: 700 }} />
+                    }
+                  </Box>
                   {order.customerName && <Typography variant="caption" display="block" noWrap>{order.customerName}</Typography>}
                   <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>{since} ago</Typography>
                 </Box>
@@ -246,35 +253,45 @@ function StatusBoard({ status, orders, onAction, onDetail }) {
               {order.notes && <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11, fontStyle: 'italic', display: 'block', mb: 0.75 }}>Note: {order.notes}</Typography>}
 
               {/* Action buttons per status */}
-              {status === 'CONFIRMED' && (
-                <Box sx={{ display: 'flex', gap: 0.75 }}>
-                  <Button size="small" variant="contained" color="warning" fullWidth onClick={() => onAction('prepare', order.id)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Start Preparing</Button>
-                  <Tooltip title="Revert to Pending">
-                    <Button size="small" variant="outlined" color="error" onClick={() => onAction('revert', order.id)} startIcon={<UndoIcon sx={{ fontSize: 13 }} />} sx={{ textTransform: 'none', fontSize: 11, minWidth: 76 }}>Revert</Button>
-                  </Tooltip>
-                </Box>
-              )}
-              {status === 'PREPARING' && (
-                <Box sx={{ display: 'flex', gap: 0.75 }}>
-                  <Button size="small" variant="contained" color="success" fullWidth onClick={() => { onAction('ready', order.id) }} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Mark Ready ✓</Button>
-                  <Tooltip title="Revert to Pending">
-                    <Button size="small" variant="outlined" color="error" onClick={() => onAction('revert-from-preparing', order.id)} startIcon={<UndoIcon sx={{ fontSize: 13 }} />} sx={{ textTransform: 'none', fontSize: 11, minWidth: 76 }}>Revert</Button>
-                  </Tooltip>
-                </Box>
-              )}
-              {status === 'READY' && (
-                <Box sx={{ display: 'flex', gap: 0.75 }}>
-                  {order.paymentMethod === 'BANK_QR'
-                    ? <Button size="small" variant="contained" color="info" fullWidth onClick={() => onAction('pickup', order.id)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Picked Up ✓</Button>
-                    : <Button size="small" variant="contained" color="success" fullWidth onClick={() => onAction('complete', order.id)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Complete ✓</Button>
-                  }
-                </Box>
-              )}
-              {status === 'PICKED_UP' && (
-                <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11, textAlign: 'center', display: 'block', mt: 0.25 }}>
-                  Picked up {order.completedAt ? dateFmt(order.completedAt) : ''}
-                </Typography>
-              )}
+              <Stack spacing={0.5}>
+                {order.paymentStatus !== 'PAID' && status !== 'PICKED_UP' && (
+                  <Button size="small" variant="contained" color="success" fullWidth
+                    startIcon={<PaidIcon sx={{ fontSize: 14 }} />}
+                    onClick={() => onAction('pay', order.id)}
+                    sx={{ textTransform: 'none', fontWeight: 800, fontSize: 12, bgcolor: '#2e7d32', '&:hover': { bgcolor: '#1b5e20' } }}>
+                    Mark as Paid
+                  </Button>
+                )}
+                {status === 'CONFIRMED' && (
+                  <Box sx={{ display: 'flex', gap: 0.75 }}>
+                    <Button size="small" variant="contained" color="warning" fullWidth onClick={() => onAction('prepare', order.id)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Start Preparing</Button>
+                    <Tooltip title="Revert to Pending">
+                      <Button size="small" variant="outlined" color="error" onClick={() => onAction('revert', order.id)} startIcon={<UndoIcon sx={{ fontSize: 13 }} />} sx={{ textTransform: 'none', fontSize: 11, minWidth: 76 }}>Revert</Button>
+                    </Tooltip>
+                  </Box>
+                )}
+                {status === 'PREPARING' && (
+                  <Box sx={{ display: 'flex', gap: 0.75 }}>
+                    <Button size="small" variant="contained" color="success" fullWidth onClick={() => onAction('ready', order.id)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Mark Ready ✓</Button>
+                    <Tooltip title="Revert to Pending">
+                      <Button size="small" variant="outlined" color="error" onClick={() => onAction('revert-from-preparing', order.id)} startIcon={<UndoIcon sx={{ fontSize: 13 }} />} sx={{ textTransform: 'none', fontSize: 11, minWidth: 76 }}>Revert</Button>
+                    </Tooltip>
+                  </Box>
+                )}
+                {status === 'READY' && (
+                  <Box sx={{ display: 'flex', gap: 0.75 }}>
+                    {order.paymentMethod === 'BANK_QR'
+                      ? <Button size="small" variant="contained" color="info" fullWidth onClick={() => onAction('pickup', order.id)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Picked Up ✓</Button>
+                      : <Button size="small" variant="contained" color="success" fullWidth onClick={() => onAction('complete', order.id)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Complete ✓</Button>
+                    }
+                  </Box>
+                )}
+                {status === 'PICKED_UP' && (
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11, textAlign: 'center', display: 'block' }}>
+                    Picked up {order.completedAt ? dateFmt(order.completedAt) : ''}
+                  </Typography>
+                )}
+              </Stack>
             </CardContent>
           </Card>
         )
@@ -345,12 +362,13 @@ export default function ShopOrderGrid() {
 
   const handleBoardAction = async (type, id) => {
     const map = {
-      'prepare':              prepareShopOrder,
-      'revert':               revertShopOrder,
+      'prepare':               prepareShopOrder,
+      'revert':                revertShopOrder,
       'revert-from-preparing': revertShopOrder,
-      'ready':                (id) => readyShopOrder(id).then(r => { broadcastReady(); return r }),
-      'complete':             completeShopOrder,
-      'pickup':               pickupShopOrder,
+      'ready':                 (id) => readyShopOrder(id).then(r => { broadcastReady(); return r }),
+      'complete':              completeShopOrder,
+      'pickup':                pickupShopOrder,
+      'pay':                   markOrderPaid,
     }
     const fn = map[type]
     if (!fn) return
@@ -443,8 +461,10 @@ export default function ShopOrderGrid() {
     },
     { field: 'totalAmount', headerName: 'Total', width: 100, renderCell: ({ value }) => <Typography variant="body2" fontWeight={600} color="primary">{fmt(value)}</Typography> },
     {
-      field: 'paymentStatus', headerName: 'Paid', width: 72,
-      renderCell: ({ value }) => <Chip label={value === 'PAID' ? '✓' : '…'} size="small" color={value === 'PAID' ? 'success' : 'default'} variant={value === 'PAID' ? 'filled' : 'outlined'} />
+      field: 'paymentStatus', headerName: 'Payment', width: 100,
+      renderCell: ({ value }) => value === 'PAID'
+        ? <Chip icon={<PaidIcon sx={{ fontSize: 14 }} />} label="PAID" size="small" color="success" sx={{ fontWeight: 800, fontSize: 12 }} />
+        : <Chip label="UNPAID" size="small" color="warning" variant="outlined" sx={{ fontWeight: 700, fontSize: 12 }} />
     },
     { field: 'createdAt', headerName: 'Time', width: 130, renderCell: ({ value }) => dateFmt(value) },
     {
@@ -459,6 +479,11 @@ export default function ShopOrderGrid() {
           {row.status === 'PREPARING' && <Button size="small" variant="outlined" color="success" onClick={async () => { await act(readyShopOrder, row.id); broadcastReady() }}>Ready</Button>}
           {row.status === 'READY' && row.paymentMethod === 'BANK_QR' && <Button size="small" variant="contained" color="info" onClick={() => act(pickupShopOrder, row.id)}>Picked Up</Button>}
           {row.status === 'READY' && row.paymentMethod !== 'BANK_QR' && <Button size="small" variant="contained" color="success" onClick={() => act(completeShopOrder, row.id)}>Complete</Button>}
+          {row.paymentStatus !== 'PAID' && !['PICKED_UP','COMPLETED','CANCELLED'].includes(row.status) && (
+            <Tooltip title="Mark as paid">
+              <Button size="small" variant="outlined" color="success" startIcon={<PaidIcon sx={{ fontSize: 13 }} />} onClick={() => act(markOrderPaid, row.id)} sx={{ fontWeight: 700, minWidth: 0, px: 0.75 }}>Paid</Button>
+            </Tooltip>
+          )}
           {!['PICKED_UP','COMPLETED','CANCELLED'].includes(row.status) && <Button size="small" color="error" onClick={() => handleCancel(row)}>✕</Button>}
         </Box>
       )

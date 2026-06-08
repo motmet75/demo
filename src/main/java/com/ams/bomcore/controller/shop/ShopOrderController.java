@@ -242,6 +242,17 @@ public class ShopOrderController {
         return ResponseEntity.ok(shopOrderService.revertOrder(orderId, tId, cId));
     }
 
+    @PatchMapping("/shop/staff/orders/{orderId}/pay")
+    public ResponseEntity<?> markAsPaid(@PathVariable UUID orderId,
+                                         @RequestParam(required = false) UUID tenantId,
+                                         @RequestParam(required = false) UUID companyId,
+                                         @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                         @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        return ResponseEntity.ok(shopOrderService.markAsPaid(orderId, tId, cId));
+    }
+
     @PutMapping("/shop/staff/orders/{orderId}/items")
     public ResponseEntity<?> updateOrderItems(@PathVariable UUID orderId,
                                                @RequestBody List<ShopOrderService.ItemRequest> items,
