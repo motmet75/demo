@@ -131,9 +131,10 @@ export default function ShopOrderGrid() {
     {
       field: 'orderCode',
       headerName: 'Code',
-      width: 100,
+      flex: 1,
+      minWidth: 110,
       renderCell: ({ value }) => value
-        ? <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 700, letterSpacing: 1, color: '#555' }}>{value}</Typography>
+        ? <Typography sx={{ fontFamily: 'monospace', fontWeight: 800, fontSize: 13, letterSpacing: 0.5 }}>{value}</Typography>
         : null,
     },
     {
