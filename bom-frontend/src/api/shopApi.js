@@ -32,8 +32,28 @@ export function fetchDeliveryOptions(tenantId, companyId, weightKg) {
 
 // ── Staff (authenticated) ──────────────────────────────────────────
 
+export function createStaffOrder(body) {
+  return apiFetchJson('/shop/staff/orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  })
+}
+
+export function fetchOrderTagQr(orderId) {
+  return apiFetchJson(`/shop/staff/orders/${orderId}/tag-qr`)
+}
+
 export function fetchShopOrders(status) {
   return apiFetchJson('/shop/staff/orders' + (status ? qs({ status }) : ''))
+}
+
+export function fetchActiveOrders() {
+  return apiFetchJson('/shop/staff/orders?active=true')
+}
+
+export function pickupShopOrder(orderId) {
+  return apiFetchJson(`/shop/staff/orders/${orderId}/pickup`, { method: 'PATCH' })
 }
 
 export function fetchShopOrder(orderId) {

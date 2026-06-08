@@ -13,6 +13,7 @@ public class ShopOrder {
     public static final String STATUS_CONFIRMED  = "CONFIRMED";
     public static final String STATUS_PREPARING  = "PREPARING";
     public static final String STATUS_READY      = "READY";
+    public static final String STATUS_PICKED_UP  = "PICKED_UP";
     public static final String STATUS_COMPLETED  = "COMPLETED";
     public static final String STATUS_CANCELLED  = "CANCELLED";
 

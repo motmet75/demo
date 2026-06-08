@@ -31,6 +31,7 @@ import DialogActions from '@mui/material/DialogActions'
 import InputAdornment from '@mui/material/InputAdornment'
 import { resolveToken, fetchMenu, createOrder, fetchPublicMenuOptions } from '../../api/shopApi'
 import ItemOptionsDialog from './ItemOptionsDialog'
+import OrderReceiptDialog from './OrderReceiptDialog'
 
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 
@@ -69,6 +70,7 @@ export default function ShopMenuPage() {
   const [checkout, setCheckout]           = useState(false)
   const [submitting, setSubmitting]       = useState(false)
   const [optionsTarget, setOptionsTarget] = useState(null)
+  const [placedOrder, setPlacedOrder]     = useState(null)
   const [form, setForm] = useState({ fulfillmentType: 'PICKUP', customerName: '', customerPhone: '', deliveryAddress: '', paymentMethod: 'CASH' })
 
   useEffect(() => {
@@ -158,7 +160,8 @@ export default function ShopMenuPage() {
     try {
       const { res, data } = await createOrder(ctx.tenantId, ctx.companyId, body)
       if (!res.ok) { setError(data?.message || 'Failed to place order'); setSubmitting(false); return }
-      navigate(`/shop/order/${data.orderCode}?tenantId=${ctx.tenantId}&companyId=${ctx.companyId}`)
+      setCheckout(false)
+      setPlacedOrder({ ...data, _nav: `/shop/order/${data.orderCode}?tenantId=${ctx.tenantId}&companyId=${ctx.companyId}` })
     } catch { setError('Network error'); setSubmitting(false) }
   }
 
@@ -363,6 +366,14 @@ export default function ShopMenuPage() {
           </Button>
         </Box>
       )}
+
+      {/* Receipt dialog after order placement */}
+      <OrderReceiptDialog
+        open={Boolean(placedOrder)}
+        order={placedOrder}
+        onClose={() => { navigate(placedOrder?._nav); setPlacedOrder(null) }}
+        onTrack={() => { navigate(placedOrder?._nav); setPlacedOrder(null) }}
+      />
 
       {/* Item options dialog */}
       {optionsTarget && (

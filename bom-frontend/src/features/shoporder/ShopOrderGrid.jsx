@@ -20,21 +20,23 @@ import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import TableBarIcon from '@mui/icons-material/TableBar'
 import TvIcon from '@mui/icons-material/Tv'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline'
 import {
   fetchShopOrders, confirmShopOrder, prepareShopOrder, readyShopOrder,
   completeShopOrder, cancelShopOrder, resetOrderSequence, setShopOrderNumber,
-  generateDisplayBoardToken
+  generateDisplayBoardToken, pickupShopOrder
 } from '../../api/shopApi'
 import ShopOrderDetailModal from './ShopOrderDetailModal'
+import ManualOrderDialog from './ManualOrderDialog'
 
 const BOARD_CHANNEL = 'shop_display_board'
 function broadcastReady() {
   try { new BroadcastChannel(BOARD_CHANNEL).postMessage({ type: 'ORDER_READY' }) } catch { /* ignore */ }
 }
 
-const STATUS_COLOR  = { PENDING: 'default', CONFIRMED: 'primary', PREPARING: 'warning', READY: 'success', COMPLETED: 'success', CANCELLED: 'error' }
-const STATUS_LABEL  = { PENDING: 'Placed', CONFIRMED: 'Confirmed', PREPARING: 'Preparing', READY: 'Ready ✓', COMPLETED: 'Done', CANCELLED: 'Cancelled' }
-const STATUSES      = ['', 'PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'COMPLETED', 'CANCELLED']
+const STATUS_COLOR  = { PENDING: 'default', CONFIRMED: 'primary', PREPARING: 'warning', READY: 'success', PICKED_UP: 'success', COMPLETED: 'success', CANCELLED: 'error' }
+const STATUS_LABEL  = { PENDING: 'Placed', CONFIRMED: 'Confirmed', PREPARING: 'Preparing', READY: 'Ready ✓', PICKED_UP: 'Picked Up ✓', COMPLETED: 'Done', CANCELLED: 'Cancelled' }
+const STATUSES      = ['', 'PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'PICKED_UP', 'COMPLETED', 'CANCELLED']
 const fmt           = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 const dateFmt       = (v) => v ? new Date(v).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) + ' ' + new Date(v).toLocaleDateString('vi-VN') : ''
 
@@ -47,6 +49,7 @@ export default function ShopOrderGrid() {
   const [resetOpen, setResetOpen]       = useState(false)
   const [resetTo, setResetTo]           = useState(0)
   const [resetting, setResetting]       = useState(false)
+  const [manualOpen, setManualOpen]      = useState(false)
   const [boardOpen, setBoardOpen]       = useState(false)
   const [boardUrl, setBoardUrl]         = useState('')
   const [boardLoading, setBoardLoading] = useState(false)
@@ -195,8 +198,13 @@ export default function ShopOrderGrid() {
           {row.status === 'PENDING'    && <Button size="small" variant="outlined" onClick={() => act(confirmShopOrder, row.id)}>Confirm</Button>}
           {row.status === 'CONFIRMED'  && <Button size="small" variant="outlined" color="warning" onClick={() => act(prepareShopOrder, row.id)}>Prepare</Button>}
           {row.status === 'PREPARING'  && <Button size="small" variant="outlined" color="success" onClick={() => { act(readyShopOrder, row.id).then(broadcastReady) }}>Ready</Button>}
-          {row.status === 'READY'      && <Button size="small" variant="contained" color="success" onClick={() => act(completeShopOrder, row.id)}>Complete</Button>}
-          {!['COMPLETED','CANCELLED'].includes(row.status) && <Button size="small" color="error" onClick={() => act(cancelShopOrder, row.id)}>✕</Button>}
+          {row.status === 'READY' && row.paymentMethod === 'BANK_QR' && (
+            <Button size="small" variant="contained" color="info" onClick={() => act(pickupShopOrder, row.id)}>Picked Up</Button>
+          )}
+          {row.status === 'READY' && row.paymentMethod !== 'BANK_QR' && (
+            <Button size="small" variant="contained" color="success" onClick={() => act(completeShopOrder, row.id)}>Complete</Button>
+          )}
+          {!['PICKED_UP','COMPLETED','CANCELLED'].includes(row.status) && <Button size="small" color="error" onClick={() => act(cancelShopOrder, row.id)}>✕</Button>}
         </Box>
       )
     }
@@ -211,6 +219,10 @@ export default function ShopOrderGrid() {
           {STATUSES.map(s => <MenuItem key={s} value={s}>{s ? (STATUS_LABEL[s] || s) : 'All'}</MenuItem>)}
         </TextField>
         <Button startIcon={<RefreshIcon />} onClick={load} variant="outlined" size="small">Refresh</Button>
+        <Button startIcon={<AddCircleOutlineIcon />} onClick={() => setManualOpen(true)}
+          variant="contained" size="small" color="success" sx={{ textTransform: 'none', fontWeight: 700 }}>
+          New Order
+        </Button>
         <Box sx={{ flex: 1 }} />
         <Tooltip title="Open display board for customers">
           <Button startIcon={<TvIcon />} onClick={handleOpenBoard} variant="outlined" size="small" color="info">
@@ -243,6 +255,12 @@ export default function ShopOrderGrid() {
           }}
         />
       </Box>
+
+      <ManualOrderDialog
+        open={manualOpen}
+        onClose={() => setManualOpen(false)}
+        onCreated={load}
+      />
 
       {/* Detail modal */}
       {detailOrder && (

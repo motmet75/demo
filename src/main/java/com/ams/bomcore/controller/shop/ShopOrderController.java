@@ -105,10 +105,12 @@ public class ShopOrderController {
                                          @RequestParam(required = false) UUID companyId,
                                          @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
                                          @RequestHeader(value = "X-Company-Id", required = false) String hCompany,
-                                         @RequestParam(required = false) String status) {
+                                         @RequestParam(required = false) String status,
+                                         @RequestParam(required = false) Boolean active) {
         UUID tId = resolve(tenantId, hTenant);
         UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
+        if (Boolean.TRUE.equals(active)) return ResponseEntity.ok(shopOrderService.listActiveOrders(tId, cId));
         return ResponseEntity.ok(shopOrderService.listOrders(tId, cId, status));
     }
 
@@ -122,6 +124,29 @@ public class ShopOrderController {
         UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
         return ResponseEntity.ok(shopOrderService.getOrder(orderId, tId, cId));
+    }
+
+    @PostMapping("/shop/staff/orders")
+    public ResponseEntity<?> createStaffOrder(@RequestBody ShopOrderService.CreateOrderRequest req,
+                                               @RequestParam(required = false) UUID tenantId,
+                                               @RequestParam(required = false) UUID companyId,
+                                               @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                               @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        ShopOrderResponseDto dto = shopOrderService.createOrder(req, tId, cId);
+        return ResponseEntity.status(HttpStatus.CREATED).body(dto);
+    }
+
+    @GetMapping("/shop/staff/orders/{orderId}/tag-qr")
+    public ResponseEntity<?> orderTagQr(@PathVariable UUID orderId,
+                                         @RequestParam(required = false) UUID tenantId,
+                                         @RequestParam(required = false) UUID companyId,
+                                         @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                         @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        return ResponseEntity.ok(Map.of("qrBase64", shopOrderService.generateOrderTagQr(orderId, tId, cId)));
     }
 
     @PatchMapping("/shop/staff/orders/{orderId}/confirm")
@@ -155,6 +180,17 @@ public class ShopOrderController {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
         return ResponseEntity.ok(shopOrderService.markReady(orderId, tId, cId));
+    }
+
+    @PatchMapping("/shop/staff/orders/{orderId}/pickup")
+    public ResponseEntity<?> pickup(@PathVariable UUID orderId,
+                                     @RequestParam(required = false) UUID tenantId,
+                                     @RequestParam(required = false) UUID companyId,
+                                     @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                     @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        return ResponseEntity.ok(shopOrderService.pickupOrder(orderId, tId, cId));
     }
 
     @PatchMapping("/shop/staff/orders/{orderId}/complete")

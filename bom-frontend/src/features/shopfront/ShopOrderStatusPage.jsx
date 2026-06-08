@@ -4,7 +4,10 @@ import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import Alert from '@mui/material/Alert'
 import CircularProgress from '@mui/material/CircularProgress'
+import Button from '@mui/material/Button'
+import PrintIcon from '@mui/icons-material/Print'
 import { fetchPublicOrder } from '../../api/shopApi'
+import { printOrderReceipt } from '../../utils/printOrderReceipt'
 
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 
@@ -16,13 +19,14 @@ const STEPS = [
   { key: 'COMPLETED', label: 'Done',      emoji: '🎉' },
 ]
 
-const STATUS_IDX = { PENDING: 0, CONFIRMED: 1, PREPARING: 2, READY: 3, COMPLETED: 4 }
+const STATUS_IDX = { PENDING: 0, CONFIRMED: 1, PREPARING: 2, READY: 3, PICKED_UP: 4, COMPLETED: 4 }
 
 const STATUS_STYLE = {
   PENDING:   { color: '#78909c', bg: '#f5f5f5', label: 'Waiting for confirmation' },
   CONFIRMED: { color: '#43a047', bg: '#f1f8e9', label: 'Order confirmed!' },
   PREPARING: { color: '#fb8c00', bg: '#fff8e1', label: 'Being prepared…' },
   READY:     { color: '#0288d1', bg: '#e1f5fe', label: '🔔 Ready to pick up!' },
+  PICKED_UP: { color: '#1b5e20', bg: '#e8f5e9', label: '✓ Picked up — enjoy!' },
   COMPLETED: { color: '#2e7d32', bg: '#e8f5e9', label: 'Completed — thank you!' },
   CANCELLED: { color: '#e53935', bg: '#fce4ec', label: 'Order cancelled' },
 }
@@ -86,6 +90,7 @@ export default function ShopOrderStatusPage() {
 
   const status    = order.status || 'PENDING'
   const cancelled = status === 'CANCELLED'
+  const isDone    = status === 'COMPLETED' || status === 'PICKED_UP'
   const activeIdx = cancelled ? -1 : (STATUS_IDX[status] ?? 0)
   const style     = STATUS_STYLE[status] || STATUS_STYLE.PENDING
   const isQrUrl   = order.paymentQr?.startsWith('https://')
@@ -175,7 +180,7 @@ export default function ShopOrderStatusPage() {
       )}
 
       {/* ── Completion ───────────────────────────────────── */}
-      {status === 'COMPLETED' && (
+      {isDone && (
         <Box sx={{ textAlign: 'center', pt: 3 }}>
           <Typography variant="h4">🎉</Typography>
           <Typography fontWeight={700} color="#2e7d32">Thank you!</Typography>
@@ -184,9 +189,15 @@ export default function ShopOrderStatusPage() {
       )}
 
       <Box sx={{ flex: 1 }} />
-      <Typography variant="caption" color="text.disabled" sx={{ display: 'block', textAlign: 'center', pb: 2, pt: 1 }}>
-        {order.orderCode} · refreshes every 5s
-      </Typography>
+      <Box sx={{ textAlign: 'center', pb: 2, pt: 1 }}>
+        <Button size="small" startIcon={<PrintIcon />} onClick={() => printOrderReceipt(order)}
+          sx={{ textTransform: 'none', color: 'text.disabled', fontSize: 12 }}>
+          Print Receipt
+        </Button>
+        <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 0.25 }}>
+          {order.orderCode} · refreshes every 5s
+        </Typography>
+      </Box>
     </Box>
   )
 }

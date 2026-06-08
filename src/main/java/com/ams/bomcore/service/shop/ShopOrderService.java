@@ -85,12 +85,16 @@ public class ShopOrderService {
         order.setCompanyId(companyId);
         order.setOrderCode(String.valueOf(System.currentTimeMillis()));
 
-        // Auto-assign per-company sequence number
-        companyRepository.incrementOrderNumber(companyId);
-        companyRepository.flush();
-        Integer nextNum = companyRepository.findById(companyId)
-                .map(c -> c.getLastOrderNumber()).orElse(null);
-        order.setOrderNumber(nextNum);
+        // Assign sequence number — manual override or auto-increment
+        if (req.manualOrderNumber() != null) {
+            order.setOrderNumber(req.manualOrderNumber());
+        } else {
+            companyRepository.incrementOrderNumber(companyId);
+            companyRepository.flush();
+            Integer nextNum = companyRepository.findById(companyId)
+                    .map(Company::getLastOrderNumber).orElse(null);
+            order.setOrderNumber(nextNum);
+        }
         order.setFulfillmentType(req.fulfillmentType());
         order.setCustomerName(req.customerName());
         order.setCustomerPhone(req.customerPhone());
@@ -148,6 +152,22 @@ public class ShopOrderService {
         BigDecimal fee = order.getDeliveryFee() != null ? order.getDeliveryFee() : BigDecimal.ZERO;
         order.setTotalAmount(totalAmount.add(fee));
         order.setTotalRawCost(totalRawCost);
+
+        // Generate payment QR immediately for prepayment (BANK_QR) orders
+        if ("BANK_QR".equals(order.getPaymentMethod())) {
+            Company company = companyRepository.findById(companyId).orElse(null);
+            if (company != null && company.getBankBin() != null && !company.getBankBin().isBlank()
+                    && company.getBankAccountNumber() != null && !company.getBankAccountNumber().isBlank()) {
+                String payload = VietQrBuilder.build(
+                        company.getBankBin(),
+                        company.getBankAccountNumber(),
+                        order.getTotalAmount(),
+                        order.getOrderCode()
+                );
+                order.setPaymentQr(QrCodeUtil.generateBase64Png(payload, 300));
+            }
+        }
+
         shopOrderRepository.save(order);
 
         return ShopOrderResponseDto.from(order, items);
@@ -196,22 +216,32 @@ public class ShopOrderService {
         order.setStatus(ShopOrder.STATUS_READY);
         order.setReadyAt(Instant.now());
 
-        // Generate payment QR via VietQR image URL
+        // Generate payment QR as clean local PNG (no logo)
         Company company = companyRepository.findById(companyId).orElse(null);
         if (company != null && company.getBankBin() != null && !company.getBankBin().isBlank()
                 && company.getBankAccountNumber() != null && !company.getBankAccountNumber().isBlank()) {
-            String url = VietQrBuilder.buildUrl(
+            String payload = VietQrBuilder.build(
                     company.getBankBin(),
                     company.getBankAccountNumber(),
-                    company.getBankAccountName(),
                     order.getTotalAmount(),
                     order.getOrderCode()
             );
-            order.setPaymentQr(url);
+            order.setPaymentQr(QrCodeUtil.generateBase64Png(payload, 300));
         } else {
             String fallback = "ORDER:" + order.getOrderCode() + " AMOUNT:" + order.getTotalAmount();
             order.setPaymentQr(QrCodeUtil.generateBase64Png(fallback, 300));
         }
+        shopOrderRepository.save(order);
+        return dto(order);
+    }
+
+    @Transactional
+    public ShopOrderResponseDto pickupOrder(UUID orderId, UUID tenantId, UUID companyId) {
+        ShopOrder order = requireOrder(orderId, tenantId, companyId);
+        requireStatus(order, ShopOrder.STATUS_READY);
+        order.setStatus(ShopOrder.STATUS_PICKED_UP);
+        order.setCompletedAt(Instant.now());
+        order.setPaymentStatus(ShopOrder.PAY_STATUS_PAID);
         shopOrderRepository.save(order);
         return dto(order);
     }
@@ -230,7 +260,9 @@ public class ShopOrderService {
     @Transactional
     public ShopOrderResponseDto cancelOrder(UUID orderId, UUID tenantId, UUID companyId) {
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
-        if (ShopOrder.STATUS_COMPLETED.equals(order.getStatus()) || ShopOrder.STATUS_CANCELLED.equals(order.getStatus())) {
+        if (ShopOrder.STATUS_COMPLETED.equals(order.getStatus())
+                || ShopOrder.STATUS_PICKED_UP.equals(order.getStatus())
+                || ShopOrder.STATUS_CANCELLED.equals(order.getStatus())) {
             throw new IllegalStateException("Cannot cancel order in status: " + order.getStatus());
         }
         order.setStatus(ShopOrder.STATUS_CANCELLED);
@@ -239,6 +271,17 @@ public class ShopOrderService {
     }
 
     // ── Queries ───────────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public List<ShopOrderResponseDto> listActiveOrders(UUID tenantId, UUID companyId) {
+        List<String> active = List.of(
+                ShopOrder.STATUS_PENDING, ShopOrder.STATUS_CONFIRMED,
+                ShopOrder.STATUS_PREPARING, ShopOrder.STATUS_READY
+        );
+        return shopOrderRepository
+                .findAllByTenantIdAndCompanyIdAndStatusInOrderByOrderNumberAsc(tenantId, companyId, active)
+                .stream().map(this::dto).toList();
+    }
 
     @Transactional(readOnly = true)
     public ShopOrderResponseDto getOrderByCode(String orderCode, UUID tenantId, UUID companyId) {
@@ -451,6 +494,14 @@ public class ShopOrderService {
             BigDecimal deliveryFee,
             String paymentMethod,
             String notes,
-            List<ItemRequest> items
+            List<ItemRequest> items,
+            Integer manualOrderNumber
     ) {}
+
+    public String generateOrderTagQr(UUID orderId, UUID tenantId, UUID companyId) {
+        ShopOrder order = requireOrder(orderId, tenantId, companyId);
+        String url = publicBaseUrl + "/shop/order/" + order.getOrderCode()
+                   + "?tenantId=" + tenantId + "&companyId=" + companyId;
+        return QrCodeUtil.generateBase64Png(url, 300);
+    }
 }
