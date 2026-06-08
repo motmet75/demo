@@ -8,122 +8,123 @@ import { fetchDisplayBoard } from '../../api/shopApi'
 const POLL_MS = 4000
 const BOARD_CHANNEL = 'shop_display_board'
 
-const STATUS_LABEL = { PENDING: 'Placed', CONFIRMED: 'Confirmed', PREPARING: 'Preparing' }
+function OrderCard({ order, ready }) {
+  const num   = order.orderNumber ?? '?'
+  const label = order.tableName
+    ? `Table ${order.tableName}`
+    : order.customerName || (order.fulfillmentType === 'PICKUP' ? 'Pickup' : 'Order')
 
-function OrderCard({ order, side }) {
-  const isReady = side === 'ready'
   return (
     <Box sx={{
-      bgcolor: isReady ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.10)',
-      border: `2px solid ${isReady ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.25)'}`,
+      bgcolor: ready ? '#f0fdf4' : '#fff',
+      border: `2px solid ${ready ? '#86efac' : '#e5e7eb'}`,
       borderRadius: 3,
-      p: 2,
+      p: { xs: 2, md: 3 },
+      textAlign: 'center',
       display: 'flex',
       flexDirection: 'column',
-      gap: 0.75,
-      animation: isReady ? 'pulse 2s ease-in-out infinite' : 'none',
+      alignItems: 'center',
+      gap: 0.5,
+      animation: ready ? 'glow 2.5s ease-in-out infinite' : 'none',
+      '@keyframes glow': {
+        '0%,100%': { boxShadow: '0 0 0 0 rgba(34,197,94,0)' },
+        '50%': { boxShadow: '0 0 0 6px rgba(34,197,94,0.12)' },
+      },
     }}>
-      {/* Order number + table */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-        <Box sx={{
-          width: 52, height: 52, borderRadius: '50%',
-          bgcolor: isReady ? '#fff' : 'rgba(255,255,255,0.2)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-        }}>
-          <Typography sx={{
-            fontSize: 22, fontWeight: 900,
-            color: isReady ? '#1b5e20' : '#fff',
-            lineHeight: 1,
-          }}>
-            {order.orderNumber ?? '?'}
-          </Typography>
-        </Box>
-        <Box>
-          <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: 18, lineHeight: 1.2 }}>
-            {order.tableName
-              ? `Table ${order.tableName}`
-              : order.customerName || (order.fulfillmentType === 'PICKUP' ? 'Pickup' : 'Order')}
-          </Typography>
-          {!isReady && (
-            <Typography sx={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, mt: 0.25 }}>
-              {STATUS_LABEL[order.status] || order.status}
-            </Typography>
-          )}
-        </Box>
-      </Box>
-
-      {/* Items */}
-      {order.items && order.items.length > 0 && (
-        <Box sx={{ borderTop: '1px solid rgba(255,255,255,0.2)', pt: 0.75 }}>
-          {order.items.map((item, i) => (
-            <Typography key={i} sx={{ color: 'rgba(255,255,255,0.9)', fontSize: 13, lineHeight: 1.6 }}>
-              {item.quantity}× {item.modelName}
-            </Typography>
-          ))}
-        </Box>
-      )}
-
-      {/* Notes */}
-      {order.notes && (
-        <Typography sx={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontStyle: 'italic', borderTop: '1px solid rgba(255,255,255,0.15)', pt: 0.5 }}>
-          📝 {order.notes}
+      <Typography sx={{
+        fontSize: { xs: 56, md: 80, lg: 96 },
+        fontWeight: 900,
+        lineHeight: 1,
+        color: ready ? '#16a34a' : '#374151',
+        letterSpacing: -3,
+      }}>
+        {num}
+      </Typography>
+      <Typography sx={{
+        fontSize: { xs: 13, md: 15 },
+        fontWeight: 600,
+        color: ready ? '#15803d' : '#6b7280',
+        mt: 0.5,
+      }}>
+        {label}
+      </Typography>
+      {ready && (
+        <Typography sx={{ fontSize: 11, color: '#86efac', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase' }}>
+          Pick up now
         </Typography>
       )}
     </Box>
   )
 }
 
-function HalfPanel({ title, emoji, color, orders, side }) {
+function Panel({ title, count, ready, orders, emptyText }) {
   return (
     <Box sx={{
       flex: 1,
-      background: color,
       display: 'flex',
       flexDirection: 'column',
+      bgcolor: ready ? '#f0fdf4' : '#f8fafc',
       minHeight: 0,
       overflow: 'hidden',
     }}>
-      {/* Header */}
+      {/* Panel header */}
       <Box sx={{
-        px: 3, py: 2,
-        borderBottom: '2px solid rgba(255,255,255,0.2)',
-        display: 'flex', alignItems: 'center', gap: 1.5,
+        px: { xs: 2, md: 4 },
+        py: { xs: 1.5, md: 2 },
+        bgcolor: ready ? '#dcfce7' : '#f1f5f9',
+        borderBottom: `2px solid ${ready ? '#bbf7d0' : '#e2e8f0'}`,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1.5,
         flexShrink: 0,
       }}>
-        <Typography sx={{ fontSize: 28, lineHeight: 1 }}>{emoji}</Typography>
-        <Box>
-          <Typography sx={{ color: '#fff', fontWeight: 900, fontSize: 20, lineHeight: 1, textTransform: 'uppercase', letterSpacing: 2 }}>
-            {title}
-          </Typography>
-          <Typography sx={{ color: 'rgba(255,255,255,0.7)', fontSize: 13 }}>
-            {orders.length} order{orders.length !== 1 ? 's' : ''}
-          </Typography>
+        <Typography sx={{
+          fontSize: { xs: 18, md: 22, lg: 26 },
+          fontWeight: 900,
+          color: ready ? '#15803d' : '#374151',
+          textTransform: 'uppercase',
+          letterSpacing: 1,
+          flex: 1,
+        }}>
+          {title}
+        </Typography>
+        <Box sx={{
+          bgcolor: ready ? '#16a34a' : '#94a3b8',
+          color: '#fff',
+          borderRadius: 99,
+          px: 1.75, py: 0.25,
+          fontWeight: 800,
+          fontSize: { xs: 14, md: 16 },
+          minWidth: 32,
+          textAlign: 'center',
+        }}>
+          {count}
         </Box>
       </Box>
 
-      {/* Orders grid */}
+      {/* Cards grid */}
       <Box sx={{
         flex: 1,
         overflowY: 'auto',
-        p: 2,
+        p: { xs: 1.5, md: 2.5 },
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-        gap: 1.5,
+        gridTemplateColumns: {
+          xs: 'repeat(auto-fill, minmax(100px, 1fr))',
+          md: 'repeat(auto-fill, minmax(140px, 1fr))',
+          lg: 'repeat(auto-fill, minmax(160px, 1fr))',
+        },
+        gap: { xs: 1, md: 1.5 },
         alignContent: 'start',
-        '&::-webkit-scrollbar': { width: 6 },
-        '&::-webkit-scrollbar-thumb': { bgcolor: 'rgba(255,255,255,0.3)', borderRadius: 3 },
+        '&::-webkit-scrollbar': { width: 4 },
+        '&::-webkit-scrollbar-thumb': { bgcolor: '#cbd5e1', borderRadius: 4 },
       }}>
         {orders.length === 0 ? (
-          <Box sx={{ gridColumn: '1 / -1', textAlign: 'center', py: 6 }}>
-            <Typography sx={{ color: 'rgba(255,255,255,0.4)', fontSize: 48 }}>
-              {side === 'ready' ? '🎉' : '🕐'}
-            </Typography>
-            <Typography sx={{ color: 'rgba(255,255,255,0.4)', mt: 1 }}>
-              {side === 'ready' ? 'No orders ready yet' : 'All caught up!'}
-            </Typography>
+          <Box sx={{ gridColumn: '1 / -1', textAlign: 'center', py: 8 }}>
+            <Typography sx={{ fontSize: 40, mb: 1 }}>{ready ? '✓' : '🕐'}</Typography>
+            <Typography sx={{ color: '#9ca3af', fontSize: 15 }}>{emptyText}</Typography>
           </Box>
         ) : (
-          orders.map(o => <OrderCard key={o.id} order={o} side={side} />)
+          orders.map(o => <OrderCard key={o.id} order={o} ready={ready} />)
         )}
       </Box>
     </Box>
@@ -146,7 +147,7 @@ export default function DisplayBoardPage() {
     try {
       const { res, data } = await fetchDisplayBoard(token)
       if (res.status === 410 || res.status === 404) {
-        setError(data?.error || 'Token expired or not found. Ask staff to regenerate the display board URL.')
+        setError(data?.error || 'Token expired. Ask staff to regenerate the display board URL.')
         return
       }
       if (!res.ok) { setError('Failed to load orders'); return }
@@ -154,20 +155,16 @@ export default function DisplayBoardPage() {
       setReady(Array.isArray(data.ready) ? data.ready : [])
       setLastUpdate(new Date())
       setLoading(false)
-    } catch {
-      setError('Network error')
-    }
+    } catch { setError('Network error') }
   }, [token])
 
-  // Initial load + polling
   useEffect(() => {
-    if (!token) { setError('Missing display board token in URL (?t=...)'); setLoading(false); return }
+    if (!token) { setError('Missing display board token (?t=...)'); setLoading(false); return }
     load()
     const id = setInterval(load, POLL_MS)
     return () => clearInterval(id)
   }, [load, token])
 
-  // Cross-tab refresh via BroadcastChannel
   useEffect(() => {
     if (!window.BroadcastChannel) return
     const ch = new BroadcastChannel(BOARD_CHANNEL)
@@ -183,70 +180,71 @@ export default function DisplayBoardPage() {
   }, [])
 
   if (loading) return (
-    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', bgcolor: '#1a1a2e' }}>
-      <CircularProgress sx={{ color: '#fff' }} />
+    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', bgcolor: '#f8fafc' }}>
+      <CircularProgress />
     </Box>
   )
 
   if (error) return (
-    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', bgcolor: '#1a1a2e', p: 4, textAlign: 'center' }}>
+    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', bgcolor: '#f8fafc', p: 4, textAlign: 'center' }}>
       <Box>
-        <Typography sx={{ color: '#ef9a9a', fontSize: 18, mb: 1 }}>⚠ {error}</Typography>
-        <Typography sx={{ color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>Ask staff to reopen Shop Orders and click "Display Board".</Typography>
+        <Typography sx={{ color: '#ef4444', fontSize: 18, mb: 1 }}>⚠ {error}</Typography>
+        <Typography sx={{ color: '#94a3b8', fontSize: 14 }}>Ask staff to click "Display Board" in Shop Orders.</Typography>
       </Box>
     </Box>
   )
 
   return (
-    <>
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255,255,255,0.3); }
-          50% { transform: scale(1.01); box-shadow: 0 0 16px 4px rgba(255,255,255,0.15); }
-        }
-      `}</style>
-      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: '#0d1117', overflow: 'hidden' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: '#f8fafc', overflow: 'hidden' }}>
 
-        {/* Top bar */}
-        <Box sx={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          px: 3, py: 1.25, bgcolor: '#161b22', borderBottom: '1px solid #30363d', flexShrink: 0,
+      {/* Top bar */}
+      <Box sx={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        px: { xs: 2, md: 4 }, py: { xs: 1, md: 1.5 },
+        bgcolor: '#fff',
+        borderBottom: '1.5px solid #e2e8f0',
+        flexShrink: 0,
+        boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+      }}>
+        <Typography sx={{
+          fontWeight: 900, fontSize: { xs: 14, md: 18 },
+          letterSpacing: 2, textTransform: 'uppercase', color: '#1e293b',
         }}>
-          <Typography sx={{ color: '#fff', fontWeight: 900, fontSize: 18, letterSpacing: 2, textTransform: 'uppercase' }}>
-            Order Display
-          </Typography>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-            {lastUpdate && (
-              <Typography sx={{ color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>
-                Updated {lastUpdate.toLocaleTimeString('vi-VN')}
-              </Typography>
-            )}
-            <Typography sx={{ color: 'rgba(255,255,255,0.8)', fontWeight: 700, fontSize: 16, fontVariantNumeric: 'tabular-nums' }}>
-              {clock.toLocaleTimeString('vi-VN')}
+          Order Display
+        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 2, md: 4 } }}>
+          {lastUpdate && (
+            <Typography sx={{ color: '#94a3b8', fontSize: { xs: 11, md: 12 }, display: { xs: 'none', sm: 'block' } }}>
+              Updated {lastUpdate.toLocaleTimeString('vi-VN')}
             </Typography>
-          </Box>
-        </Box>
-
-        {/* Split panels */}
-        <Box sx={{ flex: 1, display: 'flex', minHeight: 0 }}>
-          <HalfPanel
-            title="In Progress"
-            emoji="⏳"
-            color="linear-gradient(160deg, #1a237e 0%, #283593 100%)"
-            orders={preparing}
-            side="preparing"
-          />
-          {/* Divider */}
-          <Box sx={{ width: 3, bgcolor: '#0d1117', flexShrink: 0 }} />
-          <HalfPanel
-            title="Ready to Pickup"
-            emoji="✅"
-            color="linear-gradient(160deg, #1b5e20 0%, #2e7d32 100%)"
-            orders={ready}
-            side="ready"
-          />
+          )}
+          <Typography sx={{
+            fontWeight: 800, fontSize: { xs: 15, md: 20 },
+            color: '#374151', fontVariantNumeric: 'tabular-nums',
+          }}>
+            {clock.toLocaleTimeString('vi-VN')}
+          </Typography>
         </Box>
       </Box>
-    </>
+
+      {/* Split panels */}
+      <Box sx={{ flex: 1, display: 'flex', minHeight: 0 }}>
+        <Panel
+          title="In Progress"
+          count={preparing.length}
+          ready={false}
+          orders={preparing}
+          emptyText="All orders are ready!"
+        />
+        <Box sx={{ width: 2, bgcolor: '#e2e8f0', flexShrink: 0 }} />
+        <Panel
+          title="Ready ✓"
+          count={ready.length}
+          ready={true}
+          orders={ready}
+          emptyText="Nothing ready yet"
+        />
+      </Box>
+    </Box>
   )
 }
