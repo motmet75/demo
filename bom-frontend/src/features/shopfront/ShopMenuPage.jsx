@@ -17,6 +17,7 @@ import AddIcon from '@mui/icons-material/Add'
 import RemoveIcon from '@mui/icons-material/Remove'
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart'
 import NoteAltIcon from '@mui/icons-material/NoteAlt'
+import TuneIcon from '@mui/icons-material/Tune'
 import TakeoutDiningIcon from '@mui/icons-material/TakeoutDining'
 import TableBarIcon from '@mui/icons-material/TableBar'
 import DeliveryDiningIcon from '@mui/icons-material/DeliveryDining'
@@ -29,7 +30,8 @@ import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
 import DialogActions from '@mui/material/DialogActions'
 import InputAdornment from '@mui/material/InputAdornment'
-import { resolveToken, fetchMenu, createOrder } from '../../api/shopApi'
+import { resolveToken, fetchMenu, createOrder, fetchPublicMenuOptions } from '../../api/shopApi'
+import ItemOptionsDialog from './ItemOptionsDialog'
 
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 
@@ -39,26 +41,38 @@ const FULFILLMENT_OPTIONS = [
   { value: 'DELIVERY', label: 'Delivery',  icon: <DeliveryDiningIcon fontSize="small" /> },
 ]
 
+function fmtOpts(selectedOptions) {
+  if (!selectedOptions) return null
+  try {
+    const obj = JSON.parse(selectedOptions)
+    return Object.entries(obj).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join(' · ')
+  } catch { return null }
+}
+
+// cart shape: { [modelId]: { qty, selectedOptions: string|null, itemNotes: string|null } }
+
 export default function ShopMenuPage() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
 
-  const tokenParam  = params.get('t')
-  const rawTenantId = params.get('tenantId')
+  const tokenParam   = params.get('t')
+  const rawTenantId  = params.get('tenantId')
   const rawCompanyId = params.get('companyId')
   const rawTableId   = params.get('tableId')
 
   const [ctx, setCtx] = useState(
     tokenParam ? null : { tenantId: rawTenantId, companyId: rawCompanyId, tableId: rawTableId }
   )
-  const [menu, setMenu]         = useState([])
-  const [loading, setLoading]   = useState(true)
-  const [error, setError]       = useState('')
-  const [cart, setCart]         = useState({})
-  const [notes, setNotes]       = useState('')
-  const [showNotes, setShowNotes] = useState(false)
-  const [checkout, setCheckout] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
+  const [menu, setMenu]               = useState([])
+  const [optionsByModel, setOptionsByModel] = useState({})
+  const [loading, setLoading]         = useState(true)
+  const [error, setError]             = useState('')
+  const [cart, setCart]               = useState({})
+  const [notes, setNotes]             = useState('')
+  const [showNotes, setShowNotes]     = useState(false)
+  const [checkout, setCheckout]       = useState(false)
+  const [submitting, setSubmitting]   = useState(false)
+  const [optionsTarget, setOptionsTarget] = useState(null)  // model for ItemOptionsDialog
   const [form, setForm] = useState({
     fulfillmentType: 'PICKUP',
     customerName: '',
@@ -80,23 +94,59 @@ export default function ShopMenuPage() {
       .catch(() => { setError('Failed to read QR code.'); setLoading(false) })
   }, [tokenParam])
 
-  // Load menu once context is ready
+  // Load menu + options once context is ready
   useEffect(() => {
     if (!ctx) return
     if (!ctx.tenantId || !ctx.companyId) { setError('Missing shop context.'); setLoading(false); return }
-    fetchMenu(ctx.tenantId, ctx.companyId)
-      .then(({ data }) => { setMenu(Array.isArray(data) ? data : []); setLoading(false) })
-      .catch(() => { setError('Failed to load menu.'); setLoading(false) })
+    Promise.all([
+      fetchMenu(ctx.tenantId, ctx.companyId),
+      fetchPublicMenuOptions(ctx.tenantId, ctx.companyId),
+    ]).then(([menuRes, optsRes]) => {
+      setMenu(Array.isArray(menuRes.data) ? menuRes.data : [])
+      const byModel = {}
+      ;(Array.isArray(optsRes.data) ? optsRes.data : []).forEach(opt => {
+        if (!byModel[opt.modelId]) byModel[opt.modelId] = []
+        byModel[opt.modelId].push(opt)
+      })
+      setOptionsByModel(byModel)
+      setLoading(false)
+    }).catch(() => { setError('Failed to load menu.'); setLoading(false) })
   }, [ctx])
 
-  const itemCount   = Object.values(cart).reduce((s, q) => s + q, 0)
-  const totalAmount = menu.reduce((s, m) => s + (cart[m.id] || 0) * Number(m.sellingPrice || 0), 0)
+  const itemCount   = Object.values(cart).reduce((s, e) => s + e.qty, 0)
+  const totalAmount = menu.reduce((s, m) => s + (cart[m.id]?.qty || 0) * Number(m.sellingPrice || 0), 0)
 
-  const setQty = (id, delta) => setCart(prev => {
-    const next = (prev[id] || 0) + delta
-    if (next <= 0) { const { [id]: _, ...rest } = prev; return rest }
-    return { ...prev, [id]: next }
-  })
+  const handleAddClick = (m) => {
+    const hasOpts = (optionsByModel[m.id] || []).length > 0
+    if (hasOpts && !cart[m.id]) {
+      setOptionsTarget(m)
+    } else {
+      setCart(prev => {
+        const existing = prev[m.id] || { qty: 0, selectedOptions: null, itemNotes: null }
+        return { ...prev, [m.id]: { ...existing, qty: existing.qty + 1 } }
+      })
+    }
+  }
+
+  const handleRemoveClick = (id) => {
+    setCart(prev => {
+      const existing = prev[id]
+      if (!existing || existing.qty <= 1) { const { [id]: _, ...rest } = prev; return rest }
+      return { ...prev, [id]: { ...existing, qty: existing.qty - 1 } }
+    })
+  }
+
+  const handleEditOptions = (m) => setOptionsTarget(m)
+
+  const handleOptionsConfirm = ({ qty, selectedOptions, itemNotes }) => {
+    const id = optionsTarget.id
+    if (qty <= 0) {
+      setCart(prev => { const { [id]: _, ...rest } = prev; return rest })
+    } else {
+      setCart(prev => ({ ...prev, [id]: { qty, selectedOptions, itemNotes } }))
+    }
+    setOptionsTarget(null)
+  }
 
   const grouped = menu.reduce((g, m) => {
     const cat = m.category || 'Menu'
@@ -108,7 +158,12 @@ export default function ShopMenuPage() {
   const handlePlaceOrder = async () => {
     if (!itemCount) return
     setSubmitting(true); setError('')
-    const items = Object.entries(cart).map(([modelId, quantity]) => ({ modelId, quantity }))
+    const items = Object.entries(cart).map(([modelId, { qty, selectedOptions, itemNotes }]) => ({
+      modelId,
+      quantity: qty,
+      selectedOptions: selectedOptions || null,
+      itemNotes: itemNotes || null,
+    }))
     const body = {
       fulfillmentType: form.fulfillmentType,
       tableId: ctx.tableId || null,
@@ -165,41 +220,69 @@ export default function ShopMenuPage() {
             </Typography>
             <Stack spacing={1}>
               {items.map(m => {
-                const qty = cart[m.id] || 0
+                const entry   = cart[m.id]
+                const qty     = entry?.qty || 0
+                const hasOpts = (optionsByModel[m.id] || []).length > 0
+                const optsStr = fmtOpts(entry?.selectedOptions)
+                const noteStr = entry?.itemNotes
+
                 return (
                   <Card key={m.id} elevation={0} sx={{
-                    display: 'flex', alignItems: 'center', borderRadius: 2,
+                    borderRadius: 2,
                     border: qty > 0 ? '1.5px solid #1976d2' : '1px solid #e8e8e8',
                     bgcolor: '#fff', transition: 'border-color 0.15s',
                     overflow: 'hidden',
                   }}>
-                    {m.imageUrl && (
-                      <CardMedia component="img" image={m.imageUrl}
-                        sx={{ width: 72, height: 72, objectFit: 'cover', flexShrink: 0 }} />
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      {m.imageUrl && (
+                        <CardMedia component="img" image={m.imageUrl}
+                          sx={{ width: 72, height: 72, objectFit: 'cover', flexShrink: 0 }} />
+                      )}
+                      <Box sx={{ flex: 1, px: 1.5, py: 1 }}>
+                        <Typography variant="body2" fontWeight={600} lineHeight={1.3}>{m.modelName}</Typography>
+                        <Typography variant="body2" color="primary" fontWeight={700} sx={{ mt: 0.25 }}>
+                          {fmt(m.sellingPrice)}
+                        </Typography>
+                        {hasOpts && <Chip icon={<TuneIcon sx={{ fontSize: '12px !important' }} />}
+                          label="customizable" size="small" variant="outlined"
+                          sx={{ mt: 0.5, fontSize: 10, height: 18, color: 'text.secondary', borderColor: '#ddd' }} />}
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 1 }}>
+                        {qty > 0 ? (
+                          <>
+                            <IconButton size="small" onClick={() => handleRemoveClick(m.id)}
+                              sx={{ bgcolor: '#f0f0f0', '&:hover': { bgcolor: '#e0e0e0' } }}>
+                              <RemoveIcon sx={{ fontSize: 16 }} />
+                            </IconButton>
+                            <Typography variant="body2" fontWeight={700} sx={{ minWidth: 22, textAlign: 'center' }}>
+                              {qty}
+                            </Typography>
+                          </>
+                        ) : null}
+                        <IconButton size="small" onClick={() => handleAddClick(m)}
+                          sx={{ bgcolor: '#1976d2', color: '#fff', '&:hover': { bgcolor: '#1565c0' } }}>
+                          <AddIcon sx={{ fontSize: 16 }} />
+                        </IconButton>
+                      </Box>
+                    </Box>
+
+                    {/* Selected options / note summary */}
+                    {qty > 0 && (optsStr || noteStr) && (
+                      <Box
+                        onClick={() => hasOpts && handleEditOptions(m)}
+                        sx={{
+                          px: 1.5, py: 0.75, bgcolor: '#e3f2fd', borderTop: '1px solid #bbdefb',
+                          display: 'flex', gap: 1, alignItems: 'center',
+                          cursor: hasOpts ? 'pointer' : 'default',
+                        }}
+                      >
+                        <Box sx={{ flex: 1 }}>
+                          {optsStr && <Typography variant="caption" color="primary" display="block" noWrap>{optsStr}</Typography>}
+                          {noteStr && <Typography variant="caption" color="text.secondary" display="block" noWrap sx={{ fontStyle: 'italic' }}>{noteStr}</Typography>}
+                        </Box>
+                        {hasOpts && <TuneIcon sx={{ fontSize: 14, color: '#1976d2' }} />}
+                      </Box>
                     )}
-                    <Box sx={{ flex: 1, px: 1.5, py: 1 }}>
-                      <Typography variant="body2" fontWeight={600} lineHeight={1.3}>{m.modelName}</Typography>
-                      <Typography variant="body2" color="primary" fontWeight={700} sx={{ mt: 0.25 }}>
-                        {fmt(m.sellingPrice)}
-                      </Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 1 }}>
-                      {qty > 0 ? (
-                        <>
-                          <IconButton size="small" onClick={() => setQty(m.id, -1)}
-                            sx={{ bgcolor: '#f0f0f0', '&:hover': { bgcolor: '#e0e0e0' } }}>
-                            <RemoveIcon sx={{ fontSize: 16 }} />
-                          </IconButton>
-                          <Typography variant="body2" fontWeight={700} sx={{ minWidth: 22, textAlign: 'center' }}>
-                            {qty}
-                          </Typography>
-                        </>
-                      ) : null}
-                      <IconButton size="small" onClick={() => setQty(m.id, 1)}
-                        sx={{ bgcolor: '#1976d2', color: '#fff', '&:hover': { bgcolor: '#1565c0' } }}>
-                        <AddIcon sx={{ fontSize: 16 }} />
-                      </IconButton>
-                    </Box>
                   </Card>
                 )
               })}
@@ -216,22 +299,19 @@ export default function ShopMenuPage() {
           borderTop: '1px solid #e0e0e0', bgcolor: '#fff',
           boxShadow: '0 -2px 12px rgba(0,0,0,0.10)',
         }}>
-          {/* Notes input (collapsible) */}
           <Collapse in={showNotes}>
             <Box sx={{ px: 2, pt: 1.5, pb: 0.5 }}>
               <TextField
                 size="small" fullWidth multiline rows={2}
                 label="Order notes"
-                placeholder="e.g. No sugar, extra ice, well done..."
+                placeholder="e.g. Ring the bell, leave at door..."
                 value={notes}
                 onChange={e => setNotes(e.target.value)}
                 InputProps={{ startAdornment: <InputAdornment position="start"><NoteAltIcon fontSize="small" color="action" /></InputAdornment> }}
               />
             </Box>
           </Collapse>
-
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1.25 }}>
-            {/* Notes toggle */}
             <IconButton size="small" onClick={() => setShowNotes(n => !n)}
               color={showNotes || notes ? 'primary' : 'default'}
               sx={{ border: '1px solid', borderColor: showNotes || notes ? 'primary.main' : '#ddd', borderRadius: 1.5 }}>
@@ -248,6 +328,18 @@ export default function ShopMenuPage() {
             </Button>
           </Box>
         </Box>
+      )}
+
+      {/* Item options dialog */}
+      {optionsTarget && (
+        <ItemOptionsDialog
+          open={Boolean(optionsTarget)}
+          model={optionsTarget}
+          options={optionsByModel[optionsTarget.id] || []}
+          initialCart={cart[optionsTarget.id] || null}
+          onConfirm={handleOptionsConfirm}
+          onClose={() => setOptionsTarget(null)}
+        />
       )}
 
       {/* Checkout dialog */}
@@ -293,10 +385,9 @@ export default function ShopMenuPage() {
                 value={form.deliveryAddress} onChange={e => setForm(f => ({ ...f, deliveryAddress: e.target.value }))} />
             )}
 
-            {/* Notes (always visible in checkout) */}
             <TextField
-              label="Notes" size="small" fullWidth multiline rows={2}
-              placeholder="Customizations, special requests..."
+              label="Order notes" size="small" fullWidth multiline rows={2}
+              placeholder="Delivery instructions, special requests..."
               value={notes} onChange={e => setNotes(e.target.value)}
               InputProps={{ startAdornment: <InputAdornment position="start"><NoteAltIcon fontSize="small" color="action" /></InputAdornment> }}
             />
@@ -315,13 +406,22 @@ export default function ShopMenuPage() {
             {/* Order summary */}
             <Box>
               <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>Your order</Typography>
-              {Object.entries(cart).map(([id, qty]) => {
+              {Object.entries(cart).map(([id, { qty, selectedOptions, itemNotes }]) => {
                 const m = menu.find(x => x.id === id)
                 if (!m) return null
+                const optsStr = fmtOpts(selectedOptions)
                 return (
-                  <Box key={id} sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.25 }}>
-                    <Typography variant="body2">{qty}× {m.modelName}</Typography>
-                    <Typography variant="body2" color="primary">{fmt(qty * Number(m.sellingPrice))}</Typography>
+                  <Box key={id} sx={{ mb: 0.5 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2">{qty}× {m.modelName}</Typography>
+                      <Typography variant="body2" color="primary">{fmt(qty * Number(m.sellingPrice))}</Typography>
+                    </Box>
+                    {optsStr && (
+                      <Typography variant="caption" color="text.secondary" sx={{ pl: 1.5, display: 'block' }}>{optsStr}</Typography>
+                    )}
+                    {itemNotes && (
+                      <Typography variant="caption" color="text.secondary" sx={{ pl: 1.5, display: 'block', fontStyle: 'italic' }}>Note: {itemNotes}</Typography>
+                    )}
                   </Box>
                 )
               })}

@@ -273,14 +273,7 @@ public class ShopOrderController {
     @GetMapping("/shop/public/menu-options")
     public ResponseEntity<?> publicMenuOptions(@RequestParam UUID tenantId, @RequestParam UUID companyId) {
         validateScope(tenantId, companyId);
-        var all = shopOrderService.listAllMenuOptions(tenantId, companyId);
-        // group by modelId for easy frontend lookup
-        var grouped = new java.util.LinkedHashMap<String, java.util.List<?>>();
-        for (var opt : all) {
-            grouped.computeIfAbsent(opt.getModelId().toString(), k -> new java.util.ArrayList<>())
-                   .add(opt);
-        }
-        return ResponseEntity.ok(grouped);
+        return ResponseEntity.ok(shopOrderService.listAllMenuOptions(tenantId, companyId));
     }
 
     @GetMapping("/shop/staff/menu-options")

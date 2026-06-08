@@ -6,8 +6,6 @@ import DialogActions from '@mui/material/DialogActions'
 import Button from '@mui/material/Button'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
-import ToggleButton from '@mui/material/ToggleButton'
-import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import TextField from '@mui/material/TextField'
 import Chip from '@mui/material/Chip'
 import Divider from '@mui/material/Divider'
@@ -33,7 +31,7 @@ export default function ItemOptionsDialog({ open, model, options = [], initialCa
     if (!open) return
     if (initialCart) {
       setQty(initialCart.qty || 1)
-      setSelected(initialCart.selectedOptions || {})
+      try { setSelected(initialCart.selectedOptions ? JSON.parse(initialCart.selectedOptions) : {}) } catch { setSelected({}) }
       setNote(initialCart.itemNotes || '')
     } else {
       setQty(1)
