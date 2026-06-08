@@ -1,13 +1,16 @@
 package com.ams.bomcore.controller.shop;
 
 import com.ams.bomcore.controller.shop.dto.ShopOrderResponseDto;
+import com.ams.bomcore.domain.shop.ShopAccessToken;
 import com.ams.bomcore.domain.shop.ShopTable;
 import com.ams.bomcore.repository.CompanyRepository;
+import com.ams.bomcore.repository.ShopAccessTokenRepository;
 import com.ams.bomcore.repository.TenantRepository;
 import com.ams.bomcore.service.shop.ShopOrderService;
 import com.ams.bomcore.service.shop.ShopPricingService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -21,18 +24,39 @@ public class ShopOrderController {
     private final ShopPricingService shopPricingService;
     private final TenantRepository tenantRepository;
     private final CompanyRepository companyRepository;
+    private final ShopAccessTokenRepository shopAccessTokenRepository;
 
     public ShopOrderController(ShopOrderService shopOrderService,
                                ShopPricingService shopPricingService,
                                TenantRepository tenantRepository,
-                               CompanyRepository companyRepository) {
+                               CompanyRepository companyRepository,
+                               ShopAccessTokenRepository shopAccessTokenRepository) {
         this.shopOrderService = shopOrderService;
         this.shopPricingService = shopPricingService;
         this.tenantRepository = tenantRepository;
         this.companyRepository = companyRepository;
+        this.shopAccessTokenRepository = shopAccessTokenRepository;
     }
 
     // ── PUBLIC endpoints (/shop/public/**) ────────────────────────────
+
+    @Transactional
+    @GetMapping("/shop/public/token/{token}")
+    public ResponseEntity<?> resolveToken(@PathVariable String token) {
+        ShopAccessToken sat = shopAccessTokenRepository.findByToken(token)
+                .orElse(null);
+        if (sat == null || !sat.isValid()) {
+            return ResponseEntity.status(HttpStatus.GONE).body(Map.of("error", "Token not found or expired"));
+        }
+        sat.recordAccess();
+        shopAccessTokenRepository.save(sat);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("tenantId", sat.getTenantId());
+        result.put("companyId", sat.getCompanyId());
+        result.put("tableId", sat.getTableId());
+        result.put("tokenType", sat.getTokenType());
+        return ResponseEntity.ok(result);
+    }
 
     @GetMapping("/shop/public/menu")
     public ResponseEntity<?> getMenu(@RequestParam UUID tenantId, @RequestParam UUID companyId) {

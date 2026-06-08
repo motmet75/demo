@@ -4,6 +4,7 @@ import com.ams.bomcore.controller.shop.dto.ShopOrderResponseDto;
 import com.ams.bomcore.domain.bom.BomItemEntity;
 import com.ams.bomcore.domain.company.Company;
 import com.ams.bomcore.domain.model.Model;
+import com.ams.bomcore.domain.shop.ShopAccessToken;
 import com.ams.bomcore.domain.shop.ShopOrder;
 import com.ams.bomcore.domain.shop.ShopOrderItem;
 import com.ams.bomcore.domain.shop.ShopTable;
@@ -27,6 +28,7 @@ public class ShopOrderService {
     private final ShopOrderRepository shopOrderRepository;
     private final ShopOrderItemRepository shopOrderItemRepository;
     private final ShopTableRepository shopTableRepository;
+    private final ShopAccessTokenRepository shopAccessTokenRepository;
     private final ModelRepository modelRepository;
     private final CompanyRepository companyRepository;
     private final TenantRepository tenantRepository;
@@ -40,6 +42,7 @@ public class ShopOrderService {
     public ShopOrderService(ShopOrderRepository shopOrderRepository,
                             ShopOrderItemRepository shopOrderItemRepository,
                             ShopTableRepository shopTableRepository,
+                            ShopAccessTokenRepository shopAccessTokenRepository,
                             ModelRepository modelRepository,
                             CompanyRepository companyRepository,
                             TenantRepository tenantRepository,
@@ -49,6 +52,7 @@ public class ShopOrderService {
         this.shopOrderRepository = shopOrderRepository;
         this.shopOrderItemRepository = shopOrderItemRepository;
         this.shopTableRepository = shopTableRepository;
+        this.shopAccessTokenRepository = shopAccessTokenRepository;
         this.modelRepository = modelRepository;
         this.companyRepository = companyRepository;
         this.tenantRepository = tenantRepository;
@@ -277,13 +281,34 @@ public class ShopOrderService {
         return shopTableRepository.findAllByTenantIdAndCompanyId(tenantId, companyId);
     }
 
+    @Transactional
     public String generateTableQr(UUID tableId, UUID tenantId, UUID companyId) {
         ShopTable table = shopTableRepository.findById(tableId)
                 .orElseThrow(() -> new NoSuchElementException("Table not found"));
         if (!table.getTenantId().equals(tenantId) || !table.getCompanyId().equals(companyId)) {
             throw new IllegalArgumentException("Table does not belong to this company");
         }
-        String url = publicBaseUrl + "/shop/menu?tenantId=" + tenantId + "&companyId=" + companyId + "&tableId=" + tableId;
+
+        // Reuse existing valid token or create a fresh one
+        String tokenStr = shopAccessTokenRepository
+                .findAllByTableIdAndTokenType(tableId, ShopAccessToken.TYPE_TABLE_QR)
+                .stream()
+                .filter(ShopAccessToken::isValid)
+                .map(ShopAccessToken::getToken)
+                .findFirst()
+                .orElseGet(() -> {
+                    ShopAccessToken sat = new ShopAccessToken();
+                    sat.setToken(UUID.randomUUID().toString());
+                    sat.setTenantId(tenantId);
+                    sat.setCompanyId(companyId);
+                    sat.setTableId(tableId);
+                    sat.setTokenType(ShopAccessToken.TYPE_TABLE_QR);
+                    sat.setDescription("Table QR: " + table.getTableName());
+                    shopAccessTokenRepository.save(sat);
+                    return sat.getToken();
+                });
+
+        String url = publicBaseUrl + "/shop/menu?t=" + tokenStr;
         return QrCodeUtil.generateBase64Png(url, 300);
     }
 

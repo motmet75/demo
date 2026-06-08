@@ -20,7 +20,7 @@ import RemoveIcon from '@mui/icons-material/Remove'
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart'
 import Alert from '@mui/material/Alert'
 import CircularProgress from '@mui/material/CircularProgress'
-import { fetchMenu, createOrder } from '../../api/shopApi'
+import { resolveToken, fetchMenu, createOrder } from '../../api/shopApi'
 
 const FULFILLMENT = ['DINE_IN', 'PICKUP', 'DELIVERY']
 const PAYMENT = ['CASH', 'BANK_QR']
@@ -29,10 +29,16 @@ const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 export default function ShopMenuPage() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
-  const tenantId = params.get('tenantId')
-  const companyId = params.get('companyId')
-  const tableId = params.get('tableId')
 
+  // Context can come from either a token (?t=) or raw params (?tenantId=&companyId=&tableId=)
+  const tokenParam = params.get('t')
+  const rawTenantId = params.get('tenantId')
+  const rawCompanyId = params.get('companyId')
+  const rawTableId = params.get('tableId')
+
+  const [ctx, setCtx] = useState(
+    tokenParam ? null : { tenantId: rawTenantId, companyId: rawCompanyId, tableId: rawTableId }
+  )
   const [menu, setMenu] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -40,7 +46,7 @@ export default function ShopMenuPage() {
   const [step, setStep] = useState('menu') // menu | checkout
   const [submitting, setSubmitting] = useState(false)
   const [form, setForm] = useState({
-    fulfillmentType: tableId ? 'DINE_IN' : 'PICKUP',
+    fulfillmentType: rawTableId ? 'DINE_IN' : 'PICKUP',
     customerName: '',
     customerPhone: '',
     deliveryAddress: '',
@@ -48,13 +54,32 @@ export default function ShopMenuPage() {
     notes: ''
   })
 
+  // Step 1: resolve token if ?t= is present
   useEffect(() => {
-    if (!tenantId || !companyId) { setError('Missing tenantId or companyId'); setLoading(false); return }
-    fetchMenu(tenantId, companyId).then(({ data }) => {
-      setMenu(Array.isArray(data) ? data : [])
-      setLoading(false)
-    }).catch(() => { setError('Failed to load menu'); setLoading(false) })
-  }, [tenantId, companyId])
+    if (!tokenParam) return
+    resolveToken(tokenParam)
+      .then(({ res, data }) => {
+        if (!res.ok) { setError('Invalid or expired QR code.'); setLoading(false); return }
+        const resolved = { tenantId: data.tenantId, companyId: data.companyId, tableId: data.tableId }
+        setCtx(resolved)
+        if (resolved.tableId) {
+          setForm(f => ({ ...f, fulfillmentType: 'DINE_IN' }))
+        }
+      })
+      .catch(() => { setError('Failed to resolve QR code.'); setLoading(false) })
+  }, [tokenParam])
+
+  // Step 2: load menu once context is available
+  useEffect(() => {
+    if (!ctx) return
+    if (!ctx.tenantId || !ctx.companyId) { setError('Missing tenant or company context.'); setLoading(false); return }
+    fetchMenu(ctx.tenantId, ctx.companyId)
+      .then(({ data }) => {
+        setMenu(Array.isArray(data) ? data : [])
+        setLoading(false)
+      })
+      .catch(() => { setError('Failed to load menu'); setLoading(false) })
+  }, [ctx])
 
   const itemCount = Object.values(cart).reduce((s, q) => s + q, 0)
   const totalAmount = menu.reduce((s, m) => s + (cart[m.id] || 0) * Number(m.sellingPrice || 0), 0)
@@ -78,7 +103,7 @@ export default function ShopMenuPage() {
     const items = Object.entries(cart).map(([modelId, quantity]) => ({ modelId, quantity }))
     const body = {
       fulfillmentType: form.fulfillmentType,
-      tableId: tableId || null,
+      tableId: ctx.tableId || null,
       customerName: form.customerName || null,
       customerPhone: form.customerPhone || null,
       deliveryAddress: form.fulfillmentType === 'DELIVERY' ? form.deliveryAddress : null,
@@ -88,21 +113,21 @@ export default function ShopMenuPage() {
       items
     }
     try {
-      const { res, data } = await createOrder(tenantId, companyId, body)
+      const { res, data } = await createOrder(ctx.tenantId, ctx.companyId, body)
       if (!res.ok) { setError(data?.message || 'Failed to place order'); setSubmitting(false); return }
-      navigate(`/shop/order/${data.orderCode}?tenantId=${tenantId}&companyId=${companyId}`)
+      navigate(`/shop/order/${data.orderCode}?tenantId=${ctx.tenantId}&companyId=${ctx.companyId}`)
     } catch (e) {
       setError('Network error'); setSubmitting(false)
     }
   }
 
   if (loading) return <Box sx={{ p: 4, textAlign: 'center' }}><CircularProgress /></Box>
-  if (!tenantId || !companyId) return <Alert severity="error">Invalid QR code — missing context parameters.</Alert>
+  if (!ctx?.tenantId || !ctx?.companyId) return <Alert severity="error">{error || 'Invalid QR code — missing context.'}</Alert>
 
   return (
     <Box sx={{ maxWidth: 480, mx: 'auto', pb: 10, px: 2 }}>
       <Typography variant="h5" fontWeight={700} sx={{ py: 2, textAlign: 'center' }}>Menu</Typography>
-      {tableId && <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mb: 1 }}>Table scan — dine-in order</Typography>}
+      {ctx.tableId && <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mb: 1 }}>Table scan — dine-in order</Typography>}
       {error && <Alert severity="error" sx={{ mb: 1 }}>{error}</Alert>}
 
       {step === 'menu' ? (

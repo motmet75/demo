@@ -6,6 +6,10 @@ function qs(params) {
 
 // ── Public (no auth) ───────────────────────────────────────────────
 
+export function resolveToken(token) {
+  return apiFetchJsonNoContext(`/shop/public/token/${encodeURIComponent(token)}`)
+}
+
 export function fetchMenu(tenantId, companyId) {
   return apiFetchJsonNoContext('/shop/public/menu' + qs({ tenantId, companyId }))
 }
