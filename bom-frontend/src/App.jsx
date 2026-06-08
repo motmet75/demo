@@ -42,6 +42,7 @@ import ShopMenuPage from './features/shopfront/ShopMenuPage'
 import ShopOrderStatusPage from './features/shopfront/ShopOrderStatusPage'
 import ShopOrderPage from './features/shoporder/ShopOrderPage'
 import ShopTablePage from './features/shoptable/ShopTablePage'
+import ShopMenuManagePage from './features/shopmenu/ShopMenuManagePage'
 
 const SIDEBAR_FULL = 200
 const SIDEBAR_MINI = 52
@@ -68,6 +69,7 @@ const NAV_ITEMS = [
   { divider: true },
   { label: 'Shop Orders', path: '/shop-orders',           icon: '🧋' },
   { label: 'Tables',      path: '/shop-tables',           icon: '🪑' },
+  { label: 'Menu Setup',  path: '/shop-menu',             icon: '🍽️' },
 ]
 
 const ADMIN_ITEMS = [
@@ -206,6 +208,7 @@ function MainShell({ user, logout, isAdmin }) {
             <Route path="/viettelpost" element={<RequireAuth><ViettelPostPage /></RequireAuth>} />
             <Route path="/shop-orders" element={<RequireAuth><RequireContext><ShopOrderPage /></RequireContext></RequireAuth>} />
             <Route path="/shop-tables" element={<RequireAuth><RequireContext><ShopTablePage /></RequireContext></RequireAuth>} />
+            <Route path="/shop-menu"   element={<RequireAuth><RequireContext><ShopMenuManagePage /></RequireContext></RequireAuth>} />
             <Route path="/admin" element={<RequireAuth adminOnly><AdminPage /></RequireAuth>} />
             <Route path="/admin/users" element={<RequireAuth adminOnly><AdminPage /></RequireAuth>} />
             <Route path="/tenants" element={<RequireAuth adminOnly><TenantsPage /></RequireAuth>} />
