@@ -475,6 +475,26 @@ public class ShopOrderService {
     // ── Payment ───────────────────────────────────────────────────────
 
     @Transactional
+    public ShopOrderResponseDto switchToQrPayment(UUID orderId, UUID tenantId, UUID companyId) {
+        ShopOrder order = requireOrder(orderId, tenantId, companyId);
+        if (ShopOrder.STATUS_CANCELLED.equals(order.getStatus())
+                || ShopOrder.STATUS_COMPLETED.equals(order.getStatus())
+                || ShopOrder.STATUS_PICKED_UP.equals(order.getStatus())) {
+            throw new IllegalStateException("Cannot change payment method of a completed or cancelled order");
+        }
+        order.setPaymentMethod(ShopOrder.PAYMENT_BANK_QR);
+        Company company = companyRepository.findById(companyId).orElse(null);
+        if (company != null && company.getBankBin() != null && !company.getBankBin().isBlank()
+                && company.getBankAccountNumber() != null && !company.getBankAccountNumber().isBlank()) {
+            order.setPaymentQr(VietQrBuilder.buildUrl(
+                    company.getBankBin(), company.getBankAccountNumber(),
+                    company.getBankAccountName(), order.getTotalAmount(), order.getOrderCode()));
+        }
+        shopOrderRepository.save(order);
+        return dto(order);
+    }
+
+    @Transactional
     public ShopOrderResponseDto markAsPaid(UUID orderId, UUID tenantId, UUID companyId) {
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         if (ShopOrder.STATUS_CANCELLED.equals(order.getStatus())) {

@@ -26,6 +26,7 @@ import VisibilityIcon from '@mui/icons-material/Visibility'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import TableBarIcon from '@mui/icons-material/TableBar'
 import TvIcon from '@mui/icons-material/Tv'
+import MonitorIcon from '@mui/icons-material/Monitor'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline'
 import QrCode2Icon from '@mui/icons-material/QrCode2'
@@ -42,9 +43,10 @@ import PaidIcon from '@mui/icons-material/Paid'
 import {
   fetchShopOrders, fetchActiveOrders, confirmShopOrder, prepareShopOrder, readyShopOrder,
   completeShopOrder, cancelShopOrder, resetOrderSequence, setShopOrderNumber,
-  generateDisplayBoardToken, pickupShopOrder, revertShopOrder, markOrderPaid, fetchBankConfig
+  generateDisplayBoardToken, pickupShopOrder, revertShopOrder, markOrderPaid,
+  fetchBankConfig, switchToQrPayment
 } from '../../api/shopApi'
-import { printCupLabels } from '../../utils/printOrderReceipt'
+import { printCupLabels, printOrderReceipt } from '../../utils/printOrderReceipt'
 import ShopOrderDetailModal from './ShopOrderDetailModal'
 import ManualOrderDialog from './ManualOrderDialog'
 import QrOrderDialog from './QrOrderDialog'
@@ -422,6 +424,15 @@ export default function ShopOrderGrid() {
     setResetting(false)
   }
 
+  const handleSwitchAndPrint = async (row) => {
+    try {
+      const { res, data } = await switchToQrPayment(row.id)
+      if (!res.ok) { setError(data?.message || 'Failed to switch payment method'); return }
+      printOrderReceipt(data)
+      reload()
+    } catch (e) { setError(e.message || 'Failed to switch payment method') }
+  }
+
   const handlePayQr = async (order) => {
     let config = bankConfig
     if (!config) {
@@ -499,6 +510,16 @@ export default function ShopOrderGrid() {
               <IconButton size="small" color="primary" onClick={() => handlePayQr(row)}><QrCode2Icon fontSize="small" /></IconButton>
             </Tooltip>
           )}
+          {row.paymentMethod === 'CASH' && !['COMPLETED','PICKED_UP','CANCELLED'].includes(row.status) && (
+            <Tooltip title="Switch to QR payment and print receipt">
+              <Button size="small" variant="outlined" color="success"
+                startIcon={<QrCode2Icon sx={{ fontSize: 13 }} />}
+                onClick={() => handleSwitchAndPrint(row)}
+                sx={{ textTransform: 'none', fontWeight: 700, fontSize: 11, px: 0.75, minWidth: 0 }}>
+                → QR
+              </Button>
+            </Tooltip>
+          )}
           {row.status === 'PENDING'   && <Button size="small" variant="outlined" onClick={() => act(confirmShopOrder, row.id)}>Confirm</Button>}
           {row.status === 'CONFIRMED' && <Button size="small" variant="outlined" color="warning" onClick={() => act(prepareShopOrder, row.id)}>Prepare</Button>}
           {row.status === 'CONFIRMED' && <Tooltip title="Revert to Pending"><Button size="small" variant="outlined" color="error" startIcon={<UndoIcon sx={{ fontSize: 13 }} />} onClick={() => act(revertShopOrder, row.id)}>Revert</Button></Tooltip>}
@@ -543,6 +564,13 @@ export default function ShopOrderGrid() {
             variant="outlined" size="small" color="primary" sx={{ textTransform: 'none', fontWeight: 700 }}>QR Order</Button>
           <Box sx={{ flex: 1 }} />
           <Button startIcon={<TvIcon />} onClick={handleOpenBoard} variant="outlined" size="small" color="info">Display Board</Button>
+          <Tooltip title="Open the counter customer-facing display in a new tab">
+            <Button startIcon={<MonitorIcon />}
+              onClick={() => window.open(window.location.origin + '/bom-inventory/shop/counter', '_blank')}
+              variant="outlined" size="small" color="secondary" sx={{ textTransform: 'none' }}>
+              Counter
+            </Button>
+          </Tooltip>
           <Button startIcon={<RestartAltIcon />} onClick={() => setResetOpen(true)} variant="outlined" size="small" color="warning">Reset Counter</Button>
         </Box>
 

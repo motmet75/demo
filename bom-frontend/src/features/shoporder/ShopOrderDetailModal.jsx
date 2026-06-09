@@ -22,8 +22,10 @@ import QrCode2Icon from '@mui/icons-material/QrCode2'
 import EditIcon from '@mui/icons-material/Edit'
 import UndoIcon from '@mui/icons-material/Undo'
 import LabelIcon from '@mui/icons-material/Label'
-import { fetchOrderTagQr, revertShopOrder } from '../../api/shopApi'
+import MonitorIcon from '@mui/icons-material/Monitor'
+import { fetchOrderTagQr, revertShopOrder, switchToQrPayment } from '../../api/shopApi'
 import { printOrderReceipt, printOrderTag, printCupLabels } from '../../utils/printOrderReceipt'
+import { broadcastToCounter } from '../shopboard/CounterDisplayPage'
 import EditOrderDialog from './EditOrderDialog'
 
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : '—'
@@ -64,11 +66,12 @@ function OptionsDisplay({ selectedOptions }) {
 }
 
 export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }) {
-  const [tagQr, setTagQr]       = useState(null)
-  const [qrLoading, setQrLoading] = useState(false)
-  const [reverting, setReverting] = useState(false)
-  const [error, setError]         = useState('')
-  const [editOpen, setEditOpen]   = useState(false)
+  const [tagQr, setTagQr]           = useState(null)
+  const [qrLoading, setQrLoading]   = useState(false)
+  const [reverting, setReverting]   = useState(false)
+  const [switching, setSwitching]   = useState(false)
+  const [error, setError]           = useState('')
+  const [editOpen, setEditOpen]     = useState(false)
 
   useEffect(() => {
     if (!open || !order?.id) { setTagQr(null); return }
@@ -89,10 +92,23 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
     setReverting(false)
   }
 
+  const handleSwitchAndPrint = async () => {
+    setSwitching(true); setError('')
+    try {
+      const { res, data } = await switchToQrPayment(order.id)
+      if (!res.ok) { setError(data?.message || 'Failed to switch payment method'); return }
+      printOrderReceipt(data)
+      onRefresh?.()
+    } catch (e) { setError(e.message || 'Failed to switch payment method') }
+    setSwitching(false)
+  }
+
   if (!order) return null
 
-  const isPending   = order.status === 'PENDING'
-  const isConfirmed = order.status === 'CONFIRMED'
+  const isPending      = order.status === 'PENDING'
+  const isConfirmed    = order.status === 'CONFIRMED'
+  const isFinal        = ['COMPLETED', 'PICKED_UP', 'CANCELLED'].includes(order.status)
+  const canSwitchToQr  = order.paymentMethod === 'CASH' && !isFinal
 
   return (
     <>
@@ -228,10 +244,35 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
                 </Button>
               </Tooltip>
             )}
+            {canSwitchToQr && (
+              <Tooltip title="Switch to Bank QR payment and print receipt with QR code">
+                <Button
+                  variant="contained"
+                  color="success"
+                  startIcon={switching ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : <QrCode2Icon />}
+                  onClick={handleSwitchAndPrint}
+                  disabled={switching}
+                  sx={{ textTransform: 'none', fontWeight: 700 }}
+                >
+                  QR Payment + Print
+                </Button>
+              </Tooltip>
+            )}
           </Box>
 
           {/* ── Right: print actions + close ──────────────── */}
           <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', alignItems: 'center' }}>
+            <Tooltip title="Show this order on the counter customer display">
+              <Button
+                variant="outlined"
+                color="info"
+                startIcon={<MonitorIcon />}
+                onClick={() => broadcastToCounter(order, tagQr || null)}
+                sx={{ textTransform: 'none' }}
+              >
+                Counter Display
+              </Button>
+            </Tooltip>
             <Tooltip title="Print order tag with tracking QR">
               <Button
                 variant="outlined"

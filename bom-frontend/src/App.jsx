@@ -45,6 +45,7 @@ import ShopTablePage from './features/shoptable/ShopTablePage'
 import ShopMenuManagePage from './features/shopmenu/ShopMenuManagePage'
 import ShopBankConfigPage from './features/shopbank/ShopBankConfigPage'
 import DisplayBoardPage from './features/shopboard/DisplayBoardPage'
+import CounterDisplayPage from './features/shopboard/CounterDisplayPage'
 import ShopTokenManagePage from './features/shoptoken/ShopTokenManagePage'
 
 const SIDEBAR_FULL = 200
@@ -237,6 +238,7 @@ function AppShell() {
         <Route path="/shop/menu" element={<ShopMenuPage />} />
         <Route path="/shop/order/:orderCode" element={<ShopOrderStatusPage />} />
         <Route path="/shop/board" element={<DisplayBoardPage />} />
+        <Route path="/shop/counter" element={<CounterDisplayPage />} />
         {/* Everything else — existing authenticated shell */}
         <Route path="/*" element={<MainShell user={user} logout={logout} isAdmin={isAdmin} />} />
       </Routes>

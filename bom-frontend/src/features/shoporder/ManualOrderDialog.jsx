@@ -32,6 +32,7 @@ import { fetchModels } from '../../api/modelApi'
 import { fetchShopTables, createStaffOrder, fetchOrderTagQr, fetchMenuOptions } from '../../api/shopApi'
 import { printOrderReceipt } from '../../utils/printOrderReceipt'
 import { printOrderTag } from '../../utils/printOrderReceipt'
+import { broadcastToCounter } from '../shopboard/CounterDisplayPage'
 
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 
@@ -165,10 +166,15 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
       if (!res.ok) { setError(data?.message || 'Failed to create order'); setSubmitting(false); return }
       setCreatedOrder(data)
       onCreated?.()
-      // fetch tag QR
+      broadcastToCounter(data, null)
+      // fetch tag QR then re-broadcast with QR
       setTagLoading(true)
       fetchOrderTagQr(data.id)
-        .then(({ data: qr }) => setTagQr(qr?.qrBase64 || ''))
+        .then(({ data: qr }) => {
+          const qrB64 = qr?.qrBase64 || ''
+          setTagQr(qrB64)
+          broadcastToCounter(data, qrB64 || null)
+        })
         .catch(() => {})
         .finally(() => setTagLoading(false))
     } catch (e) { setError(e.message || 'Network error') }

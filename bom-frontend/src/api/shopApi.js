@@ -96,6 +96,10 @@ export function markOrderPaid(orderId) {
   return apiFetchJson(`/shop/staff/orders/${orderId}/pay`, { method: 'PATCH' })
 }
 
+export function switchToQrPayment(orderId) {
+  return apiFetchJson(`/shop/staff/orders/${orderId}/switch-payment`, { method: 'PATCH' })
+}
+
 export function updateOrderItems(orderId, items) {
   return apiFetchJson(`/shop/staff/orders/${orderId}/items`, {
     method: 'PUT',

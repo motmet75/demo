@@ -9,104 +9,114 @@ const POLL_MS = 4000
 const BOARD_CHANNEL = 'shop_display_board'
 
 function OrderCard({ order, ready }) {
-  const num   = order.orderNumber ?? '?'
+  const num = order.orderNumber ?? '?'
   const label = order.tableName
     ? `Table ${order.tableName}`
-    : order.customerName || (order.fulfillmentType === 'PICKUP' ? 'Pickup' : 'Order')
+    : order.customerName || (order.fulfillmentType === 'PICKUP' ? 'Pickup' : '')
 
   return (
     <Box sx={{
       bgcolor: ready ? '#f0fdf4' : '#fff',
-      border: `2px solid ${ready ? '#86efac' : '#e5e7eb'}`,
-      borderRadius: 3,
-      p: { xs: 2, md: 3 },
+      border: `2px solid ${ready ? '#4ade80' : '#e2e8f0'}`,
+      borderRadius: { xs: 2, md: 3 },
+      p: { xs: 1.5, md: 2 },
       textAlign: 'center',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
-      gap: 0.5,
+      gap: 0.25,
       animation: ready ? 'glow 2.5s ease-in-out infinite' : 'none',
       '@keyframes glow': {
-        '0%,100%': { boxShadow: '0 0 0 0 rgba(34,197,94,0)' },
-        '50%': { boxShadow: '0 0 0 6px rgba(34,197,94,0.12)' },
+        '0%,100%': { boxShadow: '0 0 0 0 rgba(74,222,128,0)' },
+        '50%': { boxShadow: '0 0 0 10px rgba(74,222,128,0.15)' },
       },
     }}>
       <Typography sx={{
-        fontSize: { xs: 56, md: 80, lg: 96 },
+        fontSize: { xs: 52, md: 80, lg: 100 },
         fontWeight: 900,
         lineHeight: 1,
-        color: ready ? '#16a34a' : '#374151',
+        color: ready ? '#15803d' : '#1e293b',
         letterSpacing: -3,
+        fontVariantNumeric: 'tabular-nums',
       }}>
         {num}
       </Typography>
-      <Typography sx={{
-        fontSize: { xs: 13, md: 15 },
-        fontWeight: 600,
-        color: ready ? '#15803d' : '#6b7280',
-        mt: 0.5,
-      }}>
-        {label}
-      </Typography>
+      {label && (
+        <Typography sx={{
+          fontSize: { xs: 11, md: 13, lg: 14 },
+          fontWeight: 600,
+          color: ready ? '#16a34a' : '#64748b',
+          lineHeight: 1.2,
+        }}>
+          {label}
+        </Typography>
+      )}
       {ready && (
-        <Typography sx={{ fontSize: 11, color: '#86efac', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase' }}>
-          Pick up now
+        <Typography sx={{
+          fontSize: { xs: 10, md: 11 },
+          color: '#4ade80',
+          fontWeight: 800,
+          letterSpacing: 1,
+          textTransform: 'uppercase',
+          mt: 0.25,
+        }}>
+          Pick up ✓
         </Typography>
       )}
     </Box>
   )
 }
 
-const PANEL_THEME = {
-  ready: { bg: '#f0fdf4', hBg: '#dcfce7', border: '#bbf7d0', titleColor: '#15803d', badgeBg: '#16a34a' },
-  info:  { bg: '#eff6ff', hBg: '#dbeafe', border: '#bfdbfe', titleColor: '#1d4ed8', badgeBg: '#2563eb' },
-  done:  { bg: '#f0f9ff', hBg: '#e0f2fe', border: '#bae6fd', titleColor: '#0369a1', badgeBg: '#0284c7' },
-  default: { bg: '#f8fafc', hBg: '#f1f5f9', border: '#e2e8f0', titleColor: '#374151', badgeBg: '#94a3b8' },
-}
-
-function Panel({ title, count, ready, orders, emptyText, color }) {
-  const theme = ready ? PANEL_THEME.ready : (PANEL_THEME[color] || PANEL_THEME.default)
+function Column({ title, emoji, subtitle, orders, ready, emptyText, headerBg, headerColor, panelBg, borderColor }) {
   return (
     <Box sx={{
       flex: 1,
       display: 'flex',
       flexDirection: 'column',
-      bgcolor: theme.bg,
+      bgcolor: panelBg,
       minHeight: 0,
       overflow: 'hidden',
     }}>
-      {/* Panel header */}
+      {/* Column header */}
       <Box sx={{
         px: { xs: 2, md: 4 },
-        py: { xs: 1.5, md: 2 },
-        bgcolor: theme.hBg,
-        borderBottom: `2px solid ${theme.border}`,
+        py: { xs: 1.5, md: 2.5 },
+        bgcolor: headerBg,
+        borderBottom: `3px solid ${borderColor}`,
         display: 'flex',
         alignItems: 'center',
         gap: 1.5,
         flexShrink: 0,
       }}>
-        <Typography sx={{
-          fontSize: { xs: 18, md: 22, lg: 26 },
-          fontWeight: 900,
-          color: theme.titleColor,
-          textTransform: 'uppercase',
-          letterSpacing: 1,
-          flex: 1,
-        }}>
-          {title}
-        </Typography>
+        <Box sx={{ flex: 1 }}>
+          <Typography sx={{
+            fontSize: { xs: 16, md: 22, lg: 28 },
+            fontWeight: 900,
+            color: headerColor,
+            textTransform: 'uppercase',
+            letterSpacing: 2,
+            lineHeight: 1,
+          }}>
+            {emoji}&nbsp;{title}
+          </Typography>
+          {subtitle && (
+            <Typography sx={{ fontSize: { xs: 11, md: 13 }, color: headerColor, opacity: 0.65, mt: 0.5 }}>
+              {subtitle}
+            </Typography>
+          )}
+        </Box>
         <Box sx={{
-          bgcolor: theme.badgeBg,
-          color: '#fff',
+          bgcolor: headerColor,
+          color: headerBg,
           borderRadius: 99,
-          px: 1.75, py: 0.25,
-          fontWeight: 800,
-          fontSize: { xs: 14, md: 16 },
-          minWidth: 32,
+          px: 2, py: 0.5,
+          fontWeight: 900,
+          fontSize: { xs: 16, md: 24 },
+          minWidth: 44,
           textAlign: 'center',
+          lineHeight: 1.4,
         }}>
-          {count}
+          {orders.length}
         </Box>
       </Box>
 
@@ -117,19 +127,23 @@ function Panel({ title, count, ready, orders, emptyText, color }) {
         p: { xs: 1.5, md: 2.5 },
         display: 'grid',
         gridTemplateColumns: {
-          xs: 'repeat(auto-fill, minmax(100px, 1fr))',
-          md: 'repeat(auto-fill, minmax(140px, 1fr))',
-          lg: 'repeat(auto-fill, minmax(160px, 1fr))',
+          xs: 'repeat(auto-fill, minmax(80px,  1fr))',
+          md: 'repeat(auto-fill, minmax(130px, 1fr))',
+          lg: 'repeat(auto-fill, minmax(155px, 1fr))',
         },
         gap: { xs: 1, md: 1.5 },
         alignContent: 'start',
         '&::-webkit-scrollbar': { width: 4 },
-        '&::-webkit-scrollbar-thumb': { bgcolor: '#cbd5e1', borderRadius: 4 },
+        '&::-webkit-scrollbar-thumb': { bgcolor: borderColor, borderRadius: 4 },
       }}>
-        {orders.length === 0 && emptyText ? (
-          <Box sx={{ gridColumn: '1 / -1', textAlign: 'center', py: 8 }}>
-            <Typography sx={{ fontSize: 40, mb: 1 }}>{ready ? '✓' : '🕐'}</Typography>
-            <Typography sx={{ color: '#9ca3af', fontSize: 15 }}>{emptyText}</Typography>
+        {orders.length === 0 ? (
+          <Box sx={{ gridColumn: '1 / -1', textAlign: 'center', py: { xs: 5, md: 12 } }}>
+            <Typography sx={{ fontSize: { xs: 36, md: 52 }, mb: 1 }}>
+              {ready ? '🎉' : '☕'}
+            </Typography>
+            <Typography sx={{ color: headerColor, opacity: 0.45, fontSize: { xs: 13, md: 16 }, fontWeight: 600 }}>
+              {emptyText}
+            </Typography>
           </Box>
         ) : (
           orders.map(o => <OrderCard key={o.id} order={o} ready={ready} />)
@@ -143,10 +157,8 @@ export default function DisplayBoardPage() {
   const [searchParams] = useSearchParams()
   const token = searchParams.get('t')
 
-  const [confirmed, setConfirmed] = useState([])
-  const [processing, setProcessing] = useState([])
+  const [inProgress, setInProgress] = useState([])
   const [ready, setReady]           = useState([])
-  const [pickedUp, setPickedUp]     = useState([])
   const [error, setError]           = useState('')
   const [loading, setLoading]       = useState(true)
   const [lastUpdate, setLastUpdate] = useState(null)
@@ -161,10 +173,11 @@ export default function DisplayBoardPage() {
         return
       }
       if (!res.ok) { setError('Failed to load orders'); return }
-      setConfirmed(Array.isArray(data.confirmed)   ? data.confirmed   : [])
-      setProcessing(Array.isArray(data.processing) ? data.processing  : [])
-      setReady(Array.isArray(data.ready)           ? data.ready       : [])
-      setPickedUp(Array.isArray(data.pickedUp)     ? data.pickedUp    : [])
+      // Merge confirmed + processing → "In Progress"; drop pickedUp from customer view
+      const confirmed  = Array.isArray(data.confirmed)  ? data.confirmed  : []
+      const processing = Array.isArray(data.processing) ? data.processing : []
+      setInProgress([...confirmed, ...processing])
+      setReady(Array.isArray(data.ready) ? data.ready : [])
       setLastUpdate(new Date())
       setLoading(false)
     } catch { setError('Network error') }
@@ -192,96 +205,104 @@ export default function DisplayBoardPage() {
   }, [])
 
   if (loading) return (
-    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', bgcolor: '#f8fafc' }}>
-      <CircularProgress />
+    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', bgcolor: '#0f172a' }}>
+      <CircularProgress sx={{ color: '#94a3b8' }} />
     </Box>
   )
 
   if (error) return (
-    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', bgcolor: '#f8fafc', p: 4, textAlign: 'center' }}>
+    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', bgcolor: '#0f172a', p: 4, textAlign: 'center' }}>
       <Box>
-        <Typography sx={{ color: '#ef4444', fontSize: 18, mb: 1 }}>⚠ {error}</Typography>
-        <Typography sx={{ color: '#94a3b8', fontSize: 14 }}>Ask staff to click "Display Board" in Shop Orders.</Typography>
+        <Typography sx={{ color: '#f87171', fontSize: 20, mb: 1 }}>⚠ {error}</Typography>
+        <Typography sx={{ color: '#475569', fontSize: 14 }}>Ask staff to click "Display Board" in Shop Orders.</Typography>
       </Box>
     </Box>
   )
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: '#f8fafc', overflow: 'hidden' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: '#0f172a', overflow: 'hidden' }}>
 
       {/* Top bar */}
       <Box sx={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        px: { xs: 2, md: 4 }, py: { xs: 1, md: 1.5 },
-        bgcolor: '#fff',
-        borderBottom: '1.5px solid #e2e8f0',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        px: { xs: 2, md: 5 },
+        py: { xs: 1, md: 1.75 },
+        bgcolor: '#1e293b',
+        borderBottom: '2px solid #334155',
         flexShrink: 0,
-        boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
       }}>
         <Typography sx={{
-          fontWeight: 900, fontSize: { xs: 14, md: 18 },
-          letterSpacing: 2, textTransform: 'uppercase', color: '#1e293b',
+          fontWeight: 900,
+          fontSize: { xs: 14, md: 20 },
+          letterSpacing: 3,
+          textTransform: 'uppercase',
+          color: '#f1f5f9',
         }}>
-          Order Display
+          Order Status
         </Typography>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 2, md: 4 } }}>
           {lastUpdate && (
-            <Typography sx={{ color: '#94a3b8', fontSize: { xs: 11, md: 12 }, display: { xs: 'none', sm: 'block' } }}>
+            <Typography sx={{ color: '#475569', fontSize: { xs: 11, md: 13 }, display: { xs: 'none', sm: 'block' } }}>
               Updated {lastUpdate.toLocaleTimeString('vi-VN')}
             </Typography>
           )}
           <Typography sx={{
-            fontWeight: 800, fontSize: { xs: 15, md: 20 },
-            color: '#374151', fontVariantNumeric: 'tabular-nums',
+            fontWeight: 900,
+            fontSize: { xs: 16, md: 22 },
+            color: '#64748b',
+            fontVariantNumeric: 'tabular-nums',
+            letterSpacing: 1,
           }}>
             {clock.toLocaleTimeString('vi-VN')}
           </Typography>
         </Box>
       </Box>
 
-      {/* Split panels */}
-      <Box sx={{ flex: 1, display: 'flex', minHeight: 0 }}>
-        {confirmed.length > 0 && (
-          <>
-            <Panel
-              title="Confirmed"
-              count={confirmed.length}
-              ready={false}
-              orders={confirmed}
-              emptyText=""
-              color="info"
-            />
-            <Box sx={{ width: 2, bgcolor: '#e2e8f0', flexShrink: 0 }} />
-          </>
-        )}
-        <Panel
-          title="Preparing"
-          count={processing.length}
+      {/*
+        Desktop: side-by-side 50/50 (flex row, both panels flex:1)
+        Mobile:  stacked — Ready on TOP, In Progress below
+                 achieved with column-reverse so second JSX child (Ready) renders at top
+      */}
+      <Box sx={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: { xs: 'column-reverse', md: 'row' },
+        minHeight: 0,
+        overflow: 'hidden',
+        gap: { xs: 0, md: '3px' },
+        bgcolor: '#334155', // shows as thin divider on desktop
+      }}>
+
+        {/* Left (desktop) / Bottom (mobile): In Progress */}
+        <Column
+          title="In Progress"
+          emoji="🍳"
+          subtitle="Your order is being prepared"
+          orders={inProgress}
           ready={false}
-          orders={processing}
-          emptyText="All orders are ready!"
+          emptyText="No orders in progress"
+          headerBg="#1e3a5f"
+          headerColor="#60a5fa"
+          panelBg="#f8fafc"
+          borderColor="#bfdbfe"
         />
-        <Box sx={{ width: 2, bgcolor: '#e2e8f0', flexShrink: 0 }} />
-        <Panel
-          title="Ready ✓"
-          count={ready.length}
-          ready={true}
+
+        {/* Right (desktop) / Top (mobile): Ready for pickup */}
+        <Column
+          title="Ready"
+          emoji="✅"
+          subtitle="Please come pick up your order"
           orders={ready}
+          ready={true}
           emptyText="Nothing ready yet"
+          headerBg="#14532d"
+          headerColor="#4ade80"
+          panelBg="#f0fdf4"
+          borderColor="#86efac"
         />
-        {pickedUp.length > 0 && (
-          <>
-            <Box sx={{ width: 2, bgcolor: '#e2e8f0', flexShrink: 0 }} />
-            <Panel
-              title="Picked Up ✓"
-              count={pickedUp.length}
-              ready={false}
-              orders={pickedUp}
-              emptyText=""
-              color="done"
-            />
-          </>
-        )}
+
       </Box>
     </Box>
   )
