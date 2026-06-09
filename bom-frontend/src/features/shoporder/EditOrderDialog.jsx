@@ -379,55 +379,57 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
 
                           {/* Side item rows */}
                           {item.sideItems.map(si => (
-                            <Box key={si.uid} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, py: 0.5, pr: 0.75, borderBottom: '1px solid #e8eaf6', flexWrap: 'wrap' }}>
-                              <Box sx={{ width: 14, height: 2, bgcolor: '#c7d2fe', flexShrink: 0 }} />
-                              {/* Editable model name */}
-                              <Autocomplete
-                                size="small" disableClearable options={models}
-                                getOptionLabel={m => m.modelName}
-                                value={{ id: si.modelId, modelName: si.modelName, sellingPrice: si.customPriceDigits }}
-                                onChange={(_, v) => v && changeSideModel(item.uid, si.uid, v)}
-                                isOptionEqualToValue={(a, b) => a.id === b.id}
-                                renderInput={params => (
-                                  <TextField {...params} variant="standard"
-                                    InputProps={{ ...params.InputProps, disableUnderline: true,
-                                      sx: { fontSize: 12, fontWeight: 600, p: 0 } }}
-                                    inputProps={{ ...params.inputProps, style: { fontSize: 12, fontWeight: 600, padding: '1px 0' } }}
-                                  />
-                                )}
-                                sx={{ flex: 1, minWidth: 80,
-                                  '& .MuiAutocomplete-endAdornment': { top: 'calc(50% - 10px)' } }}
-                                noOptionsText="No items"
-                              />
-                              {/* Qty controls */}
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
+                            <Box key={si.uid} sx={{ borderBottom: '1px solid #e8eaf6', pt: 0.5, pb: 0.4, pr: 0.75 }}>
+                              {/* Row 1: connector + editable name + delete */}
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                <Box sx={{ width: 14, height: 2, bgcolor: '#c7d2fe', flexShrink: 0 }} />
+                                <Autocomplete
+                                  size="small" disableClearable options={models}
+                                  getOptionLabel={m => m.modelName}
+                                  value={{ id: si.modelId, modelName: si.modelName, sellingPrice: si.customPriceDigits }}
+                                  onChange={(_, v) => v && changeSideModel(item.uid, si.uid, v)}
+                                  isOptionEqualToValue={(a, b) => a.id === b.id}
+                                  renderInput={params => (
+                                    <TextField {...params} variant="standard"
+                                      InputProps={{ ...params.InputProps, disableUnderline: true,
+                                        sx: { fontSize: 12, fontWeight: 600, p: 0 } }}
+                                      inputProps={{ ...params.inputProps, style: { fontSize: 12, fontWeight: 600, padding: '1px 0' } }}
+                                    />
+                                  )}
+                                  sx={{ flex: 1, '& .MuiAutocomplete-endAdornment': { top: 'calc(50% - 10px)' } }}
+                                  noOptionsText="No items"
+                                />
+                                <IconButton size="small" onClick={() => removeSideItem(item.uid, si.uid)}
+                                  sx={{ p: 0.25, color: '#94a3b8', '&:hover': { color: '#dc2626' } }}>
+                                  <CloseIcon sx={{ fontSize: 13 }} />
+                                </IconButton>
+                              </Box>
+                              {/* Row 2: qty → price → total */}
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.25, ml: 2.75 }}>
                                 <IconButton size="small" onClick={() => changeSideQty(item.uid, si.uid, -1)} sx={{ p: 0.2 }}>
                                   <RemoveIcon sx={{ fontSize: 12 }} />
                                 </IconButton>
-                                <Typography variant="caption" fontWeight={700} sx={{ minWidth: 16, textAlign: 'center', fontSize: 12 }}>
+                                <Typography variant="caption" fontWeight={700} sx={{ minWidth: 18, textAlign: 'center', fontSize: 13 }}>
                                   {si.qty || 1}
                                 </Typography>
                                 <IconButton size="small" onClick={() => changeSideQty(item.uid, si.uid, 1)}
                                   sx={{ p: 0.2, bgcolor: '#6366f1', color: '#fff', borderRadius: 0.5, '&:hover': { bgcolor: '#4f46e5' } }}>
                                   <AddIcon sx={{ fontSize: 12 }} />
                                 </IconButton>
+                                <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: 11 }}>×</Typography>
+                                <TextField
+                                  size="small" type="text" inputMode="numeric" placeholder="0"
+                                  value={fmtDots(si.customPriceDigits || '')}
+                                  onChange={e => setSideItemPrice(item.uid, si.uid, stripDigs(e.target.value))}
+                                  inputProps={{ maxLength: 12, style: { fontSize: 12, fontWeight: 700, textAlign: 'right', width: 56 } }}
+                                  InputProps={{ endAdornment: <InputAdornment position="end">đ</InputAdornment> }}
+                                  sx={{ width: 94, '& .MuiInputBase-root': { height: 26 } }}
+                                />
+                                <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: 11 }}>=</Typography>
+                                <Typography variant="caption" color="primary" fontWeight={800} sx={{ fontSize: 12 }}>
+                                  {fmt((Number(si.customPriceDigits) || 0) * (si.qty || 1))}
+                                </Typography>
                               </Box>
-                              <TextField
-                                size="small" type="text" inputMode="numeric" placeholder="0"
-                                value={fmtDots(si.customPriceDigits || '')}
-                                onChange={e => setSideItemPrice(item.uid, si.uid, stripDigs(e.target.value))}
-                                inputProps={{ maxLength: 12, style: { fontSize: 12, fontWeight: 700, textAlign: 'right', width: 52 } }}
-                                InputProps={{ endAdornment: <InputAdornment position="end">đ</InputAdornment> }}
-                                sx={{ width: 90, '& .MuiInputBase-root': { height: 26 } }}
-                              />
-                              <Typography variant="caption" color="primary" fontWeight={700}
-                                sx={{ minWidth: 54, textAlign: 'right', fontSize: 12 }}>
-                                {fmt((Number(si.customPriceDigits) || 0) * (si.qty || 1))}
-                              </Typography>
-                              <IconButton size="small" onClick={() => removeSideItem(item.uid, si.uid)}
-                                sx={{ p: 0.25, color: '#94a3b8', '&:hover': { color: '#dc2626' } }}>
-                                <CloseIcon sx={{ fontSize: 13 }} />
-                              </IconButton>
                             </Box>
                           ))}
 
