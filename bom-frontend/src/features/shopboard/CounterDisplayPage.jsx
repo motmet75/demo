@@ -3,7 +3,7 @@ import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 
 export const COUNTER_CHANNEL = 'shop_counter_display'
-const IDLE_TIMEOUT_MS = 5 * 60 * 1000 // clear after 5 min idle
+const IDLE_TIMEOUT_MS = 5 * 60 * 1000
 
 export function broadcastToCounter(order, tagQrBase64 = null) {
   const payload = order
@@ -39,20 +39,13 @@ function Clock() {
 function IdleScreen() {
   return (
     <Box sx={{
-      flex: 1,
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 3,
+      flex: 1, display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center', gap: 3,
     }}>
       <Typography sx={{ fontSize: { xs: 60, md: 100 }, lineHeight: 1 }}>🍵</Typography>
       <Typography sx={{
-        fontSize: { xs: 28, md: 48 },
-        fontWeight: 900,
-        color: '#f1f5f9',
-        letterSpacing: 2,
-        textTransform: 'uppercase',
+        fontSize: { xs: 28, md: 48 }, fontWeight: 900,
+        color: '#f1f5f9', letterSpacing: 2, textTransform: 'uppercase',
       }}>
         Welcome!
       </Typography>
@@ -67,31 +60,17 @@ function ItemRow({ item }) {
   const opts = parseOpts(item.selectedOptions)
   return (
     <Box sx={{
-      bgcolor: '#1e293b',
-      borderRadius: 2,
-      p: { xs: 1.5, md: 2 },
-      mb: 1.5,
-      borderLeft: '4px solid #3b82f6',
+      bgcolor: '#1e293b', borderRadius: 2,
+      p: { xs: 1.5, md: 2 }, mb: 1.5, borderLeft: '4px solid #3b82f6',
     }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 1 }}>
-        <Typography sx={{
-          fontSize: { xs: 16, md: 22 },
-          fontWeight: 800,
-          color: '#f1f5f9',
-          lineHeight: 1.2,
-          flex: 1,
-        }}>
+        <Typography sx={{ fontSize: { xs: 16, md: 22 }, fontWeight: 800, color: '#f1f5f9', lineHeight: 1.2, flex: 1 }}>
           <Box component="span" sx={{ color: '#60a5fa', fontWeight: 900, mr: 1 }}>
             {Number(item.quantity)}×
           </Box>
           {item.modelName}
         </Typography>
-        <Typography sx={{
-          fontSize: { xs: 14, md: 18 },
-          fontWeight: 700,
-          color: '#38bdf8',
-          flexShrink: 0,
-        }}>
+        <Typography sx={{ fontSize: { xs: 14, md: 18 }, fontWeight: 700, color: '#38bdf8', flexShrink: 0 }}>
           {fmt(item.lineTotal)}
         </Typography>
       </Box>
@@ -100,13 +79,8 @@ function ItemRow({ item }) {
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 1 }}>
           {opts.map((o, i) => (
             <Box key={i} sx={{
-              bgcolor: '#334155',
-              color: '#94a3b8',
-              borderRadius: 99,
-              px: 1.25,
-              py: 0.25,
-              fontSize: { xs: 11, md: 13 },
-              fontWeight: 600,
+              bgcolor: '#334155', color: '#94a3b8', borderRadius: 99,
+              px: 1.25, py: 0.25, fontSize: { xs: 11, md: 13 }, fontWeight: 600,
             }}>
               {o}
             </Box>
@@ -116,11 +90,8 @@ function ItemRow({ item }) {
 
       {item.itemNotes && (
         <Typography sx={{
-          mt: 0.75,
-          fontSize: { xs: 12, md: 14 },
-          color: '#fbbf24',
-          fontStyle: 'italic',
-          fontWeight: 600,
+          mt: 0.75, fontSize: { xs: 12, md: 14 },
+          color: '#fbbf24', fontStyle: 'italic', fontWeight: 600,
         }}>
           ⚠ {item.itemNotes}
         </Typography>
@@ -129,52 +100,210 @@ function ItemRow({ item }) {
   )
 }
 
-function ActiveOrder({ order }) {
-  const num = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
-  const hasPayQr = !!order.paymentQr
-  const hasTrackQr = !!order.tagQrBase64
+// Flash keyframe shared across both QR and cash panels
+const QR_FLASH_KF = {
+  '@keyframes qrFlash': {
+    '0%,100%': { boxShadow: '0 0 0 0 rgba(74,222,128,0)' },
+    '50%':     { boxShadow: '0 0 0 16px rgba(74,222,128,0.45)' },
+  },
+}
+const CASH_FLASH_KF = {
+  '@keyframes cashFlash': {
+    '0%,100%': { boxShadow: '0 0 0 0 rgba(251,191,36,0)' },
+    '50%':     { boxShadow: '0 0 0 16px rgba(251,191,36,0.45)' },
+  },
+}
+
+function PaymentPanel({ order, flash }) {
+  const isSplit  = order.paymentMethod === 'SPLIT'
+  const isQr     = order.paymentMethod === 'BANK_QR'
+  const isCash   = order.paymentMethod === 'CASH' || (!isSplit && !isQr)
+
+  const splitCash = isSplit ? Number(order.splitCashAmount || 0) : 0
+  const splitQrAmt = isSplit ? Number(order.totalAmount || 0) - splitCash : 0
 
   const payQrSrc = order.paymentQr?.startsWith('https://')
     ? order.paymentQr
     : order.paymentQr ? `data:image/png;base64,${order.paymentQr}` : null
 
+  const hasTrackQr = !!order.tagQrBase64
+
   return (
     <Box sx={{
-      flex: 1,
+      width: { xs: '100%', md: isSplit ? 320 : 280 },
+      flexShrink: 0,
       display: 'flex',
+      flexDirection: 'column',
+      bgcolor: '#0c1525',
+      borderLeft: { md: '2px solid #1e293b' },
+      borderTop: { xs: '2px solid #1e293b', md: 'none' },
+      p: { xs: 2, md: 3 },
+      gap: 2,
+      justifyContent: 'center',
+      alignItems: 'center',
+    }}>
+
+      {/* ── SPLIT: QR portion + Cash portion ── */}
+      {isSplit && (
+        <>
+          {/* QR portion block */}
+          {payQrSrc && (
+            <Box sx={{
+              textAlign: 'center', width: '100%',
+              ...(flash ? QR_FLASH_KF : {}),
+            }}>
+              <Typography sx={{
+                fontSize: { xs: 11, md: 14 }, fontWeight: 800,
+                color: '#4ade80', letterSpacing: 2, textTransform: 'uppercase', mb: 1,
+              }}>
+                💳 Quét mã chuyển khoản
+              </Typography>
+              <Box sx={{
+                bgcolor: '#fff', borderRadius: 2, p: 1,
+                display: 'inline-block',
+                border: '3px solid #4ade80',
+                animation: flash ? 'qrFlash 0.65s ease-in-out 5' : 'none',
+                ...QR_FLASH_KF,
+              }}>
+                <img src={payQrSrc} alt="VietQR" style={{ width: 180, height: 180, display: 'block' }} />
+              </Box>
+              <Typography sx={{
+                mt: 1, fontSize: { xs: 20, md: 28 }, fontWeight: 900,
+                color: '#4ade80', fontVariantNumeric: 'tabular-nums',
+              }}>
+                {fmt(splitQrAmt)}
+              </Typography>
+            </Box>
+          )}
+
+          {/* Cash portion block */}
+          <Box sx={{
+            width: '100%', borderRadius: 2, py: { xs: 1.5, md: 2.5 }, px: 2,
+            bgcolor: '#1c1200',
+            border: '3px solid #f59e0b',
+            textAlign: 'center',
+            animation: flash ? 'cashFlash 0.65s ease-in-out 5 0.32s' : 'none',
+            ...CASH_FLASH_KF,
+          }}>
+            <Typography sx={{
+              fontSize: { xs: 12, md: 14 }, fontWeight: 800,
+              color: '#fbbf24', letterSpacing: 2, textTransform: 'uppercase', mb: 1,
+            }}>
+              💵 Tiền mặt
+            </Typography>
+            <Typography sx={{
+              fontSize: { xs: 32, md: 44 }, fontWeight: 900,
+              color: '#fde68a', fontVariantNumeric: 'tabular-nums', lineHeight: 1,
+            }}>
+              {fmt(splitCash)}
+            </Typography>
+          </Box>
+        </>
+      )}
+
+      {/* ── BANK_QR: full QR ── */}
+      {isQr && payQrSrc && (
+        <Box sx={{
+          textAlign: 'center',
+          animation: flash ? 'qrFlash 0.65s ease-in-out 5' : 'none',
+          ...QR_FLASH_KF,
+        }}>
+          <Typography sx={{
+            fontSize: { xs: 11, md: 13 }, fontWeight: 800,
+            color: '#4ade80', letterSpacing: 2, textTransform: 'uppercase', mb: 1,
+          }}>
+            Scan to Pay
+          </Typography>
+          <Box sx={{
+            bgcolor: '#fff', borderRadius: 2, p: 1,
+            display: 'inline-block', border: '3px solid #4ade80',
+          }}>
+            <img src={payQrSrc} alt="VietQR" style={{ width: 180, height: 180, display: 'block' }} />
+          </Box>
+          <Typography sx={{
+            mt: 1, fontSize: { xs: 18, md: 24 }, fontWeight: 900,
+            color: '#4ade80', fontVariantNumeric: 'tabular-nums',
+          }}>
+            {fmt(order.totalAmount)}
+          </Typography>
+        </Box>
+      )}
+
+      {/* ── CASH: big cash display ── */}
+      {isCash && (
+        <Box sx={{
+          width: '100%', borderRadius: 2, py: { xs: 2, md: 3 }, px: 2,
+          bgcolor: '#1c1200', border: '3px solid #f59e0b', textAlign: 'center',
+          animation: flash ? 'cashFlash 0.65s ease-in-out 5' : 'none',
+          ...CASH_FLASH_KF,
+        }}>
+          <Typography sx={{
+            fontSize: { xs: 12, md: 14 }, fontWeight: 800,
+            color: '#fbbf24', letterSpacing: 2, textTransform: 'uppercase', mb: 1,
+          }}>
+            💵 Thanh toán tiền mặt
+          </Typography>
+          <Typography sx={{
+            fontSize: { xs: 32, md: 48 }, fontWeight: 900,
+            color: '#fde68a', fontVariantNumeric: 'tabular-nums', lineHeight: 1,
+          }}>
+            {fmt(order.totalAmount)}
+          </Typography>
+        </Box>
+      )}
+
+      {/* ── Tracking QR (always at bottom if present) ── */}
+      {hasTrackQr && (
+        <Box sx={{ textAlign: 'center' }}>
+          <Typography sx={{
+            fontSize: { xs: 10, md: 12 }, fontWeight: 700,
+            color: '#64748b', letterSpacing: 2, textTransform: 'uppercase', mb: 0.75,
+          }}>
+            Track Order
+          </Typography>
+          <Box sx={{ bgcolor: '#fff', borderRadius: 1.5, p: 0.75, display: 'inline-block', border: '2px solid #334155' }}>
+            <img
+              src={`data:image/png;base64,${order.tagQrBase64}`}
+              alt="Track"
+              style={{ width: 110, height: 110, display: 'block' }}
+            />
+          </Box>
+          <Typography sx={{ mt: 0.5, fontSize: 11, color: '#475569', fontWeight: 600 }}>
+            {order.orderCode}
+          </Typography>
+        </Box>
+      )}
+    </Box>
+  )
+}
+
+function ActiveOrder({ order, flash }) {
+  const num = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
+  const hasPayQr   = !!order.paymentQr
+  const hasTrackQr = !!order.tagQrBase64
+  const showPanel  = hasPayQr || hasTrackQr || order.paymentMethod === 'CASH'
+
+  return (
+    <Box sx={{
+      flex: 1, display: 'flex',
       flexDirection: { xs: 'column', md: 'row' },
-      minHeight: 0,
-      overflow: 'hidden',
-      gap: '2px',
-      bgcolor: '#0f172a',
+      minHeight: 0, overflow: 'hidden',
+      gap: '2px', bgcolor: '#0f172a',
     }}>
       {/* Left — order items */}
       <Box sx={{
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        minHeight: 0,
-        overflow: 'hidden',
-        bgcolor: '#0f172a',
+        flex: 1, display: 'flex', flexDirection: 'column',
+        minHeight: 0, overflow: 'hidden', bgcolor: '#0f172a',
       }}>
         {/* Order number banner */}
         <Box sx={{
-          bgcolor: '#1e3a5f',
-          borderBottom: '3px solid #3b82f6',
-          px: { xs: 2, md: 4 },
-          py: { xs: 1.5, md: 2 },
-          display: 'flex',
-          alignItems: 'center',
-          gap: 2,
-          flexShrink: 0,
+          bgcolor: '#1e3a5f', borderBottom: '3px solid #3b82f6',
+          px: { xs: 2, md: 4 }, py: { xs: 1.5, md: 2 },
+          display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0,
         }}>
           <Typography sx={{
-            fontSize: { xs: 48, md: 72 },
-            fontWeight: 900,
-            color: '#60a5fa',
-            lineHeight: 1,
-            letterSpacing: -3,
-            fontVariantNumeric: 'tabular-nums',
+            fontSize: { xs: 48, md: 72 }, fontWeight: 900, color: '#60a5fa',
+            lineHeight: 1, letterSpacing: -3, fontVariantNumeric: 'tabular-nums',
           }}>
             {num}
           </Typography>
@@ -193,13 +322,48 @@ function ActiveOrder({ order }) {
               </Typography>
             )}
           </Box>
+
+          {/* Payment method badge in header */}
+          {order.paymentMethod && (
+            <Box sx={{ ml: 'auto' }}>
+              {order.paymentMethod === 'SPLIT' ? (
+                <Box sx={{
+                  display: 'flex', gap: 1, flexDirection: { xs: 'column', md: 'row' },
+                  animation: flash ? 'badgePulse 0.7s ease-in-out 5' : 'none',
+                  '@keyframes badgePulse': {
+                    '0%,100%': { opacity: 1 },
+                    '50%': { opacity: 0.4 },
+                  },
+                }}>
+                  <Box sx={{ bgcolor: '#166534', border: '2px solid #4ade80', borderRadius: 1.5, px: 1.25, py: 0.5, textAlign: 'center' }}>
+                    <Typography sx={{ fontSize: { xs: 10, md: 12 }, color: '#4ade80', fontWeight: 800 }}>💳 QR</Typography>
+                    <Typography sx={{ fontSize: { xs: 12, md: 14 }, color: '#86efac', fontWeight: 900 }}>
+                      {fmt(Number(order.totalAmount) - Number(order.splitCashAmount || 0))}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ bgcolor: '#1c1200', border: '2px solid #f59e0b', borderRadius: 1.5, px: 1.25, py: 0.5, textAlign: 'center' }}>
+                    <Typography sx={{ fontSize: { xs: 10, md: 12 }, color: '#fbbf24', fontWeight: 800 }}>💵 Cash</Typography>
+                    <Typography sx={{ fontSize: { xs: 12, md: 14 }, color: '#fde68a', fontWeight: 900 }}>
+                      {fmt(order.splitCashAmount)}
+                    </Typography>
+                  </Box>
+                </Box>
+              ) : order.paymentMethod === 'BANK_QR' ? (
+                <Box sx={{ bgcolor: '#166534', border: '2px solid #4ade80', borderRadius: 1.5, px: 1.5, py: 0.75, textAlign: 'center' }}>
+                  <Typography sx={{ fontSize: { xs: 11, md: 13 }, color: '#4ade80', fontWeight: 800 }}>💳 QR Pay</Typography>
+                </Box>
+              ) : (
+                <Box sx={{ bgcolor: '#1c1200', border: '2px solid #f59e0b', borderRadius: 1.5, px: 1.5, py: 0.75, textAlign: 'center' }}>
+                  <Typography sx={{ fontSize: { xs: 11, md: 13 }, color: '#fbbf24', fontWeight: 800 }}>💵 Cash</Typography>
+                </Box>
+              )}
+            </Box>
+          )}
         </Box>
 
         {/* Items list */}
         <Box sx={{
-          flex: 1,
-          overflowY: 'auto',
-          p: { xs: 1.5, md: 3 },
+          flex: 1, overflowY: 'auto', p: { xs: 1.5, md: 3 },
           '&::-webkit-scrollbar': { width: 4 },
           '&::-webkit-scrollbar-thumb': { bgcolor: '#334155', borderRadius: 4 },
         }}>
@@ -207,13 +371,9 @@ function ActiveOrder({ order }) {
 
           {/* Total */}
           <Box sx={{
-            bgcolor: '#1e293b',
-            borderRadius: 2,
-            px: { xs: 2, md: 3 },
-            py: { xs: 1.5, md: 2 },
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
+            bgcolor: '#1e293b', borderRadius: 2,
+            px: { xs: 2, md: 3 }, py: { xs: 1.5, md: 2 },
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             borderTop: '2px solid #3b82f6',
           }}>
             <Typography sx={{ fontSize: { xs: 16, md: 22 }, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1 }}>
@@ -226,91 +386,23 @@ function ActiveOrder({ order }) {
         </Box>
       </Box>
 
-      {/* Right — QR codes */}
-      {(hasPayQr || hasTrackQr) && (
-        <Box sx={{
-          width: { xs: '100%', md: 280 },
-          flexShrink: 0,
-          display: 'flex',
-          flexDirection: { xs: 'row', md: 'column' },
-          bgcolor: '#0c1525',
-          borderLeft: { md: '2px solid #1e293b' },
-          borderTop: { xs: '2px solid #1e293b', md: 'none' },
-          p: { xs: 2, md: 3 },
-          gap: 3,
-          justifyContent: 'center',
-          alignItems: 'center',
-        }}>
-          {hasPayQr && payQrSrc && (
-            <Box sx={{ textAlign: 'center', flex: { xs: 1, md: 'unset' } }}>
-              <Typography sx={{
-                fontSize: { xs: 11, md: 13 },
-                fontWeight: 800,
-                color: '#4ade80',
-                letterSpacing: 2,
-                textTransform: 'uppercase',
-                mb: 1,
-              }}>
-                Scan to Pay
-              </Typography>
-              <Box sx={{
-                bgcolor: '#fff',
-                borderRadius: 2,
-                p: 1,
-                display: 'inline-block',
-                border: '3px solid #4ade80',
-              }}>
-                <img
-                  src={payQrSrc}
-                  alt="VietQR"
-                  style={{ width: 180, height: 180, display: 'block' }}
-                />
-              </Box>
-              <Typography sx={{ mt: 1, fontSize: { xs: 11, md: 12 }, color: '#4ade80', fontWeight: 600 }}>
-                {fmt(order.totalAmount)}
-              </Typography>
-            </Box>
-          )}
-
-          {hasTrackQr && (
-            <Box sx={{ textAlign: 'center', flex: { xs: 1, md: 'unset' } }}>
-              <Typography sx={{
-                fontSize: { xs: 11, md: 13 },
-                fontWeight: 800,
-                color: '#94a3b8',
-                letterSpacing: 2,
-                textTransform: 'uppercase',
-                mb: 1,
-              }}>
-                Track Order
-              </Typography>
-              <Box sx={{
-                bgcolor: '#fff',
-                borderRadius: 2,
-                p: 1,
-                display: 'inline-block',
-                border: '3px solid #475569',
-              }}>
-                <img
-                  src={`data:image/png;base64,${order.tagQrBase64}`}
-                  alt="Track"
-                  style={{ width: 160, height: 160, display: 'block' }}
-                />
-              </Box>
-              <Typography sx={{ mt: 1, fontSize: { xs: 11, md: 12 }, color: '#64748b', fontWeight: 600 }}>
-                {order.orderCode}
-              </Typography>
-            </Box>
-          )}
-        </Box>
-      )}
+      {/* Right — payment panel */}
+      {showPanel && <PaymentPanel order={order} flash={flash} />}
     </Box>
   )
 }
 
 export default function CounterDisplayPage() {
   const [order, setOrder] = useState(null)
-  const idleTimerRef = useRef(null)
+  const [flash, setFlash] = useState(false)
+  const idleTimerRef  = useRef(null)
+  const flashTimerRef = useRef(null)
+
+  const triggerFlash = () => {
+    setFlash(true)
+    clearTimeout(flashTimerRef.current)
+    flashTimerRef.current = setTimeout(() => setFlash(false), 4000)
+  }
 
   const resetIdleTimer = (ord) => {
     clearTimeout(idleTimerRef.current)
@@ -319,7 +411,11 @@ export default function CounterDisplayPage() {
     }
   }
 
-  // Listen for BroadcastChannel from admin
+  // Trigger flash whenever order changes (new order or payment update)
+  useEffect(() => {
+    if (order) triggerFlash()
+  }, [order?._ts]) // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!window.BroadcastChannel) return
     const ch = new BroadcastChannel(COUNTER_CHANNEL)
@@ -335,13 +431,11 @@ export default function CounterDisplayPage() {
     return () => ch.close()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Restore from localStorage on load (same-device but tab was refreshed)
   useEffect(() => {
     try {
       const saved = localStorage.getItem('shop_counter_order')
       if (saved) {
         const ord = JSON.parse(saved)
-        // Only restore if it's less than 10 minutes old
         if (ord._ts && Date.now() - ord._ts < 10 * 60 * 1000) {
           setOrder(ord)
           resetIdleTimer(ord)
@@ -354,39 +448,27 @@ export default function CounterDisplayPage() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: '#0f172a', overflow: 'hidden' }}>
-
       {/* Top bar */}
       <Box sx={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        px: { xs: 2, md: 4 },
-        py: { xs: 1, md: 1.5 },
-        bgcolor: '#1e293b',
-        borderBottom: '2px solid #334155',
-        flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        px: { xs: 2, md: 4 }, py: { xs: 1, md: 1.5 },
+        bgcolor: '#1e293b', borderBottom: '2px solid #334155', flexShrink: 0,
       }}>
         <Typography sx={{
-          fontWeight: 900,
-          fontSize: { xs: 14, md: 20 },
-          letterSpacing: 3,
-          textTransform: 'uppercase',
-          color: '#f1f5f9',
+          fontWeight: 900, fontSize: { xs: 14, md: 20 },
+          letterSpacing: 3, textTransform: 'uppercase', color: '#f1f5f9',
         }}>
           {order ? '🧋 Your Order' : '🍵 Order Counter'}
         </Typography>
         <Typography sx={{
-          fontWeight: 900,
-          fontSize: { xs: 16, md: 22 },
-          color: '#475569',
-          fontVariantNumeric: 'tabular-nums',
-          letterSpacing: 1,
+          fontWeight: 900, fontSize: { xs: 16, md: 22 },
+          color: '#475569', fontVariantNumeric: 'tabular-nums', letterSpacing: 1,
         }}>
           <Clock />
         </Typography>
       </Box>
 
-      {order ? <ActiveOrder order={order} /> : <IdleScreen />}
+      {order ? <ActiveOrder order={order} flash={flash} /> : <IdleScreen />}
     </Box>
   )
 }
