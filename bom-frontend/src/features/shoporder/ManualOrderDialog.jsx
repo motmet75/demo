@@ -94,6 +94,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
     setLoading(true)
     if (defaultItems?.length) {
       setItems(defaultItems.map(i => ({
+        uid: crypto.randomUUID(),
         modelId: i.modelId, modelName: i.modelName,
         sellingPrice: i.sellingPrice, qty: i.qty,
         selectedOptions: i.selectedOptions || {}, itemNotes: i.itemNotes || '',
@@ -149,14 +150,11 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
   const addItem = () => {
     if (!selectedModel) return
     const mid = selectedModel.id
-    setItems(prev => {
-      const existing = prev.find(i => i.modelId === mid)
-      if (existing) return prev.map(i => i.modelId === mid ? { ...i, qty: i.qty + 1 } : i)
-      return [...prev, {
-        modelId: mid, modelName: selectedModel.modelName,
-        sellingPrice: selectedModel.sellingPrice, qty: 1, selectedOptions: {}, itemNotes: '',
-      }]
-    })
+    setItems(prev => [...prev, {
+      uid: crypto.randomUUID(),
+      modelId: mid, modelName: selectedModel.modelName,
+      sellingPrice: selectedModel.sellingPrice, qty: 1, selectedOptions: {}, itemNotes: '',
+    }])
     if (!optsByModel[mid]) {
       fetchMenuOptions(mid)
         .then(({ data }) => setOptsByModel(prev => ({ ...prev, [mid]: Array.isArray(data) ? data : [] })))
@@ -165,9 +163,9 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
     setSelectedModel(null)
   }
 
-  const toggleOption = (modelId, groupName, value, multiSelect) => {
+  const toggleOption = (uid, groupName, value, multiSelect) => {
     setItems(prev => prev.map(item => {
-      if (item.modelId !== modelId) return item
+      if (item.uid !== uid) return item
       const cur = item.selectedOptions[groupName]
       let next
       if (multiSelect) {
@@ -184,13 +182,13 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
     }))
   }
 
-  const setItemNotes = (modelId, val) => {
-    setItems(prev => prev.map(i => i.modelId === modelId ? { ...i, itemNotes: val } : i))
+  const setItemNotes = (uid, val) => {
+    setItems(prev => prev.map(i => i.uid === uid ? { ...i, itemNotes: val } : i))
   }
 
-  const changeQty = (modelId, delta) => {
+  const changeQty = (uid, delta) => {
     setItems(prev =>
-      prev.map(i => i.modelId === modelId ? { ...i, qty: i.qty + delta } : i).filter(i => i.qty > 0)
+      prev.map(i => i.uid === uid ? { ...i, qty: i.qty + delta } : i).filter(i => i.qty > 0)
     )
   }
 
@@ -432,18 +430,24 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                     e.preventDefault()
                     try {
                       const item = JSON.parse(e.dataTransfer.getData('application/json'))
-                      setItems(prev => {
-                        const existing = prev.find(i => i.modelId === item.modelId)
-                        if (existing) return prev.map(i => i.modelId === item.modelId ? { ...i, qty: i.qty + (item.qty || 1) } : i)
-                        return [...prev, { modelId: item.modelId, modelName: item.modelName, sellingPrice: item.sellingPrice, qty: item.qty || 1, selectedOptions: {}, itemNotes: '' }]
-                      })
+                      setItems(prev => [...prev, {
+                        uid: crypto.randomUUID(),
+                        modelId: item.modelId, modelName: item.modelName,
+                        sellingPrice: item.sellingPrice, qty: item.qty || 1,
+                        selectedOptions: {}, itemNotes: '',
+                      }])
+                      if (!optsByModel[item.modelId]) {
+                        fetchMenuOptions(item.modelId)
+                          .then(({ data }) => setOptsByModel(p => ({ ...p, [item.modelId]: Array.isArray(data) ? data : [] })))
+                          .catch(() => setOptsByModel(p => ({ ...p, [item.modelId]: [] })))
+                      }
                     } catch { /* ignore */ }
                   }}
                 >
                   {items.map(item => {
                     const modelOpts = optsByModel[item.modelId] || []
                     return (
-                      <Box key={item.modelId} sx={{ bgcolor: '#f9f9f9', borderRadius: 1.5, px: 1.25, pt: 0.75, pb: 0.5 }}>
+                      <Box key={item.uid} sx={{ bgcolor: '#f9f9f9', borderRadius: 1.5, px: 1.25, pt: 0.75, pb: 0.5 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <Typography variant="body2" fontWeight={600} sx={{ flex: 1, minWidth: 0 }} noWrap>
                             {item.modelName}
@@ -452,13 +456,13 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                             {fmt(item.sellingPrice)}
                           </Typography>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
-                            <IconButton size="small" onClick={() => changeQty(item.modelId, -1)} sx={{ p: 0.25 }}>
+                            <IconButton size="small" onClick={() => changeQty(item.uid, -1)} sx={{ p: 0.25 }}>
                               <RemoveIcon sx={{ fontSize: 14 }} />
                             </IconButton>
                             <Typography variant="body2" fontWeight={700} sx={{ minWidth: 20, textAlign: 'center' }}>
                               {item.qty}
                             </Typography>
-                            <IconButton size="small" onClick={() => changeQty(item.modelId, 1)}
+                            <IconButton size="small" onClick={() => changeQty(item.uid, 1)}
                               sx={{ p: 0.25, bgcolor: '#1976d2', color: '#fff', '&:hover': { bgcolor: '#1565c0' } }}>
                               <AddIcon sx={{ fontSize: 14 }} />
                             </IconButton>
@@ -468,7 +472,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                             {fmt(item.qty * (Number(item.sellingPrice || 0) + calcOptAddOn(item)))}
                           </Typography>
                           <IconButton size="small" color="error"
-                            onClick={() => setItems(prev => prev.filter(i => i.modelId !== item.modelId))}
+                            onClick={() => setItems(prev => prev.filter(i => i.uid !== item.uid))}
                             sx={{ p: 0.25, ml: 0.25 }}>
                             <DeleteIcon sx={{ fontSize: 14 }} />
                           </IconButton>
@@ -494,7 +498,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                                     ? ` +${Number(choice.price).toLocaleString('vi-VN')}đ` : ''
                                   return (
                                     <Chip key={choice.label} label={choice.label + priceTag} size="small"
-                                      onClick={() => toggleOption(item.modelId, grp.groupName, choice.label, grp.multiSelect)}
+                                      onClick={() => toggleOption(item.uid, grp.groupName, choice.label, grp.multiSelect)}
                                       sx={{
                                         height: 22, fontSize: 11, cursor: 'pointer',
                                         bgcolor: active ? '#1976d2' : '#fff',
@@ -516,7 +520,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                           size="small" variant="standard" fullWidth
                           placeholder="Item note (e.g. no sugar, extra spicy…)"
                           value={item.itemNotes || ''}
-                          onChange={e => setItemNotes(item.modelId, e.target.value)}
+                          onChange={e => setItemNotes(item.uid, e.target.value)}
                           InputProps={{ disableUnderline: false, sx: { fontSize: 12 } }}
                           sx={{ mt: 0.5, mb: 0.25 }}
                         />
