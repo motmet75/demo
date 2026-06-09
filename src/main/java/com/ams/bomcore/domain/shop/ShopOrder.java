@@ -96,6 +96,9 @@ public class ShopOrder {
     @Column(name = "staff_name", length = 100)
     private String staffName;
 
+    @Column(name = "cancel_reason", columnDefinition = "TEXT")
+    private String cancelReason;
+
     @Column(name = "created_at")
     private Instant createdAt;
 
@@ -170,4 +173,6 @@ public class ShopOrder {
     public void setSourceToken(String sourceToken) { this.sourceToken = sourceToken; }
     public String getStaffName() { return staffName; }
     public void setStaffName(String staffName) { this.staffName = staffName; }
+    public String getCancelReason() { return cancelReason; }
+    public void setCancelReason(String cancelReason) { this.cancelReason = cancelReason; }
 }

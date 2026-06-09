@@ -31,8 +31,11 @@ import { fetchOrderTagQr, revertShopOrder, switchToQrPayment, splitPayment, reve
 import { printOrderReceipt, printOrderTag, printCupLabels } from '../../utils/printOrderReceipt'
 import { broadcastToCounter } from '../shopboard/CounterDisplayPage'
 import EditOrderDialog from './EditOrderDialog'
+import ConfirmActionDialog from './ConfirmActionDialog'
 
-const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : '—'
+const fmt     = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : '—'
+const fmtDots = (digits) => digits ? Number(digits).toLocaleString('vi-VN') : ''
+const stripNonDigits = (s) => s.replace(/[^0-9]/g, '')
 const pct = (sell, raw) => {
   if (!sell || !raw || Number(raw) === 0) return '—'
   return ((Number(sell) - Number(raw)) / Number(sell) * 100).toFixed(1) + '%'
@@ -71,8 +74,8 @@ function OptionsDisplay({ selectedOptions }) {
 
 // ── Change calculator ───────────────────────────────────────────────────────
 function ChangeCalc({ label, due, color = '#e65100', bg = '#fff7ed', borderColor = '#f59e0b' }) {
-  const [cash, setCash] = useState('')
-  const cashNum = Number(String(cash).replace(/[^0-9]/g, '') || 0)
+  const [digits, setDigits] = useState('')
+  const cashNum = digits ? Number(digits) : 0
   const change  = cashNum - due
   return (
     <Box sx={{ bgcolor: bg, border: `1.5px solid ${borderColor}`, borderRadius: 1.5, p: 1.25 }}>
@@ -82,17 +85,18 @@ function ChangeCalc({ label, due, color = '#e65100', bg = '#fff7ed', borderColor
       </Typography>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
         <TextField
-          type="number"
+          type="text"
+          inputMode="numeric"
           size="small"
           label="Customer cash"
-          value={cash}
-          onChange={e => setCash(e.target.value)}
+          value={fmtDots(digits)}
+          onChange={e => setDigits(stripNonDigits(e.target.value))}
           placeholder="0"
-          inputProps={{ min: 0, step: 1000, style: { fontSize: 18, fontWeight: 700 } }}
+          inputProps={{ maxLength: 15, style: { fontSize: 18, fontWeight: 700 } }}
           InputProps={{ endAdornment: <InputAdornment position="end">đ</InputAdornment> }}
           sx={{ width: 180 }}
         />
-        {cash !== '' && cashNum > 0 && (
+        {digits !== '' && cashNum > 0 && (
           <Box>
             <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>
               {change >= 0 ? 'Change' : 'Short'}
@@ -120,6 +124,9 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
   const [reverting2, setReverting2] = useState(false)
   const [error, setError]           = useState('')
   const [editOpen, setEditOpen]     = useState(false)
+  const [confirmDlg, setConfirmDlg] = useState(null)
+
+  const askConfirm = (cfg, fn) => setConfirmDlg({ ...cfg, onConfirm: async (reason) => { setConfirmDlg(null); await fn(reason) } })
 
   useEffect(() => {
     if (!open || !order?.id) { setTagQr(null); return }
@@ -411,18 +418,18 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
             )}
             {isConfirmed && (
               <Tooltip title="Revert to Pending — urgent stop">
-                <Button variant="outlined" color="warning"
-                  startIcon={reverting ? <CircularProgress size={14} /> : <UndoIcon />}
-                  onClick={handleRevert} disabled={reverting} sx={{ textTransform: 'none' }}>
+                <Button variant="outlined" color="warning" startIcon={<UndoIcon />}
+                  onClick={() => askConfirm({ title: 'Revert to Pending?', message: 'Revert this confirmed order back to pending status?', confirmLabel: 'Revert', confirmColor: 'warning' }, handleRevert)}
+                  sx={{ textTransform: 'none' }}>
                   Revert to Pending
                 </Button>
               </Tooltip>
             )}
             {canSwitchToQr && (
               <Tooltip title="Switch to full Bank QR payment and print receipt">
-                <Button variant="contained" color="success"
-                  startIcon={switching ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : <QrCode2Icon />}
-                  onClick={handleSwitchAndPrint} disabled={switching} sx={{ textTransform: 'none', fontWeight: 700 }}>
+                <Button variant="contained" color="success" startIcon={<QrCode2Icon />}
+                  onClick={() => askConfirm({ title: 'Switch to QR Payment?', message: 'Switch this order to Bank QR payment and print the receipt?', confirmLabel: 'Switch & Print', confirmColor: 'success' }, handleSwitchAndPrint)}
+                  sx={{ textTransform: 'none', fontWeight: 700 }}>
                   QR + Print
                 </Button>
               </Tooltip>
@@ -438,9 +445,9 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
             )}
             {canRevertCash && (
               <Tooltip title="Revert payment method back to Cash">
-                <Button variant="outlined" color="warning"
-                  startIcon={reverting2 ? <CircularProgress size={14} /> : <CurrencyExchangeIcon />}
-                  onClick={handleRevertToCash} disabled={reverting2} sx={{ textTransform: 'none' }}>
+                <Button variant="outlined" color="warning" startIcon={<CurrencyExchangeIcon />}
+                  onClick={() => askConfirm({ title: 'Revert to Cash?', message: 'Change this order\'s payment method back to cash?', confirmLabel: '→ Cash', confirmColor: 'warning' }, handleRevertToCash)}
+                  sx={{ textTransform: 'none' }}>
                   → Cash
                 </Button>
               </Tooltip>
@@ -484,6 +491,20 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
           onUpdated={() => { setEditOpen(false); onRefresh?.() }} />
       )}
 
+      {confirmDlg && (
+        <ConfirmActionDialog
+          open
+          title={confirmDlg.title}
+          message={confirmDlg.message}
+          confirmLabel={confirmDlg.confirmLabel}
+          confirmColor={confirmDlg.confirmColor}
+          requireReason={confirmDlg.requireReason}
+          reasonLabel={confirmDlg.reasonLabel}
+          onConfirm={confirmDlg.onConfirm}
+          onCancel={() => setConfirmDlg(null)}
+        />
+      )}
+
       {/* ── Split Payment Dialog ──────────────────────────────────── */}
       <Dialog open={splitOpen} onClose={() => setSplitOpen(false)} maxWidth="xs" fullWidth
         PaperProps={{ sx: { borderRadius: 2 } }}>
@@ -501,12 +522,13 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
                 sx={{ display: 'block', textAlign: 'center', mb: 1, letterSpacing: 1, textTransform: 'uppercase' }}>
                 💵 Tiền mặt
               </Typography>
-              <TextField type="number" size="small" fullWidth value={cashInput}
+              <TextField type="text" inputMode="numeric" size="small" fullWidth
+                value={fmtDots(cashInput)}
                 onChange={e => {
-                  const v = Math.max(0, Math.min(Math.round(total), Number(e.target.value) || 0))
+                  const v = Math.max(0, Math.min(Math.round(total), Number(stripNonDigits(e.target.value)) || 0))
                   setCashInput(String(v))
                 }}
-                inputProps={{ min: 0, max: total, step: 1000, style: { textAlign: 'center', fontSize: 22, fontWeight: 900, padding: '8px 4px' } }}
+                inputProps={{ maxLength: 15, style: { textAlign: 'center', fontSize: 22, fontWeight: 900, padding: '8px 4px' } }}
                 InputProps={{ endAdornment: <InputAdornment position="end">đ</InputAdornment> }}
                 sx={{ '& .MuiOutlinedInput-root': { bgcolor: '#fff', '& fieldset': { borderColor: '#f59e0b' }, '&:hover fieldset': { borderColor: '#d97706' }, '&.Mui-focused fieldset': { borderColor: '#d97706' } } }}
               />
@@ -518,12 +540,13 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
                 sx={{ display: 'block', textAlign: 'center', mb: 1, letterSpacing: 1, textTransform: 'uppercase' }}>
                 💳 Bank QR
               </Typography>
-              <TextField type="number" size="small" fullWidth value={String(qrPortion)}
+              <TextField type="text" inputMode="numeric" size="small" fullWidth
+                value={fmtDots(String(qrPortion))}
                 onChange={e => {
-                  const qr = Math.max(0, Math.min(Math.round(total), Number(e.target.value) || 0))
+                  const qr = Math.max(0, Math.min(Math.round(total), Number(stripNonDigits(e.target.value)) || 0))
                   setCashInput(String(Math.round(total) - qr))
                 }}
-                inputProps={{ min: 0, max: total, step: 1000, style: { textAlign: 'center', fontSize: 22, fontWeight: 900, padding: '8px 4px' } }}
+                inputProps={{ maxLength: 15, style: { textAlign: 'center', fontSize: 22, fontWeight: 900, padding: '8px 4px' } }}
                 InputProps={{ endAdornment: <InputAdornment position="end">đ</InputAdornment> }}
                 sx={{ '& .MuiOutlinedInput-root': { bgcolor: '#fff', '& fieldset': { borderColor: '#22c55e' }, '&:hover fieldset': { borderColor: '#16a34a' }, '&.Mui-focused fieldset': { borderColor: '#16a34a' } } }}
               />

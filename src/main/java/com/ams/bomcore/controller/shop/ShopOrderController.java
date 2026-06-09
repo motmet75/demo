@@ -319,10 +319,12 @@ public class ShopOrderController {
                                      @RequestParam(required = false) UUID tenantId,
                                      @RequestParam(required = false) UUID companyId,
                                      @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
-                                     @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+                                     @RequestHeader(value = "X-Company-Id", required = false) String hCompany,
+                                     @RequestBody(required = false) Map<String, String> body) {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
-        return ResponseEntity.ok(shopOrderService.cancelOrder(orderId, tId, cId));
+        String reason = body != null ? body.get("reason") : null;
+        return ResponseEntity.ok(shopOrderService.cancelOrder(orderId, reason, tId, cId));
     }
 
     // ── Table endpoints (/shop/staff/tables/**) ───────────────────────

@@ -56,6 +56,7 @@ import ShopOrderDetailModal from './ShopOrderDetailModal'
 import ManualOrderDialog from './ManualOrderDialog'
 import QrOrderDialog from './QrOrderDialog'
 import EodAuditDialog from './EodAuditDialog'
+import ConfirmActionDialog from './ConfirmActionDialog'
 
 const BOARD_CHANNEL = 'shop_display_board'
 function broadcastReady() {
@@ -80,103 +81,171 @@ function parseOpts(str) {
 
 // ── Stock panel ─────────────────────────────────────────────────────
 
-function StockPanel({ items, onUseInOrder, onClear }) {
-  const [queued, setQueued]     = useState([])
-  const [dragOver, setDragOver] = useState(false)
+function StockPanel({ items, onUseInOrder, onClear, onRemoveItem }) {
+  const [selectedUids, setSelectedUids] = useState(new Set())
 
-  const handleDragStart = (e, item) => {
-    e.dataTransfer.setData('application/json', JSON.stringify(item))
-    e.dataTransfer.effectAllowed = 'copy'
+  const available = items.filter(i => !i.utilizedOrderCode)
+  const utilized  = items.filter(i =>  i.utilizedOrderCode)
+  const queued    = available.filter(i => selectedUids.has(i.uid))
+  const queueTotal = queued.reduce((s, i) => s + i.qty * Number(i.sellingPrice || 0), 0)
+
+  const toggle = (uid) => setSelectedUids(prev => {
+    const next = new Set(prev); next.has(uid) ? next.delete(uid) : next.add(uid); return next
+  })
+
+  const handleCreate = () => {
+    if (!queued.length) return
+    onUseInOrder(queued)
+    setSelectedUids(new Set())
   }
 
-  const handleDrop = (e) => {
-    e.preventDefault(); setDragOver(false)
-    try {
-      const item = JSON.parse(e.dataTransfer.getData('application/json'))
-      setQueued(prev => {
-        const ex = prev.find(i => i.modelId === item.modelId)
-        if (ex) return prev.map(i => i.modelId === item.modelId ? { ...i, qty: i.qty + item.qty } : i)
-        return [...prev, { ...item }]
-      })
-    } catch { /* */ }
-  }
-
-  const addToQueue = (item) => {
-    setQueued(prev => {
-      const ex = prev.find(i => i.modelId === item.modelId)
-      if (ex) return prev.map(i => i.modelId === item.modelId ? { ...i, qty: i.qty + 1 } : i)
-      return [...prev, { ...item, qty: 1 }]
-    })
-  }
-
-  const queuedTotal = queued.reduce((s, i) => s + i.qty * Number(i.sellingPrice || 0), 0)
+  const SectionLabel = ({ children }) => (
+    <Typography variant="caption" color="text.secondary"
+      sx={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', mb: 0.5 }}>
+      {children}
+    </Typography>
+  )
 
   return (
-    <Box sx={{ width: 220, flexShrink: 0, borderRight: '1px solid #e0e0e0', display: 'flex', flexDirection: 'column', height: '100%', bgcolor: '#fffde7' }}>
+    <Box sx={{ width: 256, flexShrink: 0, borderRight: '1px solid #e0e0e0', display: 'flex', flexDirection: 'column', height: '100%', bgcolor: '#fffde7' }}>
+
+      {/* Header */}
       <Box sx={{ p: 1.25, borderBottom: '1px solid #e0e0e0', display: 'flex', alignItems: 'center', gap: 0.5 }}>
-        <Typography variant="subtitle2" fontWeight={800} sx={{ flex: 1, fontSize: 12 }}>Stock from Cancellations</Typography>
+        <Typography variant="subtitle2" fontWeight={800} sx={{ flex: 1, fontSize: 12 }}>
+          Cancelled Stock
+        </Typography>
+        {available.length > 0 && (
+          <Chip label={available.length} size="small" color="warning"
+            sx={{ height: 16, fontSize: 10, mr: 0.5, '& .MuiChip-label': { px: 0.75 } }} />
+        )}
         <Tooltip title="Clear all">
-          <IconButton size="small" onClick={onClear} sx={{ p: 0.25 }}><CloseIcon sx={{ fontSize: 14 }} /></IconButton>
+          <IconButton size="small" onClick={onClear} sx={{ p: 0.25 }}>
+            <CloseIcon sx={{ fontSize: 14 }} />
+          </IconButton>
         </Tooltip>
       </Box>
+
+      {/* Item list */}
       <Box sx={{ flex: 1, overflowY: 'auto', px: 1, py: 0.75 }}>
-        <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-          Available (drag or click +)
-        </Typography>
-        <Stack spacing={0.5} sx={{ mt: 0.5 }}>
-          {items.map((item, idx) => (
-            <Box key={`${item.modelId}-${idx}`} draggable onDragStart={e => handleDragStart(e, item)}
-              sx={{ display: 'flex', alignItems: 'center', gap: 0.5, bgcolor: '#fff', borderRadius: 1, px: 0.75, py: 0.5, border: '1px solid #e0e0e0', cursor: 'grab', '&:hover': { bgcolor: '#fff9c4', borderColor: '#f9a825' } }}>
-              <DragIndicatorIcon sx={{ fontSize: 14, color: '#bdbdbd', flexShrink: 0 }} />
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography variant="caption" fontWeight={600} noWrap display="block">{item.modelName}</Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>{item.qty > 1 ? `×${item.qty} ` : ''}{fmt(item.sellingPrice)}</Typography>
-                {item.itemNotes && (
-                  <Typography variant="caption" sx={{ fontSize: 10, color: '#c62828', fontStyle: 'italic', display: 'block' }} noWrap>
-                    ⚠ {item.itemNotes}
-                  </Typography>
-                )}
-              </Box>
-              <Tooltip title="Add to new order">
-                <IconButton size="small" onClick={() => addToQueue(item)} sx={{ p: 0.25, color: '#1976d2', flexShrink: 0 }}>
-                  <AddShoppingCartIcon sx={{ fontSize: 14 }} />
-                </IconButton>
-              </Tooltip>
-            </Box>
-          ))}
-        </Stack>
-      </Box>
-      <Box sx={{ borderTop: '1px solid #e0e0e0', p: 1 }}>
-        <Box onDragOver={e => { e.preventDefault(); setDragOver(true) }} onDragLeave={() => setDragOver(false)} onDrop={handleDrop}
-          sx={{ border: `2px dashed ${dragOver ? '#1976d2' : '#bbb'}`, borderRadius: 1.5, p: 1, textAlign: 'center', transition: 'all 0.15s', bgcolor: dragOver ? '#e3f2fd' : 'transparent', mb: queued.length ? 1 : 0 }}>
-          <Typography variant="caption" color={dragOver ? 'primary' : 'text.disabled'} sx={{ fontSize: 11 }}>
-            {dragOver ? '↓ Drop here' : 'Drop items for new order'}
-          </Typography>
-        </Box>
-        {queued.length > 0 && (
+
+        {/* Available */}
+        {available.length > 0 && (
           <>
-            <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              Queued ({queued.length})
-            </Typography>
-            <Stack spacing={0.25} sx={{ mt: 0.25, mb: 0.75 }}>
-              {queued.map(i => (
-                <Box key={i.modelId} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <Typography variant="caption" sx={{ flex: 1 }} noWrap>{i.qty}× {i.modelName}</Typography>
-                  <IconButton size="small" onClick={() => setQueued(prev => prev.filter(x => x.modelId !== i.modelId))} sx={{ p: 0.125 }}>
-                    <CloseIcon sx={{ fontSize: 12, color: '#bbb' }} />
-                  </IconButton>
-                </Box>
-              ))}
-              <Typography variant="caption" color="primary" fontWeight={700} sx={{ fontSize: 11 }}>{fmt(queuedTotal)}</Typography>
+            <SectionLabel>Available — tap + to select</SectionLabel>
+            <Stack spacing={0.5} sx={{ mb: utilized.length ? 1.5 : 0 }}>
+              {available.map(item => {
+                const sel = selectedUids.has(item.uid)
+                return (
+                  <Box key={item.uid} sx={{
+                    bgcolor: sel ? '#dbeafe' : '#fff',
+                    border: `1.5px solid ${sel ? '#3b82f6' : '#e5e7eb'}`,
+                    borderRadius: 1.25, px: 0.75, pt: 0.5, pb: 0.4,
+                    transition: 'all 0.12s',
+                  }}>
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.25 }}>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography variant="caption" fontWeight={700} display="block" noWrap>{item.modelName}</Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
+                          {item.qty > 1 ? `×${item.qty}  ` : ''}{fmt(item.sellingPrice)}
+                        </Typography>
+                        {item.itemNotes && (
+                          <Typography variant="caption"
+                            sx={{ fontSize: 10, color: '#dc2626', fontStyle: 'italic', display: 'block' }} noWrap>
+                            ⚠ {item.itemNotes}
+                          </Typography>
+                        )}
+                        <Typography variant="caption"
+                          sx={{ fontSize: 9, color: '#94a3b8', fontFamily: 'monospace', display: 'block', mt: 0.1 }}>
+                          from {item.cancelledFromOrderCode}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25 }}>
+                        <Tooltip title={sel ? 'Deselect' : 'Select for new order'}>
+                          <IconButton size="small" onClick={() => toggle(item.uid)}
+                            sx={{ p: 0.25, color: sel ? '#2563eb' : '#9ca3af' }}>
+                            {sel
+                              ? <CheckCircleIcon sx={{ fontSize: 15 }} />
+                              : <AddShoppingCartIcon sx={{ fontSize: 15 }} />}
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Remove">
+                          <IconButton size="small" onClick={() => { onRemoveItem(item.uid); setSelectedUids(p => { const n = new Set(p); n.delete(item.uid); return n }) }}
+                            sx={{ p: 0.125, color: '#d1d5db', '&:hover': { color: '#dc2626' } }}>
+                            <CloseIcon sx={{ fontSize: 11 }} />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
+                    </Box>
+                  </Box>
+                )
+              })}
             </Stack>
-            <Button variant="contained" size="small" fullWidth startIcon={<AddCircleOutlineIcon />}
-              onClick={() => { onUseInOrder(queued); setQueued([]) }}
-              sx={{ textTransform: 'none', fontWeight: 700, fontSize: 11 }}>
-              Create Order
-            </Button>
           </>
         )}
+
+        {/* Utilized */}
+        {utilized.length > 0 && (
+          <>
+            <SectionLabel>Utilized ({utilized.length})</SectionLabel>
+            <Stack spacing={0.5}>
+              {utilized.map(item => (
+                <Box key={item.uid} sx={{
+                  bgcolor: '#f0fdf4', border: '1px solid #bbf7d0',
+                  borderRadius: 1.25, px: 0.75, pt: 0.5, pb: 0.4, opacity: 0.85,
+                }}>
+                  <Typography variant="caption" fontWeight={600} display="block" noWrap color="text.secondary">
+                    {item.modelName}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
+                    {item.qty > 1 ? `×${item.qty}  ` : ''}{fmt(item.sellingPrice)}
+                  </Typography>
+                  {item.itemNotes && (
+                    <Typography variant="caption"
+                      sx={{ fontSize: 10, color: '#9ca3af', fontStyle: 'italic', display: 'block' }} noWrap>
+                      {item.itemNotes}
+                    </Typography>
+                  )}
+                  <Typography variant="caption"
+                    sx={{ fontSize: 9, fontFamily: 'monospace', display: 'block', color: '#16a34a', fontWeight: 700, mt: 0.1 }}>
+                    ✓ → {item.utilizedOrderCode}
+                  </Typography>
+                </Box>
+              ))}
+            </Stack>
+          </>
+        )}
+
+        {items.length === 0 && (
+          <Typography variant="caption" color="text.disabled" sx={{ fontSize: 11, display: 'block', textAlign: 'center', mt: 2 }}>
+            No cancelled stock
+          </Typography>
+        )}
       </Box>
+
+      {/* Create order from selection */}
+      {queued.length > 0 && (
+        <Box sx={{ borderTop: '1px solid #e0e0e0', p: 1 }}>
+          <Typography variant="caption" color="primary" fontWeight={700}
+            sx={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', mb: 0.5 }}>
+            Selected ({queued.length})
+          </Typography>
+          <Stack spacing={0.2} sx={{ mb: 0.75 }}>
+            {queued.map(i => (
+              <Typography key={i.uid} variant="caption" noWrap sx={{ fontSize: 11 }}>
+                {i.qty > 1 ? `${i.qty}× ` : ''}{i.modelName}
+              </Typography>
+            ))}
+            <Typography variant="caption" color="primary" fontWeight={800} sx={{ fontSize: 12 }}>
+              {fmt(queueTotal)}
+            </Typography>
+          </Stack>
+          <Button variant="contained" size="small" fullWidth startIcon={<AddCircleOutlineIcon />}
+            onClick={handleCreate}
+            sx={{ textTransform: 'none', fontWeight: 700, fontSize: 11 }}>
+            Create Order
+          </Button>
+        </Box>
+      )}
     </Box>
   )
 }
@@ -191,6 +260,7 @@ const BOARD_STYLE = {
 }
 
 function StatusBoard({ status, orders, onAction, onDetail, onPayQr }) {
+  // onAction(type, orderId, orderNumber)
   const style = BOARD_STYLE[status] || BOARD_STYLE.CONFIRMED
 
   if (!orders.length) {
@@ -277,32 +347,32 @@ function StatusBoard({ status, orders, onAction, onDetail, onPayQr }) {
                 {order.paymentStatus !== 'PAID' && status !== 'PICKED_UP' && (
                   <Button size="small" variant="contained" color="success" fullWidth
                     startIcon={<PaidIcon sx={{ fontSize: 14 }} />}
-                    onClick={() => onAction('pay', order.id)}
+                    onClick={() => onAction('pay', order.id, order.orderNumber)}
                     sx={{ textTransform: 'none', fontWeight: 800, fontSize: 12, bgcolor: '#2e7d32', '&:hover': { bgcolor: '#1b5e20' } }}>
                     Mark as Paid
                   </Button>
                 )}
                 {status === 'CONFIRMED' && (
                   <Box sx={{ display: 'flex', gap: 0.75 }}>
-                    <Button size="small" variant="contained" color="warning" fullWidth onClick={() => onAction('prepare', order.id)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Start Preparing</Button>
+                    <Button size="small" variant="contained" color="warning" fullWidth onClick={() => onAction('prepare', order.id, order.orderNumber)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Start Preparing</Button>
                     <Tooltip title="Revert to Pending">
-                      <Button size="small" variant="outlined" color="error" onClick={() => onAction('revert', order.id)} startIcon={<UndoIcon sx={{ fontSize: 13 }} />} sx={{ textTransform: 'none', fontSize: 11, minWidth: 76 }}>Revert</Button>
+                      <Button size="small" variant="outlined" color="error" onClick={() => onAction('revert', order.id, order.orderNumber)} startIcon={<UndoIcon sx={{ fontSize: 13 }} />} sx={{ textTransform: 'none', fontSize: 11, minWidth: 76 }}>Revert</Button>
                     </Tooltip>
                   </Box>
                 )}
                 {status === 'PREPARING' && (
                   <Box sx={{ display: 'flex', gap: 0.75 }}>
-                    <Button size="small" variant="contained" color="success" fullWidth onClick={() => onAction('ready', order.id)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Mark Ready ✓</Button>
+                    <Button size="small" variant="contained" color="success" fullWidth onClick={() => onAction('ready', order.id, order.orderNumber)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Mark Ready ✓</Button>
                     <Tooltip title="Revert to Pending">
-                      <Button size="small" variant="outlined" color="error" onClick={() => onAction('revert-from-preparing', order.id)} startIcon={<UndoIcon sx={{ fontSize: 13 }} />} sx={{ textTransform: 'none', fontSize: 11, minWidth: 76 }}>Revert</Button>
+                      <Button size="small" variant="outlined" color="error" onClick={() => onAction('revert-from-preparing', order.id, order.orderNumber)} startIcon={<UndoIcon sx={{ fontSize: 13 }} />} sx={{ textTransform: 'none', fontSize: 11, minWidth: 76 }}>Revert</Button>
                     </Tooltip>
                   </Box>
                 )}
                 {status === 'READY' && (
                   <Box sx={{ display: 'flex', gap: 0.75 }}>
                     {(order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT')
-                      ? <Button size="small" variant="contained" color="info" fullWidth onClick={() => onAction('pickup', order.id)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Picked Up ✓</Button>
-                      : <Button size="small" variant="contained" color="success" fullWidth onClick={() => onAction('complete', order.id)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Complete ✓</Button>
+                      ? <Button size="small" variant="contained" color="info" fullWidth onClick={() => onAction('pickup', order.id, order.orderNumber)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Picked Up ✓</Button>
+                      : <Button size="small" variant="contained" color="success" fullWidth onClick={() => onAction('complete', order.id, order.orderNumber)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Complete ✓</Button>
                     }
                   </Box>
                 )}
@@ -349,6 +419,8 @@ export default function ShopOrderGrid() {
   const [moveTableTarget, setMoveTableTarget] = useState('')
   const [moving, setMoving]             = useState(false)
   const [eodOpen, setEodOpen]           = useState(false)
+  const [confirmDlg, setConfirmDlg]     = useState(null)
+  // confirmDlg shape: { title, message, confirmLabel, confirmColor, requireReason, onConfirm }
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
@@ -391,29 +463,42 @@ export default function ShopOrderGrid() {
     try { await fn(id); reload() } catch (e) { setError(e.message || 'Action failed') }
   }
 
-  const handleBoardAction = async (type, id) => {
-    const map = {
-      'prepare':               prepareShopOrder,
-      'revert':                revertShopOrder,
-      'revert-from-preparing': revertShopOrder,
-      'ready':                 (id) => readyShopOrder(id).then(r => { broadcastReady(); return r }),
-      'complete':              completeShopOrder,
-      'pickup':                pickupShopOrder,
-      'pay':                   markOrderPaid,
+  const askConfirm = (cfg, fn) => setConfirmDlg({ ...cfg, onConfirm: async (reason) => { setConfirmDlg(null); await fn(reason) } })
+
+  const handleBoardAction = (type, id, orderNum) => {
+    const configs = {
+      'prepare':               { title: 'Start Preparing?',     message: `Start preparing order #${orderNum}?`,              confirmLabel: 'Start Preparing', confirmColor: 'warning' },
+      'revert':                { title: 'Revert to Pending?',   message: 'Revert this confirmed order back to pending?',      confirmLabel: 'Revert',          confirmColor: 'error'   },
+      'revert-from-preparing': { title: 'Revert to Pending?',   message: 'Stop preparing and revert this order to pending?',  confirmLabel: 'Revert',          confirmColor: 'error'   },
+      'ready':                 { title: 'Mark as Ready?',       message: `Mark order #${orderNum} as ready for pickup?`,      confirmLabel: 'Mark Ready',      confirmColor: 'success' },
+      'complete':              { title: 'Complete Order?',      message: `Complete order #${orderNum}?`,                     confirmLabel: 'Complete',        confirmColor: 'success' },
+      'pickup':                { title: 'Mark as Picked Up?',   message: 'Confirm customer has picked up this order?',        confirmLabel: 'Picked Up',       confirmColor: 'primary' },
+      'pay':                   { title: 'Mark as Paid?',        message: `Mark order #${orderNum} as paid?`,                 confirmLabel: 'Mark Paid',       confirmColor: 'success' },
     }
-    const fn = map[type]
-    if (!fn) return
-    try { await fn(id); reload() } catch (e) { setError(e.message || 'Action failed') }
+    const cfg = configs[type]
+    if (!cfg) return
+    const fns = {
+      'prepare': prepareShopOrder,
+      'revert': revertShopOrder,
+      'revert-from-preparing': revertShopOrder,
+      'ready': async (i) => { await readyShopOrder(i); broadcastReady() },
+      'complete': completeShopOrder,
+      'pickup': pickupShopOrder,
+      'pay': markOrderPaid,
+    }
+    askConfirm(cfg, async () => {
+      try { await fns[type](id); reload() } catch (e) { setError(e.message || 'Action failed') }
+    })
   }
 
-  const handleCancel = async (row) => {
+  const doCancelOrder = async (row, reason) => {
     try {
-      await cancelShopOrder(row.id)
+      await cancelShopOrder(row.id, reason)
       if (row.items?.length) {
         const newStock = row.items.map(item => ({
           modelId: item.modelId, modelName: item.modelName,
           sellingPrice: item.unitPrice, qty: Number(item.quantity),
-          selectedOptions: {}, itemNotes: '',
+          selectedOptions: {}, itemNotes: item.itemNotes || '',
         }))
         setStockItems(prev => {
           const merged = [...prev]
@@ -427,6 +512,15 @@ export default function ShopOrderGrid() {
       reload()
     } catch (e) { setError(e.message || 'Failed to cancel') }
   }
+
+  const handleCancel = (row) => askConfirm({
+    title: `Cancel Order #${row.orderNumber ?? row.orderCode}?`,
+    message: 'This will permanently cancel the order. Items will be moved to the stock panel.',
+    confirmLabel: 'Cancel Order',
+    confirmColor: 'error',
+    requireReason: true,
+    reasonLabel: 'Reason for cancellation',
+  }, (reason) => doCancelOrder(row, reason))
 
   const handleOpenBoard = async () => {
     setBoardLoading(true); setBoardOpen(true)
@@ -577,7 +671,7 @@ export default function ShopOrderGrid() {
             <Tooltip title="Switch to QR payment and print receipt">
               <Button size="small" variant="outlined" color="success"
                 startIcon={<QrCode2Icon sx={{ fontSize: 13 }} />}
-                onClick={() => handleSwitchAndPrint(row)}
+                onClick={() => askConfirm({ title: 'Switch to QR payment?', message: 'Switch this order to Bank QR and print receipt?', confirmLabel: 'Switch & Print', confirmColor: 'success' }, () => handleSwitchAndPrint(row))}
                 sx={{ textTransform: 'none', fontWeight: 700, fontSize: 11, px: 0.75, minWidth: 0 }}>
                 → QR
               </Button>
@@ -586,24 +680,62 @@ export default function ShopOrderGrid() {
           {(row.paymentMethod === 'BANK_QR' || row.paymentMethod === 'SPLIT') && !['COMPLETED','PICKED_UP','CANCELLED'].includes(row.status) && (
             <Tooltip title="Revert to cash payment">
               <Button size="small" variant="outlined" color="warning"
-                onClick={() => handleRevertToCash(row)}
+                onClick={() => askConfirm({ title: 'Revert to Cash?', message: 'Change payment method back to cash?', confirmLabel: '→ Cash', confirmColor: 'warning' }, () => handleRevertToCash(row))}
                 sx={{ textTransform: 'none', fontSize: 11, px: 0.75, minWidth: 0 }}>
                 → Cash
               </Button>
             </Tooltip>
           )}
-          {row.status === 'PENDING'   && <Button size="small" variant="outlined" onClick={() => act(confirmShopOrder, row.id)}>Confirm</Button>}
-          {row.status === 'CONFIRMED' && <Button size="small" variant="outlined" color="warning" onClick={() => act(prepareShopOrder, row.id)}>Prepare</Button>}
-          {row.status === 'CONFIRMED' && <Tooltip title="Revert to Pending"><Button size="small" variant="outlined" color="error" startIcon={<UndoIcon sx={{ fontSize: 13 }} />} onClick={() => act(revertShopOrder, row.id)}>Revert</Button></Tooltip>}
-          {row.status === 'PREPARING' && <Button size="small" variant="outlined" color="success" onClick={async () => { await act(readyShopOrder, row.id); broadcastReady() }}>Ready</Button>}
-          {row.status === 'READY' && (row.paymentMethod === 'BANK_QR' || row.paymentMethod === 'SPLIT') && <Button size="small" variant="contained" color="info" onClick={() => act(pickupShopOrder, row.id)}>Picked Up</Button>}
-          {row.status === 'READY' && row.paymentMethod !== 'BANK_QR' && row.paymentMethod !== 'SPLIT' && <Button size="small" variant="contained" color="success" onClick={() => act(completeShopOrder, row.id)}>Complete</Button>}
-          {row.paymentStatus !== 'PAID' && !['PICKED_UP','COMPLETED','CANCELLED'].includes(row.status) && (
-            <Tooltip title="Mark as paid">
-              <Button size="small" variant="outlined" color="success" startIcon={<PaidIcon sx={{ fontSize: 13 }} />} onClick={() => act(markOrderPaid, row.id)} sx={{ fontWeight: 700, minWidth: 0, px: 0.75 }}>Paid</Button>
+          {row.status === 'PENDING' && (
+            <Button size="small" variant="outlined"
+              onClick={() => askConfirm({ title: 'Confirm Order?', message: `Confirm order #${row.orderNumber ?? row.orderCode}?`, confirmLabel: 'Confirm', confirmColor: 'primary' }, () => act(confirmShopOrder, row.id))}>
+              Confirm
+            </Button>
+          )}
+          {row.status === 'CONFIRMED' && (
+            <Button size="small" variant="outlined" color="warning"
+              onClick={() => askConfirm({ title: 'Start Preparing?', message: `Start preparing order #${row.orderNumber ?? row.orderCode}?`, confirmLabel: 'Start', confirmColor: 'warning' }, () => act(prepareShopOrder, row.id))}>
+              Prepare
+            </Button>
+          )}
+          {row.status === 'CONFIRMED' && (
+            <Tooltip title="Revert to Pending">
+              <Button size="small" variant="outlined" color="error" startIcon={<UndoIcon sx={{ fontSize: 13 }} />}
+                onClick={() => askConfirm({ title: 'Revert to Pending?', message: 'Revert order back to pending status?', confirmLabel: 'Revert', confirmColor: 'error' }, () => act(revertShopOrder, row.id))}>
+                Revert
+              </Button>
             </Tooltip>
           )}
-          {!['PICKED_UP','COMPLETED','CANCELLED'].includes(row.status) && <Button size="small" color="error" onClick={() => handleCancel(row)}>✕</Button>}
+          {row.status === 'PREPARING' && (
+            <Button size="small" variant="outlined" color="success"
+              onClick={() => askConfirm({ title: 'Mark as Ready?', message: `Mark order #${row.orderNumber ?? row.orderCode} as ready?`, confirmLabel: 'Mark Ready', confirmColor: 'success' }, async () => { await act(readyShopOrder, row.id); broadcastReady() })}>
+              Ready
+            </Button>
+          )}
+          {row.status === 'READY' && (row.paymentMethod === 'BANK_QR' || row.paymentMethod === 'SPLIT') && (
+            <Button size="small" variant="contained" color="info"
+              onClick={() => askConfirm({ title: 'Mark as Picked Up?', message: 'Confirm customer has picked up this order?', confirmLabel: 'Picked Up', confirmColor: 'primary' }, () => act(pickupShopOrder, row.id))}>
+              Picked Up
+            </Button>
+          )}
+          {row.status === 'READY' && row.paymentMethod !== 'BANK_QR' && row.paymentMethod !== 'SPLIT' && (
+            <Button size="small" variant="contained" color="success"
+              onClick={() => askConfirm({ title: 'Complete Order?', message: `Complete order #${row.orderNumber ?? row.orderCode}?`, confirmLabel: 'Complete', confirmColor: 'success' }, () => act(completeShopOrder, row.id))}>
+              Complete
+            </Button>
+          )}
+          {row.paymentStatus !== 'PAID' && !['PICKED_UP','COMPLETED','CANCELLED'].includes(row.status) && (
+            <Tooltip title="Mark as paid">
+              <Button size="small" variant="outlined" color="success" startIcon={<PaidIcon sx={{ fontSize: 13 }} />}
+                onClick={() => askConfirm({ title: 'Mark as Paid?', message: `Mark order #${row.orderNumber ?? row.orderCode} as paid?`, confirmLabel: 'Mark Paid', confirmColor: 'success' }, () => act(markOrderPaid, row.id))}
+                sx={{ fontWeight: 700, minWidth: 0, px: 0.75 }}>
+                Paid
+              </Button>
+            </Tooltip>
+          )}
+          {!['PICKED_UP','COMPLETED','CANCELLED'].includes(row.status) && (
+            <Button size="small" color="error" onClick={() => handleCancel(row)}>✕</Button>
+          )}
         </Box>
       )
     }
@@ -797,6 +929,20 @@ export default function ShopOrderGrid() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {confirmDlg && (
+        <ConfirmActionDialog
+          open
+          title={confirmDlg.title}
+          message={confirmDlg.message}
+          confirmLabel={confirmDlg.confirmLabel}
+          confirmColor={confirmDlg.confirmColor}
+          requireReason={confirmDlg.requireReason}
+          reasonLabel={confirmDlg.reasonLabel}
+          onConfirm={confirmDlg.onConfirm}
+          onCancel={() => setConfirmDlg(null)}
+        />
+      )}
 
       <Dialog open={resetOpen} onClose={() => setResetOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle fontWeight={700}>Reset Order Counter</DialogTitle>

@@ -32,6 +32,7 @@ public class ShopOrderResponseDto {
     private BigDecimal splitCashAmount;
     private String notes;
     private String staffName;
+    private String cancelReason;
     private Instant createdAt;
     private Instant confirmedAt;
     private Instant readyAt;
@@ -103,6 +104,7 @@ public class ShopOrderResponseDto {
         dto.splitCashAmount = order.getSplitCashAmount();
         dto.notes = order.getNotes();
         dto.staffName = order.getStaffName();
+        dto.cancelReason = order.getCancelReason();
         dto.createdAt = order.getCreatedAt();
         dto.confirmedAt = order.getConfirmedAt();
         dto.readyAt = order.getReadyAt();
@@ -133,6 +135,7 @@ public class ShopOrderResponseDto {
     public BigDecimal getSplitCashAmount() { return splitCashAmount; }
     public String getNotes() { return notes; }
     public String getStaffName() { return staffName; }
+    public String getCancelReason() { return cancelReason; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getConfirmedAt() { return confirmedAt; }
     public Instant getReadyAt() { return readyAt; }

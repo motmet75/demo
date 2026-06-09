@@ -35,7 +35,9 @@ import { fetchShopTables, createStaffOrder, fetchOrderTagQr, fetchMenuOptions } 
 import { printOrderReceipt, printOrderTag } from '../../utils/printOrderReceipt'
 import { broadcastToCounter } from '../shopboard/CounterDisplayPage'
 
-const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
+const fmt         = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
+const fmtDots     = (digits) => digits ? Number(digits).toLocaleString('vi-VN') : ''
+const stripDigits = (s) => s.replace(/[^0-9]/g, '')
 
 const FULFILLMENT = [
   { value: 'PICKUP',   label: 'Pickup',   icon: <TakeoutDiningIcon fontSize="small" /> },
@@ -216,7 +218,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
       const { res, data } = await createStaffOrder(body)
       if (!res.ok) { setError(data?.message || 'Failed to create order'); setSubmitting(false); return }
       setCreatedOrder(data)
-      onCreated?.()
+      onCreated?.(data)
       // broadcast real order (with order number), then again once tagQr is loaded
       broadcastToCounter(data, null)
       setTagLoading(true)
@@ -537,11 +539,11 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                     <Box sx={{ bgcolor: '#fff8e1', borderRadius: 1.5, px: 1.25, py: 1, mt: 0.5 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <TextField
-                          label="Customer cash" type="number" size="small" sx={{ flex: 1 }}
-                          value={customerCash}
-                          onChange={e => setCustomerCash(e.target.value)}
+                          label="Customer cash" type="text" inputMode="numeric" size="small" sx={{ flex: 1 }}
+                          value={fmtDots(customerCash)}
+                          onChange={e => setCustomerCash(stripDigits(e.target.value))}
                           placeholder="0"
-                          inputProps={{ min: 0, step: 1000 }}
+                          inputProps={{ maxLength: 15, style: { fontSize: 15, fontWeight: 700 } }}
                           InputProps={{ endAdornment: <Typography variant="caption" color="text.secondary" sx={{ ml: 0.5, whiteSpace: 'nowrap' }}>đ</Typography> }}
                         />
                         {customerCash !== '' && Number(customerCash) > 0 && (

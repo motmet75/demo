@@ -14,23 +14,29 @@ import Alert from '@mui/material/Alert'
 import AssessmentIcon from '@mui/icons-material/Assessment'
 import { fetchShopOrders } from '../../api/shopApi'
 
-const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : '0 đ'
+const fmt         = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : '0 đ'
+const fmtDots     = (digits) => digits ? Number(digits).toLocaleString('vi-VN') : ''
+const stripDigits = (s) => s.replace(/[^0-9]/g, '')
 
+function localDateTimeStr(d) {
+  const p = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
 function todayStart() {
   const d = new Date(); d.setHours(0, 0, 0, 0)
-  return d.toISOString().slice(0, 16)
+  return localDateTimeStr(d)
 }
 function todayEnd() {
-  const d = new Date(); d.setHours(23, 59, 59, 0)
-  return d.toISOString().slice(0, 16)
+  const d = new Date(); d.setHours(23, 59, 0, 0)
+  return localDateTimeStr(d)
 }
 
 export default function EodAuditDialog({ open, onClose }) {
   const [fromTime, setFromTime]       = useState(todayStart)
   const [toTime, setToTime]           = useState(todayEnd)
-  const [fromOrder, setFromOrder]     = useState('')
-  const [toOrder, setToOrder]         = useState('')
-  const [preCash, setPreCash]         = useState('')
+  const [fromCode, setFromCode]       = useState('')
+  const [toCode, setToCode]           = useState('')
+  const [preCashDigits, setPreCashDigits] = useState('')
   const [loading, setLoading]         = useState(false)
   const [error, setError]             = useState('')
   const [result, setResult]           = useState(null)
@@ -43,16 +49,16 @@ export default function EodAuditDialog({ open, onClose }) {
 
       const from = fromTime ? new Date(fromTime) : null
       const to   = toTime   ? new Date(toTime)   : null
-      const fromNum = fromOrder !== '' ? Number(fromOrder) : null
-      const toNum   = toOrder   !== '' ? Number(toOrder)   : null
+      const fc   = fromCode.trim()
+      const tc   = toCode.trim()
 
       const orders = all.filter(o => {
         if (o.status === 'CANCELLED') return false
         const t = new Date(o.createdAt)
         if (from && t < from) return false
         if (to   && t > to)   return false
-        if (fromNum != null && o.orderNumber != null && o.orderNumber < fromNum) return false
-        if (toNum   != null && o.orderNumber != null && o.orderNumber > toNum)   return false
+        if (fc && o.orderCode && o.orderCode < fc) return false
+        if (tc && o.orderCode && o.orderCode > tc) return false
         return true
       })
 
@@ -80,14 +86,14 @@ export default function EodAuditDialog({ open, onClose }) {
       const totalQrCollected   = qrTotal + splitQr
       const grandTotal         = cashTotal + qrTotal + splitCash + splitQr
 
-      const orderNums = orders.map(o => o.orderNumber).filter(n => n != null)
-      const minOrder  = orderNums.length ? Math.min(...orderNums) : null
-      const maxOrder  = orderNums.length ? Math.max(...orderNums) : null
+      const codes    = orders.map(o => o.orderCode).filter(Boolean).sort()
+      const firstCode = codes.length ? codes[0] : null
+      const lastCode  = codes.length ? codes[codes.length - 1] : null
 
       setResult({
         orders, cashTotal, cashCount, qrTotal, qrCount,
         splitCash, splitQr, splitCount, totalCashCollected, totalQrCollected,
-        grandTotal, unpaidTotal, unpaidCount, minOrder, maxOrder,
+        grandTotal, unpaidTotal, unpaidCount, firstCode, lastCode,
       })
     } catch (e) {
       setError(e.message || 'Failed to load orders')
@@ -95,7 +101,7 @@ export default function EodAuditDialog({ open, onClose }) {
     setLoading(false)
   }
 
-  const pre   = Number(preCash.replace(/[^0-9]/g, '') || 0)
+  const pre     = preCashDigits ? Number(preCashDigits) : 0
   const newCash = result ? pre + result.totalCashCollected : pre
 
   const Row = ({ label, value, bold, color, bg }) => (
@@ -127,10 +133,14 @@ export default function EodAuditDialog({ open, onClose }) {
               onChange={e => setFromTime(e.target.value)} InputLabelProps={{ shrink: true }} />
             <TextField label="To time" type="datetime-local" size="small" value={toTime}
               onChange={e => setToTime(e.target.value)} InputLabelProps={{ shrink: true }} />
-            <TextField label="From order #" type="number" size="small" value={fromOrder}
-              onChange={e => setFromOrder(e.target.value)} placeholder="(any)" />
-            <TextField label="To order #" type="number" size="small" value={toOrder}
-              onChange={e => setToOrder(e.target.value)} placeholder="(any)" />
+            <TextField label="From order ID" size="small" value={fromCode}
+              onChange={e => setFromCode(e.target.value)} placeholder="(any)"
+              inputProps={{ style: { fontFamily: 'monospace', fontSize: 12 } }}
+              helperText="paste order string ID" />
+            <TextField label="To order ID" size="small" value={toCode}
+              onChange={e => setToCode(e.target.value)} placeholder="(any)"
+              inputProps={{ style: { fontFamily: 'monospace', fontSize: 12 } }}
+              helperText="paste order string ID" />
           </Box>
 
           <Button variant="contained" onClick={handleLoad} disabled={loading}
@@ -149,9 +159,16 @@ export default function EodAuditDialog({ open, onClose }) {
                   Scope
                 </Typography>
                 <Typography variant="body2" sx={{ mt: 0.25 }}>
-                  <b>{result.orders.length}</b> orders &nbsp;·&nbsp;
-                  Order #{result.minOrder ?? '?'} → #{result.maxOrder ?? '?'}
+                  <b>{result.orders.length}</b> orders
                 </Typography>
+                {result.firstCode && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25, flexWrap: 'wrap' }}>
+                    <Typography variant="caption" color="text.secondary">From</Typography>
+                    <Typography variant="caption" sx={{ fontFamily: 'monospace', bgcolor: '#e2e8f0', px: 0.75, py: 0.1, borderRadius: 0.75 }}>{result.firstCode}</Typography>
+                    <Typography variant="caption" color="text.secondary">to</Typography>
+                    <Typography variant="caption" sx={{ fontFamily: 'monospace', bgcolor: '#e2e8f0', px: 0.75, py: 0.1, borderRadius: 0.75 }}>{result.lastCode}</Typography>
+                  </Box>
+                )}
               </Box>
 
               {/* Revenue breakdown */}
@@ -186,9 +203,11 @@ export default function EodAuditDialog({ open, onClose }) {
                 </Box>
                 <Box sx={{ px: 1.5, py: 1 }}>
                   <TextField
-                    label="Pre-cash (opening balance)" type="number" size="small" fullWidth
-                    value={preCash} onChange={e => setPreCash(e.target.value)}
+                    label="Pre-cash (opening balance)" type="text" inputMode="numeric" size="small" fullWidth
+                    value={fmtDots(preCashDigits)}
+                    onChange={e => setPreCashDigits(stripDigits(e.target.value))}
                     placeholder="0" helperText="Cash already in the drawer at start of shift"
+                    inputProps={{ maxLength: 15, style: { fontWeight: 700 } }}
                     InputProps={{ endAdornment: <Typography variant="caption" color="text.secondary" sx={{ ml: 0.5, whiteSpace: 'nowrap' }}>đ</Typography> }}
                   />
                 </Box>

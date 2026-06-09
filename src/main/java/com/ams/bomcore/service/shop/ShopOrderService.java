@@ -273,7 +273,7 @@ public class ShopOrderService {
     }
 
     @Transactional
-    public ShopOrderResponseDto cancelOrder(UUID orderId, UUID tenantId, UUID companyId) {
+    public ShopOrderResponseDto cancelOrder(UUID orderId, String reason, UUID tenantId, UUID companyId) {
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         if (ShopOrder.STATUS_COMPLETED.equals(order.getStatus())
                 || ShopOrder.STATUS_PICKED_UP.equals(order.getStatus())
@@ -281,6 +281,9 @@ public class ShopOrderService {
             throw new IllegalStateException("Cannot cancel order in status: " + order.getStatus());
         }
         order.setStatus(ShopOrder.STATUS_CANCELLED);
+        if (reason != null && !reason.isBlank()) {
+            order.setCancelReason(reason.trim());
+        }
         shopOrderRepository.save(order);
         return dto(order);
     }

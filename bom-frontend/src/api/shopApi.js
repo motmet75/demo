@@ -84,8 +84,12 @@ export function completeShopOrder(orderId) {
   return apiFetchJson(`/shop/staff/orders/${orderId}/complete`, { method: 'PATCH' })
 }
 
-export function cancelShopOrder(orderId) {
-  return apiFetchJson(`/shop/staff/orders/${orderId}/cancel`, { method: 'PATCH' })
+export function cancelShopOrder(orderId, reason) {
+  return apiFetchJson(`/shop/staff/orders/${orderId}/cancel`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason: reason || null }),
+  })
 }
 
 export function revertShopOrder(orderId) {
