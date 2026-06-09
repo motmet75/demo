@@ -69,6 +69,46 @@ function OptionsDisplay({ selectedOptions }) {
   )
 }
 
+// ── Change calculator ───────────────────────────────────────────────────────
+function ChangeCalc({ label, due, color = '#e65100', bg = '#fff7ed', borderColor = '#f59e0b' }) {
+  const [cash, setCash] = useState('')
+  const cashNum = Number(String(cash).replace(/[^0-9]/g, '') || 0)
+  const change  = cashNum - due
+  return (
+    <Box sx={{ bgcolor: bg, border: `1.5px solid ${borderColor}`, borderRadius: 1.5, p: 1.25 }}>
+      <Typography variant="caption" fontWeight={800} color={color}
+        sx={{ display: 'block', mb: 0.75, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+        {label}
+      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        <TextField
+          type="number"
+          size="small"
+          label="Customer cash"
+          value={cash}
+          onChange={e => setCash(e.target.value)}
+          placeholder="0"
+          inputProps={{ min: 0, step: 1000, style: { fontSize: 18, fontWeight: 700 } }}
+          InputProps={{ endAdornment: <InputAdornment position="end">đ</InputAdornment> }}
+          sx={{ width: 180 }}
+        />
+        {cash !== '' && cashNum > 0 && (
+          <Box>
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>
+              {change >= 0 ? 'Change' : 'Short'}
+            </Typography>
+            <Typography fontWeight={900} sx={{
+              fontSize: 26, lineHeight: 1, color: change >= 0 ? '#2e7d32' : '#c62828',
+            }}>
+              {fmt(Math.abs(change))}
+            </Typography>
+          </Box>
+        )}
+      </Box>
+    </Box>
+  )
+}
+
 export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }) {
   const [tagQr, setTagQr]           = useState(null)
   const [qrLoading, setQrLoading]   = useState(false)
@@ -136,54 +176,66 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
 
   if (!order) return null
 
-  const isPending      = order.status === 'PENDING'
-  const isConfirmed    = order.status === 'CONFIRMED'
-  const isFinal        = ['COMPLETED', 'PICKED_UP', 'CANCELLED'].includes(order.status)
-  const canSwitchToQr  = order.paymentMethod === 'CASH' && !isFinal
-  const canSplit       = !isFinal && order.paymentMethod !== 'SPLIT'
-  const canRevertCash  = !isFinal && (order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT')
-  const total          = Number(order.totalAmount || 0)
-  const cashNum        = Number(cashInput) || 0
-  const qrPortion      = Math.max(0, total - cashNum)
+  const isPending     = order.status === 'PENDING'
+  const isConfirmed   = order.status === 'CONFIRMED'
+  const isFinal       = ['COMPLETED', 'PICKED_UP', 'CANCELLED'].includes(order.status)
+  const canSwitchToQr = order.paymentMethod === 'CASH' && !isFinal
+  const canSplit      = !isFinal && order.paymentMethod !== 'SPLIT'
+  const canRevertCash = !isFinal && (order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT')
+  const total         = Number(order.totalAmount || 0)
+  const cashNum       = Number(cashInput) || 0
+  const qrPortion     = Math.max(0, total - cashNum)
+
+  const splitCash = Number(order.splitCashAmount || 0)
+  const splitQr   = total - splitCash
+
+  const payQrSrc = order.paymentQr?.startsWith('https://')
+    ? order.paymentQr
+    : order.paymentQr ? `data:image/png;base64,${order.paymentQr}` : null
 
   return (
     <>
       <Dialog open={!!open} onClose={onClose} fullWidth maxWidth="md"
         PaperProps={{ sx: { borderRadius: 2 } }}>
+
+        {/* ── Title ─────────────────────────────────────────────────── */}
         <DialogTitle sx={{ pb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography fontWeight={800} variant="h6" sx={{ flex: 1 }}>
-            Order #{order.orderNumber ?? order.orderCode}
-          </Typography>
-          <Chip
-            label={order.status}
-            color={STATUS_COLOR[order.status] || 'default'}
-            size="small"
-            sx={{ fontWeight: 700 }}
-          />
+          <Box sx={{ flex: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1.5 }}>
+              <Typography fontWeight={800} variant="h6">
+                Order #{order.orderNumber ?? '?'}
+              </Typography>
+              {/* orderCode shown prominently for QR tracking */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, bgcolor: '#1e293b', borderRadius: 1, px: 1, py: 0.25 }}>
+                <QrCode2Icon sx={{ fontSize: 13, color: '#94a3b8' }} />
+                <Typography sx={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, letterSpacing: 1, color: '#e2e8f0' }}>
+                  {order.orderCode}
+                </Typography>
+              </Box>
+            </Box>
+            {order.staffName && (
+              <Typography variant="caption" color="text.secondary">by {order.staffName}</Typography>
+            )}
+          </Box>
+          <Chip label={order.status} color={STATUS_COLOR[order.status] || 'default'} size="small" sx={{ fontWeight: 700 }} />
         </DialogTitle>
 
         <DialogContent sx={{ pt: 0 }}>
           {error && <Alert severity="error" onClose={() => setError('')} sx={{ mb: 1 }}>{error}</Alert>}
 
-          {/* ── Info grid ─────────────────────────────────── */}
+          {/* ── Info grid ─────────────────────────────────────────── */}
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.75, mb: 1.5, p: 1.25, bgcolor: '#f8f9fa', borderRadius: 1.5 }}>
             <Typography variant="body2"><strong>Customer:</strong> {order.customerName || '—'}</Typography>
             <Typography variant="body2"><strong>Phone:</strong> {order.customerPhone || '—'}</Typography>
             <Typography variant="body2"><strong>Type:</strong> {order.fulfillmentType}</Typography>
             <Typography variant="body2"><strong>Table:</strong> {order.tableName || '—'}</Typography>
-            <Typography variant="body2">
-              <strong>Payment:</strong>{' '}
-              {order.paymentMethod === 'SPLIT'
-                ? `SPLIT — QR: ${fmt(Number(order.totalAmount) - Number(order.splitCashAmount))} + Cash: ${fmt(order.splitCashAmount)}`
-                : `${order.paymentMethod} / ${order.paymentStatus}`}
-            </Typography>
             <Typography variant="body2"><strong>Delivery fee:</strong> {fmt(order.deliveryFee)}</Typography>
             <Typography variant="body2"><strong>Created:</strong> {dateFmt(order.createdAt)}</Typography>
             {order.confirmedAt && <Typography variant="body2"><strong>Confirmed:</strong> {dateFmt(order.confirmedAt)}</Typography>}
             {order.notes && <Typography variant="body2" sx={{ gridColumn: '1/-1', fontStyle: 'italic', color: 'text.secondary' }}>Note: {order.notes}</Typography>}
           </Box>
 
-          {/* ── Items ─────────────────────────────────────── */}
+          {/* ── Items ─────────────────────────────────────────────── */}
           <Table size="small">
             <TableHead>
               <TableRow sx={{ '& th': { fontWeight: 700, fontSize: 12, bgcolor: '#f0f4ff' } }}>
@@ -217,50 +269,133 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
             </TableBody>
           </Table>
 
-          <Box sx={{ mt: 1, textAlign: 'right', pr: 1 }}>
+          <Box sx={{ mt: 0.75, textAlign: 'right', pr: 1, mb: 1.5 }}>
             <Typography variant="body2" color="text.secondary">Raw cost: {fmt(order.totalRawCost)}</Typography>
-            <Typography fontWeight={800} variant="h6" color="primary">Total: {fmt(order.totalAmount)}</Typography>
+            <Typography fontWeight={900} variant="h5" color="primary">Total: {fmt(order.totalAmount)}</Typography>
           </Box>
 
-          {/* ── QR codes ─────────────────────────────────── */}
-          {(tagQr || order.paymentQr) && (
-            <>
-              <Divider sx={{ my: 1.5 }} />
-              <Stack direction="row" spacing={3} justifyContent="center">
-                {qrLoading && <CircularProgress size={24} />}
-                {tagQr && (
-                  <Box sx={{ textAlign: 'center' }}>
-                    <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
-                      Order Tracking QR
-                    </Typography>
+          {/* ── Payment Panel ─────────────────────────────────────── */}
+          <Divider sx={{ mb: 1.5 }} />
+
+          {/* CASH order */}
+          {order.paymentMethod === 'CASH' && (
+            <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+              {/* Tracking QR */}
+              {(qrLoading || tagQr) && (
+                <Box sx={{ textAlign: 'center' }}>
+                  <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>Tracking QR</Typography>
+                  {qrLoading ? <CircularProgress size={24} /> : (
                     <img src={`data:image/png;base64,${tagQr}`} alt="Tracking QR"
-                      style={{ width: 120, height: 120, borderRadius: 8, border: '1px solid #e0e0e0' }} />
-                  </Box>
-                )}
-                {order.paymentQr && (
-                  <Box sx={{ textAlign: 'center' }}>
-                    <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
-                      {order.paymentMethod === 'SPLIT'
-                        ? `QR Portion: ${fmt(Number(order.totalAmount) - Number(order.splitCashAmount))}`
-                        : 'Payment QR'}
-                    </Typography>
-                    <img
-                      src={order.paymentQr?.startsWith('https://')
-                        ? order.paymentQr
-                        : `data:image/png;base64,${order.paymentQr}`}
-                      alt="Payment QR"
-                      style={{ width: 140, height: 140, borderRadius: 8, border: '1px solid #e0e0e0' }}
-                    />
-                    {order.paymentMethod === 'SPLIT' && (
-                      <Typography variant="caption" color="text.secondary" display="block" mt={0.5}>
-                        Cash: {fmt(order.splitCashAmount)}
-                      </Typography>
-                    )}
-                  </Box>
-                )}
-              </Stack>
-            </>
+                      style={{ width: 90, height: 90, borderRadius: 8, border: '1px solid #e0e0e0' }} />
+                  )}
+                </Box>
+              )}
+              {/* Cash block */}
+              <Box sx={{ flex: 1, minWidth: 260, bgcolor: '#fff8e1', border: '2px solid #f59e0b', borderRadius: 2, p: 1.5 }}>
+                <Typography variant="caption" fontWeight={800} color="#e65100"
+                  sx={{ display: 'block', textTransform: 'uppercase', letterSpacing: 0.5, mb: 0.5 }}>
+                  💵 Cash Payment
+                </Typography>
+                <Typography fontWeight={900} sx={{ fontSize: 32, color: '#e65100', lineHeight: 1.1, mb: 1 }}>
+                  {fmt(total)}
+                </Typography>
+                <ChangeCalc label="Customer cash calculator" due={total}
+                  color="#e65100" bg="#fff" borderColor="#f59e0b" />
+              </Box>
+            </Box>
           )}
+
+          {/* BANK_QR order */}
+          {order.paymentMethod === 'BANK_QR' && (
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+              {/* Tracking QR */}
+              {(qrLoading || tagQr) && (
+                <Box sx={{ textAlign: 'center' }}>
+                  <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>Tracking QR</Typography>
+                  {qrLoading ? <CircularProgress size={24} /> : (
+                    <img src={`data:image/png;base64,${tagQr}`} alt="Tracking QR"
+                      style={{ width: 90, height: 90, borderRadius: 8, border: '1px solid #e0e0e0' }} />
+                  )}
+                </Box>
+              )}
+              {/* Payment QR */}
+              {payQrSrc && (
+                <Box sx={{ bgcolor: '#f0fdf4', border: '2px solid #22c55e', borderRadius: 2, p: 1.5, textAlign: 'center' }}>
+                  <Typography variant="caption" fontWeight={800} color="#15803d"
+                    sx={{ display: 'block', textTransform: 'uppercase', letterSpacing: 0.5, mb: 0.5 }}>
+                    💳 Scan to Pay
+                  </Typography>
+                  <img src={payQrSrc} alt="Payment QR"
+                    style={{ width: 180, height: 180, borderRadius: 10, border: '2px solid #bbf7d0', display: 'block' }} />
+                  <Typography fontWeight={900} sx={{ fontSize: 28, color: '#15803d', mt: 0.75, lineHeight: 1 }}>
+                    {fmt(total)}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+                    ref: {order.orderCode}
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+          )}
+
+          {/* SPLIT order */}
+          {order.paymentMethod === 'SPLIT' && (
+            <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+              {/* Tracking QR */}
+              {(qrLoading || tagQr) && (
+                <Box sx={{ textAlign: 'center' }}>
+                  <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>Tracking QR</Typography>
+                  {qrLoading ? <CircularProgress size={24} /> : (
+                    <img src={`data:image/png;base64,${tagQr}`} alt="Tracking QR"
+                      style={{ width: 90, height: 90, borderRadius: 8, border: '1px solid #e0e0e0' }} />
+                  )}
+                </Box>
+              )}
+
+              {/* QR block */}
+              {payQrSrc && (
+                <Box sx={{ bgcolor: '#f0fdf4', border: '2px solid #22c55e', borderRadius: 2, p: 1.5, textAlign: 'center' }}>
+                  <Typography variant="caption" fontWeight={800} color="#15803d"
+                    sx={{ display: 'block', textTransform: 'uppercase', letterSpacing: 0.5, mb: 0.5 }}>
+                    💳 QR Portion
+                  </Typography>
+                  <img src={payQrSrc} alt="Payment QR"
+                    style={{ width: 160, height: 160, borderRadius: 10, border: '2px solid #bbf7d0', display: 'block' }} />
+                  <Typography fontWeight={900} sx={{ fontSize: 28, color: '#15803d', mt: 0.75, lineHeight: 1 }}>
+                    {fmt(splitQr)}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+                    ref: {order.orderCode}
+                  </Typography>
+                </Box>
+              )}
+
+              {/* Cash block */}
+              <Box sx={{ flex: 1, minWidth: 220, bgcolor: '#fff8e1', border: '2px solid #f59e0b', borderRadius: 2, p: 1.5 }}>
+                <Typography variant="caption" fontWeight={800} color="#e65100"
+                  sx={{ display: 'block', textTransform: 'uppercase', letterSpacing: 0.5, mb: 0.5 }}>
+                  💵 Cash Portion
+                </Typography>
+                <Typography fontWeight={900} sx={{ fontSize: 32, color: '#e65100', lineHeight: 1.1, mb: 1.25 }}>
+                  {fmt(splitCash)}
+                </Typography>
+                <ChangeCalc label="Customer cash calculator" due={splitCash}
+                  color="#e65100" bg="#fff" borderColor="#f59e0b" />
+              </Box>
+            </Box>
+          )}
+
+          {/* Fallback: tracking QR only (no payment QR) — for any method not handled above */}
+          {!['CASH','BANK_QR','SPLIT'].includes(order.paymentMethod) && (qrLoading || tagQr) && (
+            <Box sx={{ textAlign: 'center' }}>
+              <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>Tracking QR</Typography>
+              {qrLoading ? <CircularProgress size={24} /> : (
+                <img src={`data:image/png;base64,${tagQr}`} alt="Tracking QR"
+                  style={{ width: 120, height: 120, borderRadius: 8, border: '1px solid #e0e0e0' }} />
+              )}
+            </Box>
+          )}
+
         </DialogContent>
 
         <DialogActions sx={{ px: 2, pb: 2, flexWrap: 'wrap', gap: 0.75, justifyContent: 'space-between' }}>
@@ -268,67 +403,44 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
           <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
             {isPending && (
               <Tooltip title="Edit items on this order">
-                <Button
-                  variant="outlined"
-                  startIcon={<EditIcon />}
-                  onClick={() => setEditOpen(true)}
-                  sx={{ textTransform: 'none' }}
-                >
+                <Button variant="outlined" startIcon={<EditIcon />}
+                  onClick={() => setEditOpen(true)} sx={{ textTransform: 'none' }}>
                   Edit Order
                 </Button>
               </Tooltip>
             )}
             {isConfirmed && (
               <Tooltip title="Revert to Pending — urgent stop">
-                <Button
-                  variant="outlined"
-                  color="warning"
+                <Button variant="outlined" color="warning"
                   startIcon={reverting ? <CircularProgress size={14} /> : <UndoIcon />}
-                  onClick={handleRevert}
-                  disabled={reverting}
-                  sx={{ textTransform: 'none' }}
-                >
+                  onClick={handleRevert} disabled={reverting} sx={{ textTransform: 'none' }}>
                   Revert to Pending
                 </Button>
               </Tooltip>
             )}
             {canSwitchToQr && (
               <Tooltip title="Switch to full Bank QR payment and print receipt">
-                <Button
-                  variant="contained"
-                  color="success"
+                <Button variant="contained" color="success"
                   startIcon={switching ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : <QrCode2Icon />}
-                  onClick={handleSwitchAndPrint}
-                  disabled={switching}
-                  sx={{ textTransform: 'none', fontWeight: 700 }}
-                >
+                  onClick={handleSwitchAndPrint} disabled={switching} sx={{ textTransform: 'none', fontWeight: 700 }}>
                   QR + Print
                 </Button>
               </Tooltip>
             )}
             {canSplit && (
               <Tooltip title="Set a split payment: part by bank QR, part by cash">
-                <Button
-                  variant="outlined"
-                  color="secondary"
-                  startIcon={<CallSplitIcon />}
+                <Button variant="outlined" color="secondary" startIcon={<CallSplitIcon />}
                   onClick={() => { setCashInput(String(Math.round(total / 2))); setSplitOpen(true) }}
-                  sx={{ textTransform: 'none', fontWeight: 700 }}
-                >
+                  sx={{ textTransform: 'none', fontWeight: 700 }}>
                   Split
                 </Button>
               </Tooltip>
             )}
             {canRevertCash && (
               <Tooltip title="Revert payment method back to Cash">
-                <Button
-                  variant="outlined"
-                  color="warning"
+                <Button variant="outlined" color="warning"
                   startIcon={reverting2 ? <CircularProgress size={14} /> : <CurrencyExchangeIcon />}
-                  onClick={handleRevertToCash}
-                  disabled={reverting2}
-                  sx={{ textTransform: 'none' }}
-                >
+                  onClick={handleRevertToCash} disabled={reverting2} sx={{ textTransform: 'none' }}>
                   → Cash
                 </Button>
               </Tooltip>
@@ -338,45 +450,26 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
           {/* ── Right: print actions + close ──────────────── */}
           <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', alignItems: 'center' }}>
             <Tooltip title="Show this order on the counter customer display">
-              <Button
-                variant="outlined"
-                color="info"
-                startIcon={<MonitorIcon />}
-                onClick={() => broadcastToCounter(order, tagQr || null)}
-                sx={{ textTransform: 'none' }}
-              >
+              <Button variant="outlined" color="info" startIcon={<MonitorIcon />}
+                onClick={() => broadcastToCounter(order, tagQr || null)} sx={{ textTransform: 'none' }}>
                 Counter Display
               </Button>
             </Tooltip>
             <Tooltip title="Print order tag with tracking QR — give to customer to track order status">
-              <Button
-                variant="outlined"
-                color="secondary"
+              <Button variant="outlined" color="secondary"
                 startIcon={qrLoading ? <CircularProgress size={14} /> : <QrCode2Icon />}
                 onClick={() => tagQr && printOrderTag(order, tagQr)}
-                disabled={qrLoading || !tagQr}
-                sx={{ textTransform: 'none' }}
-              >
+                disabled={qrLoading || !tagQr} sx={{ textTransform: 'none' }}>
                 Print · Track
               </Button>
             </Tooltip>
-            <Button
-              variant="outlined"
-              color="primary"
-              startIcon={<PrintIcon />}
-              onClick={() => printOrderReceipt(order, tagQr)}
-              sx={{ textTransform: 'none' }}
-            >
+            <Button variant="outlined" color="primary" startIcon={<PrintIcon />}
+              onClick={() => printOrderReceipt(order, tagQr)} sx={{ textTransform: 'none' }}>
               Print · Pay
             </Button>
             <Tooltip title="Print one cup label per item unit">
-              <Button
-                variant="outlined"
-                color="secondary"
-                startIcon={<LabelIcon />}
-                onClick={() => printCupLabels(order)}
-                sx={{ textTransform: 'none' }}
-              >
+              <Button variant="outlined" color="secondary" startIcon={<LabelIcon />}
+                onClick={() => printCupLabels(order)} sx={{ textTransform: 'none' }}>
                 Cup Labels
               </Button>
             </Tooltip>
@@ -386,15 +479,12 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
       </Dialog>
 
       {editOpen && (
-        <EditOrderDialog
-          open={editOpen}
-          order={order}
+        <EditOrderDialog open={editOpen} order={order}
           onClose={() => setEditOpen(false)}
-          onUpdated={() => { setEditOpen(false); onRefresh?.() }}
-        />
+          onUpdated={() => { setEditOpen(false); onRefresh?.() }} />
       )}
 
-      {/* ── Split Payment Dialog ─────────────────────────── */}
+      {/* ── Split Payment Dialog ──────────────────────────────────── */}
       <Dialog open={splitOpen} onClose={() => setSplitOpen(false)} maxWidth="xs" fullWidth
         PaperProps={{ sx: { borderRadius: 2 } }}>
         <DialogTitle sx={{ pb: 0.5 }}>
@@ -404,7 +494,6 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
           </Typography>
         </DialogTitle>
         <DialogContent sx={{ pt: 1.5 }}>
-          {/* Two big linked boxes */}
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 1, alignItems: 'center', mb: 2 }}>
             {/* Cash box */}
             <Box sx={{ bgcolor: '#fff7ed', border: '2px solid #f59e0b', borderRadius: 2, p: 1.5 }}>
@@ -412,86 +501,46 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
                 sx={{ display: 'block', textAlign: 'center', mb: 1, letterSpacing: 1, textTransform: 'uppercase' }}>
                 💵 Tiền mặt
               </Typography>
-              <TextField
-                type="number"
-                size="small"
-                fullWidth
-                value={cashInput}
+              <TextField type="number" size="small" fullWidth value={cashInput}
                 onChange={e => {
                   const v = Math.max(0, Math.min(Math.round(total), Number(e.target.value) || 0))
                   setCashInput(String(v))
                 }}
                 inputProps={{ min: 0, max: total, step: 1000, style: { textAlign: 'center', fontSize: 22, fontWeight: 900, padding: '8px 4px' } }}
                 InputProps={{ endAdornment: <InputAdornment position="end">đ</InputAdornment> }}
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    bgcolor: '#fff',
-                    '& fieldset': { borderColor: '#f59e0b' },
-                    '&:hover fieldset': { borderColor: '#d97706' },
-                    '&.Mui-focused fieldset': { borderColor: '#d97706' },
-                  }
-                }}
+                sx={{ '& .MuiOutlinedInput-root': { bgcolor: '#fff', '& fieldset': { borderColor: '#f59e0b' }, '&:hover fieldset': { borderColor: '#d97706' }, '&.Mui-focused fieldset': { borderColor: '#d97706' } } }}
               />
             </Box>
-
-            {/* Arrow */}
             <Typography sx={{ color: '#94a3b8', fontWeight: 900, fontSize: 20, userSelect: 'none' }}>⇄</Typography>
-
             {/* QR box */}
             <Box sx={{ bgcolor: '#f0fdf4', border: '2px solid #22c55e', borderRadius: 2, p: 1.5 }}>
               <Typography variant="caption" fontWeight={800} color="success.dark"
                 sx={{ display: 'block', textAlign: 'center', mb: 1, letterSpacing: 1, textTransform: 'uppercase' }}>
                 💳 Bank QR
               </Typography>
-              <TextField
-                type="number"
-                size="small"
-                fullWidth
-                value={String(qrPortion)}
+              <TextField type="number" size="small" fullWidth value={String(qrPortion)}
                 onChange={e => {
                   const qr = Math.max(0, Math.min(Math.round(total), Number(e.target.value) || 0))
                   setCashInput(String(Math.round(total) - qr))
                 }}
                 inputProps={{ min: 0, max: total, step: 1000, style: { textAlign: 'center', fontSize: 22, fontWeight: 900, padding: '8px 4px' } }}
                 InputProps={{ endAdornment: <InputAdornment position="end">đ</InputAdornment> }}
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    bgcolor: '#fff',
-                    '& fieldset': { borderColor: '#22c55e' },
-                    '&:hover fieldset': { borderColor: '#16a34a' },
-                    '&.Mui-focused fieldset': { borderColor: '#16a34a' },
-                  }
-                }}
+                sx={{ '& .MuiOutlinedInput-root': { bgcolor: '#fff', '& fieldset': { borderColor: '#22c55e' }, '&:hover fieldset': { borderColor: '#16a34a' }, '&.Mui-focused fieldset': { borderColor: '#16a34a' } } }}
               />
             </Box>
           </Box>
-
-          {/* Quick buttons */}
           <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
-            <Button size="small" variant="outlined" color="warning"
-              onClick={() => setCashInput(String(Math.round(total / 2)))}>
-              Half / Half
-            </Button>
-            <Button size="small" variant="outlined" color="success"
-              onClick={() => setCashInput('0')}>
-              All QR
-            </Button>
-            <Button size="small" variant="outlined"
-              onClick={() => setCashInput(String(Math.round(total)))}>
-              All Cash
-            </Button>
+            <Button size="small" variant="outlined" color="warning" onClick={() => setCashInput(String(Math.round(total / 2)))}>Half / Half</Button>
+            <Button size="small" variant="outlined" color="success" onClick={() => setCashInput('0')}>All QR</Button>
+            <Button size="small" variant="outlined" onClick={() => setCashInput(String(Math.round(total)))}>All Cash</Button>
           </Box>
         </DialogContent>
         <DialogActions sx={{ px: 2, pb: 2 }}>
           <Button onClick={() => setSplitOpen(false)} sx={{ textTransform: 'none' }}>Cancel</Button>
-          <Button
-            variant="contained"
-            color="success"
+          <Button variant="contained" color="success"
             startIcon={splitting ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : <CallSplitIcon />}
-            onClick={handleSplit}
-            disabled={splitting || cashNum < 0 || cashNum > total}
-            sx={{ textTransform: 'none', fontWeight: 700 }}
-          >
+            onClick={handleSplit} disabled={splitting || cashNum < 0 || cashNum > total}
+            sx={{ textTransform: 'none', fontWeight: 700 }}>
             Confirm
           </Button>
         </DialogActions>
