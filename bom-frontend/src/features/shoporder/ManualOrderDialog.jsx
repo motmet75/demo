@@ -93,10 +93,12 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
     }, 0)
   }
 
+  const itemBasePrice = (item) => Number(item.customPriceDigits) || 0
+
   const sidesTotal = (item) =>
     (item.sideItems || []).reduce((s, si) => s + (Number(si.customPriceDigits) || 0), 0)
 
-  const total = items.reduce((s, i) => s + i.qty * (Number(i.sellingPrice || 0) + calcOptAddOn(i)) + sidesTotal(i), 0)
+  const total = items.reduce((s, i) => s + i.qty * (itemBasePrice(i) + calcOptAddOn(i)) + sidesTotal(i), 0)
 
   // Load models + tables when dialog opens
   useEffect(() => {
@@ -106,7 +108,9 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
       setItems(defaultItems.map(i => ({
         uid: crypto.randomUUID(),
         modelId: i.modelId, modelName: i.modelName,
-        sellingPrice: i.sellingPrice, qty: i.qty,
+        sellingPrice: i.sellingPrice,
+        customPriceDigits: String(Math.round(Number(i.sellingPrice) || 0)),
+        qty: i.qty,
         selectedOptions: i.selectedOptions || {}, itemNotes: i.itemNotes || '',
         sideItems: [],
       })))
@@ -134,7 +138,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
         selectedOptions: Object.keys(i.selectedOptions || {}).length > 0
           ? JSON.stringify(i.selectedOptions) : null,
         itemNotes: i.itemNotes || null,
-        lineTotal: i.qty * (Number(i.sellingPrice || 0) + calcOptAddOn(i)),
+        lineTotal: i.qty * (itemBasePrice(i) + calcOptAddOn(i)),
       })),
       totalAmount: total,
       paymentQr: null,
@@ -183,13 +187,24 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
       i.uid !== parentUid ? i : { ...i, sideItems: i.sideItems.filter(si => si.uid !== sideUid) }
     ))
 
+  const setSideItemPrice = (parentUid, sideUid, digits) =>
+    setItems(prev => prev.map(i =>
+      i.uid !== parentUid ? i : {
+        ...i, sideItems: i.sideItems.map(si =>
+          si.uid === sideUid ? { ...si, customPriceDigits: digits } : si
+        )
+      }
+    ))
+
   const addItem = () => {
     if (!selectedModel) return
     const mid = selectedModel.id
     setItems(prev => [...prev, {
       uid: crypto.randomUUID(),
       modelId: mid, modelName: selectedModel.modelName,
-      sellingPrice: selectedModel.sellingPrice, qty: 1, selectedOptions: {}, itemNotes: '',
+      sellingPrice: selectedModel.sellingPrice,
+      customPriceDigits: String(Math.round(Number(selectedModel.sellingPrice) || 0)),
+      qty: 1, selectedOptions: {}, itemNotes: '',
       sideItems: [],
     }])
     if (!optsByModel[mid]) {
@@ -223,6 +238,9 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
     setItems(prev => prev.map(i => i.uid === uid ? { ...i, itemNotes: val } : i))
   }
 
+  const setItemPrice = (uid, digits) =>
+    setItems(prev => prev.map(i => i.uid === uid ? { ...i, customPriceDigits: digits } : i))
+
   const changeQty = (uid, delta) => {
     setItems(prev =>
       prev.map(i => i.uid === uid ? { ...i, qty: i.qty + delta } : i).filter(i => i.qty > 0)
@@ -246,7 +264,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
           selectedOptions: Object.keys(i.selectedOptions || {}).length > 0
             ? JSON.stringify(i.selectedOptions) : null,
           itemNotes: i.itemNotes || null,
-          unitPriceOverride: null,
+          unitPriceOverride: Number(i.customPriceDigits) || null,
         },
         ...(i.sideItems || []).map(si => ({
           modelId: si.modelId, quantity: 1,
@@ -477,7 +495,9 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                       setItems(prev => [...prev, {
                         uid: crypto.randomUUID(),
                         modelId: item.modelId, modelName: item.modelName,
-                        sellingPrice: item.sellingPrice, qty: item.qty || 1,
+                        sellingPrice: item.sellingPrice,
+                        customPriceDigits: String(Math.round(Number(item.sellingPrice) || 0)),
+                        qty: item.qty || 1,
                         selectedOptions: {}, itemNotes: '', sideItems: [],
                       }])
                       if (!optsByModel[item.modelId]) {
@@ -490,143 +510,156 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                 >
                   {items.map(item => {
                     const modelOpts = optsByModel[item.modelId] || []
+                    const sf = sideForm[item.uid] || {}
+                    const lineTotal = item.qty * (itemBasePrice(item) + calcOptAddOn(item)) + sidesTotal(item)
                     return (
-                      <Box key={item.uid} sx={{ bgcolor: '#f9f9f9', borderRadius: 1.5, px: 1.25, pt: 0.75, pb: 0.5 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Typography variant="body2" fontWeight={600} sx={{ flex: 1, minWidth: 0 }} noWrap>
-                            {item.modelName}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary" sx={{ fontSize: 12 }}>
-                            {fmt(item.sellingPrice)}
-                          </Typography>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
-                            <IconButton size="small" onClick={() => changeQty(item.uid, -1)} sx={{ p: 0.25 }}>
-                              <RemoveIcon sx={{ fontSize: 14 }} />
-                            </IconButton>
-                            <Typography variant="body2" fontWeight={700} sx={{ minWidth: 20, textAlign: 'center' }}>
-                              {item.qty}
+                      <Box key={item.uid} sx={{ border: '1.5px solid #e2e8f0', borderRadius: 2, overflow: 'hidden' }}>
+
+                        {/* ── Main item ─────────────────────────────────────── */}
+                        <Box sx={{ bgcolor: '#f8faff', px: 1.5, pt: 1, pb: 0.75 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+                            <Typography variant="body2" fontWeight={700} sx={{ flex: 1, minWidth: 80 }} noWrap>
+                              {item.modelName}
                             </Typography>
-                            <IconButton size="small" onClick={() => changeQty(item.uid, 1)}
-                              sx={{ p: 0.25, bgcolor: '#1976d2', color: '#fff', '&:hover': { bgcolor: '#1565c0' } }}>
-                              <AddIcon sx={{ fontSize: 14 }} />
+                            <TextField
+                              size="small" type="text" inputMode="numeric" placeholder="0"
+                              value={fmtDots(item.customPriceDigits || '')}
+                              onChange={e => setItemPrice(item.uid, stripDigits(e.target.value))}
+                              inputProps={{ maxLength: 12, style: { fontSize: 12, fontWeight: 700, textAlign: 'right', width: 68 } }}
+                              InputProps={{ endAdornment: <InputAdornment position="end">đ</InputAdornment> }}
+                              sx={{ width: 106, '& .MuiInputBase-root': { height: 30 } }}
+                            />
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+                              <IconButton size="small" onClick={() => changeQty(item.uid, -1)} sx={{ p: 0.25 }}>
+                                <RemoveIcon sx={{ fontSize: 14 }} />
+                              </IconButton>
+                              <Typography variant="body2" fontWeight={700} sx={{ minWidth: 20, textAlign: 'center', fontSize: 13 }}>
+                                {item.qty}
+                              </Typography>
+                              <IconButton size="small" onClick={() => changeQty(item.uid, 1)}
+                                sx={{ p: 0.25, bgcolor: '#1976d2', color: '#fff', borderRadius: 0.75, '&:hover': { bgcolor: '#1565c0' } }}>
+                                <AddIcon sx={{ fontSize: 14 }} />
+                              </IconButton>
+                            </Box>
+                            <Typography variant="body2" color="primary" fontWeight={800}
+                              sx={{ minWidth: 70, textAlign: 'right', fontSize: 13 }}>
+                              {fmt(lineTotal)}
+                            </Typography>
+                            <IconButton size="small" color="error"
+                              onClick={() => setItems(prev => prev.filter(i => i.uid !== item.uid))}
+                              sx={{ p: 0.25 }}>
+                              <DeleteIcon sx={{ fontSize: 14 }} />
                             </IconButton>
                           </Box>
-                          <Typography variant="body2" color="primary" fontWeight={700}
-                            sx={{ minWidth: 64, textAlign: 'right', fontSize: 13 }}>
-                            {fmt(item.qty * (Number(item.sellingPrice || 0) + calcOptAddOn(item)))}
-                          </Typography>
-                          <IconButton size="small" color="error"
-                            onClick={() => setItems(prev => prev.filter(i => i.uid !== item.uid))}
-                            sx={{ p: 0.25, ml: 0.25 }}>
-                            <DeleteIcon sx={{ fontSize: 14 }} />
-                          </IconButton>
+
+                          {/* Option chips */}
+                          {modelOpts.map(grp => {
+                            const rawChoices = (() => { try { return JSON.parse(grp.choices) } catch { return [] } })()
+                            const choices = rawChoices.map(c => typeof c === 'object' ? c : { label: String(c), price: 0 })
+                            if (!choices.length) return null
+                            const curVal = item.selectedOptions[grp.groupName]
+                            const selArr = Array.isArray(curVal) ? curVal : (curVal ? [curVal] : [])
+                            return (
+                              <Box key={grp.id} sx={{ mt: 0.5 }}>
+                                <Typography variant="caption" color="text.secondary"
+                                  sx={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                  {grp.groupName}{grp.isFree ? ' (free)' : ''}
+                                </Typography>
+                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.25 }}>
+                                  {choices.map(choice => {
+                                    const active = selArr.includes(choice.label)
+                                    const priceTag = (!grp.isFree && choice.price > 0)
+                                      ? ` +${Number(choice.price).toLocaleString('vi-VN')}đ` : ''
+                                    return (
+                                      <Chip key={choice.label} label={choice.label + priceTag} size="small"
+                                        onClick={() => toggleOption(item.uid, grp.groupName, choice.label, grp.multiSelect)}
+                                        sx={{
+                                          height: 22, fontSize: 11, cursor: 'pointer',
+                                          bgcolor: active ? '#1976d2' : '#fff', color: active ? '#fff' : '#555',
+                                          border: `1px solid ${active ? '#1976d2' : '#ddd'}`, fontWeight: active ? 700 : 400,
+                                          '&:hover': { bgcolor: active ? '#1565c0' : '#f0f4ff' },
+                                        }} />
+                                    )
+                                  })}
+                                </Box>
+                              </Box>
+                            )
+                          })}
+
+                          <TextField size="small" variant="standard" fullWidth
+                            placeholder="Item note (e.g. no sugar, extra spicy…)"
+                            value={item.itemNotes || ''}
+                            onChange={e => setItemNotes(item.uid, e.target.value)}
+                            InputProps={{ disableUnderline: false, sx: { fontSize: 12 } }}
+                            sx={{ mt: 0.5 }}
+                          />
                         </Box>
 
-                        {/* Option chips */}
-                        {modelOpts.map(grp => {
-                          const rawChoices = (() => { try { return JSON.parse(grp.choices) } catch { return [] } })()
-                          const choices = rawChoices.map(c => typeof c === 'object' ? c : { label: String(c), price: 0 })
-                          if (!choices.length) return null
-                          const curVal = item.selectedOptions[grp.groupName]
-                          const selArr = Array.isArray(curVal) ? curVal : (curVal ? [curVal] : [])
-                          return (
-                            <Box key={grp.id} sx={{ mt: 0.5 }}>
-                              <Typography variant="caption" color="text.secondary"
-                                sx={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                                {grp.groupName}{grp.isFree ? ' (free)' : ''}
-                              </Typography>
-                              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.25 }}>
-                                {choices.map(choice => {
-                                  const active = selArr.includes(choice.label)
-                                  const priceTag = (!grp.isFree && choice.price > 0)
-                                    ? ` +${Number(choice.price).toLocaleString('vi-VN')}đ` : ''
-                                  return (
-                                    <Chip key={choice.label} label={choice.label + priceTag} size="small"
-                                      onClick={() => toggleOption(item.uid, grp.groupName, choice.label, grp.multiSelect)}
-                                      sx={{
-                                        height: 22, fontSize: 11, cursor: 'pointer',
-                                        bgcolor: active ? '#1976d2' : '#fff',
-                                        color: active ? '#fff' : '#555',
-                                        border: `1px solid ${active ? '#1976d2' : '#ddd'}`,
-                                        fontWeight: active ? 700 : 400,
-                                        '&:hover': { bgcolor: active ? '#1565c0' : '#f0f4ff' },
-                                      }}
-                                    />
-                                  )
-                                })}
-                              </Box>
-                            </Box>
-                          )
-                        })}
+                        {/* ── Children (tree) ─────────────────────────────────── */}
+                        <Box sx={{ bgcolor: '#f0f4ff', borderTop: '1px solid #e2e8f0' }}>
+                          <Box sx={{ ml: 1.5, borderLeft: '2px solid #c7d2fe' }}>
 
-                        {/* Per-item note */}
-                        <TextField
-                          size="small" variant="standard" fullWidth
-                          placeholder="Item note (e.g. no sugar, extra spicy…)"
-                          value={item.itemNotes || ''}
-                          onChange={e => setItemNotes(item.uid, e.target.value)}
-                          InputProps={{ disableUnderline: false, sx: { fontSize: 12 } }}
-                          sx={{ mt: 0.5 }}
-                        />
-
-                        {/* Existing side items */}
-                        {(item.sideItems || []).length > 0 && (
-                          <Stack spacing={0.2} sx={{ mt: 0.5, pl: 1.25, borderLeft: '2px solid #bbdefb' }}>
-                            {item.sideItems.map(si => (
-                              <Box key={si.uid} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                                <Typography variant="caption" sx={{ flex: 1, fontSize: 12 }} noWrap>
-                                  + {si.modelName}
+                            {/* Side item rows */}
+                            {(item.sideItems || []).map(si => (
+                              <Box key={si.uid} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, py: 0.5, pr: 0.75, borderBottom: '1px solid #e8eaf6' }}>
+                                <Box sx={{ width: 14, height: 2, bgcolor: '#c7d2fe', flexShrink: 0 }} />
+                                <Typography variant="caption" fontWeight={600} sx={{ flex: 1, fontSize: 12 }} noWrap>
+                                  {si.modelName}
                                 </Typography>
-                                <Typography variant="caption" color="primary" fontWeight={700} sx={{ fontSize: 12, minWidth: 60, textAlign: 'right' }}>
-                                  {fmtDots(si.customPriceDigits) || '0'} đ
+                                <TextField
+                                  size="small" type="text" inputMode="numeric" placeholder="0"
+                                  value={fmtDots(si.customPriceDigits || '')}
+                                  onChange={e => setSideItemPrice(item.uid, si.uid, stripDigits(e.target.value))}
+                                  inputProps={{ maxLength: 12, style: { fontSize: 12, fontWeight: 700, textAlign: 'right', width: 58 } }}
+                                  InputProps={{ endAdornment: <InputAdornment position="end">đ</InputAdornment> }}
+                                  sx={{ width: 96, '& .MuiInputBase-root': { height: 26 } }}
+                                />
+                                <Typography variant="caption" color="primary" fontWeight={700}
+                                  sx={{ minWidth: 54, textAlign: 'right', fontSize: 12 }}>
+                                  {fmt(Number(si.customPriceDigits) || 0)}
                                 </Typography>
                                 <IconButton size="small" onClick={() => removeSideItem(item.uid, si.uid)}
-                                  sx={{ p: 0.125, color: '#bbb', '&:hover': { color: '#dc2626' } }}>
-                                  <CloseIcon sx={{ fontSize: 12 }} />
+                                  sx={{ p: 0.25, color: '#94a3b8', '&:hover': { color: '#dc2626' } }}>
+                                  <CloseIcon sx={{ fontSize: 13 }} />
                                 </IconButton>
                               </Box>
                             ))}
-                          </Stack>
-                        )}
 
-                        {/* Add side item row */}
-                        {(() => {
-                          const sf = sideForm[item.uid] || {}
-                          return (
-                            <Box sx={{ mt: 0.5, display: 'flex', gap: 0.5, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                            {/* Add side item */}
+                            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5, py: 0.6, pr: 0.75, flexWrap: 'wrap' }}>
+                              <Box sx={{ width: 14, height: 2, bgcolor: '#a5b4fc', flexShrink: 0, mt: 2.25 }} />
                               <Autocomplete
-                                size="small"
-                                options={models}
-                                getOptionLabel={m => m.modelName}
+                                size="small" options={models} getOptionLabel={m => m.modelName}
                                 value={sf.model || null}
                                 onChange={(_, v) => {
                                   setSF(item.uid, 'model', v)
                                   if (v) setSF(item.uid, 'priceDigits', String(Math.round(Number(v.sellingPrice) || 0)))
                                 }}
-                                renderInput={params => <TextField {...params} label="Side item…" size="small" />}
+                                renderInput={params => <TextField {...params} label="Add topping / side…" size="small" />}
                                 sx={{ flex: 1, minWidth: 130 }}
                                 isOptionEqualToValue={(a, b) => a.id === b.id}
                                 noOptionsText="No items"
                               />
                               <TextField
-                                size="small" type="text" inputMode="numeric"
-                                label="Price" placeholder="0"
+                                size="small" type="text" inputMode="numeric" label="Price" placeholder="0"
                                 value={fmtDots(sf.priceDigits || '')}
                                 onChange={e => setSF(item.uid, 'priceDigits', stripDigits(e.target.value))}
-                                sx={{ width: 105 }}
                                 inputProps={{ maxLength: 12 }}
                                 InputProps={{ endAdornment: <InputAdornment position="end">đ</InputAdornment> }}
+                                sx={{ width: 98 }}
                               />
-                              <Button size="small" variant="outlined"
+                              <Button size="small" variant="contained"
                                 startIcon={<PlaylistAddIcon sx={{ fontSize: 14 }} />}
-                                onClick={() => addSideItem(item.uid)}
-                                disabled={!sf.model}
-                                sx={{ textTransform: 'none', fontSize: 11, height: 40, flexShrink: 0 }}>
-                                Add side
+                                onClick={() => addSideItem(item.uid)} disabled={!sf.model}
+                                sx={{ textTransform: 'none', fontSize: 11, height: 40, flexShrink: 0,
+                                  bgcolor: '#6366f1', '&:hover': { bgcolor: '#4f46e5' }, '&.Mui-disabled': { bgcolor: '#e0e0e0' } }}>
+                                Add
                               </Button>
                             </Box>
-                          )
-                        })()}
+
+                          </Box>
+                        </Box>
+
                       </Box>
                     )
                   })}
