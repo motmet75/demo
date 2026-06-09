@@ -198,7 +198,8 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
 
                       {/* Options */}
                       {modelOpts.map(grp => {
-                        const choices = (() => { try { return JSON.parse(grp.choices) } catch { return [] } })()
+                        const rawChoices = (() => { try { return JSON.parse(grp.choices) } catch { return [] } })()
+                        const choices = rawChoices.map(c => typeof c === 'object' ? c : { label: String(c), price: 0 })
                         if (!choices.length) return null
                         const curVal = item.selectedOptions[grp.groupName]
                         const selArr = Array.isArray(curVal) ? curVal : (curVal ? [curVal] : [])
@@ -208,13 +209,16 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
                               sx={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                               {grp.groupName}
                               {grp.required && <span style={{ color: '#e53935' }}> *</span>}
+                              {grp.isFree ? ' (free)' : ''}
                             </Typography>
                             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.25 }}>
                               {choices.map(choice => {
-                                const active = selArr.includes(choice)
+                                const active = selArr.includes(choice.label)
+                                const priceTag = (!grp.isFree && choice.price > 0)
+                                  ? ` +${Number(choice.price).toLocaleString('vi-VN')}đ` : ''
                                 return (
-                                  <Chip key={choice} label={choice} size="small"
-                                    onClick={() => toggleOption(item.modelId, grp.groupName, choice, grp.multiSelect)}
+                                  <Chip key={choice.label} label={choice.label + priceTag} size="small"
+                                    onClick={() => toggleOption(item.modelId, grp.groupName, choice.label, grp.multiSelect)}
                                     sx={{
                                       height: 22, fontSize: 11, cursor: 'pointer',
                                       bgcolor: active ? '#1976d2' : '#fff',

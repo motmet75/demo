@@ -17,7 +17,6 @@ import CircularProgress from '@mui/material/CircularProgress'
 import Divider from '@mui/material/Divider'
 import Tooltip from '@mui/material/Tooltip'
 import Stack from '@mui/material/Stack'
-import Slider from '@mui/material/Slider'
 import TextField from '@mui/material/TextField'
 import InputAdornment from '@mui/material/InputAdornment'
 import PrintIcon from '@mui/icons-material/Print'
@@ -118,8 +117,8 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
     try {
       const { res, data } = await splitPayment(order.id, cash)
       if (!res.ok) { setError(data?.message || 'Failed to set split payment'); setSplitting(false); return }
+      broadcastToCounter(data, tagQr || null)
       setSplitOpen(false)
-      printOrderReceipt(data)
       onRefresh?.()
     } catch (e) { setError(e.message || 'Failed to set split payment') }
     setSplitting(false)
@@ -398,59 +397,89 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
       {/* ── Split Payment Dialog ─────────────────────────── */}
       <Dialog open={splitOpen} onClose={() => setSplitOpen(false)} maxWidth="xs" fullWidth
         PaperProps={{ sx: { borderRadius: 2 } }}>
-        <DialogTitle sx={{ pb: 1 }}>
+        <DialogTitle sx={{ pb: 0.5 }}>
           <Typography fontWeight={800}>Split Payment</Typography>
           <Typography variant="caption" color="text.secondary">
-            Total: {fmt(total)} — adjust cash vs. bank QR portions
+            Total: <strong>{fmt(total)}</strong> — type in either box, the other adjusts automatically
           </Typography>
         </DialogTitle>
-        <DialogContent>
-          <Box sx={{ pt: 1 }}>
-            <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-              <Button size="small" variant="outlined" onClick={() => setCashInput(String(Math.round(total / 2)))}>
-                Half
-              </Button>
-              <Button size="small" variant="outlined" onClick={() => setCashInput('0')}>
-                All QR
-              </Button>
-              <Button size="small" variant="outlined" onClick={() => setCashInput(String(Math.round(total)))}>
-                All Cash
-              </Button>
+        <DialogContent sx={{ pt: 1.5 }}>
+          {/* Two big linked boxes */}
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 1, alignItems: 'center', mb: 2 }}>
+            {/* Cash box */}
+            <Box sx={{ bgcolor: '#fff7ed', border: '2px solid #f59e0b', borderRadius: 2, p: 1.5 }}>
+              <Typography variant="caption" fontWeight={800} color="warning.dark"
+                sx={{ display: 'block', textAlign: 'center', mb: 1, letterSpacing: 1, textTransform: 'uppercase' }}>
+                💵 Tiền mặt
+              </Typography>
+              <TextField
+                type="number"
+                size="small"
+                fullWidth
+                value={cashInput}
+                onChange={e => {
+                  const v = Math.max(0, Math.min(Math.round(total), Number(e.target.value) || 0))
+                  setCashInput(String(v))
+                }}
+                inputProps={{ min: 0, max: total, step: 1000, style: { textAlign: 'center', fontSize: 22, fontWeight: 900, padding: '8px 4px' } }}
+                InputProps={{ endAdornment: <InputAdornment position="end">đ</InputAdornment> }}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    bgcolor: '#fff',
+                    '& fieldset': { borderColor: '#f59e0b' },
+                    '&:hover fieldset': { borderColor: '#d97706' },
+                    '&.Mui-focused fieldset': { borderColor: '#d97706' },
+                  }
+                }}
+              />
             </Box>
 
-            <TextField
-              label="Cash amount (đ)"
-              type="number"
-              fullWidth
-              size="small"
-              value={cashInput}
-              onChange={e => {
-                const v = Math.max(0, Math.min(Math.round(total), Number(e.target.value) || 0))
-                setCashInput(String(v))
-              }}
-              InputProps={{ endAdornment: <InputAdornment position="end">đ</InputAdornment> }}
-              sx={{ mb: 2 }}
-            />
+            {/* Arrow */}
+            <Typography sx={{ color: '#94a3b8', fontWeight: 900, fontSize: 20, userSelect: 'none' }}>⇄</Typography>
 
-            <Slider
-              value={cashNum}
-              min={0}
-              max={total}
-              step={1000}
-              onChange={(_, v) => setCashInput(String(v))}
-              sx={{ mb: 1 }}
-            />
-
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, mt: 1 }}>
-              <Box sx={{ p: 1.25, bgcolor: '#f0fdf4', borderRadius: 1.5, textAlign: 'center', border: '1px solid #bbf7d0' }}>
-                <Typography variant="caption" color="success.main" fontWeight={700} display="block">Bank QR</Typography>
-                <Typography variant="h6" fontWeight={900} color="success.dark">{fmt(qrPortion)}</Typography>
-              </Box>
-              <Box sx={{ p: 1.25, bgcolor: '#fff7ed', borderRadius: 1.5, textAlign: 'center', border: '1px solid #fed7aa' }}>
-                <Typography variant="caption" color="warning.main" fontWeight={700} display="block">Cash</Typography>
-                <Typography variant="h6" fontWeight={900} color="warning.dark">{fmt(cashNum)}</Typography>
-              </Box>
+            {/* QR box */}
+            <Box sx={{ bgcolor: '#f0fdf4', border: '2px solid #22c55e', borderRadius: 2, p: 1.5 }}>
+              <Typography variant="caption" fontWeight={800} color="success.dark"
+                sx={{ display: 'block', textAlign: 'center', mb: 1, letterSpacing: 1, textTransform: 'uppercase' }}>
+                💳 Bank QR
+              </Typography>
+              <TextField
+                type="number"
+                size="small"
+                fullWidth
+                value={String(qrPortion)}
+                onChange={e => {
+                  const qr = Math.max(0, Math.min(Math.round(total), Number(e.target.value) || 0))
+                  setCashInput(String(Math.round(total) - qr))
+                }}
+                inputProps={{ min: 0, max: total, step: 1000, style: { textAlign: 'center', fontSize: 22, fontWeight: 900, padding: '8px 4px' } }}
+                InputProps={{ endAdornment: <InputAdornment position="end">đ</InputAdornment> }}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    bgcolor: '#fff',
+                    '& fieldset': { borderColor: '#22c55e' },
+                    '&:hover fieldset': { borderColor: '#16a34a' },
+                    '&.Mui-focused fieldset': { borderColor: '#16a34a' },
+                  }
+                }}
+              />
             </Box>
+          </Box>
+
+          {/* Quick buttons */}
+          <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
+            <Button size="small" variant="outlined" color="warning"
+              onClick={() => setCashInput(String(Math.round(total / 2)))}>
+              Half / Half
+            </Button>
+            <Button size="small" variant="outlined" color="success"
+              onClick={() => setCashInput('0')}>
+              All QR
+            </Button>
+            <Button size="small" variant="outlined"
+              onClick={() => setCashInput(String(Math.round(total)))}>
+              All Cash
+            </Button>
           </Box>
         </DialogContent>
         <DialogActions sx={{ px: 2, pb: 2 }}>
@@ -463,7 +492,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
             disabled={splitting || cashNum < 0 || cashNum > total}
             sx={{ textTransform: 'none', fontWeight: 700 }}
           >
-            Confirm & Print
+            Confirm
           </Button>
         </DialogActions>
       </Dialog>
