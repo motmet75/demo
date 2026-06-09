@@ -56,27 +56,49 @@ function IdleScreen() {
   )
 }
 
-function ItemRow({ item }) {
+function ItemRow({ item, number, isChild }) {
   const opts = parseOpts(item.selectedOptions)
   return (
     <Box sx={{
-      bgcolor: '#1e293b', borderRadius: 2,
-      p: { xs: 1.5, md: 2 }, mb: 1.5, borderLeft: '4px solid #3b82f6',
+      bgcolor: isChild ? '#162032' : '#1e293b',
+      borderRadius: isChild ? 1.5 : 2,
+      p: isChild ? { xs: 1, md: 1.5 } : { xs: 1.5, md: 2 },
+      mb: isChild ? 1 : 1.5,
+      ml: isChild ? { xs: 3, md: 5 } : 0,
+      borderLeft: isChild ? '3px solid #6366f1' : '4px solid #3b82f6',
     }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 1 }}>
-        <Typography sx={{ fontSize: { xs: 16, md: 22 }, fontWeight: 800, color: '#f1f5f9', lineHeight: 1.2, flex: 1 }}>
-          <Box component="span" sx={{ color: '#60a5fa', fontWeight: 900, mr: 1 }}>
-            {Number(item.quantity)}×
-          </Box>
+        <Typography sx={{
+          fontSize: isChild ? { xs: 14, md: 18 } : { xs: 16, md: 22 },
+          fontWeight: isChild ? 600 : 800, color: '#f1f5f9', lineHeight: 1.2, flex: 1,
+        }}>
+          {number && (
+            <Box component="span" sx={{
+              color: isChild ? '#818cf8' : '#94a3b8',
+              fontWeight: 700, mr: 0.75, fontSize: '0.8em',
+            }}>
+              {number}
+            </Box>
+          )}
+          {!isChild && (
+            <Box component="span" sx={{ color: '#60a5fa', fontWeight: 900, mr: 1 }}>
+              {Number(item.quantity)}×
+            </Box>
+          )}
           {item.modelName}
         </Typography>
-        <Typography sx={{ fontSize: { xs: 14, md: 18 }, fontWeight: 700, color: '#38bdf8', flexShrink: 0 }}>
+        <Typography sx={{
+          fontSize: isChild ? { xs: 12, md: 15 } : { xs: 14, md: 18 },
+          fontWeight: 700,
+          color: isChild ? '#a5b4fc' : '#38bdf8',
+          flexShrink: 0,
+        }}>
           {fmt(item.lineTotal)}
         </Typography>
       </Box>
 
       {opts.length > 0 && (
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 1 }}>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 0.75 }}>
           {opts.map((o, i) => (
             <Box key={i} sx={{
               bgcolor: '#334155', color: '#94a3b8', borderRadius: 99,
@@ -367,7 +389,21 @@ function ActiveOrder({ order, flash }) {
           '&::-webkit-scrollbar': { width: 4 },
           '&::-webkit-scrollbar-thumb': { bgcolor: '#334155', borderRadius: 4 },
         }}>
-          {(order.items || []).map((item, i) => <ItemRow key={i} item={item} />)}
+          {(() => {
+            const allItems = order.items || []
+            const roots = allItems.filter(it => !it.parentItemId)
+            return roots.map((root, idx) => {
+              const children = allItems.filter(it => it.parentItemId === root.id)
+              return (
+                <Box key={root.id || idx}>
+                  <ItemRow item={root} number={`${idx + 1}.`} />
+                  {children.map((child, cIdx) => (
+                    <ItemRow key={child.id || cIdx} item={child} number={`${idx + 1}.${cIdx + 1}`} isChild />
+                  ))}
+                </Box>
+              )
+            })
+          })()}
 
           {/* Total */}
           <Box sx={{

@@ -130,46 +130,12 @@ public class ShopOrderService {
         shopOrderRepository.save(order);
 
         List<ShopOrderItem> items = new ArrayList<>();
-        BigDecimal totalAmount = BigDecimal.ZERO;
-        BigDecimal totalRawCost = BigDecimal.ZERO;
-
-        for (var lineReq : req.items()) {
-            Model model = modelRepository.findById(lineReq.modelId())
-                    .orElseThrow(() -> new IllegalArgumentException("Model not found: " + lineReq.modelId()));
-
-            BigDecimal qty = lineReq.quantity();
-            BigDecimal unitPrice = lineReq.unitPriceOverride() != null
-                    ? lineReq.unitPriceOverride()
-                    : (model.getSellingPrice() != null ? model.getSellingPrice() : BigDecimal.ZERO);
-            ShopPricingService.RawCostBreakdown costBreakdown =
-                    shopPricingService.calculateRawCost(model.getId(), qty, tenantId, companyId);
-            BigDecimal unitRawCost = qty.compareTo(BigDecimal.ZERO) > 0
-                    ? costBreakdown.total().divide(qty, 4, RoundingMode.HALF_UP)
-                    : BigDecimal.ZERO;
-            BigDecimal optionAddOn = calculateOptionAddOn(model.getId(), lineReq.selectedOptions(), tenantId, companyId);
-            BigDecimal lineTotal = unitPrice.add(optionAddOn).multiply(qty);
-
-            ShopOrderItem item = new ShopOrderItem();
-            item.setOrder(order);
-            item.setModel(model);
-            item.setModelName(model.getModelName());
-            item.setQuantity(qty);
-            item.setUnitPrice(unitPrice);
-            item.setUnitRawCost(unitRawCost);
-            item.setOptionAddOn(optionAddOn);
-            item.setLineTotal(lineTotal);
-            item.setSelectedOptions(lineReq.selectedOptions());
-            item.setItemNotes(lineReq.itemNotes());
-            shopOrderItemRepository.save(item);
-            items.add(item);
-
-            totalAmount = totalAmount.add(lineTotal);
-            totalRawCost = totalRawCost.add(costBreakdown.total());
-        }
+        BigDecimal[] totals = { BigDecimal.ZERO, BigDecimal.ZERO };
+        buildItems(order, req.items(), null, items, totals, tenantId, companyId);
 
         BigDecimal fee = order.getDeliveryFee() != null ? order.getDeliveryFee() : BigDecimal.ZERO;
-        order.setTotalAmount(totalAmount.add(fee));
-        order.setTotalRawCost(totalRawCost);
+        order.setTotalAmount(totals[0].add(fee));
+        order.setTotalRawCost(totals[1]);
 
         // Generate payment QR immediately for prepayment (BANK_QR) orders
         if ("BANK_QR".equals(order.getPaymentMethod())) {
@@ -596,47 +562,18 @@ public class ShopOrderService {
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         requireStatus(order, ShopOrder.STATUS_PENDING);
 
-        shopOrderItemRepository.deleteAll(shopOrderItemRepository.findAllByOrder_Id(orderId));
+        // Delete children before parents to respect the self-referencing FK
+        List<ShopOrderItem> existing = shopOrderItemRepository.findAllByOrder_Id(orderId);
+        shopOrderItemRepository.deleteAll(existing.stream().filter(i -> i.getParentItem() != null).toList());
+        shopOrderItemRepository.deleteAll(existing.stream().filter(i -> i.getParentItem() == null).toList());
 
         List<ShopOrderItem> items = new ArrayList<>();
-        BigDecimal totalAmount = BigDecimal.ZERO;
-        BigDecimal totalRawCost = BigDecimal.ZERO;
-
-        for (var lineReq : newItems) {
-            Model model = modelRepository.findById(lineReq.modelId())
-                    .orElseThrow(() -> new IllegalArgumentException("Model not found: " + lineReq.modelId()));
-            BigDecimal qty = lineReq.quantity();
-            BigDecimal unitPrice = lineReq.unitPriceOverride() != null
-                    ? lineReq.unitPriceOverride()
-                    : (model.getSellingPrice() != null ? model.getSellingPrice() : BigDecimal.ZERO);
-            ShopPricingService.RawCostBreakdown costBreakdown =
-                    shopPricingService.calculateRawCost(model.getId(), qty, tenantId, companyId);
-            BigDecimal unitRawCost = qty.compareTo(BigDecimal.ZERO) > 0
-                    ? costBreakdown.total().divide(qty, 4, RoundingMode.HALF_UP)
-                    : BigDecimal.ZERO;
-            BigDecimal optionAddOn = calculateOptionAddOn(model.getId(), lineReq.selectedOptions(), tenantId, companyId);
-            BigDecimal lineTotal = unitPrice.add(optionAddOn).multiply(qty);
-
-            ShopOrderItem item = new ShopOrderItem();
-            item.setOrder(order);
-            item.setModel(model);
-            item.setModelName(model.getModelName());
-            item.setQuantity(qty);
-            item.setUnitPrice(unitPrice);
-            item.setUnitRawCost(unitRawCost);
-            item.setOptionAddOn(optionAddOn);
-            item.setLineTotal(lineTotal);
-            item.setSelectedOptions(lineReq.selectedOptions());
-            item.setItemNotes(lineReq.itemNotes());
-            shopOrderItemRepository.save(item);
-            items.add(item);
-            totalAmount = totalAmount.add(lineTotal);
-            totalRawCost = totalRawCost.add(costBreakdown.total());
-        }
+        BigDecimal[] totals = { BigDecimal.ZERO, BigDecimal.ZERO };
+        buildItems(order, newItems, null, items, totals, tenantId, companyId);
 
         BigDecimal fee = order.getDeliveryFee() != null ? order.getDeliveryFee() : BigDecimal.ZERO;
-        order.setTotalAmount(totalAmount.add(fee));
-        order.setTotalRawCost(totalRawCost);
+        order.setTotalAmount(totals[0].add(fee));
+        order.setTotalRawCost(totals[1]);
 
         if ("BANK_QR".equals(order.getPaymentMethod())) {
             Company company = companyRepository.findById(companyId).orElse(null);
@@ -650,6 +587,53 @@ public class ShopOrderService {
 
         shopOrderRepository.save(order);
         return ShopOrderResponseDto.from(order, items);
+    }
+
+    // ── Recursive item builder ────────────────────────────────────────
+
+    /**
+     * Recursively saves ItemRequest nodes (and their sideItems children) under the given parent.
+     * totals[0] = running totalAmount, totals[1] = running totalRawCost.
+     */
+    private void buildItems(ShopOrder order, List<ItemRequest> requests, ShopOrderItem parent,
+                             List<ShopOrderItem> accumulator, BigDecimal[] totals,
+                             UUID tenantId, UUID companyId) {
+        if (requests == null) return;
+        for (var req : requests) {
+            Model model = modelRepository.findById(req.modelId())
+                    .orElseThrow(() -> new IllegalArgumentException("Model not found: " + req.modelId()));
+            BigDecimal qty = req.quantity();
+            BigDecimal unitPrice = req.unitPriceOverride() != null
+                    ? req.unitPriceOverride()
+                    : (model.getSellingPrice() != null ? model.getSellingPrice() : BigDecimal.ZERO);
+            ShopPricingService.RawCostBreakdown costBreakdown =
+                    shopPricingService.calculateRawCost(model.getId(), qty, tenantId, companyId);
+            BigDecimal unitRawCost = qty.compareTo(BigDecimal.ZERO) > 0
+                    ? costBreakdown.total().divide(qty, 4, RoundingMode.HALF_UP)
+                    : BigDecimal.ZERO;
+            BigDecimal optionAddOn = calculateOptionAddOn(model.getId(), req.selectedOptions(), tenantId, companyId);
+            BigDecimal lineTotal = unitPrice.add(optionAddOn).multiply(qty);
+
+            ShopOrderItem item = new ShopOrderItem();
+            item.setOrder(order);
+            item.setParentItem(parent);
+            item.setModel(model);
+            item.setModelName(model.getModelName());
+            item.setQuantity(qty);
+            item.setUnitPrice(unitPrice);
+            item.setUnitRawCost(unitRawCost);
+            item.setOptionAddOn(optionAddOn);
+            item.setLineTotal(lineTotal);
+            item.setSelectedOptions(req.selectedOptions());
+            item.setItemNotes(req.itemNotes());
+            shopOrderItemRepository.save(item);
+            accumulator.add(item);
+
+            totals[0] = totals[0].add(lineTotal);
+            totals[1] = totals[1].add(costBreakdown.total());
+
+            buildItems(order, req.sideItems(), item, accumulator, totals, tenantId, companyId);
+        }
     }
 
     // ── Option add-on pricing ─────────────────────────────────────────
@@ -779,7 +763,7 @@ public class ShopOrderService {
 
     // ── Request records ───────────────────────────────────────────────
 
-    public record ItemRequest(UUID modelId, BigDecimal quantity, String selectedOptions, String itemNotes, BigDecimal unitPriceOverride) {}
+    public record ItemRequest(UUID modelId, BigDecimal quantity, String selectedOptions, String itemNotes, BigDecimal unitPriceOverride, List<ItemRequest> sideItems) {}
 
     // ── Menu options (admin) ───────────────────────────────────────────
 

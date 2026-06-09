@@ -50,6 +50,7 @@ public class ShopOrderResponseDto {
         private String selectedOptions;
         private BigDecimal optionAddOn;
         private String itemNotes;
+        private UUID parentItemId;
 
         public static ItemDto from(ShopOrderItem item) {
             ItemDto dto = new ItemDto();
@@ -63,6 +64,7 @@ public class ShopOrderResponseDto {
             dto.selectedOptions = item.getSelectedOptions();
             dto.optionAddOn = item.getOptionAddOn();
             dto.itemNotes = item.getItemNotes();
+            dto.parentItemId = item.getParentItem() != null ? item.getParentItem().getId() : null;
             return dto;
         }
 
@@ -76,6 +78,7 @@ public class ShopOrderResponseDto {
         public String getSelectedOptions() { return selectedOptions; }
         public BigDecimal getOptionAddOn() { return optionAddOn; }
         public String getItemNotes() { return itemNotes; }
+        public UUID getParentItemId() { return parentItemId; }
     }
 
     public static ShopOrderResponseDto from(ShopOrder order, List<ShopOrderItem> items) {

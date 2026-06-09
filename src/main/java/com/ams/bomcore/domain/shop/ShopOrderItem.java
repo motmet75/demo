@@ -47,6 +47,10 @@ public class ShopOrderItem {
     @Column(name = "item_notes", columnDefinition = "TEXT")
     private String itemNotes;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_item_id")
+    private ShopOrderItem parentItem;
+
     public ShopOrderItem() {}
 
     @PrePersist
@@ -76,4 +80,6 @@ public class ShopOrderItem {
     public void setOptionAddOn(BigDecimal optionAddOn) { this.optionAddOn = optionAddOn; }
     public String getItemNotes() { return itemNotes; }
     public void setItemNotes(String itemNotes) { this.itemNotes = itemNotes; }
+    public ShopOrderItem getParentItem() { return parentItem; }
+    public void setParentItem(ShopOrderItem parentItem) { this.parentItem = parentItem; }
 }

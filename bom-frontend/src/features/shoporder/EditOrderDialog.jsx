@@ -46,7 +46,9 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
   useEffect(() => {
     if (!open || !order) return
     setLoading(true)
-    const initial = (order.items || []).map(item => ({
+    const allItems = order.items || []
+    const roots = allItems.filter(it => !it.parentItemId)
+    const initial = roots.map(item => ({
       uid: crypto.randomUUID(),
       modelId: item.modelId,
       modelName: item.modelName,
@@ -55,7 +57,11 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
       qty: Number(item.quantity),
       selectedOptions: parseOpts(item.selectedOptions),
       itemNotes: item.itemNotes || '',
-      sideItems: [],
+      sideItems: allItems.filter(si => si.parentItemId === item.id).map(si => ({
+        uid: crypto.randomUUID(),
+        modelId: si.modelId, modelName: si.modelName,
+        customPriceDigits: String(Math.round(Number(si.unitPrice) || 0)),
+      })),
     }))
     setItems(initial)
     setSideForm({})
@@ -190,19 +196,18 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
   const handleSave = async () => {
     if (!items.length) { setError('At least one item required'); return }
     setSaving(true); setError('')
-    const payload = items.flatMap(i => [
-      {
-        modelId: i.modelId, quantity: i.qty,
-        selectedOptions: Object.keys(i.selectedOptions || {}).length > 0 ? JSON.stringify(i.selectedOptions) : null,
-        itemNotes: i.itemNotes || null,
-        unitPriceOverride: Number(i.customPriceDigits) || null,
-      },
-      ...i.sideItems.map(si => ({
+    const payload = items.map(i => ({
+      modelId: i.modelId, quantity: i.qty,
+      selectedOptions: Object.keys(i.selectedOptions || {}).length > 0 ? JSON.stringify(i.selectedOptions) : null,
+      itemNotes: i.itemNotes || null,
+      unitPriceOverride: Number(i.customPriceDigits) || null,
+      sideItems: i.sideItems.map(si => ({
         modelId: si.modelId, quantity: 1,
         selectedOptions: null, itemNotes: null,
         unitPriceOverride: Number(si.customPriceDigits) || null,
-      }))
-    ])
+        sideItems: [],
+      })),
+    }))
     try {
       const { res, data } = await updateOrderItems(order.id, payload)
       if (!res.ok) { setError(data?.message || 'Failed to save'); setSaving(false); return }

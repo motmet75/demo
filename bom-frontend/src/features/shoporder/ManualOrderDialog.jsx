@@ -127,19 +127,37 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
   // Auto-broadcast temp order to counter display whenever items change
   useEffect(() => {
     if (!items.length) return
-    const tempOrder = {
-      orderNumber: null,
-      orderCode: '―',
-      customerName: customer.name || null,
-      tableName: tableName || null,
-      items: items.map(i => ({
+    const tempItems = []
+    items.forEach(i => {
+      const tempId = crypto.randomUUID()
+      tempItems.push({
+        id: tempId,
         modelName: i.modelName,
         quantity: i.qty,
         selectedOptions: Object.keys(i.selectedOptions || {}).length > 0
           ? JSON.stringify(i.selectedOptions) : null,
         itemNotes: i.itemNotes || null,
         lineTotal: i.qty * (itemBasePrice(i) + calcOptAddOn(i)),
-      })),
+        parentItemId: null,
+      })
+      ;(i.sideItems || []).forEach(si => {
+        tempItems.push({
+          id: crypto.randomUUID(),
+          modelName: si.modelName,
+          quantity: 1,
+          selectedOptions: null,
+          itemNotes: null,
+          lineTotal: Number(si.customPriceDigits) || 0,
+          parentItemId: tempId,
+        })
+      })
+    })
+    const tempOrder = {
+      orderNumber: null,
+      orderCode: '―',
+      customerName: customer.name || null,
+      tableName: tableName || null,
+      items: tempItems,
       totalAmount: total,
       paymentQr: null,
       tagQrBase64: null,
@@ -258,20 +276,19 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
       paymentMethod: payment,
       notes: notes || null,
       manualOrderNumber: manualNum !== '' ? Number(manualNum) : null,
-      items: items.flatMap(i => [
-        {
-          modelId: i.modelId, quantity: i.qty,
-          selectedOptions: Object.keys(i.selectedOptions || {}).length > 0
-            ? JSON.stringify(i.selectedOptions) : null,
-          itemNotes: i.itemNotes || null,
-          unitPriceOverride: Number(i.customPriceDigits) || null,
-        },
-        ...(i.sideItems || []).map(si => ({
+      items: items.map(i => ({
+        modelId: i.modelId, quantity: i.qty,
+        selectedOptions: Object.keys(i.selectedOptions || {}).length > 0
+          ? JSON.stringify(i.selectedOptions) : null,
+        itemNotes: i.itemNotes || null,
+        unitPriceOverride: Number(i.customPriceDigits) || null,
+        sideItems: (i.sideItems || []).map(si => ({
           modelId: si.modelId, quantity: 1,
           selectedOptions: null, itemNotes: null,
           unitPriceOverride: Number(si.customPriceDigits) || null,
+          sideItems: [],
         })),
-      ]),
+      })),
     }
     try {
       const { res, data } = await createStaffOrder(body)
