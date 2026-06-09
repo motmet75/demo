@@ -81,6 +81,15 @@ function parseOpts(str) {
 
 // ── Stock panel ─────────────────────────────────────────────────────
 
+function SectionLabel({ children }) {
+  return (
+    <Typography variant="caption" color="text.secondary"
+      sx={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', mb: 0.5 }}>
+      {children}
+    </Typography>
+  )
+}
+
 function StockPanel({ items, onUseInOrder, onClear, onRemoveItem }) {
   const [selectedUids, setSelectedUids] = useState(new Set())
 
@@ -98,13 +107,6 @@ function StockPanel({ items, onUseInOrder, onClear, onRemoveItem }) {
     onUseInOrder(queued)
     setSelectedUids(new Set())
   }
-
-  const SectionLabel = ({ children }) => (
-    <Typography variant="caption" color="text.secondary"
-      sx={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', mb: 0.5 }}>
-      {children}
-    </Typography>
-  )
 
   return (
     <Box sx={{ width: 256, flexShrink: 0, borderRight: '1px solid #e0e0e0', display: 'flex', flexDirection: 'column', height: '100%', bgcolor: '#fffde7' }}>
@@ -411,6 +413,7 @@ export default function ShopOrderGrid() {
   const [copied, setCopied]             = useState(false)
   const [tab, setTab]                   = useState(0)
   const [stockItems, setStockItems]     = useState([])
+  const [pendingStockUids, setPendingStockUids] = useState([])
   const [payQrOrder, setPayQrOrder]     = useState(null)
   const [bankConfig, setBankConfig]     = useState(null)
   const [tables, setTables]             = useState([])
@@ -496,21 +499,24 @@ export default function ShopOrderGrid() {
       await cancelShopOrder(row.id, reason)
       if (row.items?.length) {
         const newStock = row.items.map(item => ({
+          uid: crypto.randomUUID(),
           modelId: item.modelId, modelName: item.modelName,
           sellingPrice: item.unitPrice, qty: Number(item.quantity),
-          selectedOptions: {}, itemNotes: item.itemNotes || '',
+          selectedOptions: parseOpts(item.selectedOptions) || {},
+          itemNotes: item.itemNotes || '',
+          cancelledFromOrderCode: row.orderCode,
+          utilizedOrderCode: null,
         }))
-        setStockItems(prev => {
-          const merged = [...prev]
-          newStock.forEach(ns => {
-            const ex = merged.find(s => s.modelId === ns.modelId)
-            if (ex) ex.qty += ns.qty; else merged.push(ns)
-          })
-          return [...merged]
-        })
+        setStockItems(prev => [...prev, ...newStock])
       }
       reload()
     } catch (e) { setError(e.message || 'Failed to cancel') }
+  }
+
+  const handleUseInOrder = (queueItems) => {
+    setPendingStockUids(queueItems.map(i => i.uid))
+    setManualDefaults(queueItems)
+    setManualOpen(true)
   }
 
   const handleCancel = (row) => askConfirm({
@@ -751,7 +757,12 @@ export default function ShopOrderGrid() {
   return (
     <Box sx={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
       {stockItems.length > 0 && (
-        <StockPanel items={stockItems} onUseInOrder={items => { setManualDefaults(items); setManualOpen(true) }} onClear={() => setStockItems([])} />
+        <StockPanel
+          items={stockItems}
+          onUseInOrder={handleUseInOrder}
+          onClear={() => setStockItems([])}
+          onRemoveItem={uid => setStockItems(prev => prev.filter(i => i.uid !== uid))}
+        />
       )}
 
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -823,7 +834,22 @@ export default function ShopOrderGrid() {
       </Box>
 
       {/* Dialogs */}
-      <ManualOrderDialog open={manualOpen} onClose={() => { setManualOpen(false); setManualDefaults(null) }} onCreated={reload} defaultItems={manualDefaults} />
+      <ManualOrderDialog
+        open={manualOpen}
+        onClose={() => { setManualOpen(false); setManualDefaults(null); setPendingStockUids([]) }}
+        onCreated={(createdOrder) => {
+          if (pendingStockUids.length && createdOrder?.orderCode) {
+            setStockItems(prev => prev.map(i =>
+              pendingStockUids.includes(i.uid)
+                ? { ...i, utilizedOrderCode: createdOrder.orderCode }
+                : i
+            ))
+          }
+          setPendingStockUids([])
+          reload()
+        }}
+        defaultItems={manualDefaults}
+      />
       <EodAuditDialog open={eodOpen} onClose={() => setEodOpen(false)} />
       <QrOrderDialog open={qrOrderOpen} onClose={() => setQrOrderOpen(false)} />
       {detailOrder && (

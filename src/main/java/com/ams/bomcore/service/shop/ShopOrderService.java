@@ -138,7 +138,9 @@ public class ShopOrderService {
                     .orElseThrow(() -> new IllegalArgumentException("Model not found: " + lineReq.modelId()));
 
             BigDecimal qty = lineReq.quantity();
-            BigDecimal unitPrice = model.getSellingPrice() != null ? model.getSellingPrice() : BigDecimal.ZERO;
+            BigDecimal unitPrice = lineReq.unitPriceOverride() != null
+                    ? lineReq.unitPriceOverride()
+                    : (model.getSellingPrice() != null ? model.getSellingPrice() : BigDecimal.ZERO);
             ShopPricingService.RawCostBreakdown costBreakdown =
                     shopPricingService.calculateRawCost(model.getId(), qty, tenantId, companyId);
             BigDecimal unitRawCost = qty.compareTo(BigDecimal.ZERO) > 0
@@ -604,7 +606,9 @@ public class ShopOrderService {
             Model model = modelRepository.findById(lineReq.modelId())
                     .orElseThrow(() -> new IllegalArgumentException("Model not found: " + lineReq.modelId()));
             BigDecimal qty = lineReq.quantity();
-            BigDecimal unitPrice = model.getSellingPrice() != null ? model.getSellingPrice() : BigDecimal.ZERO;
+            BigDecimal unitPrice = lineReq.unitPriceOverride() != null
+                    ? lineReq.unitPriceOverride()
+                    : (model.getSellingPrice() != null ? model.getSellingPrice() : BigDecimal.ZERO);
             ShopPricingService.RawCostBreakdown costBreakdown =
                     shopPricingService.calculateRawCost(model.getId(), qty, tenantId, companyId);
             BigDecimal unitRawCost = qty.compareTo(BigDecimal.ZERO) > 0
@@ -775,7 +779,7 @@ public class ShopOrderService {
 
     // ── Request records ───────────────────────────────────────────────
 
-    public record ItemRequest(UUID modelId, BigDecimal quantity, String selectedOptions, String itemNotes) {}
+    public record ItemRequest(UUID modelId, BigDecimal quantity, String selectedOptions, String itemNotes, BigDecimal unitPriceOverride) {}
 
     // ── Menu options (admin) ───────────────────────────────────────────
 

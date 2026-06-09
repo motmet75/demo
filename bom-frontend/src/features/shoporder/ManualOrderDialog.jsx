@@ -20,11 +20,14 @@ import CircularProgress from '@mui/material/CircularProgress'
 import Chip from '@mui/material/Chip'
 import Tooltip from '@mui/material/Tooltip'
 import Badge from '@mui/material/Badge'
+import InputAdornment from '@mui/material/InputAdornment'
 import AddIcon from '@mui/icons-material/Add'
 import RemoveIcon from '@mui/icons-material/Remove'
 import DeleteIcon from '@mui/icons-material/Delete'
 import PrintIcon from '@mui/icons-material/Print'
 import QrCode2Icon from '@mui/icons-material/QrCode2'
+import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd'
+import CloseIcon from '@mui/icons-material/Close'
 import TableBarIcon from '@mui/icons-material/TableBar'
 import TakeoutDiningIcon from '@mui/icons-material/TakeoutDining'
 import DeliveryDiningIcon from '@mui/icons-material/DeliveryDining'
@@ -63,6 +66,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
   const [items, setItems]               = useState([])
   const [selectedModel, setSelectedModel] = useState(null)
   const [optsByModel, setOptsByModel]   = useState({})
+  const [sideForm, setSideForm]         = useState({})
 
   // post-create state
   const [createdOrder, setCreatedOrder] = useState(null)
@@ -89,7 +93,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
     }, 0)
   }
 
-  const total = items.reduce((s, i) => s + i.qty * (Number(i.sellingPrice || 0) + calcOptAddOn(i)), 0)
+  const total = items.reduce((s, i) => s + i.qty * (Number(i.sellingPrice || 0) + calcOptAddOn(i)) + sidesTotal(i), 0)
 
   // Load models + tables when dialog opens
   useEffect(() => {
@@ -101,6 +105,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
         modelId: i.modelId, modelName: i.modelName,
         sellingPrice: i.sellingPrice, qty: i.qty,
         selectedOptions: i.selectedOptions || {}, itemNotes: i.itemNotes || '',
+        sideItems: [],
       })))
     }
     Promise.all([fetchModels(), fetchShopTables()])
@@ -145,10 +150,38 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
     setCustomer({ name: '', phone: '' }); setPayment('CASH'); setNotes('')
     setItems([]); setSelectedModel(null); setError('')
     setCreatedOrder(null); setTagQr(''); setOptsByModel({})
-    setJustBroadcast(false); setCustomerCash('')
+    setJustBroadcast(false); setCustomerCash(''); setSideForm({})
   }
 
   const handleClose = () => { reset(); onClose() }
+
+  // ── Side item helpers ──────────────────────────────────────────────
+  const setSF = (parentUid, field, value) =>
+    setSideForm(prev => ({ ...prev, [parentUid]: { ...(prev[parentUid] || {}), [field]: value } }))
+
+  const addSideItem = (parentUid) => {
+    const sf = sideForm[parentUid] || {}
+    if (!sf.model) return
+    const price = sf.priceDigits ?? String(Math.round(Number(sf.model.sellingPrice) || 0))
+    setItems(prev => prev.map(i =>
+      i.uid !== parentUid ? i : {
+        ...i, sideItems: [...(i.sideItems || []), {
+          uid: crypto.randomUUID(),
+          modelId: sf.model.id, modelName: sf.model.modelName,
+          customPriceDigits: price,
+        }]
+      }
+    ))
+    setSideForm(prev => ({ ...prev, [parentUid]: {} }))
+  }
+
+  const removeSideItem = (parentUid, sideUid) =>
+    setItems(prev => prev.map(i =>
+      i.uid !== parentUid ? i : { ...i, sideItems: i.sideItems.filter(si => si.uid !== sideUid) }
+    ))
+
+  const sidesTotal = (item) =>
+    (item.sideItems || []).reduce((s, si) => s + (Number(si.customPriceDigits) || 0), 0)
 
   const addItem = () => {
     if (!selectedModel) return
@@ -157,6 +190,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
       uid: crypto.randomUUID(),
       modelId: mid, modelName: selectedModel.modelName,
       sellingPrice: selectedModel.sellingPrice, qty: 1, selectedOptions: {}, itemNotes: '',
+      sideItems: [],
     }])
     if (!optsByModel[mid]) {
       fetchMenuOptions(mid)
@@ -206,13 +240,20 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
       paymentMethod: payment,
       notes: notes || null,
       manualOrderNumber: manualNum !== '' ? Number(manualNum) : null,
-      items: items.map(i => ({
-        modelId: i.modelId,
-        quantity: i.qty,
-        selectedOptions: Object.keys(i.selectedOptions || {}).length > 0
-          ? JSON.stringify(i.selectedOptions) : null,
-        itemNotes: i.itemNotes || null,
-      })),
+      items: items.flatMap(i => [
+        {
+          modelId: i.modelId, quantity: i.qty,
+          selectedOptions: Object.keys(i.selectedOptions || {}).length > 0
+            ? JSON.stringify(i.selectedOptions) : null,
+          itemNotes: i.itemNotes || null,
+          unitPriceOverride: null,
+        },
+        ...(i.sideItems || []).map(si => ({
+          modelId: si.modelId, quantity: 1,
+          selectedOptions: null, itemNotes: null,
+          unitPriceOverride: Number(si.customPriceDigits) || null,
+        })),
+      ]),
     }
     try {
       const { res, data } = await createStaffOrder(body)
@@ -437,7 +478,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                         uid: crypto.randomUUID(),
                         modelId: item.modelId, modelName: item.modelName,
                         sellingPrice: item.sellingPrice, qty: item.qty || 1,
-                        selectedOptions: {}, itemNotes: '',
+                        selectedOptions: {}, itemNotes: '', sideItems: [],
                       }])
                       if (!optsByModel[item.modelId]) {
                         fetchMenuOptions(item.modelId)
@@ -525,8 +566,67 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                           value={item.itemNotes || ''}
                           onChange={e => setItemNotes(item.uid, e.target.value)}
                           InputProps={{ disableUnderline: false, sx: { fontSize: 12 } }}
-                          sx={{ mt: 0.5, mb: 0.25 }}
+                          sx={{ mt: 0.5 }}
                         />
+
+                        {/* Existing side items */}
+                        {(item.sideItems || []).length > 0 && (
+                          <Stack spacing={0.2} sx={{ mt: 0.5, pl: 1.25, borderLeft: '2px solid #bbdefb' }}>
+                            {item.sideItems.map(si => (
+                              <Box key={si.uid} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                <Typography variant="caption" sx={{ flex: 1, fontSize: 12 }} noWrap>
+                                  + {si.modelName}
+                                </Typography>
+                                <Typography variant="caption" color="primary" fontWeight={700} sx={{ fontSize: 12, minWidth: 60, textAlign: 'right' }}>
+                                  {fmtDots(si.customPriceDigits) || '0'} đ
+                                </Typography>
+                                <IconButton size="small" onClick={() => removeSideItem(item.uid, si.uid)}
+                                  sx={{ p: 0.125, color: '#bbb', '&:hover': { color: '#dc2626' } }}>
+                                  <CloseIcon sx={{ fontSize: 12 }} />
+                                </IconButton>
+                              </Box>
+                            ))}
+                          </Stack>
+                        )}
+
+                        {/* Add side item row */}
+                        {(() => {
+                          const sf = sideForm[item.uid] || {}
+                          return (
+                            <Box sx={{ mt: 0.5, display: 'flex', gap: 0.5, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                              <Autocomplete
+                                size="small"
+                                options={models}
+                                getOptionLabel={m => m.modelName}
+                                value={sf.model || null}
+                                onChange={(_, v) => {
+                                  setSF(item.uid, 'model', v)
+                                  if (v) setSF(item.uid, 'priceDigits', String(Math.round(Number(v.sellingPrice) || 0)))
+                                }}
+                                renderInput={params => <TextField {...params} label="Side item…" size="small" />}
+                                sx={{ flex: 1, minWidth: 130 }}
+                                isOptionEqualToValue={(a, b) => a.id === b.id}
+                                noOptionsText="No items"
+                              />
+                              <TextField
+                                size="small" type="text" inputMode="numeric"
+                                label="Price" placeholder="0"
+                                value={fmtDots(sf.priceDigits || '')}
+                                onChange={e => setSF(item.uid, 'priceDigits', stripDigits(e.target.value))}
+                                sx={{ width: 105 }}
+                                inputProps={{ maxLength: 12 }}
+                                InputProps={{ endAdornment: <InputAdornment position="end">đ</InputAdornment> }}
+                              />
+                              <Button size="small" variant="outlined"
+                                startIcon={<PlaylistAddIcon sx={{ fontSize: 14 }} />}
+                                onClick={() => addSideItem(item.uid)}
+                                disabled={!sf.model}
+                                sx={{ textTransform: 'none', fontSize: 11, height: 40, flexShrink: 0 }}>
+                                Add side
+                              </Button>
+                            </Box>
+                          )
+                        })()}
                       </Box>
                     )
                   })}
