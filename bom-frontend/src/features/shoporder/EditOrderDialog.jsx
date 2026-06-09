@@ -142,13 +142,14 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
     const sf = sideForm[parentUid] || {}
     if (!sf.model) return
     const price = sf.priceDigits ?? String(Math.round(Number(sf.model.sellingPrice) || 0))
+    const qty = sf.qty || 1
     setItems(prev => prev.map(i =>
       i.uid !== parentUid ? i : {
         ...i, sideItems: [...i.sideItems, {
           uid: crypto.randomUUID(),
           modelId: sf.model.id, modelName: sf.model.modelName,
           customPriceDigits: price,
-          qty: 1,
+          qty,
         }]
       }
     ))
@@ -455,6 +456,22 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
                               isOptionEqualToValue={(a, b) => a.id === b.id}
                               noOptionsText="No items"
                             />
+                            {/* Qty for the new side item */}
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0, mt: 0.5 }}>
+                              <IconButton size="small"
+                                onClick={() => setSF(item.uid, 'qty', Math.max(1, (sf.qty || 1) - 1))}
+                                sx={{ p: 0.2 }}>
+                                <RemoveIcon sx={{ fontSize: 12 }} />
+                              </IconButton>
+                              <Typography variant="caption" fontWeight={700} sx={{ minWidth: 18, textAlign: 'center', fontSize: 12 }}>
+                                {sf.qty || 1}
+                              </Typography>
+                              <IconButton size="small"
+                                onClick={() => setSF(item.uid, 'qty', (sf.qty || 1) + 1)}
+                                sx={{ p: 0.2, bgcolor: '#6366f1', color: '#fff', borderRadius: 0.5, '&:hover': { bgcolor: '#4f46e5' } }}>
+                                <AddIcon sx={{ fontSize: 12 }} />
+                              </IconButton>
+                            </Box>
                             <TextField
                               size="small" type="text" inputMode="numeric" label="Price" placeholder="0"
                               value={fmtDots(sf.priceDigits || '')}
