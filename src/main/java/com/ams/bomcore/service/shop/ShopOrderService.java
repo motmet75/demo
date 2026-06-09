@@ -18,6 +18,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
@@ -134,7 +137,8 @@ public class ShopOrderService {
             BigDecimal unitRawCost = qty.compareTo(BigDecimal.ZERO) > 0
                     ? costBreakdown.total().divide(qty, 4, RoundingMode.HALF_UP)
                     : BigDecimal.ZERO;
-            BigDecimal lineTotal = unitPrice.multiply(qty);
+            BigDecimal optionAddOn = calculateOptionAddOn(model.getId(), lineReq.selectedOptions(), tenantId, companyId);
+            BigDecimal lineTotal = unitPrice.add(optionAddOn).multiply(qty);
 
             ShopOrderItem item = new ShopOrderItem();
             item.setOrder(order);
@@ -143,6 +147,7 @@ public class ShopOrderService {
             item.setQuantity(qty);
             item.setUnitPrice(unitPrice);
             item.setUnitRawCost(unitRawCost);
+            item.setOptionAddOn(optionAddOn);
             item.setLineTotal(lineTotal);
             item.setSelectedOptions(lineReq.selectedOptions());
             item.setItemNotes(lineReq.itemNotes());
@@ -477,12 +482,11 @@ public class ShopOrderService {
     @Transactional
     public ShopOrderResponseDto switchToQrPayment(UUID orderId, UUID tenantId, UUID companyId) {
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
-        if (ShopOrder.STATUS_CANCELLED.equals(order.getStatus())
-                || ShopOrder.STATUS_COMPLETED.equals(order.getStatus())
-                || ShopOrder.STATUS_PICKED_UP.equals(order.getStatus())) {
+        if (isFinalStatus(order.getStatus())) {
             throw new IllegalStateException("Cannot change payment method of a completed or cancelled order");
         }
         order.setPaymentMethod(ShopOrder.PAYMENT_BANK_QR);
+        order.setSplitCashAmount(null);
         Company company = companyRepository.findById(companyId).orElse(null);
         if (company != null && company.getBankBin() != null && !company.getBankBin().isBlank()
                 && company.getBankAccountNumber() != null && !company.getBankAccountNumber().isBlank()) {
@@ -490,6 +494,46 @@ public class ShopOrderService {
                     company.getBankBin(), company.getBankAccountNumber(),
                     company.getBankAccountName(), order.getTotalAmount(), order.getOrderCode()));
         }
+        shopOrderRepository.save(order);
+        return dto(order);
+    }
+
+    @Transactional
+    public ShopOrderResponseDto splitPayment(UUID orderId, BigDecimal cashAmount, UUID tenantId, UUID companyId) {
+        ShopOrder order = requireOrder(orderId, tenantId, companyId);
+        if (isFinalStatus(order.getStatus())) {
+            throw new IllegalStateException("Cannot change payment method of a completed or cancelled order");
+        }
+        BigDecimal total = order.getTotalAmount() != null ? order.getTotalAmount() : BigDecimal.ZERO;
+        if (cashAmount == null || cashAmount.compareTo(BigDecimal.ZERO) < 0 || cashAmount.compareTo(total) > 0) {
+            throw new IllegalArgumentException("Cash amount must be between 0 and " + total);
+        }
+        BigDecimal qrAmount = total.subtract(cashAmount);
+        order.setPaymentMethod(ShopOrder.PAYMENT_SPLIT);
+        order.setSplitCashAmount(cashAmount);
+        Company company = companyRepository.findById(companyId).orElse(null);
+        if (qrAmount.compareTo(BigDecimal.ZERO) > 0 && company != null
+                && company.getBankBin() != null && !company.getBankBin().isBlank()
+                && company.getBankAccountNumber() != null && !company.getBankAccountNumber().isBlank()) {
+            order.setPaymentQr(VietQrBuilder.buildUrl(
+                    company.getBankBin(), company.getBankAccountNumber(),
+                    company.getBankAccountName(), qrAmount, order.getOrderCode()));
+        } else {
+            order.setPaymentQr(null);
+        }
+        shopOrderRepository.save(order);
+        return dto(order);
+    }
+
+    @Transactional
+    public ShopOrderResponseDto revertToCash(UUID orderId, UUID tenantId, UUID companyId) {
+        ShopOrder order = requireOrder(orderId, tenantId, companyId);
+        if (isFinalStatus(order.getStatus())) {
+            throw new IllegalStateException("Cannot change payment method of a completed or cancelled order");
+        }
+        order.setPaymentMethod(ShopOrder.PAYMENT_CASH);
+        order.setPaymentQr(null);
+        order.setSplitCashAmount(null);
         shopOrderRepository.save(order);
         return dto(order);
     }
@@ -538,7 +582,8 @@ public class ShopOrderService {
             BigDecimal unitRawCost = qty.compareTo(BigDecimal.ZERO) > 0
                     ? costBreakdown.total().divide(qty, 4, RoundingMode.HALF_UP)
                     : BigDecimal.ZERO;
-            BigDecimal lineTotal = unitPrice.multiply(qty);
+            BigDecimal optionAddOn = calculateOptionAddOn(model.getId(), lineReq.selectedOptions(), tenantId, companyId);
+            BigDecimal lineTotal = unitPrice.add(optionAddOn).multiply(qty);
 
             ShopOrderItem item = new ShopOrderItem();
             item.setOrder(order);
@@ -547,6 +592,7 @@ public class ShopOrderService {
             item.setQuantity(qty);
             item.setUnitPrice(unitPrice);
             item.setUnitRawCost(unitRawCost);
+            item.setOptionAddOn(optionAddOn);
             item.setLineTotal(lineTotal);
             item.setSelectedOptions(lineReq.selectedOptions());
             item.setItemNotes(lineReq.itemNotes());
@@ -572,6 +618,65 @@ public class ShopOrderService {
 
         shopOrderRepository.save(order);
         return ShopOrderResponseDto.from(order, items);
+    }
+
+    // ── Option add-on pricing ─────────────────────────────────────────
+
+    /**
+     * Sums the prices of selected option choices for a single item unit.
+     * Groups marked isFree=true contribute 0 regardless of choice prices.
+     * Handles both old string[] choices and new {label,price}[] choices.
+     */
+    private BigDecimal calculateOptionAddOn(UUID modelId, String selectedOptionsJson,
+                                            UUID tenantId, UUID companyId) {
+        if (selectedOptionsJson == null || selectedOptionsJson.isBlank()) return BigDecimal.ZERO;
+        List<ModelMenuOption> groups =
+                menuOptionRepository.findAllByModelIdAndTenantIdAndCompanyIdOrderByDisplayOrderAsc(
+                        modelId, tenantId, companyId);
+        if (groups.isEmpty()) return BigDecimal.ZERO;
+
+        ObjectMapper mapper = new ObjectMapper();
+        Map<String, Object> selected;
+        try {
+            selected = mapper.readValue(selectedOptionsJson, new TypeReference<>() {});
+        } catch (Exception e) {
+            return BigDecimal.ZERO;
+        }
+
+        BigDecimal total = BigDecimal.ZERO;
+        for (ModelMenuOption group : groups) {
+            if (Boolean.TRUE.equals(group.getIsFree())) continue;
+            Object chosenRaw = selected.get(group.getGroupName());
+            if (chosenRaw == null) continue;
+
+            // Parse choices: [{label,price}] or [string]
+            List<Map<String, Object>> choiceDefs;
+            try {
+                choiceDefs = mapper.readValue(group.getChoices(), new TypeReference<>() {});
+            } catch (Exception e) {
+                continue;
+            }
+
+            // Normalize chosen value(s) to a set of label strings
+            Set<String> chosenLabels = new HashSet<>();
+            if (chosenRaw instanceof List<?> list) {
+                for (Object o : list) chosenLabels.add(o.toString());
+            } else {
+                chosenLabels.add(chosenRaw.toString());
+            }
+
+            for (Map<String, Object> choice : choiceDefs) {
+                Object labelObj = choice.get("label");
+                Object priceObj = choice.get("price");
+                if (labelObj == null || priceObj == null) continue;
+                if (chosenLabels.contains(labelObj.toString())) {
+                    try {
+                        total = total.add(new BigDecimal(priceObj.toString()));
+                    } catch (NumberFormatException ignored) {}
+                }
+            }
+        }
+        return total;
     }
 
     // ── Token management ──────────────────────────────────────────────
@@ -622,6 +727,12 @@ public class ShopOrderService {
             throw new IllegalArgumentException("Order does not belong to this company");
         }
         return order;
+    }
+
+    private static boolean isFinalStatus(String status) {
+        return ShopOrder.STATUS_CANCELLED.equals(status)
+                || ShopOrder.STATUS_COMPLETED.equals(status)
+                || ShopOrder.STATUS_PICKED_UP.equals(status);
     }
 
     private void requireStatus(ShopOrder order, String expected) {

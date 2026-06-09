@@ -30,7 +30,7 @@ import SearchIcon from '@mui/icons-material/Search'
 import Checkbox from '@mui/material/Checkbox'
 import IconButton from '@mui/material/IconButton'
 import { fetchModels, updateModel } from '../../api/modelApi'
-import { fetchMenuOptions, createMenuOption, deleteMenuOption } from '../../api/shopApi'
+import { fetchMenuOptions, createMenuOption, updateMenuOption, deleteMenuOption } from '../../api/shopApi'
 
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 
@@ -106,11 +106,22 @@ function ModelCard({ model, onEdit, onToggle, saving }) {
 }
 
 const EMPTY_FORM = { sellingPrice: '', category: '', imageUrl: '' }
-const EMPTY_OPT  = { groupName: '', choices: '', required: false, multiSelect: false, defaultValue: '' }
+const EMPTY_OPT  = { groupName: '', choiceRows: [{ label: '', price: '' }], required: false, multiSelect: false, isFree: false, defaultValue: '' }
 
 function parseChoices(str) {
   if (!str) return []
-  try { return JSON.parse(str) } catch { return str.split(',').map(s => s.trim()).filter(Boolean) }
+  try {
+    const parsed = JSON.parse(str)
+    if (Array.isArray(parsed)) {
+      return parsed.map(c => (typeof c === 'object' && c.label != null ? c : { label: String(c), price: 0 }))
+    }
+    return []
+  } catch { return str.split(',').map(s => ({ label: s.trim(), price: 0 })).filter(c => c.label) }
+}
+
+function fmtChoicePrice(price, isFree) {
+  if (isFree || !price) return ''
+  return ` +${Number(price).toLocaleString('vi-VN')}đ`
 }
 
 function EditDialog({ open, model, onClose, onSave }) {
@@ -155,15 +166,17 @@ function EditDialog({ open, model, onClose, onSave }) {
   }
 
   const handleAddOption = async () => {
-    if (!newOpt.groupName.trim() || !newOpt.choices.trim()) return
+    const validRows = newOpt.choiceRows.filter(r => r.label.trim())
+    if (!newOpt.groupName.trim() || !validRows.length) return
     setOptSaving(true)
     try {
       const body = {
         modelId: model.id,
         groupName: newOpt.groupName.trim(),
-        choices: JSON.stringify(newOpt.choices.split(',').map(s => s.trim()).filter(Boolean)),
+        choices: JSON.stringify(validRows.map(r => ({ label: r.label.trim(), price: Number(r.price) || 0 }))),
         required: newOpt.required,
         multiSelect: newOpt.multiSelect,
+        isFree: newOpt.isFree,
         defaultValue: newOpt.defaultValue.trim() || null,
         displayOrder: options.length,
       }
@@ -183,6 +196,16 @@ function EditDialog({ open, model, onClose, onSave }) {
       setOptions(prev => prev.filter(o => o.id !== optId))
     } catch (e) {
       setError(e.message || 'Failed to delete option group')
+    }
+  }
+
+  const handleToggleIsFree = async (opt) => {
+    const updated = { ...opt, isFree: !opt.isFree }
+    try {
+      await updateMenuOption(opt.id, updated)
+      setOptions(prev => prev.map(o => o.id === opt.id ? updated : o))
+    } catch (e) {
+      setError(e.message || 'Failed to update option group')
     }
   }
 
@@ -236,9 +259,19 @@ function EditDialog({ open, model, onClose, onSave }) {
                         <Typography variant="body2" fontWeight={700}>{opt.groupName}</Typography>
                         {opt.required && <Chip label="required" size="small" color="error" sx={{ fontSize: 9, height: 16 }} />}
                         {opt.multiSelect && <Chip label="multi" size="small" variant="outlined" sx={{ fontSize: 9, height: 16 }} />}
+                        <Tooltip title={opt.isFree ? 'All choices free — click to charge prices' : 'Click to mark all choices as free'}>
+                          <Chip
+                            label={opt.isFree ? 'Free' : 'Priced'}
+                            size="small"
+                            color={opt.isFree ? 'success' : 'default'}
+                            variant={opt.isFree ? 'filled' : 'outlined'}
+                            onClick={() => handleToggleIsFree(opt)}
+                            sx={{ fontSize: 9, height: 16, cursor: 'pointer' }}
+                          />
+                        </Tooltip>
                       </Box>
                       <Typography variant="caption" color="text.secondary">
-                        {choices.join(' · ')}
+                        {choices.map(c => `${c.label}${fmtChoicePrice(c.price, opt.isFree)}`).join(' · ')}
                         {opt.defaultValue ? ` (default: ${opt.defaultValue})` : ''}
                       </Typography>
                     </Box>
@@ -256,24 +289,51 @@ function EditDialog({ open, model, onClose, onSave }) {
               <Stack spacing={1.25}>
                 <TextField label="Group name" size="small" fullWidth
                   value={newOpt.groupName} onChange={setOpt('groupName')}
-                  placeholder="e.g. Sugar, Ice, Toppings" autoFocus />
-                <TextField label="Choices (comma-separated)" size="small" fullWidth
-                  value={newOpt.choices} onChange={setOpt('choices')}
-                  placeholder="e.g. 30%, 50%, 70%, 100%" />
+                  placeholder="e.g. Toppings, Sugar, Ice" autoFocus />
+
+                <Typography variant="caption" color="text.secondary" fontWeight={600}>Choices</Typography>
+                {newOpt.choiceRows.map((row, idx) => (
+                  <Box key={idx} sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                    <TextField label="Label" size="small" sx={{ flex: 2 }}
+                      value={row.label}
+                      onChange={e => setNewOpt(f => {
+                        const rows = [...f.choiceRows]; rows[idx] = { ...rows[idx], label: e.target.value }; return { ...f, choiceRows: rows }
+                      })}
+                      placeholder="e.g. Trân châu" />
+                    <TextField label="Price" size="small" type="number" sx={{ flex: 1 }}
+                      value={row.price}
+                      onChange={e => setNewOpt(f => {
+                        const rows = [...f.choiceRows]; rows[idx] = { ...rows[idx], price: e.target.value }; return { ...f, choiceRows: rows }
+                      })}
+                      InputProps={{ endAdornment: <InputAdornment position="end">đ</InputAdornment> }}
+                      placeholder="0" />
+                    <IconButton size="small" color="error" disabled={newOpt.choiceRows.length <= 1}
+                      onClick={() => setNewOpt(f => ({ ...f, choiceRows: f.choiceRows.filter((_, i) => i !== idx) }))}>
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                ))}
+                <Button size="small" startIcon={<AddIcon />} onClick={() => setNewOpt(f => ({ ...f, choiceRows: [...f.choiceRows, { label: '', price: '' }] }))}>
+                  Add choice
+                </Button>
+
                 <TextField label="Default value (optional)" size="small" fullWidth
                   value={newOpt.defaultValue} onChange={setOpt('defaultValue')} />
-                <Box sx={{ display: 'flex', gap: 2 }}>
+                <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
                   <FormControlLabel
                     control={<Checkbox size="small" checked={newOpt.required} onChange={setOpt('required')} />}
                     label={<Typography variant="caption">Required</Typography>} />
                   <FormControlLabel
                     control={<Checkbox size="small" checked={newOpt.multiSelect} onChange={setOpt('multiSelect')} />}
                     label={<Typography variant="caption">Multi-select</Typography>} />
+                  <FormControlLabel
+                    control={<Checkbox size="small" checked={newOpt.isFree} onChange={setOpt('isFree')} />}
+                    label={<Typography variant="caption">Always free (ignore prices)</Typography>} />
                 </Box>
                 <Box sx={{ display: 'flex', gap: 1 }}>
                   <Button size="small" onClick={() => { setShowAddOpt(false); setNewOpt(EMPTY_OPT) }}>Cancel</Button>
                   <Button size="small" variant="contained" onClick={handleAddOption}
-                    disabled={optSaving || !newOpt.groupName.trim() || !newOpt.choices.trim()}>
+                    disabled={optSaving || !newOpt.groupName.trim() || !newOpt.choiceRows.some(r => r.label.trim())}>
                     {optSaving ? <CircularProgress size={14} /> : 'Add'}
                   </Button>
                 </Box>

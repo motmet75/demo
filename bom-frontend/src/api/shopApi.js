@@ -100,6 +100,18 @@ export function switchToQrPayment(orderId) {
   return apiFetchJson(`/shop/staff/orders/${orderId}/switch-payment`, { method: 'PATCH' })
 }
 
+export function splitPayment(orderId, cashAmount) {
+  return apiFetchJson(`/shop/staff/orders/${orderId}/split-payment`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cashAmount })
+  })
+}
+
+export function revertToCash(orderId) {
+  return apiFetchJson(`/shop/staff/orders/${orderId}/revert-payment`, { method: 'PATCH' })
+}
+
 export function updateOrderItems(orderId, items) {
   return apiFetchJson(`/shop/staff/orders/${orderId}/items`, {
     method: 'PUT',

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
@@ -17,13 +17,18 @@ import CircularProgress from '@mui/material/CircularProgress'
 import Divider from '@mui/material/Divider'
 import Tooltip from '@mui/material/Tooltip'
 import Stack from '@mui/material/Stack'
+import Slider from '@mui/material/Slider'
+import TextField from '@mui/material/TextField'
+import InputAdornment from '@mui/material/InputAdornment'
 import PrintIcon from '@mui/icons-material/Print'
+import CallSplitIcon from '@mui/icons-material/CallSplit'
+import CurrencyExchangeIcon from '@mui/icons-material/CurrencyExchange'
 import QrCode2Icon from '@mui/icons-material/QrCode2'
 import EditIcon from '@mui/icons-material/Edit'
 import UndoIcon from '@mui/icons-material/Undo'
 import LabelIcon from '@mui/icons-material/Label'
 import MonitorIcon from '@mui/icons-material/Monitor'
-import { fetchOrderTagQr, revertShopOrder, switchToQrPayment } from '../../api/shopApi'
+import { fetchOrderTagQr, revertShopOrder, switchToQrPayment, splitPayment, revertToCash } from '../../api/shopApi'
 import { printOrderReceipt, printOrderTag, printCupLabels } from '../../utils/printOrderReceipt'
 import { broadcastToCounter } from '../shopboard/CounterDisplayPage'
 import EditOrderDialog from './EditOrderDialog'
@@ -70,6 +75,10 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
   const [qrLoading, setQrLoading]   = useState(false)
   const [reverting, setReverting]   = useState(false)
   const [switching, setSwitching]   = useState(false)
+  const [splitOpen, setSplitOpen]   = useState(false)
+  const [cashInput, setCashInput]   = useState('')
+  const [splitting, setSplitting]   = useState(false)
+  const [reverting2, setReverting2] = useState(false)
   const [error, setError]           = useState('')
   const [editOpen, setEditOpen]     = useState(false)
 
@@ -103,12 +112,40 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
     setSwitching(false)
   }
 
+  const handleSplit = async () => {
+    const cash = Number(cashInput)
+    setSplitting(true); setError('')
+    try {
+      const { res, data } = await splitPayment(order.id, cash)
+      if (!res.ok) { setError(data?.message || 'Failed to set split payment'); setSplitting(false); return }
+      setSplitOpen(false)
+      printOrderReceipt(data)
+      onRefresh?.()
+    } catch (e) { setError(e.message || 'Failed to set split payment') }
+    setSplitting(false)
+  }
+
+  const handleRevertToCash = async () => {
+    setReverting2(true); setError('')
+    try {
+      const { res, data } = await revertToCash(order.id)
+      if (!res.ok) { setError(data?.message || 'Failed to revert payment'); setReverting2(false); return }
+      onRefresh?.()
+    } catch (e) { setError(e.message || 'Failed to revert payment') }
+    setReverting2(false)
+  }
+
   if (!order) return null
 
   const isPending      = order.status === 'PENDING'
   const isConfirmed    = order.status === 'CONFIRMED'
   const isFinal        = ['COMPLETED', 'PICKED_UP', 'CANCELLED'].includes(order.status)
   const canSwitchToQr  = order.paymentMethod === 'CASH' && !isFinal
+  const canSplit       = !isFinal && order.paymentMethod !== 'SPLIT'
+  const canRevertCash  = !isFinal && (order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT')
+  const total          = Number(order.totalAmount || 0)
+  const cashNum        = Number(cashInput) || 0
+  const qrPortion      = Math.max(0, total - cashNum)
 
   return (
     <>
@@ -135,7 +172,12 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
             <Typography variant="body2"><strong>Phone:</strong> {order.customerPhone || '—'}</Typography>
             <Typography variant="body2"><strong>Type:</strong> {order.fulfillmentType}</Typography>
             <Typography variant="body2"><strong>Table:</strong> {order.tableName || '—'}</Typography>
-            <Typography variant="body2"><strong>Payment:</strong> {order.paymentMethod} / {order.paymentStatus}</Typography>
+            <Typography variant="body2">
+              <strong>Payment:</strong>{' '}
+              {order.paymentMethod === 'SPLIT'
+                ? `SPLIT — QR: ${fmt(Number(order.totalAmount) - Number(order.splitCashAmount))} + Cash: ${fmt(order.splitCashAmount)}`
+                : `${order.paymentMethod} / ${order.paymentStatus}`}
+            </Typography>
             <Typography variant="body2"><strong>Delivery fee:</strong> {fmt(order.deliveryFee)}</Typography>
             <Typography variant="body2"><strong>Created:</strong> {dateFmt(order.createdAt)}</Typography>
             {order.confirmedAt && <Typography variant="body2"><strong>Confirmed:</strong> {dateFmt(order.confirmedAt)}</Typography>}
@@ -199,7 +241,9 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
                 {order.paymentQr && (
                   <Box sx={{ textAlign: 'center' }}>
                     <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
-                      Payment QR
+                      {order.paymentMethod === 'SPLIT'
+                        ? `QR Portion: ${fmt(Number(order.totalAmount) - Number(order.splitCashAmount))}`
+                        : 'Payment QR'}
                     </Typography>
                     <img
                       src={order.paymentQr?.startsWith('https://')
@@ -208,6 +252,11 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
                       alt="Payment QR"
                       style={{ width: 140, height: 140, borderRadius: 8, border: '1px solid #e0e0e0' }}
                     />
+                    {order.paymentMethod === 'SPLIT' && (
+                      <Typography variant="caption" color="text.secondary" display="block" mt={0.5}>
+                        Cash: {fmt(order.splitCashAmount)}
+                      </Typography>
+                    )}
                   </Box>
                 )}
               </Stack>
@@ -245,7 +294,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
               </Tooltip>
             )}
             {canSwitchToQr && (
-              <Tooltip title="Switch to Bank QR payment and print receipt with QR code">
+              <Tooltip title="Switch to full Bank QR payment and print receipt">
                 <Button
                   variant="contained"
                   color="success"
@@ -254,7 +303,34 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
                   disabled={switching}
                   sx={{ textTransform: 'none', fontWeight: 700 }}
                 >
-                  QR Payment + Print
+                  QR + Print
+                </Button>
+              </Tooltip>
+            )}
+            {canSplit && (
+              <Tooltip title="Set a split payment: part by bank QR, part by cash">
+                <Button
+                  variant="outlined"
+                  color="secondary"
+                  startIcon={<CallSplitIcon />}
+                  onClick={() => { setCashInput(String(Math.round(total / 2))); setSplitOpen(true) }}
+                  sx={{ textTransform: 'none', fontWeight: 700 }}
+                >
+                  Split
+                </Button>
+              </Tooltip>
+            )}
+            {canRevertCash && (
+              <Tooltip title="Revert payment method back to Cash">
+                <Button
+                  variant="outlined"
+                  color="warning"
+                  startIcon={reverting2 ? <CircularProgress size={14} /> : <CurrencyExchangeIcon />}
+                  onClick={handleRevertToCash}
+                  disabled={reverting2}
+                  sx={{ textTransform: 'none' }}
+                >
+                  → Cash
                 </Button>
               </Tooltip>
             )}
@@ -316,6 +392,79 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
           onUpdated={() => { setEditOpen(false); onRefresh?.() }}
         />
       )}
+
+      {/* ── Split Payment Dialog ─────────────────────────── */}
+      <Dialog open={splitOpen} onClose={() => setSplitOpen(false)} maxWidth="xs" fullWidth
+        PaperProps={{ sx: { borderRadius: 2 } }}>
+        <DialogTitle sx={{ pb: 1 }}>
+          <Typography fontWeight={800}>Split Payment</Typography>
+          <Typography variant="caption" color="text.secondary">
+            Total: {fmt(total)} — adjust cash vs. bank QR portions
+          </Typography>
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 1 }}>
+            <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+              <Button size="small" variant="outlined" onClick={() => setCashInput(String(Math.round(total / 2)))}>
+                Half
+              </Button>
+              <Button size="small" variant="outlined" onClick={() => setCashInput('0')}>
+                All QR
+              </Button>
+              <Button size="small" variant="outlined" onClick={() => setCashInput(String(Math.round(total)))}>
+                All Cash
+              </Button>
+            </Box>
+
+            <TextField
+              label="Cash amount (đ)"
+              type="number"
+              fullWidth
+              size="small"
+              value={cashInput}
+              onChange={e => {
+                const v = Math.max(0, Math.min(Math.round(total), Number(e.target.value) || 0))
+                setCashInput(String(v))
+              }}
+              InputProps={{ endAdornment: <InputAdornment position="end">đ</InputAdornment> }}
+              sx={{ mb: 2 }}
+            />
+
+            <Slider
+              value={cashNum}
+              min={0}
+              max={total}
+              step={1000}
+              onChange={(_, v) => setCashInput(String(v))}
+              sx={{ mb: 1 }}
+            />
+
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, mt: 1 }}>
+              <Box sx={{ p: 1.25, bgcolor: '#f0fdf4', borderRadius: 1.5, textAlign: 'center', border: '1px solid #bbf7d0' }}>
+                <Typography variant="caption" color="success.main" fontWeight={700} display="block">Bank QR</Typography>
+                <Typography variant="h6" fontWeight={900} color="success.dark">{fmt(qrPortion)}</Typography>
+              </Box>
+              <Box sx={{ p: 1.25, bgcolor: '#fff7ed', borderRadius: 1.5, textAlign: 'center', border: '1px solid #fed7aa' }}>
+                <Typography variant="caption" color="warning.main" fontWeight={700} display="block">Cash</Typography>
+                <Typography variant="h6" fontWeight={900} color="warning.dark">{fmt(cashNum)}</Typography>
+              </Box>
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 2, pb: 2 }}>
+          <Button onClick={() => setSplitOpen(false)} sx={{ textTransform: 'none' }}>Cancel</Button>
+          <Button
+            variant="contained"
+            color="success"
+            startIcon={splitting ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : <CallSplitIcon />}
+            onClick={handleSplit}
+            disabled={splitting || cashNum < 0 || cashNum > total}
+            sx={{ textTransform: 'none', fontWeight: 700 }}
+          >
+            Confirm & Print
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   )
 }

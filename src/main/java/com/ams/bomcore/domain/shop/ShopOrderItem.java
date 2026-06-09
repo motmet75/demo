@@ -40,6 +40,10 @@ public class ShopOrderItem {
     @Column(name = "selected_options", columnDefinition = "TEXT")
     private String selectedOptions;
 
+    /** Sum of option choice prices per unit (from groups where isFree=false) */
+    @Column(name = "option_add_on", columnDefinition = "numeric")
+    private BigDecimal optionAddOn = BigDecimal.ZERO;
+
     @Column(name = "item_notes", columnDefinition = "TEXT")
     private String itemNotes;
 
@@ -68,6 +72,8 @@ public class ShopOrderItem {
     public void setLineTotal(BigDecimal lineTotal) { this.lineTotal = lineTotal; }
     public String getSelectedOptions() { return selectedOptions; }
     public void setSelectedOptions(String selectedOptions) { this.selectedOptions = selectedOptions; }
+    public BigDecimal getOptionAddOn() { return optionAddOn; }
+    public void setOptionAddOn(BigDecimal optionAddOn) { this.optionAddOn = optionAddOn; }
     public String getItemNotes() { return itemNotes; }
     public void setItemNotes(String itemNotes) { this.itemNotes = itemNotes; }
 }

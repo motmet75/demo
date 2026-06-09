@@ -23,6 +23,7 @@ public class ShopOrder {
 
     public static final String PAYMENT_CASH     = "CASH";
     public static final String PAYMENT_BANK_QR  = "BANK_QR";
+    public static final String PAYMENT_SPLIT    = "SPLIT";
 
     public static final String PAY_STATUS_UNPAID = "UNPAID";
     public static final String PAY_STATUS_PAID   = "PAID";
@@ -82,6 +83,9 @@ public class ShopOrder {
 
     @Column(name = "payment_qr", columnDefinition = "TEXT")
     private String paymentQr;
+
+    @Column(name = "split_cash_amount", columnDefinition = "numeric")
+    private BigDecimal splitCashAmount;
 
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
@@ -147,6 +151,8 @@ public class ShopOrder {
     public void setPaymentStatus(String paymentStatus) { this.paymentStatus = paymentStatus; }
     public String getPaymentQr() { return paymentQr; }
     public void setPaymentQr(String paymentQr) { this.paymentQr = paymentQr; }
+    public BigDecimal getSplitCashAmount() { return splitCashAmount; }
+    public void setSplitCashAmount(BigDecimal splitCashAmount) { this.splitCashAmount = splitCashAmount; }
     public String getNotes() { return notes; }
     public void setNotes(String notes) { this.notes = notes; }
     public Instant getCreatedAt() { return createdAt; }

@@ -253,6 +253,30 @@ public class ShopOrderController {
         return ResponseEntity.ok(shopOrderService.switchToQrPayment(orderId, tId, cId));
     }
 
+    @PatchMapping("/shop/staff/orders/{orderId}/split-payment")
+    public ResponseEntity<?> splitPayment(@PathVariable UUID orderId,
+                                          @RequestBody Map<String, Object> body,
+                                          @RequestParam(required = false) UUID tenantId,
+                                          @RequestParam(required = false) UUID companyId,
+                                          @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                          @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        BigDecimal cashAmount = new BigDecimal(body.get("cashAmount").toString());
+        return ResponseEntity.ok(shopOrderService.splitPayment(orderId, cashAmount, tId, cId));
+    }
+
+    @PatchMapping("/shop/staff/orders/{orderId}/revert-payment")
+    public ResponseEntity<?> revertPayment(@PathVariable UUID orderId,
+                                           @RequestParam(required = false) UUID tenantId,
+                                           @RequestParam(required = false) UUID companyId,
+                                           @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                           @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        return ResponseEntity.ok(shopOrderService.revertToCash(orderId, tId, cId));
+    }
+
     @PatchMapping("/shop/staff/orders/{orderId}/pay")
     public ResponseEntity<?> markAsPaid(@PathVariable UUID orderId,
                                          @RequestParam(required = false) UUID tenantId,

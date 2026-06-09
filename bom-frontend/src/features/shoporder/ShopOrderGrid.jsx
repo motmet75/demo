@@ -44,7 +44,7 @@ import {
   fetchShopOrders, fetchActiveOrders, confirmShopOrder, prepareShopOrder, readyShopOrder,
   completeShopOrder, cancelShopOrder, resetOrderSequence, setShopOrderNumber,
   generateDisplayBoardToken, pickupShopOrder, revertShopOrder, markOrderPaid,
-  fetchBankConfig, switchToQrPayment
+  fetchBankConfig, switchToQrPayment, revertToCash
 } from '../../api/shopApi'
 import { printCupLabels, printOrderReceipt } from '../../utils/printOrderReceipt'
 import ShopOrderDetailModal from './ShopOrderDetailModal'
@@ -289,7 +289,7 @@ function StatusBoard({ status, orders, onAction, onDetail, onPayQr }) {
                 )}
                 {status === 'READY' && (
                   <Box sx={{ display: 'flex', gap: 0.75 }}>
-                    {order.paymentMethod === 'BANK_QR'
+                    {(order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT')
                       ? <Button size="small" variant="contained" color="info" fullWidth onClick={() => onAction('pickup', order.id)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Picked Up ✓</Button>
                       : <Button size="small" variant="contained" color="success" fullWidth onClick={() => onAction('complete', order.id)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Complete ✓</Button>
                     }
@@ -433,6 +433,14 @@ export default function ShopOrderGrid() {
     } catch (e) { setError(e.message || 'Failed to switch payment method') }
   }
 
+  const handleRevertToCash = async (row) => {
+    try {
+      const { res, data } = await revertToCash(row.id)
+      if (!res.ok) { setError(data?.message || 'Failed to revert payment'); return }
+      reload()
+    } catch (e) { setError(e.message || 'Failed to revert payment') }
+  }
+
   const handlePayQr = async (order) => {
     let config = bankConfig
     if (!config) {
@@ -520,12 +528,21 @@ export default function ShopOrderGrid() {
               </Button>
             </Tooltip>
           )}
+          {(row.paymentMethod === 'BANK_QR' || row.paymentMethod === 'SPLIT') && !['COMPLETED','PICKED_UP','CANCELLED'].includes(row.status) && (
+            <Tooltip title="Revert to cash payment">
+              <Button size="small" variant="outlined" color="warning"
+                onClick={() => handleRevertToCash(row)}
+                sx={{ textTransform: 'none', fontSize: 11, px: 0.75, minWidth: 0 }}>
+                → Cash
+              </Button>
+            </Tooltip>
+          )}
           {row.status === 'PENDING'   && <Button size="small" variant="outlined" onClick={() => act(confirmShopOrder, row.id)}>Confirm</Button>}
           {row.status === 'CONFIRMED' && <Button size="small" variant="outlined" color="warning" onClick={() => act(prepareShopOrder, row.id)}>Prepare</Button>}
           {row.status === 'CONFIRMED' && <Tooltip title="Revert to Pending"><Button size="small" variant="outlined" color="error" startIcon={<UndoIcon sx={{ fontSize: 13 }} />} onClick={() => act(revertShopOrder, row.id)}>Revert</Button></Tooltip>}
           {row.status === 'PREPARING' && <Button size="small" variant="outlined" color="success" onClick={async () => { await act(readyShopOrder, row.id); broadcastReady() }}>Ready</Button>}
-          {row.status === 'READY' && row.paymentMethod === 'BANK_QR' && <Button size="small" variant="contained" color="info" onClick={() => act(pickupShopOrder, row.id)}>Picked Up</Button>}
-          {row.status === 'READY' && row.paymentMethod !== 'BANK_QR' && <Button size="small" variant="contained" color="success" onClick={() => act(completeShopOrder, row.id)}>Complete</Button>}
+          {row.status === 'READY' && (row.paymentMethod === 'BANK_QR' || row.paymentMethod === 'SPLIT') && <Button size="small" variant="contained" color="info" onClick={() => act(pickupShopOrder, row.id)}>Picked Up</Button>}
+          {row.status === 'READY' && row.paymentMethod !== 'BANK_QR' && row.paymentMethod !== 'SPLIT' && <Button size="small" variant="contained" color="success" onClick={() => act(completeShopOrder, row.id)}>Complete</Button>}
           {row.paymentStatus !== 'PAID' && !['PICKED_UP','COMPLETED','CANCELLED'].includes(row.status) && (
             <Tooltip title="Mark as paid">
               <Button size="small" variant="outlined" color="success" startIcon={<PaidIcon sx={{ fontSize: 13 }} />} onClick={() => act(markOrderPaid, row.id)} sx={{ fontWeight: 700, minWidth: 0, px: 0.75 }}>Paid</Button>

@@ -41,6 +41,10 @@ public class ModelMenuOption {
     @Column(name = "display_order")
     private Integer displayOrder = 0;
 
+    /** When true, all choices in this group are free regardless of their defined prices */
+    @Column(name = "is_free")
+    private Boolean isFree = false;
+
     @Column(name = "created_at")
     private Instant createdAt;
 
@@ -72,6 +76,8 @@ public class ModelMenuOption {
     public void setDefaultValue(String defaultValue) { this.defaultValue = defaultValue; }
     public Integer getDisplayOrder() { return displayOrder; }
     public void setDisplayOrder(Integer displayOrder) { this.displayOrder = displayOrder; }
+    public Boolean getIsFree() { return isFree; }
+    public void setIsFree(Boolean isFree) { this.isFree = isFree; }
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
 }

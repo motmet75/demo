@@ -242,13 +242,26 @@ export function printOrderReceipt(order, trackingQrBase64 = null) {
     ? `<div class="center" style="margin-bottom:6px"><img src="https://img.vietqr.io/img/${bankCode}.png" height="36" style="max-width:120px;object-fit:contain" /></div>`
     : ''
 
+  const cashAmt = order.splitCashAmount != null ? Number(order.splitCashAmount) : null
+  const qrAmt   = cashAmt != null ? Number(order.totalAmount) - cashAmt : null
+
   const paymentSection = order.paymentMethod === 'BANK_QR' ? `
     ${bankLogoTag}
     <div class="center bold" style="margin-bottom:6px">Scan to Pay</div>
     ${qrSrc ? `<div class="center"><img src="${qrSrc}" width="190" height="190" style="display:block;margin:0 auto" /></div>` : ''}
     <div class="center grey" style="margin-top:6px">Transfer exact amount</div>
     <div class="center bold">Ref: ${order.orderCode}</div>
-  ` : `<div class="center bold">Payment: Cash on delivery</div>`
+  ` : order.paymentMethod === 'SPLIT' ? `
+    <div class="center bold" style="margin-bottom:6px">Split Payment</div>
+    <div class="row"><span>💳 Bank Transfer</span><span>${fmt(qrAmt)}</span></div>
+    <div class="row"><span>💵 Cash</span><span>${fmt(cashAmt)}</span></div>
+    ${bankLogoTag}
+    ${qrSrc ? `
+      <div class="center" style="margin-top:6px"><div class="center bold" style="margin-bottom:4px">Scan to Pay (Bank Portion)</div>
+      <img src="${qrSrc}" width="180" height="180" style="display:block;margin:0 auto" /></div>
+      <div class="center grey" style="margin-top:4px">Ref: ${order.orderCode}</div>
+    ` : ''}
+  ` : `<div class="center bold">Payment: Cash</div>`
 
   const notesSection = order.notes
     ? `<div class="divider"></div><div class="grey italic" style="font-size:11px">Note: ${order.notes}</div>`

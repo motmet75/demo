@@ -29,6 +29,7 @@ public class ShopOrderResponseDto {
     private String paymentMethod;
     private String paymentStatus;
     private String paymentQr;
+    private BigDecimal splitCashAmount;
     private String notes;
     private Instant createdAt;
     private Instant confirmedAt;
@@ -45,6 +46,7 @@ public class ShopOrderResponseDto {
         private BigDecimal unitRawCost;
         private BigDecimal lineTotal;
         private String selectedOptions;
+        private BigDecimal optionAddOn;
         private String itemNotes;
 
         public static ItemDto from(ShopOrderItem item) {
@@ -57,6 +59,7 @@ public class ShopOrderResponseDto {
             dto.unitRawCost = item.getUnitRawCost();
             dto.lineTotal = item.getLineTotal();
             dto.selectedOptions = item.getSelectedOptions();
+            dto.optionAddOn = item.getOptionAddOn();
             dto.itemNotes = item.getItemNotes();
             return dto;
         }
@@ -69,6 +72,7 @@ public class ShopOrderResponseDto {
         public BigDecimal getUnitRawCost() { return unitRawCost; }
         public BigDecimal getLineTotal() { return lineTotal; }
         public String getSelectedOptions() { return selectedOptions; }
+        public BigDecimal getOptionAddOn() { return optionAddOn; }
         public String getItemNotes() { return itemNotes; }
     }
 
@@ -95,6 +99,7 @@ public class ShopOrderResponseDto {
         dto.paymentMethod = order.getPaymentMethod();
         dto.paymentStatus = order.getPaymentStatus();
         dto.paymentQr = order.getPaymentQr();
+        dto.splitCashAmount = order.getSplitCashAmount();
         dto.notes = order.getNotes();
         dto.createdAt = order.getCreatedAt();
         dto.confirmedAt = order.getConfirmedAt();
@@ -123,6 +128,7 @@ public class ShopOrderResponseDto {
     public String getPaymentMethod() { return paymentMethod; }
     public String getPaymentStatus() { return paymentStatus; }
     public String getPaymentQr() { return paymentQr; }
+    public BigDecimal getSplitCashAmount() { return splitCashAmount; }
     public String getNotes() { return notes; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getConfirmedAt() { return confirmedAt; }
