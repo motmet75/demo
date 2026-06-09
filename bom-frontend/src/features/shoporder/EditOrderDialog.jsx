@@ -178,6 +178,20 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
       }
     ))
 
+  const changeSideModel = (parentUid, sideUid, newModel) =>
+    setItems(prev => prev.map(i =>
+      i.uid !== parentUid ? i : {
+        ...i, sideItems: i.sideItems.map(si =>
+          si.uid === sideUid ? {
+            ...si,
+            modelId: newModel.id,
+            modelName: newModel.modelName,
+            customPriceDigits: String(Math.round(Number(newModel.sellingPrice) || 0)),
+          } : si
+        )
+      }
+    ))
+
   // ── Totals ─────────────────────────────────────────────────────────
 
   const calcOptAddOn = (item) => {
@@ -270,7 +284,8 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
                 {items.map((item, itemIdx) => {
                   const modelOpts = optsByModel[item.modelId] || []
                   const sf = sideForm[item.uid] || {}
-                  const lineTotal = item.qty * (itemBasePrice(item) + calcOptAddOn(item)) + sidesTotal(item)
+                  const mainSubtotal = item.qty * (itemBasePrice(item) + calcOptAddOn(item))
+                  const blockTotal = mainSubtotal + sidesTotal(item)
                   return (
                     <Box key={item.uid} sx={{ border: '1.5px solid #e2e8f0', borderRadius: 2, overflow: 'hidden' }}>
 
@@ -305,7 +320,7 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
                           </Box>
                           <Typography variant="body2" color="primary" fontWeight={800}
                             sx={{ minWidth: 70, textAlign: 'right', fontSize: 13 }}>
-                            {fmt(lineTotal)}
+                            {fmt(mainSubtotal)}
                           </Typography>
                           <IconButton size="small" color="error"
                             onClick={() => setItems(prev => prev.filter(i => i.uid !== item.uid))}
@@ -365,9 +380,24 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
                           {item.sideItems.map(si => (
                             <Box key={si.uid} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, py: 0.5, pr: 0.75, borderBottom: '1px solid #e8eaf6', flexWrap: 'wrap' }}>
                               <Box sx={{ width: 14, height: 2, bgcolor: '#c7d2fe', flexShrink: 0 }} />
-                              <Typography variant="caption" fontWeight={600} sx={{ flex: 1, minWidth: 60, fontSize: 12 }} noWrap>
-                                {si.modelName}
-                              </Typography>
+                              {/* Editable model name */}
+                              <Autocomplete
+                                size="small" disableClearable options={models}
+                                getOptionLabel={m => m.modelName}
+                                value={{ id: si.modelId, modelName: si.modelName, sellingPrice: si.customPriceDigits }}
+                                onChange={(_, v) => v && changeSideModel(item.uid, si.uid, v)}
+                                isOptionEqualToValue={(a, b) => a.id === b.id}
+                                renderInput={params => (
+                                  <TextField {...params} variant="standard"
+                                    InputProps={{ ...params.InputProps, disableUnderline: true,
+                                      sx: { fontSize: 12, fontWeight: 600, p: 0 } }}
+                                    inputProps={{ ...params.inputProps, style: { fontSize: 12, fontWeight: 600, padding: '1px 0' } }}
+                                  />
+                                )}
+                                sx={{ flex: 1, minWidth: 80,
+                                  '& .MuiAutocomplete-endAdornment': { top: 'calc(50% - 10px)' } }}
+                                noOptionsText="No items"
+                              />
                               {/* Qty controls */}
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
                                 <IconButton size="small" onClick={() => changeSideQty(item.uid, si.uid, -1)} sx={{ p: 0.2 }}>
@@ -399,6 +429,16 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
                               </IconButton>
                             </Box>
                           ))}
+
+                          {/* Block total row — only when there are side items */}
+                          {item.sideItems.length > 0 && (
+                            <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 0.5, px: 0.75, py: 0.4, borderBottom: '1px solid #e8eaf6' }}>
+                              <Typography variant="caption" sx={{ color: '#64748b', fontSize: 11 }}>Block total</Typography>
+                              <Typography variant="caption" fontWeight={800} color="primary" sx={{ fontSize: 12 }}>
+                                {fmt(blockTotal)}
+                              </Typography>
+                            </Box>
+                          )}
 
                           {/* Add side item */}
                           <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5, py: 0.6, pr: 0.75, flexWrap: 'wrap' }}>
