@@ -349,24 +349,26 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
                 Counter Display
               </Button>
             </Tooltip>
-            <Tooltip title="Print order tag with tracking QR">
+            <Tooltip title="Print order tag with tracking QR — give to customer to track order status">
               <Button
                 variant="outlined"
+                color="secondary"
                 startIcon={qrLoading ? <CircularProgress size={14} /> : <QrCode2Icon />}
                 onClick={() => tagQr && printOrderTag(order, tagQr)}
                 disabled={qrLoading || !tagQr}
                 sx={{ textTransform: 'none' }}
               >
-                Print Tag
+                Print · Track
               </Button>
             </Tooltip>
             <Button
               variant="outlined"
+              color="primary"
               startIcon={<PrintIcon />}
               onClick={() => printOrderReceipt(order, tagQr)}
               sx={{ textTransform: 'none' }}
             >
-              Print Receipt
+              Print · Pay
             </Button>
             <Tooltip title="Print one cup label per item unit">
               <Button

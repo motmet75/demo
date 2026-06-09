@@ -1,6 +1,17 @@
 import React, { useState } from 'react'
+import * as XLSX from 'xlsx'
 import { importModelBoms } from '../../api/modelApi'
 import { useAppContext } from '../../context/AppContext'
+
+function downloadTemplate() {
+  const headers = ['model_code', 'model_name', 'material_code', 'material_name_en', 'qty_per_unit']
+  const sample  = ['MD-BL-18V', 'Cordless Blower 18V', '2827122002', 'DC Motor (Ducted Set)', 1]
+  const ws = XLSX.utils.aoa_to_sheet([headers, sample])
+  ws['!cols'] = headers.map(() => ({ wch: 24 }))
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'ModelBOM')
+  XLSX.writeFile(wb, 'model_bom_import_template.xlsx')
+}
 
 // Minimal modal dialog - updated to support XLSX Excel imports
 export default function ModelBomImportDialog({ open, onClose, onSuccess }) {
@@ -42,7 +53,13 @@ export default function ModelBomImportDialog({ open, onClose, onSuccess }) {
       <div style={{ width: 640, maxWidth: '92%', background: '#fff', borderRadius: 6, padding: 16, boxShadow: '0 6px 24px rgba(0,0,0,0.2)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <h3 style={{ margin: 0 }}>Import Model BOM (Excel XLSX)</h3>
-          <button onClick={handleClose} aria-label="Close">Close</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" onClick={downloadTemplate}
+              style={{ fontSize: 12, padding: '3px 10px', background: '#e8f5e9', border: '1px solid #a5d6a7', borderRadius: 4, cursor: 'pointer' }}>
+              ⬇ Download Template
+            </button>
+            <button onClick={handleClose} aria-label="Close">Close</button>
+          </div>
         </div>
 
         <form onSubmit={onSubmit}>

@@ -40,13 +40,15 @@ import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
 import AddShoppingCartIcon from '@mui/icons-material/AddShoppingCart'
 import LabelIcon from '@mui/icons-material/Label'
 import PaidIcon from '@mui/icons-material/Paid'
+import PrintIcon from '@mui/icons-material/Print'
+import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber'
 import {
   fetchShopOrders, fetchActiveOrders, confirmShopOrder, prepareShopOrder, readyShopOrder,
   completeShopOrder, cancelShopOrder, resetOrderSequence, setShopOrderNumber,
   generateDisplayBoardToken, pickupShopOrder, revertShopOrder, markOrderPaid,
-  fetchBankConfig, switchToQrPayment, revertToCash
+  fetchBankConfig, switchToQrPayment, revertToCash, fetchOrderTagQr
 } from '../../api/shopApi'
-import { printCupLabels, printOrderReceipt } from '../../utils/printOrderReceipt'
+import { printCupLabels, printOrderReceipt, printOrderTag } from '../../utils/printOrderReceipt'
 import ShopOrderDetailModal from './ShopOrderDetailModal'
 import ManualOrderDialog from './ManualOrderDialog'
 import QrOrderDialog from './QrOrderDialog'
@@ -441,6 +443,13 @@ export default function ShopOrderGrid() {
     } catch (e) { setError(e.message || 'Failed to revert payment') }
   }
 
+  const handlePrintTrack = async (row) => {
+    try {
+      const { data } = await fetchOrderTagQr(row.id)
+      printOrderTag(row, data?.qrBase64 || null)
+    } catch (e) { setError(e.message || 'Failed to fetch tracking QR') }
+  }
+
   const handlePayQr = async (order) => {
     let config = bankConfig
     if (!config) {
@@ -512,6 +521,8 @@ export default function ShopOrderGrid() {
       renderCell: ({ row }) => (
         <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', flexWrap: 'nowrap' }}>
           <Tooltip title="Detail"><IconButton size="small" onClick={() => setDetailOrder(row)}><VisibilityIcon fontSize="small" /></IconButton></Tooltip>
+          <Tooltip title="Print Receipt (Pay)"><IconButton size="small" color="primary" onClick={() => printOrderReceipt(row)}><PrintIcon fontSize="small" /></IconButton></Tooltip>
+          <Tooltip title="Print Tracking Tag"><IconButton size="small" color="secondary" onClick={() => handlePrintTrack(row)}><ConfirmationNumberIcon fontSize="small" /></IconButton></Tooltip>
           <Tooltip title="Print cup labels"><IconButton size="small" onClick={() => printCupLabels(row)}><LabelIcon fontSize="small" /></IconButton></Tooltip>
           {row.paymentStatus !== 'PAID' && row.status !== 'CANCELLED' && (
             <Tooltip title="Payment QR">
