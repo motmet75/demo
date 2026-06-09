@@ -337,7 +337,7 @@ export default function ShopOrderGrid() {
   const [payQrOrder, setPayQrOrder]     = useState(null)
   const [bankConfig, setBankConfig]     = useState(null)
   const [tables, setTables]             = useState([])
-  const [selectedRows, setSelectedRows] = useState([])
+  const [selectedRows, setSelectedRows] = useState({ type: 'include', ids: new Set() })
   const [moveTableOpen, setMoveTableOpen] = useState(false)
   const [moveTableTarget, setMoveTableTarget] = useState('')
   const [moving, setMoving]             = useState(false)
@@ -454,11 +454,11 @@ export default function ShopOrderGrid() {
   }
 
   const handleMoveTable = async () => {
-    if (!selectedRows.length) return
+    if (!selectedRows.ids.size) return
     setMoving(true)
     try {
-      await Promise.all(selectedRows.map(id => setOrderTable(id, moveTableTarget || null)))
-      setMoveTableOpen(false); setMoveTableTarget(''); setSelectedRows([])
+      await Promise.all(Array.from(selectedRows.ids).map(id => setOrderTable(id, moveTableTarget || null)))
+      setMoveTableOpen(false); setMoveTableTarget(''); setSelectedRows({ type: 'include', ids: new Set() })
       reload()
     } catch (e) { setError(e.message || 'Failed to move orders') }
     setMoving(false)
@@ -625,13 +625,13 @@ export default function ShopOrderGrid() {
             variant="contained" size="small" color="success" sx={{ textTransform: 'none', fontWeight: 700 }}>New Order</Button>
           <Button startIcon={<QrCode2Icon />} onClick={() => setQrOrderOpen(true)}
             variant="outlined" size="small" color="primary" sx={{ textTransform: 'none', fontWeight: 700 }}>QR Order</Button>
-          {selectedRows.length > 0 && (
+          {selectedRows.ids.size > 0 && (
             <Button
               startIcon={<DriveFileMoveIcon />}
               onClick={() => { setMoveTableTarget(''); setMoveTableOpen(true) }}
               variant="contained" size="small" color="info"
               sx={{ textTransform: 'none', fontWeight: 700 }}>
-              Move {selectedRows.length} order{selectedRows.length > 1 ? 's' : ''} → Table
+              Move {selectedRows.ids.size} order{selectedRows.ids.size > 1 ? 's' : ''} → Table
             </Button>
           )}
           <Box sx={{ flex: 1 }} />
@@ -766,7 +766,7 @@ export default function ShopOrderGrid() {
 
       {/* Move to Table dialog */}
       <Dialog open={moveTableOpen} onClose={() => setMoveTableOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle fontWeight={700}>Move {selectedRows.length} Order{selectedRows.length > 1 ? 's' : ''} to Table</DialogTitle>
+        <DialogTitle fontWeight={700}>Move {selectedRows.ids.size} Order{selectedRows.ids.size > 1 ? 's' : ''} to Table</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             Select the target table. Choose "No table" to unassign.
