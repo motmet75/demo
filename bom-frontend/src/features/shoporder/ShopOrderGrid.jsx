@@ -43,7 +43,6 @@ import PaidIcon from '@mui/icons-material/Paid'
 import PrintIcon from '@mui/icons-material/Print'
 import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber'
 import DriveFileMoveIcon from '@mui/icons-material/DriveFileMove'
-import Select from '@mui/material/Select'
 import {
   fetchShopOrders, fetchActiveOrders, confirmShopOrder, prepareShopOrder, readyShopOrder,
   completeShopOrder, cancelShopOrder, resetOrderSequence, setShopOrderNumber,
@@ -517,17 +516,16 @@ export default function ShopOrderGrid() {
     {
       field: 'tableName', headerName: 'Table', width: 115,
       renderCell: ({ row }) => (
-        <Select
-          size="small"
-          value={row.tableId || ''}
-          onChange={e => { e.stopPropagation(); handleInlineTableChange(row.id, e.target.value) }}
-          onClick={e => e.stopPropagation()}
-          displayEmpty
-          sx={{ fontSize: 12, height: 26, minWidth: 100, '& .MuiSelect-select': { py: '2px', px: 1 } }}
-        >
-          <MenuItem value="" sx={{ fontSize: 12, color: '#aaa', fontStyle: 'italic' }}>No table</MenuItem>
-          {tables.map(t => <MenuItem key={t.id} value={t.id} sx={{ fontSize: 12 }}>{t.tableName}</MenuItem>)}
-        </Select>
+        <Box onClick={e => e.stopPropagation()} sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+          <select
+            value={row.tableId || ''}
+            onChange={e => handleInlineTableChange(row.id, e.target.value)}
+            style={{ fontSize: 12, height: 24, border: '1px solid #c4c4c4', borderRadius: 4, padding: '0 6px', minWidth: 100, cursor: 'pointer', background: '#fff', color: '#222' }}
+          >
+            <option value="">— no table —</option>
+            {tables.map(t => <option key={t.id} value={t.id}>{t.tableName}</option>)}
+          </select>
+        </Box>
       )
     },
     {
