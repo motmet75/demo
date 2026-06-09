@@ -209,6 +209,27 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
             </Box>
           </Stack>
         </DialogContent>
+
+        {/* VietQR payment — shown for BANK_QR orders, qr_only template (no logo in center) */}
+        {createdOrder.paymentMethod === 'BANK_QR' && createdOrder.paymentQr && (
+          <Box sx={{ textAlign: 'center', bgcolor: '#f0fdf4', borderTop: '1px solid #bbf7d0', px: 2, py: 2 }}>
+            <Typography variant="subtitle2" fontWeight={700} color="#15803d" sx={{ mb: 1 }}>
+              Scan to Pay · VietQR
+            </Typography>
+            <img
+              src={createdOrder.paymentQr.startsWith('https://')
+                ? createdOrder.paymentQr
+                : `data:image/png;base64,${createdOrder.paymentQr}`}
+              alt="VietQR payment"
+              style={{ width: 180, height: 180, display: 'block', margin: '0 auto', borderRadius: 8 }}
+            />
+            <Typography variant="h6" fontWeight={900} color="primary" sx={{ mt: 1 }}>
+              {fmt(createdOrder.totalAmount)}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">ref: {createdOrder.orderCode}</Typography>
+          </Box>
+        )}
+
         <DialogActions sx={{ px: 2, pb: 2, pt: 1, flexDirection: 'column', gap: 1 }}>
           <Box sx={{ display: 'flex', gap: 1, width: '100%' }}>
             <Button variant="outlined" fullWidth startIcon={tagLoading ? <CircularProgress size={14} /> : <QrCode2Icon />}

@@ -42,7 +42,7 @@ import PaidIcon from '@mui/icons-material/Paid'
 import {
   fetchShopOrders, fetchActiveOrders, confirmShopOrder, prepareShopOrder, readyShopOrder,
   completeShopOrder, cancelShopOrder, resetOrderSequence, setShopOrderNumber,
-  generateDisplayBoardToken, pickupShopOrder, revertShopOrder, markOrderPaid
+  generateDisplayBoardToken, pickupShopOrder, revertShopOrder, markOrderPaid, fetchBankConfig
 } from '../../api/shopApi'
 import { printCupLabels } from '../../utils/printOrderReceipt'
 import ShopOrderDetailModal from './ShopOrderDetailModal'
@@ -177,7 +177,7 @@ const BOARD_STYLE = {
   PICKED_UP:  { headerBg: '#e3f2fd', border: '#0288d1',  cardBg: '#f0f9ff',  color: '#01579b',  numColor: '#0288d1' },
 }
 
-function StatusBoard({ status, orders, onAction, onDetail }) {
+function StatusBoard({ status, orders, onAction, onDetail, onPayQr }) {
   const style = BOARD_STYLE[status] || BOARD_STYLE.CONFIRMED
 
   if (!orders.length) {
@@ -223,6 +223,13 @@ function StatusBoard({ status, orders, onAction, onDetail }) {
                       <LabelIcon sx={{ fontSize: 16 }} />
                     </IconButton>
                   </Tooltip>
+                  {order.paymentStatus !== 'PAID' && (
+                    <Tooltip title="Payment QR">
+                      <IconButton size="small" onClick={() => onPayQr(order)} sx={{ p: 0.25, color: '#1565c0' }}>
+                        <QrCode2Icon sx={{ fontSize: 16 }} />
+                      </IconButton>
+                    </Tooltip>
+                  )}
                   <Tooltip title="View detail">
                     <IconButton size="small" onClick={() => onDetail(order)} sx={{ p: 0.25 }}>
                       <VisibilityIcon sx={{ fontSize: 16 }} />
@@ -321,6 +328,8 @@ export default function ShopOrderGrid() {
   const [copied, setCopied]             = useState(false)
   const [tab, setTab]                   = useState(0)
   const [stockItems, setStockItems]     = useState([])
+  const [payQrOrder, setPayQrOrder]     = useState(null)
+  const [bankConfig, setBankConfig]     = useState(null)
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
@@ -413,6 +422,18 @@ export default function ShopOrderGrid() {
     setResetting(false)
   }
 
+  const handlePayQr = async (order) => {
+    let config = bankConfig
+    if (!config) {
+      try {
+        const { data } = await fetchBankConfig()
+        setBankConfig(data || {})
+        config = data || {}
+      } catch { setError('Failed to load bank config'); return }
+    }
+    setPayQrOrder(order)
+  }
+
   const processRowUpdate = useCallback(async (newRow, oldRow) => {
     if (newRow.orderNumber === oldRow.orderNumber) return oldRow
     const num = parseInt(newRow.orderNumber, 10)
@@ -473,6 +494,11 @@ export default function ShopOrderGrid() {
         <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', flexWrap: 'nowrap' }}>
           <Tooltip title="Detail"><IconButton size="small" onClick={() => setDetailOrder(row)}><VisibilityIcon fontSize="small" /></IconButton></Tooltip>
           <Tooltip title="Print cup labels"><IconButton size="small" onClick={() => printCupLabels(row)}><LabelIcon fontSize="small" /></IconButton></Tooltip>
+          {row.paymentStatus !== 'PAID' && row.status !== 'CANCELLED' && (
+            <Tooltip title="Payment QR">
+              <IconButton size="small" color="primary" onClick={() => handlePayQr(row)}><QrCode2Icon fontSize="small" /></IconButton>
+            </Tooltip>
+          )}
           {row.status === 'PENDING'   && <Button size="small" variant="outlined" onClick={() => act(confirmShopOrder, row.id)}>Confirm</Button>}
           {row.status === 'CONFIRMED' && <Button size="small" variant="outlined" color="warning" onClick={() => act(prepareShopOrder, row.id)}>Prepare</Button>}
           {row.status === 'CONFIRMED' && <Tooltip title="Revert to Pending"><Button size="small" variant="outlined" color="error" startIcon={<UndoIcon sx={{ fontSize: 13 }} />} onClick={() => act(revertShopOrder, row.id)}>Revert</Button></Tooltip>}
@@ -544,10 +570,10 @@ export default function ShopOrderGrid() {
               />
             </Box>
           )}
-          {tab === 1 && <StatusBoard status="CONFIRMED"  orders={confirmedOrders} onAction={handleBoardAction} onDetail={setDetailOrder} />}
-          {tab === 2 && <StatusBoard status="PREPARING"  orders={preparingOrders} onAction={handleBoardAction} onDetail={setDetailOrder} />}
-          {tab === 3 && <StatusBoard status="READY"      orders={readyOrders}     onAction={handleBoardAction} onDetail={setDetailOrder} />}
-          {tab === 4 && <StatusBoard status="PICKED_UP"  orders={pickedUpOrders}  onAction={handleBoardAction} onDetail={setDetailOrder} />}
+          {tab === 1 && <StatusBoard status="CONFIRMED"  orders={confirmedOrders} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} />}
+          {tab === 2 && <StatusBoard status="PREPARING"  orders={preparingOrders} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} />}
+          {tab === 3 && <StatusBoard status="READY"      orders={readyOrders}     onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} />}
+          {tab === 4 && <StatusBoard status="PICKED_UP"  orders={pickedUpOrders}  onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} />}
         </Box>
       </Box>
 
@@ -580,6 +606,60 @@ export default function ShopOrderGrid() {
         </DialogContent>
         <DialogActions><Button onClick={() => setBoardOpen(false)}>Close</Button></DialogActions>
       </Dialog>
+
+      {/* Payment QR dialog — generate VietQR (qr_only, no logo in center) for any unpaid order */}
+      {payQrOrder && (() => {
+        const cfg = bankConfig
+        const qrUrl = cfg?.bankBin && cfg?.bankAccountNumber
+          ? `https://img.vietqr.io/image/${cfg.bankBin}-${cfg.bankAccountNumber}-qr_only.png`
+            + `?amount=${Math.round(Number(payQrOrder.totalAmount || 0))}`
+            + `&addInfo=${encodeURIComponent(payQrOrder.orderCode || '')}`
+            + `&accountName=${encodeURIComponent(cfg.bankAccountName || '')}`
+          : null
+        return (
+          <Dialog open onClose={() => setPayQrOrder(null)} maxWidth="xs" fullWidth
+            PaperProps={{ sx: { borderRadius: 3, overflow: 'hidden' } }}>
+            <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <QrCode2Icon color="primary" />
+                <Typography fontWeight={700}>Payment QR</Typography>
+              </Box>
+              <IconButton size="small" onClick={() => setPayQrOrder(null)}><CloseIcon fontSize="small" /></IconButton>
+            </DialogTitle>
+            <DialogContent sx={{ pt: 0 }}>
+              {qrUrl ? (
+                <Box sx={{ textAlign: 'center' }}>
+                  <Typography variant="subtitle2" fontWeight={700} color="#15803d" sx={{ mb: 1 }}>
+                    Scan to Pay · VietQR
+                  </Typography>
+                  <Box sx={{ display: 'inline-block', p: 1.5, bgcolor: '#fff', borderRadius: 2, border: '2px solid #e3f2fd', boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }}>
+                    <img src={qrUrl} alt="VietQR payment"
+                      style={{ width: 200, height: 200, display: 'block', borderRadius: 6 }} />
+                  </Box>
+                  <Typography variant="h6" fontWeight={900} color="primary" sx={{ mt: 1.25 }}>
+                    {fmt(payQrOrder.totalAmount)}
+                  </Typography>
+                  {payQrOrder.orderNumber && (
+                    <Typography variant="body2" fontWeight={700} color="text.secondary">
+                      Order #{payQrOrder.orderNumber}
+                    </Typography>
+                  )}
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                    ref: {payQrOrder.orderCode}
+                  </Typography>
+                </Box>
+              ) : (
+                <Alert severity="warning" sx={{ mt: 1 }}>
+                  No bank account configured. Set it up in <strong>Bank Account Setup</strong> first.
+                </Alert>
+              )}
+            </DialogContent>
+            <DialogActions sx={{ px: 2, pb: 2 }}>
+              <Button onClick={() => setPayQrOrder(null)} sx={{ textTransform: 'none' }}>Close</Button>
+            </DialogActions>
+          </Dialog>
+        )
+      })()}
 
       <Dialog open={resetOpen} onClose={() => setResetOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle fontWeight={700}>Reset Order Counter</DialogTitle>
