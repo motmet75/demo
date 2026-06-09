@@ -96,7 +96,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
   const itemBasePrice = (item) => Number(item.customPriceDigits) || 0
 
   const sidesTotal = (item) =>
-    (item.sideItems || []).reduce((s, si) => s + (Number(si.customPriceDigits) || 0), 0)
+    (item.sideItems || []).reduce((s, si) => s + (Number(si.customPriceDigits) || 0) * (si.qty || 1), 0)
 
   const total = items.reduce((s, i) => s + i.qty * (itemBasePrice(i) + calcOptAddOn(i)) + sidesTotal(i), 0)
 
@@ -144,10 +144,10 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
         tempItems.push({
           id: crypto.randomUUID(),
           modelName: si.modelName,
-          quantity: 1,
+          quantity: si.qty || 1,
           selectedOptions: null,
           itemNotes: null,
-          lineTotal: Number(si.customPriceDigits) || 0,
+          lineTotal: (Number(si.customPriceDigits) || 0) * (si.qty || 1),
           parentItemId: tempId,
         })
       })
@@ -194,6 +194,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
           uid: crypto.randomUUID(),
           modelId: sf.model.id, modelName: sf.model.modelName,
           customPriceDigits: price,
+          qty: 1,
         }]
       }
     ))
@@ -211,6 +212,15 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
         ...i, sideItems: i.sideItems.map(si =>
           si.uid === sideUid ? { ...si, customPriceDigits: digits } : si
         )
+      }
+    ))
+
+  const changeSideQty = (parentUid, sideUid, delta) =>
+    setItems(prev => prev.map(i =>
+      i.uid !== parentUid ? i : {
+        ...i, sideItems: i.sideItems
+          .map(si => si.uid === sideUid ? { ...si, qty: (si.qty || 1) + delta } : si)
+          .filter(si => si.qty > 0)
       }
     ))
 
@@ -283,7 +293,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
         itemNotes: i.itemNotes || null,
         unitPriceOverride: Number(i.customPriceDigits) || null,
         sideItems: (i.sideItems || []).map(si => ({
-          modelId: si.modelId, quantity: 1,
+          modelId: si.modelId, quantity: si.qty || 1,
           selectedOptions: null, itemNotes: null,
           unitPriceOverride: Number(si.customPriceDigits) || null,
           sideItems: [],
@@ -621,22 +631,35 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
 
                             {/* Side item rows */}
                             {(item.sideItems || []).map(si => (
-                              <Box key={si.uid} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, py: 0.5, pr: 0.75, borderBottom: '1px solid #e8eaf6' }}>
+                              <Box key={si.uid} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, py: 0.5, pr: 0.75, borderBottom: '1px solid #e8eaf6', flexWrap: 'wrap' }}>
                                 <Box sx={{ width: 14, height: 2, bgcolor: '#c7d2fe', flexShrink: 0 }} />
-                                <Typography variant="caption" fontWeight={600} sx={{ flex: 1, fontSize: 12 }} noWrap>
+                                <Typography variant="caption" fontWeight={600} sx={{ flex: 1, minWidth: 60, fontSize: 12 }} noWrap>
                                   {si.modelName}
                                 </Typography>
+                                {/* Qty controls */}
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
+                                  <IconButton size="small" onClick={() => changeSideQty(item.uid, si.uid, -1)} sx={{ p: 0.2 }}>
+                                    <RemoveIcon sx={{ fontSize: 12 }} />
+                                  </IconButton>
+                                  <Typography variant="caption" fontWeight={700} sx={{ minWidth: 16, textAlign: 'center', fontSize: 12 }}>
+                                    {si.qty || 1}
+                                  </Typography>
+                                  <IconButton size="small" onClick={() => changeSideQty(item.uid, si.uid, 1)}
+                                    sx={{ p: 0.2, bgcolor: '#6366f1', color: '#fff', borderRadius: 0.5, '&:hover': { bgcolor: '#4f46e5' } }}>
+                                    <AddIcon sx={{ fontSize: 12 }} />
+                                  </IconButton>
+                                </Box>
                                 <TextField
                                   size="small" type="text" inputMode="numeric" placeholder="0"
                                   value={fmtDots(si.customPriceDigits || '')}
                                   onChange={e => setSideItemPrice(item.uid, si.uid, stripDigits(e.target.value))}
-                                  inputProps={{ maxLength: 12, style: { fontSize: 12, fontWeight: 700, textAlign: 'right', width: 58 } }}
+                                  inputProps={{ maxLength: 12, style: { fontSize: 12, fontWeight: 700, textAlign: 'right', width: 52 } }}
                                   InputProps={{ endAdornment: <InputAdornment position="end">đ</InputAdornment> }}
-                                  sx={{ width: 96, '& .MuiInputBase-root': { height: 26 } }}
+                                  sx={{ width: 90, '& .MuiInputBase-root': { height: 26 } }}
                                 />
                                 <Typography variant="caption" color="primary" fontWeight={700}
                                   sx={{ minWidth: 54, textAlign: 'right', fontSize: 12 }}>
-                                  {fmt(Number(si.customPriceDigits) || 0)}
+                                  {fmt((Number(si.customPriceDigits) || 0) * (si.qty || 1))}
                                 </Typography>
                                 <IconButton size="small" onClick={() => removeSideItem(item.uid, si.uid)}
                                   sx={{ p: 0.25, color: '#94a3b8', '&:hover': { color: '#dc2626' } }}>
