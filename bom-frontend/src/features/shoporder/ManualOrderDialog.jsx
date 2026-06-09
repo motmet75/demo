@@ -93,6 +93,9 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
     }, 0)
   }
 
+  const sidesTotal = (item) =>
+    (item.sideItems || []).reduce((s, si) => s + (Number(si.customPriceDigits) || 0), 0)
+
   const total = items.reduce((s, i) => s + i.qty * (Number(i.sellingPrice || 0) + calcOptAddOn(i)) + sidesTotal(i), 0)
 
   // Load models + tables when dialog opens
@@ -179,9 +182,6 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
     setItems(prev => prev.map(i =>
       i.uid !== parentUid ? i : { ...i, sideItems: i.sideItems.filter(si => si.uid !== sideUid) }
     ))
-
-  const sidesTotal = (item) =>
-    (item.sideItems || []).reduce((s, si) => s + (Number(si.customPriceDigits) || 0), 0)
 
   const addItem = () => {
     if (!selectedModel) return
