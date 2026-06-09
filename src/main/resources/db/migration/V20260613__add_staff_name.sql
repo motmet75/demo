@@ -1,0 +1,1 @@
+ALTER TABLE shop_order ADD COLUMN IF NOT EXISTS staff_name VARCHAR(100);

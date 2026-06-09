@@ -57,6 +57,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
   const [customer, setCustomer]         = useState({ name: '', phone: '' })
   const [payment, setPayment]           = useState('CASH')
   const [notes, setNotes]               = useState('')
+  const [customerCash, setCustomerCash] = useState('')
   const [items, setItems]               = useState([])
   const [selectedModel, setSelectedModel] = useState(null)
   const [optsByModel, setOptsByModel]   = useState({})
@@ -142,7 +143,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
     setCustomer({ name: '', phone: '' }); setPayment('CASH'); setNotes('')
     setItems([]); setSelectedModel(null); setError('')
     setCreatedOrder(null); setTagQr(''); setOptsByModel({})
-    setJustBroadcast(false)
+    setJustBroadcast(false); setCustomerCash('')
   }
 
   const handleClose = () => { reset(); onClose() }
@@ -532,6 +533,39 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                     <Typography fontWeight={800}>Total</Typography>
                     <Typography fontWeight={800} color="primary">{fmt(total)}</Typography>
                   </Box>
+                  {payment === 'CASH' && (
+                    <Box sx={{ bgcolor: '#fff8e1', borderRadius: 1.5, px: 1.25, py: 1, mt: 0.5 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <TextField
+                          label="Customer cash" type="number" size="small" sx={{ flex: 1 }}
+                          value={customerCash}
+                          onChange={e => setCustomerCash(e.target.value)}
+                          placeholder="0"
+                          inputProps={{ min: 0, step: 1000 }}
+                          InputProps={{ endAdornment: <Typography variant="caption" color="text.secondary" sx={{ ml: 0.5, whiteSpace: 'nowrap' }}>đ</Typography> }}
+                        />
+                        {customerCash !== '' && Number(customerCash) > 0 && (
+                          <Box sx={{ minWidth: 120, textAlign: 'right' }}>
+                            {Number(customerCash) >= total ? (
+                              <>
+                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>Change</Typography>
+                                <Typography fontWeight={800} color="#2e7d32" sx={{ fontSize: 18, lineHeight: 1.1 }}>
+                                  {fmt(Number(customerCash) - total)}
+                                </Typography>
+                              </>
+                            ) : (
+                              <>
+                                <Typography variant="caption" color="error" sx={{ fontSize: 11 }}>Short</Typography>
+                                <Typography fontWeight={800} color="error.main" sx={{ fontSize: 18, lineHeight: 1.1 }}>
+                                  {fmt(total - Number(customerCash))}
+                                </Typography>
+                              </>
+                            )}
+                          </Box>
+                        )}
+                      </Box>
+                    </Box>
+                  )}
                 </Stack>
               ) : (
                 <Typography variant="body2" color="text.disabled" sx={{ textAlign: 'center', py: 1 }}>

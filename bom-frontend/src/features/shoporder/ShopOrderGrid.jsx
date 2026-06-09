@@ -43,6 +43,7 @@ import PaidIcon from '@mui/icons-material/Paid'
 import PrintIcon from '@mui/icons-material/Print'
 import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber'
 import DriveFileMoveIcon from '@mui/icons-material/DriveFileMove'
+import AssessmentIcon from '@mui/icons-material/Assessment'
 import {
   fetchShopOrders, fetchActiveOrders, confirmShopOrder, prepareShopOrder, readyShopOrder,
   completeShopOrder, cancelShopOrder, resetOrderSequence, setShopOrderNumber,
@@ -54,6 +55,7 @@ import { printCupLabels, printOrderReceipt, printOrderTag } from '../../utils/pr
 import ShopOrderDetailModal from './ShopOrderDetailModal'
 import ManualOrderDialog from './ManualOrderDialog'
 import QrOrderDialog from './QrOrderDialog'
+import EodAuditDialog from './EodAuditDialog'
 
 const BOARD_CHANNEL = 'shop_display_board'
 function broadcastReady() {
@@ -129,6 +131,11 @@ function StockPanel({ items, onUseInOrder, onClear }) {
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Typography variant="caption" fontWeight={600} noWrap display="block">{item.modelName}</Typography>
                 <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>{item.qty > 1 ? `×${item.qty} ` : ''}{fmt(item.sellingPrice)}</Typography>
+                {item.itemNotes && (
+                  <Typography variant="caption" sx={{ fontSize: 10, color: '#c62828', fontStyle: 'italic', display: 'block' }} noWrap>
+                    ⚠ {item.itemNotes}
+                  </Typography>
+                )}
               </Box>
               <Tooltip title="Add to new order">
                 <IconButton size="small" onClick={() => addToQueue(item)} sx={{ p: 0.25, color: '#1976d2', flexShrink: 0 }}>
@@ -341,6 +348,7 @@ export default function ShopOrderGrid() {
   const [moveTableOpen, setMoveTableOpen] = useState(false)
   const [moveTableTarget, setMoveTableTarget] = useState('')
   const [moving, setMoving]             = useState(false)
+  const [eodOpen, setEodOpen]           = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
@@ -537,6 +545,7 @@ export default function ShopOrderGrid() {
       renderCell: ({ value }) => { const map = { DINE_IN: '🪑 Dine', PICKUP: '🥡 Pick', DELIVERY: '🛵 Del' }; return <Typography variant="caption">{map[value] || value}</Typography> }
     },
     { field: 'customerName', headerName: 'Customer', width: 120, renderCell: ({ value }) => <Typography variant="body2" noWrap>{value || '—'}</Typography> },
+    { field: 'staffName', headerName: 'Staff', width: 100, renderCell: ({ value }) => <Typography variant="caption" color="text.secondary" noWrap>{value || '—'}</Typography> },
     {
       field: 'notes', headerName: 'Notes', width: 130,
       renderCell: ({ value }) => value
@@ -643,6 +652,7 @@ export default function ShopOrderGrid() {
               Counter
             </Button>
           </Tooltip>
+          <Button startIcon={<AssessmentIcon />} onClick={() => setEodOpen(true)} variant="outlined" size="small" color="secondary" sx={{ textTransform: 'none', fontWeight: 700 }}>EOD Audit</Button>
           <Button startIcon={<RestartAltIcon />} onClick={() => setResetOpen(true)} variant="outlined" size="small" color="warning">Reset Counter</Button>
         </Box>
 
@@ -682,6 +692,7 @@ export default function ShopOrderGrid() {
 
       {/* Dialogs */}
       <ManualOrderDialog open={manualOpen} onClose={() => { setManualOpen(false); setManualDefaults(null) }} onCreated={reload} defaultItems={manualDefaults} />
+      <EodAuditDialog open={eodOpen} onClose={() => setEodOpen(false)} />
       <QrOrderDialog open={qrOrderOpen} onClose={() => setQrOrderOpen(false)} />
       {detailOrder && (
         <ShopOrderDetailModal open order={detailOrder} onClose={() => setDetailOrder(null)} onRefresh={() => { reload(); setDetailOrder(null) }} />

@@ -93,6 +93,9 @@ public class ShopOrder {
     @Column(name = "source_token", length = 100)
     private String sourceToken;
 
+    @Column(name = "staff_name", length = 100)
+    private String staffName;
+
     @Column(name = "created_at")
     private Instant createdAt;
 
@@ -165,4 +168,6 @@ public class ShopOrder {
     public void setCompletedAt(Instant completedAt) { this.completedAt = completedAt; }
     public String getSourceToken() { return sourceToken; }
     public void setSourceToken(String sourceToken) { this.sourceToken = sourceToken; }
+    public String getStaffName() { return staffName; }
+    public void setStaffName(String staffName) { this.staffName = staffName; }
 }
