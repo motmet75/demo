@@ -526,6 +526,24 @@ public class ShopOrderService {
     }
 
     @Transactional
+    public ShopOrderResponseDto setOrderTable(UUID orderId, UUID tableId, UUID tenantId, UUID companyId) {
+        ShopOrder order = requireOrder(orderId, tenantId, companyId);
+        if (tableId == null) {
+            order.setTable(null);
+        } else {
+            ShopTable table = shopTableRepository.findById(tableId)
+                    .orElseThrow(() -> new IllegalArgumentException("Table not found"));
+            if (!table.getTenantId().equals(tenantId) || !table.getCompanyId().equals(companyId)) {
+                throw new IllegalArgumentException("Table does not belong to this company");
+            }
+            order.setTable(table);
+        }
+        shopOrderRepository.save(order);
+        List<ShopOrderItem> items = shopOrderItemRepository.findAllByOrder_Id(orderId);
+        return ShopOrderResponseDto.from(order, items);
+    }
+
+    @Transactional
     public ShopOrderResponseDto revertToCash(UUID orderId, UUID tenantId, UUID companyId) {
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         if (isFinalStatus(order.getStatus())) {

@@ -42,11 +42,14 @@ import LabelIcon from '@mui/icons-material/Label'
 import PaidIcon from '@mui/icons-material/Paid'
 import PrintIcon from '@mui/icons-material/Print'
 import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber'
+import DriveFileMoveIcon from '@mui/icons-material/DriveFileMove'
+import Select from '@mui/material/Select'
 import {
   fetchShopOrders, fetchActiveOrders, confirmShopOrder, prepareShopOrder, readyShopOrder,
   completeShopOrder, cancelShopOrder, resetOrderSequence, setShopOrderNumber,
   generateDisplayBoardToken, pickupShopOrder, revertShopOrder, markOrderPaid,
-  fetchBankConfig, switchToQrPayment, revertToCash, fetchOrderTagQr
+  fetchBankConfig, switchToQrPayment, revertToCash, fetchOrderTagQr,
+  fetchShopTables, setOrderTable
 } from '../../api/shopApi'
 import { printCupLabels, printOrderReceipt, printOrderTag } from '../../utils/printOrderReceipt'
 import ShopOrderDetailModal from './ShopOrderDetailModal'
@@ -334,6 +337,11 @@ export default function ShopOrderGrid() {
   const [stockItems, setStockItems]     = useState([])
   const [payQrOrder, setPayQrOrder]     = useState(null)
   const [bankConfig, setBankConfig]     = useState(null)
+  const [tables, setTables]             = useState([])
+  const [selectedRows, setSelectedRows] = useState([])
+  const [moveTableOpen, setMoveTableOpen] = useState(false)
+  const [moveTableTarget, setMoveTableTarget] = useState('')
+  const [moving, setMoving]             = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
@@ -360,6 +368,9 @@ export default function ShopOrderGrid() {
 
   useEffect(() => { load() }, [load])
   useEffect(() => { loadBoard() }, [loadBoard])
+  useEffect(() => {
+    fetchShopTables().then(({ data }) => setTables(Array.isArray(data) ? data : [])).catch(() => {})
+  }, [])
 
   const reload = () => { load(); loadBoard() }
 
@@ -443,6 +454,22 @@ export default function ShopOrderGrid() {
     } catch (e) { setError(e.message || 'Failed to revert payment') }
   }
 
+  const handleMoveTable = async () => {
+    if (!selectedRows.length) return
+    setMoving(true)
+    try {
+      await Promise.all(selectedRows.map(id => setOrderTable(id, moveTableTarget || null)))
+      setMoveTableOpen(false); setMoveTableTarget(''); setSelectedRows([])
+      reload()
+    } catch (e) { setError(e.message || 'Failed to move orders') }
+    setMoving(false)
+  }
+
+  const handleInlineTableChange = async (orderId, tableId) => {
+    try { await setOrderTable(orderId, tableId || null); reload() }
+    catch (e) { setError(e.message || 'Failed to set table') }
+  }
+
   const handlePrintTrack = async (row) => {
     try {
       const { data } = await fetchOrderTagQr(row.id)
@@ -484,14 +511,24 @@ export default function ShopOrderGrid() {
       ),
     },
     {
-      field: 'orderCode', headerName: 'Code', flex: 1, minWidth: 110,
+      field: 'orderCode', headerName: 'Code', width: 130,
       renderCell: ({ value }) => value ? <Typography sx={{ fontFamily: 'monospace', fontWeight: 800, fontSize: 13, letterSpacing: 0.5 }}>{value}</Typography> : null,
     },
     {
-      field: 'tableName', headerName: 'Table', width: 90,
-      renderCell: ({ value }) => value
-        ? <Chip icon={<TableBarIcon sx={{ fontSize: 14 }} />} label={value} size="small" variant="outlined" color="info" />
-        : <Typography variant="caption" color="text.disabled">—</Typography>
+      field: 'tableName', headerName: 'Table', width: 115,
+      renderCell: ({ row }) => (
+        <Select
+          size="small"
+          value={row.tableId || ''}
+          onChange={e => { e.stopPropagation(); handleInlineTableChange(row.id, e.target.value) }}
+          onClick={e => e.stopPropagation()}
+          displayEmpty
+          sx={{ fontSize: 12, height: 26, minWidth: 100, '& .MuiSelect-select': { py: '2px', px: 1 } }}
+        >
+          <MenuItem value="" sx={{ fontSize: 12, color: '#aaa', fontStyle: 'italic' }}>No table</MenuItem>
+          {tables.map(t => <MenuItem key={t.id} value={t.id} sx={{ fontSize: 12 }}>{t.tableName}</MenuItem>)}
+        </Select>
+      )
     },
     {
       field: 'status', headerName: 'Status', width: 115,
@@ -517,7 +554,7 @@ export default function ShopOrderGrid() {
     },
     { field: 'createdAt', headerName: 'Time', width: 130, renderCell: ({ value }) => dateFmt(value) },
     {
-      field: 'actions', headerName: 'Actions', width: 360, sortable: false,
+      field: 'actions', headerName: 'Actions', width: 470, sortable: false,
       renderCell: ({ row }) => (
         <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', flexWrap: 'nowrap' }}>
           <Tooltip title="Detail"><IconButton size="small" onClick={() => setDetailOrder(row)}><VisibilityIcon fontSize="small" /></IconButton></Tooltip>
@@ -590,6 +627,15 @@ export default function ShopOrderGrid() {
             variant="contained" size="small" color="success" sx={{ textTransform: 'none', fontWeight: 700 }}>New Order</Button>
           <Button startIcon={<QrCode2Icon />} onClick={() => setQrOrderOpen(true)}
             variant="outlined" size="small" color="primary" sx={{ textTransform: 'none', fontWeight: 700 }}>QR Order</Button>
+          {selectedRows.length > 0 && (
+            <Button
+              startIcon={<DriveFileMoveIcon />}
+              onClick={() => { setMoveTableTarget(''); setMoveTableOpen(true) }}
+              variant="contained" size="small" color="info"
+              sx={{ textTransform: 'none', fontWeight: 700 }}>
+              Move {selectedRows.length} order{selectedRows.length > 1 ? 's' : ''} → Table
+            </Button>
+          )}
           <Box sx={{ flex: 1 }} />
           <Button startIcon={<TvIcon />} onClick={handleOpenBoard} variant="outlined" size="small" color="info">Display Board</Button>
           <Tooltip title="Open the counter customer-facing display in a new tab">
@@ -621,6 +667,9 @@ export default function ShopOrderGrid() {
             <Box sx={{ height: '100%', p: 1.5, boxSizing: 'border-box' }}>
               <DataGrid rows={rows} columns={columns} loading={loading} getRowId={r => r.id}
                 pageSizeOptions={[25, 50, 100]} density="compact"
+                checkboxSelection disableRowSelectionOnClick
+                rowSelectionModel={selectedRows}
+                onRowSelectionModelChange={ids => setSelectedRows(ids)}
                 processRowUpdate={processRowUpdate} onProcessRowUpdateError={e => setError(e.message)}
                 sx={{ height: '100%', '& .MuiDataGrid-cell--editable': { cursor: 'cell' }, '& .MuiDataGrid-row:hover': { bgcolor: '#f5f9ff' } }}
               />
@@ -716,6 +765,29 @@ export default function ShopOrderGrid() {
           </Dialog>
         )
       })()}
+
+      {/* Move to Table dialog */}
+      <Dialog open={moveTableOpen} onClose={() => setMoveTableOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle fontWeight={700}>Move {selectedRows.length} Order{selectedRows.length > 1 ? 's' : ''} to Table</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Select the target table. Choose "No table" to unassign.
+          </Typography>
+          <TextField select label="Target table" size="small" fullWidth
+            value={moveTableTarget}
+            onChange={e => setMoveTableTarget(e.target.value)}>
+            <MenuItem value=""><em>No table</em></MenuItem>
+            {tables.map(t => <MenuItem key={t.id} value={t.id}>{t.tableName}</MenuItem>)}
+          </TextField>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setMoveTableOpen(false)} disabled={moving}>Cancel</Button>
+          <Button onClick={handleMoveTable} variant="contained" color="info" disabled={moving}
+            startIcon={moving ? <CircularProgress size={14} /> : <DriveFileMoveIcon />}>
+            {moving ? 'Moving…' : 'Confirm'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={resetOpen} onClose={() => setResetOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle fontWeight={700}>Reset Order Counter</DialogTitle>

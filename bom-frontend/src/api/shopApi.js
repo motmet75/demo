@@ -166,6 +166,13 @@ export function fetchTableQr(tableId) {
   return apiFetchJson(`/shop/staff/tables/${tableId}/qrcode`)
 }
 
+export function setOrderTable(orderId, tableId) {
+  return apiFetchJson(`/shop/staff/orders/${orderId}/table`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tableId: tableId || null })
+  })
+}
+
 // ── Menu options ───────────────────────────────────────────────────
 
 export function fetchPublicMenuOptions(tenantId, companyId) {
