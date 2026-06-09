@@ -761,9 +761,30 @@ public class ShopOrderService {
         return ShopOrderResponseDto.from(order, shopOrderItemRepository.findAllByOrder_Id(order.getId()));
     }
 
-    // ── Request records ───────────────────────────────────────────────
+    // ── Request DTOs ──────────────────────────────────────────────────
 
-    public record ItemRequest(UUID modelId, BigDecimal quantity, String selectedOptions, String itemNotes, BigDecimal unitPriceOverride, List<ItemRequest> sideItems) {}
+    public static class ItemRequest {
+        private UUID modelId;
+        private BigDecimal quantity;
+        private String selectedOptions;
+        private String itemNotes;
+        private BigDecimal unitPriceOverride;
+        private List<ItemRequest> sideItems;
+
+        public UUID modelId() { return modelId; }
+        public BigDecimal quantity() { return quantity; }
+        public String selectedOptions() { return selectedOptions; }
+        public String itemNotes() { return itemNotes; }
+        public BigDecimal unitPriceOverride() { return unitPriceOverride; }
+        public List<ItemRequest> sideItems() { return sideItems != null ? sideItems : Collections.emptyList(); }
+
+        public void setModelId(UUID v) { this.modelId = v; }
+        public void setQuantity(BigDecimal v) { this.quantity = v; }
+        public void setSelectedOptions(String v) { this.selectedOptions = v; }
+        public void setItemNotes(String v) { this.itemNotes = v; }
+        public void setUnitPriceOverride(BigDecimal v) { this.unitPriceOverride = v; }
+        public void setSideItems(List<ItemRequest> v) { this.sideItems = v; }
+    }
 
     // ── Menu options (admin) ───────────────────────────────────────────
 

@@ -256,7 +256,7 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
 
             {items.length > 0 ? (
               <Stack spacing={1}>
-                {items.map(item => {
+                {items.map((item, itemIdx) => {
                   const modelOpts = optsByModel[item.modelId] || []
                   const sf = sideForm[item.uid] || {}
                   const lineTotal = item.qty * (itemBasePrice(item) + calcOptAddOn(item)) + sidesTotal(item)
@@ -266,6 +266,9 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
                       {/* ── Main item ───────────────────────────────────────── */}
                       <Box sx={{ bgcolor: '#f8faff', px: 1.5, pt: 1, pb: 0.75 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+                          <Typography variant="caption" sx={{ color: '#94a3b8', fontWeight: 700, minWidth: 18, flexShrink: 0, fontSize: 11 }}>
+                            {itemIdx + 1}.
+                          </Typography>
                           <Typography variant="body2" fontWeight={700} sx={{ flex: 1, minWidth: 80 }} noWrap>
                             {item.modelName}
                           </Typography>
