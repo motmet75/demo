@@ -99,6 +99,9 @@ public class ShopOrder {
     @Column(name = "cancel_reason", columnDefinition = "TEXT")
     private String cancelReason;
 
+    @Column(name = "customer_editing")
+    private Boolean customerEditing = false;
+
     @Column(name = "created_at")
     private Instant createdAt;
 
@@ -175,4 +178,6 @@ public class ShopOrder {
     public void setStaffName(String staffName) { this.staffName = staffName; }
     public String getCancelReason() { return cancelReason; }
     public void setCancelReason(String cancelReason) { this.cancelReason = cancelReason; }
+    public Boolean getCustomerEditing() { return customerEditing; }
+    public void setCustomerEditing(Boolean customerEditing) { this.customerEditing = customerEditing; }
 }

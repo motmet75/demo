@@ -30,6 +30,26 @@ export function fetchDeliveryOptions(tenantId, companyId, weightKg) {
   return apiFetchJsonNoContext('/shop/public/delivery-options' + qs({ tenantId, companyId, weightKg }))
 }
 
+export function fetchActiveTableOrders(tableId, tenantId, companyId) {
+  return apiFetchJsonNoContext('/shop/public/table-orders' + qs({ tableId, tenantId, companyId }))
+}
+
+export function startCustomerEdit(orderCode, tenantId, companyId) {
+  return apiFetchJsonNoContext(`/shop/public/orders/${orderCode}/start-edit` + qs({ tenantId, companyId }), { method: 'PATCH' })
+}
+
+export function cancelCustomerEdit(orderCode, tenantId, companyId) {
+  return apiFetchJsonNoContext(`/shop/public/orders/${orderCode}/cancel-edit` + qs({ tenantId, companyId }), { method: 'PATCH' })
+}
+
+export function updatePublicOrderItems(orderCode, tenantId, companyId, items) {
+  return apiFetchJsonNoContext(`/shop/public/orders/${orderCode}/items` + qs({ tenantId, companyId }), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(items)
+  })
+}
+
 // ── Staff (authenticated) ──────────────────────────────────────────
 
 export function createStaffOrder(body) {

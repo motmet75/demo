@@ -30,12 +30,13 @@ import SearchIcon from '@mui/icons-material/Search'
 import Checkbox from '@mui/material/Checkbox'
 import IconButton from '@mui/material/IconButton'
 import Autocomplete from '@mui/material/Autocomplete'
-import { fetchModels, updateModel } from '../../api/modelApi'
+import ContentCopyIcon from '@mui/icons-material/ContentCopy'
+import { fetchModels, updateModel, createModel } from '../../api/modelApi'
 import { fetchMenuOptions, createMenuOption, updateMenuOption, deleteMenuOption } from '../../api/shopApi'
 
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 
-function ModelCard({ model, onEdit, onToggle, saving }) {
+function ModelCard({ model, onEdit, onClone, onToggle, saving }) {
   const onMenu = Boolean(model.sellingPrice) && model.isActive !== false
   const hasImage = Boolean(model.imageUrl)
 
@@ -81,9 +82,16 @@ function ModelCard({ model, onEdit, onToggle, saving }) {
       </CardContent>
 
       <CardActions sx={{ pt: 0.5, pb: 1, px: 1.5, justifyContent: 'space-between', alignItems: 'center' }}>
-        <Tooltip title="Edit menu settings">
-          <Button size="small" startIcon={<EditIcon />} onClick={() => onEdit(model)}>Edit</Button>
-        </Tooltip>
+        <Box sx={{ display: 'flex', gap: 0.5 }}>
+          <Tooltip title="Edit menu settings">
+            <Button size="small" startIcon={<EditIcon />} onClick={() => onEdit(model)}>Edit</Button>
+          </Tooltip>
+          <Tooltip title="Clone as special / coupon">
+            <IconButton size="small" onClick={() => onClone(model)} sx={{ color: '#7c3aed' }}>
+              <ContentCopyIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Tooltip>
+        </Box>
         <Tooltip title={onMenu ? 'Remove from menu' : (model.sellingPrice ? 'Add to menu' : 'Set a price first')}>
           <span>
             <FormControlLabel
@@ -105,6 +113,161 @@ function ModelCard({ model, onEdit, onToggle, saving }) {
     </Card>
   )
 }
+
+// ── Clone dialog ────────────────────────────────────────────────────────────
+
+const CLONE_TYPES = [
+  { value: 'special', label: 'Special Menu', suffix: ' (Special)', catPrefix: 'Special', color: '#7c3aed' },
+  { value: 'coupon',  label: 'Coupon / Promo', suffix: ' (Coupon)',  catPrefix: 'Coupon',  color: '#db2777' },
+  { value: 'custom',  label: 'Custom Copy',    suffix: ' (Copy)',    catPrefix: null,       color: '#0369a1' },
+]
+
+function CloneDialog({ open, source, onClose, onCreated }) {
+  const [type,         setType]         = useState('special')
+  const [name,         setName]         = useState('')
+  const [price,        setPrice]        = useState('')
+  const [copyOptions,  setCopyOptions]  = useState(true)
+  const [saving,       setSaving]       = useState(false)
+  const [error,        setError]        = useState('')
+
+  useEffect(() => {
+    if (!open || !source) return
+    setType('special')
+    setName(source.modelName + CLONE_TYPES[0].suffix)
+    setPrice(source.sellingPrice ?? '')
+    setCopyOptions(true)
+    setError('')
+  }, [open, source?.id])
+
+  const handleTypeChange = (val) => {
+    const t = CLONE_TYPES.find(x => x.value === val) || CLONE_TYPES[0]
+    setType(val)
+    setName((source?.modelName || '') + t.suffix)
+  }
+
+  const handleSave = async () => {
+    if (!name.trim()) { setError('Name is required'); return }
+    setSaving(true); setError('')
+    try {
+      const t = CLONE_TYPES.find(x => x.value === type)
+      // generate a short unique code from source code
+      const suffix = Date.now().toString(36).toUpperCase().slice(-4)
+      const newCode = ((source.modelCode || 'ITEM') + '-' + type.slice(0,2).toUpperCase() + suffix).slice(0, 50)
+      const newCategory = t.catPrefix
+        ? t.catPrefix + (source.category ? ' · ' + source.category : '')
+        : source.category || null
+
+      const created = await createModel({
+        modelCode: newCode,
+        modelName: name.trim(),
+        sellingPrice: price !== '' ? Number(price) : null,
+        category: newCategory,
+        imageUrl: source.imageUrl || null,
+        allowedSideIds: source.allowedSideIds || null,
+        isActive: true,
+      })
+
+      if (copyOptions) {
+        try {
+          const { data: opts } = await fetchMenuOptions(source.id)
+          if (Array.isArray(opts)) {
+            await Promise.all(opts.map(opt => createMenuOption({
+              modelId: created.id,
+              groupName: opt.groupName,
+              choices: opt.choices,
+              required: opt.required,
+              multiSelect: opt.multiSelect,
+              isFree: opt.isFree,
+              defaultValue: opt.defaultValue,
+              displayOrder: opt.displayOrder,
+            })))
+          }
+        } catch { /* options copy failure is non-fatal */ }
+      }
+
+      onCreated(created)
+      onClose()
+    } catch (e) {
+      setError(e.message || 'Clone failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!source) return null
+  const selectedType = CLONE_TYPES.find(x => x.value === type)
+
+  return (
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
+      <DialogTitle sx={{ pb: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <ContentCopyIcon sx={{ color: selectedType?.color, fontSize: 20 }} />
+          <Typography fontWeight={700}>Clone: {source.modelName}</Typography>
+        </Box>
+        <Typography variant="caption" color="text.secondary">Creates an independent copy you can customise</Typography>
+      </DialogTitle>
+      <DialogContent>
+        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+        <Stack spacing={2} sx={{ mt: 0.5 }}>
+
+          {/* Type selector */}
+          <Box>
+            <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ mb: 0.75, display: 'block' }}>
+              Clone type
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              {CLONE_TYPES.map(t => (
+                <Chip
+                  key={t.value}
+                  label={t.label}
+                  onClick={() => handleTypeChange(t.value)}
+                  variant={type === t.value ? 'filled' : 'outlined'}
+                  sx={{
+                    fontWeight: 700, cursor: 'pointer',
+                    ...(type === t.value ? { bgcolor: t.color, color: '#fff', borderColor: t.color } : { borderColor: t.color, color: t.color }),
+                  }}
+                />
+              ))}
+            </Box>
+          </Box>
+
+          <TextField
+            label="Name for the clone"
+            size="small" fullWidth
+            value={name}
+            onChange={e => setName(e.target.value)}
+            autoFocus
+          />
+
+          <TextField
+            label="Selling price"
+            type="number" size="small" fullWidth
+            value={price}
+            onChange={e => setPrice(e.target.value)}
+            InputProps={{ endAdornment: <InputAdornment position="end">đ</InputAdornment> }}
+            helperText={source.sellingPrice ? `Original: ${fmt(source.sellingPrice)}` : 'Original has no price'}
+          />
+
+          <FormControlLabel
+            control={<Checkbox checked={copyOptions} onChange={e => setCopyOptions(e.target.checked)} size="small" />}
+            label={<Typography variant="body2">Also copy option groups (sugar level, ice, etc.)</Typography>}
+          />
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 2, pb: 2 }}>
+        <Button onClick={onClose} disabled={saving}>Cancel</Button>
+        <Button
+          variant="contained" onClick={handleSave} disabled={saving || !name.trim()}
+          sx={{ bgcolor: selectedType?.color, '&:hover': { bgcolor: selectedType?.color, filter: 'brightness(0.9)' } }}
+        >
+          {saving ? <CircularProgress size={18} sx={{ color: '#fff' }} /> : 'Clone'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
+// ── Edit dialog ─────────────────────────────────────────────────────────────
 
 const EMPTY_FORM   = { sellingPrice: '', category: '', imageUrl: '', allowedSideIds: [] }
 const EMPTY_CHOICE = { label: '', price: '', modelId: null }
@@ -420,7 +583,8 @@ export default function ShopMenuManagePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [savingId, setSavingId] = useState(null)
-  const [editModel, setEditModel] = useState(null)
+  const [editModel,  setEditModel]  = useState(null)
+  const [cloneSource, setCloneSource] = useState(null)
   const [filter, setFilter] = useState('all')      // all | on | off
   const [catFilter, setCatFilter] = useState('')
   const [search, setSearch] = useState('')
@@ -466,6 +630,10 @@ export default function ShopMenuManagePage() {
   const handleSave = async (id, payload) => {
     const updated = await updateModel(id, payload)
     setModels(prev => prev.map(m => m.id === id ? { ...m, ...updated } : m))
+  }
+
+  const handleCloneCreated = (created) => {
+    setModels(prev => [...prev, created])
   }
 
   const onCount = models.filter(m => Boolean(m.sellingPrice) && m.isActive !== false).length
@@ -534,6 +702,7 @@ export default function ShopMenuManagePage() {
               key={m.id}
               model={m}
               onEdit={setEditModel}
+              onClone={setCloneSource}
               onToggle={handleToggle}
               saving={savingId === m.id}
             />
@@ -547,6 +716,13 @@ export default function ShopMenuManagePage() {
         models={models}
         onClose={() => setEditModel(null)}
         onSave={handleSave}
+      />
+
+      <CloneDialog
+        open={Boolean(cloneSource)}
+        source={cloneSource}
+        onClose={() => setCloneSource(null)}
+        onCreated={handleCloneCreated}
       />
     </Box>
   )

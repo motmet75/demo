@@ -692,8 +692,14 @@ export default function ShopOrderGrid() {
               </Button>
             </Tooltip>
           )}
+          {row.status === 'PENDING' && row.customerEditing && (
+            <Chip label="✏ Customer Editing" size="small" color="warning"
+              sx={{ fontWeight: 700, fontSize: 10, height: 22 }} />
+          )}
           {row.status === 'PENDING' && (
             <Button size="small" variant="outlined"
+              disabled={Boolean(row.customerEditing)}
+              title={row.customerEditing ? 'Customer is editing — wait for them to finish' : ''}
               onClick={() => askConfirm({ title: 'Confirm Order?', message: `Confirm order #${row.orderNumber ?? row.orderCode}?`, confirmLabel: 'Confirm', confirmColor: 'primary' }, () => act(confirmShopOrder, row.id))}>
               Confirm
             </Button>

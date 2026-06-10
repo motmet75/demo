@@ -408,6 +408,43 @@ public class ShopOrderController {
 
     // ── Menu options (/shop/staff/menu-options) ───────────────────────
 
+    @GetMapping("/shop/public/table-orders")
+    public ResponseEntity<?> getActiveTableOrders(@RequestParam UUID tableId,
+                                                   @RequestParam UUID tenantId, @RequestParam UUID companyId) {
+        validateScope(tenantId, companyId);
+        return ResponseEntity.ok(shopOrderService.getActiveTableOrders(tableId, tenantId, companyId));
+    }
+
+    @PatchMapping("/shop/public/orders/{orderCode}/start-edit")
+    public ResponseEntity<?> startCustomerEdit(@PathVariable String orderCode,
+                                               @RequestParam UUID tenantId, @RequestParam UUID companyId) {
+        validateScope(tenantId, companyId);
+        try {
+            return ResponseEntity.ok(shopOrderService.startCustomerEdit(orderCode, tenantId, companyId));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(409).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PatchMapping("/shop/public/orders/{orderCode}/cancel-edit")
+    public ResponseEntity<?> cancelCustomerEdit(@PathVariable String orderCode,
+                                                @RequestParam UUID tenantId, @RequestParam UUID companyId) {
+        validateScope(tenantId, companyId);
+        return ResponseEntity.ok(shopOrderService.cancelCustomerEdit(orderCode, tenantId, companyId));
+    }
+
+    @PutMapping("/shop/public/orders/{orderCode}/items")
+    public ResponseEntity<?> updateOrderByCustomer(@PathVariable String orderCode,
+                                                    @RequestBody List<ShopOrderService.ItemRequest> items,
+                                                    @RequestParam UUID tenantId, @RequestParam UUID companyId) {
+        validateScope(tenantId, companyId);
+        try {
+            return ResponseEntity.ok(shopOrderService.updateOrderByCustomer(orderCode, items, tenantId, companyId));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(409).body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @GetMapping("/shop/public/menu-options")
     public ResponseEntity<?> publicMenuOptions(@RequestParam UUID tenantId, @RequestParam UUID companyId) {
         validateScope(tenantId, companyId);

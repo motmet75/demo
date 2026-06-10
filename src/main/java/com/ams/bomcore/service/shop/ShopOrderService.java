@@ -163,10 +163,66 @@ public class ShopOrderService {
     public ShopOrderResponseDto confirmOrder(UUID orderId, UUID tenantId, UUID companyId) {
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         requireStatus(order, ShopOrder.STATUS_PENDING);
+        if (Boolean.TRUE.equals(order.getCustomerEditing()))
+            throw new IllegalStateException("Customer is currently editing this order — please wait.");
         order.setStatus(ShopOrder.STATUS_CONFIRMED);
         order.setConfirmedAt(Instant.now());
         shopOrderRepository.save(order);
         return dto(order);
+    }
+
+    // ── Customer edit-lock endpoints ──────────────────────────────────
+
+    @Transactional
+    public ShopOrderResponseDto startCustomerEdit(String orderCode, UUID tenantId, UUID companyId) {
+        ShopOrder order = shopOrderRepository.findByOrderCodeAndTenantIdAndCompanyId(orderCode, tenantId, companyId)
+                .orElseThrow(() -> new NoSuchElementException("Order not found"));
+        if (!ShopOrder.STATUS_PENDING.equals(order.getStatus()))
+            throw new IllegalStateException("Order can only be edited while PENDING");
+        order.setCustomerEditing(true);
+        shopOrderRepository.save(order);
+        return dto(order);
+    }
+
+    @Transactional
+    public ShopOrderResponseDto cancelCustomerEdit(String orderCode, UUID tenantId, UUID companyId) {
+        ShopOrder order = shopOrderRepository.findByOrderCodeAndTenantIdAndCompanyId(orderCode, tenantId, companyId)
+                .orElseThrow(() -> new NoSuchElementException("Order not found"));
+        order.setCustomerEditing(false);
+        shopOrderRepository.save(order);
+        return dto(order);
+    }
+
+    @Transactional
+    public ShopOrderResponseDto updateOrderByCustomer(String orderCode, List<ItemRequest> newItems, UUID tenantId, UUID companyId) {
+        ShopOrder order = shopOrderRepository.findByOrderCodeAndTenantIdAndCompanyId(orderCode, tenantId, companyId)
+                .orElseThrow(() -> new NoSuchElementException("Order not found"));
+        if (!ShopOrder.STATUS_PENDING.equals(order.getStatus()))
+            throw new IllegalStateException("Order can only be updated while PENDING");
+
+        List<ShopOrderItem> existing = shopOrderItemRepository.findAllByOrder_Id(order.getId());
+        shopOrderItemRepository.deleteAll(existing.stream().filter(i -> i.getParentItem() != null).toList());
+        shopOrderItemRepository.deleteAll(existing.stream().filter(i -> i.getParentItem() == null).toList());
+
+        List<ShopOrderItem> items = new ArrayList<>();
+        BigDecimal[] totals = { BigDecimal.ZERO, BigDecimal.ZERO };
+        buildItems(order, newItems, null, items, totals, tenantId, companyId);
+
+        BigDecimal fee = order.getDeliveryFee() != null ? order.getDeliveryFee() : BigDecimal.ZERO;
+        order.setTotalAmount(totals[0].add(fee));
+        order.setTotalRawCost(totals[1]);
+        order.setCustomerEditing(false);
+        shopOrderRepository.save(order);
+        return ShopOrderResponseDto.from(order, items);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ShopOrderResponseDto> getActiveTableOrders(UUID tableId, UUID tenantId, UUID companyId) {
+        return shopOrderRepository.findAllByTable_IdAndTenantIdAndCompanyIdAndStatusIn(
+                tableId, tenantId, companyId,
+                List.of(ShopOrder.STATUS_PENDING, ShopOrder.STATUS_CONFIRMED,
+                        ShopOrder.STATUS_PREPARING, ShopOrder.STATUS_READY))
+                .stream().map(this::dto).toList();
     }
 
     @Transactional

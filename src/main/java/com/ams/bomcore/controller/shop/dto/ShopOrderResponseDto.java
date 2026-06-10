@@ -33,6 +33,7 @@ public class ShopOrderResponseDto {
     private String notes;
     private String staffName;
     private String cancelReason;
+    private Boolean customerEditing;
     private Instant createdAt;
     private Instant confirmedAt;
     private Instant readyAt;
@@ -108,6 +109,7 @@ public class ShopOrderResponseDto {
         dto.notes = order.getNotes();
         dto.staffName = order.getStaffName();
         dto.cancelReason = order.getCancelReason();
+        dto.customerEditing = Boolean.TRUE.equals(order.getCustomerEditing());
         dto.createdAt = order.getCreatedAt();
         dto.confirmedAt = order.getConfirmedAt();
         dto.readyAt = order.getReadyAt();
@@ -139,6 +141,7 @@ public class ShopOrderResponseDto {
     public String getNotes() { return notes; }
     public String getStaffName() { return staffName; }
     public String getCancelReason() { return cancelReason; }
+    public Boolean getCustomerEditing() { return customerEditing; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getConfirmedAt() { return confirmedAt; }
     public Instant getReadyAt() { return readyAt; }

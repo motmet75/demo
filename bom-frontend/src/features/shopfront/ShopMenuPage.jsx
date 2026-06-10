@@ -33,7 +33,12 @@ import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
 import DialogActions from '@mui/material/DialogActions'
 import InputAdornment from '@mui/material/InputAdornment'
-import { resolveToken, fetchMenu, createOrder, fetchPublicMenuOptions } from '../../api/shopApi'
+import EditNoteIcon from '@mui/icons-material/EditNote'
+import AddShoppingCartIcon from '@mui/icons-material/AddShoppingCart'
+import TableRestaurantIcon from '@mui/icons-material/TableRestaurant'
+import { resolveToken, fetchMenu, createOrder, fetchPublicMenuOptions,
+         fetchActiveTableOrders, startCustomerEdit, cancelCustomerEdit,
+         updatePublicOrderItems, fetchPublicOrder } from '../../api/shopApi'
 import ItemOptionsDialog from './ItemOptionsDialog'
 import OrderReceiptDialog from './OrderReceiptDialog'
 
@@ -45,6 +50,203 @@ const FULFILLMENT_OPTIONS = [
   { value: 'DINE_IN',  label: 'Dine In',  icon: <TableBarIcon fontSize="small" /> },
   { value: 'DELIVERY', label: 'Delivery', icon: <DeliveryDiningIcon fontSize="small" /> },
 ]
+
+const TRACKING_STEPS = [
+  { key: 'PENDING',   label: 'Placed',    emoji: '📋' },
+  { key: 'CONFIRMED', label: 'Confirmed', emoji: '✅' },
+  { key: 'PREPARING', label: 'Making',    emoji: '👨‍🍳' },
+  { key: 'READY',     label: 'Ready',     emoji: '🔔' },
+  { key: 'COMPLETED', label: 'Done',      emoji: '🎉' },
+]
+const STATUS_IDX = { PENDING: 0, CONFIRMED: 1, PREPARING: 2, READY: 3, PICKED_UP: 4, COMPLETED: 4 }
+const STATUS_STYLE = {
+  PENDING:   { color: '#78909c', bg: '#f5f5f5', label: 'Waiting for confirmation' },
+  CONFIRMED: { color: '#43a047', bg: '#f1f8e9', label: 'Order confirmed!' },
+  PREPARING: { color: '#fb8c00', bg: '#fff8e1', label: 'Being prepared…' },
+  READY:     { color: '#0288d1', bg: '#e1f5fe', label: '🔔 Ready to pick up!' },
+  PICKED_UP: { color: '#1b5e20', bg: '#e8f5e9', label: '✓ Picked up — enjoy!' },
+  COMPLETED: { color: '#2e7d32', bg: '#e8f5e9', label: 'Completed — thank you!' },
+  CANCELLED: { color: '#e53935', bg: '#fce4ec', label: 'Order cancelled' },
+}
+
+function buildChildMap(items) {
+  const map = {}
+  ;(items || []).forEach(it => {
+    if (it.parentItemId) {
+      const k = String(it.parentItemId)
+      if (!map[k]) map[k] = []
+      map[k].push(it)
+    }
+  })
+  return map
+}
+
+function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpdated }) {
+  const [order, setOrder] = React.useState(initialOrder)
+  const fmtLocal = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
+
+  // Poll for updates
+  React.useEffect(() => {
+    if (!ctx?.tenantId || !ctx?.companyId || !order?.orderCode) return
+    const id = setInterval(() => {
+      fetchPublicOrder(order.orderCode, ctx.tenantId, ctx.companyId)
+        .then(({ data }) => { if (data?.orderCode) { setOrder(data); onUpdated?.(data) } })
+        .catch(() => {})
+    }, 5000)
+    return () => clearInterval(id)
+  }, [order?.orderCode, ctx?.tenantId, ctx?.companyId]) // eslint-disable-line
+
+  const status     = order.status || 'PENDING'
+  const style      = STATUS_STYLE[status] || STATUS_STYLE.PENDING
+  const activeIdx  = STATUS_IDX[status] ?? 0
+  const isPending  = status === 'PENDING'
+  const isDone     = status === 'COMPLETED' || status === 'PICKED_UP'
+  const isCancelled = status === 'CANCELLED'
+  const displayNum = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
+
+  const allItems   = order.items || []
+  const childMap   = buildChildMap(allItems)
+  const rootItems  = allItems.filter(it => !it.parentItemId)
+
+  return (
+    <Box sx={{
+      position: 'fixed', inset: 0, zIndex: 2000,
+      bgcolor: '#fff', display: 'flex', flexDirection: 'column', overflow: 'hidden',
+    }}>
+      {/* Hero */}
+      <Box sx={{ bgcolor: style.bg, textAlign: 'center', px: 2, pt: 5, pb: 3, flexShrink: 0 }}>
+        <Typography sx={{ fontSize: { xs: 88, md: 110 }, fontWeight: 900, lineHeight: 1,
+          color: style.color, letterSpacing: -4 }}>
+          {displayNum}
+        </Typography>
+        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, mt: 1.5, px: 2.5, py: 0.75,
+          bgcolor: '#fff', borderRadius: 99, border: `1.5px solid ${style.color}22` }}>
+          {status === 'PREPARING' && (
+            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: style.color,
+              animation: 'blink 1.4s infinite',
+              '@keyframes blink': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0.2 } } }} />
+          )}
+          <Typography fontWeight={700} sx={{ color: style.color, fontSize: 15 }}>{style.label}</Typography>
+        </Box>
+
+        {/* Edit lock indicator */}
+        {order.customerEditing && (
+          <Box sx={{ mt: 1 }}>
+            <Chip label="✏ Editing in progress…" size="small" color="warning" sx={{ fontWeight: 700 }} />
+          </Box>
+        )}
+      </Box>
+
+      {/* Step bar */}
+      {!isCancelled && (
+        <Box sx={{ borderTop: '1px solid #f0f0f0', borderBottom: '1px solid #f0f0f0', px: 1.5, py: 1.25, flexShrink: 0 }}>
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', maxWidth: 520, mx: 'auto' }}>
+            {TRACKING_STEPS.map((step, idx) => {
+              const done = idx < activeIdx; const active = idx === activeIdx
+              return (
+                <React.Fragment key={step.key}>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5, flex: 1 }}>
+                    <Box sx={{ width: 30, height: 30, borderRadius: '50%', display: 'flex', alignItems: 'center',
+                      justifyContent: 'center', fontSize: active ? 15 : 12,
+                      bgcolor: done ? '#a5d6a7' : active ? '#0288d1' : '#eee',
+                      border: active ? '2px solid #0277bd' : '2px solid transparent' }}>
+                      {done
+                        ? <Typography sx={{ color: '#2e7d32', fontWeight: 900, fontSize: 14, lineHeight: 1 }}>✓</Typography>
+                        : <Typography sx={{ lineHeight: 1 }}>{step.emoji}</Typography>}
+                    </Box>
+                    <Typography variant="caption" sx={{ fontWeight: active ? 700 : 400,
+                      color: active ? '#0277bd' : done ? '#43a047' : '#bdbdbd',
+                      fontSize: 10, textAlign: 'center', lineHeight: 1.2 }}>
+                      {step.label}
+                    </Typography>
+                  </Box>
+                  {idx < TRACKING_STEPS.length - 1 && (
+                    <Box sx={{ height: 2, flex: 1, mt: '13px', mb: 'auto',
+                      bgcolor: idx < activeIdx ? '#a5d6a7' : '#eee', borderRadius: 2 }} />
+                  )}
+                </React.Fragment>
+              )
+            })}
+          </Box>
+        </Box>
+      )}
+
+      {/* Items list */}
+      <Box sx={{ flex: 1, overflowY: 'auto', px: { xs: 2, md: 4 }, py: 1.5 }}>
+        {rootItems.map((item, idx) => {
+          const children = childMap[String(item.id)] || []
+          return (
+            <Box key={item.id || idx} sx={{ mb: 1, pb: 1, borderBottom: '1px solid #f0f0f0' }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <Typography variant="body2" fontWeight={700}>
+                  {Number(item.quantity)}× {item.modelName}
+                </Typography>
+                <Typography variant="body2" color="primary" fontWeight={700}>{fmtLocal(item.lineTotal)}</Typography>
+              </Box>
+              {item.selectedOptions && (
+                <Typography variant="caption" color="text.secondary" sx={{ pl: 1.5, display: 'block' }}>
+                  {fmtOpts(item.selectedOptions)}
+                </Typography>
+              )}
+              {item.itemNotes && (
+                <Typography variant="caption" sx={{ pl: 1.5, color: '#f59e0b', display: 'block' }}>
+                  ⚠ {item.itemNotes}
+                </Typography>
+              )}
+              {children.map((child, ci) => (
+                <Box key={child.id || ci} sx={{ display: 'flex', justifyContent: 'space-between',
+                  pl: 2.5, mt: 0.25, borderLeft: '2px solid #c7d2fe', ml: 1 }}>
+                  <Typography variant="caption" sx={{ color: '#6366f1', fontWeight: 600 }}>
+                    + {Number(child.quantity)}× {child.modelName}
+                  </Typography>
+                  <Typography variant="caption" color="primary">{fmtLocal(child.lineTotal)}</Typography>
+                </Box>
+              ))}
+            </Box>
+          )
+        })}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 0.5 }}>
+          <Typography fontWeight={700}>Total</Typography>
+          <Typography fontWeight={900} color="primary">{fmtLocal(order.totalAmount)}</Typography>
+        </Box>
+      </Box>
+
+      {/* Action buttons */}
+      <Box sx={{ px: 2, pb: 3, pt: 1.5, display: 'flex', flexDirection: 'column', gap: 1, flexShrink: 0,
+        borderTop: '1px solid #f0f0f0' }}>
+        {isPending && !order.customerEditing && (
+          <Button variant="outlined" fullWidth startIcon={<EditNoteIcon />}
+            onClick={() => onEdit(order)}
+            sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none', borderColor: '#f59e0b', color: '#b45309',
+              '&:hover': { bgcolor: '#fffbeb', borderColor: '#f59e0b' } }}>
+            Edit My Order
+          </Button>
+        )}
+        {isPending && order.customerEditing && (
+          <Typography variant="caption" color="warning.main" textAlign="center" fontWeight={600}>
+            Your order is locked for editing — submit changes from the menu
+          </Typography>
+        )}
+        {!isDone && !isCancelled && (
+          <Button variant="outlined" fullWidth startIcon={<AddShoppingCartIcon />}
+            onClick={onOrderMore}
+            sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none' }}>
+            {ctx?.tableId ? 'Order More for This Table' : 'Order Again'}
+          </Button>
+        )}
+        {(isDone || isCancelled) && (
+          <Button variant="contained" fullWidth onClick={onOrderMore}
+            sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none' }}>
+            New Order
+          </Button>
+        )}
+        <Typography variant="caption" color="text.disabled" textAlign="center">
+          {order.orderCode} · auto-refreshes every 5s
+        </Typography>
+      </Box>
+    </Box>
+  )
+}
 
 function fmtOpts(selectedOptions) {
   if (!selectedOptions) return null
@@ -82,6 +284,9 @@ export default function ShopMenuPage() {
   const [cartOpen, setCartOpen]             = useState(false)
   const [submitting, setSubmitting]         = useState(false)
   const [placedOrder, setPlacedOrder]       = useState(null)
+  const [trackingOrder, setTrackingOrder]   = useState(null) // inline post-order tracking
+  const [editingOrderCode, setEditingOrderCode] = useState(null) // order being edited
+  const [tableOrders, setTableOrders]       = useState(null) // occupied table dialog
   const [form, setForm] = useState({
     fulfillmentType: 'PICKUP', customerName: '', customerPhone: '',
     deliveryAddress: '', paymentMethod: 'CASH',
@@ -105,7 +310,13 @@ export default function ShopMenuPage() {
         if (!res.ok) { setError('Invalid or expired QR code.'); setLoading(false); return }
         const resolved = { tenantId: data.tenantId, companyId: data.companyId, tableId: data.tableId }
         setCtx(resolved)
-        if (resolved.tableId) setForm(f => ({ ...f, fulfillmentType: 'DINE_IN' }))
+        if (resolved.tableId) {
+          setForm(f => ({ ...f, fulfillmentType: 'DINE_IN' }))
+          // Check if this table already has active orders (group ordering scenario)
+          fetchActiveTableOrders(resolved.tableId, resolved.tenantId, resolved.companyId)
+            .then(({ data: orders }) => { if (Array.isArray(orders) && orders.length > 0) setTableOrders(orders) })
+            .catch(() => {})
+        }
       })
       .catch(() => { setError('Failed to read QR code.'); setLoading(false) })
   }, [tokenParam])
@@ -267,42 +478,99 @@ export default function ShopMenuPage() {
     setOptionsTarget(null)
   }
 
+  // ── Restore cart from an existing order (for edit flow) ──────────────
+  const restoreCartFromOrder = (order) => {
+    const allItems = order.items || []
+    const children = {}
+    allItems.forEach(it => {
+      if (it.parentItemId) {
+        const key = String(it.parentItemId)
+        if (!children[key]) children[key] = []
+        children[key].push(it)
+      }
+    })
+    const newCart = {}
+    allItems.filter(it => !it.parentItemId).forEach(it => {
+      const uid = genUid()
+      const sideItems = (children[String(it.id)] || []).map(child => ({
+        uid: genUid(), modelId: child.modelId, modelName: child.modelName, qty: Number(child.quantity) || 1,
+      }))
+      newCart[uid] = { uid, modelId: it.modelId, qty: Number(it.quantity) || 1,
+        selectedOptions: it.selectedOptions || null, itemNotes: it.itemNotes || null, sideItems }
+    })
+    setCart(newCart)
+    setSideForm({})
+  }
+
+  // ── Build item request array from cart ────────────────────────────────
+  const buildItemRequests = () => cartEntries.map(entry => ({
+    modelId: entry.modelId,
+    quantity: entry.qty,
+    selectedOptions: entry.selectedOptions || null,
+    itemNotes: entry.itemNotes || null,
+    sideItems: (entry.sideItems || []).map(side => ({
+      modelId: side.modelId, quantity: side.qty || 1,
+      selectedOptions: null, itemNotes: null, sideItems: [],
+    })),
+  }))
+
   // ── Order submission ──────────────────────────────────────────────────
   const handlePlaceOrder = async () => {
     if (!itemCount) return
     setSubmitting(true); setError('')
-    const items = cartEntries.map(entry => ({
-      modelId: entry.modelId,
-      quantity: entry.qty,
-      selectedOptions: entry.selectedOptions || null,
-      itemNotes: entry.itemNotes || null,
-      sideItems: (entry.sideItems || []).map(side => ({
-        modelId: side.modelId,
-        quantity: side.qty || 1,
-        selectedOptions: null,
-        itemNotes: null,
-        sideItems: [],
-      })),
-    }))
-    const body = {
-      fulfillmentType: form.fulfillmentType,
-      tableId: ctx.tableId || null,
-      customerName: form.customerName || null,
-      customerPhone: form.customerPhone || null,
-      deliveryAddress: form.fulfillmentType === 'DELIVERY' ? form.deliveryAddress : null,
-      deliveryFee: null,
-      paymentMethod: form.paymentMethod,
-      notes: notes || null,
-      manualOrderNumber: seqParam ? Number(seqParam) : null,
-      token: tokenParam || null,
-      items,
-    }
+    const items = buildItemRequests()
     try {
-      const { res, data } = await createOrder(ctx.tenantId, ctx.companyId, body)
-      if (!res.ok) { setError(data?.message || 'Failed to place order'); setSubmitting(false); return }
-      setCheckout(false); setCartOpen(false)
-      setPlacedOrder({ ...data, _nav: `/shop/order/${data.orderCode}?tenantId=${ctx.tenantId}&companyId=${ctx.companyId}` })
-    } catch { setError('Network error'); setSubmitting(false) }
+      if (editingOrderCode) {
+        // Update existing order
+        const { res, data } = await updatePublicOrderItems(editingOrderCode, ctx.tenantId, ctx.companyId, items)
+        if (!res.ok) { setError(data?.message || data?.error || 'Failed to update order'); setSubmitting(false); return }
+        setCart({}); setSideForm({}); setCheckout(false); setCartOpen(false)
+        setEditingOrderCode(null)
+        setTrackingOrder(data)
+      } else {
+        // New order
+        const body = {
+          fulfillmentType: form.fulfillmentType,
+          tableId: ctx.tableId || null,
+          customerName: form.customerName || null,
+          customerPhone: form.customerPhone || null,
+          deliveryAddress: form.fulfillmentType === 'DELIVERY' ? form.deliveryAddress : null,
+          deliveryFee: null,
+          paymentMethod: form.paymentMethod,
+          notes: notes || null,
+          manualOrderNumber: seqParam ? Number(seqParam) : null,
+          token: tokenParam || null,
+          items,
+        }
+        const { res, data } = await createOrder(ctx.tenantId, ctx.companyId, body)
+        if (!res.ok) { setError(data?.message || 'Failed to place order'); setSubmitting(false); return }
+        setCart({}); setSideForm({}); setNotes(''); setCheckout(false); setCartOpen(false)
+        setTrackingOrder(data)
+      }
+    } catch { setError('Network error') } finally { setSubmitting(false) }
+  }
+
+  // ── Customer edit: lock the order and restore cart ────────────────────
+  const handleEditOrder = async (order) => {
+    try {
+      await startCustomerEdit(order.orderCode, ctx.tenantId, ctx.companyId)
+      restoreCartFromOrder(order)
+      setEditingOrderCode(order.orderCode)
+      setTrackingOrder(null)
+    } catch (e) {
+      setError('Cannot edit order right now')
+    }
+  }
+
+  const handleCancelEdit = async () => {
+    if (!editingOrderCode) return
+    try { await cancelCustomerEdit(editingOrderCode, ctx.tenantId, ctx.companyId) } catch {}
+    setCart({}); setSideForm({})
+    setEditingOrderCode(null)
+    // Reload the order to show current status
+    fetchPublicOrder(editingOrderCode, ctx.tenantId, ctx.companyId)
+      .then(({ data }) => { if (data?.orderCode) setTrackingOrder(data) })
+      .catch(() => {})
   }
 
   const grouped = menu.reduce((g, m) => {
@@ -714,9 +982,17 @@ export default function ShopMenuPage() {
             sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none', flexShrink: 0 }}>
             Cart ({itemCount})
           </Button>
+          {editingOrderCode && (
+            <Button variant="text" size="small" onClick={handleCancelEdit}
+              sx={{ textTransform: 'none', color: '#ef4444', flexShrink: 0, fontWeight: 600, fontSize: 12 }}>
+              Cancel edit
+            </Button>
+          )}
           <Button variant="contained" size="medium" fullWidth onClick={() => setCheckout(true)}
-            sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none' }}>
-            Checkout · {fmt(totalAmount)}
+            sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none',
+              bgcolor: editingOrderCode ? '#f59e0b' : undefined,
+              '&:hover': { bgcolor: editingOrderCode ? '#d97706' : undefined } }}>
+            {editingOrderCode ? `Update Order · ${fmt(totalAmount)}` : `Checkout · ${fmt(totalAmount)}`}
           </Button>
         </Box>
       )}
@@ -828,18 +1104,64 @@ export default function ShopMenuPage() {
           <Button onClick={() => setCheckout(false)} disabled={submitting}>Back</Button>
           <Button variant="contained" fullWidth onClick={handlePlaceOrder} disabled={submitting}
             sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none' }}>
-            {submitting ? <CircularProgress size={20} /> : `Confirm Order · ${fmt(totalAmount)}`}
+            {submitting ? <CircularProgress size={20} /> :
+              editingOrderCode ? `Update Order · ${fmt(totalAmount)}` : `Confirm Order · ${fmt(totalAmount)}`}
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* ── Receipt dialog ───────────────────────────────────────── */}
-      <OrderReceiptDialog
-        open={Boolean(placedOrder)}
-        order={placedOrder}
-        onClose={() => { navigate(placedOrder?._nav); setPlacedOrder(null) }}
-        onTrack={() => { navigate(placedOrder?._nav); setPlacedOrder(null) }}
-      />
+      {/* ── Inline order tracking (replaces navigate-away) ────────── */}
+      {trackingOrder && (
+        <TrackingOverlay
+          order={trackingOrder}
+          ctx={ctx}
+          onEdit={handleEditOrder}
+          onOrderMore={() => setTrackingOrder(null)}
+          onUpdated={setTrackingOrder}
+        />
+      )}
+
+      {/* ── Table occupied dialog ────────────────────────────────── */}
+      <Dialog open={Boolean(tableOrders)} onClose={() => setTableOrders(null)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ pb: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <TableRestaurantIcon color="warning" />
+            <Typography fontWeight={700}>Table has active orders</Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+            This table already has {tableOrders?.length} active order{tableOrders?.length !== 1 ? 's' : ''}.
+            Are you ordering for this group?
+          </Typography>
+          {(tableOrders || []).slice(0, 3).map(o => (
+            <Box key={o.id} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              px: 1.25, py: 0.75, mb: 0.5, bgcolor: '#f8fafc', borderRadius: 1.5, border: '1px solid #e2e8f0' }}>
+              <Typography variant="body2" fontWeight={700}>
+                {o.orderNumber ? `#${o.orderNumber}` : o.orderCode}
+              </Typography>
+              <Chip label={o.status} size="small"
+                color={o.status === 'READY' ? 'success' : o.status === 'PREPARING' ? 'warning' : 'default'} />
+            </Box>
+          ))}
+        </DialogContent>
+        <DialogActions sx={{ px: 2, pb: 2, gap: 1 }}>
+          <Button onClick={() => setTableOrders(null)} variant="outlined" sx={{ flex: 1, textTransform: 'none' }}>
+            Add New Order
+          </Button>
+          <Button
+            variant="contained" color="warning"
+            onClick={() => {
+              // Show the most recent active order for this table
+              const latest = tableOrders?.[tableOrders.length - 1]
+              if (latest) setTrackingOrder(latest)
+              setTableOrders(null)
+            }}
+            sx={{ flex: 1, textTransform: 'none' }}>
+            View Orders
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* ── Options dialog (initial add for items with configurable options) ── */}
       {optionsTarget && (
