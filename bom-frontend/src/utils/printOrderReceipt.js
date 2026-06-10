@@ -35,7 +35,9 @@ export function printWalkUpQr(seq, qrBase64) {
 </body>
 </html>`
 
-  const win = window.open('', '_blank', 'width=300,height=550')
+  const pw = Math.max(Math.round(screen.width * 0.5), 600)
+  const ph = Math.min(Math.round(screen.height * 0.9), 900)
+  const win = window.open('', '_blank', `width=${pw},height=${ph},left=${Math.round((screen.width-pw)/2)},top=40`)
   win.document.write(html)
   win.document.close()
   win.onload = () => { win.focus(); win.print(); setTimeout(() => win.close(), 800) }
@@ -78,7 +80,9 @@ export function printOrderTag(order, qrBase64) {
 </body>
 </html>`
 
-  const win = window.open('', '_blank', 'width=280,height=500')
+  const pw = Math.max(Math.round(screen.width * 0.5), 600)
+  const ph = Math.min(Math.round(screen.height * 0.9), 900)
+  const win = window.open('', '_blank', `width=${pw},height=${ph},left=${Math.round((screen.width-pw)/2)},top=40`)
   win.document.write(html)
   win.document.close()
   win.onload = () => { win.focus(); win.print(); setTimeout(() => win.close(), 800) }
@@ -300,7 +304,9 @@ export function printCupLabels(order) {
 </body>
 </html>`
 
-  const win = window.open('', '_blank', 'width=520,height=600')
+  const pw = Math.max(Math.round(screen.width * 0.5), 700)
+  const ph = Math.min(Math.round(screen.height * 0.9), 900)
+  const win = window.open('', '_blank', `width=${pw},height=${ph},left=${Math.round((screen.width-pw)/2)},top=40`)
   win.document.write(html)
   win.document.close()
   win.onload = () => { win.focus(); win.print(); setTimeout(() => win.close(), 1000) }
@@ -434,7 +440,7 @@ export function printOrderReceipt(order, trackingQrBase64 = null) {
   .title      { font-size: 16px; font-weight: 900; letter-spacing: 2px; }
   .big-num    { font-size: 48px; font-weight: 900; text-align: center; line-height: 1.1; }
   .divider    { border-top: 1px dashed #666; margin: 7px 0; }
-  .row        { display: flex; align-items: baseline; margin-bottom: 2px; }
+  .row        { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 2px; }
   .item-row   { margin-top: 5px; gap: 3px; }
   .row-num    { font-size: 11px; color: #999; flex-shrink: 0; min-width: 16px; }
   .item-qty   { font-weight: 900; flex-shrink: 0; margin-right: 3px; }
@@ -449,7 +455,8 @@ export function printOrderReceipt(order, trackingQrBase64 = null) {
   .subtotal-row  { margin-top: 2px; padding-top: 2px; border-top: 1px dotted #ccc; padding-left: 20px; }
   .subtotal-label { flex: 1; font-size: 11px; color: #555; font-style: italic; }
   .subtotal-val   { font-size: 12px; font-weight: 900; color: #111; white-space: nowrap; }
-  .total-row  { font-weight: 900; font-size: 15px; margin-top: 4px; }
+  .summary-row { margin-top: 6px; margin-bottom: 6px; }
+  .total-row  { font-weight: 900; font-size: 15px; margin-top: 8px; margin-bottom: 8px; }
   .footer     { text-align: center; font-style: italic; color: #555; margin-top: 6px; font-size: 12px; }
   @media print { @page { margin: 0; } body { padding: 8px 6px; } }
 </style>
@@ -474,7 +481,7 @@ export function printOrderReceipt(order, trackingQrBase64 = null) {
   <div class="divider"></div>
 
   ${deliveryRow}
-  <div class="row" style="font-size:11px;color:#555;margin-bottom:2px;">
+  <div class="row summary-row" style="font-size:11px;color:#555;">
     <span>${rootItems.length} line${rootItems.length !== 1 ? 's' : ''}</span>
     <span style="font-weight:700;color:#111;">${rootItems.reduce((s, it) => s + Number(it.quantity || 1), 0)} items total</span>
   </div>
@@ -498,7 +505,9 @@ export function printOrderReceipt(order, trackingQrBase64 = null) {
 </body>
 </html>`
 
-  const win = window.open('', '_blank', 'width=340,height=720')
+  const pw = Math.max(Math.round(screen.width * 0.5), 600)
+  const ph = Math.min(Math.round(screen.height * 0.9), 960)
+  const win = window.open('', '_blank', `width=${pw},height=${ph},left=${Math.round((screen.width-pw)/2)},top=40`)
   win.document.write(html)
   win.document.close()
   win.onload = () => { win.focus(); win.print(); setTimeout(() => win.close(), 1000) }
