@@ -117,9 +117,9 @@ function buildOrderedItems(items) {
   const result = []
   const roots = items.filter(it => !it.parentItemId)
   roots.forEach((root, rIdx) => {
-    result.push({ ...root, _depth: 0, _label: `${rIdx + 1}.` })
+    result.push({ ...root, _depth: 0, _label: `${rIdx + 1}.`, _parentQty: null })
     items.filter(it => it.parentItemId === root.id).forEach((child, cIdx) => {
-      result.push({ ...child, _depth: 1, _label: `${rIdx + 1}.${cIdx + 1}` })
+      result.push({ ...child, _depth: 1, _label: `${rIdx + 1}.${cIdx + 1}`, _parentQty: Number(root.quantity || 1) })
     })
   })
   return result
@@ -267,22 +267,23 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
               </TableRow>
             </TableHead>
             <TableBody>
-              {buildOrderedItems(order.items || []).map(item => (
-                <TableRow key={item.id} sx={{ verticalAlign: 'top', bgcolor: item._depth > 0 ? '#f8f9ff' : 'inherit' }}>
+              {buildOrderedItems(order.items || []).map(item => {
+                const isChild     = item._depth > 0
+                const parentQty   = item._parentQty || 1
+                const childQty    = Number(item.quantity || 1)
+                const effectiveQty   = isChild ? childQty * parentQty : childQty
+                const effectiveTotal = isChild ? Number(item.lineTotal || 0) * parentQty : Number(item.lineTotal || 0)
+                return (
+                <TableRow key={item.id} sx={{ verticalAlign: 'top', bgcolor: isChild ? '#f8f9ff' : 'inherit' }}>
                   <TableCell>
-                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5, pl: item._depth > 0 ? 1.5 : 0 }}>
-                      {item._depth > 0 && (
-                        <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.3, flexShrink: 0 }}>
-                          <Box sx={{ width: 10, height: 2, bgcolor: '#c7d2fe', mr: 0.5 }} />
-                        </Box>
-                      )}
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5, pl: isChild ? 2 : 0, borderLeft: isChild ? '2px solid #c7d2fe' : 'none', ml: isChild ? 1 : 0 }}>
                       <Box>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                           <Typography variant="caption" sx={{ color: '#94a3b8', fontWeight: 700, fontSize: 10, flexShrink: 0 }}>
                             {item._label}
                           </Typography>
-                          <Typography variant="body2" fontWeight={item._depth > 0 ? 500 : 600}
-                            color={item._depth > 0 ? 'text.secondary' : 'text.primary'}>
+                          <Typography variant="body2" fontWeight={isChild ? 700 : 700} fontSize={isChild ? 13 : 14}
+                            color={isChild ? '#4338ca' : 'text.primary'}>
                             {item.modelName}
                           </Typography>
                         </Box>
@@ -295,13 +296,25 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
                       </Box>
                     </Box>
                   </TableCell>
-                  <TableCell align="center">{Number(item.quantity)}</TableCell>
-                  <TableCell align="right">{fmt(item.unitPrice)}</TableCell>
+                  <TableCell align="center">
+                    {isChild
+                      ? <Typography fontWeight={800} fontSize={13} color="#6366f1">{parentQty}×{childQty}</Typography>
+                      : <Typography fontWeight={700} fontSize={14}>{childQty}</Typography>
+                    }
+                  </TableCell>
+                  <TableCell align="right">
+                    <Typography fontWeight={isChild ? 600 : 400} fontSize={isChild ? 13 : 'inherit'}>{fmt(item.unitPrice)}</Typography>
+                  </TableCell>
                   <TableCell align="right"><Typography variant="caption" color="text.secondary">{fmt(item.unitRawCost)}</Typography></TableCell>
                   <TableCell align="right"><Typography variant="caption" color="success.main">{pct(item.unitPrice, item.unitRawCost)}</Typography></TableCell>
-                  <TableCell align="right"><Typography fontWeight={700} color={item._depth > 0 ? '#6366f1' : 'primary'}>{fmt(item.lineTotal)}</Typography></TableCell>
+                  <TableCell align="right">
+                    <Typography fontWeight={800} fontSize={isChild ? 13 : 14} color={isChild ? '#6366f1' : 'primary'}>
+                      {fmt(effectiveTotal)}
+                    </Typography>
+                  </TableCell>
                 </TableRow>
-              ))}
+                )
+              })}
             </TableBody>
           </Table>
 
