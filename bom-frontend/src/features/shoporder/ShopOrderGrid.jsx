@@ -301,7 +301,18 @@ function StatusBoard({ status, orders, onAction, onDetail, onPayQr }) {
                     }
                   </Box>
                   {order.customerName && <Typography variant="caption" display="block" noWrap>{order.customerName}</Typography>}
-                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>{since} ago</Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>{since} ago</Typography>
+                    {(() => {
+                      const roots = (order.items || []).filter(it => !it.parentItemId)
+                      const totalQty = roots.reduce((s, it) => s + Number(it.quantity || 1), 0)
+                      return totalQty > 0 ? (
+                        <Box sx={{ bgcolor: style.numColor, color: '#fff', fontWeight: 900, fontSize: 11, borderRadius: 99, px: 0.75, py: 0.1, lineHeight: 1.6 }}>
+                          {totalQty} item{totalQty > 1 ? 's' : ''}
+                        </Box>
+                      ) : null
+                    })()}
+                  </Box>
                 </Box>
                 <Box sx={{ display: 'flex', gap: 0.25 }}>
                   <Tooltip title="Print cup labels">

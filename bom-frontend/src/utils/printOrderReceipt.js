@@ -474,6 +474,10 @@ export function printOrderReceipt(order, trackingQrBase64 = null) {
   <div class="divider"></div>
 
   ${deliveryRow}
+  <div class="row" style="font-size:11px;color:#555;margin-bottom:2px;">
+    <span>${rootItems.length} line${rootItems.length !== 1 ? 's' : ''}</span>
+    <span style="font-weight:700;color:#111;">${rootItems.reduce((s, it) => s + Number(it.quantity || 1), 0)} items total</span>
+  </div>
   <div class="row total-row">
     <span>TOTAL</span>
     <span>${fmt(rootItems.reduce((s, item) => {

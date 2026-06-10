@@ -341,13 +341,25 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
             const itemsTotal = groups.reduce((s, g) => s + g.subtotal, 0)
             const delivery   = Number(order.deliveryFee || 0)
             const grandTotal = itemsTotal + delivery
+            const totalMainQty = groups.reduce((s, g) => s + Number(g.root.quantity || 1), 0)
+            const totalLines   = groups.length
             return (
-            <Box sx={{ mt: 0.75, textAlign: 'right', pr: 1, mb: 1.5 }}>
-              <Typography variant="body2" color="text.secondary">Raw cost: {fmt(order.totalRawCost)}</Typography>
-              {delivery > 0 && (
-                <Typography variant="body2" color="text.secondary">Items: {fmt(itemsTotal)} + Delivery: {fmt(delivery)}</Typography>
-              )}
-              <Typography fontWeight={900} variant="h5" color="primary">Total: {fmt(grandTotal)}</Typography>
+            <Box sx={{ mt: 0.75, pr: 1, mb: 1.5 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                <Typography variant="caption" color="text.secondary">
+                  {totalLines} line{totalLines !== 1 ? 's' : ''}
+                </Typography>
+                <Box sx={{ bgcolor: '#1976d2', color: '#fff', fontWeight: 900, fontSize: 12, borderRadius: 99, px: 1, py: 0.1, lineHeight: 1.6 }}>
+                  {totalMainQty} item{totalMainQty !== 1 ? 's' : ''} total
+                </Box>
+              </Box>
+              <Box sx={{ textAlign: 'right' }}>
+                <Typography variant="body2" color="text.secondary">Raw cost: {fmt(order.totalRawCost)}</Typography>
+                {delivery > 0 && (
+                  <Typography variant="body2" color="text.secondary">Items: {fmt(itemsTotal)} + Delivery: {fmt(delivery)}</Typography>
+                )}
+                <Typography fontWeight={900} variant="h5" color="primary">Total: {fmt(grandTotal)}</Typography>
+              </Box>
             </Box>
             )
           })()}
