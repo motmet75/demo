@@ -694,50 +694,47 @@ export default function ShopMenuPage() {
                 {/* Existing side items */}
                 {sides.map((si, siIdx) => {
                   const sm = menu.find(x => x.id === si.modelId)
-                  const perCup       = si.qty || 1
-                  const effectiveQty = perCup * entry.qty
+                  const perCup         = si.qty || 1
+                  const effectiveQty   = perCup * entry.qty
                   const effectivePrice = sm ? effectiveQty * Number(sm.sellingPrice || 0) : 0
                   return (
-                    <Box key={si.uid} sx={{ px: 0.75, pt: 0.5, pb: 0.75, borderBottom: '1px solid #e8eaf6' }}>
-                      {/* Row 1: label · name · delete */}
+                    <Box key={si.uid} sx={{ px: 0.75, py: 0.5, borderBottom: '1px solid #e8eaf6' }}>
+                      {/* Single row: number · name · stepper · price · delete */}
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                        <Typography variant="caption" sx={{ color: '#cbd5e1', fontWeight: 700, fontSize: 10, flexShrink: 0, minWidth: 20 }}>
+                        <Typography variant="caption" sx={{ color: '#cbd5e1', fontWeight: 700, fontSize: 10, flexShrink: 0, minWidth: 22 }}>
                           {idx + 1}.{siIdx + 1}
                         </Typography>
-                        <Typography variant="caption" fontWeight={600} sx={{ flex: 1, fontSize: 12, color: '#64748b' }} noWrap>
-                          {si.modelName}
-                        </Typography>
-                        <IconButton onClick={() => removeSide(entry.uid, si.uid)}
-                          sx={{ p: 0.5, color: '#94a3b8', '&:hover': { color: '#dc2626' } }}>
-                          <CloseIcon sx={{ fontSize: 14 }} />
-                        </IconButton>
-                      </Box>
-                      {/* Row 2: per-cup stepper · effective total · price */}
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, pl: 2.5, mt: 0.25 }}>
-                        <Typography variant="caption" sx={{ color: '#a5b4fc', fontSize: 10, flexShrink: 0 }}>
-                          /cup
-                        </Typography>
-                        <IconButton
-                          onClick={() => changeSideQty(entry.uid, si.uid, -1)}
-                          sx={{ p: 0, width: 28, height: 28, bgcolor: '#f1f5f9', color: '#64748b', borderRadius: 1, flexShrink: 0, '&:hover': { bgcolor: '#e2e8f0' } }}>
-                          <RemoveIcon sx={{ fontSize: 15 }} />
-                        </IconButton>
-                        <Typography fontWeight={800} sx={{ minWidth: 20, textAlign: 'center', fontSize: 14, color: '#4f46e5', flexShrink: 0 }}>
-                          {perCup}
-                        </Typography>
-                        <IconButton
-                          onClick={() => changeSideQty(entry.uid, si.uid, 1)}
-                          sx={{ p: 0, width: 28, height: 28, bgcolor: '#6366f1', color: '#fff', borderRadius: 1, flexShrink: 0, '&:hover': { bgcolor: '#4f46e5' } }}>
-                          <AddIcon sx={{ fontSize: 15 }} />
-                        </IconButton>
-                        {entry.qty > 1 && (
-                          <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: 10, flexShrink: 0 }}>
-                            = {effectiveQty}×
+                        <Box sx={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                          <Typography variant="caption" fontWeight={600} sx={{ fontSize: 12, color: '#64748b', display: 'block' }} noWrap>
+                            {si.modelName}
                           </Typography>
-                        )}
-                        <Typography variant="caption" fontWeight={700} sx={{ ml: 'auto', fontSize: 12, color: '#64748b', flexShrink: 0 }}>
+                          {entry.qty > 1 && (
+                            <Typography variant="caption" sx={{ color: '#a5b4fc', fontSize: 10 }}>
+                              {perCup}/cup × {entry.qty} = {effectiveQty}×
+                            </Typography>
+                          )}
+                        </Box>
+                        {/* Stepper — same style as main item */}
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
+                          <IconButton size="small" onClick={() => changeSideQty(entry.uid, si.uid, -1)}
+                            sx={{ p: 0.25, color: '#94a3b8' }}>
+                            <RemoveIcon sx={{ fontSize: 14 }} />
+                          </IconButton>
+                          <Typography fontWeight={700} sx={{ minWidth: 20, textAlign: 'center', fontSize: 13, color: '#4f46e5' }}>
+                            {perCup}
+                          </Typography>
+                          <IconButton size="small" onClick={() => changeSideQty(entry.uid, si.uid, 1)}
+                            sx={{ p: 0.25, bgcolor: '#6366f1', color: '#fff', borderRadius: 0.75, '&:hover': { bgcolor: '#4f46e5' } }}>
+                            <AddIcon sx={{ fontSize: 14 }} />
+                          </IconButton>
+                        </Box>
+                        <Typography variant="caption" fontWeight={700} sx={{ minWidth: 60, textAlign: 'right', fontSize: 12, color: '#64748b', flexShrink: 0 }}>
                           {sm ? fmt(effectivePrice) : ''}
                         </Typography>
+                        <IconButton size="small" onClick={() => removeSide(entry.uid, si.uid)}
+                          sx={{ p: 0.25, color: '#94a3b8', '&:hover': { color: '#dc2626' } }}>
+                          <CloseIcon sx={{ fontSize: 13 }} />
+                        </IconButton>
                       </Box>
                     </Box>
                   )
@@ -1124,37 +1121,38 @@ export default function ShopMenuPage() {
                       const effQty   = perCup * entry.qty
                       const effPrice = effQty * Number(sm.sellingPrice || 0)
                       return (
-                        <Box key={side.uid} sx={{ pl: 1.5, mb: 0.5 }}>
-                          {/* Row 1: number · name · price */}
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                            <Typography variant="caption" color="text.secondary">
-                              {idx + 1}.{siIdx + 1} {effQty}× {sm.modelName}
+                        <Box key={side.uid} sx={{ pl: 1.5, mb: 0.25 }}>
+                          {/* Single row: number · name · stepper · price */}
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: 10, flexShrink: 0, minWidth: 22 }}>
+                              {idx + 1}.{siIdx + 1}
                             </Typography>
-                            <Typography variant="caption" color="primary" fontWeight={700}>{fmt(effPrice)}</Typography>
-                          </Box>
-                          {/* Row 2: per-cup stepper */}
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.25 }}>
-                            <Typography variant="caption" sx={{ color: '#a5b4fc', fontSize: 10, flexShrink: 0 }}>
-                              /cup
-                            </Typography>
-                            <IconButton
-                              onClick={() => changeSideQty(entry.uid, side.uid, -1)}
-                              sx={{ p: 0, width: 28, height: 28, bgcolor: '#f1f5f9', color: '#64748b', borderRadius: 1, flexShrink: 0, '&:hover': { bgcolor: '#e2e8f0' } }}>
-                              <RemoveIcon sx={{ fontSize: 15 }} />
-                            </IconButton>
-                            <Typography fontWeight={800} sx={{ minWidth: 20, textAlign: 'center', fontSize: 14, color: '#4f46e5', flexShrink: 0 }}>
-                              {perCup}
-                            </Typography>
-                            <IconButton
-                              onClick={() => changeSideQty(entry.uid, side.uid, 1)}
-                              sx={{ p: 0, width: 28, height: 28, bgcolor: '#6366f1', color: '#fff', borderRadius: 1, flexShrink: 0, '&:hover': { bgcolor: '#4f46e5' } }}>
-                              <AddIcon sx={{ fontSize: 15 }} />
-                            </IconButton>
-                            {entry.qty > 1 && (
-                              <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: 10, flexShrink: 0 }}>
-                                = {effQty}×
+                            <Box sx={{ flex: 1, minWidth: 0 }}>
+                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }} noWrap>
+                                {sm.modelName}
                               </Typography>
-                            )}
+                              {entry.qty > 1 && (
+                                <Typography variant="caption" sx={{ color: '#a5b4fc', fontSize: 10 }}>
+                                  {perCup}/cup × {entry.qty} = {effQty}×
+                                </Typography>
+                              )}
+                            </Box>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
+                              <IconButton size="small" onClick={() => changeSideQty(entry.uid, side.uid, -1)}
+                                sx={{ p: 0.25, color: '#94a3b8' }}>
+                                <RemoveIcon sx={{ fontSize: 14 }} />
+                              </IconButton>
+                              <Typography fontWeight={700} sx={{ minWidth: 20, textAlign: 'center', fontSize: 13, color: '#4f46e5' }}>
+                                {perCup}
+                              </Typography>
+                              <IconButton size="small" onClick={() => changeSideQty(entry.uid, side.uid, 1)}
+                                sx={{ p: 0.25, bgcolor: '#6366f1', color: '#fff', borderRadius: 0.75, '&:hover': { bgcolor: '#4f46e5' } }}>
+                                <AddIcon sx={{ fontSize: 14 }} />
+                              </IconButton>
+                            </Box>
+                            <Typography variant="caption" color="primary" fontWeight={700} sx={{ minWidth: 52, textAlign: 'right', flexShrink: 0 }}>
+                              {fmt(effPrice)}
+                            </Typography>
                           </Box>
                         </Box>
                       )
@@ -1194,7 +1192,18 @@ export default function ShopMenuPage() {
           order={trackingOrder}
           ctx={ctx}
           onEdit={handleEditOrder}
-          onOrderMore={() => setTrackingOrder(null)}
+          onOrderMore={() => {
+            if (trackingOrder?.orderCode) {
+              const qs = ctx?.tenantId && ctx?.companyId
+                ? `?tenantId=${ctx.tenantId}&companyId=${ctx.companyId}`
+                : ''
+              window.open(
+                window.location.origin + '/bom-inventory/shop/order/' + encodeURIComponent(trackingOrder.orderCode) + qs,
+                '_blank'
+              )
+            }
+            setTrackingOrder(null)
+          }}
           onUpdated={setTrackingOrder}
         />
       )}

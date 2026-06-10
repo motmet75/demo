@@ -90,14 +90,20 @@ function ItemRow({ item, number, isChild }) {
           )}
           {item.modelName}
         </Typography>
-        <Typography sx={{
-          fontSize: isChild ? { xs: 12, md: 15 } : { xs: 14, md: 18 },
-          fontWeight: 700,
-          color: isChild ? '#a5b4fc' : '#38bdf8',
-          flexShrink: 0,
-        }}>
-          {fmt(item.lineTotal)}
-        </Typography>
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0, gap: 0.25 }}>
+          <Typography sx={{
+            fontSize: isChild ? { xs: 12, md: 15 } : { xs: 14, md: 18 },
+            fontWeight: 700,
+            color: isChild ? '#a5b4fc' : '#38bdf8',
+          }}>
+            {fmt(item.lineTotal)}
+          </Typography>
+          {!isChild && Number(item.quantity) > 1 && (
+            <Typography sx={{ fontSize: { xs: 10, md: 12 }, color: '#64748b', fontWeight: 500 }}>
+              {fmt(item.unitPrice)} /ea
+            </Typography>
+          )}
+        </Box>
       </Box>
 
       {opts.length > 0 && (
