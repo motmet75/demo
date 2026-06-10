@@ -122,26 +122,29 @@ export function printCupLabels(order) {
   const labelHtml = rootItems.flatMap(item => {
     const qty = Number(item.quantity) || 1
     const opts = parseOptsObj(item.selectedOptions)
-    const optLines = Object.entries(opts)
-      .map(([k, v]) => `<div class="opt"><span class="opt-key">${k}:</span> <span class="opt-val">${Array.isArray(v) ? v.join(', ') : v}</span></div>`)
-      .join('')
+    const optParts = Object.entries(opts)
+      .map(([k, v]) => `<span class="opt-key">${k}:</span> <span class="opt-val">${Array.isArray(v) ? v.join(', ') : v}</span>`)
+    const optLine = optParts.length > 0
+      ? `<div class="opt-line">${optParts.join('<span class="opt-sep"> · </span>')}</div>`
+      : ''
     const noteHtml = item.itemNotes
       ? `<div class="note">&#9888; ${item.itemNotes}</div>`
       : ''
 
-    // Side items for this parent
+    // Side / topping items — numbered list
     const children = childMap[String(item.id)] || []
     const sidesHtml = children.length > 0
       ? `<div class="sides-divider"></div>
          <div class="sides-header">+ Toppings / Sides</div>
-         ${children.map(child => {
+         ${children.map((child, ci) => {
            const childQty = Number(child.quantity) || 1
            const childNote = child.itemNotes
              ? `<div class="child-note">&#9888; ${child.itemNotes}</div>`
              : ''
            return `<div class="side-row">
-             <span class="side-name">&#x2022; ${child.modelName}</span>
-             <span class="side-qty">×${childQty}</span>
+             <span class="side-num">${ci + 1}.</span>
+             <span class="side-qty">${childQty}×</span>
+             <span class="side-name">${child.modelName}</span>
            </div>${childNote}`
          }).join('')}`
       : ''
@@ -153,7 +156,7 @@ export function printCupLabels(order) {
           ${qty > 1 ? `<span class="counter">${i + 1} / ${qty}</span>` : ''}
         </div>
         <div class="item-name">${item.modelName}</div>
-        ${optLines}
+        ${optLine}
         ${noteHtml}
         ${sidesHtml}
       </div>
@@ -213,14 +216,16 @@ export function printCupLabels(order) {
     padding: 6px 10px 2px;
     letter-spacing: -0.2px;
   }
-  .opt {
-    font-size: 12px;
+  .opt-line {
+    font-size: 11px;
     color: #333;
     line-height: 1.5;
-    padding: 0 10px;
+    padding: 2px 10px;
+    word-break: break-word;
   }
   .opt-key { color: #777; }
   .opt-val { font-weight: 700; color: #111; }
+  .opt-sep { color: #9ca3af; font-weight: 400; }
   .note {
     font-size: 11px;
     font-weight: 700;
@@ -246,22 +251,29 @@ export function printCupLabels(order) {
   }
   .side-row {
     display: flex;
-    justify-content: space-between;
     align-items: baseline;
-    padding: 1px 10px 1px 16px;
+    gap: 4px;
+    padding: 1px 10px 1px 14px;
+  }
+  .side-num {
+    font-size: 10px;
+    font-weight: 700;
+    color: #9ca3af;
+    flex-shrink: 0;
+    min-width: 14px;
+  }
+  .side-qty {
+    font-size: 11px;
+    font-weight: 900;
+    color: #6366f1;
+    flex-shrink: 0;
   }
   .side-name {
     font-size: 12px;
     font-weight: 600;
     color: #374151;
     flex: 1;
-  }
-  .side-qty {
-    font-size: 11px;
-    font-weight: 700;
-    color: #6366f1;
-    margin-left: 6px;
-    white-space: nowrap;
+    word-break: break-word;
   }
   .child-note {
     font-size: 10px;
@@ -313,28 +325,46 @@ export function printOrderReceipt(order, trackingQrBase64 = null) {
   const childMap = buildChildMap(allItems)
   const rootItems = allItems.filter(item => !item.parentItemId)
 
-  const itemsHtml = rootItems.map(item => {
-    const optsStr = parseOpts(item.selectedOptions)
+  const itemsHtml = rootItems.map((item, idx) => {
+    const rowNum = idx + 1
+    const opts = parseOptsObj(item.selectedOptions)
+    const optsInline = Object.entries(opts)
+      .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+      .join(' · ')
     const children = childMap[String(item.id)] || []
-    const childrenHtml = children.map(child => {
-      const childOptsStr = parseOpts(child.selectedOptions)
+    const childrenHtml = children.map((child, ci) => {
+      const childOpts = parseOptsObj(child.selectedOptions)
+      const childOptsInline = Object.entries(childOpts)
+        .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+        .join(' · ')
       return `
         <div class="row side-row">
-          <span class="side-name">&#x2514; ${child.quantity}&#215; ${child.modelName}</span>
+          <span class="side-num">${rowNum}.${ci + 1}</span>
+          <span class="side-qty">${child.quantity}&#215;</span>
+          <span class="side-name">${child.modelName}</span>
           <span class="item-price">${fmt(child.lineTotal)}</span>
         </div>
-        ${childOptsStr ? `<div class="deep-indent grey">${childOptsStr}</div>` : ''}
-        ${child.itemNotes ? `<div class="deep-indent grey italic">&#9888; ${child.itemNotes}</div>` : ''}
+        ${childOptsInline ? `<div class="child-opts grey">${childOptsInline}</div>` : ''}
+        ${child.itemNotes ? `<div class="child-opts grey italic">&#9888; ${child.itemNotes}</div>` : ''}
       `
     }).join('')
+
+    const subtotal = Number(item.lineTotal || 0) + children.reduce((s, c) => s + Number(c.lineTotal || 0), 0)
+    const subtotalHtml = children.length > 0
+      ? `<div class="row subtotal-row"><span class="subtotal-label">= subtotal</span><span class="subtotal-val">${fmt(subtotal)}</span></div>`
+      : ''
+
     return `
       <div class="row item-row">
-        <span class="item-name">${item.quantity}&#215; ${item.modelName}</span>
+        <span class="row-num">${rowNum}.</span>
+        <span class="item-qty">${item.quantity}&#215;</span>
+        <span class="item-name">${item.modelName}</span>
         <span class="item-price">${fmt(item.lineTotal)}</span>
       </div>
-      ${optsStr ? `<div class="indent grey">${optsStr}</div>` : ''}
-      ${item.itemNotes ? `<div class="indent grey italic">&#9888; ${item.itemNotes}</div>` : ''}
+      ${optsInline ? `<div class="opts-inline grey">${optsInline}</div>` : ''}
+      ${item.itemNotes ? `<div class="opts-inline grey italic">&#9888; ${item.itemNotes}</div>` : ''}
       ${childrenHtml}
+      ${subtotalHtml}
     `
   }).join('')
 
@@ -395,17 +425,24 @@ export function printOrderReceipt(order, trackingQrBase64 = null) {
   .bold       { font-weight: bold; }
   .grey       { color: #555; }
   .italic     { font-style: italic; }
-  .indent     { padding-left: 12px; font-size: 11px; color: #666; }
-  .deep-indent { padding-left: 24px; font-size: 11px; color: #666; }
   .title      { font-size: 16px; font-weight: 900; letter-spacing: 2px; }
   .big-num    { font-size: 48px; font-weight: 900; text-align: center; line-height: 1.1; }
   .divider    { border-top: 1px dashed #666; margin: 7px 0; }
-  .row        { display: flex; justify-content: space-between; margin-bottom: 2px; }
-  .item-row   { margin-top: 4px; }
-  .item-name  { flex: 1; padding-right: 8px; }
-  .item-price { text-align: right; white-space: nowrap; }
-  .side-row   { margin-top: 1px; }
-  .side-name  { flex: 1; padding-left: 8px; padding-right: 8px; font-size: 12px; color: #444; }
+  .row        { display: flex; align-items: baseline; margin-bottom: 2px; }
+  .item-row   { margin-top: 5px; gap: 3px; }
+  .row-num    { font-size: 11px; color: #999; flex-shrink: 0; min-width: 16px; }
+  .item-qty   { font-weight: 900; flex-shrink: 0; margin-right: 3px; }
+  .item-name  { flex: 1; padding-right: 6px; font-weight: 700; }
+  .item-price { text-align: right; white-space: nowrap; flex-shrink: 0; }
+  .opts-inline { padding-left: 20px; font-size: 11px; color: #666; margin-bottom: 1px; }
+  .side-row   { margin-top: 2px; gap: 3px; padding-left: 6px; }
+  .side-num   { font-size: 10px; color: #aaa; flex-shrink: 0; min-width: 22px; }
+  .side-qty   { font-weight: 900; font-size: 11px; color: #6366f1; flex-shrink: 0; margin-right: 3px; }
+  .side-name  { flex: 1; padding-right: 6px; font-size: 12px; color: #444; }
+  .child-opts    { padding-left: 32px; font-size: 10px; color: #777; margin-bottom: 1px; }
+  .subtotal-row  { margin-top: 2px; padding-top: 2px; border-top: 1px dotted #ccc; padding-left: 20px; }
+  .subtotal-label { flex: 1; font-size: 11px; color: #555; font-style: italic; }
+  .subtotal-val   { font-size: 12px; font-weight: 900; color: #111; white-space: nowrap; }
   .total-row  { font-weight: 900; font-size: 15px; margin-top: 4px; }
   .footer     { text-align: center; font-style: italic; color: #555; margin-top: 6px; font-size: 12px; }
   @media print { @page { margin: 0; } body { padding: 8px 6px; } }

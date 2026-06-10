@@ -98,10 +98,21 @@ function OrderCard({ order, colStyle }) {
           rootItems.map((item, idx) => {
             const children = childMap[String(item.id)] || []
             const opts = parseOpts(item.selectedOptions)
+            const rowNum = idx + 1
             return (
-              <Box key={item.id || idx} sx={{ mb: children.length > 0 ? 0.5 : 0.25 }}>
-                {/* Root item row — qty × name  opt1 · opt2 inline */}
+              <Box key={item.id || idx} sx={{ mb: children.length > 0 ? 0.75 : 0.4 }}>
+                {/* Root item row: "1.  2× Matcha Naoki  opt1 · opt2" */}
                 <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.4, flexWrap: 'wrap' }}>
+                  <Typography sx={{
+                    fontSize: { xs: 9, md: 10 },
+                    fontWeight: 700,
+                    color: colStyle.labelColor,
+                    flexShrink: 0,
+                    lineHeight: 1.4,
+                    minWidth: 16,
+                  }}>
+                    {rowNum}.
+                  </Typography>
                   <Typography sx={{
                     fontSize: { xs: 10, md: 11 },
                     fontWeight: 900,
@@ -139,7 +150,7 @@ function OrderCard({ order, colStyle }) {
                     fontSize: { xs: 9, md: 10 },
                     color: '#f59e0b',
                     fontWeight: 700,
-                    pl: 1.75,
+                    pl: 2.5,
                     fontStyle: 'italic',
                     lineHeight: 1.4,
                   }}>
@@ -147,25 +158,33 @@ function OrderCard({ order, colStyle }) {
                   </Typography>
                 )}
 
-                {/* Child / side items */}
+                {/* Child / topping rows: "  1.1  1× Top Cheese-Boba" */}
                 {children.map((child, ci) => (
                   <Box key={child.id || ci} sx={{
                     display: 'flex',
                     alignItems: 'baseline',
-                    gap: 0.3,
-                    pl: 1.5,
-                    mt: 0.15,
-                    borderLeft: `2px solid ${colStyle.childBorder}`,
-                    ml: 0.75,
+                    gap: 0.4,
+                    pl: 1,
+                    mt: 0.2,
                   }}>
                     <Typography sx={{
                       fontSize: { xs: 9, md: 10 },
+                      fontWeight: 700,
+                      color: colStyle.labelColor,
+                      flexShrink: 0,
+                      lineHeight: 1.4,
+                      minWidth: 24,
+                    }}>
+                      {rowNum}.{ci + 1}
+                    </Typography>
+                    <Typography sx={{
+                      fontSize: { xs: 9, md: 10 },
+                      fontWeight: 900,
                       color: colStyle.childColor,
                       flexShrink: 0,
                       lineHeight: 1.4,
-                      fontWeight: 700,
                     }}>
-                      +{Number(child.quantity)}
+                      {Number(child.quantity)}×
                     </Typography>
                     <Typography sx={{
                       fontSize: { xs: 9, md: 10 },
@@ -178,7 +197,7 @@ function OrderCard({ order, colStyle }) {
                     </Typography>
                     {child.itemNotes && (
                       <Typography sx={{ fontSize: 9, color: '#f59e0b', fontStyle: 'italic', ml: 0.25 }}>
-                        ⚠
+                        ⚠ {child.itemNotes}
                       </Typography>
                     )}
                   </Box>
