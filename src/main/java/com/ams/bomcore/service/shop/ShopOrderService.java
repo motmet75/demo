@@ -176,7 +176,13 @@ public class ShopOrderService {
 
         List<ShopOrderItem> items = shopOrderItemRepository.findAllByOrder_Id(orderId);
         for (ShopOrderItem item : items) {
-            var bomOpt = bomService.getActiveBomForModel(item.getModel().getId(), tenantId);
+            // Resolve the BOM model from selectedOptions (choice may link to a different model's BOM)
+            List<ModelMenuOption> optionGroups = menuOptionRepository
+                    .findAllByModelIdAndTenantIdAndCompanyIdOrderByDisplayOrderAsc(
+                            item.getModel().getId(), tenantId, companyId);
+            UUID bomModelId = shopPricingService.resolveEffectiveBomModel(
+                    item.getModel().getId(), item.getSelectedOptions(), optionGroups);
+            var bomOpt = bomService.getActiveBomForModel(bomModelId, tenantId);
             if (bomOpt.isEmpty()) continue;
             List<BomItemEntity> bomItems = bomService.getBomItems(bomOpt.get().getId(), tenantId, companyId);
 
@@ -637,8 +643,10 @@ public class ShopOrderService {
             BigDecimal unitPrice = req.unitPriceOverride() != null
                     ? req.unitPriceOverride()
                     : (model.getSellingPrice() != null ? model.getSellingPrice() : BigDecimal.ZERO);
+            List<ModelMenuOption> optionGroups = menuOptionRepository
+                    .findAllByModelIdAndTenantIdAndCompanyIdOrderByDisplayOrderAsc(model.getId(), tenantId, companyId);
             ShopPricingService.RawCostBreakdown costBreakdown =
-                    shopPricingService.calculateRawCost(model.getId(), qty, tenantId, companyId);
+                    shopPricingService.calculateRawCost(model.getId(), qty, req.selectedOptions(), optionGroups, tenantId, companyId);
             BigDecimal unitRawCost = qty.compareTo(BigDecimal.ZERO) > 0
                     ? costBreakdown.total().divide(qty, 4, RoundingMode.HALF_UP)
                     : BigDecimal.ZERO;

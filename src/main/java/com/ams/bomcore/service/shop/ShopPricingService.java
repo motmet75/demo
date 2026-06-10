@@ -3,8 +3,11 @@ package com.ams.bomcore.service.shop;
 import com.ams.bomcore.domain.bom.BomItemEntity;
 import com.ams.bomcore.domain.inventory.InventoryEntity;
 import com.ams.bomcore.domain.material.Material;
+import com.ams.bomcore.domain.shop.ModelMenuOption;
 import com.ams.bomcore.repository.InventoryRepository;
 import com.ams.bomcore.service.bom.BomService;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -19,6 +22,8 @@ import java.util.UUID;
 @Service
 public class ShopPricingService {
 
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
     private final BomService bomService;
     private final InventoryRepository inventoryRepository;
 
@@ -31,7 +36,52 @@ public class ShopPricingService {
 
     public record RawCostBreakdown(List<CostLine> lines, BigDecimal total) {}
 
+    /**
+     * Resolves which model's BOM to use for a given order item.
+     * If any selected choice carries a {@code modelId} field, that model's BOM is used instead
+     * of the item's own model BOM (e.g. Small/Medium/Large each backed by a different BOM model).
+     * Only the first matching choice with a valid modelId wins.
+     */
+    public UUID resolveEffectiveBomModel(UUID baseModelId, String selectedOptions, List<ModelMenuOption> optionGroups) {
+        if (selectedOptions == null || selectedOptions.isBlank() || optionGroups == null || optionGroups.isEmpty()) {
+            return baseModelId;
+        }
+        try {
+            Map<String, Object> selected = MAPPER.readValue(selectedOptions, new TypeReference<>() {});
+            for (ModelMenuOption group : optionGroups) {
+                Object chosenRaw = selected.get(group.getGroupName());
+                if (chosenRaw == null) continue;
+                // Normalize to a single label (take first element for multi-select)
+                String chosenLabel = (chosenRaw instanceof List<?> list && !list.isEmpty())
+                        ? list.get(0).toString() : chosenRaw.toString();
+                List<Map<String, Object>> choiceDefs = MAPPER.readValue(group.getChoices(), new TypeReference<>() {});
+                for (Map<String, Object> choice : choiceDefs) {
+                    if (chosenLabel.equals(String.valueOf(choice.get("label")))) {
+                        Object mid = choice.get("modelId");
+                        if (mid != null && !mid.toString().isBlank()) {
+                            try { return UUID.fromString(mid.toString()); } catch (IllegalArgumentException ignored) {}
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        return baseModelId;
+    }
+
+    /** Convenience overload — resolves effective BOM model from selectedOptions, then calculates raw cost. */
+    public RawCostBreakdown calculateRawCost(UUID modelId, BigDecimal orderQty,
+            String selectedOptions, List<ModelMenuOption> optionGroups,
+            UUID tenantId, UUID companyId) {
+        UUID effectiveModelId = resolveEffectiveBomModel(modelId, selectedOptions, optionGroups);
+        return calculateRawCostForModel(effectiveModelId, orderQty, tenantId, companyId);
+    }
+
+    /** Backward-compatible overload — no selectedOptions, uses model's own BOM directly. */
     public RawCostBreakdown calculateRawCost(UUID modelId, BigDecimal orderQty, UUID tenantId, UUID companyId) {
+        return calculateRawCostForModel(modelId, orderQty, tenantId, companyId);
+    }
+
+    private RawCostBreakdown calculateRawCostForModel(UUID modelId, BigDecimal orderQty, UUID tenantId, UUID companyId) {
         var bomOpt = bomService.getActiveBomForModel(modelId, tenantId);
         if (bomOpt.isEmpty()) {
             return new RawCostBreakdown(List.of(), BigDecimal.ZERO);

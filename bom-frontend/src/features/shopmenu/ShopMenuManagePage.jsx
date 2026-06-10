@@ -29,6 +29,7 @@ import RestaurantMenuIcon from '@mui/icons-material/RestaurantMenu'
 import SearchIcon from '@mui/icons-material/Search'
 import Checkbox from '@mui/material/Checkbox'
 import IconButton from '@mui/material/IconButton'
+import Autocomplete from '@mui/material/Autocomplete'
 import { fetchModels, updateModel } from '../../api/modelApi'
 import { fetchMenuOptions, createMenuOption, updateMenuOption, deleteMenuOption } from '../../api/shopApi'
 
@@ -105,8 +106,9 @@ function ModelCard({ model, onEdit, onToggle, saving }) {
   )
 }
 
-const EMPTY_FORM = { sellingPrice: '', category: '', imageUrl: '' }
-const EMPTY_OPT  = { groupName: '', choiceRows: [{ label: '', price: '' }], required: false, multiSelect: false, isFree: false, defaultValue: '' }
+const EMPTY_FORM   = { sellingPrice: '', category: '', imageUrl: '' }
+const EMPTY_CHOICE = { label: '', price: '', modelId: null }
+const EMPTY_OPT    = { groupName: '', choiceRows: [{ ...EMPTY_CHOICE }], required: false, multiSelect: false, isFree: false, defaultValue: '' }
 
 function parseChoices(str) {
   if (!str) return []
@@ -124,7 +126,13 @@ function fmtChoicePrice(price, isFree) {
   return ` +${Number(price).toLocaleString('vi-VN')}đ`
 }
 
-function EditDialog({ open, model, onClose, onSave }) {
+function fmtChoiceSummary(choice, isFree) {
+  const price = fmtChoicePrice(choice.price, isFree)
+  const bom   = choice.modelId ? ' 🔗' : ''
+  return `${choice.label}${price}${bom}`
+}
+
+function EditDialog({ open, model, models, onClose, onSave }) {
   const [form, setForm]           = useState(EMPTY_FORM)
   const [saving, setSaving]       = useState(false)
   const [error, setError]         = useState('')
@@ -173,7 +181,11 @@ function EditDialog({ open, model, onClose, onSave }) {
       const body = {
         modelId: model.id,
         groupName: newOpt.groupName.trim(),
-        choices: JSON.stringify(validRows.map(r => ({ label: r.label.trim(), price: Number(r.price) || 0 }))),
+        choices: JSON.stringify(validRows.map(r => {
+          const c = { label: r.label.trim(), price: Number(r.price) || 0 }
+          if (r.modelId) c.modelId = r.modelId
+          return c
+        })),
         required: newOpt.required,
         multiSelect: newOpt.multiSelect,
         isFree: newOpt.isFree,
@@ -271,9 +283,14 @@ function EditDialog({ open, model, onClose, onSave }) {
                         </Tooltip>
                       </Box>
                       <Typography variant="caption" color="text.secondary">
-                        {choices.map(c => `${c.label}${fmtChoicePrice(c.price, opt.isFree)}`).join(' · ')}
+                        {choices.map(c => fmtChoiceSummary(c, opt.isFree)).join(' · ')}
                         {opt.defaultValue ? ` (default: ${opt.defaultValue})` : ''}
                       </Typography>
+                      {choices.some(c => c.modelId) && (
+                        <Typography variant="caption" sx={{ color: '#1976d2', fontSize: 10 }}>
+                          🔗 = linked BOM model
+                        </Typography>
+                      )}
                     </Box>
                     <IconButton size="small" color="error" onClick={() => handleDeleteOption(opt.id)}>
                       <DeleteIcon fontSize="small" />
@@ -291,29 +308,53 @@ function EditDialog({ open, model, onClose, onSave }) {
                   value={newOpt.groupName} onChange={setOpt('groupName')}
                   placeholder="e.g. Toppings, Sugar, Ice" autoFocus />
 
-                <Typography variant="caption" color="text.secondary" fontWeight={600}>Choices</Typography>
-                {newOpt.choiceRows.map((row, idx) => (
-                  <Box key={idx} sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                    <TextField label="Label" size="small" sx={{ flex: 2 }}
-                      value={row.label}
-                      onChange={e => setNewOpt(f => {
-                        const rows = [...f.choiceRows]; rows[idx] = { ...rows[idx], label: e.target.value }; return { ...f, choiceRows: rows }
-                      })}
-                      placeholder="e.g. Trân châu" />
-                    <TextField label="Price" size="small" type="number" sx={{ flex: 1 }}
-                      value={row.price}
-                      onChange={e => setNewOpt(f => {
-                        const rows = [...f.choiceRows]; rows[idx] = { ...rows[idx], price: e.target.value }; return { ...f, choiceRows: rows }
-                      })}
-                      InputProps={{ endAdornment: <InputAdornment position="end">đ</InputAdornment> }}
-                      placeholder="0" />
-                    <IconButton size="small" color="error" disabled={newOpt.choiceRows.length <= 1}
-                      onClick={() => setNewOpt(f => ({ ...f, choiceRows: f.choiceRows.filter((_, i) => i !== idx) }))}>
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </Box>
-                ))}
-                <Button size="small" startIcon={<AddIcon />} onClick={() => setNewOpt(f => ({ ...f, choiceRows: [...f.choiceRows, { label: '', price: '' }] }))}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600}>Choices</Typography>
+                  <Typography variant="caption" color="text.disabled" sx={{ fontSize: 10 }}>
+                    — Link a BOM model to override inventory deduction per choice (e.g. Small/Medium/Large variants)
+                  </Typography>
+                </Box>
+                {newOpt.choiceRows.map((row, idx) => {
+                  const setRow = (patch) => setNewOpt(f => {
+                    const rows = [...f.choiceRows]; rows[idx] = { ...rows[idx], ...patch }; return { ...f, choiceRows: rows }
+                  })
+                  const linkedModel = row.modelId ? (models || []).find(m => m.id === row.modelId) : null
+                  return (
+                    <Box key={idx} sx={{ border: '1px solid #e8e8e8', borderRadius: 1.5, p: 1, bgcolor: '#fafafa' }}>
+                      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 0.75 }}>
+                        <TextField label="Choice label" size="small" sx={{ flex: 2 }}
+                          value={row.label} onChange={e => setRow({ label: e.target.value })}
+                          placeholder="e.g. Small / Medium / Large" />
+                        <TextField label="Price add-on" size="small" type="number" sx={{ flex: 1 }}
+                          value={row.price} onChange={e => setRow({ price: e.target.value })}
+                          InputProps={{ endAdornment: <InputAdornment position="end">đ</InputAdornment> }}
+                          placeholder="0" />
+                        <IconButton size="small" color="error" disabled={newOpt.choiceRows.length <= 1}
+                          onClick={() => setNewOpt(f => ({ ...f, choiceRows: f.choiceRows.filter((_, i) => i !== idx) }))}>
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Box>
+                      <Autocomplete
+                        size="small"
+                        options={models || []}
+                        getOptionLabel={m => `${m.modelName}${m.sellingPrice ? ' — ' + fmt(m.sellingPrice) : ''}`}
+                        value={linkedModel || null}
+                        onChange={(_, v) => setRow({ modelId: v ? v.id : null })}
+                        isOptionEqualToValue={(a, b) => a.id === b.id}
+                        renderInput={params => (
+                          <TextField {...params} label="Link BOM model (optional)"
+                            placeholder="Leave blank to use this item's own BOM"
+                            size="small"
+                            helperText={linkedModel ? `Uses BOM of "${linkedModel.modelName}"` : 'Uses this menu item\'s own BOM'}
+                          />
+                        )}
+                        noOptionsText="No models"
+                      />
+                    </Box>
+                  )
+                })}
+                <Button size="small" startIcon={<AddIcon />}
+                  onClick={() => setNewOpt(f => ({ ...f, choiceRows: [...f.choiceRows, { ...EMPTY_CHOICE }] }))}>
                   Add choice
                 </Button>
 
@@ -486,6 +527,7 @@ export default function ShopMenuManagePage() {
       <EditDialog
         open={Boolean(editModel)}
         model={editModel}
+        models={models}
         onClose={() => setEditModel(null)}
         onSave={handleSave}
       />
