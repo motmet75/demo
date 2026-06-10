@@ -14,6 +14,10 @@ export function fetchMenu(tenantId, companyId) {
   return apiFetchJsonNoContext('/shop/public/menu' + qs({ tenantId, companyId }))
 }
 
+export function fetchShopConfig(tenantId, companyId) {
+  return apiFetchJsonNoContext('/shop/public/shop-config' + qs({ tenantId, companyId }))
+}
+
 export function fetchPublicOrder(orderCode) {
   return apiFetchJsonNoContext(`/shop/public/orders/${encodeURIComponent(orderCode)}`)
 }

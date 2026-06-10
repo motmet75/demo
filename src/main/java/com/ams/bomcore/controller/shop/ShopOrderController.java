@@ -641,15 +641,11 @@ public class ShopOrderController {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
         var company = companyRepository.findById(cId).orElseThrow();
-        return ResponseEntity.ok(Map.of(
-                "bankBin",           company.getBankBin()           != null ? company.getBankBin()           : "",
-                "bankAccountNumber", company.getBankAccountNumber() != null ? company.getBankAccountNumber() : "",
-                "bankAccountName",   company.getBankAccountName()   != null ? company.getBankAccountName()   : ""
-        ));
+        return ResponseEntity.ok(bankConfigMap(company));
     }
 
     @PutMapping("/shop/staff/bank-config")
-    public ResponseEntity<?> updateBankConfig(@RequestBody Map<String, String> body,
+    public ResponseEntity<?> updateBankConfig(@RequestBody Map<String, Object> body,
                                                @RequestParam(required = false) UUID tenantId,
                                                @RequestParam(required = false) UUID companyId,
                                                @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
@@ -657,15 +653,28 @@ public class ShopOrderController {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
         var company = companyRepository.findById(cId).orElseThrow();
-        if (body.containsKey("bankBin"))           company.setBankBin(body.get("bankBin"));
-        if (body.containsKey("bankAccountNumber")) company.setBankAccountNumber(body.get("bankAccountNumber"));
-        if (body.containsKey("bankAccountName"))   company.setBankAccountName(body.get("bankAccountName"));
+        if (body.containsKey("bankBin"))           company.setBankBin(String.valueOf(body.get("bankBin")));
+        if (body.containsKey("bankAccountNumber")) company.setBankAccountNumber(String.valueOf(body.get("bankAccountNumber")));
+        if (body.containsKey("bankAccountName"))   company.setBankAccountName(String.valueOf(body.get("bankAccountName")));
+        if (body.containsKey("prepaidMenu"))       company.setPrepaidMenu(Boolean.TRUE.equals(body.get("prepaidMenu")));
         companyRepository.save(company);
-        return ResponseEntity.ok(Map.of(
-                "bankBin",           company.getBankBin()           != null ? company.getBankBin()           : "",
-                "bankAccountNumber", company.getBankAccountNumber() != null ? company.getBankAccountNumber() : "",
-                "bankAccountName",   company.getBankAccountName()   != null ? company.getBankAccountName()   : ""
-        ));
+        return ResponseEntity.ok(bankConfigMap(company));
+    }
+
+    @GetMapping("/shop/public/shop-config")
+    public ResponseEntity<?> getPublicShopConfig(@RequestParam UUID tenantId, @RequestParam UUID companyId) {
+        validateScope(tenantId, companyId);
+        var company = companyRepository.findById(companyId).orElseThrow();
+        return ResponseEntity.ok(bankConfigMap(company));
+    }
+
+    private Map<String, Object> bankConfigMap(com.ams.bomcore.domain.company.Company company) {
+        Map<String, Object> m = new java.util.LinkedHashMap<>();
+        m.put("bankBin",           company.getBankBin()           != null ? company.getBankBin()           : "");
+        m.put("bankAccountNumber", company.getBankAccountNumber() != null ? company.getBankAccountNumber() : "");
+        m.put("bankAccountName",   company.getBankAccountName()   != null ? company.getBankAccountName()   : "");
+        m.put("prepaidMenu",       Boolean.TRUE.equals(company.getPrepaidMenu()));
+        return m;
     }
 
     // ── Delivery fee estimate ──────────────────────────────────────────

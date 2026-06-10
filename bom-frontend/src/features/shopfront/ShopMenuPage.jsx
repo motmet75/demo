@@ -43,7 +43,7 @@ import TableRestaurantIcon from '@mui/icons-material/TableRestaurant'
 import { resolveToken, fetchMenu, createOrder, fetchPublicMenuOptions,
          fetchActiveTableOrders, startCustomerEdit, cancelCustomerEdit,
          updatePublicOrderItems, fetchPublicOrder, fetchTokenSession,
-         cancelPublicOrder } from '../../api/shopApi'
+         cancelPublicOrder, fetchShopConfig } from '../../api/shopApi'
 import ItemOptionsDialog from './ItemOptionsDialog'
 import OrderReceiptDialog from './OrderReceiptDialog'
 
@@ -164,6 +164,7 @@ function SessionOrderList({ session, token, onEdit }) {
           const chip      = STATUS_CHIP_MAP[status] || STATUS_CHIP_MAP.PENDING
           const editing   = Boolean(order.customerEditing)
           const isPending = status === 'PENDING'
+          const isPaid    = order.paymentStatus === 'PAID'
           const displayNum = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
           const roots      = (order.items || []).filter(i => !i.parentItemId)
 
@@ -233,11 +234,17 @@ function SessionOrderList({ session, token, onEdit }) {
                       Edit
                     </Button>
                   )}
-                  <Button variant="outlined" size="small" color="error"
-                    onClick={() => { setCancelTarget(order); setCancelNote(''); setCancelError('') }}
-                    sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5, flexShrink: 0 }}>
-                    Cancel
-                  </Button>
+                  {!isPaid && (
+                    <Button variant="outlined" size="small" color="error"
+                      onClick={() => { setCancelTarget(order); setCancelNote(''); setCancelError('') }}
+                      sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5, flexShrink: 0 }}>
+                      Cancel
+                    </Button>
+                  )}
+                  {isPaid && (
+                    <Chip label="Paid ✓" color="success" size="small"
+                      sx={{ fontWeight: 700, fontSize: 11, alignSelf: 'center' }} />
+                  )}
                 </Box>
               )}
             </Box>
@@ -484,6 +491,8 @@ export default function ShopMenuPage() {
   const [tableOrders, setTableOrders]       = useState(null) // occupied table dialog
   const [tokenSession, setTokenSession]     = useState(null) // orders for this token
   const [sessionOpen, setSessionOpen]       = useState(false)
+  const [shopConfig, setShopConfig]         = useState({ prepaidMenu: false, bankBin: '', bankAccountNumber: '', bankAccountName: '' })
+  const [prepaidQrOrder, setPrepaidQrOrder] = useState(null) // show payment QR after placing order
   const [form, setForm] = useState({
     fulfillmentType: 'PICKUP', customerName: '', customerPhone: '',
     deliveryAddress: '', paymentMethod: 'CASH',
@@ -524,7 +533,8 @@ export default function ShopMenuPage() {
     Promise.all([
       fetchMenu(ctx.tenantId, ctx.companyId),
       fetchPublicMenuOptions(ctx.tenantId, ctx.companyId),
-    ]).then(([menuRes, optsRes]) => {
+      fetchShopConfig(ctx.tenantId, ctx.companyId),
+    ]).then(([menuRes, optsRes, cfgRes]) => {
       setMenu(Array.isArray(menuRes.data) ? menuRes.data : [])
       const byModel = {}
       ;(Array.isArray(optsRes.data) ? optsRes.data : []).forEach(opt => {
@@ -532,6 +542,7 @@ export default function ShopMenuPage() {
         byModel[opt.modelId].push(opt)
       })
       setOptionsByModel(byModel)
+      if (cfgRes.data) setShopConfig(cfgRes.data)
       setLoading(false)
     }).catch(() => { setError('Failed to load menu.'); setLoading(false) })
   }, [ctx])
@@ -775,7 +786,11 @@ export default function ShopMenuPage() {
         const { res, data } = await createOrder(ctx.tenantId, ctx.companyId, body)
         if (!res.ok) { setError(data?.message || 'Failed to place order'); setSubmitting(false); return }
         setCart({}); setSideForm({}); setNotes(''); setCheckout(false); setCartOpen(false)
-        setTrackingOrder(data)
+        if (shopConfig.prepaidMenu && shopConfig.bankBin && shopConfig.bankAccountNumber) {
+          setPrepaidQrOrder(data)
+        } else {
+          setTrackingOrder(data)
+        }
       }
     } catch { setError('Network error') } finally { setSubmitting(false) }
   }
@@ -1282,6 +1297,54 @@ export default function ShopMenuPage() {
       </Dialog>
 
       {/* ── Session orders dialog ───────────────────────────────── */}
+      {/* ── Prepaid payment QR ──────────────────────────────────── */}
+      {prepaidQrOrder && (() => {
+        const amount = Math.round(Number(prepaidQrOrder.totalAmount || 0))
+        const qrUrl = shopConfig.bankBin && shopConfig.bankAccountNumber
+          ? `https://img.vietqr.io/image/${shopConfig.bankBin}-${shopConfig.bankAccountNumber}-qr_only.png`
+            + `?amount=${amount}&addInfo=${encodeURIComponent(prepaidQrOrder.orderCode)}`
+            + `&accountName=${encodeURIComponent(shopConfig.bankAccountName || '')}`
+          : null
+        const orderNum = prepaidQrOrder.orderNumber ? `#${prepaidQrOrder.orderNumber}` : prepaidQrOrder.orderCode
+        return (
+          <Dialog open fullWidth maxWidth="xs"
+            PaperProps={{ sx: { borderRadius: 3 } }}>
+            <DialogTitle sx={{ textAlign: 'center', pb: 0.5, pt: 2.5, fontWeight: 900, fontSize: 20 }}>
+              Pay to confirm order {orderNum}
+            </DialogTitle>
+            <DialogContent sx={{ textAlign: 'center', pt: 1 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Scan the QR below to pay. Your order will be confirmed after payment is received.
+              </Typography>
+              {qrUrl ? (
+                <Box sx={{ display: 'inline-block', p: 1.5, bgcolor: '#fff', borderRadius: 2, border: '2px solid #1976d2', mb: 1.5 }}>
+                  <img src={qrUrl} alt="Payment QR" style={{ width: 220, height: 220, display: 'block', borderRadius: 6 }} />
+                </Box>
+              ) : (
+                <Alert severity="warning" sx={{ mb: 1.5 }}>Bank account not configured — please pay at counter.</Alert>
+              )}
+              <Typography variant="h5" fontWeight={900} color="primary">{fmt(prepaidQrOrder.totalAmount)}</Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                Ref: <strong>{prepaidQrOrder.orderCode}</strong>
+                {shopConfig.bankAccountName ? ` · ${shopConfig.bankAccountName}` : ''}
+              </Typography>
+            </DialogContent>
+            <DialogActions sx={{ px: 3, pb: 2.5, flexDirection: 'column', gap: 1 }}>
+              <Button variant="contained" fullWidth size="large"
+                onClick={() => { setPrepaidQrOrder(null); setTrackingOrder(prepaidQrOrder) }}
+                sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 2 }}>
+                I've paid — Track my order
+              </Button>
+              <Button fullWidth size="small" color="inherit"
+                onClick={() => { setPrepaidQrOrder(null); setTrackingOrder(prepaidQrOrder) }}
+                sx={{ textTransform: 'none', color: 'text.secondary' }}>
+                Pay later / close
+              </Button>
+            </DialogActions>
+          </Dialog>
+        )
+      })()}
+
       <Dialog open={sessionOpen} onClose={() => setSessionOpen(false)} fullWidth maxWidth="sm"
         PaperProps={{ sx: { position: 'fixed', bottom: 0, left: 0, right: 0, m: 0, borderRadius: '16px 16px 0 0', maxHeight: '88vh' } }}>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', pb: 1, pt: 2 }}>

@@ -499,15 +499,6 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
                 </Button>
               </Tooltip>
             )}
-            {isConfirmed && (
-              <Tooltip title="Revert to Waiting Confirm — urgent stop">
-                <Button variant="outlined" color="warning" startIcon={<UndoIcon />}
-                  onClick={() => askConfirm({ title: 'Revert to Waiting Confirm?', message: 'Revert this confirmed order back to waiting confirm?', confirmLabel: 'Revert', confirmColor: 'warning' }, handleRevert)}
-                  sx={{ textTransform: 'none' }}>
-                  Revert
-                </Button>
-              </Tooltip>
-            )}
             {canSwitchToQr && (
               <Tooltip title="Switch to full Bank QR payment and print receipt">
                 <Button variant="contained" color="success" startIcon={<QrCode2Icon />}

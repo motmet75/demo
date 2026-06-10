@@ -341,6 +341,9 @@ public class ShopOrderService {
                 || ShopOrder.STATUS_CANCELLED.equals(order.getStatus())) {
             throw new IllegalStateException("Cannot cancel order in status: " + order.getStatus());
         }
+        if (ShopOrder.PAY_STATUS_PAID.equals(order.getPaymentStatus())) {
+            throw new IllegalStateException("Cannot cancel a paid order");
+        }
         order.setStatus(ShopOrder.STATUS_CANCELLED);
         if (reason != null && !reason.isBlank()) {
             order.setCancelReason(reason.trim());
@@ -943,6 +946,9 @@ public class ShopOrderService {
         ShopOrder order = requireOrderByCode(orderCode);
         if (!ShopOrder.STATUS_PENDING.equals(order.getStatus())) {
             throw new IllegalStateException("Order can only be cancelled by customer while PENDING");
+        }
+        if (ShopOrder.PAY_STATUS_PAID.equals(order.getPaymentStatus())) {
+            throw new IllegalStateException("Cannot cancel a paid order");
         }
         order.setStatus(ShopOrder.STATUS_CANCELLED);
         order.setCustomerCancelled(true);

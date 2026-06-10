@@ -50,6 +50,9 @@ public class Company {
     @Column(name = "bank_account_name", length = 100)
     private String bankAccountName;
 
+    @Column(name = "prepaid_menu")
+    private Boolean prepaidMenu = false;
+
     public Company() {}
 
     public UUID getId() { return id; }
@@ -77,6 +80,9 @@ public class Company {
 
     public String getBankAccountName() { return bankAccountName; }
     public void setBankAccountName(String bankAccountName) { this.bankAccountName = bankAccountName; }
+
+    public Boolean getPrepaidMenu() { return prepaidMenu; }
+    public void setPrepaidMenu(Boolean prepaidMenu) { this.prepaidMenu = prepaidMenu; }
 
     @PrePersist
     private void prePersist() {

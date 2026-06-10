@@ -396,20 +396,10 @@ function StatusBoard({ status, orders, onAction, onDetail, onPayQr }) {
                   </Button>
                 )}
                 {status === 'CONFIRMED' && (
-                  <Box sx={{ display: 'flex', gap: 0.75 }}>
-                    <Button size="small" variant="contained" color="warning" fullWidth onClick={() => onAction('prepare', order.id, order.orderNumber)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Start Preparing</Button>
-                    <Tooltip title="Revert to Waiting Confirm">
-                      <Button size="small" variant="outlined" color="error" onClick={() => onAction('revert', order.id, order.orderNumber)} startIcon={<UndoIcon sx={{ fontSize: 13 }} />} sx={{ textTransform: 'none', fontSize: 11, minWidth: 76 }}>Revert</Button>
-                    </Tooltip>
-                  </Box>
+                  <Button size="small" variant="contained" color="warning" fullWidth onClick={() => onAction('prepare', order.id, order.orderNumber)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Start Preparing</Button>
                 )}
                 {status === 'PREPARING' && (
-                  <Box sx={{ display: 'flex', gap: 0.75 }}>
-                    <Button size="small" variant="contained" color="success" fullWidth onClick={() => onAction('ready', order.id, order.orderNumber)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Mark Ready ✓</Button>
-                    <Tooltip title="Revert to Waiting Confirm">
-                      <Button size="small" variant="outlined" color="error" onClick={() => onAction('revert-from-preparing', order.id, order.orderNumber)} startIcon={<UndoIcon sx={{ fontSize: 13 }} />} sx={{ textTransform: 'none', fontSize: 11, minWidth: 76 }}>Revert</Button>
-                    </Tooltip>
-                  </Box>
+                  <Button size="small" variant="contained" color="success" fullWidth onClick={() => onAction('ready', order.id, order.orderNumber)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Mark Ready ✓</Button>
                 )}
                 {status === 'READY' && (
                   <Box sx={{ display: 'flex', gap: 0.75 }}>
@@ -670,15 +660,15 @@ export default function ShopOrderGrid() {
       renderCell: ({ value }) => value ? <Typography sx={{ fontFamily: 'monospace', fontWeight: 800, fontSize: 13, letterSpacing: 0.5 }}>{value}</Typography> : null,
     },
     {
-      field: 'tableName', headerName: 'Table', width: 115,
+      field: 'tableName', headerName: 'Table', width: 80,
       renderCell: ({ row }) => (
         <Box onClick={e => e.stopPropagation()} sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
           <select
             value={row.tableId || ''}
             onChange={e => handleInlineTableChange(row.id, e.target.value)}
-            style={{ fontSize: 12, height: 24, border: '1px solid #c4c4c4', borderRadius: 4, padding: '0 6px', minWidth: 100, cursor: 'pointer', background: '#fff', color: '#222' }}
+            style={{ fontSize: 12, height: 24, border: '1px solid #c4c4c4', borderRadius: 4, padding: '0 4px', minWidth: 70, cursor: 'pointer', background: '#fff', color: '#222' }}
           >
-            <option value="">— no table —</option>
+            <option value="">No</option>
             {tables.map(t => <option key={t.id} value={t.id}>{t.tableName}</option>)}
           </select>
         </Box>
@@ -709,7 +699,7 @@ export default function ShopOrderGrid() {
     },
     { field: 'createdAt', headerName: 'Time', width: 130, renderCell: ({ value }) => dateFmt(value) },
     {
-      field: 'actions', headerName: 'Actions', width: 470, sortable: false,
+      field: 'actions', headerName: 'Actions', width: 517, sortable: false,
       renderCell: ({ row }) => (
         <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', flexWrap: 'nowrap' }}>
           <Tooltip title="Detail"><IconButton size="small" onClick={() => setDetailOrder(row)}><VisibilityIcon fontSize="small" /></IconButton></Tooltip>
@@ -748,7 +738,7 @@ export default function ShopOrderGrid() {
             </Tooltip>
           )}
           {row.status === 'PENDING' && row.customerEditing && (
-            <Chip label="✏ Customer Editing" size="small" color="warning"
+            <Chip label="✏ C-Editing" size="small" color="warning"
               sx={{ fontWeight: 700, fontSize: 10, height: 22 }} />
           )}
           {row.status === 'PENDING' && (
@@ -764,14 +754,6 @@ export default function ShopOrderGrid() {
               onClick={() => askConfirm({ title: 'Start Preparing?', message: `Start preparing order #${row.orderNumber ?? row.orderCode}?`, confirmLabel: 'Start', confirmColor: 'warning' }, () => act(prepareShopOrder, row.id))}>
               Prepare
             </Button>
-          )}
-          {row.status === 'CONFIRMED' && (
-            <Tooltip title="Revert to Waiting Confirm">
-              <Button size="small" variant="outlined" color="error" startIcon={<UndoIcon sx={{ fontSize: 13 }} />}
-                onClick={() => askConfirm({ title: 'Revert to Waiting Confirm?', message: 'Revert order back to waiting confirm?', confirmLabel: 'Revert', confirmColor: 'error' }, () => act(revertShopOrder, row.id))}>
-                Revert
-              </Button>
-            </Tooltip>
           )}
           {row.status === 'PREPARING' && (
             <Button size="small" variant="outlined" color="success"
@@ -897,6 +879,7 @@ export default function ShopOrderGrid() {
             <Box sx={{ height: '100%', p: 1.5, boxSizing: 'border-box' }}>
               <DataGrid rows={rows} columns={columns} loading={loading} getRowId={r => r.id}
                 pageSizeOptions={[25, 50, 100]} density="compact"
+                initialState={{ columns: { columnVisibilityModel: { staffName: false } } }}
                 checkboxSelection disableRowSelectionOnClick
                 rowSelectionModel={selectedRows}
                 onRowSelectionModelChange={ids => setSelectedRows(ids)}

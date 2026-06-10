@@ -13,6 +13,9 @@ import Chip from '@mui/material/Chip'
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance'
 import QrCode2Icon from '@mui/icons-material/QrCode2'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
+import Switch from '@mui/material/Switch'
+import FormControlLabel from '@mui/material/FormControlLabel'
+import PaymentsIcon from '@mui/icons-material/Payments'
 import { fetchBankConfig, updateBankConfig } from '../../api/shopApi'
 
 const POPULAR_BANKS = [
@@ -31,7 +34,7 @@ const POPULAR_BANKS = [
 ]
 
 export default function ShopBankConfigPage() {
-  const [form, setForm] = useState({ bankBin: '', bankAccountNumber: '', bankAccountName: '' })
+  const [form, setForm] = useState({ bankBin: '', bankAccountNumber: '', bankAccountName: '', prepaidMenu: false })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -40,7 +43,7 @@ export default function ShopBankConfigPage() {
   useEffect(() => {
     fetchBankConfig()
       .then(({ data }) => {
-        if (data) setForm({ bankBin: data.bankBin || '', bankAccountNumber: data.bankAccountNumber || '', bankAccountName: data.bankAccountName || '' })
+        if (data) setForm({ bankBin: data.bankBin || '', bankAccountNumber: data.bankAccountNumber || '', bankAccountName: data.bankAccountName || '', prepaidMenu: Boolean(data.prepaidMenu) })
         setLoading(false)
       })
       .catch(() => { setError('Failed to load bank config'); setLoading(false) })
@@ -138,6 +141,34 @@ export default function ShopBankConfigPage() {
                   helperText="Use ALL CAPS, no accents"
                 />
               </Stack>
+            </CardContent>
+          </Card>
+
+          {/* Business logic */}
+          <Card variant="outlined" sx={{ borderRadius: 2, borderColor: form.prepaidMenu ? '#1976d2' : undefined }}>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                <PaymentsIcon color={form.prepaidMenu ? 'primary' : 'disabled'} />
+                <Typography variant="subtitle2" fontWeight={700}>Order Mode</Typography>
+              </Box>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={form.prepaidMenu}
+                    onChange={e => { setForm(f => ({ ...f, prepaidMenu: e.target.checked })); setSuccess(false) }}
+                    color="primary"
+                  />
+                }
+                label={
+                  <Box>
+                    <Typography variant="body2" fontWeight={700}>Prepaid Menu</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Customer pays before staff confirms. Paid orders cannot be cancelled.
+                    </Typography>
+                  </Box>
+                }
+                sx={{ alignItems: 'flex-start', ml: 0 }}
+              />
             </CardContent>
           </Card>
 
