@@ -4,6 +4,7 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
 import Alert from '@mui/material/Alert'
+import CircularProgress from '@mui/material/CircularProgress'
 import IconButton from '@mui/material/IconButton'
 import Tooltip from '@mui/material/Tooltip'
 import Dialog from '@mui/material/Dialog'
@@ -11,6 +12,7 @@ import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
 import DialogActions from '@mui/material/DialogActions'
 import Typography from '@mui/material/Typography'
+import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import AddIcon from '@mui/icons-material/Add'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import EditIcon from '@mui/icons-material/Edit'
@@ -35,13 +37,13 @@ const STATUS_CHIP = {
 }
 
 export default function ShopTableGrid() {
-  const [rows, setRows]             = useState([])
-  const [loading, setLoading]       = useState(false)
-  const [error, setError]           = useState('')
-  const [editTable, setEditTable]   = useState(null)
-  const [qrDialog, setQrDialog]     = useState(null)
-  const [qrBase64, setQrBase64]     = useState('')
+  const [rows, setRows]                   = useState([])
+  const [loading, setLoading]             = useState(false)
+  const [error, setError]                 = useState('')
+  const [editTable, setEditTable]         = useState(null)
+  const [qrDialog, setQrDialog]           = useState(null)   // { table, qrBase64, activeOrderCount }
   const [newOrderTable, setNewOrderTable] = useState(null)
+  const [printConfirm, setPrintConfirm]   = useState(null)   // { row, qrBase64, activeOrderCount }
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
@@ -64,40 +66,49 @@ export default function ShopTableGrid() {
   }
 
   const handleQr = async (row) => {
-    setQrDialog(row); setQrBase64('')
+    setQrDialog({ table: row, qrBase64: '', activeOrderCount: 0 })
     try {
       const { data } = await fetchTableQr(row.id)
-      setQrBase64(data?.qrBase64 || '')
+      setQrDialog({ table: row, qrBase64: data?.qrBase64 || '', activeOrderCount: data?.activeOrderCount ?? 0 })
     } catch { setError('Failed to load QR') }
+  }
+
+  const doPrint = (row, qr) => {
+    const win = window.open('', '_blank', 'width=500,height=600')
+    win.document.write(`<!DOCTYPE html><html><head>
+      <title>Table QR — ${row.tableName}</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; background: #fff; padding: 24px; }
+        .box { border: 3px solid #000; border-radius: 16px; padding: 32px 40px; text-align: center; max-width: 360px; width: 100%; }
+        h1 { font-size: 42px; font-weight: 900; margin-bottom: 4px; }
+        .sub { font-size: 16px; color: #555; margin-bottom: 24px; }
+        img { width: 260px; height: 260px; display: block; margin: 0 auto 20px; }
+        .footer { font-size: 13px; color: #888; border-top: 1px solid #eee; padding-top: 12px; margin-top: 4px; }
+        @media print { body { padding: 0; } }
+      </style>
+    </head><body>
+      <div class="box">
+        <h1>${row.tableName}</h1>
+        <p class="sub">Scan to order</p>
+        <img src="data:image/png;base64,${qr}" alt="QR" />
+        <p class="footer">Point your camera at the QR code</p>
+      </div>
+      <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 800) }</script>
+    </body></html>`)
+    win.document.close()
   }
 
   const handlePrint = async (row) => {
     try {
       const { data } = await fetchTableQr(row.id)
       const qr = data?.qrBase64 || ''
-      const win = window.open('', '_blank', 'width=500,height=600')
-      win.document.write(`<!DOCTYPE html><html><head>
-        <title>Table QR — ${row.tableName}</title>
-        <style>
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; background: #fff; padding: 24px; }
-          .box { border: 3px solid #000; border-radius: 16px; padding: 32px 40px; text-align: center; max-width: 360px; width: 100%; }
-          h1 { font-size: 42px; font-weight: 900; margin-bottom: 4px; }
-          .sub { font-size: 16px; color: #555; margin-bottom: 24px; }
-          img { width: 260px; height: 260px; display: block; margin: 0 auto 20px; }
-          .footer { font-size: 13px; color: #888; border-top: 1px solid #eee; padding-top: 12px; margin-top: 4px; }
-          @media print { body { padding: 0; } }
-        </style>
-      </head><body>
-        <div class="box">
-          <h1>${row.tableName}</h1>
-          <p class="sub">Scan to order</p>
-          <img src="data:image/png;base64,${qr}" alt="QR" />
-          <p class="footer">Point your camera at the QR code</p>
-        </div>
-        <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 800) }</script>
-      </body></html>`)
-      win.document.close()
+      const count = data?.activeOrderCount ?? 0
+      if (count > 0) {
+        setPrintConfirm({ row, qrBase64: qr, activeOrderCount: count })
+      } else {
+        doPrint(row, qr)
+      }
     } catch { setError('Failed to load QR for printing') }
   }
 
@@ -251,24 +262,57 @@ export default function ShopTableGrid() {
         />
       )}
 
+      {/* QR dialog */}
       <Dialog open={!!qrDialog} onClose={() => setQrDialog(null)}>
-        <DialogTitle>QR Code — {qrDialog?.tableName}</DialogTitle>
-        <DialogContent sx={{ textAlign: 'center' }}>
-          {qrBase64 ? (
+        <DialogTitle>QR Code — {qrDialog?.table?.tableName}</DialogTitle>
+        <DialogContent sx={{ textAlign: 'center', minWidth: 320 }}>
+          {qrDialog?.activeOrderCount > 0 && (
+            <Alert severity="warning" icon={<WarningAmberIcon />} sx={{ mb: 2, textAlign: 'left' }}>
+              <strong>Table not clear</strong> — {qrDialog.activeOrderCount} active order{qrDialog.activeOrderCount > 1 ? 's' : ''} still in progress.
+              A new session has been started. Clear the table when those orders are done.
+            </Alert>
+          )}
+          {qrDialog?.qrBase64 ? (
             <>
-              <img src={`data:image/png;base64,${qrBase64}`} alt="Table QR" style={{ width: 280, height: 280 }} />
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Customers scan this to view the menu</Typography>
+              <img src={`data:image/png;base64,${qrDialog.qrBase64}`} alt="Table QR" style={{ width: 280, height: 280 }} />
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>New session — customers scan to order</Typography>
             </>
-          ) : <Typography>Loading...</Typography>}
+          ) : <CircularProgress sx={{ my: 4 }} />}
         </DialogContent>
         <DialogActions>
-          {qrBase64 && (
+          {qrDialog?.qrBase64 && (
             <Button onClick={() => {
-              const a = document.createElement('a'); a.href = `data:image/png;base64,${qrBase64}`
-              a.download = `table-${qrDialog?.tableName || 'qr'}.png`; a.click()
+              const a = document.createElement('a')
+              a.href = `data:image/png;base64,${qrDialog.qrBase64}`
+              a.download = `table-${qrDialog.table?.tableName || 'qr'}.png`
+              a.click()
             }}>Download</Button>
           )}
           <Button onClick={() => setQrDialog(null)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Print confirm dialog — shown only when table has active orders */}
+      <Dialog open={!!printConfirm} onClose={() => setPrintConfirm(null)}>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <WarningAmberIcon color="warning" /> Table not clear
+        </DialogTitle>
+        <DialogContent>
+          <Typography>
+            <strong>{printConfirm?.row?.tableName}</strong> has{' '}
+            <strong>{printConfirm?.activeOrderCount}</strong> active order{printConfirm?.activeOrderCount > 1 ? 's' : ''} that
+            haven't been cleared yet.
+          </Typography>
+          <Typography sx={{ mt: 1.5, color: 'text.secondary' }}>
+            Printing a new QR will start a fresh ordering session. Print anyway?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPrintConfirm(null)}>Cancel</Button>
+          <Button variant="contained" color="warning"
+            onClick={() => { doPrint(printConfirm.row, printConfirm.qrBase64); setPrintConfirm(null) }}>
+            Print Anyway
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

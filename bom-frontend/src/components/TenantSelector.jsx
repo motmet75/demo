@@ -13,11 +13,12 @@ export default function TenantSelector() {
     setTenantId(v)
   }
 
-  // Non-admin users are locked to their assignedTenantId – show it as a label
+  // Non-admin users are locked to their assignedTenantId – show name only
   if (!isAdmin) {
-    const label = user?.assignedTenantName
-      ? `${user.assignedTenantCode || ''} - ${user.assignedTenantName}`
-      : (tenantId || '—')
+    if (!user?.assignedTenantName) return null
+    const label = user.assignedTenantCode
+      ? `${user.assignedTenantCode} - ${user.assignedTenantName}`
+      : user.assignedTenantName
     return (
       <div style={{ display: 'inline-block', marginRight: 12 }}>
         <label>Tenant: </label>

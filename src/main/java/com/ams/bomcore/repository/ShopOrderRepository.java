@@ -13,6 +13,7 @@ public interface ShopOrderRepository extends JpaRepository<ShopOrder, UUID> {
     List<ShopOrder> findAllByTenantIdAndCompanyIdAndStatusOrderByCreatedAtDesc(UUID tenantId, UUID companyId, String status);
     Optional<ShopOrder> findByOrderCodeAndTenantIdAndCompanyId(String orderCode, UUID tenantId, UUID companyId);
     Optional<ShopOrder> findByOrderCode(String orderCode);
+    List<ShopOrder> findAllBySourceTokenOrderByCreatedAtDesc(String sourceToken);
     List<ShopOrder> findAllByTenantIdAndCompanyIdAndStatusInOrderByOrderNumberAsc(UUID tenantId, UUID companyId, List<String> statuses);
     List<ShopOrder> findAllByTable_IdAndTenantIdAndCompanyIdAndStatusIn(UUID tableId, UUID tenantId, UUID companyId, List<String> statuses);
     Optional<ShopOrder> findTopByTenantIdAndCompanyIdAndPickupScannedAtAfterOrderByPickupScannedAtDesc(UUID tenantId, UUID companyId, Instant after);

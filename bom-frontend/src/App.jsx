@@ -171,7 +171,6 @@ function HeaderBar({ user, logout }) {
 
   return (
     <>
-      {!hideContext && <ContextHeaderBar />}
       {!hideContext && <TenantSelector />}
       {!hideContext && <CompanySelector />}
       {!hideContext && <BomSelector />}

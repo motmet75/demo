@@ -1214,8 +1214,9 @@ export default function ShopMenuPage() {
           onEdit={handleEditOrder}
           onOrderMore={() => {
             if (trackingOrder?.orderCode) {
+              const tSuffix = tokenParam ? `?t=${encodeURIComponent(tokenParam)}` : ''
               window.open(
-                window.location.origin + '/bom-inventory/shop/order/' + encodeURIComponent(trackingOrder.orderCode),
+                window.location.origin + '/bom-inventory/shop/order/' + encodeURIComponent(trackingOrder.orderCode) + tSuffix,
                 '_blank'
               )
             }

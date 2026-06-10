@@ -419,35 +419,37 @@ public class ShopOrderService {
         return shopTableRepository.findAllByTenantIdAndCompanyId(tenantId, companyId);
     }
 
+    public record TableQrResult(String qrBase64, String token, int activeOrderCount) {}
+
     @Transactional
-    public String generateTableQr(UUID tableId, UUID tenantId, UUID companyId) {
+    public TableQrResult generateTableQr(UUID tableId, UUID tenantId, UUID companyId) {
         ShopTable table = shopTableRepository.findById(tableId)
                 .orElseThrow(() -> new NoSuchElementException("Table not found"));
         if (!table.getTenantId().equals(tenantId) || !table.getCompanyId().equals(companyId)) {
             throw new IllegalArgumentException("Table does not belong to this company");
         }
 
-        // Reuse existing valid token or create a fresh one
-        String tokenStr = shopAccessTokenRepository
-                .findAllByTableIdAndTokenType(tableId, ShopAccessToken.TYPE_TABLE_QR)
-                .stream()
-                .filter(ShopAccessToken::isValid)
-                .map(ShopAccessToken::getToken)
-                .findFirst()
-                .orElseGet(() -> {
-                    ShopAccessToken sat = new ShopAccessToken();
-                    sat.setToken(UUID.randomUUID().toString());
-                    sat.setTenantId(tenantId);
-                    sat.setCompanyId(companyId);
-                    sat.setTableId(tableId);
-                    sat.setTokenType(ShopAccessToken.TYPE_TABLE_QR);
-                    sat.setDescription("Table QR: " + table.getTableName());
-                    shopAccessTokenRepository.save(sat);
-                    return sat.getToken();
-                });
+        // Check for active (uncleared) orders on this table
+        int activeOrderCount = shopOrderRepository
+                .findAllByTable_IdAndTenantIdAndCompanyIdAndStatusIn(
+                        tableId, tenantId, companyId,
+                        List.of(ShopOrder.STATUS_PENDING, ShopOrder.STATUS_CONFIRMED,
+                                ShopOrder.STATUS_PREPARING, ShopOrder.STATUS_READY))
+                .size();
 
-        String url = publicBaseUrl + "/shop/menu?t=" + tokenStr;
-        return QrCodeUtil.generateBase64Png(url, 300);
+        // Always create a fresh token for each press — 4-hour ordering window
+        ShopAccessToken sat = new ShopAccessToken();
+        sat.setToken(UUID.randomUUID().toString());
+        sat.setTenantId(tenantId);
+        sat.setCompanyId(companyId);
+        sat.setTableId(tableId);
+        sat.setTokenType(ShopAccessToken.TYPE_TABLE_QR);
+        sat.setDescription("Table QR: " + table.getTableName());
+        sat.setExpiresAt(java.time.Instant.now().plus(4, java.time.temporal.ChronoUnit.HOURS));
+        shopAccessTokenRepository.save(sat);
+
+        String url = publicBaseUrl + "/shop/menu?t=" + sat.getToken();
+        return new TableQrResult(QrCodeUtil.generateBase64Png(url, 300), sat.getToken(), activeOrderCount);
     }
 
     @Transactional
@@ -458,6 +460,7 @@ public class ShopOrderService {
         sat.setCompanyId(companyId);
         sat.setTokenType(ShopAccessToken.TYPE_TABLE_QR);
         sat.setDescription("Walk-up QR" + (seq != null ? " #" + seq : ""));
+        sat.setExpiresAt(java.time.Instant.now().plus(4, java.time.temporal.ChronoUnit.HOURS));
         shopAccessTokenRepository.save(sat);
         String url = publicBaseUrl + "/shop/menu?t=" + sat.getToken()
                    + (seq != null ? "&seq=" + seq : "");
@@ -821,14 +824,7 @@ public class ShopOrderService {
     // ── Helpers ───────────────────────────────────────────────────────
 
     private void disableSourceToken(ShopOrder order) {
-        if (order.getSourceToken() == null || order.getSourceToken().isBlank()) return;
-        shopAccessTokenRepository.findByToken(order.getSourceToken()).ifPresent(sat -> {
-            // Only disable walk-up QR tokens (TABLE_QR with no table assigned)
-            if (ShopAccessToken.TYPE_TABLE_QR.equals(sat.getTokenType()) && sat.getTableId() == null) {
-                sat.setEnabled(false);
-                shopAccessTokenRepository.save(sat);
-            }
-        });
+        // Walk-up QR tokens expire naturally via expiresAt (4h window); no early disable needed.
     }
 
     private ShopOrder requireOrder(UUID orderId, UUID tenantId, UUID companyId) {
@@ -924,6 +920,26 @@ public class ShopOrderService {
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         String url = publicBaseUrl + "/shop/order/" + order.getOrderCode();
         return QrCodeUtil.generateBase64Png(url, 300);
+    }
+
+    // ── Token session (customer tracking session) ─────────────────────
+
+    public record TokenSessionDto(
+        String token,
+        boolean valid,
+        java.time.Instant expiresAt,
+        java.time.Instant createdAt,
+        List<ShopOrderResponseDto> orders
+    ) {}
+
+    @Transactional(readOnly = true)
+    public TokenSessionDto getOrdersByToken(String token) {
+        ShopAccessToken sat = shopAccessTokenRepository.findByToken(token)
+                .orElseThrow(() -> new NoSuchElementException("Token not found"));
+        List<ShopOrderResponseDto> orders = shopOrderRepository
+                .findAllBySourceTokenOrderByCreatedAtDesc(token)
+                .stream().map(this::dto).toList();
+        return new TokenSessionDto(token, sat.isValid(), sat.getExpiresAt(), sat.getCreatedAt(), orders);
     }
 
     // ── Code-only public order methods (no tenant/company in URL) ─────

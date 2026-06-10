@@ -225,6 +225,10 @@ export function deleteMenuOption(id) {
 
 // ── Pickup flow ────────────────────────────────────────────────────
 
+export function fetchTokenSession(token) {
+  return apiFetchJsonNoContext(`/shop/public/session?t=${encodeURIComponent(token)}`)
+}
+
 export function pickupScan(orderCode) {
   return apiFetchJsonNoContext(
     `/shop/public/orders/${encodeURIComponent(orderCode)}/pickup-scan`,

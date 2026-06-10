@@ -63,7 +63,17 @@ public class ShopOrderController {
         result.put("companyId", sat.getCompanyId());
         result.put("tableId", sat.getTableId());
         result.put("tokenType", sat.getTokenType());
+        result.put("expiresAt", sat.getExpiresAt());
         return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/shop/public/session")
+    public ResponseEntity<?> getTokenSession(@RequestParam String t) {
+        try {
+            return ResponseEntity.ok(shopOrderService.getOrdersByToken(t));
+        } catch (java.util.NoSuchElementException e) {
+            return ResponseEntity.status(HttpStatus.GONE).body(Map.of("error", "Token not found"));
+        }
     }
 
     @GetMapping("/shop/public/menu")
@@ -424,8 +434,12 @@ public class ShopOrderController {
                                       @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
-        String qr = shopOrderService.generateTableQr(tableId, tId, cId);
-        return ResponseEntity.ok(Map.of("qrBase64", qr));
+        ShopOrderService.TableQrResult result = shopOrderService.generateTableQr(tableId, tId, cId);
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("qrBase64", result.qrBase64());
+        resp.put("token", result.token());
+        resp.put("activeOrderCount", result.activeOrderCount());
+        return ResponseEntity.ok(resp);
     }
 
     // ── Menu options (/shop/staff/menu-options) ───────────────────────
