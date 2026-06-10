@@ -106,7 +106,7 @@ function ModelCard({ model, onEdit, onToggle, saving }) {
   )
 }
 
-const EMPTY_FORM   = { sellingPrice: '', category: '', imageUrl: '' }
+const EMPTY_FORM   = { sellingPrice: '', category: '', imageUrl: '', allowedSideIds: [] }
 const EMPTY_CHOICE = { label: '', price: '', modelId: null }
 const EMPTY_OPT    = { groupName: '', choiceRows: [{ ...EMPTY_CHOICE }], required: false, multiSelect: false, isFree: false, defaultValue: '' }
 
@@ -144,7 +144,9 @@ function EditDialog({ open, model, models, onClose, onSave }) {
 
   useEffect(() => {
     if (!open || !model) return
-    setForm({ sellingPrice: model.sellingPrice ?? '', category: model.category ?? '', imageUrl: model.imageUrl ?? '' })
+    let parsedSideIds = []
+    try { parsedSideIds = model.allowedSideIds ? JSON.parse(model.allowedSideIds) : [] } catch { parsedSideIds = [] }
+    setForm({ sellingPrice: model.sellingPrice ?? '', category: model.category ?? '', imageUrl: model.imageUrl ?? '', allowedSideIds: parsedSideIds })
     setError(''); setOptions([]); setShowAddOpt(false); setNewOpt(EMPTY_OPT)
     setOptLoading(true)
     fetchMenuOptions(model.id)
@@ -164,6 +166,7 @@ function EditDialog({ open, model, models, onClose, onSave }) {
         sellingPrice: form.sellingPrice !== '' ? Number(form.sellingPrice) : null,
         category: form.category || null,
         imageUrl: form.imageUrl || null,
+        allowedSideIds: form.allowedSideIds.length ? JSON.stringify(form.allowedSideIds) : null,
       })
       onClose()
     } catch (e) {
@@ -245,6 +248,20 @@ function EditDialog({ open, model, models, onClose, onSave }) {
                 onError={e => { e.target.style.display = 'none' }} />
             </Box>
           )}
+
+          <Autocomplete
+            multiple
+            options={(models || []).filter(x => x.id !== model?.id && x.sellingPrice != null)}
+            getOptionLabel={x => x.modelName}
+            value={(models || []).filter(x => (form.allowedSideIds || []).includes(x.id))}
+            onChange={(_, v) => setForm(f => ({ ...f, allowedSideIds: v.map(x => x.id) }))}
+            isOptionEqualToValue={(a, b) => a.id === b.id}
+            renderInput={params => (
+              <TextField {...params} label="Allowed side / topping items" size="small"
+                helperText="Only these items will appear as side options when ordering. Leave empty to disable sides for this item." />
+            )}
+            noOptionsText="No menu items"
+          />
 
           <Divider>
             <Typography variant="caption" color="text.secondary" fontWeight={600}>Option Groups</Typography>

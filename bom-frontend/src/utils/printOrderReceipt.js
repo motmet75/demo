@@ -97,26 +97,65 @@ function parseOptsObj(str) {
   try { return JSON.parse(str) } catch { return {} }
 }
 
+// Build a map: parentId (string) -> [child items]
+function buildChildMap(items) {
+  const map = {}
+  for (const item of items) {
+    if (item.parentItemId) {
+      const key = String(item.parentItemId)
+      if (!map[key]) map[key] = []
+      map[key].push(item)
+    }
+  }
+  return map
+}
+
 export function printCupLabels(order) {
   if (!order?.items?.length) return
   const num = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
 
-  const labelHtml = order.items.flatMap(item => {
+  const allItems = order.items
+  const childMap = buildChildMap(allItems)
+  // Root items = items with no parent
+  const rootItems = allItems.filter(item => !item.parentItemId)
+
+  const labelHtml = rootItems.flatMap(item => {
     const qty = Number(item.quantity) || 1
     const opts = parseOptsObj(item.selectedOptions)
     const optLines = Object.entries(opts)
       .map(([k, v]) => `<div class="opt"><span class="opt-key">${k}:</span> <span class="opt-val">${Array.isArray(v) ? v.join(', ') : v}</span></div>`)
       .join('')
     const noteHtml = item.itemNotes
-      ? `<div class="note">⚠ ${item.itemNotes}</div>`
+      ? `<div class="note">&#9888; ${item.itemNotes}</div>`
       : ''
+
+    // Side items for this parent
+    const children = childMap[String(item.id)] || []
+    const sidesHtml = children.length > 0
+      ? `<div class="sides-divider"></div>
+         <div class="sides-header">+ Toppings / Sides</div>
+         ${children.map(child => {
+           const childQty = Number(child.quantity) || 1
+           const childNote = child.itemNotes
+             ? `<div class="child-note">&#9888; ${child.itemNotes}</div>`
+             : ''
+           return `<div class="side-row">
+             <span class="side-name">&#x2022; ${child.modelName}</span>
+             <span class="side-qty">×${childQty}</span>
+           </div>${childNote}`
+         }).join('')}`
+      : ''
+
     return Array.from({ length: qty }, (_, i) => `
       <div class="label">
-        <div class="order-num">${num}</div>
+        <div class="label-header">
+          <span class="order-num">${num}</span>
+          ${qty > 1 ? `<span class="counter">${i + 1} / ${qty}</span>` : ''}
+        </div>
         <div class="item-name">${item.modelName}</div>
         ${optLines}
         ${noteHtml}
-        ${qty > 1 ? `<div class="counter">${i + 1} / ${qty}</div>` : ''}
+        ${sidesHtml}
       </div>
     `)
   }).join('')
@@ -133,55 +172,108 @@ export function printCupLabels(order) {
     background: #fff;
   }
   .label {
-    width: 220px;
-    min-height: 90px;
-    border: 1.5px solid #111;
-    border-radius: 6px;
-    padding: 8px 10px 6px;
+    width: 230px;
+    border: 2px solid #111;
+    border-radius: 8px;
+    overflow: hidden;
     margin: 6px;
     display: inline-block;
     vertical-align: top;
     page-break-inside: avoid;
   }
-  .order-num {
-    font-size: 22px;
-    font-weight: 900;
-    color: #1976d2;
-    line-height: 1;
-    letter-spacing: -1px;
-    border-bottom: 1px dashed #ccc;
-    padding-bottom: 4px;
-    margin-bottom: 4px;
+  /* ── Header bar ── */
+  .label-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #1976d2;
+    padding: 4px 8px;
   }
+  .order-num {
+    font-size: 20px;
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: -0.5px;
+    line-height: 1;
+  }
+  .counter {
+    font-size: 11px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.85);
+    background: rgba(0,0,0,0.2);
+    border-radius: 10px;
+    padding: 1px 6px;
+  }
+  /* ── Main item body ── */
   .item-name {
-    font-size: 15px;
-    font-weight: 800;
+    font-size: 16px;
+    font-weight: 900;
     line-height: 1.2;
-    margin-bottom: 4px;
     color: #111;
+    padding: 6px 10px 2px;
+    letter-spacing: -0.2px;
   }
   .opt {
     font-size: 12px;
     color: #333;
-    line-height: 1.4;
+    line-height: 1.5;
+    padding: 0 10px;
   }
-  .opt-key { color: #666; }
+  .opt-key { color: #777; }
   .opt-val { font-weight: 700; color: #111; }
   .note {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 700;
-    color: #c62828;
-    margin-top: 4px;
-    padding: 2px 4px;
-    background: #fff3e0;
+    color: #b45309;
+    margin: 4px 8px 0;
+    padding: 3px 6px;
+    background: #fff7ed;
     border-radius: 3px;
-    border-left: 3px solid #ff6f00;
+    border-left: 3px solid #f59e0b;
   }
-  .counter {
+  /* ── Side items section ── */
+  .sides-divider {
+    border-top: 1.5px dashed #9ca3af;
+    margin: 6px 8px 0;
+  }
+  .sides-header {
     font-size: 10px;
-    color: #aaa;
-    text-align: right;
-    margin-top: 4px;
+    font-weight: 700;
+    color: #6366f1;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 3px 10px 1px;
+  }
+  .side-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 1px 10px 1px 16px;
+  }
+  .side-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: #374151;
+    flex: 1;
+  }
+  .side-qty {
+    font-size: 11px;
+    font-weight: 700;
+    color: #6366f1;
+    margin-left: 6px;
+    white-space: nowrap;
+  }
+  .child-note {
+    font-size: 10px;
+    color: #b45309;
+    padding: 0 10px 0 20px;
+    font-style: italic;
+  }
+  /* bottom padding */
+  .label::after {
+    content: '';
+    display: block;
+    height: 6px;
   }
   @media print {
     @page { margin: 6mm; }
@@ -216,16 +308,33 @@ export function printOrderReceipt(order, trackingQrBase64 = null) {
     ? `<div class="row"><span>Customer</span><span>${order.customerName}${order.customerPhone ? ' · ' + order.customerPhone : ''}</span></div>`
     : ''
 
-  const itemsHtml = (order.items || []).map(item => {
+  // Build hierarchy for receipt: group children under parents
+  const allItems = order.items || []
+  const childMap = buildChildMap(allItems)
+  const rootItems = allItems.filter(item => !item.parentItemId)
+
+  const itemsHtml = rootItems.map(item => {
     const optsStr = parseOpts(item.selectedOptions)
-    const noteStr = item.itemNotes
+    const children = childMap[String(item.id)] || []
+    const childrenHtml = children.map(child => {
+      const childOptsStr = parseOpts(child.selectedOptions)
+      return `
+        <div class="row side-row">
+          <span class="side-name">&#x2514; ${child.quantity}&#215; ${child.modelName}</span>
+          <span class="item-price">${fmt(child.lineTotal)}</span>
+        </div>
+        ${childOptsStr ? `<div class="deep-indent grey">${childOptsStr}</div>` : ''}
+        ${child.itemNotes ? `<div class="deep-indent grey italic">&#9888; ${child.itemNotes}</div>` : ''}
+      `
+    }).join('')
     return `
       <div class="row item-row">
-        <span class="item-name">${item.quantity}× ${item.modelName}</span>
+        <span class="item-name">${item.quantity}&#215; ${item.modelName}</span>
         <span class="item-price">${fmt(item.lineTotal)}</span>
       </div>
       ${optsStr ? `<div class="indent grey">${optsStr}</div>` : ''}
-      ${noteStr ? `<div class="indent grey italic">Note: ${noteStr}</div>` : ''}
+      ${item.itemNotes ? `<div class="indent grey italic">&#9888; ${item.itemNotes}</div>` : ''}
+      ${childrenHtml}
     `
   }).join('')
 
@@ -253,8 +362,8 @@ export function printOrderReceipt(order, trackingQrBase64 = null) {
     <div class="center bold">Ref: ${order.orderCode}</div>
   ` : order.paymentMethod === 'SPLIT' ? `
     <div class="center bold" style="margin-bottom:6px">Split Payment</div>
-    <div class="row"><span>💳 Bank Transfer</span><span>${fmt(qrAmt)}</span></div>
-    <div class="row"><span>💵 Cash</span><span>${fmt(cashAmt)}</span></div>
+    <div class="row"><span>&#128179; Bank Transfer</span><span>${fmt(qrAmt)}</span></div>
+    <div class="row"><span>&#128181; Cash</span><span>${fmt(cashAmt)}</span></div>
     ${bankLogoTag}
     ${qrSrc ? `
       <div class="center" style="margin-top:6px"><div class="center bold" style="margin-bottom:4px">Scan to Pay (Bank Portion)</div>
@@ -282,20 +391,23 @@ export function printOrderReceipt(order, trackingQrBase64 = null) {
     padding: 14px 10px;
     color: #111;
   }
-  .center   { text-align: center; }
-  .bold     { font-weight: bold; }
-  .grey     { color: #555; }
-  .italic   { font-style: italic; }
-  .indent   { padding-left: 12px; font-size: 11px; color: #666; }
-  .title    { font-size: 16px; font-weight: 900; letter-spacing: 2px; }
-  .big-num  { font-size: 48px; font-weight: 900; text-align: center; line-height: 1.1; }
-  .divider  { border-top: 1px dashed #666; margin: 7px 0; }
-  .row      { display: flex; justify-content: space-between; margin-bottom: 2px; }
-  .item-row { margin-top: 4px; }
-  .item-name { flex: 1; padding-right: 8px; }
+  .center     { text-align: center; }
+  .bold       { font-weight: bold; }
+  .grey       { color: #555; }
+  .italic     { font-style: italic; }
+  .indent     { padding-left: 12px; font-size: 11px; color: #666; }
+  .deep-indent { padding-left: 24px; font-size: 11px; color: #666; }
+  .title      { font-size: 16px; font-weight: 900; letter-spacing: 2px; }
+  .big-num    { font-size: 48px; font-weight: 900; text-align: center; line-height: 1.1; }
+  .divider    { border-top: 1px dashed #666; margin: 7px 0; }
+  .row        { display: flex; justify-content: space-between; margin-bottom: 2px; }
+  .item-row   { margin-top: 4px; }
+  .item-name  { flex: 1; padding-right: 8px; }
   .item-price { text-align: right; white-space: nowrap; }
-  .total-row { font-weight: 900; font-size: 15px; margin-top: 4px; }
-  .footer   { text-align: center; font-style: italic; color: #555; margin-top: 6px; font-size: 12px; }
+  .side-row   { margin-top: 1px; }
+  .side-name  { flex: 1; padding-left: 8px; padding-right: 8px; font-size: 12px; color: #444; }
+  .total-row  { font-weight: 900; font-size: 15px; margin-top: 4px; }
+  .footer     { text-align: center; font-style: italic; color: #555; margin-top: 6px; font-size: 12px; }
   @media print { @page { margin: 0; } body { padding: 8px 6px; } }
 </style>
 </head>
@@ -331,7 +443,7 @@ export function printOrderReceipt(order, trackingQrBase64 = null) {
   ${paymentSection}
 
   <div class="divider"></div>
-  <div class="footer">★ Thank you! See you again ★</div>
+  <div class="footer">&#9733; Thank you! See you again &#9733;</div>
 </body>
 </html>`
 

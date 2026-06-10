@@ -326,6 +326,10 @@ export default function ShopMenuPage() {
         const unitPrice = Number(m.sellingPrice || 0) + calcOptAddOn(entry)
         const mainTotal = entry.qty * unitPrice
         const sideTotal = eTotal - mainTotal
+        let allowedSideIds = null
+        try { allowedSideIds = m.allowedSideIds ? JSON.parse(m.allowedSideIds) : null } catch { allowedSideIds = null }
+        const allowedSideOptions = allowedSideIds ? menu.filter(x => allowedSideIds.includes(x.id)) : []
+        const canAddSides = allowedSideOptions.length > 0
 
         return (
           <Box key={entry.uid} sx={{ border: '1.5px solid #e2e8f0', borderRadius: 2, overflow: 'hidden' }}>
@@ -463,12 +467,13 @@ export default function ShopMenuPage() {
                   </Box>
                 )}
 
-                {/* Add side inline form */}
+                {/* Add side inline form — only shown when the item has configured allowed sides */}
+                {canAddSides && (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.6, pr: 0.75, flexWrap: 'wrap' }}>
                   <Box sx={{ width: 12, height: 2, bgcolor: '#a5b4fc', flexShrink: 0, mt: 2.25 }} />
                   <Autocomplete
                     size="small"
-                    options={menu}
+                    options={allowedSideOptions}
                     getOptionLabel={m => m.modelName}
                     value={sf.model || null}
                     onChange={(_, v) => setSF(entry.uid, 'model', v)}
@@ -501,6 +506,7 @@ export default function ShopMenuPage() {
                     Add
                   </Button>
                 </Box>
+                )}
 
               </Box>
             </Box>
