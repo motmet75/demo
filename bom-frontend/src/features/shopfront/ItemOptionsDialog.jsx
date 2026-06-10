@@ -88,13 +88,16 @@ export default function ItemOptionsDialog({ open, model, options = [], initialCa
                 {group.multiSelect && <Chip label="multi" size="small" variant="outlined" sx={{ fontSize: 10, height: 18 }} />}
               </Box>
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-                {choices.map(choice => {
-                  const sel = isSelected(group.groupName, choice, group.multiSelect)
+                {choices.map((choice, ci) => {
+                  const label = typeof choice === 'object' && choice !== null ? String(choice.label ?? '') : String(choice)
+                  const price = typeof choice === 'object' && choice !== null ? Number(choice.price || 0) : 0
+                  const chipLabel = price > 0 ? `${label} +${fmt(price)}` : label
+                  const sel = isSelected(group.groupName, label, group.multiSelect)
                   return (
                     <Chip
-                      key={choice}
-                      label={choice}
-                      onClick={() => handleSelect(group.groupName, choice, group.multiSelect)}
+                      key={label || ci}
+                      label={chipLabel}
+                      onClick={() => handleSelect(group.groupName, label, group.multiSelect)}
                       color={sel ? 'primary' : 'default'}
                       variant={sel ? 'filled' : 'outlined'}
                       sx={{ cursor: 'pointer', fontWeight: sel ? 700 : 400, fontSize: 13, height: 32 }}
