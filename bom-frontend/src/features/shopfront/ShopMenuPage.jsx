@@ -757,8 +757,8 @@ export default function ShopMenuPage() {
 
                 {/* Add side inline form — only shown when the item has configured allowed sides */}
                 {canAddSides && (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.6, pr: 0.75, flexWrap: 'wrap' }}>
-                  <Box sx={{ width: 12, height: 2, bgcolor: '#a5b4fc', flexShrink: 0, mt: 2.25 }} />
+                <Box sx={{ pt: 0.5, pb: 0.75, px: 0.75 }}>
+                  {/* Row 1: autocomplete full-width */}
                   <Autocomplete
                     size="small"
                     options={allowedSideOptions}
@@ -768,31 +768,44 @@ export default function ShopMenuPage() {
                     renderInput={params => <TextField {...params} label="Add side / topping…" size="small" />}
                     isOptionEqualToValue={(a, b) => a.id === b.id}
                     noOptionsText="No items"
-                    sx={{ flex: 1, minWidth: 130 }}
+                    fullWidth
                   />
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
-                    <IconButton size="small" onClick={() => setSF(entry.uid, 'qty', Math.max(1, (sf.qty || 1) - 1))} sx={{ p: 0.2 }}>
-                      <RemoveIcon sx={{ fontSize: 12 }} />
+                  {/* Row 2: per-cup qty stepper + Add button */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.75 }}>
+                    <Typography variant="caption" sx={{ color: '#a5b4fc', fontSize: 10, flexShrink: 0 }}>
+                      qty/cup
+                    </Typography>
+                    <IconButton
+                      onClick={() => setSF(entry.uid, 'qty', Math.max(1, (sf.qty || 1) - 1))}
+                      sx={{ p: 0, width: 32, height: 32, bgcolor: '#f1f5f9', color: '#64748b', borderRadius: 1, flexShrink: 0, '&:hover': { bgcolor: '#e2e8f0' } }}>
+                      <RemoveIcon sx={{ fontSize: 16 }} />
                     </IconButton>
-                    <Typography variant="caption" fontWeight={700} sx={{ minWidth: 18, textAlign: 'center', fontSize: 12 }}>
+                    <Typography fontWeight={800} sx={{ minWidth: 24, textAlign: 'center', fontSize: 15, color: '#4f46e5', flexShrink: 0 }}>
                       {sf.qty || 1}
                     </Typography>
-                    <IconButton size="small" onClick={() => setSF(entry.uid, 'qty', (sf.qty || 1) + 1)}
-                      sx={{ p: 0.2, bgcolor: '#6366f1', color: '#fff', borderRadius: 0.5, '&:hover': { bgcolor: '#4f46e5' } }}>
-                      <AddIcon sx={{ fontSize: 12 }} />
+                    <IconButton
+                      onClick={() => setSF(entry.uid, 'qty', (sf.qty || 1) + 1)}
+                      sx={{ p: 0, width: 32, height: 32, bgcolor: '#6366f1', color: '#fff', borderRadius: 1, flexShrink: 0, '&:hover': { bgcolor: '#4f46e5' } }}>
+                      <AddIcon sx={{ fontSize: 16 }} />
                     </IconButton>
+                    {entry.qty > 1 && sf.qty > 1 && (
+                      <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: 10, flexShrink: 0 }}>
+                        = {(sf.qty || 1) * entry.qty}× total
+                      </Typography>
+                    )}
+                    <Box sx={{ flex: 1 }} />
+                    <Button variant="contained"
+                      startIcon={<PlaylistAddIcon sx={{ fontSize: 15 }} />}
+                      onClick={() => addSideInline(entry.uid)}
+                      disabled={!sf.model}
+                      sx={{
+                        textTransform: 'none', fontSize: 12, height: 36, flexShrink: 0,
+                        bgcolor: '#6366f1', '&:hover': { bgcolor: '#4f46e5' },
+                        '&.Mui-disabled': { bgcolor: '#e0e0e0', color: '#9e9e9e' },
+                      }}>
+                      Add
+                    </Button>
                   </Box>
-                  <Button size="small" variant="contained"
-                    startIcon={<PlaylistAddIcon sx={{ fontSize: 14 }} />}
-                    onClick={() => addSideInline(entry.uid)}
-                    disabled={!sf.model}
-                    sx={{
-                      textTransform: 'none', fontSize: 11, height: 36, flexShrink: 0,
-                      bgcolor: '#6366f1', '&:hover': { bgcolor: '#4f46e5' },
-                      '&.Mui-disabled': { bgcolor: '#e0e0e0' },
-                    }}>
-                    Add
-                  </Button>
                 </Box>
                 )}
 
@@ -1107,19 +1120,42 @@ export default function ShopMenuPage() {
                     {sides.map((side, siIdx) => {
                       const sm = menu.find(x => x.id === side.modelId)
                       if (!sm) return null
-                      const effQty   = (side.qty || 1) * entry.qty
+                      const perCup   = side.qty || 1
+                      const effQty   = perCup * entry.qty
                       const effPrice = effQty * Number(sm.sellingPrice || 0)
                       return (
-                        <Box key={side.uid} sx={{ display: 'flex', justifyContent: 'space-between', pl: 1.5 }}>
-                          <Typography variant="caption" color="text.secondary">
-                            {idx + 1}.{siIdx + 1} {effQty}× {sm.modelName}
+                        <Box key={side.uid} sx={{ pl: 1.5, mb: 0.5 }}>
+                          {/* Row 1: number · name · price */}
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                            <Typography variant="caption" color="text.secondary">
+                              {idx + 1}.{siIdx + 1} {effQty}× {sm.modelName}
+                            </Typography>
+                            <Typography variant="caption" color="primary" fontWeight={700}>{fmt(effPrice)}</Typography>
+                          </Box>
+                          {/* Row 2: per-cup stepper */}
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.25 }}>
+                            <Typography variant="caption" sx={{ color: '#a5b4fc', fontSize: 10, flexShrink: 0 }}>
+                              /cup
+                            </Typography>
+                            <IconButton
+                              onClick={() => changeSideQty(entry.uid, side.uid, -1)}
+                              sx={{ p: 0, width: 28, height: 28, bgcolor: '#f1f5f9', color: '#64748b', borderRadius: 1, flexShrink: 0, '&:hover': { bgcolor: '#e2e8f0' } }}>
+                              <RemoveIcon sx={{ fontSize: 15 }} />
+                            </IconButton>
+                            <Typography fontWeight={800} sx={{ minWidth: 20, textAlign: 'center', fontSize: 14, color: '#4f46e5', flexShrink: 0 }}>
+                              {perCup}
+                            </Typography>
+                            <IconButton
+                              onClick={() => changeSideQty(entry.uid, side.uid, 1)}
+                              sx={{ p: 0, width: 28, height: 28, bgcolor: '#6366f1', color: '#fff', borderRadius: 1, flexShrink: 0, '&:hover': { bgcolor: '#4f46e5' } }}>
+                              <AddIcon sx={{ fontSize: 15 }} />
+                            </IconButton>
                             {entry.qty > 1 && (
-                              <Typography component="span" variant="caption" sx={{ color: '#a5b4fc', ml: 0.5 }}>
-                                ({side.qty || 1}/cup)
+                              <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: 10, flexShrink: 0 }}>
+                                = {effQty}×
                               </Typography>
                             )}
-                          </Typography>
-                          <Typography variant="caption" color="primary" fontWeight={700}>{fmt(effPrice)}</Typography>
+                          </Box>
                         </Box>
                       )
                     })}
