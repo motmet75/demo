@@ -326,20 +326,40 @@ function StatusBoard({ status, orders, onAction, onDetail, onPayQr }) {
               <Divider sx={{ mb: 0.75 }} />
 
               {/* Items */}
-              <Stack spacing={0.2} sx={{ mb: 1, minHeight: 32 }}>
-                {(order.items || []).map(item => {
-                  const opts = parseOpts(item.selectedOptions)
-                  const optStr = Object.entries(opts).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join('+') : v}`).join(' · ')
-                  return (
-                    <Box key={item.id}>
-                      <Typography variant="body2" fontWeight={700} sx={{ fontSize: 13, color: style.color }}>
-                        {Number(item.quantity)}× {item.modelName}
-                      </Typography>
-                      {optStr && <Typography variant="caption" sx={{ fontSize: 11, pl: 1.25, display: 'block', color: '#555' }}>{optStr}</Typography>}
-                      {item.itemNotes && <Typography variant="caption" sx={{ fontSize: 11, pl: 1.25, fontStyle: 'italic', display: 'block', color: '#c62828', fontWeight: 700 }}>⚠ {item.itemNotes}</Typography>}
-                    </Box>
-                  )
-                })}
+              <Stack spacing={0.3} sx={{ mb: 1, minHeight: 32 }}>
+                {(() => {
+                  const allItems = order.items || []
+                  const roots = allItems.filter(it => !it.parentItemId)
+                  return roots.map((root, rIdx) => {
+                    const children = allItems.filter(it => it.parentItemId === root.id)
+                    const opts = parseOpts(root.selectedOptions)
+                    const optStr = Object.entries(opts).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join('+') : v}`).join(' · ')
+                    return (
+                      <Box key={root.id || rIdx}>
+                        {/* Root item */}
+                        <Typography variant="body2" fontWeight={700} sx={{ fontSize: 13, color: style.color }}>
+                          {rIdx + 1}. {Number(root.quantity)}× {root.modelName}
+                        </Typography>
+                        {optStr && <Typography variant="caption" sx={{ fontSize: 11, pl: 1.5, display: 'block', color: '#555' }}>{optStr}</Typography>}
+                        {root.itemNotes && <Typography variant="caption" sx={{ fontSize: 11, pl: 1.5, fontStyle: 'italic', display: 'block', color: '#c62828', fontWeight: 700 }}>⚠ {root.itemNotes}</Typography>}
+                        {/* Child / topping items */}
+                        {children.map((child, ci) => (
+                          <Box key={child.id || ci} sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5, ml: 2.5, pl: 1, mt: 0.2, borderLeft: `2px solid ${style.border || '#e2e8f0'}` }}>
+                            <Typography variant="caption" sx={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, flexShrink: 0 }}>
+                              {rIdx + 1}.{ci + 1}
+                            </Typography>
+                            <Typography variant="caption" sx={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, flex: 1 }}>
+                              {child.modelName}
+                            </Typography>
+                            <Typography variant="caption" sx={{ fontSize: 10, color: '#cbd5e1', fontWeight: 600 }}>
+                              ({Number(child.quantity)}×/cup)
+                            </Typography>
+                          </Box>
+                        ))}
+                      </Box>
+                    )
+                  })
+                })()}
               </Stack>
 
               {order.notes && <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11, fontStyle: 'italic', display: 'block', mb: 0.75 }}>Note: {order.notes}</Typography>}

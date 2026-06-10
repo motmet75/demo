@@ -476,7 +476,11 @@ export function printOrderReceipt(order, trackingQrBase64 = null) {
   ${deliveryRow}
   <div class="row total-row">
     <span>TOTAL</span>
-    <span>${fmt(order.totalAmount)}</span>
+    <span>${fmt(rootItems.reduce((s, item) => {
+      const children = childMap[String(item.id)] || []
+      const parentQty = Number(item.quantity || 1)
+      return s + Number(item.lineTotal || 0) + children.reduce((cs, c) => cs + Number(c.lineTotal || 0) * parentQty, 0)
+    }, 0) + Number(order.deliveryFee || 0))}</span>
   </div>
 
   ${notesSection}
