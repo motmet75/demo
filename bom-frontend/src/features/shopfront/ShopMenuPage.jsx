@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
@@ -28,6 +28,8 @@ import DeliveryDiningIcon from '@mui/icons-material/DeliveryDining'
 import Alert from '@mui/material/Alert'
 import CircularProgress from '@mui/material/CircularProgress'
 import Chip from '@mui/material/Chip'
+import Badge from '@mui/material/Badge'
+import Collapse from '@mui/material/Collapse'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
@@ -35,10 +37,12 @@ import DialogActions from '@mui/material/DialogActions'
 import InputAdornment from '@mui/material/InputAdornment'
 import EditNoteIcon from '@mui/icons-material/EditNote'
 import AddShoppingCartIcon from '@mui/icons-material/AddShoppingCart'
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong'
+import VisibilityIcon from '@mui/icons-material/Visibility'
 import TableRestaurantIcon from '@mui/icons-material/TableRestaurant'
 import { resolveToken, fetchMenu, createOrder, fetchPublicMenuOptions,
          fetchActiveTableOrders, startCustomerEdit, cancelCustomerEdit,
-         updatePublicOrderItems, fetchPublicOrder } from '../../api/shopApi'
+         updatePublicOrderItems, fetchPublicOrder, fetchTokenSession } from '../../api/shopApi'
 import ItemOptionsDialog from './ItemOptionsDialog'
 import OrderReceiptDialog from './OrderReceiptDialog'
 
@@ -79,6 +83,142 @@ function buildChildMap(items) {
     }
   })
   return map
+}
+
+const STATUS_CHIP_MAP = {
+  PENDING:   { label: 'Pending',   color: 'default' },
+  CONFIRMED: { label: 'Confirmed', color: 'success' },
+  PREPARING: { label: 'Preparing', color: 'warning' },
+  READY:     { label: 'Ready!',    color: 'info'    },
+  PICKED_UP: { label: 'Picked up', color: 'success' },
+  COMPLETED: { label: 'Done',      color: 'success' },
+  CANCELLED: { label: 'Cancelled', color: 'error'   },
+}
+
+// Button shown in bottom bar / sidebar when session has orders
+function ShowOrdersButton({ session, onClick, fullWidth }) {
+  const orders   = session?.orders || []
+  const editing  = orders.some(o => o.customerEditing)
+  const count    = orders.length
+  return (
+    <Badge
+      badgeContent={editing ? '!' : null}
+      color="warning"
+      sx={{ '& .MuiBadge-badge': { fontSize: 11, fontWeight: 900 }, ...(fullWidth ? { width: '100%' } : {}) }}>
+      <Button
+        variant="outlined"
+        size="medium"
+        fullWidth={fullWidth}
+        startIcon={<ReceiptLongIcon />}
+        onClick={onClick}
+        sx={{
+          borderRadius: 2, fontWeight: 700, textTransform: 'none', flexShrink: 0,
+          borderColor: editing ? '#f59e0b' : undefined,
+          color: editing ? '#d97706' : undefined,
+          animation: editing ? 'pulse-border 1.6s infinite' : 'none',
+          '@keyframes pulse-border': {
+            '0%,100%': { boxShadow: '0 0 0 0 #f59e0b44' },
+            '50%':     { boxShadow: '0 0 0 6px #f59e0b00' },
+          },
+        }}>
+        {editing ? `✏ Editing · ${count}` : `Show Orders · ${count}`}
+      </Button>
+    </Badge>
+  )
+}
+
+// Compact order list shown inside the session dialog
+function SessionOrderList({ session, token, onEdit, onClose }) {
+  const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
+  const orders = session?.orders || []
+  if (!orders.length) return (
+    <Box sx={{ textAlign: 'center', py: 4, color: 'text.secondary' }}>
+      <Typography>No orders yet in this session.</Typography>
+    </Box>
+  )
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      {orders.map((order) => {
+        const status   = order.status || 'PENDING'
+        const chip     = STATUS_CHIP_MAP[status] || STATUS_CHIP_MAP.PENDING
+        const editing  = Boolean(order.customerEditing)
+        const isPending = status === 'PENDING'
+        const displayNum = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
+        const roots    = (order.items || []).filter(i => !i.parentItemId)
+        return (
+          <Box key={order.orderCode} sx={{
+            border: editing ? '2px solid #f59e0b' : '1px solid #e2e8f0',
+            borderRadius: 2, overflow: 'hidden',
+            bgcolor: editing ? '#fffbeb' : '#fff',
+            boxShadow: editing ? '0 0 0 3px #fde68a55' : '0 1px 3px #0001',
+            animation: editing ? 'glow-edit 2s infinite' : 'none',
+            '@keyframes glow-edit': {
+              '0%,100%': { boxShadow: '0 0 0 3px #fde68a55' },
+              '50%':     { boxShadow: '0 0 0 6px #fde68a00' },
+            },
+          }}>
+            {/* Header */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1.25,
+              bgcolor: editing ? '#fef3c7' : '#f8fafc' }}>
+              <Typography fontWeight={900} sx={{ fontSize: 20, minWidth: 38, color: editing ? '#b45309' : '#334155' }}>
+                {displayNum}
+              </Typography>
+              <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+                <Chip label={chip.label} color={chip.color} size="small" sx={{ fontWeight: 700, fontSize: 11 }} />
+                {editing && (
+                  <Chip
+                    icon={<VisibilityIcon sx={{ fontSize: 13 }} />}
+                    label="Editing — finish or cancel"
+                    size="small"
+                    sx={{
+                      bgcolor: '#f59e0b', color: '#fff', fontWeight: 700, fontSize: 10,
+                      animation: 'blink-chip 1.4s infinite',
+                      '@keyframes blink-chip': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0.6 } },
+                    }}
+                  />
+                )}
+              </Box>
+              <Typography fontWeight={800} color="primary" sx={{ fontSize: 14, flexShrink: 0 }}>
+                {fmt(order.totalAmount)}
+              </Typography>
+            </Box>
+
+            {/* Item summary */}
+            <Box sx={{ px: 2, py: 1 }}>
+              {roots.slice(0, 3).map((item, i) => (
+                <Typography key={item.id} variant="caption" color="text.secondary" sx={{ display: 'block' }} noWrap>
+                  {item.quantity}× {item.modelName}
+                  {item.selectedOptions ? ` (${item.selectedOptions})` : ''}
+                </Typography>
+              ))}
+              {roots.length > 3 && (
+                <Typography variant="caption" color="text.secondary">+{roots.length - 3} more…</Typography>
+              )}
+            </Box>
+
+            {/* Actions */}
+            {(isPending || editing) && (
+              <Box sx={{ px: 2, pb: 1.25, pt: 0.25, display: 'flex', gap: 1 }}>
+                {editing ? (
+                  <Button variant="contained" size="small" color="warning" fullWidth
+                    onClick={() => onEdit(order)}
+                    sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5 }}>
+                    ✏ Resume editing
+                  </Button>
+                ) : (
+                  <Button variant="outlined" size="small" fullWidth
+                    onClick={() => onEdit(order)}
+                    sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5 }}>
+                    Edit order
+                  </Button>
+                )}
+              </Box>
+            )}
+          </Box>
+        )
+      })}
+    </Box>
+  )
 }
 
 function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpdated }) {
@@ -288,6 +428,8 @@ export default function ShopMenuPage() {
   const [trackingOrder, setTrackingOrder]   = useState(null) // inline post-order tracking
   const [editingOrderCode, setEditingOrderCode] = useState(null) // order being edited
   const [tableOrders, setTableOrders]       = useState(null) // occupied table dialog
+  const [tokenSession, setTokenSession]     = useState(null) // orders for this token
+  const [sessionOpen, setSessionOpen]       = useState(false)
   const [form, setForm] = useState({
     fulfillmentType: 'PICKUP', customerName: '', customerPhone: '',
     deliveryAddress: '', paymentMethod: 'CASH',
@@ -339,6 +481,21 @@ export default function ShopMenuPage() {
       setLoading(false)
     }).catch(() => { setError('Failed to load menu.'); setLoading(false) })
   }, [ctx])
+
+  // ── Poll token session orders ─────────────────────────────────────────
+  const loadTokenSession = useCallback(() => {
+    if (!tokenParam) return
+    fetchTokenSession(tokenParam)
+      .then(({ data }) => { if (data?.orders != null) setTokenSession(data) })
+      .catch(() => {})
+  }, [tokenParam])
+
+  useEffect(() => {
+    loadTokenSession()
+    if (!tokenParam) return
+    const id = setInterval(loadTokenSession, 5000)
+    return () => clearInterval(id)
+  }, [loadTokenSession, tokenParam])
 
   // ── Auto-start edit when opened via tracking page "Edit Order" button ──
   useEffect(() => {
@@ -1014,36 +1171,47 @@ export default function ShopMenuPage() {
           maxHeight: 'calc(100vh - 40px)',
           overflowY: 'auto',
         }}>
+          {tokenSession?.orders?.length > 0 && (
+            <Box sx={{ mb: 2 }}>
+              <ShowOrdersButton session={tokenSession} onClick={() => setSessionOpen(true)} fullWidth />
+            </Box>
+          )}
           <CartPanel onCheckout={() => setCheckout(true)} />
         </Box>
       </Box>
 
       {/* ── Mobile bottom bar ──────────────────────────────────── */}
-      {itemCount > 0 && (
+      {(itemCount > 0 || (tokenSession?.orders?.length > 0)) && (
         <Box sx={{
           display: { xs: 'flex', md: 'none' },
           position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 200,
           borderTop: '1px solid #e0e0e0', bgcolor: '#fff',
           boxShadow: '0 -2px 12px rgba(0,0,0,0.10)',
           alignItems: 'center', gap: 1, px: 2, py: 1.25,
+          flexWrap: 'wrap',
         }}>
-          <Button variant="outlined" size="medium" onClick={() => setCartOpen(true)}
-            startIcon={<ShoppingCartIcon />}
-            sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none', flexShrink: 0 }}>
-            Cart ({itemCount})
-          </Button>
-          {editingOrderCode && (
-            <Button variant="text" size="small" onClick={handleCancelEdit}
-              sx={{ textTransform: 'none', color: '#ef4444', flexShrink: 0, fontWeight: 600, fontSize: 12 }}>
-              Cancel edit
-            </Button>
+          {tokenSession?.orders?.length > 0 && (
+            <ShowOrdersButton session={tokenSession} onClick={() => setSessionOpen(true)} />
           )}
-          <Button variant="contained" size="medium" fullWidth onClick={() => setCheckout(true)}
-            sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none',
-              bgcolor: editingOrderCode ? '#f59e0b' : undefined,
-              '&:hover': { bgcolor: editingOrderCode ? '#d97706' : undefined } }}>
-            {editingOrderCode ? `Update Order · ${fmt(totalAmount)}` : `Checkout · ${fmt(totalAmount)}`}
-          </Button>
+          {itemCount > 0 && <>
+            <Button variant="outlined" size="medium" onClick={() => setCartOpen(true)}
+              startIcon={<ShoppingCartIcon />}
+              sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none', flexShrink: 0 }}>
+              Cart ({itemCount})
+            </Button>
+            {editingOrderCode && (
+              <Button variant="text" size="small" onClick={handleCancelEdit}
+                sx={{ textTransform: 'none', color: '#ef4444', flexShrink: 0, fontWeight: 600, fontSize: 12 }}>
+                Cancel edit
+              </Button>
+            )}
+            <Button variant="contained" size="medium" fullWidth onClick={() => setCheckout(true)}
+              sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none',
+                bgcolor: editingOrderCode ? '#f59e0b' : undefined,
+                '&:hover': { bgcolor: editingOrderCode ? '#d97706' : undefined } }}>
+              {editingOrderCode ? `Update Order · ${fmt(totalAmount)}` : `Checkout · ${fmt(totalAmount)}`}
+            </Button>
+          </>}
         </Box>
       )}
 
@@ -1056,6 +1224,29 @@ export default function ShopMenuPage() {
         </DialogTitle>
         <DialogContent sx={{ overflowY: 'auto' }}>
           <CartPanel onCheckout={() => { setCartOpen(false); setCheckout(true) }} />
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Session orders dialog ───────────────────────────────── */}
+      <Dialog open={sessionOpen} onClose={() => setSessionOpen(false)} fullWidth maxWidth="sm"
+        PaperProps={{ sx: { position: 'fixed', bottom: 0, left: 0, right: 0, m: 0, borderRadius: '16px 16px 0 0', maxHeight: '88vh' } }}>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', pb: 1, pt: 2 }}>
+          <ReceiptLongIcon sx={{ mr: 1, color: '#6366f1' }} />
+          <Typography fontWeight={800} variant="h6" sx={{ flex: 1 }}>
+            Your Orders
+            <Typography component="span" variant="caption" sx={{ ml: 1, color: 'text.secondary' }}>
+              ({tokenSession?.orders?.length ?? 0})
+            </Typography>
+          </Typography>
+          <IconButton size="small" onClick={() => setSessionOpen(false)}><CloseIcon /></IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ overflowY: 'auto', px: 2, pb: 3 }}>
+          <SessionOrderList
+            session={tokenSession}
+            token={tokenParam}
+            onEdit={(order) => { setSessionOpen(false); handleEditOrder(order) }}
+            onClose={() => setSessionOpen(false)}
+          />
         </DialogContent>
       </Dialog>
 
