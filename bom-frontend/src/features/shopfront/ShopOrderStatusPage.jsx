@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useCallback } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import Alert from '@mui/material/Alert'
 import CircularProgress from '@mui/material/CircularProgress'
 import Button from '@mui/material/Button'
 import PrintIcon from '@mui/icons-material/Print'
+import EditIcon from '@mui/icons-material/Edit'
 import { fetchPublicOrder } from '../../api/shopApi'
 import { printOrderReceipt } from '../../utils/printOrderReceipt'
 
@@ -61,19 +62,16 @@ function StepDot({ step, activeIdx, idx }) {
 
 export default function ShopOrderStatusPage() {
   const { orderCode } = useParams()
-  const [params] = useSearchParams()
-  const tenantId  = params.get('tenantId')
-  const companyId = params.get('companyId')
 
   const [order, setOrder] = useState(null)
   const [error, setError] = useState('')
 
   const load = useCallback(() => {
-    if (!orderCode || !tenantId || !companyId) return
-    fetchPublicOrder(orderCode, tenantId, companyId)
+    if (!orderCode) return
+    fetchPublicOrder(orderCode)
       .then(({ data }) => { if (data?.orderCode) setOrder(data); else setError('Order not found') })
       .catch(() => setError('Failed to load order'))
-  }, [orderCode, tenantId, companyId])
+  }, [orderCode])
 
   useEffect(() => {
     load()
@@ -197,14 +195,32 @@ export default function ShopOrderStatusPage() {
       )}
 
       <Box sx={{ flex: 1 }} />
-      <Box sx={{ textAlign: 'center', pb: 2, pt: 1 }}>
-        <Button size="small" startIcon={<PrintIcon />} onClick={() => printOrderReceipt(order)}
-          sx={{ textTransform: 'none', color: 'text.disabled', fontSize: 12 }}>
-          Print Receipt
-        </Button>
-        <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 0.25 }}>
-          {order.orderCode} · refreshes every 5s
-        </Typography>
+      <Box sx={{ px: 2, pb: 2, pt: 1, display: 'flex', flexDirection: 'column', gap: 1, maxWidth: 480, mx: 'auto', width: '100%' }}>
+        {order.status === 'PENDING' && (
+          <Button
+            variant="outlined"
+            fullWidth
+            startIcon={<EditIcon />}
+            onClick={() => {
+              const base = window.location.origin + '/bom-inventory/shop/menu'
+              const q = order.tenantId && order.companyId
+                ? `?tenantId=${order.tenantId}&companyId=${order.companyId}&editOrder=${encodeURIComponent(order.orderCode)}`
+                : `?editOrder=${encodeURIComponent(order.orderCode)}`
+              window.location.href = base + q
+            }}
+            sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none' }}>
+            Edit Order
+          </Button>
+        )}
+        <Box sx={{ textAlign: 'center' }}>
+          <Button size="small" startIcon={<PrintIcon />} onClick={() => printOrderReceipt(order)}
+            sx={{ textTransform: 'none', color: 'text.disabled', fontSize: 12 }}>
+            Print Receipt
+          </Button>
+          <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 0.25 }}>
+            {order.orderCode} · refreshes every 5s
+          </Typography>
+        </Box>
       </Box>
     </Box>
   )

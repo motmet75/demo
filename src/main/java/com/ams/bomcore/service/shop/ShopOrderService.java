@@ -922,17 +922,66 @@ public class ShopOrderService {
 
     public String generateOrderTagQr(UUID orderId, UUID tenantId, UUID companyId) {
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
-        String url = publicBaseUrl + "/shop/order/" + order.getOrderCode()
-                   + "?tenantId=" + tenantId + "&companyId=" + companyId;
+        String url = publicBaseUrl + "/shop/order/" + order.getOrderCode();
         return QrCodeUtil.generateBase64Png(url, 300);
+    }
+
+    // ── Code-only public order methods (no tenant/company in URL) ─────
+
+    private ShopOrder requireOrderByCode(String orderCode) {
+        return shopOrderRepository.findByOrderCode(orderCode)
+                .orElseThrow(() -> new NoSuchElementException("Order not found: " + orderCode));
+    }
+
+    @Transactional(readOnly = true)
+    public ShopOrderResponseDto getOrderByCode(String orderCode) {
+        return dto(requireOrderByCode(orderCode));
+    }
+
+    @Transactional
+    public ShopOrderResponseDto startCustomerEdit(String orderCode) {
+        ShopOrder order = requireOrderByCode(orderCode);
+        if (!ShopOrder.STATUS_PENDING.equals(order.getStatus()))
+            throw new IllegalStateException("Order can only be edited while PENDING");
+        order.setCustomerEditing(true);
+        shopOrderRepository.save(order);
+        return dto(order);
+    }
+
+    @Transactional
+    public ShopOrderResponseDto cancelCustomerEdit(String orderCode) {
+        ShopOrder order = requireOrderByCode(orderCode);
+        order.setCustomerEditing(false);
+        shopOrderRepository.save(order);
+        return dto(order);
+    }
+
+    @Transactional
+    public ShopOrderResponseDto updateOrderByCustomer(String orderCode, List<ItemRequest> newItems) {
+        ShopOrder order = requireOrderByCode(orderCode);
+        if (!ShopOrder.STATUS_PENDING.equals(order.getStatus()))
+            throw new IllegalStateException("Order can only be updated while PENDING");
+        UUID tenantId  = order.getTenantId();
+        UUID companyId = order.getCompanyId();
+        List<ShopOrderItem> existing = shopOrderItemRepository.findAllByOrder_Id(order.getId());
+        shopOrderItemRepository.deleteAll(existing.stream().filter(i -> i.getParentItem() != null).toList());
+        shopOrderItemRepository.deleteAll(existing.stream().filter(i -> i.getParentItem() == null).toList());
+        List<ShopOrderItem> items = new ArrayList<>();
+        BigDecimal[] totals = { BigDecimal.ZERO, BigDecimal.ZERO };
+        buildItems(order, newItems, null, items, totals, tenantId, companyId);
+        BigDecimal fee = order.getDeliveryFee() != null ? order.getDeliveryFee() : BigDecimal.ZERO;
+        order.setTotalAmount(totals[0].add(fee));
+        order.setTotalRawCost(totals[1]);
+        order.setCustomerEditing(false);
+        shopOrderRepository.save(order);
+        return ShopOrderResponseDto.from(order, items);
     }
 
     // ── Pickup scan (public — no auth) ────────────────────────────────
 
     @Transactional
-    public ShopOrderResponseDto markPickupScan(String orderCode, UUID tenantId, UUID companyId) {
-        ShopOrder order = shopOrderRepository.findByOrderCodeAndTenantIdAndCompanyId(orderCode, tenantId, companyId)
-                .orElseThrow(() -> new NoSuchElementException("Order not found"));
+    public ShopOrderResponseDto markPickupScan(String orderCode) {
+        ShopOrder order = requireOrderByCode(orderCode);
         order.setPickupScannedAt(Instant.now());
         return dto(shopOrderRepository.save(order));
     }
@@ -947,8 +996,7 @@ public class ShopOrderService {
 
     public String generatePickupQr(UUID orderId, UUID tenantId, UUID companyId) {
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
-        String url = publicBaseUrl + "/shop/pickup/" + order.getOrderCode()
-                   + "?tenantId=" + tenantId + "&companyId=" + companyId;
+        String url = publicBaseUrl + "/shop/pickup/" + order.getOrderCode();
         return QrCodeUtil.generateBase64Png(url, 300);
     }
 }

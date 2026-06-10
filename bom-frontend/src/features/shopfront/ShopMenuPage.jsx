@@ -87,9 +87,9 @@ function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpda
 
   // Poll for updates
   React.useEffect(() => {
-    if (!ctx?.tenantId || !ctx?.companyId || !order?.orderCode) return
+    if (!order?.orderCode) return
     const id = setInterval(() => {
-      fetchPublicOrder(order.orderCode, ctx.tenantId, ctx.companyId)
+      fetchPublicOrder(order.orderCode)
         .then(({ data }) => { if (data?.orderCode) { setOrder(data); onUpdated?.(data) } })
         .catch(() => {})
     }, 5000)
@@ -266,11 +266,12 @@ export default function ShopMenuPage() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
 
-  const tokenParam   = params.get('t')
-  const rawTenantId  = params.get('tenantId')
-  const rawCompanyId = params.get('companyId')
-  const rawTableId   = params.get('tableId')
-  const seqParam     = params.get('seq')
+  const tokenParam    = params.get('t')
+  const rawTenantId   = params.get('tenantId')
+  const rawCompanyId  = params.get('companyId')
+  const rawTableId    = params.get('tableId')
+  const seqParam      = params.get('seq')
+  const editOrderCode = params.get('editOrder')
 
   const [ctx, setCtx] = useState(
     tokenParam ? null : { tenantId: rawTenantId, companyId: rawCompanyId, tableId: rawTableId }
@@ -338,6 +339,24 @@ export default function ShopMenuPage() {
       setLoading(false)
     }).catch(() => { setError('Failed to load menu.'); setLoading(false) })
   }, [ctx])
+
+  // ── Auto-start edit when opened via tracking page "Edit Order" button ──
+  useEffect(() => {
+    if (!editOrderCode || loading) return
+    fetchPublicOrder(editOrderCode)
+      .then(({ data }) => {
+        if (!data?.orderCode) return
+        startCustomerEdit(data.orderCode)
+          .then(() => {
+            restoreCartFromOrder(data)
+            setEditingOrderCode(data.orderCode)
+            setCartOpen(true)
+          })
+          .catch(() => {})
+      })
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editOrderCode, loading])
 
   // ── Derived values ────────────────────────────────────────────────────
   const cartEntries = Object.values(cart)
@@ -522,7 +541,7 @@ export default function ShopMenuPage() {
     try {
       if (editingOrderCode) {
         // Update existing order
-        const { res, data } = await updatePublicOrderItems(editingOrderCode, ctx.tenantId, ctx.companyId, items)
+        const { res, data } = await updatePublicOrderItems(editingOrderCode, items)
         if (!res.ok) { setError(data?.message || data?.error || 'Failed to update order'); setSubmitting(false); return }
         setCart({}); setSideForm({}); setCheckout(false); setCartOpen(false)
         setEditingOrderCode(null)
@@ -553,7 +572,7 @@ export default function ShopMenuPage() {
   // ── Customer edit: lock the order and restore cart ────────────────────
   const handleEditOrder = async (order) => {
     try {
-      await startCustomerEdit(order.orderCode, ctx.tenantId, ctx.companyId)
+      await startCustomerEdit(order.orderCode)
       restoreCartFromOrder(order)
       setEditingOrderCode(order.orderCode)
       setTrackingOrder(null)
@@ -565,11 +584,11 @@ export default function ShopMenuPage() {
 
   const handleCancelEdit = async () => {
     if (!editingOrderCode) return
-    try { await cancelCustomerEdit(editingOrderCode, ctx.tenantId, ctx.companyId) } catch {}
+    try { await cancelCustomerEdit(editingOrderCode) } catch {}
     setCart({}); setSideForm({})
     setEditingOrderCode(null)
     // Reload the order to show current status
-    fetchPublicOrder(editingOrderCode, ctx.tenantId, ctx.companyId)
+    fetchPublicOrder(editingOrderCode)
       .then(({ data }) => { if (data?.orderCode) setTrackingOrder(data) })
       .catch(() => {})
   }
@@ -1195,11 +1214,8 @@ export default function ShopMenuPage() {
           onEdit={handleEditOrder}
           onOrderMore={() => {
             if (trackingOrder?.orderCode) {
-              const qs = ctx?.tenantId && ctx?.companyId
-                ? `?tenantId=${ctx.tenantId}&companyId=${ctx.companyId}`
-                : ''
               window.open(
-                window.location.origin + '/bom-inventory/shop/order/' + encodeURIComponent(trackingOrder.orderCode) + qs,
+                window.location.origin + '/bom-inventory/shop/order/' + encodeURIComponent(trackingOrder.orderCode),
                 '_blank'
               )
             }

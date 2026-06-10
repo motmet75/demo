@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import CircularProgress from '@mui/material/CircularProgress'
@@ -12,9 +12,6 @@ function fmt(n) {
 
 export default function CustomerPickupPage() {
   const { orderCode } = useParams()
-  const [params] = useSearchParams()
-  const tenantId = params.get('tenantId')
-  const companyId = params.get('companyId')
 
   const [order, setOrder] = useState(null)
   const [scanned, setScanned] = useState(false)
@@ -22,12 +19,12 @@ export default function CustomerPickupPage() {
   const [error, setError] = useState('')
 
   const load = useCallback(async () => {
-    if (!orderCode || !tenantId || !companyId) { setError('Invalid link'); return }
+    if (!orderCode) { setError('Invalid link'); return }
     try {
-      const { data } = await fetchPublicOrder(orderCode, tenantId, companyId)
+      const { data } = await fetchPublicOrder(orderCode)
       setOrder(data)
     } catch (e) { setError(e.message || 'Order not found') }
-  }, [orderCode, tenantId, companyId])
+  }, [orderCode])
 
   useEffect(() => { load() }, [load])
 
@@ -35,11 +32,11 @@ export default function CustomerPickupPage() {
   useEffect(() => {
     if (!order || scanned || scanning) return
     setScanning(true)
-    pickupScan(orderCode, tenantId, companyId)
+    pickupScan(orderCode)
       .then(() => setScanned(true))
       .catch(() => {})
       .finally(() => setScanning(false))
-  }, [order, scanned, scanning, orderCode, tenantId, companyId])
+  }, [order, scanned, scanning, orderCode])
 
   if (error) return (
     <Box sx={{ height: '100vh', bgcolor: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2 }}>
@@ -175,7 +172,7 @@ export default function CustomerPickupPage() {
               variant="contained"
               onClick={() => {
                 setScanning(true)
-                pickupScan(orderCode, tenantId, companyId)
+                pickupScan(orderCode)
                   .then(() => setScanned(true))
                   .catch(() => {})
                   .finally(() => setScanning(false))

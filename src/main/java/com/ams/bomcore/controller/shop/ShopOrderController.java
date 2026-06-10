@@ -92,17 +92,13 @@ public class ShopOrderController {
     }
 
     @GetMapping("/shop/public/orders/{orderCode}")
-    public ResponseEntity<?> getOrderStatus(@PathVariable String orderCode,
-                                             @RequestParam UUID tenantId, @RequestParam UUID companyId) {
-        validateScope(tenantId, companyId);
-        return ResponseEntity.ok(shopOrderService.getOrderByCode(orderCode, tenantId, companyId));
+    public ResponseEntity<?> getOrderStatus(@PathVariable String orderCode) {
+        return ResponseEntity.ok(shopOrderService.getOrderByCode(orderCode));
     }
 
     @PatchMapping("/shop/public/orders/{orderCode}/pickup-scan")
-    public ResponseEntity<?> pickupScan(@PathVariable String orderCode,
-                                         @RequestParam UUID tenantId, @RequestParam UUID companyId) {
-        validateScope(tenantId, companyId);
-        return ResponseEntity.ok(shopOrderService.markPickupScan(orderCode, tenantId, companyId));
+    public ResponseEntity<?> pickupScan(@PathVariable String orderCode) {
+        return ResponseEntity.ok(shopOrderService.markPickupScan(orderCode));
     }
 
     @GetMapping("/shop/public/active-pickup")
@@ -442,30 +438,24 @@ public class ShopOrderController {
     }
 
     @PatchMapping("/shop/public/orders/{orderCode}/start-edit")
-    public ResponseEntity<?> startCustomerEdit(@PathVariable String orderCode,
-                                               @RequestParam UUID tenantId, @RequestParam UUID companyId) {
-        validateScope(tenantId, companyId);
+    public ResponseEntity<?> startCustomerEdit(@PathVariable String orderCode) {
         try {
-            return ResponseEntity.ok(shopOrderService.startCustomerEdit(orderCode, tenantId, companyId));
+            return ResponseEntity.ok(shopOrderService.startCustomerEdit(orderCode));
         } catch (IllegalStateException e) {
             return ResponseEntity.status(409).body(Map.of("error", e.getMessage()));
         }
     }
 
     @PatchMapping("/shop/public/orders/{orderCode}/cancel-edit")
-    public ResponseEntity<?> cancelCustomerEdit(@PathVariable String orderCode,
-                                                @RequestParam UUID tenantId, @RequestParam UUID companyId) {
-        validateScope(tenantId, companyId);
-        return ResponseEntity.ok(shopOrderService.cancelCustomerEdit(orderCode, tenantId, companyId));
+    public ResponseEntity<?> cancelCustomerEdit(@PathVariable String orderCode) {
+        return ResponseEntity.ok(shopOrderService.cancelCustomerEdit(orderCode));
     }
 
     @PutMapping("/shop/public/orders/{orderCode}/items")
     public ResponseEntity<?> updateOrderByCustomer(@PathVariable String orderCode,
-                                                    @RequestBody List<ShopOrderService.ItemRequest> items,
-                                                    @RequestParam UUID tenantId, @RequestParam UUID companyId) {
-        validateScope(tenantId, companyId);
+                                                    @RequestBody List<ShopOrderService.ItemRequest> items) {
         try {
-            return ResponseEntity.ok(shopOrderService.updateOrderByCustomer(orderCode, items, tenantId, companyId));
+            return ResponseEntity.ok(shopOrderService.updateOrderByCustomer(orderCode, items));
         } catch (IllegalStateException e) {
             return ResponseEntity.status(409).body(Map.of("error", e.getMessage()));
         }

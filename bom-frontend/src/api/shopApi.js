@@ -14,8 +14,8 @@ export function fetchMenu(tenantId, companyId) {
   return apiFetchJsonNoContext('/shop/public/menu' + qs({ tenantId, companyId }))
 }
 
-export function fetchPublicOrder(orderCode, tenantId, companyId) {
-  return apiFetchJsonNoContext(`/shop/public/orders/${orderCode}` + qs({ tenantId, companyId }))
+export function fetchPublicOrder(orderCode) {
+  return apiFetchJsonNoContext(`/shop/public/orders/${encodeURIComponent(orderCode)}`)
 }
 
 export function createOrder(tenantId, companyId, body) {
@@ -34,16 +34,16 @@ export function fetchActiveTableOrders(tableId, tenantId, companyId) {
   return apiFetchJsonNoContext('/shop/public/table-orders' + qs({ tableId, tenantId, companyId }))
 }
 
-export function startCustomerEdit(orderCode, tenantId, companyId) {
-  return apiFetchJsonNoContext(`/shop/public/orders/${orderCode}/start-edit` + qs({ tenantId, companyId }), { method: 'PATCH' })
+export function startCustomerEdit(orderCode) {
+  return apiFetchJsonNoContext(`/shop/public/orders/${encodeURIComponent(orderCode)}/start-edit`, { method: 'PATCH' })
 }
 
-export function cancelCustomerEdit(orderCode, tenantId, companyId) {
-  return apiFetchJsonNoContext(`/shop/public/orders/${orderCode}/cancel-edit` + qs({ tenantId, companyId }), { method: 'PATCH' })
+export function cancelCustomerEdit(orderCode) {
+  return apiFetchJsonNoContext(`/shop/public/orders/${encodeURIComponent(orderCode)}/cancel-edit`, { method: 'PATCH' })
 }
 
-export function updatePublicOrderItems(orderCode, tenantId, companyId, items) {
-  return apiFetchJsonNoContext(`/shop/public/orders/${orderCode}/items` + qs({ tenantId, companyId }), {
+export function updatePublicOrderItems(orderCode, items) {
+  return apiFetchJsonNoContext(`/shop/public/orders/${encodeURIComponent(orderCode)}/items`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(items)
@@ -225,9 +225,9 @@ export function deleteMenuOption(id) {
 
 // ── Pickup flow ────────────────────────────────────────────────────
 
-export function pickupScan(orderCode, tenantId, companyId) {
+export function pickupScan(orderCode) {
   return apiFetchJsonNoContext(
-    `/shop/public/orders/${encodeURIComponent(orderCode)}/pickup-scan` + qs({ tenantId, companyId }),
+    `/shop/public/orders/${encodeURIComponent(orderCode)}/pickup-scan`,
     { method: 'PATCH' }
   )
 }
