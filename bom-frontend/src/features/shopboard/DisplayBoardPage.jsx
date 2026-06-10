@@ -164,8 +164,10 @@ function OrderCard({ order, colStyle }) {
                     display: 'flex',
                     alignItems: 'baseline',
                     gap: 0.4,
-                    pl: 1,
+                    pl: 2.5,
                     mt: 0.2,
+                    borderLeft: `2px solid ${colStyle.childBorder}`,
+                    ml: 1,
                   }}>
                     <Typography sx={{
                       fontSize: { xs: 9, md: 10 },

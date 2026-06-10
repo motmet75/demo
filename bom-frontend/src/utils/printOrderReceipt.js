@@ -253,7 +253,9 @@ export function printCupLabels(order) {
     display: flex;
     align-items: baseline;
     gap: 4px;
-    padding: 1px 10px 1px 14px;
+    padding: 1px 10px 1px 10px;
+    margin-left: 14px;
+    border-left: 2px solid #c7d2fe;
   }
   .side-num {
     font-size: 10px;
@@ -332,24 +334,28 @@ export function printOrderReceipt(order, trackingQrBase64 = null) {
       .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
       .join(' · ')
     const children = childMap[String(item.id)] || []
+    const parentQty = Number(item.quantity || 1)
     const childrenHtml = children.map((child, ci) => {
       const childOpts = parseOptsObj(child.selectedOptions)
       const childOptsInline = Object.entries(childOpts)
         .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
         .join(' · ')
+      const effectiveQty   = Number(child.quantity || 1) * parentQty
+      const effectiveTotal = Number(child.lineTotal || 0) * parentQty
       return `
         <div class="row side-row">
           <span class="side-num">${rowNum}.${ci + 1}</span>
-          <span class="side-qty">${child.quantity}&#215;</span>
+          <span class="side-qty">${effectiveQty}&#215;</span>
           <span class="side-name">${child.modelName}</span>
-          <span class="item-price">${fmt(child.lineTotal)}</span>
+          <span class="item-price">${fmt(effectiveTotal)}</span>
         </div>
         ${childOptsInline ? `<div class="child-opts grey">${childOptsInline}</div>` : ''}
         ${child.itemNotes ? `<div class="child-opts grey italic">&#9888; ${child.itemNotes}</div>` : ''}
       `
     }).join('')
 
-    const subtotal = Number(item.lineTotal || 0) + children.reduce((s, c) => s + Number(c.lineTotal || 0), 0)
+    const subtotal = Number(item.lineTotal || 0)
+      + children.reduce((s, c) => s + Number(c.lineTotal || 0) * parentQty, 0)
     const subtotalHtml = children.length > 0
       ? `<div class="row subtotal-row"><span class="subtotal-label">= subtotal</span><span class="subtotal-val">${fmt(subtotal)}</span></div>`
       : ''
@@ -435,11 +441,11 @@ export function printOrderReceipt(order, trackingQrBase64 = null) {
   .item-name  { flex: 1; padding-right: 6px; font-weight: 700; }
   .item-price { text-align: right; white-space: nowrap; flex-shrink: 0; }
   .opts-inline { padding-left: 20px; font-size: 11px; color: #666; margin-bottom: 1px; }
-  .side-row   { margin-top: 2px; gap: 3px; padding-left: 6px; }
+  .side-row   { margin-top: 2px; gap: 3px; margin-left: 14px; border-left: 2px solid #c7d2fe; padding-left: 6px; }
   .side-num   { font-size: 10px; color: #aaa; flex-shrink: 0; min-width: 22px; }
   .side-qty   { font-weight: 900; font-size: 11px; color: #6366f1; flex-shrink: 0; margin-right: 3px; }
   .side-name  { flex: 1; padding-right: 6px; font-size: 12px; color: #444; }
-  .child-opts    { padding-left: 32px; font-size: 10px; color: #777; margin-bottom: 1px; }
+  .child-opts    { margin-left: 14px; padding-left: 28px; font-size: 10px; color: #777; margin-bottom: 1px; }
   .subtotal-row  { margin-top: 2px; padding-top: 2px; border-top: 1px dotted #ccc; padding-left: 20px; }
   .subtotal-label { flex: 1; font-size: 11px; color: #555; font-style: italic; }
   .subtotal-val   { font-size: 12px; font-weight: 900; color: #111; white-space: nowrap; }

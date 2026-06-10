@@ -692,19 +692,33 @@ export default function ShopMenuPage() {
               <Box sx={{ ml: 1.5, borderLeft: '2px solid #c7d2fe' }}>
 
                 {/* Existing side items */}
-                {sides.map(si => {
+                {sides.map((si, siIdx) => {
                   const sm = menu.find(x => x.id === si.modelId)
+                  const effectiveQty   = (si.qty || 1) * entry.qty
+                  const effectivePrice = sm ? effectiveQty * Number(sm.sellingPrice || 0) : 0
                   return (
                     <Box key={si.uid} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 0.75, py: 0.5, borderBottom: '1px solid #e8eaf6', flexWrap: 'wrap' }}>
-                      <Box sx={{ width: 12, height: 2, bgcolor: '#c7d2fe', flexShrink: 0 }} />
+                      {/* sub-number */}
+                      <Typography variant="caption" sx={{ color: '#a5b4fc', fontWeight: 700, fontSize: 10, flexShrink: 0, minWidth: 20 }}>
+                        {/* find parent index from cartEntries */}
+                        {idx + 1}.{siIdx + 1}
+                      </Typography>
+                      {/* effective qty badge */}
+                      <Typography variant="caption" fontWeight={900} sx={{ color: '#6366f1', fontSize: 12, flexShrink: 0 }}>
+                        {effectiveQty}×
+                      </Typography>
                       <Typography variant="caption" fontWeight={600} sx={{ flex: 1, fontSize: 12, minWidth: 60 }} noWrap>
                         {si.modelName}
                       </Typography>
+                      {/* per-cup spinner */}
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.2 }}>
+                        <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: 10, mr: 0.25 }}>
+                          {entry.qty > 1 ? `${si.qty || 1}/cup` : ''}
+                        </Typography>
                         <IconButton size="small" onClick={() => changeSideQty(entry.uid, si.uid, -1)} sx={{ p: 0.2 }}>
                           <RemoveIcon sx={{ fontSize: 12 }} />
                         </IconButton>
-                        <Typography variant="caption" fontWeight={700} sx={{ minWidth: 18, textAlign: 'center', fontSize: 12 }}>
+                        <Typography variant="caption" fontWeight={700} sx={{ minWidth: 16, textAlign: 'center', fontSize: 12 }}>
                           {si.qty || 1}
                         </Typography>
                         <IconButton size="small" onClick={() => changeSideQty(entry.uid, si.uid, 1)}
@@ -713,7 +727,7 @@ export default function ShopMenuPage() {
                         </IconButton>
                       </Box>
                       <Typography variant="caption" color="primary" fontWeight={700} sx={{ minWidth: 56, textAlign: 'right', fontSize: 12 }}>
-                        {sm ? fmt((si.qty || 1) * Number(sm.sellingPrice || 0) * entry.qty) : ''}
+                        {sm ? fmt(effectivePrice) : ''}
                       </Typography>
                       <IconButton size="small" onClick={() => removeSide(entry.uid, si.uid)}
                         sx={{ p: 0.25, color: '#94a3b8', '&:hover': { color: '#dc2626' } }}>
@@ -1063,11 +1077,18 @@ export default function ShopMenuPage() {
                 const m       = menu.find(x => x.id === entry.modelId)
                 if (!m) return null
                 const optsStr = fmtOpts(entry.selectedOptions)
+                const sides   = entry.sideItems || []
+                const unitPrice = Number(m.sellingPrice || 0) + calcOptAddOn(entry)
+                const mainTotal = entry.qty * unitPrice
+                const sideTotal = sides.reduce((s, si) => {
+                  const sm = menu.find(x => x.id === si.modelId)
+                  return s + (si.qty || 1) * Number(sm?.sellingPrice || 0) * entry.qty
+                }, 0)
                 return (
                   <Box key={entry.uid} sx={{ mb: 0.75 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2">{idx + 1}. {entry.qty}× {m.modelName}</Typography>
-                      <Typography variant="body2" color="primary">{fmt(entryTotal(entry))}</Typography>
+                      <Typography variant="body2" fontWeight={700}>{idx + 1}. {entry.qty}× {m.modelName}</Typography>
+                      <Typography variant="body2" color="primary" fontWeight={700}>{fmt(mainTotal)}</Typography>
                     </Box>
                     {optsStr && (
                       <Typography variant="caption" color="text.secondary" sx={{ pl: 1.5, display: 'block' }}>{optsStr}</Typography>
@@ -1077,16 +1098,31 @@ export default function ShopMenuPage() {
                         Note: {entry.itemNotes}
                       </Typography>
                     )}
-                    {(entry.sideItems || []).map(side => {
+                    {sides.map((side, siIdx) => {
                       const sm = menu.find(x => x.id === side.modelId)
                       if (!sm) return null
+                      const effQty   = (side.qty || 1) * entry.qty
+                      const effPrice = effQty * Number(sm.sellingPrice || 0)
                       return (
-                        <Box key={side.uid} sx={{ display: 'flex', justifyContent: 'space-between', pl: 2 }}>
-                          <Typography variant="caption" color="text.secondary">↳ {side.qty || 1}× {sm.modelName}</Typography>
-                          <Typography variant="caption" color="primary">{fmt((side.qty || 1) * Number(sm.sellingPrice) * entry.qty)}</Typography>
+                        <Box key={side.uid} sx={{ display: 'flex', justifyContent: 'space-between', pl: 1.5 }}>
+                          <Typography variant="caption" color="text.secondary">
+                            {idx + 1}.{siIdx + 1} {effQty}× {sm.modelName}
+                            {entry.qty > 1 && (
+                              <Typography component="span" variant="caption" sx={{ color: '#a5b4fc', ml: 0.5 }}>
+                                ({side.qty || 1}/cup)
+                              </Typography>
+                            )}
+                          </Typography>
+                          <Typography variant="caption" color="primary" fontWeight={700}>{fmt(effPrice)}</Typography>
                         </Box>
                       )
                     })}
+                    {sides.length > 0 && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', pl: 1.5, borderTop: '1px dotted #e2e8f0', mt: 0.25, pt: 0.25 }}>
+                        <Typography variant="caption" sx={{ color: '#64748b', fontStyle: 'italic' }}>= subtotal</Typography>
+                        <Typography variant="caption" fontWeight={900} color="primary">{fmt(mainTotal + sideTotal)}</Typography>
+                      </Box>
+                    )}
                   </Box>
                 )
               })}
