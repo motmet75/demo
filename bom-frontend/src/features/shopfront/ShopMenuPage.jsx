@@ -153,7 +153,7 @@ export default function ShopMenuPage() {
     const main = entry.qty * (base + calcOptAddOn(entry))
     const side = (entry.sideItems || []).reduce((s, si) => {
       const sm = menu.find(x => x.id === si.modelId)
-      return s + (sm ? Number(sm.sellingPrice || 0) : 0) * (si.qty || 1)
+      return s + (sm ? Number(sm.sellingPrice || 0) : 0) * (si.qty || 1) * entry.qty
     }, 0)
     return main + side
   }
@@ -320,9 +320,12 @@ export default function ShopMenuPage() {
         if (!m) return null
         const opts   = parseOpts(entry.selectedOptions)
         const groups = optionsByModel[entry.modelId] || []
-        const sf     = sideForm[entry.uid] || {}
-        const eTotal = entryTotal(entry)
-        const sides  = entry.sideItems || []
+        const sf        = sideForm[entry.uid] || {}
+        const eTotal    = entryTotal(entry)
+        const sides     = entry.sideItems || []
+        const unitPrice = Number(m.sellingPrice || 0) + calcOptAddOn(entry)
+        const mainTotal = entry.qty * unitPrice
+        const sideTotal = eTotal - mainTotal
 
         return (
           <Box key={entry.uid} sx={{ border: '1.5px solid #e2e8f0', borderRadius: 2, overflow: 'hidden' }}>
@@ -333,9 +336,13 @@ export default function ShopMenuPage() {
                 <Typography variant="caption" sx={{ color: '#94a3b8', fontWeight: 700, fontSize: 11, flexShrink: 0 }}>
                   {idx + 1}.
                 </Typography>
-                <Typography variant="body2" fontWeight={700} sx={{ flex: 1, minWidth: 80 }} noWrap>
-                  {m.modelName}
-                </Typography>
+                {/* Name + unit price stacked */}
+                <Box sx={{ flex: 1, minWidth: 80, overflow: 'hidden' }}>
+                  <Typography variant="body2" fontWeight={700} noWrap>{m.modelName}</Typography>
+                  <Typography variant="caption" sx={{ color: '#64748b', fontSize: 11 }}>
+                    {fmt(unitPrice)} / item
+                  </Typography>
+                </Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
                   <IconButton size="small" onClick={() => decrementEntry(entry.uid)} sx={{ p: 0.25 }}>
                     <RemoveIcon sx={{ fontSize: 14 }} />
@@ -348,9 +355,10 @@ export default function ShopMenuPage() {
                     <AddIcon sx={{ fontSize: 14 }} />
                   </IconButton>
                 </Box>
+                {/* Main item line total (sides shown separately below) */}
                 <Typography variant="body2" color="primary" fontWeight={800}
                   sx={{ minWidth: 70, textAlign: 'right', fontSize: 13 }}>
-                  {fmt(eTotal)}
+                  {fmt(mainTotal)}
                 </Typography>
                 <IconButton size="small" color="error" onClick={() => deleteEntry(entry.uid)} sx={{ p: 0.25 }}>
                   <DeleteIcon sx={{ fontSize: 14 }} />
@@ -433,7 +441,7 @@ export default function ShopMenuPage() {
                         </IconButton>
                       </Box>
                       <Typography variant="caption" color="primary" fontWeight={700} sx={{ minWidth: 56, textAlign: 'right', fontSize: 12 }}>
-                        {sm ? fmt((si.qty || 1) * Number(sm.sellingPrice || 0)) : ''}
+                        {sm ? fmt((si.qty || 1) * Number(sm.sellingPrice || 0) * entry.qty) : ''}
                       </Typography>
                       <IconButton size="small" onClick={() => removeSide(entry.uid, si.uid)}
                         sx={{ p: 0.25, color: '#94a3b8', '&:hover': { color: '#dc2626' } }}>
@@ -442,6 +450,18 @@ export default function ShopMenuPage() {
                     </Box>
                   )
                 })}
+
+                {/* Block total — only shown when there are side items */}
+                {sides.length > 0 && (
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 0.75, py: 0.5, borderTop: '1px dashed #c7d2fe' }}>
+                    <Typography variant="caption" sx={{ color: '#64748b', fontSize: 11 }}>
+                      {fmt(mainTotal)} + {fmt(sideTotal)} sides
+                    </Typography>
+                    <Typography variant="caption" fontWeight={800} color="primary" sx={{ fontSize: 12 }}>
+                      = {fmt(eTotal)}
+                    </Typography>
+                  </Box>
+                )}
 
                 {/* Add side inline form */}
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.6, pr: 0.75, flexWrap: 'wrap' }}>
@@ -578,13 +598,32 @@ export default function ShopMenuPage() {
                       bgcolor: '#fff', transition: 'border-color 0.15s', overflow: 'hidden',
                     }}>
                       <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        {m.imageUrl && (
-                          <CardMedia component="img" image={m.imageUrl}
-                            sx={{ width: { xs: 72, md: 80 }, height: { xs: 72, md: 80 }, objectFit: 'cover', flexShrink: 0 }} />
-                        )}
-                        <Box sx={{ flex: 1, px: 1.5, py: 1 }}>
-                          <Typography variant="body2" fontWeight={600} lineHeight={1.3}>{m.modelName}</Typography>
-                          <Typography variant="body2" color="primary" fontWeight={700} sx={{ mt: 0.25 }}>{fmt(m.sellingPrice)}</Typography>
+                        {/* Thumbnail — always present; grey placeholder when no image */}
+                        <Box sx={{
+                          width: { xs: 88, md: 96 }, height: { xs: 88, md: 96 },
+                          flexShrink: 0, bgcolor: '#f0f0f0', overflow: 'hidden',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          {m.imageUrl ? (
+                            <Box component="img" src={m.imageUrl} alt={m.modelName}
+                              sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                              onError={e => { e.target.style.display = 'none'; e.target.parentNode.style.background = '#e8eaf6' }} />
+                          ) : (
+                            <Typography sx={{ fontSize: 28, lineHeight: 1, userSelect: 'none', opacity: 0.25 }}>🍽</Typography>
+                          )}
+                        </Box>
+                        <Box sx={{ flex: 1, px: 1.5, py: 1.25 }}>
+                          <Typography
+                            fontWeight={800}
+                            lineHeight={1.25}
+                            sx={{ fontSize: { xs: 15, md: 16 }, letterSpacing: 0 }}>
+                            {m.modelName}
+                          </Typography>
+                          <Typography
+                            color="primary" fontWeight={700}
+                            sx={{ mt: 0.4, fontSize: { xs: 14, md: 15 } }}>
+                            {fmt(m.sellingPrice)}
+                          </Typography>
                           {hasOpts && (
                             <Chip icon={<TuneIcon sx={{ fontSize: '12px !important' }} />} label="customizable"
                               size="small" variant="outlined"
@@ -762,7 +801,7 @@ export default function ShopMenuPage() {
                       return (
                         <Box key={side.uid} sx={{ display: 'flex', justifyContent: 'space-between', pl: 2 }}>
                           <Typography variant="caption" color="text.secondary">↳ {side.qty || 1}× {sm.modelName}</Typography>
-                          <Typography variant="caption" color="primary">{fmt((side.qty || 1) * Number(sm.sellingPrice))}</Typography>
+                          <Typography variant="caption" color="primary">{fmt((side.qty || 1) * Number(sm.sellingPrice) * entry.qty)}</Typography>
                         </Box>
                       )
                     })}
