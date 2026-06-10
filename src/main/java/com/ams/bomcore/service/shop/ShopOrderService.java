@@ -179,18 +179,49 @@ public class ShopOrderService {
             var bomOpt = bomService.getActiveBomForModel(item.getModel().getId(), tenantId);
             if (bomOpt.isEmpty()) continue;
             List<BomItemEntity> bomItems = bomService.getBomItems(bomOpt.get().getId(), tenantId, companyId);
-            for (BomItemEntity bomItem : bomItems) {
-                try {
-                    orderDeductionService.consumeForProduction(bomItem.getId(), item.getQuantity(), tenantId, companyId);
-                } catch (Exception e) {
-                    // log but do not block status transition — partial stock is acceptable
+
+            // Build BOM tree to correctly compute deduction quantities for recursive structures.
+            // effectiveOrderQty for a child = parentChainMultiplier × shopItemQty where
+            // parentChainMultiplier is the product of all ancestor BOM item quantities.
+            Map<UUID, List<BomItemEntity>> childMap = new HashMap<>();
+            List<BomItemEntity> bomRoots = new ArrayList<>();
+            for (BomItemEntity bi : bomItems) {
+                if (bi.getParentItem() == null) {
+                    bomRoots.add(bi);
+                } else {
+                    UUID parentId = bi.getParentItem().getId();
+                    childMap.computeIfAbsent(parentId, k -> new ArrayList<>()).add(bi);
                 }
             }
+            deductBomTree(bomRoots, BigDecimal.ONE, childMap, item.getQuantity(), tenantId, companyId);
         }
 
         order.setStatus(ShopOrder.STATUS_PREPARING);
         shopOrderRepository.save(order);
         return dto(order);
+    }
+
+    /**
+     * Traverses the BOM tree and issues consumeForProduction for each node using the correct
+     * effective quantity: parentChainMultiplier × shopItemQty is passed as orderQty so that
+     * consumeForProduction computes: bomItem.quantity × (parentChainMultiplier × shopItemQty).
+     */
+    private void deductBomTree(List<BomItemEntity> nodes, BigDecimal parentChainMultiplier,
+                                Map<UUID, List<BomItemEntity>> childMap,
+                                BigDecimal shopItemQty, UUID tenantId, UUID companyId) {
+        for (BomItemEntity node : nodes) {
+            try {
+                orderDeductionService.consumeForProduction(
+                        node.getId(), parentChainMultiplier.multiply(shopItemQty), tenantId, companyId);
+            } catch (Exception e) {
+                // log but do not block status transition — partial stock is acceptable
+            }
+            List<BomItemEntity> children = childMap.get(node.getId());
+            if (children != null && !children.isEmpty()) {
+                BigDecimal childMultiplier = parentChainMultiplier.multiply(node.getQuantity());
+                deductBomTree(children, childMultiplier, childMap, shopItemQty, tenantId, companyId);
+            }
+        }
     }
 
     @Transactional

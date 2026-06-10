@@ -2,6 +2,7 @@ package com.ams.bomcore.service.shop;
 
 import com.ams.bomcore.domain.bom.BomItemEntity;
 import com.ams.bomcore.domain.inventory.InventoryEntity;
+import com.ams.bomcore.domain.material.Material;
 import com.ams.bomcore.repository.InventoryRepository;
 import com.ams.bomcore.service.bom.BomService;
 import org.springframework.stereotype.Service;
@@ -9,7 +10,10 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -34,36 +38,70 @@ public class ShopPricingService {
         }
         var bom = bomOpt.get();
         List<BomItemEntity> bomItems = bomService.getBomItems(bom.getId(), tenantId, companyId);
-
         List<InventoryEntity> allInventory = inventoryRepository.findAllByTenantIdAndCompanyId(tenantId, companyId);
+
+        // Build parent→children map and collect root items (parentItem == null)
+        Map<UUID, List<BomItemEntity>> childMap = new HashMap<>();
+        List<BomItemEntity> roots = new ArrayList<>();
+        for (BomItemEntity bi : bomItems) {
+            if (bi.getParentItem() == null) {
+                roots.add(bi);
+            } else {
+                UUID parentId = bi.getParentItem().getId();
+                childMap.computeIfAbsent(parentId, k -> new ArrayList<>()).add(bi);
+            }
+        }
+
+        // Accumulate effective material quantities by traversing the BOM tree.
+        // Each node's effective qty = product of all ancestor quantities × orderQty.
+        Map<UUID, BigDecimal> materialQtyMap = new LinkedHashMap<>();
+        Map<UUID, Material> materialById = new LinkedHashMap<>();
+        for (BomItemEntity root : roots) {
+            accumulateBomQty(root, orderQty.multiply(root.getQuantity()), childMap, materialQtyMap, materialById);
+        }
 
         List<CostLine> lines = new ArrayList<>();
         BigDecimal total = BigDecimal.ZERO;
+        for (Map.Entry<UUID, BigDecimal> entry : materialQtyMap.entrySet()) {
+            UUID materialId = entry.getKey();
+            BigDecimal qty = entry.getValue();
+            Material material = materialById.get(materialId);
+            if (material == null) continue;
 
-        for (BomItemEntity item : bomItems) {
-            if (item.getMaterial() == null) continue;
-
-            UUID materialId = item.getMaterial().getId();
             BigDecimal avgUnitPrice = weightedAvgUnitPrice(allInventory, materialId);
             if (avgUnitPrice == null) {
-                // fall back to Material.price
-                avgUnitPrice = item.getMaterial().getPrice() != null ? item.getMaterial().getPrice() : BigDecimal.ZERO;
+                avgUnitPrice = material.getPrice() != null ? material.getPrice() : BigDecimal.ZERO;
             }
-
-            BigDecimal qty = item.getQuantity().multiply(orderQty);
             BigDecimal lineCost = qty.multiply(avgUnitPrice).setScale(4, RoundingMode.HALF_UP);
             total = total.add(lineCost);
-
-            lines.add(new CostLine(
-                    item.getMaterial().getMaterialCode(),
-                    item.getMaterial().getMaterialName(),
-                    qty,
-                    avgUnitPrice,
-                    lineCost
-            ));
+            lines.add(new CostLine(material.getMaterialCode(), material.getMaterialName(), qty, avgUnitPrice, lineCost));
         }
 
         return new RawCostBreakdown(lines, total.setScale(4, RoundingMode.HALF_UP));
+    }
+
+    /**
+     * Recursively accumulates material quantities through the BOM tree.
+     * multiplier = product of all ancestor node quantities × orderQty already applied.
+     */
+    private void accumulateBomQty(BomItemEntity node, BigDecimal multiplier,
+                                   Map<UUID, List<BomItemEntity>> childMap,
+                                   Map<UUID, BigDecimal> qtyMap,
+                                   Map<UUID, Material> materialById) {
+        Material mat = node.getMaterial();
+        if (mat != null) {
+            UUID matId = mat.getId();
+            if (matId != null) {
+                qtyMap.merge(matId, multiplier, BigDecimal::add);
+                materialById.putIfAbsent(matId, mat);
+            }
+        }
+        List<BomItemEntity> children = childMap.get(node.getId());
+        if (children == null || children.isEmpty()) return;
+        for (BomItemEntity child : children) {
+            if (child.getQuantity() == null) continue;
+            accumulateBomQty(child, multiplier.multiply(child.getQuantity()), childMap, qtyMap, materialById);
+        }
     }
 
     private BigDecimal weightedAvgUnitPrice(List<InventoryEntity> allInventory, UUID materialId) {
