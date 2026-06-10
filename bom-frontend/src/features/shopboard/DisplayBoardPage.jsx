@@ -100,8 +100,8 @@ function OrderCard({ order, colStyle }) {
             const opts = parseOpts(item.selectedOptions)
             return (
               <Box key={item.id || idx} sx={{ mb: children.length > 0 ? 0.5 : 0.25 }}>
-                {/* Root item row */}
-                <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.4 }}>
+                {/* Root item row — qty × name  opt1 · opt2 inline */}
+                <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.4, flexWrap: 'wrap' }}>
                   <Typography sx={{
                     fontSize: { xs: 10, md: 11 },
                     fontWeight: 900,
@@ -120,26 +120,18 @@ function OrderCard({ order, colStyle }) {
                   }}>
                     {item.modelName}
                   </Typography>
+                  {opts.length > 0 && (
+                    <Typography sx={{
+                      fontSize: { xs: 9, md: 10 },
+                      fontWeight: 600,
+                      color: colStyle.optColor,
+                      lineHeight: 1.4,
+                      wordBreak: 'break-word',
+                    }}>
+                      {opts.join(' · ')}
+                    </Typography>
+                  )}
                 </Box>
-
-                {/* Options chips */}
-                {opts.length > 0 && (
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.3, pl: 1.75, mb: 0.25 }}>
-                    {opts.map((o, i) => (
-                      <Box key={i} sx={{
-                        bgcolor: colStyle.optBg,
-                        color: colStyle.optColor,
-                        borderRadius: 99,
-                        px: 0.75,
-                        fontSize: { xs: 9, md: 10 },
-                        fontWeight: 600,
-                        lineHeight: 1.6,
-                      }}>
-                        {o}
-                      </Box>
-                    ))}
-                  </Box>
-                )}
 
                 {/* Note */}
                 {item.itemNotes && (
