@@ -164,10 +164,10 @@ function OrderCard({ order, colStyle }) {
                     display: 'flex',
                     alignItems: 'baseline',
                     gap: 0.5,
-                    pl: 1.25,
-                    pt: 0.25,
-                    mt: 0.25,
-                    ml: 2,
+                    pl: 1,
+                    pt: 0.2,
+                    mt: 0.2,
+                    ml: 3,
                     borderLeft: `2px solid ${colStyle.childBorder}`,
                   }}>
                     <Typography sx={{
@@ -239,21 +239,21 @@ const COL_QUEUED = {
   cardBg: '#fefce8', headerBg: '#fef9c3', border: '#fbbf24',
   numColor: '#92400e', labelColor: '#78350f', qtyColor: '#d97706',
   itemColor: '#1c1917', optBg: '#fde68a', optColor: '#92400e',
-  childBorder: '#fcd34d', childColor: '#d97706',
+  childBorder: '#fcd34d', childColor: '#a8a29e',
   glow: false, glowColor: '#fbbf24', readyBadge: false,
 }
 const COL_MAKING = {
   cardBg: '#eff6ff', headerBg: '#dbeafe', border: '#3b82f6',
   numColor: '#1d4ed8', labelColor: '#1e40af', qtyColor: '#2563eb',
   itemColor: '#1e293b', optBg: '#bfdbfe', optColor: '#1e40af',
-  childBorder: '#93c5fd', childColor: '#60a5fa',
+  childBorder: '#93c5fd', childColor: '#94a3b8',
   glow: false, glowColor: '#3b82f6', readyBadge: false,
 }
 const COL_READY = {
   cardBg: '#f0fdf4', headerBg: '#dcfce7', border: '#22c55e',
   numColor: '#15803d', labelColor: '#166534', qtyColor: '#16a34a',
   itemColor: '#1c1917', optBg: '#bbf7d0', optColor: '#166534',
-  childBorder: '#86efac', childColor: '#4ade80',
+  childBorder: '#86efac', childColor: '#a3a3a3',
   glow: true, glowColor: '#22c55e', readyBadge: true,
 }
 

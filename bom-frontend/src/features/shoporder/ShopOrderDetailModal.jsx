@@ -113,16 +113,20 @@ function ChangeCalc({ label, due, color = '#e65100', bg = '#fff7ed', borderColor
   )
 }
 
-function buildOrderedItems(items) {
-  const result = []
-  const roots = items.filter(it => !it.parentItemId)
-  roots.forEach((root, rIdx) => {
-    result.push({ ...root, _depth: 0, _label: `${rIdx + 1}.`, _parentQty: null })
-    items.filter(it => it.parentItemId === root.id).forEach((child, cIdx) => {
-      result.push({ ...child, _depth: 1, _label: `${rIdx + 1}.${cIdx + 1}`, _parentQty: Number(root.quantity || 1) })
-    })
+function buildItemGroups(items) {
+  const roots = (items || []).filter(it => !it.parentItemId)
+  return roots.map((root, rIdx) => {
+    const children = (items || [])
+      .filter(it => it.parentItemId === root.id)
+      .map((child, cIdx) => ({
+        ...child,
+        _label: `${rIdx + 1}.${cIdx + 1}`,
+        _parentQty: Number(root.quantity || 1),
+      }))
+    const rootTotal     = Number(root.lineTotal || 0)
+    const childrenTotal = children.reduce((s, c) => s + Number(c.lineTotal || 0) * Number(root.quantity || 1), 0)
+    return { root: { ...root, _label: `${rIdx + 1}.` }, children, subtotal: rootTotal + childrenTotal }
   })
-  return result
 }
 
 export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }) {
@@ -267,61 +271,86 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
               </TableRow>
             </TableHead>
             <TableBody>
-              {buildOrderedItems(order.items || []).map(item => {
-                const isChild     = item._depth > 0
-                const parentQty   = item._parentQty || 1
-                const childQty    = Number(item.quantity || 1)
-                const effectiveQty   = isChild ? childQty * parentQty : childQty
-                const effectiveTotal = isChild ? Number(item.lineTotal || 0) * parentQty : Number(item.lineTotal || 0)
-                return (
-                <TableRow key={item.id} sx={{ verticalAlign: 'top', bgcolor: isChild ? '#f8f9ff' : 'inherit' }}>
+              {buildItemGroups(order.items || []).map(({ root, children, subtotal }) => [
+                /* ── Root item row ── */
+                <TableRow key={root.id} sx={{ verticalAlign: 'top' }}>
                   <TableCell>
-                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5, pl: isChild ? 2 : 0, borderLeft: isChild ? '2px solid #c7d2fe' : 'none', ml: isChild ? 1 : 0 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <Typography variant="caption" sx={{ color: '#94a3b8', fontWeight: 700, fontSize: 10, flexShrink: 0 }}>{root._label}</Typography>
                       <Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                          <Typography variant="caption" sx={{ color: '#94a3b8', fontWeight: 700, fontSize: 10, flexShrink: 0 }}>
-                            {item._label}
-                          </Typography>
-                          <Typography variant="body2" fontWeight={isChild ? 700 : 700} fontSize={isChild ? 13 : 14}
-                            color={isChild ? '#4338ca' : 'text.primary'}>
-                            {item.modelName}
-                          </Typography>
-                        </Box>
-                        <OptionsDisplay selectedOptions={item.selectedOptions} />
-                        {item.itemNotes && (
-                          <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', display: 'block', mt: 0.25 }}>
-                            {item.itemNotes}
-                          </Typography>
+                        <Typography variant="body2" fontWeight={700} fontSize={14}>{root.modelName}</Typography>
+                        <OptionsDisplay selectedOptions={root.selectedOptions} />
+                        {root.itemNotes && (
+                          <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', display: 'block', mt: 0.25 }}>{root.itemNotes}</Typography>
                         )}
                       </Box>
                     </Box>
                   </TableCell>
-                  <TableCell align="center">
-                    {isChild
-                      ? <Typography fontWeight={800} fontSize={13} color="#6366f1">{parentQty}×{childQty}</Typography>
-                      : <Typography fontWeight={700} fontSize={14}>{childQty}</Typography>
-                    }
-                  </TableCell>
-                  <TableCell align="right">
-                    <Typography fontWeight={isChild ? 600 : 400} fontSize={isChild ? 13 : 'inherit'}>{fmt(item.unitPrice)}</Typography>
-                  </TableCell>
-                  <TableCell align="right"><Typography variant="caption" color="text.secondary">{fmt(item.unitRawCost)}</Typography></TableCell>
-                  <TableCell align="right"><Typography variant="caption" color="success.main">{pct(item.unitPrice, item.unitRawCost)}</Typography></TableCell>
-                  <TableCell align="right">
-                    <Typography fontWeight={800} fontSize={isChild ? 13 : 14} color={isChild ? '#6366f1' : 'primary'}>
-                      {fmt(effectiveTotal)}
-                    </Typography>
-                  </TableCell>
-                </TableRow>
-                )
-              })}
+                  <TableCell align="center"><Typography fontWeight={700} fontSize={14}>{Number(root.quantity)}</Typography></TableCell>
+                  <TableCell align="right">{fmt(root.unitPrice)}</TableCell>
+                  <TableCell align="right"><Typography variant="caption" color="text.secondary">{fmt(root.unitRawCost)}</Typography></TableCell>
+                  <TableCell align="right"><Typography variant="caption" color="success.main">{pct(root.unitPrice, root.unitRawCost)}</Typography></TableCell>
+                  <TableCell align="right"><Typography fontWeight={700} fontSize={14} color="primary">{fmt(root.lineTotal)}</Typography></TableCell>
+                </TableRow>,
+
+                /* ── Child rows ── */
+                ...children.map(child => {
+                  const effectiveQty   = Number(child.quantity || 1) * child._parentQty
+                  const effectiveTotal = Number(child.lineTotal || 0) * child._parentQty
+                  return (
+                    <TableRow key={child.id} sx={{ verticalAlign: 'top', bgcolor: '#f8f9ff' }}>
+                      <TableCell>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 1, pl: 1.5, borderLeft: '2px solid #c7d2fe' }}>
+                          <Typography variant="caption" sx={{ color: '#94a3b8', fontWeight: 700, fontSize: 10, flexShrink: 0 }}>{child._label}</Typography>
+                          <Box>
+                            <Typography variant="body2" fontWeight={600} fontSize={13} color="#4338ca">{child.modelName}</Typography>
+                            {child.itemNotes && (
+                              <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', display: 'block' }}>{child.itemNotes}</Typography>
+                            )}
+                          </Box>
+                        </Box>
+                      </TableCell>
+                      <TableCell align="center"><Typography fontWeight={800} fontSize={13} color="#6366f1">{child._parentQty}×{Number(child.quantity)}</Typography></TableCell>
+                      <TableCell align="right"><Typography fontSize={13} color="text.secondary">{fmt(child.unitPrice)}</Typography></TableCell>
+                      <TableCell align="right"><Typography variant="caption" color="text.secondary">{fmt(child.unitRawCost)}</Typography></TableCell>
+                      <TableCell align="right"><Typography variant="caption" color="success.main">{pct(child.unitPrice, child.unitRawCost)}</Typography></TableCell>
+                      <TableCell align="right"><Typography fontWeight={700} fontSize={13} color="#6366f1">{fmt(effectiveTotal)}</Typography></TableCell>
+                    </TableRow>
+                  )
+                }),
+
+                /* ── Subtotal row (only when children exist) ── */
+                children.length > 0 && (
+                  <TableRow key={`sub-${root.id}`} sx={{ bgcolor: '#f0f4ff' }}>
+                    <TableCell colSpan={5} align="right">
+                      <Typography variant="caption" sx={{ color: '#64748b', fontStyle: 'italic' }}>
+                        subtotal ({root._label.replace('.', '')} {root.modelName})
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="right">
+                      <Typography fontWeight={900} fontSize={14} color="primary">{fmt(subtotal)}</Typography>
+                    </TableCell>
+                  </TableRow>
+                ),
+              ])}
             </TableBody>
           </Table>
 
-          <Box sx={{ mt: 0.75, textAlign: 'right', pr: 1, mb: 1.5 }}>
-            <Typography variant="body2" color="text.secondary">Raw cost: {fmt(order.totalRawCost)}</Typography>
-            <Typography fontWeight={900} variant="h5" color="primary">Total: {fmt(order.totalAmount)}</Typography>
-          </Box>
+          {(() => {
+            const groups = buildItemGroups(order.items || [])
+            const itemsTotal = groups.reduce((s, g) => s + g.subtotal, 0)
+            const delivery   = Number(order.deliveryFee || 0)
+            const grandTotal = itemsTotal + delivery
+            return (
+            <Box sx={{ mt: 0.75, textAlign: 'right', pr: 1, mb: 1.5 }}>
+              <Typography variant="body2" color="text.secondary">Raw cost: {fmt(order.totalRawCost)}</Typography>
+              {delivery > 0 && (
+                <Typography variant="body2" color="text.secondary">Items: {fmt(itemsTotal)} + Delivery: {fmt(delivery)}</Typography>
+              )}
+              <Typography fontWeight={900} variant="h5" color="primary">Total: {fmt(grandTotal)}</Typography>
+            </Box>
+            )
+          })()}
 
           {/* ── Payment Panel ─────────────────────────────────────── */}
           <Divider sx={{ mb: 1.5 }} />
