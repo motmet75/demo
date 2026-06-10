@@ -1,9 +1,12 @@
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
+import { fetchActivePickup } from '../../api/shopApi'
 
 export const COUNTER_CHANNEL = 'shop_counter_display'
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000
+const PICKUP_POLL_MS  = 3000
 
 export function broadcastToCounter(order, tagQrBase64 = null) {
   const payload = order
@@ -429,10 +432,15 @@ function ActiveOrder({ order, flash }) {
 }
 
 export default function CounterDisplayPage() {
+  const [searchParams] = useSearchParams()
+  const tenantId  = searchParams.get('tenantId')
+  const companyId = searchParams.get('companyId')
+
   const [order, setOrder] = useState(null)
   const [flash, setFlash] = useState(false)
-  const idleTimerRef  = useRef(null)
-  const flashTimerRef = useRef(null)
+  const idleTimerRef     = useRef(null)
+  const flashTimerRef    = useRef(null)
+  const lastPickupCode   = useRef(null)
 
   const triggerFlash = () => {
     setFlash(true)
@@ -451,6 +459,29 @@ export default function CounterDisplayPage() {
   useEffect(() => {
     if (order) triggerFlash()
   }, [order?._ts]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cross-device polling: when tenantId+companyId are in URL, poll for pickup scans
+  const pollPickup = useCallback(async () => {
+    if (!tenantId || !companyId) return
+    try {
+      const { res, data: ord } = await fetchActivePickup(tenantId, companyId)
+      if (res.status === 204 || !ord) return
+      if (ord.orderCode !== lastPickupCode.current) {
+        lastPickupCode.current = ord.orderCode
+        const payload = { ...ord, _ts: Date.now() }
+        setOrder(payload)
+        resetIdleTimer(payload)
+        localStorage.setItem('shop_counter_order', JSON.stringify(payload))
+      }
+    } catch (_) {}
+  }, [tenantId, companyId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!tenantId || !companyId) return
+    pollPickup()
+    const t = setInterval(pollPickup, PICKUP_POLL_MS)
+    return () => clearInterval(t)
+  }, [pollPickup])
 
   useEffect(() => {
     if (!window.BroadcastChannel) return

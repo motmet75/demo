@@ -98,6 +98,21 @@ public class ShopOrderController {
         return ResponseEntity.ok(shopOrderService.getOrderByCode(orderCode, tenantId, companyId));
     }
 
+    @PatchMapping("/shop/public/orders/{orderCode}/pickup-scan")
+    public ResponseEntity<?> pickupScan(@PathVariable String orderCode,
+                                         @RequestParam UUID tenantId, @RequestParam UUID companyId) {
+        validateScope(tenantId, companyId);
+        return ResponseEntity.ok(shopOrderService.markPickupScan(orderCode, tenantId, companyId));
+    }
+
+    @GetMapping("/shop/public/active-pickup")
+    public ResponseEntity<?> activePickup(@RequestParam UUID tenantId, @RequestParam UUID companyId) {
+        validateScope(tenantId, companyId);
+        return shopOrderService.getActivePickup(tenantId, companyId)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.noContent().build());
+    }
+
     // ── STAFF endpoints (/shop/staff/**) ──────────────────────────────
 
     @GetMapping("/shop/staff/orders")
@@ -147,6 +162,17 @@ public class ShopOrderController {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
         return ResponseEntity.ok(Map.of("qrBase64", shopOrderService.generateOrderTagQr(orderId, tId, cId)));
+    }
+
+    @GetMapping("/shop/staff/orders/{orderId}/pickup-qr")
+    public ResponseEntity<?> pickupQr(@PathVariable UUID orderId,
+                                       @RequestParam(required = false) UUID tenantId,
+                                       @RequestParam(required = false) UUID companyId,
+                                       @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                       @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        return ResponseEntity.ok(Map.of("qrBase64", shopOrderService.generatePickupQr(orderId, tId, cId)));
     }
 
     @PatchMapping("/shop/staff/orders/{orderId}/confirm")

@@ -3,6 +3,7 @@ package com.ams.bomcore.repository;
 import com.ams.bomcore.domain.shop.ShopOrder;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -14,4 +15,5 @@ public interface ShopOrderRepository extends JpaRepository<ShopOrder, UUID> {
     Optional<ShopOrder> findByOrderCode(String orderCode);
     List<ShopOrder> findAllByTenantIdAndCompanyIdAndStatusInOrderByOrderNumberAsc(UUID tenantId, UUID companyId, List<String> statuses);
     List<ShopOrder> findAllByTable_IdAndTenantIdAndCompanyIdAndStatusIn(UUID tableId, UUID tenantId, UUID companyId, List<String> statuses);
+    Optional<ShopOrder> findTopByTenantIdAndCompanyIdAndPickupScannedAtAfterOrderByPickupScannedAtDesc(UUID tenantId, UUID companyId, Instant after);
 }

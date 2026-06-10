@@ -926,4 +926,29 @@ public class ShopOrderService {
                    + "?tenantId=" + tenantId + "&companyId=" + companyId;
         return QrCodeUtil.generateBase64Png(url, 300);
     }
+
+    // ── Pickup scan (public — no auth) ────────────────────────────────
+
+    @Transactional
+    public ShopOrderResponseDto markPickupScan(String orderCode, UUID tenantId, UUID companyId) {
+        ShopOrder order = shopOrderRepository.findByOrderCodeAndTenantIdAndCompanyId(orderCode, tenantId, companyId)
+                .orElseThrow(() -> new NoSuchElementException("Order not found"));
+        order.setPickupScannedAt(Instant.now());
+        return dto(shopOrderRepository.save(order));
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<ShopOrderResponseDto> getActivePickup(UUID tenantId, UUID companyId) {
+        Instant cutoff = Instant.now().minusSeconds(300);
+        return shopOrderRepository
+                .findTopByTenantIdAndCompanyIdAndPickupScannedAtAfterOrderByPickupScannedAtDesc(tenantId, companyId, cutoff)
+                .map(this::dto);
+    }
+
+    public String generatePickupQr(UUID orderId, UUID tenantId, UUID companyId) {
+        ShopOrder order = requireOrder(orderId, tenantId, companyId);
+        String url = publicBaseUrl + "/shop/pickup/" + order.getOrderCode()
+                   + "?tenantId=" + tenantId + "&companyId=" + companyId;
+        return QrCodeUtil.generateBase64Png(url, 300);
+    }
 }

@@ -34,6 +34,7 @@ public class ShopOrderResponseDto {
     private String staffName;
     private String cancelReason;
     private Boolean customerEditing;
+    private Instant pickupScannedAt;
     private Instant createdAt;
     private Instant confirmedAt;
     private Instant readyAt;
@@ -110,6 +111,7 @@ public class ShopOrderResponseDto {
         dto.staffName = order.getStaffName();
         dto.cancelReason = order.getCancelReason();
         dto.customerEditing = Boolean.TRUE.equals(order.getCustomerEditing());
+        dto.pickupScannedAt = order.getPickupScannedAt();
         dto.createdAt = order.getCreatedAt();
         dto.confirmedAt = order.getConfirmedAt();
         dto.readyAt = order.getReadyAt();
@@ -142,6 +144,7 @@ public class ShopOrderResponseDto {
     public String getStaffName() { return staffName; }
     public String getCancelReason() { return cancelReason; }
     public Boolean getCustomerEditing() { return customerEditing; }
+    public Instant getPickupScannedAt() { return pickupScannedAt; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getConfirmedAt() { return confirmedAt; }
     public Instant getReadyAt() { return readyAt; }

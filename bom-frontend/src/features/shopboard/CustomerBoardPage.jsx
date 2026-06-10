@@ -154,7 +154,7 @@ function Section({ title, subtitle, emoji, orders, ready, emptyText }) {
 
 export default function CustomerBoardPage() {
   const [params]      = useSearchParams()
-  const token         = params.get('token')
+  const token         = params.get('t') || params.get('token')
   const [data, setData]       = useState(null)
   const [error, setError]     = useState('')
   const [lastUpdate, setLastUpdate] = useState(null)

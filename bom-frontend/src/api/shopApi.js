@@ -223,6 +223,23 @@ export function deleteMenuOption(id) {
   return apiFetchJson(`/shop/staff/menu-options/${id}`, { method: 'DELETE' })
 }
 
+// ── Pickup flow ────────────────────────────────────────────────────
+
+export function pickupScan(orderCode, tenantId, companyId) {
+  return apiFetchJsonNoContext(
+    `/shop/public/orders/${encodeURIComponent(orderCode)}/pickup-scan` + qs({ tenantId, companyId }),
+    { method: 'PATCH' }
+  )
+}
+
+export function fetchActivePickup(tenantId, companyId) {
+  return apiFetchJsonNoContext('/shop/public/active-pickup' + qs({ tenantId, companyId }))
+}
+
+export function fetchPickupQr(orderId) {
+  return apiFetchJson(`/shop/staff/orders/${orderId}/pickup-qr`)
+}
+
 // ── Display board ──────────────────────────────────────────────────
 
 export function generateDisplayBoardToken() {

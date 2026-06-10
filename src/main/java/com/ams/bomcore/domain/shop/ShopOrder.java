@@ -102,6 +102,9 @@ public class ShopOrder {
     @Column(name = "customer_editing")
     private Boolean customerEditing = false;
 
+    @Column(name = "pickup_scanned_at")
+    private Instant pickupScannedAt;
+
     @Column(name = "created_at")
     private Instant createdAt;
 
@@ -180,4 +183,6 @@ public class ShopOrder {
     public void setCancelReason(String cancelReason) { this.cancelReason = cancelReason; }
     public Boolean getCustomerEditing() { return customerEditing; }
     public void setCustomerEditing(Boolean customerEditing) { this.customerEditing = customerEditing; }
+    public Instant getPickupScannedAt() { return pickupScannedAt; }
+    public void setPickupScannedAt(Instant pickupScannedAt) { this.pickupScannedAt = pickupScannedAt; }
 }

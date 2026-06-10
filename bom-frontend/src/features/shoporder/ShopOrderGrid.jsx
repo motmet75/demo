@@ -50,7 +50,7 @@ import {
   completeShopOrder, cancelShopOrder, resetOrderSequence, setShopOrderNumber,
   generateDisplayBoardToken, pickupShopOrder, revertShopOrder, markOrderPaid,
   fetchBankConfig, switchToQrPayment, revertToCash, fetchOrderTagQr,
-  fetchShopTables, setOrderTable
+  fetchShopTables, setOrderTable, fetchPickupQr
 } from '../../api/shopApi'
 import { printCupLabels, printOrderReceipt, printOrderTag } from '../../utils/printOrderReceipt'
 import ShopOrderDetailModal from './ShopOrderDetailModal'
@@ -58,6 +58,7 @@ import ManualOrderDialog from './ManualOrderDialog'
 import QrOrderDialog from './QrOrderDialog'
 import EodAuditDialog from './EodAuditDialog'
 import ConfirmActionDialog from './ConfirmActionDialog'
+import { useAppContext } from '../../context/AppContext'
 
 const BOARD_CHANNEL = 'shop_display_board'
 function broadcastReady() {
@@ -435,6 +436,7 @@ function StatusBoard({ status, orders, onAction, onDetail, onPayQr }) {
 // ── Main ShopOrderGrid ──────────────────────────────────────────────
 
 export default function ShopOrderGrid() {
+  const { tenantId: ctxTenantId, companyId: ctxCompanyId } = useAppContext()
   const [rows, setRows]                 = useState([])
   const [boardRows, setBoardRows]       = useState([])   // for board tabs — unfiltered
   const [loading, setLoading]           = useState(false)
@@ -466,6 +468,7 @@ export default function ShopOrderGrid() {
   const [eodOpen, setEodOpen]           = useState(false)
   const [confirmDlg, setConfirmDlg]     = useState(null)
   // confirmDlg shape: { title, message, confirmLabel, confirmColor, requireReason, onConfirm }
+  const [pickupQrOrder, setPickupQrOrder] = useState(null)  // { id, orderNumber, orderCode, qrBase64 }
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
@@ -768,6 +771,20 @@ export default function ShopOrderGrid() {
               Ready
             </Button>
           )}
+          {row.status === 'READY' && (
+            <Tooltip title="Generate QR for customer to scan at pickup">
+              <Button size="small" variant="outlined" color="warning" startIcon={<QrCode2Icon sx={{ fontSize: 13 }} />}
+                onClick={async () => {
+                  try {
+                    const { data } = await fetchPickupQr(row.id)
+                    setPickupQrOrder({ id: row.id, orderNumber: row.orderNumber, orderCode: row.orderCode, qrBase64: data.qrBase64 })
+                  } catch (e) { alert('Failed to generate pickup QR: ' + (e.message || e)) }
+                }}
+                sx={{ fontWeight: 700, minWidth: 0, px: 0.75 }}>
+                Pickup QR
+              </Button>
+            </Tooltip>
+          )}
           {row.status === 'READY' && (row.paymentMethod === 'BANK_QR' || row.paymentMethod === 'SPLIT') && (
             <Button size="small" variant="contained" color="info"
               onClick={() => askConfirm({ title: 'Mark as Picked Up?', message: 'Confirm customer has picked up this order?', confirmLabel: 'Picked Up', confirmColor: 'primary' }, () => act(pickupShopOrder, row.id))}>
@@ -840,7 +857,11 @@ export default function ShopOrderGrid() {
           <Button startIcon={<TvIcon />} onClick={handleOpenBoard} variant="outlined" size="small" color="info">Display Board</Button>
           <Tooltip title="Open the counter customer-facing display in a new tab">
             <Button startIcon={<MonitorIcon />}
-              onClick={() => window.open(window.location.origin + '/bom-inventory/shop/counter', '_blank')}
+              onClick={() => {
+                const base = window.location.origin + '/bom-inventory/shop/counter'
+                const q = ctxTenantId && ctxCompanyId ? `?tenantId=${ctxTenantId}&companyId=${ctxCompanyId}` : ''
+                window.open(base + q, '_blank')
+              }}
               variant="outlined" size="small" color="secondary" sx={{ textTransform: 'none' }}>
               Counter
             </Button>
@@ -1044,6 +1065,43 @@ export default function ShopOrderGrid() {
           onCancel={() => setConfirmDlg(null)}
         />
       )}
+
+      {/* Pickup QR dialog */}
+      {pickupQrOrder && (() => {
+        const { orderNumber, orderCode, qrBase64 } = pickupQrOrder
+        const origin = window.location.origin + '/bom-inventory'
+        const pickupUrl = `${origin}/shop/pickup/${orderCode}` + (ctxTenantId && ctxCompanyId ? `?tenantId=${ctxTenantId}&companyId=${ctxCompanyId}` : '')
+        return (
+          <Dialog open onClose={() => setPickupQrOrder(null)} maxWidth="xs" fullWidth>
+            <DialogTitle sx={{ fontWeight: 800 }}>
+              Pickup QR — Order #{orderNumber ?? orderCode}
+            </DialogTitle>
+            <DialogContent sx={{ textAlign: 'center', pb: 1 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Customer scans this QR → counter screen shows payment QR automatically
+              </Typography>
+              {qrBase64 && (
+                <Box sx={{ bgcolor: '#fff', display: 'inline-block', p: 1, borderRadius: 2, border: '2px solid #e0e0e0', mb: 2 }}>
+                  <img src={`data:image/png;base64,${qrBase64}`} alt="Pickup QR" style={{ width: 220, height: 220, display: 'block' }} />
+                </Box>
+              )}
+              <TextField
+                value={pickupUrl}
+                size="small" fullWidth
+                inputProps={{ readOnly: true, style: { fontSize: 11 } }}
+                onClick={e => e.target.select()}
+                sx={{ mb: 1 }}
+              />
+              <Button variant="outlined" size="small" onClick={() => navigator.clipboard.writeText(pickupUrl)} startIcon={<ContentCopyIcon />}>
+                Copy Link
+              </Button>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setPickupQrOrder(null)}>Close</Button>
+            </DialogActions>
+          </Dialog>
+        )
+      })()}
 
       <Dialog open={resetOpen} onClose={() => setResetOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle fontWeight={700}>Reset Order Counter</DialogTitle>
