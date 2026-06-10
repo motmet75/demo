@@ -312,6 +312,128 @@ export function printCupLabels(order) {
   win.onload = () => { win.focus(); win.print(); setTimeout(() => win.close(), 1000) }
 }
 
+export function printCombinedReceipt(orders) {
+  if (!orders?.length) return
+  const time = new Date().toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
+
+  const activeOrders = orders.filter(o => o.status !== 'CANCELLED')
+  let grandTotal = 0
+
+  const ordersHtml = activeOrders.map((order) => {
+    const num      = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
+    const allItems = order.items || []
+    const childMap = buildChildMap(allItems)
+    const roots    = allItems.filter(i => !i.parentItemId)
+
+    const orderTotal = roots.reduce((s, item) => {
+      const children  = childMap[String(item.id)] || []
+      const parentQty = Number(item.quantity || 1)
+      return s + Number(item.lineTotal || 0) + children.reduce((cs, c) => cs + Number(c.lineTotal || 0) * parentQty, 0)
+    }, 0) + Number(order.deliveryFee || 0)
+    grandTotal += orderTotal
+
+    const itemsHtml = roots.map((item, idx) => {
+      const children     = childMap[String(item.id)] || []
+      const parentQty    = Number(item.quantity || 1)
+      const opts         = parseOpts(item.selectedOptions)
+      const childrenHtml = children.map(child => {
+        const effectiveQty = Number(child.quantity || 1) * parentQty
+        return `<div class="row side-row">
+          <span class="side-qty">${effectiveQty}&#215;</span>
+          <span class="side-name">${child.modelName}</span>
+          <span class="item-price">${fmt(Number(child.lineTotal || 0) * parentQty)}</span>
+        </div>`
+      }).join('')
+      return `
+        <div class="row item-row">
+          <span class="row-num">${idx + 1}.</span>
+          <span class="item-qty">${item.quantity}&#215;</span>
+          <span class="item-name">${item.modelName}</span>
+          <span class="item-price">${fmt(item.lineTotal)}</span>
+        </div>
+        ${opts ? `<div class="opts-inline grey">${opts}</div>` : ''}
+        ${childrenHtml}
+      `
+    }).join('')
+
+    const tableInfo = order.tableName ? `Table ${order.tableName}` : order.fulfillmentType === 'DELIVERY' ? 'Delivery' : 'Pickup'
+
+    return `
+      <div class="order-block">
+        <div class="order-header">
+          <span class="order-num">${num}</span>
+          <span class="order-meta">${tableInfo}</span>
+          <span class="order-subtotal">${fmt(orderTotal)}</span>
+        </div>
+        ${itemsHtml}
+      </div>
+    `
+  }).join('<div class="divider"></div>')
+
+  const html = `<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Combined Receipt</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 13px;
+    width: 300px;
+    margin: 0 auto;
+    padding: 14px 10px;
+    color: #111;
+  }
+  .center     { text-align: center; }
+  .bold       { font-weight: bold; }
+  .grey       { color: #555; }
+  .title      { font-size: 16px; font-weight: 900; letter-spacing: 2px; }
+  .divider    { border-top: 1px dashed #666; margin: 7px 0; }
+  .row        { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 2px; }
+  .item-row   { margin-top: 5px; gap: 3px; }
+  .row-num    { font-size: 11px; color: #999; flex-shrink: 0; min-width: 16px; }
+  .item-qty   { font-weight: 900; flex-shrink: 0; margin-right: 3px; }
+  .item-name  { flex: 1; padding-right: 6px; font-weight: 700; }
+  .item-price { text-align: right; white-space: nowrap; flex-shrink: 0; }
+  .opts-inline { padding-left: 20px; font-size: 11px; color: #666; margin-bottom: 1px; }
+  .side-row   { margin-top: 2px; margin-left: 14px; border-left: 2px solid #c7d2fe; padding-left: 6px; gap: 3px; }
+  .side-qty   { font-weight: 900; font-size: 11px; color: #6366f1; flex-shrink: 0; margin-right: 3px; }
+  .side-name  { flex: 1; padding-right: 6px; font-size: 12px; color: #444; }
+  .order-block { margin-bottom: 6px; }
+  .order-header { display: flex; align-items: center; gap: 4px; background: #f3f4f6; padding: 4px 6px; border-radius: 3px; margin-bottom: 4px; }
+  .order-num  { font-size: 16px; font-weight: 900; min-width: 32px; }
+  .order-meta { flex: 1; font-size: 11px; color: #555; }
+  .order-subtotal { font-weight: 900; font-size: 13px; white-space: nowrap; }
+  .total-row  { font-weight: 900; font-size: 16px; margin-top: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; }
+  .footer     { text-align: center; font-style: italic; color: #555; margin-top: 6px; font-size: 12px; }
+  @media print { @page { margin: 0; } body { padding: 8px 6px; } }
+</style>
+</head>
+<body>
+  <div class="center title">COMBINED RECEIPT</div>
+  <div class="divider"></div>
+  <div class="center grey" style="font-size:12px">${time}</div>
+  <div class="center grey" style="font-size:11px;margin-top:2px">${activeOrders.length} order${activeOrders.length !== 1 ? 's' : ''} combined</div>
+  <div class="divider"></div>
+
+  ${ordersHtml}
+
+  <div class="divider"></div>
+  <div class="total-row"><span>TOTAL</span><span>${fmt(grandTotal)}</span></div>
+  <div class="divider"></div>
+  <div class="footer">&#9733; Thank you! &#9733;</div>
+</body>
+</html>`
+
+  const pw = Math.max(Math.round(screen.width * 0.5), 600)
+  const ph = Math.min(Math.round(screen.height * 0.9), 960)
+  const win = window.open('', '_blank', `width=${pw},height=${ph},left=${Math.round((screen.width-pw)/2)},top=40`)
+  win.document.write(html)
+  win.document.close()
+  win.onload = () => { win.focus(); win.print(); setTimeout(() => win.close(), 1000) }
+}
+
 export function printOrderReceipt(order, trackingQrBase64 = null) {
   if (!order) return
 

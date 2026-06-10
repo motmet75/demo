@@ -135,6 +135,18 @@ public class ShopOrderController {
         return ResponseEntity.ok(shopOrderService.listOrders(tId, cId, status));
     }
 
+    @GetMapping("/shop/staff/orders/by-token")
+    public ResponseEntity<?> getOrdersByToken(@RequestParam String token,
+                                               @RequestParam(required = false) UUID tenantId,
+                                               @RequestParam(required = false) UUID companyId,
+                                               @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                               @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant);
+        UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        return ResponseEntity.ok(shopOrderService.getOrdersByTokenForStaff(token, tId, cId));
+    }
+
     @GetMapping("/shop/staff/orders/{orderId}")
     public ResponseEntity<?> getOrder(@PathVariable UUID orderId,
                                        @RequestParam(required = false) UUID tenantId,

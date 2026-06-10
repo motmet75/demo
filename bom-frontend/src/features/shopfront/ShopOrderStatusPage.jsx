@@ -39,7 +39,7 @@ const STATUS_STYLE = {
 }
 
 const STATUS_CHIP = {
-  PENDING:   { color: 'default',  label: 'Pending' },
+  PENDING:   { color: 'default',  label: 'Waiting Confirm' },
   CONFIRMED: { color: 'success',  label: 'Confirmed' },
   PREPARING: { color: 'warning',  label: 'Preparing' },
   READY:     { color: 'info',     label: 'Ready!' },

@@ -32,6 +32,7 @@ public class ShopOrderResponseDto {
     private BigDecimal splitCashAmount;
     private String notes;
     private String staffName;
+    private String sourceToken;
     private String cancelReason;
     private Boolean customerCancelled;
     private String customerCancelNote;
@@ -111,6 +112,7 @@ public class ShopOrderResponseDto {
         dto.splitCashAmount = order.getSplitCashAmount();
         dto.notes = order.getNotes();
         dto.staffName = order.getStaffName();
+        dto.sourceToken = order.getSourceToken();
         dto.cancelReason = order.getCancelReason();
         dto.customerCancelled = Boolean.TRUE.equals(order.getCustomerCancelled());
         dto.customerCancelNote = order.getCustomerCancelNote();
@@ -146,6 +148,7 @@ public class ShopOrderResponseDto {
     public BigDecimal getSplitCashAmount() { return splitCashAmount; }
     public String getNotes() { return notes; }
     public String getStaffName() { return staffName; }
+    public String getSourceToken() { return sourceToken; }
     public String getCancelReason() { return cancelReason; }
     public Boolean getCustomerCancelled() { return customerCancelled; }
     public String getCustomerCancelNote() { return customerCancelNote; }

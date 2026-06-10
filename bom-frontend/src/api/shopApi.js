@@ -84,6 +84,10 @@ export function fetchShopOrders(status) {
   return apiFetchJson('/shop/staff/orders' + (status ? qs({ status }) : ''))
 }
 
+export function fetchOrdersByToken(token) {
+  return apiFetchJson('/shop/staff/orders/by-token' + qs({ token }))
+}
+
 export function fetchActiveOrders() {
   return apiFetchJson('/shop/staff/orders?active=true')
 }

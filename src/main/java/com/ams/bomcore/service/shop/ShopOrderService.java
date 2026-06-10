@@ -346,6 +346,7 @@ public class ShopOrderService {
             order.setCancelReason(reason.trim());
         }
         shopOrderRepository.save(order);
+        disableSourceToken(order);
         return dto(order);
     }
 
@@ -824,7 +825,20 @@ public class ShopOrderService {
     // ── Helpers ───────────────────────────────────────────────────────
 
     private void disableSourceToken(ShopOrder order) {
-        // Walk-up QR tokens expire naturally via expiresAt (4h window); no early disable needed.
+        String token = order.getSourceToken();
+        if (token == null || token.isBlank()) return;
+
+        ShopAccessToken sat = shopAccessTokenRepository.findByToken(token).orElse(null);
+        if (sat == null || !Boolean.TRUE.equals(sat.getEnabled())) return;
+
+        // Disable when every order in the session has reached a terminal state
+        List<ShopOrder> sessionOrders = shopOrderRepository.findAllBySourceTokenOrderByCreatedAtDesc(token);
+        boolean allDone = !sessionOrders.isEmpty()
+                && sessionOrders.stream().allMatch(o -> isFinalStatus(o.getStatus()));
+        if (allDone) {
+            sat.setEnabled(false);
+            shopAccessTokenRepository.save(sat);
+        }
     }
 
     private ShopOrder requireOrder(UUID orderId, UUID tenantId, UUID companyId) {
@@ -937,6 +951,7 @@ public class ShopOrderService {
         }
         // cancelReason (staff column) intentionally left untouched
         shopOrderRepository.save(order);
+        disableSourceToken(order);
         return dto(order);
     }
 
@@ -958,6 +973,17 @@ public class ShopOrderService {
                 .findAllBySourceTokenOrderByCreatedAtDesc(token)
                 .stream().map(this::dto).toList();
         return new TokenSessionDto(token, sat.isValid(), sat.getExpiresAt(), sat.getCreatedAt(), orders);
+    }
+
+    // ── Staff: combined receipt for a token ──────────────────────────
+
+    @Transactional(readOnly = true)
+    public List<ShopOrderResponseDto> getOrdersByTokenForStaff(String token, UUID tenantId, UUID companyId) {
+        return shopOrderRepository.findAllBySourceTokenOrderByCreatedAtDesc(token)
+                .stream()
+                .filter(o -> o.getTenantId().equals(tenantId) && o.getCompanyId().equals(companyId))
+                .map(this::dto)
+                .toList();
     }
 
     // ── Code-only public order methods (no tenant/company in URL) ─────

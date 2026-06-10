@@ -50,9 +50,9 @@ import {
   completeShopOrder, cancelShopOrder, resetOrderSequence, setShopOrderNumber,
   generateDisplayBoardToken, pickupShopOrder, revertShopOrder, markOrderPaid,
   fetchBankConfig, switchToQrPayment, revertToCash, fetchOrderTagQr,
-  fetchShopTables, setOrderTable, fetchPickupQr
+  fetchShopTables, setOrderTable, fetchPickupQr, fetchOrdersByToken
 } from '../../api/shopApi'
-import { printCupLabels, printOrderReceipt, printOrderTag } from '../../utils/printOrderReceipt'
+import { printCupLabels, printOrderReceipt, printOrderTag, printCombinedReceipt } from '../../utils/printOrderReceipt'
 import ShopOrderDetailModal from './ShopOrderDetailModal'
 import ManualOrderDialog from './ManualOrderDialog'
 import QrOrderDialog from './QrOrderDialog'
@@ -398,7 +398,7 @@ function StatusBoard({ status, orders, onAction, onDetail, onPayQr }) {
                 {status === 'CONFIRMED' && (
                   <Box sx={{ display: 'flex', gap: 0.75 }}>
                     <Button size="small" variant="contained" color="warning" fullWidth onClick={() => onAction('prepare', order.id, order.orderNumber)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Start Preparing</Button>
-                    <Tooltip title="Revert to Pending">
+                    <Tooltip title="Revert to Waiting Confirm">
                       <Button size="small" variant="outlined" color="error" onClick={() => onAction('revert', order.id, order.orderNumber)} startIcon={<UndoIcon sx={{ fontSize: 13 }} />} sx={{ textTransform: 'none', fontSize: 11, minWidth: 76 }}>Revert</Button>
                     </Tooltip>
                   </Box>
@@ -406,7 +406,7 @@ function StatusBoard({ status, orders, onAction, onDetail, onPayQr }) {
                 {status === 'PREPARING' && (
                   <Box sx={{ display: 'flex', gap: 0.75 }}>
                     <Button size="small" variant="contained" color="success" fullWidth onClick={() => onAction('ready', order.id, order.orderNumber)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Mark Ready ✓</Button>
-                    <Tooltip title="Revert to Pending">
+                    <Tooltip title="Revert to Waiting Confirm">
                       <Button size="small" variant="outlined" color="error" onClick={() => onAction('revert-from-preparing', order.id, order.orderNumber)} startIcon={<UndoIcon sx={{ fontSize: 13 }} />} sx={{ textTransform: 'none', fontSize: 11, minWidth: 76 }}>Revert</Button>
                     </Tooltip>
                   </Box>
@@ -469,6 +469,7 @@ export default function ShopOrderGrid() {
   const [confirmDlg, setConfirmDlg]     = useState(null)
   // confirmDlg shape: { title, message, confirmLabel, confirmColor, requireReason, onConfirm }
   const [pickupQrOrder, setPickupQrOrder] = useState(null)  // { id, orderNumber, orderCode, qrBase64 }
+  const [combinedToken, setCombinedToken] = useState(null)  // token string — opens CombinedReceiptDialog
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
@@ -516,8 +517,8 @@ export default function ShopOrderGrid() {
   const handleBoardAction = (type, id, orderNum) => {
     const configs = {
       'prepare':               { title: 'Start Preparing?',     message: `Start preparing order #${orderNum}?`,              confirmLabel: 'Start Preparing', confirmColor: 'warning' },
-      'revert':                { title: 'Revert to Pending?',   message: 'Revert this confirmed order back to pending?',      confirmLabel: 'Revert',          confirmColor: 'error'   },
-      'revert-from-preparing': { title: 'Revert to Pending?',   message: 'Stop preparing and revert this order to pending?',  confirmLabel: 'Revert',          confirmColor: 'error'   },
+      'revert':                { title: 'Revert to Waiting Confirm?',   message: 'Revert this confirmed order back to waiting confirm?',      confirmLabel: 'Revert',          confirmColor: 'error'   },
+      'revert-from-preparing': { title: 'Revert to Waiting Confirm?',   message: 'Stop preparing and revert this order to waiting confirm?',  confirmLabel: 'Revert',          confirmColor: 'error'   },
       'ready':                 { title: 'Mark as Ready?',       message: `Mark order #${orderNum} as ready for pickup?`,      confirmLabel: 'Mark Ready',      confirmColor: 'success' },
       'complete':              { title: 'Complete Order?',      message: `Complete order #${orderNum}?`,                     confirmLabel: 'Complete',        confirmColor: 'success' },
       'pickup':                { title: 'Mark as Picked Up?',   message: 'Confirm customer has picked up this order?',        confirmLabel: 'Picked Up',       confirmColor: 'primary' },
@@ -713,6 +714,13 @@ export default function ShopOrderGrid() {
         <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', flexWrap: 'nowrap' }}>
           <Tooltip title="Detail"><IconButton size="small" onClick={() => setDetailOrder(row)}><VisibilityIcon fontSize="small" /></IconButton></Tooltip>
           <Tooltip title="Print Receipt (Pay)"><IconButton size="small" color="primary" onClick={() => printOrderReceipt(row)}><PrintIcon fontSize="small" /></IconButton></Tooltip>
+          {row.sourceToken && (
+            <Tooltip title="Combined Receipt (all orders this token)">
+              <IconButton size="small" color="secondary" onClick={() => setCombinedToken(row.sourceToken)}>
+                <PeopleAltIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
           <Tooltip title="Print Tracking Tag"><IconButton size="small" color="secondary" onClick={() => handlePrintTrack(row)}><ConfirmationNumberIcon fontSize="small" /></IconButton></Tooltip>
           <Tooltip title="Print cup labels"><IconButton size="small" onClick={() => printCupLabels(row)}><LabelIcon fontSize="small" /></IconButton></Tooltip>
           {row.paymentStatus !== 'PAID' && row.status !== 'CANCELLED' && (
@@ -758,9 +766,9 @@ export default function ShopOrderGrid() {
             </Button>
           )}
           {row.status === 'CONFIRMED' && (
-            <Tooltip title="Revert to Pending">
+            <Tooltip title="Revert to Waiting Confirm">
               <Button size="small" variant="outlined" color="error" startIcon={<UndoIcon sx={{ fontSize: 13 }} />}
-                onClick={() => askConfirm({ title: 'Revert to Pending?', message: 'Revert order back to pending status?', confirmLabel: 'Revert', confirmColor: 'error' }, () => act(revertShopOrder, row.id))}>
+                onClick={() => askConfirm({ title: 'Revert to Waiting Confirm?', message: 'Revert order back to waiting confirm?', confirmLabel: 'Revert', confirmColor: 'error' }, () => act(revertShopOrder, row.id))}>
                 Revert
               </Button>
             </Tooltip>
@@ -1119,6 +1127,152 @@ export default function ShopOrderGrid() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {combinedToken && (
+        <CombinedReceiptDialog
+          token={combinedToken}
+          onClose={() => setCombinedToken(null)}
+          onRefresh={reload}
+        />
+      )}
     </Box>
+  )
+}
+
+// ── Combined Receipt Dialog ──────────────────────────────────────────
+function CombinedReceiptDialog({ token, onClose, onRefresh }) {
+  const [orders, setOrders]   = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState('')
+  const [paying, setPaying]   = useState(false)
+
+  const fmtAmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : '—'
+
+  useEffect(() => {
+    setLoading(true)
+    fetchOrdersByToken(token)
+      .then(({ res, data }) => {
+        if (!res.ok) { setError(data?.error || 'Failed to load'); return }
+        setOrders(data || [])
+      })
+      .catch(() => setError('Network error'))
+      .finally(() => setLoading(false))
+  }, [token])
+
+  const activeOrders = orders.filter(o => o.status !== 'CANCELLED')
+  const unpaidOrders = activeOrders.filter(o => o.paymentStatus !== 'PAID')
+  const grandTotal   = activeOrders.reduce((s, o) => s + Number(o.totalAmount || 0), 0)
+
+  const handleMarkAllPaid = async () => {
+    if (!unpaidOrders.length) return
+    setPaying(true)
+    try {
+      for (const o of unpaidOrders) {
+        await markOrderPaid(o.id)
+      }
+      onRefresh()
+      onClose()
+    } catch { setError('Failed to mark orders paid') }
+    setPaying(false)
+  }
+
+  const STATUS_CHIP = { PENDING: 'default', CONFIRMED: 'primary', PREPARING: 'warning', READY: 'success', PICKED_UP: 'success', COMPLETED: 'success', CANCELLED: 'error' }
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <PeopleAltIcon color="secondary" />
+          <Typography fontWeight={800}>Combined Receipt</Typography>
+        </Box>
+        <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+      </DialogTitle>
+
+      <DialogContent sx={{ pt: 0 }}>
+        {loading && <Box sx={{ textAlign: 'center', py: 4 }}><CircularProgress /></Box>}
+        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+        {!loading && !error && (
+          <>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              {orders.map((order) => {
+                const num     = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
+                const roots   = (order.items || []).filter(i => !i.parentItemId)
+                const isCancelled = order.status === 'CANCELLED'
+                return (
+                  <Box key={order.id} sx={{
+                    border: '1px solid #e2e8f0', borderRadius: 1.5,
+                    opacity: isCancelled ? 0.5 : 1,
+                    bgcolor: isCancelled ? '#fafafa' : '#fff',
+                  }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1,
+                      bgcolor: isCancelled ? '#f5f5f5' : '#f8fafc', borderRadius: '6px 6px 0 0' }}>
+                      <Typography fontWeight={900} sx={{ fontSize: 18, minWidth: 34,
+                        textDecoration: isCancelled ? 'line-through' : 'none', color: '#334155' }}>
+                        {num}
+                      </Typography>
+                      <Chip label={order.status} color={STATUS_CHIP[order.status] || 'default'}
+                        size="small" sx={{ fontWeight: 700, fontSize: 10 }} />
+                      {order.tableName && (
+                        <Chip label={`Table ${order.tableName}`} size="small" variant="outlined"
+                          sx={{ fontSize: 10 }} />
+                      )}
+                      <Box sx={{ flex: 1 }} />
+                      <Typography fontWeight={800} color={isCancelled ? 'text.disabled' : 'primary'}
+                        sx={{ textDecoration: isCancelled ? 'line-through' : 'none' }}>
+                        {fmtAmt(order.totalAmount)}
+                      </Typography>
+                      {order.paymentStatus === 'PAID' && (
+                        <Chip label="Paid" color="success" size="small" sx={{ fontWeight: 700, fontSize: 10 }} />
+                      )}
+                    </Box>
+                    <Box sx={{ px: 2, py: 0.75 }}>
+                      {roots.slice(0, 4).map(item => (
+                        <Typography key={item.id} variant="caption" color="text.secondary"
+                          sx={{ display: 'block' }} noWrap>
+                          {item.quantity}× {item.modelName}
+                        </Typography>
+                      ))}
+                      {roots.length > 4 && (
+                        <Typography variant="caption" color="text.secondary">+{roots.length - 4} more…</Typography>
+                      )}
+                    </Box>
+                  </Box>
+                )
+              })}
+            </Box>
+
+            <Divider sx={{ my: 2 }} />
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant="body2" color="text.secondary">
+                {activeOrders.length} order{activeOrders.length !== 1 ? 's' : ''}
+                {orders.length > activeOrders.length ? ` (${orders.length - activeOrders.length} cancelled)` : ''}
+              </Typography>
+              <Typography fontWeight={900} sx={{ fontSize: 20 }} color="primary">
+                {fmtAmt(grandTotal)}
+              </Typography>
+            </Box>
+          </>
+        )}
+      </DialogContent>
+
+      <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+        <Button onClick={onClose} sx={{ textTransform: 'none' }}>Close</Button>
+        <Button variant="outlined" startIcon={<PrintIcon />}
+          onClick={() => printCombinedReceipt(orders)}
+          disabled={loading || !orders.length}
+          sx={{ textTransform: 'none', fontWeight: 700 }}>
+          Print
+        </Button>
+        {unpaidOrders.length > 0 && (
+          <Button variant="contained" color="success"
+            startIcon={paying ? <CircularProgress size={16} color="inherit" /> : <PaidIcon />}
+            onClick={handleMarkAllPaid} disabled={paying}
+            sx={{ textTransform: 'none', fontWeight: 700 }}>
+            Mark All Paid ({unpaidOrders.length})
+          </Button>
+        )}
+      </DialogActions>
+    </Dialog>
   )
 }

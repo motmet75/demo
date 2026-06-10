@@ -87,7 +87,7 @@ function buildChildMap(items) {
 }
 
 const STATUS_CHIP_MAP = {
-  PENDING:   { label: 'Pending',   color: 'default' },
+  PENDING:   { label: 'Waiting Confirm', color: 'default' },
   CONFIRMED: { label: 'Confirmed', color: 'success' },
   PREPARING: { label: 'Preparing', color: 'warning' },
   READY:     { label: 'Ready!',    color: 'info'    },
@@ -136,7 +136,8 @@ function SessionOrderList({ session, token, onEdit }) {
   const [cancelling, setCancelling]     = useState(false)
   const [cancelError, setCancelError]   = useState('')
 
-  const orders = session?.orders || []
+  // hide cancelled orders — customers don't need to see them
+  const orders = (session?.orders || []).filter(o => o.status !== 'CANCELLED')
 
   const doCancel = async () => {
     if (!cancelTarget) return
@@ -163,7 +164,6 @@ function SessionOrderList({ session, token, onEdit }) {
           const chip      = STATUS_CHIP_MAP[status] || STATUS_CHIP_MAP.PENDING
           const editing   = Boolean(order.customerEditing)
           const isPending = status === 'PENDING'
-          const isCancelledByCustomer = Boolean(order.customerCancelled)
           const displayNum = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
           const roots      = (order.items || []).filter(i => !i.parentItemId)
 
@@ -171,8 +171,7 @@ function SessionOrderList({ session, token, onEdit }) {
             <Box key={order.orderCode} sx={{
               border: editing ? '2px solid #f59e0b' : '1px solid #e2e8f0',
               borderRadius: 2, overflow: 'hidden',
-              bgcolor: editing ? '#fffbeb' : status === 'CANCELLED' ? '#fafafa' : '#fff',
-              opacity: status === 'CANCELLED' ? 0.75 : 1,
+              bgcolor: editing ? '#fffbeb' : '#fff',
               animation: editing ? 'glow-edit 2s infinite' : 'none',
               '@keyframes glow-edit': {
                 '0%,100%': { boxShadow: '0 0 0 3px #fde68a55' },
@@ -199,13 +198,8 @@ function SessionOrderList({ session, token, onEdit }) {
                       }}
                     />
                   )}
-                  {isCancelledByCustomer && (
-                    <Chip label="Cancelled by you" size="small"
-                      sx={{ bgcolor: '#fee2e2', color: '#b91c1c', fontWeight: 600, fontSize: 10 }} />
-                  )}
                 </Box>
-                <Typography fontWeight={800} color={status === 'CANCELLED' ? 'text.disabled' : 'primary'}
-                  sx={{ fontSize: 14, flexShrink: 0, textDecoration: status === 'CANCELLED' ? 'line-through' : 'none' }}>
+                <Typography fontWeight={800} color="primary" sx={{ fontSize: 14, flexShrink: 0 }}>
                   {fmt(order.totalAmount)}
                 </Typography>
               </Box>
@@ -221,20 +215,15 @@ function SessionOrderList({ session, token, onEdit }) {
                 {roots.length > 3 && (
                   <Typography variant="caption" color="text.secondary">+{roots.length - 3} more…</Typography>
                 )}
-                {isCancelledByCustomer && order.customerCancelNote && (
-                  <Typography variant="caption" sx={{ color: '#b91c1c', fontStyle: 'italic', display: 'block', mt: 0.25 }}>
-                    Note: {order.customerCancelNote}
-                  </Typography>
-                )}
               </Box>
 
               {/* Actions — only for PENDING orders */}
               {isPending && (
                 <Box sx={{ px: 2, pb: 1.25, pt: 0.25, display: 'flex', gap: 1 }}>
                   {editing ? (
-                    <Button variant="contained" size="small" color="warning" fullWidth
+                    <Button variant="contained" size="small" color="warning"
                       onClick={() => onEdit(order)}
-                      sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5 }}>
+                      sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5, flex: 1 }}>
                       ✏ Resume editing
                     </Button>
                   ) : (
@@ -244,13 +233,11 @@ function SessionOrderList({ session, token, onEdit }) {
                       Edit
                     </Button>
                   )}
-                  {!editing && (
-                    <Button variant="outlined" size="small" color="error"
-                      onClick={() => { setCancelTarget(order); setCancelNote(''); setCancelError('') }}
-                      sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5, flexShrink: 0 }}>
-                      Cancel
-                    </Button>
-                  )}
+                  <Button variant="outlined" size="small" color="error"
+                    onClick={() => { setCancelTarget(order); setCancelNote(''); setCancelError('') }}
+                    sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5, flexShrink: 0 }}>
+                    Cancel
+                  </Button>
                 </Box>
               )}
             </Box>

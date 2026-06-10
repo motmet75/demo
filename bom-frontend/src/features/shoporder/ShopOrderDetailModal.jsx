@@ -500,11 +500,11 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
               </Tooltip>
             )}
             {isConfirmed && (
-              <Tooltip title="Revert to Pending — urgent stop">
+              <Tooltip title="Revert to Waiting Confirm — urgent stop">
                 <Button variant="outlined" color="warning" startIcon={<UndoIcon />}
-                  onClick={() => askConfirm({ title: 'Revert to Pending?', message: 'Revert this confirmed order back to pending status?', confirmLabel: 'Revert', confirmColor: 'warning' }, handleRevert)}
+                  onClick={() => askConfirm({ title: 'Revert to Waiting Confirm?', message: 'Revert this confirmed order back to waiting confirm?', confirmLabel: 'Revert', confirmColor: 'warning' }, handleRevert)}
                   sx={{ textTransform: 'none' }}>
-                  Revert to Pending
+                  Revert
                 </Button>
               </Tooltip>
             )}
