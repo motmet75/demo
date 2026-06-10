@@ -27,6 +27,7 @@ import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import TableBarIcon from '@mui/icons-material/TableBar'
 import TvIcon from '@mui/icons-material/Tv'
 import MonitorIcon from '@mui/icons-material/Monitor'
+import PeopleAltIcon from '@mui/icons-material/PeopleAlt'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline'
 import QrCode2Icon from '@mui/icons-material/QrCode2'
@@ -335,24 +336,32 @@ function StatusBoard({ status, orders, onAction, onDetail, onPayQr }) {
                     const opts = parseOpts(root.selectedOptions)
                     const optStr = Object.entries(opts).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join('+') : v}`).join(' · ')
                     return (
-                      <Box key={root.id || rIdx}>
+                      <Box key={root.id || rIdx} sx={{ mb: 0.5 }}>
                         {/* Root item */}
-                        <Typography variant="body2" fontWeight={700} sx={{ fontSize: 13, color: style.color }}>
-                          {rIdx + 1}. {Number(root.quantity)}× {root.modelName}
-                        </Typography>
-                        {optStr && <Typography variant="caption" sx={{ fontSize: 11, pl: 1.5, display: 'block', color: '#555' }}>{optStr}</Typography>}
-                        {root.itemNotes && <Typography variant="caption" sx={{ fontSize: 11, pl: 1.5, fontStyle: 'italic', display: 'block', color: '#c62828', fontWeight: 700 }}>⚠ {root.itemNotes}</Typography>}
+                        <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
+                          <Typography sx={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', flexShrink: 0 }}>
+                            {rIdx + 1}.
+                          </Typography>
+                          <Typography sx={{ fontSize: 22, fontWeight: 900, color: style.color, lineHeight: 1, flexShrink: 0 }}>
+                            {Number(root.quantity)}×
+                          </Typography>
+                          <Typography sx={{ fontSize: 14, fontWeight: 800, color: '#111', lineHeight: 1.2 }}>
+                            {root.modelName}
+                          </Typography>
+                        </Box>
+                        {optStr && <Typography variant="caption" sx={{ fontSize: 11, pl: 2, display: 'block', color: '#555' }}>{optStr}</Typography>}
+                        {root.itemNotes && <Typography variant="caption" sx={{ fontSize: 11, pl: 2, fontStyle: 'italic', display: 'block', color: '#c62828', fontWeight: 700 }}>⚠ {root.itemNotes}</Typography>}
                         {/* Child / topping items */}
                         {children.map((child, ci) => (
-                          <Box key={child.id || ci} sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5, ml: 2.5, pl: 1, mt: 0.2, borderLeft: `2px solid ${style.border || '#e2e8f0'}` }}>
-                            <Typography variant="caption" sx={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, flexShrink: 0 }}>
+                          <Box key={child.id || ci} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, ml: 3, pl: 1, mt: 0.3, borderLeft: `3px solid ${style.border}` }}>
+                            <Typography sx={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, flexShrink: 0, minWidth: 20 }}>
                               {rIdx + 1}.{ci + 1}
                             </Typography>
-                            <Typography variant="caption" sx={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, flex: 1 }}>
-                              {child.modelName}
+                            <Typography sx={{ fontSize: 16, fontWeight: 900, color: '#111', lineHeight: 1, flexShrink: 0 }}>
+                              {Number(child.quantity)}×
                             </Typography>
-                            <Typography variant="caption" sx={{ fontSize: 10, color: '#cbd5e1', fontWeight: 600 }}>
-                              ({Number(child.quantity)}×/cup)
+                            <Typography sx={{ fontSize: 12, fontWeight: 700, color: '#374151', flex: 1 }}>
+                              {child.modelName}
                             </Typography>
                           </Box>
                         ))}
@@ -429,8 +438,10 @@ export default function ShopOrderGrid() {
   const [qrOrderOpen, setQrOrderOpen]   = useState(false)
   const [boardOpen, setBoardOpen]       = useState(false)
   const [boardUrl, setBoardUrl]         = useState('')
+  const [customerBoardUrl, setCustomerBoardUrl] = useState('')
   const [boardLoading, setBoardLoading] = useState(false)
   const [copied, setCopied]             = useState(false)
+  const [copiedCustomer, setCopiedCustomer] = useState(false)
   const [tab, setTab]                   = useState(0)
   const [stockItems, setStockItems]     = useState([])
   const [pendingStockUids, setPendingStockUids] = useState([])
@@ -552,7 +563,9 @@ export default function ShopOrderGrid() {
     setBoardLoading(true); setBoardOpen(true)
     try {
       const { data } = await generateDisplayBoardToken()
-      setBoardUrl(`${window.location.origin}/bom-inventory/shop/board?t=${data.token}`)
+      const base = `${window.location.origin}/bom-inventory`
+      setBoardUrl(`${base}/shop/board?t=${data.token}`)
+      setCustomerBoardUrl(`${base}/shop/customer-board?t=${data.token}`)
     } catch (e) { setError(e.message || 'Failed to generate board URL') }
     setBoardLoading(false)
   }
@@ -883,23 +896,48 @@ export default function ShopOrderGrid() {
       )}
 
       <Dialog open={boardOpen} onClose={() => setBoardOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><TvIcon color="info" /> Display Board</DialogTitle>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><TvIcon color="info" /> Display Boards</DialogTitle>
         <DialogContent>
           {boardLoading ? <Box sx={{ textAlign: 'center', py: 3 }}><CircularProgress /></Box> : boardUrl ? (
-            <>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Open on a TV or tablet. Shows in-progress and ready orders, auto-refreshes. Valid 24 hours.
-              </Typography>
-              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                <TextField value={boardUrl} size="small" fullWidth inputProps={{ readOnly: true, style: { fontSize: 13 } }} onClick={e => e.target.select()} />
-                <Tooltip title={copied ? 'Copied!' : 'Copy URL'}>
-                  <IconButton onClick={() => { navigator.clipboard.writeText(boardUrl); setCopied(true); setTimeout(() => setCopied(false), 2000) }} color={copied ? 'success' : 'default'}>
-                    <ContentCopyIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
+            <Stack spacing={2.5}>
+              {/* Staff board */}
+              <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
+                  <TvIcon fontSize="small" color="info" />
+                  <Typography variant="body2" fontWeight={700}>Staff Board</Typography>
+                  <Typography variant="caption" color="text.secondary">— full detail (kitchen / bar)</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                  <TextField value={boardUrl} size="small" fullWidth inputProps={{ readOnly: true, style: { fontSize: 12 } }} onClick={e => e.target.select()} />
+                  <Tooltip title={copied ? 'Copied!' : 'Copy URL'}>
+                    <IconButton onClick={() => { navigator.clipboard.writeText(boardUrl); setCopied(true); setTimeout(() => setCopied(false), 2000) }} color={copied ? 'success' : 'default'} size="small">
+                      <ContentCopyIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+                <Button variant="text" size="small" sx={{ mt: 0.5 }} onClick={() => window.open(boardUrl, '_blank')}>Open in new tab →</Button>
               </Box>
-              <Button variant="text" size="small" sx={{ mt: 1 }} onClick={() => window.open(boardUrl, '_blank')}>Open in new tab →</Button>
-            </>
+
+              {/* Customer board */}
+              <Box sx={{ bgcolor: '#f0fdf4', borderRadius: 2, p: 1.5, border: '1px solid #bbf7d0' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
+                  <PeopleAltIcon fontSize="small" sx={{ color: '#16a34a' }} />
+                  <Typography variant="body2" fontWeight={700} color="#16a34a">Customer Board</Typography>
+                  <Typography variant="caption" color="text.secondary">— order numbers only (waiting area TV)</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                  <TextField value={customerBoardUrl} size="small" fullWidth inputProps={{ readOnly: true, style: { fontSize: 12 } }} onClick={e => e.target.select()} />
+                  <Tooltip title={copiedCustomer ? 'Copied!' : 'Copy URL'}>
+                    <IconButton onClick={() => { navigator.clipboard.writeText(customerBoardUrl); setCopiedCustomer(true); setTimeout(() => setCopiedCustomer(false), 2000) }} color={copiedCustomer ? 'success' : 'default'} size="small">
+                      <ContentCopyIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+                <Button variant="text" size="small" color="success" sx={{ mt: 0.5 }} onClick={() => window.open(customerBoardUrl, '_blank')}>Open in new tab →</Button>
+              </Box>
+
+              <Typography variant="caption" color="text.secondary">Both links use the same token and are valid for 24 hours.</Typography>
+            </Stack>
           ) : null}
         </DialogContent>
         <DialogActions><Button onClick={() => setBoardOpen(false)}>Close</Button></DialogActions>

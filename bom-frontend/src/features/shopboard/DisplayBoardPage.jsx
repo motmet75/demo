@@ -100,108 +100,101 @@ function OrderCard({ order, colStyle }) {
             const opts = parseOpts(item.selectedOptions)
             const rowNum = idx + 1
             return (
-              <Box key={item.id || idx} sx={{ mb: children.length > 0 ? 0.75 : 0.4 }}>
-                {/* Root item row: "1.  2× Matcha Naoki  opt1 · opt2" */}
-                <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.4, flexWrap: 'wrap' }}>
+              <Box key={item.id || idx} sx={{ mb: children.length > 0 ? 0.75 : 0.5 }}>
+                {/* Root item: big qty + bold name */}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                   <Typography sx={{
                     fontSize: { xs: 9, md: 10 },
                     fontWeight: 700,
                     color: colStyle.labelColor,
                     flexShrink: 0,
-                    lineHeight: 1.4,
-                    minWidth: 16,
+                    lineHeight: 1,
+                    minWidth: 14,
                   }}>
                     {rowNum}.
                   </Typography>
                   <Typography sx={{
-                    fontSize: { xs: 10, md: 11 },
+                    fontSize: { xs: 20, md: 26 },
                     fontWeight: 900,
                     color: colStyle.qtyColor,
                     flexShrink: 0,
-                    lineHeight: 1.4,
+                    lineHeight: 1,
                   }}>
                     {Number(item.quantity)}×
                   </Typography>
                   <Typography sx={{
-                    fontSize: { xs: 11, md: 12 },
-                    fontWeight: 700,
-                    color: colStyle.itemColor,
-                    lineHeight: 1.3,
+                    fontSize: { xs: 12, md: 13 },
+                    fontWeight: 800,
+                    color: '#111',
+                    lineHeight: 1.2,
                     wordBreak: 'break-word',
                   }}>
                     {item.modelName}
                   </Typography>
-                  {opts.length > 0 && (
-                    <Typography sx={{
-                      fontSize: { xs: 9, md: 10 },
-                      fontWeight: 600,
-                      color: colStyle.optColor,
-                      lineHeight: 1.4,
-                      wordBreak: 'break-word',
-                    }}>
-                      {opts.join(' · ')}
-                    </Typography>
-                  )}
                 </Box>
+
+                {/* Options inline */}
+                {opts.length > 0 && (
+                  <Typography sx={{
+                    fontSize: { xs: 9, md: 10 },
+                    fontWeight: 600,
+                    color: colStyle.optColor,
+                    lineHeight: 1.4,
+                    pl: 2,
+                    wordBreak: 'break-word',
+                  }}>
+                    {opts.join(' · ')}
+                  </Typography>
+                )}
 
                 {/* Note */}
                 {item.itemNotes && (
-                  <Typography sx={{
-                    fontSize: { xs: 9, md: 10 },
-                    color: '#f59e0b',
-                    fontWeight: 700,
-                    pl: 2.5,
-                    fontStyle: 'italic',
-                    lineHeight: 1.4,
-                  }}>
+                  <Typography sx={{ fontSize: { xs: 9, md: 10 }, color: '#f59e0b', fontWeight: 700, pl: 2, fontStyle: 'italic' }}>
                     ⚠ {item.itemNotes}
                   </Typography>
                 )}
 
-                {/* Child / topping rows: "  1.1  Top Cheese-Boba  (1×/cup)" */}
+                {/* Child / topping rows */}
                 {children.map((child, ci) => (
                   <Box key={child.id || ci} sx={{
                     display: 'flex',
-                    alignItems: 'baseline',
+                    alignItems: 'center',
                     gap: 0.5,
-                    pl: 1,
-                    pt: 0.2,
-                    mt: 0.2,
                     ml: 3,
-                    borderLeft: `2px solid ${colStyle.childBorder}`,
+                    pl: 1,
+                    mt: 0.3,
+                    borderLeft: `3px solid ${colStyle.childBorder}`,
                   }}>
                     <Typography sx={{
                       fontSize: { xs: 8, md: 9 },
                       fontWeight: 700,
                       color: colStyle.labelColor,
                       flexShrink: 0,
-                      lineHeight: 1.4,
                       minWidth: 20,
+                      lineHeight: 1,
                     }}>
                       {rowNum}.{ci + 1}
                     </Typography>
                     <Typography sx={{
-                      fontSize: { xs: 9, md: 10 },
-                      color: colStyle.childColor,
-                      lineHeight: 1.3,
+                      fontSize: { xs: 14, md: 18 },
+                      fontWeight: 900,
+                      color: '#111',
+                      flexShrink: 0,
+                      lineHeight: 1,
+                    }}>
+                      {Number(child.quantity)}×
+                    </Typography>
+                    <Typography sx={{
+                      fontSize: { xs: 11, md: 12 },
                       fontWeight: 700,
+                      color: '#374151',
+                      lineHeight: 1.2,
                       wordBreak: 'break-word',
-                      flex: 1,
                     }}>
                       {child.modelName}
                     </Typography>
-                    <Typography sx={{
-                      fontSize: { xs: 8, md: 9 },
-                      fontWeight: 700,
-                      color: colStyle.childColor,
-                      flexShrink: 0,
-                      lineHeight: 1.4,
-                      opacity: 0.75,
-                    }}>
-                      ({Number(child.quantity)}×/cup)
-                    </Typography>
                     {child.itemNotes && (
-                      <Typography sx={{ fontSize: 9, color: '#f59e0b', fontStyle: 'italic', ml: 0.25 }}>
+                      <Typography sx={{ fontSize: 9, color: '#f59e0b', fontStyle: 'italic' }}>
                         ⚠ {child.itemNotes}
                       </Typography>
                     )}
