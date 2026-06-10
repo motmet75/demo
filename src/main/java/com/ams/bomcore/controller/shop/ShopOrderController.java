@@ -451,6 +451,17 @@ public class ShopOrderController {
         return ResponseEntity.ok(shopOrderService.getActiveTableOrders(tableId, tenantId, companyId));
     }
 
+    @PatchMapping("/shop/public/orders/{orderCode}/cancel-by-customer")
+    public ResponseEntity<?> cancelByCustomer(@PathVariable String orderCode,
+                                               @RequestBody(required = false) Map<String, Object> body) {
+        String note = body != null && body.get("note") instanceof String s ? s : null;
+        try {
+            return ResponseEntity.ok(shopOrderService.cancelByCustomer(orderCode, note));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(409).body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @PatchMapping("/shop/public/orders/{orderCode}/start-edit")
     public ResponseEntity<?> startCustomerEdit(@PathVariable String orderCode) {
         try {

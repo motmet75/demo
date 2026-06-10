@@ -42,7 +42,8 @@ import VisibilityIcon from '@mui/icons-material/Visibility'
 import TableRestaurantIcon from '@mui/icons-material/TableRestaurant'
 import { resolveToken, fetchMenu, createOrder, fetchPublicMenuOptions,
          fetchActiveTableOrders, startCustomerEdit, cancelCustomerEdit,
-         updatePublicOrderItems, fetchPublicOrder, fetchTokenSession } from '../../api/shopApi'
+         updatePublicOrderItems, fetchPublicOrder, fetchTokenSession,
+         cancelPublicOrder } from '../../api/shopApi'
 import ItemOptionsDialog from './ItemOptionsDialog'
 import OrderReceiptDialog from './OrderReceiptDialog'
 
@@ -128,96 +129,162 @@ function ShowOrdersButton({ session, onClick, fullWidth }) {
 }
 
 // Compact order list shown inside the session dialog
-function SessionOrderList({ session, token, onEdit, onClose }) {
+function SessionOrderList({ session, token, onEdit }) {
   const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
+  const [cancelTarget, setCancelTarget] = useState(null)   // order being cancelled
+  const [cancelNote, setCancelNote]     = useState('')
+  const [cancelling, setCancelling]     = useState(false)
+  const [cancelError, setCancelError]   = useState('')
+
   const orders = session?.orders || []
+
+  const doCancel = async () => {
+    if (!cancelTarget) return
+    setCancelling(true); setCancelError('')
+    try {
+      const { res, data } = await cancelPublicOrder(cancelTarget.orderCode, cancelNote)
+      if (!res.ok) { setCancelError(data?.error || 'Failed to cancel'); setCancelling(false); return }
+      setCancelTarget(null); setCancelNote('')
+    } catch { setCancelError('Network error') }
+    setCancelling(false)
+  }
+
   if (!orders.length) return (
     <Box sx={{ textAlign: 'center', py: 4, color: 'text.secondary' }}>
       <Typography>No orders yet in this session.</Typography>
     </Box>
   )
+
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-      {orders.map((order) => {
-        const status   = order.status || 'PENDING'
-        const chip     = STATUS_CHIP_MAP[status] || STATUS_CHIP_MAP.PENDING
-        const editing  = Boolean(order.customerEditing)
-        const isPending = status === 'PENDING'
-        const displayNum = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
-        const roots    = (order.items || []).filter(i => !i.parentItemId)
-        return (
-          <Box key={order.orderCode} sx={{
-            border: editing ? '2px solid #f59e0b' : '1px solid #e2e8f0',
-            borderRadius: 2, overflow: 'hidden',
-            bgcolor: editing ? '#fffbeb' : '#fff',
-            boxShadow: editing ? '0 0 0 3px #fde68a55' : '0 1px 3px #0001',
-            animation: editing ? 'glow-edit 2s infinite' : 'none',
-            '@keyframes glow-edit': {
-              '0%,100%': { boxShadow: '0 0 0 3px #fde68a55' },
-              '50%':     { boxShadow: '0 0 0 6px #fde68a00' },
-            },
-          }}>
-            {/* Header */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1.25,
-              bgcolor: editing ? '#fef3c7' : '#f8fafc' }}>
-              <Typography fontWeight={900} sx={{ fontSize: 20, minWidth: 38, color: editing ? '#b45309' : '#334155' }}>
-                {displayNum}
-              </Typography>
-              <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
-                <Chip label={chip.label} color={chip.color} size="small" sx={{ fontWeight: 700, fontSize: 11 }} />
-                {editing && (
-                  <Chip
-                    icon={<VisibilityIcon sx={{ fontSize: 13 }} />}
-                    label="Editing — finish or cancel"
-                    size="small"
-                    sx={{
-                      bgcolor: '#f59e0b', color: '#fff', fontWeight: 700, fontSize: 10,
-                      animation: 'blink-chip 1.4s infinite',
-                      '@keyframes blink-chip': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0.6 } },
-                    }}
-                  />
+    <>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+        {orders.map((order) => {
+          const status    = order.status || 'PENDING'
+          const chip      = STATUS_CHIP_MAP[status] || STATUS_CHIP_MAP.PENDING
+          const editing   = Boolean(order.customerEditing)
+          const isPending = status === 'PENDING'
+          const isCancelledByCustomer = Boolean(order.customerCancelled)
+          const displayNum = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
+          const roots      = (order.items || []).filter(i => !i.parentItemId)
+
+          return (
+            <Box key={order.orderCode} sx={{
+              border: editing ? '2px solid #f59e0b' : '1px solid #e2e8f0',
+              borderRadius: 2, overflow: 'hidden',
+              bgcolor: editing ? '#fffbeb' : status === 'CANCELLED' ? '#fafafa' : '#fff',
+              opacity: status === 'CANCELLED' ? 0.75 : 1,
+              animation: editing ? 'glow-edit 2s infinite' : 'none',
+              '@keyframes glow-edit': {
+                '0%,100%': { boxShadow: '0 0 0 3px #fde68a55' },
+                '50%':     { boxShadow: '0 0 0 6px #fde68a00' },
+              },
+            }}>
+              {/* Header */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1.25,
+                bgcolor: editing ? '#fef3c7' : '#f8fafc' }}>
+                <Typography fontWeight={900} sx={{ fontSize: 20, minWidth: 38, color: editing ? '#b45309' : '#334155' }}>
+                  {displayNum}
+                </Typography>
+                <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+                  <Chip label={chip.label} color={chip.color} size="small" sx={{ fontWeight: 700, fontSize: 11 }} />
+                  {editing && (
+                    <Chip
+                      icon={<VisibilityIcon sx={{ fontSize: 13 }} />}
+                      label="Editing — finish or cancel"
+                      size="small"
+                      sx={{
+                        bgcolor: '#f59e0b', color: '#fff', fontWeight: 700, fontSize: 10,
+                        animation: 'blink-chip 1.4s infinite',
+                        '@keyframes blink-chip': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0.6 } },
+                      }}
+                    />
+                  )}
+                  {isCancelledByCustomer && (
+                    <Chip label="Cancelled by you" size="small"
+                      sx={{ bgcolor: '#fee2e2', color: '#b91c1c', fontWeight: 600, fontSize: 10 }} />
+                  )}
+                </Box>
+                <Typography fontWeight={800} color={status === 'CANCELLED' ? 'text.disabled' : 'primary'}
+                  sx={{ fontSize: 14, flexShrink: 0, textDecoration: status === 'CANCELLED' ? 'line-through' : 'none' }}>
+                  {fmt(order.totalAmount)}
+                </Typography>
+              </Box>
+
+              {/* Item summary */}
+              <Box sx={{ px: 2, py: 1 }}>
+                {roots.slice(0, 3).map((item) => (
+                  <Typography key={item.id} variant="caption" color="text.secondary" sx={{ display: 'block' }} noWrap>
+                    {item.quantity}× {item.modelName}
+                    {item.selectedOptions ? ` (${item.selectedOptions})` : ''}
+                  </Typography>
+                ))}
+                {roots.length > 3 && (
+                  <Typography variant="caption" color="text.secondary">+{roots.length - 3} more…</Typography>
+                )}
+                {isCancelledByCustomer && order.customerCancelNote && (
+                  <Typography variant="caption" sx={{ color: '#b91c1c', fontStyle: 'italic', display: 'block', mt: 0.25 }}>
+                    Note: {order.customerCancelNote}
+                  </Typography>
                 )}
               </Box>
-              <Typography fontWeight={800} color="primary" sx={{ fontSize: 14, flexShrink: 0 }}>
-                {fmt(order.totalAmount)}
-              </Typography>
-            </Box>
 
-            {/* Item summary */}
-            <Box sx={{ px: 2, py: 1 }}>
-              {roots.slice(0, 3).map((item, i) => (
-                <Typography key={item.id} variant="caption" color="text.secondary" sx={{ display: 'block' }} noWrap>
-                  {item.quantity}× {item.modelName}
-                  {item.selectedOptions ? ` (${item.selectedOptions})` : ''}
-                </Typography>
-              ))}
-              {roots.length > 3 && (
-                <Typography variant="caption" color="text.secondary">+{roots.length - 3} more…</Typography>
+              {/* Actions — only for PENDING orders */}
+              {isPending && (
+                <Box sx={{ px: 2, pb: 1.25, pt: 0.25, display: 'flex', gap: 1 }}>
+                  {editing ? (
+                    <Button variant="contained" size="small" color="warning" fullWidth
+                      onClick={() => onEdit(order)}
+                      sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5 }}>
+                      ✏ Resume editing
+                    </Button>
+                  ) : (
+                    <Button variant="outlined" size="small"
+                      onClick={() => onEdit(order)}
+                      sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5, flex: 1 }}>
+                      Edit
+                    </Button>
+                  )}
+                  {!editing && (
+                    <Button variant="outlined" size="small" color="error"
+                      onClick={() => { setCancelTarget(order); setCancelNote(''); setCancelError('') }}
+                      sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5, flexShrink: 0 }}>
+                      Cancel
+                    </Button>
+                  )}
+                </Box>
               )}
             </Box>
+          )
+        })}
+      </Box>
 
-            {/* Actions */}
-            {(isPending || editing) && (
-              <Box sx={{ px: 2, pb: 1.25, pt: 0.25, display: 'flex', gap: 1 }}>
-                {editing ? (
-                  <Button variant="contained" size="small" color="warning" fullWidth
-                    onClick={() => onEdit(order)}
-                    sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5 }}>
-                    ✏ Resume editing
-                  </Button>
-                ) : (
-                  <Button variant="outlined" size="small" fullWidth
-                    onClick={() => onEdit(order)}
-                    sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5 }}>
-                    Edit order
-                  </Button>
-                )}
-              </Box>
-            )}
-          </Box>
-        )
-      })}
-    </Box>
+      {/* Cancel confirmation dialog */}
+      <Dialog open={Boolean(cancelTarget)} onClose={() => !cancelling && setCancelTarget(null)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ pb: 1 }}>Cancel this order?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Order <strong>{cancelTarget?.orderNumber ? `#${cancelTarget.orderNumber}` : cancelTarget?.orderCode}</strong> will
+            be cancelled. This cannot be undone.
+          </Typography>
+          <TextField
+            fullWidth size="small" multiline rows={2}
+            label="Reason (optional)"
+            placeholder="e.g. changed my mind"
+            value={cancelNote}
+            onChange={e => setCancelNote(e.target.value)}
+            disabled={cancelling}
+          />
+          {cancelError && <Alert severity="error" sx={{ mt: 1.5 }}>{cancelError}</Alert>}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setCancelTarget(null)} disabled={cancelling}>Keep order</Button>
+          <Button variant="contained" color="error" onClick={doCancel} disabled={cancelling}
+            sx={{ fontWeight: 700, minWidth: 120 }}>
+            {cancelling ? <CircularProgress size={18} color="inherit" /> : 'Yes, Cancel'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
   )
 }
 

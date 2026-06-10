@@ -34,6 +34,14 @@ export function fetchActiveTableOrders(tableId, tenantId, companyId) {
   return apiFetchJsonNoContext('/shop/public/table-orders' + qs({ tableId, tenantId, companyId }))
 }
 
+export function cancelPublicOrder(orderCode, note) {
+  return apiFetchJsonNoContext(`/shop/public/orders/${encodeURIComponent(orderCode)}/cancel-by-customer`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ note: note || null }),
+  })
+}
+
 export function startCustomerEdit(orderCode) {
   return apiFetchJsonNoContext(`/shop/public/orders/${encodeURIComponent(orderCode)}/start-edit`, { method: 'PATCH' })
 }

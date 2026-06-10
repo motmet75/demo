@@ -99,6 +99,12 @@ public class ShopOrder {
     @Column(name = "cancel_reason", columnDefinition = "TEXT")
     private String cancelReason;
 
+    @Column(name = "customer_cancelled")
+    private Boolean customerCancelled = false;
+
+    @Column(name = "customer_cancel_note", columnDefinition = "TEXT")
+    private String customerCancelNote;
+
     @Column(name = "customer_editing")
     private Boolean customerEditing = false;
 
@@ -181,6 +187,10 @@ public class ShopOrder {
     public void setStaffName(String staffName) { this.staffName = staffName; }
     public String getCancelReason() { return cancelReason; }
     public void setCancelReason(String cancelReason) { this.cancelReason = cancelReason; }
+    public Boolean getCustomerCancelled() { return customerCancelled; }
+    public void setCustomerCancelled(Boolean customerCancelled) { this.customerCancelled = customerCancelled; }
+    public String getCustomerCancelNote() { return customerCancelNote; }
+    public void setCustomerCancelNote(String customerCancelNote) { this.customerCancelNote = customerCancelNote; }
     public Boolean getCustomerEditing() { return customerEditing; }
     public void setCustomerEditing(Boolean customerEditing) { this.customerEditing = customerEditing; }
     public Instant getPickupScannedAt() { return pickupScannedAt; }

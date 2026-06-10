@@ -922,6 +922,24 @@ public class ShopOrderService {
         return QrCodeUtil.generateBase64Png(url, 300);
     }
 
+    // ── Customer self-cancel (separate from staff cancel) ────────────
+
+    @Transactional
+    public ShopOrderResponseDto cancelByCustomer(String orderCode, String note) {
+        ShopOrder order = requireOrderByCode(orderCode);
+        if (!ShopOrder.STATUS_PENDING.equals(order.getStatus())) {
+            throw new IllegalStateException("Order can only be cancelled by customer while PENDING");
+        }
+        order.setStatus(ShopOrder.STATUS_CANCELLED);
+        order.setCustomerCancelled(true);
+        if (note != null && !note.isBlank()) {
+            order.setCustomerCancelNote(note.trim());
+        }
+        // cancelReason (staff column) intentionally left untouched
+        shopOrderRepository.save(order);
+        return dto(order);
+    }
+
     // ── Token session (customer tracking session) ─────────────────────
 
     public record TokenSessionDto(
