@@ -158,44 +158,47 @@ function OrderCard({ order, colStyle }) {
                   </Typography>
                 )}
 
-                {/* Child / topping rows: "  1.1  1× Top Cheese-Boba" */}
+                {/* Child / topping rows: "  1.1  Top Cheese-Boba  (1×/cup)" */}
                 {children.map((child, ci) => (
                   <Box key={child.id || ci} sx={{
                     display: 'flex',
                     alignItems: 'baseline',
-                    gap: 0.4,
-                    pl: 2.5,
-                    mt: 0.2,
+                    gap: 0.5,
+                    pl: 1.25,
+                    pt: 0.25,
+                    mt: 0.25,
+                    ml: 2,
                     borderLeft: `2px solid ${colStyle.childBorder}`,
-                    ml: 1,
                   }}>
                     <Typography sx={{
-                      fontSize: { xs: 9, md: 10 },
+                      fontSize: { xs: 8, md: 9 },
                       fontWeight: 700,
                       color: colStyle.labelColor,
                       flexShrink: 0,
                       lineHeight: 1.4,
-                      minWidth: 24,
+                      minWidth: 20,
                     }}>
                       {rowNum}.{ci + 1}
                     </Typography>
                     <Typography sx={{
                       fontSize: { xs: 9, md: 10 },
-                      fontWeight: 900,
+                      color: colStyle.childColor,
+                      lineHeight: 1.3,
+                      fontWeight: 700,
+                      wordBreak: 'break-word',
+                      flex: 1,
+                    }}>
+                      {child.modelName}
+                    </Typography>
+                    <Typography sx={{
+                      fontSize: { xs: 8, md: 9 },
+                      fontWeight: 700,
                       color: colStyle.childColor,
                       flexShrink: 0,
                       lineHeight: 1.4,
+                      opacity: 0.75,
                     }}>
-                      {Number(child.quantity)}×
-                    </Typography>
-                    <Typography sx={{
-                      fontSize: { xs: 9, md: 10 },
-                      color: colStyle.childColor,
-                      lineHeight: 1.3,
-                      fontWeight: 600,
-                      wordBreak: 'break-word',
-                    }}>
-                      {child.modelName}
+                      ({Number(child.quantity)}×/cup)
                     </Typography>
                     {child.itemNotes && (
                       <Typography sx={{ fontSize: 9, color: '#f59e0b', fontStyle: 'italic', ml: 0.25 }}>
@@ -236,21 +239,21 @@ const COL_QUEUED = {
   cardBg: '#fefce8', headerBg: '#fef9c3', border: '#fbbf24',
   numColor: '#92400e', labelColor: '#78350f', qtyColor: '#d97706',
   itemColor: '#1c1917', optBg: '#fde68a', optColor: '#92400e',
-  childBorder: '#fcd34d', childColor: '#b45309',
+  childBorder: '#fcd34d', childColor: '#d97706',
   glow: false, glowColor: '#fbbf24', readyBadge: false,
 }
 const COL_MAKING = {
   cardBg: '#eff6ff', headerBg: '#dbeafe', border: '#3b82f6',
   numColor: '#1d4ed8', labelColor: '#1e40af', qtyColor: '#2563eb',
   itemColor: '#1e293b', optBg: '#bfdbfe', optColor: '#1e40af',
-  childBorder: '#93c5fd', childColor: '#1d4ed8',
+  childBorder: '#93c5fd', childColor: '#60a5fa',
   glow: false, glowColor: '#3b82f6', readyBadge: false,
 }
 const COL_READY = {
   cardBg: '#f0fdf4', headerBg: '#dcfce7', border: '#22c55e',
   numColor: '#15803d', labelColor: '#166534', qtyColor: '#16a34a',
   itemColor: '#1c1917', optBg: '#bbf7d0', optColor: '#166534',
-  childBorder: '#86efac', childColor: '#15803d',
+  childBorder: '#86efac', childColor: '#4ade80',
   glow: true, glowColor: '#22c55e', readyBadge: true,
 }
 
