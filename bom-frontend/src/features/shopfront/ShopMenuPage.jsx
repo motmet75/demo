@@ -557,6 +557,7 @@ export default function ShopMenuPage() {
       restoreCartFromOrder(order)
       setEditingOrderCode(order.orderCode)
       setTrackingOrder(null)
+      setCartOpen(true)
     } catch (e) {
       setError('Cannot edit order right now')
     }
