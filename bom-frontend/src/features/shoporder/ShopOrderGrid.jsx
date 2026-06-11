@@ -263,7 +263,7 @@ const BOARD_STYLE = {
   PICKED_UP:  { headerBg: '#e3f2fd', border: '#0288d1',  cardBg: '#f0f9ff',  color: '#01579b',  numColor: '#0288d1' },
 }
 
-function StatusBoard({ status, orders, onAction, onDetail, onPayQr }) {
+function StatusBoard({ status, orders, onAction, onDetail, onPayQr, onPickupQr }) {
   // onAction(type, orderId, orderNumber)
   const style = BOARD_STYLE[status] || BOARD_STYLE.CONFIRMED
 
@@ -402,12 +402,20 @@ function StatusBoard({ status, orders, onAction, onDetail, onPayQr }) {
                   <Button size="small" variant="contained" color="success" fullWidth onClick={() => onAction('ready', order.id, order.orderNumber)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Mark Ready ✓</Button>
                 )}
                 {status === 'READY' && (
-                  <Box sx={{ display: 'flex', gap: 0.75 }}>
-                    {(order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT')
-                      ? <Button size="small" variant="contained" color="info" fullWidth onClick={() => onAction('pickup', order.id, order.orderNumber)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Picked Up ✓</Button>
-                      : <Button size="small" variant="contained" color="success" fullWidth onClick={() => onAction('complete', order.id, order.orderNumber)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Complete ✓</Button>
-                    }
-                  </Box>
+                  <Stack spacing={0.5}>
+                    <Button size="small" variant="outlined" color="warning" fullWidth
+                      startIcon={<QrCode2Icon sx={{ fontSize: 13 }} />}
+                      onClick={() => onPickupQr(order)}
+                      sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>
+                      Pickup QR
+                    </Button>
+                    <Box sx={{ display: 'flex', gap: 0.75 }}>
+                      {(order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT')
+                        ? <Button size="small" variant="contained" color="info" fullWidth onClick={() => onAction('pickup', order.id, order.orderNumber)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Picked Up ✓</Button>
+                        : <Button size="small" variant="contained" color="success" fullWidth onClick={() => onAction('complete', order.id, order.orderNumber)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Complete ✓</Button>
+                      }
+                    </Box>
+                  </Stack>
                 )}
                 {status === 'PICKED_UP' && (
                   <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11, textAlign: 'center', display: 'block' }}>
@@ -999,6 +1007,13 @@ export default function ShopOrderGrid() {
     setPayQrOrder(order)
   }
 
+  const handlePickupQr = async (row) => {
+    try {
+      const { data } = await fetchPickupQr(row.id)
+      setPickupQrOrder({ id: row.id, orderNumber: row.orderNumber, orderCode: row.orderCode, qrBase64: data.qrBase64 })
+    } catch (e) { setError('Failed to generate pickup QR: ' + (e.message || e)) }
+  }
+
   const cardActions = {
     detail:          (row) => setDetailOrder(row),
     combinedReceipt: (token) => setCombinedToken(token),
@@ -1020,12 +1035,7 @@ export default function ShopOrderGrid() {
     cancel:     handleCancel,
     switchToQr: (row) => askConfirm({ title: 'Switch to QR payment?', message: 'Switch this order to Bank QR and print receipt?', confirmLabel: 'Switch & Print', confirmColor: 'success' }, () => handleSwitchAndPrint(row)),
     revertCash: (row) => askConfirm({ title: 'Revert to Cash?', message: 'Change payment method back to cash?', confirmLabel: '→ Cash', confirmColor: 'warning' }, () => handleRevertToCash(row)),
-    pickupQr:   async (row) => {
-      try {
-        const { data } = await fetchPickupQr(row.id)
-        setPickupQrOrder({ id: row.id, orderNumber: row.orderNumber, orderCode: row.orderCode, qrBase64: data.qrBase64 })
-      } catch (e) { setError('Failed to generate pickup QR: ' + (e.message || e)) }
-    },
+    pickupQr:   handlePickupQr,
   }
 
   const tabBadge = (label, count, color = 'primary') => (
@@ -1113,10 +1123,10 @@ export default function ShopOrderGrid() {
               })}
             />
           )}
-          {tab === 1 && <StatusBoard status="CONFIRMED"  orders={confirmedOrders} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} />}
-          {tab === 2 && <StatusBoard status="PREPARING"  orders={preparingOrders} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} />}
-          {tab === 3 && <StatusBoard status="READY"      orders={readyOrders}     onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} />}
-          {tab === 4 && <StatusBoard status="PICKED_UP"  orders={pickedUpOrders}  onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} />}
+          {tab === 1 && <StatusBoard status="CONFIRMED"  orders={confirmedOrders} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} />}
+          {tab === 2 && <StatusBoard status="PREPARING"  orders={preparingOrders} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} />}
+          {tab === 3 && <StatusBoard status="READY"      orders={readyOrders}     onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} />}
+          {tab === 4 && <StatusBoard status="PICKED_UP"  orders={pickedUpOrders}  onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} />}
         </Box>
       </Box>
 
@@ -1148,6 +1158,7 @@ export default function ShopOrderGrid() {
         <DialogContent>
           {boardLoading ? <Box sx={{ textAlign: 'center', py: 3 }}><CircularProgress /></Box> : boardUrl ? (
             <Stack spacing={2.5}>
+
               {/* Staff board */}
               <Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
@@ -1166,12 +1177,12 @@ export default function ShopOrderGrid() {
                 <Button variant="text" size="small" sx={{ mt: 0.5 }} onClick={() => window.open(boardUrl, '_blank')}>Open in new tab →</Button>
               </Box>
 
-              {/* Customer board */}
+              {/* Customer board + Link Device QR */}
               <Box sx={{ bgcolor: '#f0fdf4', borderRadius: 2, p: 1.5, border: '1px solid #bbf7d0' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
                   <PeopleAltIcon fontSize="small" sx={{ color: '#16a34a' }} />
                   <Typography variant="body2" fontWeight={700} color="#16a34a">Customer Board</Typography>
-                  <Typography variant="caption" color="text.secondary">— order numbers only (waiting area TV)</Typography>
+                  <Typography variant="caption" color="text.secondary">— order numbers (waiting area TV)</Typography>
                 </Box>
                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                   <TextField value={customerBoardUrl} size="small" fullWidth inputProps={{ readOnly: true, style: { fontSize: 12 } }} onClick={e => e.target.select()} />
@@ -1182,6 +1193,52 @@ export default function ShopOrderGrid() {
                   </Tooltip>
                 </Box>
                 <Button variant="text" size="small" color="success" sx={{ mt: 0.5 }} onClick={() => window.open(customerBoardUrl, '_blank')}>Open in new tab →</Button>
+
+                {/* ── Link Device QR ── */}
+                <Box sx={{
+                  mt: 1.5,
+                  bgcolor: '#022c22',
+                  border: '2px solid #16a34a',
+                  borderRadius: 2,
+                  p: 2,
+                  display: 'flex',
+                  gap: 2,
+                  alignItems: 'center',
+                }}>
+                  {/* QR code image — generated from the customer board URL */}
+                  <Box sx={{
+                    bgcolor: '#fff',
+                    borderRadius: 1.5,
+                    p: 0.75,
+                    flexShrink: 0,
+                    border: '2px solid #4ade80',
+                  }}>
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=4&data=${encodeURIComponent(customerBoardUrl)}`}
+                      alt="Customer Board QR"
+                      style={{ width: 160, height: 160, display: 'block' }}
+                    />
+                  </Box>
+                  {/* Instructions */}
+                  <Box>
+                    <Typography sx={{ fontWeight: 800, color: '#4ade80', fontSize: 14, mb: 0.75 }}>
+                      📱 Link a Device
+                    </Typography>
+                    <Typography sx={{ color: '#86efac', fontSize: 12, lineHeight: 1.6 }}>
+                      Scan this QR with a phone or tablet to mirror the customer board live.
+                    </Typography>
+                    <Typography sx={{ color: '#4ade80', fontSize: 11, mt: 0.75, lineHeight: 1.5, fontStyle: 'italic' }}>
+                      Counter tip: open on your counter phone and show it to customers so they can track their order.
+                    </Typography>
+                    <Button
+                      size="small" variant="outlined"
+                      startIcon={<ContentCopyIcon sx={{ fontSize: 13 }} />}
+                      onClick={() => { navigator.clipboard.writeText(customerBoardUrl); setCopiedCustomer(true); setTimeout(() => setCopiedCustomer(false), 2000) }}
+                      sx={{ mt: 1, borderColor: '#4ade80', color: '#4ade80', fontWeight: 700, fontSize: 11, textTransform: 'none', '&:hover': { borderColor: '#22c55e', bgcolor: '#14532d' } }}>
+                      {copiedCustomer ? 'Copied!' : 'Copy link'}
+                    </Button>
+                  </Box>
+                </Box>
               </Box>
 
               <Typography variant="caption" color="text.secondary">Both links use the same token and are valid for 24 hours.</Typography>
