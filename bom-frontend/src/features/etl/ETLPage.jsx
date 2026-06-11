@@ -141,6 +141,84 @@ ORDER BY created_at DESC`,
 FROM inventory i
 JOIN material m ON i.material_id = m.id`,
   },
+  // ── Menu ────────────────────────────────────────────────────────
+  {
+    group: 'Menu',
+    label: 'Menu + Sub-items (join)',
+    sql: `SELECT
+  parent.id            AS parent_id,
+  parent.menustringid  AS parent_key,
+  parent.menuname      AS parent_name,
+  parent.path          AS parent_path,
+  parent.index         AS parent_order,
+  child.id             AS child_id,
+  child.menustringid   AS child_key,
+  child.menuname       AS child_name,
+  child.path           AS child_path,
+  child.index          AS child_order,
+  child.isvisible      AS child_visible,
+  child.external
+FROM menutb parent
+LEFT JOIN menutb child
+  ON child.menurootstringid = parent.menustringid
+ AND child.menustringid    <> parent.menustringid
+WHERE parent.menurootstringid IS NULL
+   OR parent.menurootstringid = ''
+   OR parent.menurootstringid = parent.menustringid
+ORDER BY parent.index, parent.id, child.index`,
+  },
+  {
+    group: 'Menu',
+    label: 'Menu Tree (recursive)',
+    sql: `WITH RECURSIVE menu_tree AS (
+  SELECT
+    id,
+    menustringid,
+    menurootstringid,
+    menuname,
+    path,
+    index,
+    isvisible,
+    external,
+    language,
+    0                    AS depth,
+    menuname::text       AS breadcrumb
+  FROM menutb
+  WHERE menurootstringid IS NULL
+     OR menurootstringid = ''
+     OR menurootstringid = menustringid
+
+  UNION ALL
+
+  SELECT
+    c.id,
+    c.menustringid,
+    c.menurootstringid,
+    c.menuname,
+    c.path,
+    c.index,
+    c.isvisible,
+    c.external,
+    c.language,
+    p.depth + 1,
+    p.breadcrumb || ' > ' || c.menuname
+  FROM menutb c
+  JOIN menu_tree p ON c.menurootstringid = p.menustringid
+                  AND c.menustringid     <> p.menustringid
+)
+SELECT
+  depth,
+  REPEAT('  ', depth) || menuname  AS menu_label,
+  menustringid                     AS key,
+  menurootstringid                 AS parent_key,
+  path,
+  index,
+  isvisible,
+  external,
+  breadcrumb
+FROM menu_tree
+ORDER BY breadcrumb`,
+  },
 ]
 
 export default function ETLPage() {
