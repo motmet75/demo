@@ -137,6 +137,44 @@ export default function CustomerPickupPage() {
         </Box>
       </Box>
 
+      {/* Payment QR — show directly on phone for QR pay orders */}
+      {(() => {
+        const isQr = order.paymentMethod === 'BANK_QR'
+        const isSplit = order.paymentMethod === 'SPLIT'
+        const payQrSrc = order.paymentQr?.startsWith('https://')
+          ? order.paymentQr
+          : order.paymentQr ? `data:image/png;base64,${order.paymentQr}` : null
+        if (!(isQr || isSplit) || !payQrSrc) return null
+        const splitCash = isSplit ? Number(order.splitCashAmount || 0) : 0
+        const qrAmount = isSplit ? Number(order.totalAmount || 0) - splitCash : Number(order.totalAmount || 0)
+        return (
+          <Box sx={{
+            width: '100%',
+            maxWidth: 400,
+            bgcolor: '#0a1f0a',
+            border: '3px solid #4ade80',
+            borderRadius: 3,
+            p: 2.5,
+            textAlign: 'center',
+          }}>
+            <Typography sx={{ fontSize: 13, fontWeight: 800, color: '#4ade80', letterSpacing: 2, textTransform: 'uppercase', mb: 1.5 }}>
+              💳 Show this QR to the cashier
+            </Typography>
+            <Box sx={{ bgcolor: '#fff', borderRadius: 2, p: 1, display: 'inline-block', border: '3px solid #4ade80' }}>
+              <img src={payQrSrc} alt="Payment QR" style={{ width: 220, height: 220, display: 'block' }} />
+            </Box>
+            <Typography sx={{ mt: 1.5, fontSize: 22, fontWeight: 900, color: '#4ade80', fontVariantNumeric: 'tabular-nums' }}>
+              {fmt(qrAmount)}
+            </Typography>
+            {isSplit && splitCash > 0 && (
+              <Typography sx={{ mt: 0.5, fontSize: 13, color: '#fbbf24' }}>
+                + {fmt(splitCash)} cash
+              </Typography>
+            )}
+          </Box>
+        )
+      })()}
+
       {/* Counter notice */}
       <Box sx={{
         width: '100%',
