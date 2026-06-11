@@ -263,7 +263,7 @@ const BOARD_STYLE = {
   PICKED_UP:  { headerBg: '#e3f2fd', border: '#0288d1',  cardBg: '#f0f9ff',  color: '#01579b',  numColor: '#0288d1' },
 }
 
-function StatusBoard({ status, orders, onAction, onDetail, onPayQr, onPickupQr }) {
+function StatusBoard({ status, orders, onAction, onDetail, onPayQr, onPickupQr, onSwitchQr, onRevertCash }) {
   // onAction(type, orderId, orderNumber)
   const style = BOARD_STYLE[status] || BOARD_STYLE.CONFIRMED
 
@@ -387,6 +387,26 @@ function StatusBoard({ status, orders, onAction, onDetail, onPayQr, onPickupQr }
 
               {/* Action buttons per status */}
               <Stack spacing={0.5}>
+                {/* Payment method switch */}
+                {!['PICKED_UP', 'COMPLETED', 'CANCELLED'].includes(status) && (
+                  <Box sx={{ display: 'flex', gap: 0.5 }}>
+                    {order.paymentMethod === 'CASH' && (
+                      <Button size="small" variant="outlined" color="success" fullWidth
+                        startIcon={<QrCode2Icon sx={{ fontSize: 12 }} />}
+                        onClick={() => onSwitchQr(order)}
+                        sx={{ textTransform: 'none', fontWeight: 700, fontSize: 11 }}>
+                        → QR Pay
+                      </Button>
+                    )}
+                    {(order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT') && (
+                      <Button size="small" variant="outlined" color="warning" fullWidth
+                        onClick={() => onRevertCash(order)}
+                        sx={{ textTransform: 'none', fontWeight: 700, fontSize: 11 }}>
+                        → Cash
+                      </Button>
+                    )}
+                  </Box>
+                )}
                 {order.paymentStatus !== 'PAID' && status !== 'PICKED_UP' && (
                   <Button size="small" variant="contained" color="success" fullWidth
                     startIcon={<PaidIcon sx={{ fontSize: 14 }} />}
@@ -1123,10 +1143,10 @@ export default function ShopOrderGrid() {
               })}
             />
           )}
-          {tab === 1 && <StatusBoard status="CONFIRMED"  orders={confirmedOrders} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} />}
-          {tab === 2 && <StatusBoard status="PREPARING"  orders={preparingOrders} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} />}
-          {tab === 3 && <StatusBoard status="READY"      orders={readyOrders}     onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} />}
-          {tab === 4 && <StatusBoard status="PICKED_UP"  orders={pickedUpOrders}  onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} />}
+          {tab === 1 && <StatusBoard status="CONFIRMED"  orders={confirmedOrders} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} />}
+          {tab === 2 && <StatusBoard status="PREPARING"  orders={preparingOrders} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} />}
+          {tab === 3 && <StatusBoard status="READY"      orders={readyOrders}     onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} />}
+          {tab === 4 && <StatusBoard status="PICKED_UP"  orders={pickedUpOrders}  onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} />}
         </Box>
       </Box>
 
