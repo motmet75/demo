@@ -312,12 +312,16 @@ export function printCupLabels(order) {
   win.onload = () => { win.focus(); win.print(); setTimeout(() => win.close(), 1000) }
 }
 
-export function printCombinedReceipt(orders) {
+// opts: { payQrUrl, unpaidTotal, tokenRef }
+export function printCombinedReceipt(orders, opts = {}) {
   if (!orders?.length) return
+  const { payQrUrl = null, unpaidTotal = null, tokenRef = '' } = opts
   const time = new Date().toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
 
   const activeOrders = orders.filter(o => o.status !== 'CANCELLED')
-  let grandTotal = 0
+  let grandTotal  = 0
+  let totalQr     = 0
+  let totalCash   = 0
 
   const ordersHtml = activeOrders.map((order) => {
     const num      = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
@@ -332,10 +336,21 @@ export function printCombinedReceipt(orders) {
     }, 0) + Number(order.deliveryFee || 0)
     grandTotal += orderTotal
 
+    const isQr   = order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT'
+    const isSplit = order.paymentMethod === 'SPLIT'
+    const cashPortion = isSplit ? Number(order.splitCashAmount || 0) : isQr ? 0 : orderTotal
+    const qrPortion   = isSplit ? orderTotal - cashPortion : isQr ? orderTotal : 0
+    totalQr   += qrPortion
+    totalCash += cashPortion
+
+    const payBadge = isQr
+      ? `<span class="pay-badge qr-badge">&#x1F4B3; ${isSplit ? 'Split' : 'QR'}</span>`
+      : `<span class="pay-badge cash-badge">&#x1F4B5; Cash</span>`
+
     const itemsHtml = roots.map((item, idx) => {
       const children     = childMap[String(item.id)] || []
       const parentQty    = Number(item.quantity || 1)
-      const opts         = parseOpts(item.selectedOptions)
+      const opts_        = parseOpts(item.selectedOptions)
       const childrenHtml = children.map(child => {
         const effectiveQty = Number(child.quantity || 1) * parentQty
         return `<div class="row side-row">
@@ -351,24 +366,47 @@ export function printCombinedReceipt(orders) {
           <span class="item-name">${item.modelName}</span>
           <span class="item-price">${fmt(item.lineTotal)}</span>
         </div>
-        ${opts ? `<div class="opts-inline grey">${opts}</div>` : ''}
+        ${opts_ ? `<div class="opts-inline grey">${opts_}</div>` : ''}
         ${childrenHtml}
       `
     }).join('')
 
-    const tableInfo = order.tableName ? `Table ${order.tableName}` : order.fulfillmentType === 'DELIVERY' ? 'Delivery' : 'Pickup'
+    const tableInfo  = order.tableName ? `Table ${order.tableName}` : order.fulfillmentType === 'DELIVERY' ? 'Delivery' : 'Pickup'
+    const noteHtml   = order.notes ? `<div class="order-note">&#9888; ${order.notes}</div>` : ''
 
     return `
       <div class="order-block">
         <div class="order-header">
           <span class="order-num">${num}</span>
           <span class="order-meta">${tableInfo}</span>
+          ${payBadge}
           <span class="order-subtotal">${fmt(orderTotal)}</span>
         </div>
         ${itemsHtml}
+        ${noteHtml}
       </div>
     `
   }).join('<div class="divider"></div>')
+
+  // Payment summary section
+  const hasQr   = totalQr > 0
+  const hasCash = totalCash > 0
+  const showQrImg = payQrUrl && hasQr
+
+  const paymentSummary = `
+    <div class="pay-summary">
+      ${hasCash ? `<div class="row"><span>&#x1F4B5; Cash</span><span>${fmt(totalCash)}</span></div>` : ''}
+      ${hasQr   ? `<div class="row"><span>&#x1F4B3; Bank Transfer (QR)</span><span>${fmt(unpaidTotal != null ? unpaidTotal : totalQr)}</span></div>` : ''}
+    </div>
+    ${showQrImg ? `
+      <div class="divider"></div>
+      <div class="center bold" style="margin-bottom:6px;font-size:13px">Scan to Pay — Bank Transfer</div>
+      <div class="center">
+        <img src="${payQrUrl}" width="200" height="200" style="display:block;margin:0 auto;border:2px solid #16a34a;border-radius:8px;padding:4px;background:#fff" />
+      </div>
+      <div class="center grey" style="margin-top:6px;font-size:11px">Transfer exact amount &bull; Ref: ${tokenRef || 'combined'}</div>
+    ` : ''}
+  `
 
   const html = `<!DOCTYPE html>
 <html lang="vi">
@@ -385,28 +423,33 @@ export function printCombinedReceipt(orders) {
     padding: 14px 10px;
     color: #111;
   }
-  .center     { text-align: center; }
-  .bold       { font-weight: bold; }
-  .grey       { color: #555; }
-  .title      { font-size: 16px; font-weight: 900; letter-spacing: 2px; }
-  .divider    { border-top: 1px dashed #666; margin: 7px 0; }
-  .row        { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 2px; }
-  .item-row   { margin-top: 5px; gap: 3px; }
-  .row-num    { font-size: 11px; color: #999; flex-shrink: 0; min-width: 16px; }
-  .item-qty   { font-weight: 900; flex-shrink: 0; margin-right: 3px; }
-  .item-name  { flex: 1; padding-right: 6px; font-weight: 700; }
-  .item-price { text-align: right; white-space: nowrap; flex-shrink: 0; }
+  .center      { text-align: center; }
+  .bold        { font-weight: bold; }
+  .grey        { color: #555; }
+  .title       { font-size: 16px; font-weight: 900; letter-spacing: 2px; }
+  .divider     { border-top: 1px dashed #666; margin: 7px 0; }
+  .row         { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 2px; }
+  .item-row    { margin-top: 5px; gap: 3px; }
+  .row-num     { font-size: 11px; color: #999; flex-shrink: 0; min-width: 16px; }
+  .item-qty    { font-weight: 900; flex-shrink: 0; margin-right: 3px; }
+  .item-name   { flex: 1; padding-right: 6px; font-weight: 700; }
+  .item-price  { text-align: right; white-space: nowrap; flex-shrink: 0; }
   .opts-inline { padding-left: 20px; font-size: 11px; color: #666; margin-bottom: 1px; }
-  .side-row   { margin-top: 2px; margin-left: 14px; border-left: 2px solid #c7d2fe; padding-left: 6px; gap: 3px; }
-  .side-qty   { font-weight: 900; font-size: 11px; color: #6366f1; flex-shrink: 0; margin-right: 3px; }
-  .side-name  { flex: 1; padding-right: 6px; font-size: 12px; color: #444; }
-  .order-block { margin-bottom: 6px; }
+  .side-row    { margin-top: 2px; margin-left: 14px; border-left: 2px solid #c7d2fe; padding-left: 6px; gap: 3px; }
+  .side-qty    { font-weight: 900; font-size: 11px; color: #6366f1; flex-shrink: 0; margin-right: 3px; }
+  .side-name   { flex: 1; padding-right: 6px; font-size: 12px; color: #444; }
+  .order-block  { margin-bottom: 6px; }
   .order-header { display: flex; align-items: center; gap: 4px; background: #f3f4f6; padding: 4px 6px; border-radius: 3px; margin-bottom: 4px; }
-  .order-num  { font-size: 16px; font-weight: 900; min-width: 32px; }
-  .order-meta { flex: 1; font-size: 11px; color: #555; }
+  .order-num    { font-size: 16px; font-weight: 900; min-width: 28px; }
+  .order-meta   { flex: 1; font-size: 11px; color: #555; }
   .order-subtotal { font-weight: 900; font-size: 13px; white-space: nowrap; }
-  .total-row  { font-weight: 900; font-size: 16px; margin-top: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; }
-  .footer     { text-align: center; font-style: italic; color: #555; margin-top: 6px; font-size: 12px; }
+  .order-note   { font-size: 11px; color: #b45309; padding: 2px 0 0 16px; font-style: italic; }
+  .pay-badge    { font-size: 10px; font-weight: 700; border-radius: 3px; padding: 1px 4px; white-space: nowrap; }
+  .qr-badge     { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+  .cash-badge   { background: #fefce8; color: #854d0e; border: 1px solid #fef08a; }
+  .pay-summary  { margin: 6px 0; }
+  .total-row    { font-weight: 900; font-size: 16px; margin-top: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; }
+  .footer       { text-align: center; font-style: italic; color: #555; margin-top: 6px; font-size: 12px; }
   @media print { @page { margin: 0; } body { padding: 8px 6px; } }
 </style>
 </head>
@@ -421,6 +464,10 @@ export function printCombinedReceipt(orders) {
 
   <div class="divider"></div>
   <div class="total-row"><span>TOTAL</span><span>${fmt(grandTotal)}</span></div>
+  <div class="divider"></div>
+
+  ${paymentSummary}
+
   <div class="divider"></div>
   <div class="footer">&#9733; Thank you! &#9733;</div>
 </body>
