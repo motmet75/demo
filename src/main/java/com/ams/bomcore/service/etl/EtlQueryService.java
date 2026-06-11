@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -51,6 +52,18 @@ import com.ams.bomcore.domain.etl.EtlQueryResult;
 public class EtlQueryService {
 
     private static final int ETL_ROW_LIMIT = 5_000;
+
+    /**
+     * Tables that have no tenant_id / company_id columns.
+     * Predicate injection is skipped for these; they are treated as global/shared.
+     */
+    private static final Set<String> NO_TENANT_TABLES = Set.of(
+        "menutb", "menu_tb"
+    );
+
+    /** Extracts only the physical table name from "FROM tableName [alias]" */
+    private static final Pattern FROM_TABLE_PATTERN =
+            Pattern.compile("(?i)\\bFROM\\s+([\\w.]+)");
 
     /** Matches :paramName, excludes Postgres cast ::type */
     private static final Pattern PARAM_PATTERN =
@@ -160,6 +173,14 @@ public class EtlQueryService {
      *     ORDER BY ...
      */
     private String injectTenantPredicate(String sql) {
+        // Skip injection entirely for tables without tenant scoping
+        Matcher ftm = FROM_TABLE_PATTERN.matcher(sql);
+        if (ftm.find()) {
+            String rawTable = ftm.group(1);
+            if (rawTable.contains(".")) rawTable = rawTable.substring(rawTable.lastIndexOf('.') + 1);
+            if (NO_TENANT_TABLES.contains(rawTable.toLowerCase())) return sql;
+        }
+
         String alias   = detectPrimaryAlias(sql);
         String prefix  = alias.isEmpty() ? "" : alias + ".";
         String pred    = prefix + "tenant_id = :_tenant_id"

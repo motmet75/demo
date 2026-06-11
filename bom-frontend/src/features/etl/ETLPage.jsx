@@ -22,43 +22,130 @@ const SKELETON_ROWS = Array.from({ length: 22 })
 // templates. The backend enforces these automatically using the authenticated
 // session context — clients cannot modify or bypass them.
 const TEMPLATES = [
+  // ── Shop Orders ──────────────────────────────────────────────────
   {
-    label: 'Material + Active BOM Join',
-    sql: `SELECT m.material_code, m.material_name, b.bom_name, b.status, b.created_at
-FROM material m
-JOIN bom b ON b.id = b.id
-WHERE b.status = 'ACTIVE'
-ORDER BY m.material_code ASC`,
+    group: 'Shop Orders',
+    label: 'All Shop Orders',
+    sql: `SELECT
+  so.order_number       AS "#",
+  so.order_code         AS code,
+  so.status,
+  so.fulfillment_type   AS type,
+  so.payment_method     AS pay_method,
+  so.payment_status     AS pay_status,
+  so.total_amount,
+  so.customer_name,
+  so.staff_name,
+  so.notes,
+  so.created_at,
+  so.confirmed_at,
+  so.ready_at,
+  so.completed_at
+FROM shop_order so
+ORDER BY so.created_at DESC`,
   },
   {
+    group: 'Shop Orders',
+    label: "Today's Orders",
+    sql: `SELECT
+  so.order_number       AS "#",
+  so.order_code         AS code,
+  so.status,
+  so.fulfillment_type   AS type,
+  so.payment_method     AS pay_method,
+  so.payment_status     AS paid,
+  so.total_amount,
+  so.customer_name,
+  so.created_at
+FROM shop_order so
+WHERE so.created_at >= CURRENT_DATE
+ORDER BY so.created_at DESC`,
+  },
+  {
+    group: 'Shop Orders',
+    label: 'Order Items Detail',
+    sql: `SELECT
+  so.order_number       AS "#",
+  so.order_code         AS code,
+  so.status,
+  i.model_name,
+  i.quantity,
+  i.unit_price,
+  i.line_total,
+  i.item_notes,
+  so.created_at
+FROM shop_order so
+JOIN shop_order_item i ON i.order_id = so.id
+ORDER BY so.created_at DESC, so.id, i.id`,
+  },
+  {
+    group: 'Shop Orders',
+    label: 'Daily Revenue',
+    sql: `SELECT
+  DATE(so.created_at)               AS day,
+  COUNT(*)                          AS total_orders,
+  SUM(so.total_amount)              AS gross_revenue,
+  SUM(CASE WHEN so.payment_status = 'PAID'
+       THEN so.total_amount ELSE 0 END) AS paid_revenue,
+  COUNT(CASE WHEN so.status = 'CANCELLED' THEN 1 END) AS cancelled
+FROM shop_order so
+GROUP BY DATE(so.created_at)
+ORDER BY day DESC`,
+  },
+  {
+    group: 'Shop Orders',
+    label: 'By Status Count',
+    sql: `SELECT
+  so.status,
+  so.payment_method,
+  COUNT(*)             AS orders,
+  SUM(so.total_amount) AS total_amount
+FROM shop_order so
+GROUP BY so.status, so.payment_method
+ORDER BY so.status`,
+  },
+  {
+    group: 'Shop Orders',
+    label: 'Top Items (by qty)',
+    sql: `SELECT
+  i.model_name,
+  SUM(i.quantity)      AS total_qty,
+  SUM(i.line_total)    AS total_revenue,
+  COUNT(DISTINCT i.order_id) AS order_count
+FROM shop_order so
+JOIN shop_order_item i ON i.order_id = so.id
+WHERE so.status NOT IN ('CANCELLED')
+  AND i.parent_item_id IS NULL
+GROUP BY i.model_name
+ORDER BY total_qty DESC`,
+  },
+  // ── Inventory ───────────────────────────────────────────────────
+  {
+    group: 'Inventory',
     label: 'Materials',
     sql: `SELECT id, material_code, material_name, unit, material_type, price
 FROM material
 ORDER BY material_code`,
   },
   {
+    group: 'Inventory',
     label: 'BOM Summary',
     sql: `SELECT id, bom_name, status, created_at
 FROM bom
 ORDER BY created_at DESC`,
   },
   {
+    group: 'Inventory',
     label: 'Inventory Status',
     sql: `SELECT m.material_code, i.batch_no, i.quantity_on_hand, i.quantity_locked
 FROM inventory i
 JOIN material m ON i.material_id = m.id`,
   },
-  {
-    label: 'Orders',
-    sql: `SELECT id, order_number, status, production_batch_id, delivery_date_time
-FROM order_header
-ORDER BY delivery_date_time DESC`,
-  },
 ]
 
 export default function ETLPage() {
   const { tenantId, companyId } = useAppContext()
-  const [sql, setSql] = useState(TEMPLATES[0].sql)
+  const [sql, setSql] = useState(TEMPLATES[0].sql)  // All Shop Orders
   const [params, setParams] = useState('{}')
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -153,32 +240,45 @@ export default function ETLPage() {
 
         {/* Template list */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px 8px' }}>
-          {TEMPLATES.map((t, idx) => (
-            <div
-              key={t.label}
-              onClick={() => applyTemplate(t, idx)}
-              style={{
-                padding: '8px 12px',
-                marginBottom: 4,
-                borderRadius: 6,
-                cursor: 'pointer',
-                borderLeft: activeIdx === idx ? '3px solid #3b82f6' : '3px solid transparent',
-                background: activeIdx === idx ? 'rgba(59,130,246,0.12)' : 'transparent',
-                transition: 'all 0.12s',
-              }}
-              onMouseOver={e => { if (activeIdx !== idx) e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
-              onMouseOut={e => { if (activeIdx !== idx) e.currentTarget.style.background = 'transparent' }}
-            >
-              <span style={{
-                fontSize: 12,
-                lineHeight: 1.45,
-                color: activeIdx === idx ? '#93c5fd' : '#7a8faa',
-                fontWeight: activeIdx === idx ? 600 : 400,
-              }}>
-                {t.label}
-              </span>
-            </div>
-          ))}
+          {(() => {
+            let lastGroup = null
+            return TEMPLATES.map((t, idx) => {
+              const showGroup = t.group && t.group !== lastGroup
+              if (showGroup) lastGroup = t.group
+              return (
+                <React.Fragment key={t.label}>
+                  {showGroup && (
+                    <div style={{ padding: '10px 12px 3px', fontSize: 9, fontWeight: 700, color: '#3d4f6b', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                      {t.group}
+                    </div>
+                  )}
+                  <div
+                    onClick={() => applyTemplate(t, idx)}
+                    style={{
+                      padding: '7px 12px',
+                      marginBottom: 2,
+                      borderRadius: 6,
+                      cursor: 'pointer',
+                      borderLeft: activeIdx === idx ? '3px solid #3b82f6' : '3px solid transparent',
+                      background: activeIdx === idx ? 'rgba(59,130,246,0.12)' : 'transparent',
+                      transition: 'all 0.12s',
+                    }}
+                    onMouseOver={e => { if (activeIdx !== idx) e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
+                    onMouseOut={e => { if (activeIdx !== idx) e.currentTarget.style.background = 'transparent' }}
+                  >
+                    <span style={{
+                      fontSize: 12,
+                      lineHeight: 1.45,
+                      color: activeIdx === idx ? '#93c5fd' : '#7a8faa',
+                      fontWeight: activeIdx === idx ? 600 : 400,
+                    }}>
+                      {t.label}
+                    </span>
+                  </div>
+                </React.Fragment>
+              )
+            })
+          })()}
         </div>
       </div>
 
