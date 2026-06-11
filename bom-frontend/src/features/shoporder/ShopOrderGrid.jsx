@@ -1426,14 +1426,16 @@ export default function ShopOrderGrid() {
 
 // ── Combined Receipt Dialog ──────────────────────────────────────────
 function CombinedReceiptDialog({ token, onClose, onRefresh }) {
-  const [orders, setOrders]   = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState('')
-  const [paying, setPaying]   = useState(false)
+  const [orders, setOrders]       = useState([])
+  const [loading, setLoading]     = useState(true)
+  const [error, setError]         = useState('')
+  const [paying, setPaying]       = useState(false)
+  const [switching, setSwitching] = useState(false)  // 'toQr' | 'toCash' | false
+  const [bankConfig, setBankConfig] = useState(null)
 
   const fmtAmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : '—'
 
-  useEffect(() => {
+  const reload = () => {
     setLoading(true)
     fetchOrdersByToken(token)
       .then(({ res, data }) => {
@@ -1442,23 +1444,91 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
       })
       .catch(() => setError('Network error'))
       .finally(() => setLoading(false))
-  }, [token])
+  }
 
-  const activeOrders = orders.filter(o => o.status !== 'CANCELLED')
-  const unpaidOrders = activeOrders.filter(o => o.paymentStatus !== 'PAID')
-  const grandTotal   = activeOrders.reduce((s, o) => s + Number(o.totalAmount || 0), 0)
+  useEffect(() => { reload() }, [token]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    fetchBankConfig().then(({ data }) => setBankConfig(data || {})).catch(() => {})
+  }, [])
+
+  const activeOrders  = orders.filter(o => o.status !== 'CANCELLED')
+  const unpaidOrders  = activeOrders.filter(o => o.paymentStatus !== 'PAID')
+  const switchableToQr = activeOrders.filter(o =>
+    o.paymentStatus !== 'PAID' && o.paymentMethod === 'CASH' &&
+    !['COMPLETED', 'PICKED_UP', 'CANCELLED'].includes(o.status)
+  )
+  const switchableToCash = activeOrders.filter(o =>
+    o.paymentStatus !== 'PAID' &&
+    (o.paymentMethod === 'BANK_QR' || o.paymentMethod === 'SPLIT') &&
+    !['COMPLETED', 'PICKED_UP', 'CANCELLED'].includes(o.status)
+  )
+  const grandTotal    = activeOrders.reduce((s, o) => s + Number(o.totalAmount || 0), 0)
+  const unpaidTotal   = unpaidOrders.reduce((s, o) => s + Number(o.totalAmount || 0), 0)
+
+  // After switching to QR, show the combined QR for the unpaid total
+  const anyQrPay = activeOrders.some(o =>
+    o.paymentMethod === 'BANK_QR' || o.paymentMethod === 'SPLIT'
+  )
+  const payQrUrl = bankConfig?.bankBin && bankConfig?.bankAccountNumber && anyQrPay
+    ? `https://img.vietqr.io/image/${bankConfig.bankBin}-${bankConfig.bankAccountNumber}-qr_only.png`
+      + `?amount=${Math.round(unpaidTotal)}`
+      + `&addInfo=${encodeURIComponent(token?.substring(0, 12) || 'combined')}`
+      + `&accountName=${encodeURIComponent(bankConfig.bankAccountName || '')}`
+    : null
 
   const handleMarkAllPaid = async () => {
     if (!unpaidOrders.length) return
     setPaying(true)
     try {
-      for (const o of unpaidOrders) {
-        await markOrderPaid(o.id)
-      }
-      onRefresh()
-      onClose()
+      for (const o of unpaidOrders) await markOrderPaid(o.id)
+      onRefresh(); onClose()
     } catch { setError('Failed to mark orders paid') }
     setPaying(false)
+  }
+
+  const handleSwitchAllToQr = async () => {
+    if (!switchableToQr.length) return
+    setSwitching('toQr')
+    try {
+      for (const o of switchableToQr) {
+        const { res, data } = await switchToQrPayment(o.id)
+        if (!res.ok) throw new Error(data?.message || `Failed for order #${o.orderNumber}`)
+      }
+      reload()
+      onRefresh()
+    } catch (e) { setError(e.message || 'Failed to switch to QR') }
+    setSwitching(false)
+  }
+
+  const handleSwitchAllToCash = async () => {
+    if (!switchableToCash.length) return
+    setSwitching('toCash')
+    try {
+      for (const o of switchableToCash) {
+        const { res, data } = await revertToCash(o.id)
+        if (!res.ok) throw new Error(data?.message || `Failed for order #${o.orderNumber}`)
+      }
+      reload()
+      onRefresh()
+    } catch (e) { setError(e.message || 'Failed to switch to cash') }
+    setSwitching(false)
+  }
+
+  const handlePrintWithQr = () => {
+    printCombinedReceipt(orders)
+    // open QR in a print-friendly window
+    if (payQrUrl) {
+      const w = window.open('', '_blank', 'width=400,height=500')
+      w.document.write(`
+        <html><body style="text-align:center;font-family:sans-serif;padding:24px">
+          <h2 style="margin:0 0 8px">QR Pay — ${fmtAmt(unpaidTotal)}</h2>
+          <img src="${payQrUrl}" style="width:260px;height:260px" />
+          <p style="color:#555;font-size:13px;margin-top:8px">Scan to pay</p>
+          <script>window.onload=()=>window.print()</script>
+        </body></html>`)
+      w.document.close()
+    }
   }
 
   const STATUS_CHIP = { PENDING: 'default', CONFIRMED: 'primary', PREPARING: 'warning', READY: 'success', PICKED_UP: 'success', COMPLETED: 'success', CANCELLED: 'error' }
@@ -1479,19 +1549,47 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
 
         {!loading && !error && (
           <>
+            {/* Payment method switch bar */}
+            {(switchableToQr.length > 0 || switchableToCash.length > 0) && (
+              <Box sx={{ display: 'flex', gap: 1, mb: 2, p: 1.5, bgcolor: '#f8fafc', borderRadius: 2, border: '1px solid #e2e8f0' }}>
+                {switchableToQr.length > 0 && (
+                  <Button size="small" variant="outlined" color="success" fullWidth
+                    startIcon={switching === 'toQr' ? <CircularProgress size={14} color="inherit" /> : <QrCode2Icon sx={{ fontSize: 14 }} />}
+                    onClick={handleSwitchAllToQr}
+                    disabled={!!switching}
+                    sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>
+                    → QR Pay ({switchableToQr.length})
+                  </Button>
+                )}
+                {switchableToCash.length > 0 && (
+                  <Button size="small" variant="outlined" color="warning" fullWidth
+                    startIcon={switching === 'toCash' ? <CircularProgress size={14} color="inherit" /> : null}
+                    onClick={handleSwitchAllToCash}
+                    disabled={!!switching}
+                    sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>
+                    → Cash ({switchableToCash.length})
+                  </Button>
+                )}
+              </Box>
+            )}
+
+            {/* Order list */}
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
               {orders.map((order) => {
-                const num     = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
-                const roots   = (order.items || []).filter(i => !i.parentItemId)
+                const num         = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
+                const roots       = (order.items || []).filter(i => !i.parentItemId)
                 const isCancelled = order.status === 'CANCELLED'
+                const isQr        = order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT'
                 return (
                   <Box key={order.id} sx={{
-                    border: '1px solid #e2e8f0', borderRadius: 1.5,
+                    border: `1px solid ${isQr && !isCancelled ? '#bbf7d0' : '#e2e8f0'}`,
+                    borderRadius: 1.5,
                     opacity: isCancelled ? 0.5 : 1,
-                    bgcolor: isCancelled ? '#fafafa' : '#fff',
+                    bgcolor: isCancelled ? '#fafafa' : isQr ? '#f0fdf4' : '#fff',
                   }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1,
-                      bgcolor: isCancelled ? '#f5f5f5' : '#f8fafc', borderRadius: '6px 6px 0 0' }}>
+                      bgcolor: isCancelled ? '#f5f5f5' : isQr ? '#dcfce7' : '#f8fafc',
+                      borderRadius: '6px 6px 0 0' }}>
                       <Typography fontWeight={900} sx={{ fontSize: 18, minWidth: 34,
                         textDecoration: isCancelled ? 'line-through' : 'none', color: '#334155' }}>
                         {num}
@@ -1499,8 +1597,10 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
                       <Chip label={order.status} color={STATUS_CHIP[order.status] || 'default'}
                         size="small" sx={{ fontWeight: 700, fontSize: 10 }} />
                       {order.tableName && (
-                        <Chip label={`Table ${order.tableName}`} size="small" variant="outlined"
-                          sx={{ fontSize: 10 }} />
+                        <Chip label={`Table ${order.tableName}`} size="small" variant="outlined" sx={{ fontSize: 10 }} />
+                      )}
+                      {isQr && !isCancelled && (
+                        <Chip label="💳 QR" size="small" color="success" sx={{ fontWeight: 800, fontSize: 10 }} />
                       )}
                       <Box sx={{ flex: 1 }} />
                       <Typography fontWeight={800} color={isCancelled ? 'text.disabled' : 'primary'}
@@ -1513,8 +1613,7 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
                     </Box>
                     <Box sx={{ px: 2, py: 0.75 }}>
                       {roots.slice(0, 4).map(item => (
-                        <Typography key={item.id} variant="caption" color="text.secondary"
-                          sx={{ display: 'block' }} noWrap>
+                        <Typography key={item.id} variant="caption" color="text.secondary" sx={{ display: 'block' }} noWrap>
                           {item.quantity}× {item.modelName}
                         </Typography>
                       ))}
@@ -1528,6 +1627,24 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
             </Box>
 
             <Divider sx={{ my: 2 }} />
+
+            {/* QR Pay panel — shown when any active order is on QR pay */}
+            {payQrUrl && (
+              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2, p: 1.5, bgcolor: '#f0fdf4', borderRadius: 2, border: '1px solid #bbf7d0' }}>
+                <Box sx={{ bgcolor: '#fff', borderRadius: 1.5, p: 0.75, border: '2px solid #4ade80', flexShrink: 0 }}>
+                  <img src={payQrUrl} alt="QR Pay" style={{ width: 100, height: 100, display: 'block' }} />
+                </Box>
+                <Box>
+                  <Typography sx={{ fontWeight: 800, color: '#15803d', fontSize: 13 }}>💳 QR Payment</Typography>
+                  <Typography sx={{ fontWeight: 900, color: '#15803d', fontSize: 20, lineHeight: 1.2 }}>
+                    {fmtAmt(unpaidTotal)}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">Unpaid total · scan to pay</Typography>
+                </Box>
+              </Box>
+            )}
+
+            {/* Grand total */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <Typography variant="body2" color="text.secondary">
                 {activeOrders.length} order{activeOrders.length !== 1 ? 's' : ''}
@@ -1541,7 +1658,7 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
         )}
       </DialogContent>
 
-      <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+      <DialogActions sx={{ px: 3, pb: 2, gap: 1, flexWrap: 'wrap' }}>
         <Button onClick={onClose} sx={{ textTransform: 'none' }}>Close</Button>
         <Button variant="outlined" startIcon={<PrintIcon />}
           onClick={() => printCombinedReceipt(orders)}
@@ -1549,6 +1666,16 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
           sx={{ textTransform: 'none', fontWeight: 700 }}>
           Print
         </Button>
+        {/* Print receipt + QR together — only when there's a QR pay URL */}
+        {payQrUrl && (
+          <Button variant="outlined" color="success"
+            startIcon={<PrintIcon />}
+            onClick={handlePrintWithQr}
+            disabled={loading || !orders.length}
+            sx={{ textTransform: 'none', fontWeight: 700 }}>
+            Print + QR
+          </Button>
+        )}
         {unpaidOrders.length > 0 && (
           <Button variant="contained" color="success"
             startIcon={paying ? <CircularProgress size={16} color="inherit" /> : <PaidIcon />}
