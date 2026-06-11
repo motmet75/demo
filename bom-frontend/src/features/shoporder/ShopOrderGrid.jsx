@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useCallback } from 'react'
-import { DataGrid } from '@mui/x-data-grid'
+import React, { useEffect, useState, useCallback, useMemo } from 'react'
 import Box from '@mui/material/Box'
+import Checkbox from '@mui/material/Checkbox'
 import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
 import TextField from '@mui/material/TextField'
@@ -423,6 +423,371 @@ function StatusBoard({ status, orders, onAction, onDetail, onPayQr }) {
   )
 }
 
+// ── OrderCard ───────────────────────────────────────────────────────
+
+const CARD_STYLE = {
+  PENDING:   { border: '#f59e0b', bg: '#fffbeb', num: '#d97706' },
+  CONFIRMED: { border: '#3b82f6', bg: '#eff6ff', num: '#2563eb' },
+  PREPARING: { border: '#f97316', bg: '#fff7ed', num: '#ea580c' },
+  READY:     { border: '#22c55e', bg: '#f0fdf4', num: '#16a34a', pulse: true },
+  PICKED_UP: { border: '#0ea5e9', bg: '#f0f9ff', num: '#0284c7' },
+  COMPLETED: { border: '#94a3b8', bg: '#f8fafc', num: '#64748b' },
+  CANCELLED: { border: '#fca5a5', bg: '#fff5f5', num: '#ef4444' },
+}
+
+function OrderCard({ order, tables, actions, selected, onSelect }) {
+  const [editNum, setEditNum] = useState(false)
+  const [numVal, setNumVal]   = useState(String(order.orderNumber ?? ''))
+
+  const s       = CARD_STYLE[order.status] || CARD_STYLE.CONFIRMED
+  const isQr    = order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT'
+  const isActive = !['COMPLETED', 'PICKED_UP', 'CANCELLED'].includes(order.status)
+  const roots    = (order.items || []).filter(it => !it.parentItemId)
+  const childMap = {}
+  ;(order.items || []).filter(it => it.parentItemId).forEach(it => {
+    const k = String(it.parentItemId)
+    if (!childMap[k]) childMap[k] = []
+    childMap[k].push(it)
+  })
+
+  const commitNum = () => {
+    const n = parseInt(numVal, 10)
+    if (!isNaN(n) && n > 0 && n !== order.orderNumber) actions.setOrderNumber(order.id, n)
+    setEditNum(false)
+  }
+
+  return (
+    <Box sx={{
+      border: `2px solid ${selected ? '#6366f1' : s.border}`,
+      borderRadius: 2, bgcolor: s.bg,
+      display: 'flex', flexDirection: 'column',
+      opacity: order.status === 'CANCELLED' ? 0.65 : 1,
+      animation: s.pulse ? 'ocPulse 3s ease-in-out infinite' : 'none',
+      '@keyframes ocPulse': { '0%,100%': { boxShadow: `0 0 0 0 ${s.border}33` }, '50%': { boxShadow: `0 0 0 6px ${s.border}33` } },
+      '&:hover': { boxShadow: `0 2px 12px ${s.border}55` },
+      transition: 'box-shadow 0.15s',
+    }}>
+
+      {/* ── Header ── */}
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75, p: 1.25, pb: 0.5 }}>
+
+        {/* Selection checkbox */}
+        <Checkbox
+          size="small" checked={selected} onChange={onSelect}
+          sx={{ p: 0.25, mt: 0.5, color: s.num, '&.Mui-checked': { color: '#6366f1' } }}
+        />
+
+        {/* Order number circle — click to edit */}
+        {editNum ? (
+          <Box component="input"
+            type="number" value={numVal} autoFocus
+            onChange={e => setNumVal(e.target.value)}
+            onBlur={commitNum}
+            onKeyDown={e => { if (e.key === 'Enter') commitNum(); if (e.key === 'Escape') { setNumVal(String(order.orderNumber ?? '')); setEditNum(false) } }}
+            sx={{ width: 44, height: 44, borderRadius: '50%', border: `2px solid ${s.num}`, textAlign: 'center', fontWeight: 900, fontSize: 15, color: s.num, background: 'white', outline: 'none', p: 0, flexShrink: 0 }}
+          />
+        ) : (
+          <Tooltip title="Click to edit order #">
+            <Box onClick={() => { setNumVal(String(order.orderNumber ?? '')); setEditNum(true) }} sx={{
+              width: 44, height: 44, borderRadius: '50%', flexShrink: 0,
+              bgcolor: s.num, color: '#fff',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontWeight: 900, fontSize: 16, cursor: 'pointer',
+              '&:hover': { filter: 'brightness(0.85)' },
+            }}>
+              {order.orderNumber ?? '?'}
+            </Box>
+          </Tooltip>
+        )}
+
+        {/* Status / meta */}
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Box sx={{ display: 'flex', gap: 0.4, flexWrap: 'wrap', alignItems: 'center', mb: 0.3 }}>
+            <Chip label={STATUS_LABEL[order.status] || order.status} color={STATUS_COLOR[order.status] || 'default'} size="small"
+              sx={{ height: 20, fontSize: 10, fontWeight: 800 }} />
+            {order.fulfillmentType && (() => { const m = { DINE_IN: '🪑', PICKUP: '🥡', DELIVERY: '🛵' }; return <Typography sx={{ fontSize: 13 }}>{m[order.fulfillmentType] || ''}</Typography> })()}
+            {order.tableName && <Chip icon={<TableBarIcon sx={{ fontSize: 11 }} />} label={order.tableName} size="small" color="info" variant="outlined" sx={{ height: 20, fontSize: 10 }} />}
+            {order.paymentStatus === 'PAID'
+              ? <Chip icon={<PaidIcon sx={{ fontSize: 11, ml: '4px !important' }} />} label="PAID" size="small" color="success" sx={{ height: 20, fontSize: 10, fontWeight: 800 }} />
+              : <Chip label="UNPAID" size="small" color="warning" variant="outlined" sx={{ height: 20, fontSize: 10 }} />
+            }
+            {order.paymentMethod === 'BANK_QR' && <Chip label="QR" size="small" color="info" sx={{ height: 18, fontSize: 10 }} />}
+            {order.paymentMethod === 'SPLIT' && <Chip label="Split" size="small" color="secondary" sx={{ height: 18, fontSize: 10 }} />}
+          </Box>
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+            {order.customerName && <Typography sx={{ fontSize: 12, fontWeight: 700, color: '#1e293b', flex: 1 }} noWrap>{order.customerName}</Typography>}
+            <Typography sx={{ fontSize: 10, color: '#94a3b8', flexShrink: 0 }}>{elapsed(order.confirmedAt || order.createdAt)} ago</Typography>
+          </Box>
+          {order.staffName && <Typography sx={{ fontSize: 10, color: '#94a3b8' }} noWrap>by {order.staffName}</Typography>}
+        </Box>
+
+        {/* Icon cluster */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.1, flexShrink: 0 }}>
+          <Box sx={{ display: 'flex' }}>
+            <Tooltip title="View detail">
+              <IconButton size="small" onClick={() => actions.detail(order)} sx={{ p: 0.35 }}><VisibilityIcon sx={{ fontSize: 15 }} /></IconButton>
+            </Tooltip>
+            <Tooltip title="Print Receipt">
+              <IconButton size="small" color="primary" onClick={() => printOrderReceipt(order)} sx={{ p: 0.35 }}><PrintIcon sx={{ fontSize: 15 }} /></IconButton>
+            </Tooltip>
+            {order.sourceToken && (
+              <Tooltip title="Combined Receipt">
+                <IconButton size="small" color="secondary" onClick={() => actions.combinedReceipt(order.sourceToken)} sx={{ p: 0.35 }}><PeopleAltIcon sx={{ fontSize: 15 }} /></IconButton>
+              </Tooltip>
+            )}
+          </Box>
+          <Box sx={{ display: 'flex' }}>
+            <Tooltip title="Print Tracking Tag">
+              <IconButton size="small" color="secondary" onClick={() => actions.printTag(order)} sx={{ p: 0.35 }}><ConfirmationNumberIcon sx={{ fontSize: 15 }} /></IconButton>
+            </Tooltip>
+            <Tooltip title="Print Cup Labels">
+              <IconButton size="small" onClick={() => printCupLabels(order)} sx={{ p: 0.35 }}><LabelIcon sx={{ fontSize: 15 }} /></IconButton>
+            </Tooltip>
+            {order.paymentStatus !== 'PAID' && order.status !== 'CANCELLED' && (
+              <Tooltip title="Payment QR">
+                <IconButton size="small" color="primary" onClick={() => actions.payQr(order)} sx={{ p: 0.35 }}><QrCode2Icon sx={{ fontSize: 15 }} /></IconButton>
+              </Tooltip>
+            )}
+          </Box>
+        </Box>
+      </Box>
+
+      {/* ── Table selector + order code ── */}
+      <Box sx={{ px: 1.25, pb: 0.5, display: 'flex', alignItems: 'center', gap: 0.75 }}>
+        <TableBarIcon sx={{ fontSize: 13, color: '#94a3b8', flexShrink: 0 }} />
+        <Box component="select"
+          value={order.tableId || ''}
+          onChange={e => actions.setTable(order.id, e.target.value)}
+          sx={{ fontSize: 11, height: 22, border: '1px solid #cbd5e1', borderRadius: 1, px: 0.5, flex: 1, cursor: 'pointer', bgcolor: 'white', color: '#334155' }}
+        >
+          <option value="">No table</option>
+          {tables.map(t => <option key={t.id} value={t.id}>{t.tableName}</option>)}
+        </Box>
+        <Typography sx={{ fontSize: 10, fontFamily: 'monospace', color: '#94a3b8', flexShrink: 0 }}>{order.orderCode}</Typography>
+      </Box>
+
+      <Divider />
+
+      {/* ── Items ── */}
+      <Box sx={{ px: 1.25, py: 0.75, flex: 1 }}>
+        {roots.length === 0
+          ? <Typography sx={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>No items</Typography>
+          : roots.slice(0, 7).map((root, rIdx) => {
+              const children = childMap[String(root.id)] || []
+              const opts = parseOpts(root.selectedOptions)
+              const optStr = Object.entries(opts).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join('+') : v}`).join(' · ')
+              return (
+                <Box key={root.id || rIdx} sx={{ mb: 0.6 }}>
+                  <Box sx={{ display: 'flex', gap: 0.4, alignItems: 'baseline' }}>
+                    <Typography sx={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, flexShrink: 0 }}>{rIdx + 1}.</Typography>
+                    <Typography sx={{ fontSize: 20, fontWeight: 900, color: s.num, lineHeight: 1, flexShrink: 0 }}>{Number(root.quantity)}×</Typography>
+                    <Typography sx={{ fontSize: 13, fontWeight: 800, color: '#111', lineHeight: 1.2, flex: 1 }}>{root.modelName}</Typography>
+                    <Typography sx={{ fontSize: 11, color: '#64748b', flexShrink: 0, pl: 0.5 }}>{fmt(root.lineTotal)}</Typography>
+                  </Box>
+                  {optStr && <Typography sx={{ fontSize: 10, pl: 2.5, color: '#555', display: 'block', lineHeight: 1.3 }}>{optStr}</Typography>}
+                  {root.itemNotes && <Typography sx={{ fontSize: 11, pl: 2.5, fontStyle: 'italic', color: '#b91c1c', fontWeight: 700, display: 'block' }}>⚠ {root.itemNotes}</Typography>}
+                  {children.map((child, ci) => (
+                    <Box key={child.id || ci} sx={{ display: 'flex', gap: 0.4, alignItems: 'center', ml: 2.5, pl: 0.75, mt: 0.2, borderLeft: `2px solid ${s.border}` }}>
+                      <Typography sx={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, flexShrink: 0 }}>{rIdx+1}.{ci+1}</Typography>
+                      <Typography sx={{ fontSize: 14, fontWeight: 800, color: '#374151', lineHeight: 1, flexShrink: 0 }}>{Number(child.quantity)}×</Typography>
+                      <Typography sx={{ fontSize: 11, color: '#374151', flex: 1 }}>{child.modelName}</Typography>
+                    </Box>
+                  ))}
+                </Box>
+              )
+            })
+        }
+        {roots.length > 7 && <Typography sx={{ fontSize: 11, color: '#64748b', fontStyle: 'italic' }}>+{roots.length - 7} more…</Typography>}
+      </Box>
+
+      {/* ── Notes + total ── */}
+      <Box sx={{ px: 1.25, pb: 0.75 }}>
+        {order.notes && <Typography sx={{ fontSize: 11, fontStyle: 'italic', color: '#64748b', mb: 0.25 }}>📝 {order.notes}</Typography>}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography sx={{ fontSize: 10, color: '#94a3b8' }}>{dateFmt(order.createdAt)}</Typography>
+          <Typography sx={{ fontSize: 17, fontWeight: 900, color: s.num }}>{fmt(order.totalAmount)}</Typography>
+        </Box>
+      </Box>
+
+      <Divider />
+
+      {/* ── Actions ── */}
+      <Box sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+
+        {/* Payment method swap */}
+        {(order.paymentMethod === 'CASH' || isQr) && isActive && (
+          <Box sx={{ display: 'flex', gap: 0.5 }}>
+            {order.paymentMethod === 'CASH' && (
+              <Button size="small" variant="outlined" color="success" startIcon={<QrCode2Icon sx={{ fontSize: 12 }} />}
+                onClick={() => actions.switchToQr(order)}
+                sx={{ textTransform: 'none', fontWeight: 700, fontSize: 11, flex: 1, py: 0.25 }}>
+                → QR Pay
+              </Button>
+            )}
+            {isQr && (
+              <Button size="small" variant="outlined" color="warning"
+                onClick={() => actions.revertCash(order)}
+                sx={{ textTransform: 'none', fontSize: 11, flex: isQr && order.paymentMethod !== 'CASH' ? 1 : 0, py: 0.25, px: 1 }}>
+                → Cash
+              </Button>
+            )}
+          </Box>
+        )}
+
+        {order.status === 'PENDING' && order.customerEditing && (
+          <Chip label="✏ Customer is editing…" size="small" color="warning" sx={{ fontWeight: 700, fontSize: 10 }} />
+        )}
+
+        {/* Primary status transition */}
+        <Box sx={{ display: 'flex', gap: 0.5 }}>
+          {order.status === 'PENDING' && (
+            <Button size="small" variant="contained" color="primary" fullWidth
+              disabled={Boolean(order.customerEditing)}
+              onClick={() => actions.confirm(order)}
+              sx={{ textTransform: 'none', fontWeight: 800, fontSize: 12 }}>
+              Confirm Order
+            </Button>
+          )}
+          {order.status === 'CONFIRMED' && (
+            <Button size="small" variant="contained" color="warning" fullWidth
+              onClick={() => actions.prepare(order)}
+              sx={{ textTransform: 'none', fontWeight: 800, fontSize: 12 }}>
+              Start Preparing
+            </Button>
+          )}
+          {order.status === 'PREPARING' && (
+            <Button size="small" variant="contained" color="success" fullWidth
+              onClick={() => actions.ready(order)}
+              sx={{ textTransform: 'none', fontWeight: 800, fontSize: 12 }}>
+              Mark Ready ✓
+            </Button>
+          )}
+          {order.status === 'READY' && (
+            <>
+              <Button size="small" variant="outlined" color="warning"
+                startIcon={<QrCode2Icon sx={{ fontSize: 12 }} />}
+                onClick={() => actions.pickupQr(order)}
+                sx={{ textTransform: 'none', fontWeight: 700, fontSize: 11, flex: 1, py: 0.5 }}>
+                Pickup QR
+              </Button>
+              {isQr
+                ? <Button size="small" variant="contained" color="info" onClick={() => actions.pickup(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: 12, flex: 1 }}>Picked Up ✓</Button>
+                : <Button size="small" variant="contained" color="success" onClick={() => actions.complete(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: 12, flex: 1 }}>Complete ✓</Button>
+              }
+            </>
+          )}
+          {(order.status === 'PICKED_UP' || order.status === 'COMPLETED') && (
+            <Typography sx={{ fontSize: 11, color: '#64748b', textAlign: 'center', flex: 1, py: 0.5 }}>
+              ✅ {order.status === 'PICKED_UP' ? 'Picked up' : 'Completed'} · {dateFmt(order.completedAt || order.readyAt)}
+            </Typography>
+          )}
+          {order.status === 'CANCELLED' && (
+            <Typography sx={{ fontSize: 11, color: '#ef4444', textAlign: 'center', flex: 1, py: 0.5, fontWeight: 700 }}>
+              ✕ Cancelled{order.cancelReason ? ` — ${order.cancelReason}` : ''}
+            </Typography>
+          )}
+        </Box>
+
+        {/* Mark paid + Cancel */}
+        <Box sx={{ display: 'flex', gap: 0.5 }}>
+          {order.paymentStatus !== 'PAID' && isActive && (
+            <Button size="small" variant="outlined" color="success" startIcon={<PaidIcon sx={{ fontSize: 12 }} />}
+              onClick={() => actions.markPaid(order)}
+              sx={{ textTransform: 'none', fontWeight: 700, fontSize: 11, flex: 1, py: 0.25 }}>
+              Mark Paid
+            </Button>
+          )}
+          {isActive && (
+            <Button size="small" color="error" onClick={() => actions.cancel(order)}
+              sx={{ textTransform: 'none', fontSize: 12, px: 1.5, flexShrink: 0 }}>
+              ✕ Cancel
+            </Button>
+          )}
+        </Box>
+      </Box>
+    </Box>
+  )
+}
+
+// ── OrderCardGrid ────────────────────────────────────────────────────
+
+const SORT_OPTIONS = [
+  { value: 'newest', label: 'Newest first' },
+  { value: 'oldest', label: 'Oldest first' },
+  { value: 'status', label: 'By status' },
+  { value: 'number', label: 'By order #' },
+  { value: 'total',  label: 'By total ↓' },
+]
+const STATUS_SORT_ORDER = { PENDING: 0, CONFIRMED: 1, PREPARING: 2, READY: 3, PICKED_UP: 4, COMPLETED: 5, CANCELLED: 6 }
+
+function OrderCardGrid({ rows, loading, tables, actions, selectedIds, onToggleSelect }) {
+  const [search, setSearch] = useState('')
+  const [sortBy, setSortBy] = useState('newest')
+
+  const filtered = useMemo(() => {
+    let list = rows
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      list = list.filter(r =>
+        String(r.orderNumber || '').includes(q) ||
+        (r.orderCode || '').toLowerCase().includes(q) ||
+        (r.customerName || '').toLowerCase().includes(q) ||
+        (r.tableName || '').toLowerCase().includes(q) ||
+        (r.staffName || '').toLowerCase().includes(q) ||
+        (r.notes || '').toLowerCase().includes(q) ||
+        (r.items || []).some(it => (it.modelName || '').toLowerCase().includes(q))
+      )
+    }
+    return [...list].sort((a, b) => {
+      if (sortBy === 'newest') return new Date(b.createdAt) - new Date(a.createdAt)
+      if (sortBy === 'oldest') return new Date(a.createdAt) - new Date(b.createdAt)
+      if (sortBy === 'status') return (STATUS_SORT_ORDER[a.status] ?? 9) - (STATUS_SORT_ORDER[b.status] ?? 9)
+      if (sortBy === 'number') return (a.orderNumber ?? 9999) - (b.orderNumber ?? 9999)
+      if (sortBy === 'total')  return Number(b.totalAmount || 0) - Number(a.totalAmount || 0)
+      return 0
+    })
+  }, [rows, search, sortBy])
+
+  if (loading) return (
+    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+      <CircularProgress />
+    </Box>
+  )
+
+  return (
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ px: 1.5, py: 0.75, display: 'flex', gap: 1, alignItems: 'center', borderBottom: '1px solid #e0e0e0', flexShrink: 0 }}>
+        <TextField size="small" placeholder="Search order #, customer, item, table…"
+          value={search} onChange={e => setSearch(e.target.value)}
+          sx={{ flex: 1 }} inputProps={{ style: { fontSize: 13 } }} />
+        <TextField select size="small" label="Sort" value={sortBy} onChange={e => setSortBy(e.target.value)} sx={{ width: 140 }}>
+          {SORT_OPTIONS.map(o => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
+        </TextField>
+        <Typography sx={{ fontSize: 12, color: '#94a3b8', flexShrink: 0 }}>{filtered.length} orders</Typography>
+      </Box>
+      <Box sx={{ flex: 1, overflow: 'auto', p: 1.5 }}>
+        {filtered.length === 0
+          ? <Box sx={{ textAlign: 'center', py: 8 }}><Typography color="text.secondary">No orders found</Typography></Box>
+          : (
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 1.5 }}>
+              {filtered.map(order => (
+                <OrderCard
+                  key={order.id}
+                  order={order}
+                  tables={tables}
+                  actions={actions}
+                  selected={selectedIds.has(order.id)}
+                  onSelect={() => onToggleSelect(order.id)}
+                />
+              ))}
+            </Box>
+          )
+        }
+      </Box>
+    </Box>
+  )
+}
+
 // ── Main ShopOrderGrid ──────────────────────────────────────────────
 
 export default function ShopOrderGrid() {
@@ -451,7 +816,7 @@ export default function ShopOrderGrid() {
   const [payQrOrder, setPayQrOrder]     = useState(null)
   const [bankConfig, setBankConfig]     = useState(null)
   const [tables, setTables]             = useState([])
-  const [selectedRows, setSelectedRows] = useState({ type: 'include', ids: new Set() })
+  const [selectedRows, setSelectedRows] = useState(new Set())
   const [moveTableOpen, setMoveTableOpen] = useState(false)
   const [moveTableTarget, setMoveTableTarget] = useState('')
   const [moving, setMoving]             = useState(false)
@@ -600,11 +965,11 @@ export default function ShopOrderGrid() {
   }
 
   const handleMoveTable = async () => {
-    if (!selectedRows.ids.size) return
+    if (!selectedRows.size) return
     setMoving(true)
     try {
-      await Promise.all(Array.from(selectedRows.ids).map(id => setOrderTable(id, moveTableTarget || null)))
-      setMoveTableOpen(false); setMoveTableTarget(''); setSelectedRows({ type: 'include', ids: new Set() })
+      await Promise.all(Array.from(selectedRows).map(id => setOrderTable(id, moveTableTarget || null)))
+      setMoveTableOpen(false); setMoveTableTarget(''); setSelectedRows(new Set())
       reload()
     } catch (e) { setError(e.message || 'Failed to move orders') }
     setMoving(false)
@@ -634,175 +999,34 @@ export default function ShopOrderGrid() {
     setPayQrOrder(order)
   }
 
-  const processRowUpdate = useCallback(async (newRow, oldRow) => {
-    if (newRow.orderNumber === oldRow.orderNumber) return oldRow
-    const num = parseInt(newRow.orderNumber, 10)
-    if (isNaN(num) || num < 1) return oldRow
-    try {
-      const { data } = await setShopOrderNumber(newRow.id, num)
-      return data ?? { ...newRow, orderNumber: num }
-    } catch (e) { setError(e.message || 'Failed to update number'); return oldRow }
-  }, [])
-
-  const columns = [
-    {
-      field: 'orderNumber', headerName: '#', width: 64, editable: true, type: 'number', headerAlign: 'center', align: 'center',
-      renderCell: ({ value }) => (
-        <Tooltip title="Click to edit number">
-          <Box sx={{ width: 36, height: 36, borderRadius: '50%', bgcolor: value ? '#1976d2' : '#e0e0e0', color: value ? '#fff' : '#9e9e9e', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
-            {value ?? '–'}
-          </Box>
-        </Tooltip>
-      ),
+  const cardActions = {
+    detail:          (row) => setDetailOrder(row),
+    combinedReceipt: (token) => setCombinedToken(token),
+    payQr:           handlePayQr,
+    printTag:        handlePrintTrack,
+    setTable:        handleInlineTableChange,
+    setOrderNumber:  async (id, num) => {
+      const n = parseInt(num, 10)
+      if (isNaN(n) || n < 1) return
+      try { await setShopOrderNumber(id, n); reload() }
+      catch (e) { setError(e.message || 'Failed to update number') }
     },
-    {
-      field: 'orderCode', headerName: 'Code', width: 130,
-      renderCell: ({ value }) => value ? <Typography sx={{ fontFamily: 'monospace', fontWeight: 800, fontSize: 13, letterSpacing: 0.5 }}>{value}</Typography> : null,
+    confirm:    (row) => askConfirm({ title: 'Confirm Order?', message: `Confirm order #${row.orderNumber ?? row.orderCode}?`, confirmLabel: 'Confirm', confirmColor: 'primary' }, () => act(confirmShopOrder, row.id)),
+    prepare:    (row) => askConfirm({ title: 'Start Preparing?', message: `Start preparing order #${row.orderNumber ?? row.orderCode}?`, confirmLabel: 'Start', confirmColor: 'warning' }, () => act(prepareShopOrder, row.id)),
+    ready:      (row) => askConfirm({ title: 'Mark as Ready?', message: `Mark order #${row.orderNumber ?? row.orderCode} as ready?`, confirmLabel: 'Mark Ready', confirmColor: 'success' }, async () => { await act(readyShopOrder, row.id); broadcastReady() }),
+    complete:   (row) => askConfirm({ title: 'Complete Order?', message: `Complete order #${row.orderNumber ?? row.orderCode}?`, confirmLabel: 'Complete', confirmColor: 'success' }, () => act(completeShopOrder, row.id)),
+    pickup:     (row) => askConfirm({ title: 'Mark as Picked Up?', message: 'Confirm customer has picked up this order?', confirmLabel: 'Picked Up', confirmColor: 'primary' }, () => act(pickupShopOrder, row.id)),
+    markPaid:   (row) => askConfirm({ title: 'Mark as Paid?', message: `Mark order #${row.orderNumber ?? row.orderCode} as paid?`, confirmLabel: 'Mark Paid', confirmColor: 'success' }, () => act(markOrderPaid, row.id)),
+    cancel:     handleCancel,
+    switchToQr: (row) => askConfirm({ title: 'Switch to QR payment?', message: 'Switch this order to Bank QR and print receipt?', confirmLabel: 'Switch & Print', confirmColor: 'success' }, () => handleSwitchAndPrint(row)),
+    revertCash: (row) => askConfirm({ title: 'Revert to Cash?', message: 'Change payment method back to cash?', confirmLabel: '→ Cash', confirmColor: 'warning' }, () => handleRevertToCash(row)),
+    pickupQr:   async (row) => {
+      try {
+        const { data } = await fetchPickupQr(row.id)
+        setPickupQrOrder({ id: row.id, orderNumber: row.orderNumber, orderCode: row.orderCode, qrBase64: data.qrBase64 })
+      } catch (e) { setError('Failed to generate pickup QR: ' + (e.message || e)) }
     },
-    {
-      field: 'tableName', headerName: 'Table', width: 80,
-      renderCell: ({ row }) => (
-        <Box onClick={e => e.stopPropagation()} sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
-          <select
-            value={row.tableId || ''}
-            onChange={e => handleInlineTableChange(row.id, e.target.value)}
-            style={{ fontSize: 12, height: 24, border: '1px solid #c4c4c4', borderRadius: 4, padding: '0 4px', minWidth: 70, cursor: 'pointer', background: '#fff', color: '#222' }}
-          >
-            <option value="">No</option>
-            {tables.map(t => <option key={t.id} value={t.id}>{t.tableName}</option>)}
-          </select>
-        </Box>
-      )
-    },
-    {
-      field: 'status', headerName: 'Status', width: 115,
-      renderCell: ({ value }) => <Chip label={STATUS_LABEL[value] || value} color={STATUS_COLOR[value] || 'default'} size="small" sx={{ fontWeight: 700, minWidth: 90 }} />
-    },
-    {
-      field: 'fulfillmentType', headerName: 'Type', width: 80,
-      renderCell: ({ value }) => { const map = { DINE_IN: '🪑 Dine', PICKUP: '🥡 Pick', DELIVERY: '🛵 Del' }; return <Typography variant="caption">{map[value] || value}</Typography> }
-    },
-    { field: 'customerName', headerName: 'Customer', width: 120, renderCell: ({ value }) => <Typography variant="body2" noWrap>{value || '—'}</Typography> },
-    { field: 'staffName', headerName: 'Staff', width: 100, renderCell: ({ value }) => <Typography variant="caption" color="text.secondary" noWrap>{value || '—'}</Typography> },
-    {
-      field: 'notes', headerName: 'Notes', width: 130,
-      renderCell: ({ value }) => value
-        ? <Tooltip title={value}><Typography variant="caption" noWrap sx={{ maxWidth: 120, display: 'block' }}>{value}</Typography></Tooltip>
-        : <Typography variant="caption" color="text.disabled">—</Typography>
-    },
-    { field: 'totalAmount', headerName: 'Total', width: 100, renderCell: ({ value }) => <Typography variant="body2" fontWeight={600} color="primary">{fmt(value)}</Typography> },
-    {
-      field: 'paymentStatus', headerName: 'Payment', width: 100,
-      renderCell: ({ value }) => value === 'PAID'
-        ? <Chip icon={<PaidIcon sx={{ fontSize: 14 }} />} label="PAID" size="small" color="success" sx={{ fontWeight: 800, fontSize: 12 }} />
-        : <Chip label="UNPAID" size="small" color="warning" variant="outlined" sx={{ fontWeight: 700, fontSize: 12 }} />
-    },
-    { field: 'createdAt', headerName: 'Time', width: 130, renderCell: ({ value }) => dateFmt(value) },
-    {
-      field: 'actions', headerName: 'Actions', width: 517, sortable: false,
-      renderCell: ({ row }) => (
-        <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', flexWrap: 'nowrap' }}>
-          <Tooltip title="Detail"><IconButton size="small" onClick={() => setDetailOrder(row)}><VisibilityIcon fontSize="small" /></IconButton></Tooltip>
-          <Tooltip title="Print Receipt (Pay)"><IconButton size="small" color="primary" onClick={() => printOrderReceipt(row)}><PrintIcon fontSize="small" /></IconButton></Tooltip>
-          {row.sourceToken && (
-            <Tooltip title="Combined Receipt (all orders this token)">
-              <IconButton size="small" color="secondary" onClick={() => setCombinedToken(row.sourceToken)}>
-                <PeopleAltIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          )}
-          <Tooltip title="Print Tracking Tag"><IconButton size="small" color="secondary" onClick={() => handlePrintTrack(row)}><ConfirmationNumberIcon fontSize="small" /></IconButton></Tooltip>
-          <Tooltip title="Print cup labels"><IconButton size="small" onClick={() => printCupLabels(row)}><LabelIcon fontSize="small" /></IconButton></Tooltip>
-          {row.paymentStatus !== 'PAID' && row.status !== 'CANCELLED' && (
-            <Tooltip title="Payment QR">
-              <IconButton size="small" color="primary" onClick={() => handlePayQr(row)}><QrCode2Icon fontSize="small" /></IconButton>
-            </Tooltip>
-          )}
-          {row.paymentMethod === 'CASH' && !['COMPLETED','PICKED_UP','CANCELLED'].includes(row.status) && (
-            <Tooltip title="Switch to QR payment and print receipt">
-              <Button size="small" variant="outlined" color="success"
-                startIcon={<QrCode2Icon sx={{ fontSize: 13 }} />}
-                onClick={() => askConfirm({ title: 'Switch to QR payment?', message: 'Switch this order to Bank QR and print receipt?', confirmLabel: 'Switch & Print', confirmColor: 'success' }, () => handleSwitchAndPrint(row))}
-                sx={{ textTransform: 'none', fontWeight: 700, fontSize: 11, px: 0.75, minWidth: 0 }}>
-                → QR
-              </Button>
-            </Tooltip>
-          )}
-          {(row.paymentMethod === 'BANK_QR' || row.paymentMethod === 'SPLIT') && !['COMPLETED','PICKED_UP','CANCELLED'].includes(row.status) && (
-            <Tooltip title="Revert to cash payment">
-              <Button size="small" variant="outlined" color="warning"
-                onClick={() => askConfirm({ title: 'Revert to Cash?', message: 'Change payment method back to cash?', confirmLabel: '→ Cash', confirmColor: 'warning' }, () => handleRevertToCash(row))}
-                sx={{ textTransform: 'none', fontSize: 11, px: 0.75, minWidth: 0 }}>
-                → Cash
-              </Button>
-            </Tooltip>
-          )}
-          {row.status === 'PENDING' && row.customerEditing && (
-            <Chip label="✏ C-Editing" size="small" color="warning"
-              sx={{ fontWeight: 700, fontSize: 10, height: 22 }} />
-          )}
-          {row.status === 'PENDING' && (
-            <Button size="small" variant="outlined"
-              disabled={Boolean(row.customerEditing)}
-              title={row.customerEditing ? 'Customer is editing — wait for them to finish' : ''}
-              onClick={() => askConfirm({ title: 'Confirm Order?', message: `Confirm order #${row.orderNumber ?? row.orderCode}?`, confirmLabel: 'Confirm', confirmColor: 'primary' }, () => act(confirmShopOrder, row.id))}>
-              Confirm
-            </Button>
-          )}
-          {row.status === 'CONFIRMED' && (
-            <Button size="small" variant="outlined" color="warning"
-              onClick={() => askConfirm({ title: 'Start Preparing?', message: `Start preparing order #${row.orderNumber ?? row.orderCode}?`, confirmLabel: 'Start', confirmColor: 'warning' }, () => act(prepareShopOrder, row.id))}>
-              Prepare
-            </Button>
-          )}
-          {row.status === 'PREPARING' && (
-            <Button size="small" variant="outlined" color="success"
-              onClick={() => askConfirm({ title: 'Mark as Ready?', message: `Mark order #${row.orderNumber ?? row.orderCode} as ready?`, confirmLabel: 'Mark Ready', confirmColor: 'success' }, async () => { await act(readyShopOrder, row.id); broadcastReady() })}>
-              Ready
-            </Button>
-          )}
-          {row.status === 'READY' && (
-            <Tooltip title="Generate QR for customer to scan at pickup">
-              <Button size="small" variant="outlined" color="warning" startIcon={<QrCode2Icon sx={{ fontSize: 13 }} />}
-                onClick={async () => {
-                  try {
-                    const { data } = await fetchPickupQr(row.id)
-                    setPickupQrOrder({ id: row.id, orderNumber: row.orderNumber, orderCode: row.orderCode, qrBase64: data.qrBase64 })
-                  } catch (e) { alert('Failed to generate pickup QR: ' + (e.message || e)) }
-                }}
-                sx={{ fontWeight: 700, minWidth: 0, px: 0.75 }}>
-                Pickup QR
-              </Button>
-            </Tooltip>
-          )}
-          {row.status === 'READY' && (row.paymentMethod === 'BANK_QR' || row.paymentMethod === 'SPLIT') && (
-            <Button size="small" variant="contained" color="info"
-              onClick={() => askConfirm({ title: 'Mark as Picked Up?', message: 'Confirm customer has picked up this order?', confirmLabel: 'Picked Up', confirmColor: 'primary' }, () => act(pickupShopOrder, row.id))}>
-              Picked Up
-            </Button>
-          )}
-          {row.status === 'READY' && row.paymentMethod !== 'BANK_QR' && row.paymentMethod !== 'SPLIT' && (
-            <Button size="small" variant="contained" color="success"
-              onClick={() => askConfirm({ title: 'Complete Order?', message: `Complete order #${row.orderNumber ?? row.orderCode}?`, confirmLabel: 'Complete', confirmColor: 'success' }, () => act(completeShopOrder, row.id))}>
-              Complete
-            </Button>
-          )}
-          {row.paymentStatus !== 'PAID' && !['PICKED_UP','COMPLETED','CANCELLED'].includes(row.status) && (
-            <Tooltip title="Mark as paid">
-              <Button size="small" variant="outlined" color="success" startIcon={<PaidIcon sx={{ fontSize: 13 }} />}
-                onClick={() => askConfirm({ title: 'Mark as Paid?', message: `Mark order #${row.orderNumber ?? row.orderCode} as paid?`, confirmLabel: 'Mark Paid', confirmColor: 'success' }, () => act(markOrderPaid, row.id))}
-                sx={{ fontWeight: 700, minWidth: 0, px: 0.75 }}>
-                Paid
-              </Button>
-            </Tooltip>
-          )}
-          {!['PICKED_UP','COMPLETED','CANCELLED'].includes(row.status) && (
-            <Button size="small" color="error" onClick={() => handleCancel(row)}>✕</Button>
-          )}
-        </Box>
-      )
-    }
-  ]
+  }
 
   const tabBadge = (label, count, color = 'primary') => (
     <Badge badgeContent={count || null} color={color} max={99}
@@ -834,13 +1058,13 @@ export default function ShopOrderGrid() {
             variant="contained" size="small" color="success" sx={{ textTransform: 'none', fontWeight: 700 }}>New Order</Button>
           <Button startIcon={<QrCode2Icon />} onClick={() => setQrOrderOpen(true)}
             variant="outlined" size="small" color="primary" sx={{ textTransform: 'none', fontWeight: 700 }}>QR Order</Button>
-          {selectedRows.ids.size > 0 && (
+          {selectedRows.size > 0 && (
             <Button
               startIcon={<DriveFileMoveIcon />}
               onClick={() => { setMoveTableTarget(''); setMoveTableOpen(true) }}
               variant="contained" size="small" color="info"
               sx={{ textTransform: 'none', fontWeight: 700 }}>
-              Move {selectedRows.ids.size} order{selectedRows.ids.size > 1 ? 's' : ''} → Table
+              Move {selectedRows.size} order{selectedRows.size > 1 ? 's' : ''} → Table
             </Button>
           )}
           <Box sx={{ flex: 1 }} />
@@ -876,17 +1100,18 @@ export default function ShopOrderGrid() {
         {/* Tab content */}
         <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
           {tab === 0 && (
-            <Box sx={{ height: '100%', p: 1.5, boxSizing: 'border-box' }}>
-              <DataGrid rows={rows} columns={columns} loading={loading} getRowId={r => r.id}
-                pageSizeOptions={[25, 50, 100]} density="compact"
-                initialState={{ columns: { columnVisibilityModel: { staffName: false } } }}
-                checkboxSelection disableRowSelectionOnClick
-                rowSelectionModel={selectedRows}
-                onRowSelectionModelChange={ids => setSelectedRows(ids)}
-                processRowUpdate={processRowUpdate} onProcessRowUpdateError={e => setError(e.message)}
-                sx={{ height: '100%', '& .MuiDataGrid-cell--editable': { cursor: 'cell' }, '& .MuiDataGrid-row:hover': { bgcolor: '#f5f9ff' } }}
-              />
-            </Box>
+            <OrderCardGrid
+              rows={rows}
+              loading={loading}
+              tables={tables}
+              actions={cardActions}
+              selectedIds={selectedRows}
+              onToggleSelect={id => setSelectedRows(prev => {
+                const next = new Set(prev)
+                next.has(id) ? next.delete(id) : next.add(id)
+                return next
+              })}
+            />
           )}
           {tab === 1 && <StatusBoard status="CONFIRMED"  orders={confirmedOrders} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} />}
           {tab === 2 && <StatusBoard status="PREPARING"  orders={preparingOrders} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} />}
@@ -1022,7 +1247,7 @@ export default function ShopOrderGrid() {
 
       {/* Move to Table dialog */}
       <Dialog open={moveTableOpen} onClose={() => setMoveTableOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle fontWeight={700}>Move {selectedRows.ids.size} Order{selectedRows.ids.size > 1 ? 's' : ''} to Table</DialogTitle>
+        <DialogTitle fontWeight={700}>Move {selectedRows.size} Order{selectedRows.size > 1 ? 's' : ''} to Table</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             Select the target table. Choose "No table" to unassign.
