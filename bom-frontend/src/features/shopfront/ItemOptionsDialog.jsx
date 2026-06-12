@@ -14,6 +14,7 @@ import InputAdornment from '@mui/material/InputAdornment'
 import RemoveIcon from '@mui/icons-material/Remove'
 import AddIcon from '@mui/icons-material/Add'
 import IconButton from '@mui/material/IconButton'
+import CloseIcon from '@mui/icons-material/Close'
 
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 
@@ -45,6 +46,7 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
   const [selected, setSelected] = useState({})
   const [note, setNote]         = useState('')
   const [sides, setSides]       = useState({})  // { [modelId]: qty }
+  const [imagePreview, setImagePreview] = useState(null)
 
   useEffect(() => {
     if (!open) return
@@ -259,7 +261,8 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
                   border: sideQty > 0 ? '1.5px solid #6366f1' : '1px solid #e2e8f0',
                   transition: 'border-color 0.15s, background-color 0.15s',
                 }}>
-                  <Box sx={{ width: 52, height: 52, flexShrink: 0, borderRadius: 1.5, bgcolor: '#e8eaf6', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Box onClick={() => side.imageUrl && setImagePreview(side)}
+                    sx={{ width: 52, height: 52, flexShrink: 0, borderRadius: 1.5, bgcolor: '#e8eaf6', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: side.imageUrl ? 'pointer' : 'default' }}>
                     {side.imageUrl ? (
                       <Box component="img" src={side.imageUrl} alt={side.modelName} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none' }} />
                     ) : (
@@ -267,7 +270,11 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
                     )}
                   </Box>
                   <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography fontWeight={700} sx={{ fontSize: 14, color: '#1e293b' }} noWrap>{side.modelName}</Typography>
+                    <Typography fontWeight={700} noWrap
+                      onClick={() => side.imageUrl && setImagePreview(side)}
+                      sx={{ fontSize: 14, color: '#1e293b', ...(side.imageUrl ? { cursor: 'pointer', '&:hover': { color: '#1976d2', textDecoration: 'underline dotted' } } : {}) }}>
+                      {side.modelName}
+                    </Typography>
                     <Typography sx={{ fontSize: 13, fontWeight: 600, color: '#6366f1' }}>+{fmt(side.sellingPrice)}</Typography>
                   </Box>
                   {sideQty === 0 ? (
@@ -324,6 +331,28 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
           Add {qty} · {fmt(buttonTotal)}
         </Button>
       </DialogActions>
+    </Dialog>
+
+    {/* ── Topping image preview ── */}
+    <Dialog open={Boolean(imagePreview)} onClose={() => setImagePreview(null)} maxWidth="xs" fullWidth
+      PaperProps={{ sx: { borderRadius: 3, overflow: 'hidden' } }}>
+      {imagePreview && (
+        <>
+          <Box sx={{ position: 'relative', bgcolor: '#f0f0f0', lineHeight: 0 }}>
+            <Box component="img" src={imagePreview.imageUrl} alt={imagePreview.modelName}
+              sx={{ width: '100%', maxHeight: 300, objectFit: 'contain', display: 'block' }}
+              onError={e => { e.target.style.display = 'none' }} />
+            <IconButton size="small" onClick={() => setImagePreview(null)}
+              sx={{ position: 'absolute', top: 8, right: 8, bgcolor: 'rgba(0,0,0,0.45)', color: '#fff', '&:hover': { bgcolor: 'rgba(0,0,0,0.65)' } }}>
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </Box>
+          <Box sx={{ px: 2.5, py: 2 }}>
+            <Typography fontWeight={800} sx={{ fontSize: 17 }}>{imagePreview.modelName}</Typography>
+            <Typography color="primary" fontWeight={700} sx={{ fontSize: 15, mt: 0.5 }}>+{fmt(imagePreview.sellingPrice)}</Typography>
+          </Box>
+        </>
+      )}
     </Dialog>
   )
 }

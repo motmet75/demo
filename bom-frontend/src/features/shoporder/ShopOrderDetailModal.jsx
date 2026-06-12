@@ -56,16 +56,21 @@ function OptionsDisplay({ selectedOptions }) {
   return (
     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
       {entries.map(([group, val]) => {
-        const vals = Array.isArray(val) ? val : [val]
-        return vals.map(v => (
-          <Chip
-            key={`${group}:${v}`}
-            label={`${group}: ${v}`}
-            size="small"
-            color="primary"
-            variant="outlined"
-            sx={{ height: 20, fontSize: 10, fontWeight: 600 }}
-          />
+        let chips
+        if (Array.isArray(val)) {
+          chips = val.map(v => ({ key: `${group}:${v}`, label: `${group}: ${v}` }))
+        } else if (typeof val === 'object' && val !== null) {
+          // priced option: {label: qty}
+          chips = Object.entries(val).map(([lbl, qty]) => ({
+            key: `${group}:${lbl}`,
+            label: `${group}: ${qty > 1 ? `${lbl}×${qty}` : lbl}`,
+          }))
+        } else {
+          chips = [{ key: `${group}:${val}`, label: `${group}: ${val}` }]
+        }
+        return chips.map(c => (
+          <Chip key={c.key} label={c.label} size="small" color="primary" variant="outlined"
+            sx={{ height: 20, fontSize: 10, fontWeight: 600 }} />
         ))
       })}
     </Box>

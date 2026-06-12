@@ -129,7 +129,7 @@ function ShowOrdersButton({ session, onClick, fullWidth }) {
 }
 
 // Compact order list shown inside the session dialog
-function SessionOrderList({ session, token, onEdit }) {
+function SessionOrderList({ session, token, onEdit, onView }) {
   const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
   const [cancelTarget, setCancelTarget] = useState(null)   // order being cancelled
   const [cancelNote, setCancelNote]     = useState('')
@@ -218,10 +218,10 @@ function SessionOrderList({ session, token, onEdit }) {
                 )}
               </Box>
 
-              {/* Actions — only for PENDING orders */}
-              {isPending && (
-                <Box sx={{ px: 2, pb: 1.25, pt: 0.25, display: 'flex', gap: 1 }}>
-                  {editing ? (
+              {/* Actions */}
+              <Box sx={{ px: 2, pb: 1.25, pt: 0.25, display: 'flex', gap: 1 }}>
+                {isPending && (
+                  editing ? (
                     <Button variant="contained" size="small" color="warning"
                       onClick={() => onEdit(order)}
                       sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5, flex: 1 }}>
@@ -233,20 +233,25 @@ function SessionOrderList({ session, token, onEdit }) {
                       sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5, flex: 1 }}>
                       Edit
                     </Button>
-                  )}
-                  {!isPaid && (
-                    <Button variant="outlined" size="small" color="error"
-                      onClick={() => { setCancelTarget(order); setCancelNote(''); setCancelError('') }}
-                      sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5, flexShrink: 0 }}>
-                      Cancel
-                    </Button>
-                  )}
-                  {isPaid && (
-                    <Chip label="Paid ✓" color="success" size="small"
-                      sx={{ fontWeight: 700, fontSize: 11, alignSelf: 'center' }} />
-                  )}
-                </Box>
-              )}
+                  )
+                )}
+                <Button variant="outlined" size="small"
+                  onClick={() => onView && onView(order)}
+                  sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5, flexShrink: 0 }}>
+                  View
+                </Button>
+                {isPending && !isPaid && (
+                  <Button variant="outlined" size="small" color="error"
+                    onClick={() => { setCancelTarget(order); setCancelNote(''); setCancelError('') }}
+                    sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5, flexShrink: 0 }}>
+                    Cancel
+                  </Button>
+                )}
+                {isPending && isPaid && (
+                  <Chip label="Paid ✓" color="success" size="small"
+                    sx={{ fontWeight: 700, fontSize: 11, alignSelf: 'center' }} />
+                )}
+              </Box>
             </Box>
           )
         })}
@@ -1455,6 +1460,7 @@ export default function ShopMenuPage() {
             session={tokenSession}
             token={tokenParam}
             onEdit={(order) => { setSessionOpen(false); handleEditOrder(order) }}
+            onView={(order) => { setSessionOpen(false); setTrackingOrder(order) }}
             onClose={() => setSessionOpen(false)}
           />
         </DialogContent>

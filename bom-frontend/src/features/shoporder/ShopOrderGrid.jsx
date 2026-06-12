@@ -346,7 +346,8 @@ function StatusBoard({ status, orders, onAction, onDetail, onPayQr, onPickupQr, 
                   return roots.map((root, rIdx) => {
                     const children = allItems.filter(it => it.parentItemId === root.id)
                     const opts = parseOpts(root.selectedOptions)
-                    const optStr = Object.entries(opts).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join('+') : v}`).join(' · ')
+                    const fmtV = v => Array.isArray(v) ? v.join('+') : (typeof v === 'object' && v !== null ? Object.entries(v).map(([lbl, qty]) => qty > 1 ? `${lbl}×${qty}` : lbl).join('+') : v)
+                    const optStr = Object.entries(opts).map(([k, v]) => `${k}: ${fmtV(v)}`).join(' · ')
                     return (
                       <Box key={root.id || rIdx} sx={{ mb: 0.5 }}>
                         {/* Root item */}
@@ -366,13 +367,13 @@ function StatusBoard({ status, orders, onAction, onDetail, onPayQr, onPickupQr, 
                         {/* Child / topping items */}
                         {children.map((child, ci) => (
                           <Box key={child.id || ci} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, ml: 3, pl: 1, mt: 0.3, borderLeft: `3px solid ${style.border}` }}>
-                            <Typography sx={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, flexShrink: 0, minWidth: 20 }}>
+                            <Typography sx={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, flexShrink: 0, minWidth: 20 }}>
                               {rIdx + 1}.{ci + 1}
                             </Typography>
-                            <Typography sx={{ fontSize: 16, fontWeight: 900, color: '#111', lineHeight: 1, flexShrink: 0 }}>
+                            <Typography sx={{ fontSize: 17, fontWeight: 900, color: '#111', lineHeight: 1, flexShrink: 0 }}>
                               {Number(child.quantity)}×
                             </Typography>
-                            <Typography sx={{ fontSize: 12, fontWeight: 700, color: '#374151', flex: 1 }}>
+                            <Typography sx={{ fontSize: 14, fontWeight: 700, color: '#374151', flex: 1 }}>
                               {child.modelName}
                             </Typography>
                           </Box>
@@ -603,7 +604,8 @@ function OrderCard({ order, tables, actions, selected, onSelect }) {
           : roots.slice(0, 7).map((root, rIdx) => {
               const children = childMap[String(root.id)] || []
               const opts = parseOpts(root.selectedOptions)
-              const optStr = Object.entries(opts).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join('+') : v}`).join(' · ')
+              const fmtV = v => Array.isArray(v) ? v.join('+') : (typeof v === 'object' && v !== null ? Object.entries(v).map(([lbl, qty]) => qty > 1 ? `${lbl}×${qty}` : lbl).join('+') : v)
+              const optStr = Object.entries(opts).map(([k, v]) => `${k}: ${fmtV(v)}`).join(' · ')
               return (
                 <Box key={root.id || rIdx} sx={{ mb: 0.6 }}>
                   <Box sx={{ display: 'flex', gap: 0.4, alignItems: 'baseline' }}>
@@ -616,9 +618,9 @@ function OrderCard({ order, tables, actions, selected, onSelect }) {
                   {root.itemNotes && <Typography sx={{ fontSize: 11, pl: 2.5, fontStyle: 'italic', color: '#b91c1c', fontWeight: 700, display: 'block' }}>⚠ {root.itemNotes}</Typography>}
                   {children.map((child, ci) => (
                     <Box key={child.id || ci} sx={{ display: 'flex', gap: 0.4, alignItems: 'center', ml: 2.5, pl: 0.75, mt: 0.2, borderLeft: `2px solid ${s.border}` }}>
-                      <Typography sx={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, flexShrink: 0 }}>{rIdx+1}.{ci+1}</Typography>
-                      <Typography sx={{ fontSize: 14, fontWeight: 800, color: '#374151', lineHeight: 1, flexShrink: 0 }}>{Number(child.quantity)}×</Typography>
-                      <Typography sx={{ fontSize: 11, color: '#374151', flex: 1 }}>{child.modelName}</Typography>
+                      <Typography sx={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, flexShrink: 0 }}>{rIdx+1}.{ci+1}</Typography>
+                      <Typography sx={{ fontSize: 15, fontWeight: 800, color: '#374151', lineHeight: 1, flexShrink: 0 }}>{Number(child.quantity)}×</Typography>
+                      <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#374151', flex: 1 }}>{child.modelName}</Typography>
                     </Box>
                   ))}
                 </Box>

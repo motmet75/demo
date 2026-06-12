@@ -126,8 +126,9 @@ export function printCupLabels(order) {
   const labelHtml = rootItems.flatMap(item => {
     const qty = Number(item.quantity) || 1
     const opts = parseOptsObj(item.selectedOptions)
+    const fmtOptV = v => Array.isArray(v) ? v.join(', ') : (typeof v === 'object' && v !== null ? Object.entries(v).map(([lbl, qty]) => qty > 1 ? `${lbl}×${qty}` : lbl).join(', ') : v)
     const optParts = Object.entries(opts)
-      .map(([k, v]) => `<span class="opt-key">${k}:</span> <span class="opt-val">${Array.isArray(v) ? v.join(', ') : v}</span>`)
+      .map(([k, v]) => `<span class="opt-key">${k}:</span> <span class="opt-val">${fmtOptV(v)}</span>`)
     const optLine = optParts.length > 0
       ? `<div class="opt-line">${optParts.join('<span class="opt-sep"> · </span>')}</div>`
       : ''
@@ -350,7 +351,8 @@ export function printCombinedReceipt(orders, opts = {}) {
     const itemsHtml = roots.map((item, idx) => {
       const children     = childMap[String(item.id)] || []
       const parentQty    = Number(item.quantity || 1)
-      const opts_        = parseOpts(item.selectedOptions)
+      const fmtOptV3 = v => Array.isArray(v) ? v.join(', ') : (typeof v === 'object' && v !== null ? Object.entries(v).map(([lbl, qty]) => qty > 1 ? `${lbl}×${qty}` : lbl).join(', ') : v)
+      const opts_        = Object.entries(parseOpts(item.selectedOptions)).map(([k, v]) => `${k}: ${fmtOptV3(v)}`).join(' · ')
       const childrenHtml = children.map(child => {
         const effectiveQty = Number(child.quantity || 1) * parentQty
         return `<div class="row side-row">
@@ -505,15 +507,16 @@ export function printOrderReceipt(order, trackingQrBase64 = null) {
   const itemsHtml = rootItems.map((item, idx) => {
     const rowNum = idx + 1
     const opts = parseOptsObj(item.selectedOptions)
+    const fmtOptV2 = v => Array.isArray(v) ? v.join(', ') : (typeof v === 'object' && v !== null ? Object.entries(v).map(([lbl, qty]) => qty > 1 ? `${lbl}×${qty}` : lbl).join(', ') : v)
     const optsInline = Object.entries(opts)
-      .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+      .map(([k, v]) => `${k}: ${fmtOptV2(v)}`)
       .join(' · ')
     const children = childMap[String(item.id)] || []
     const parentQty = Number(item.quantity || 1)
     const childrenHtml = children.map((child, ci) => {
       const childOpts = parseOptsObj(child.selectedOptions)
       const childOptsInline = Object.entries(childOpts)
-        .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+        .map(([k, v]) => `${k}: ${fmtOptV2(v)}`)
         .join(' · ')
       const effectiveQty   = Number(child.quantity || 1) * parentQty
       const effectiveTotal = Number(child.lineTotal || 0) * parentQty
