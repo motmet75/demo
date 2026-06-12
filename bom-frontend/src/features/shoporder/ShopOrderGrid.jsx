@@ -1516,19 +1516,11 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
   }
 
   const handlePrintWithQr = () => {
-    printCombinedReceipt(orders)
-    // open QR in a print-friendly window
-    if (payQrUrl) {
-      const w = window.open('', '_blank', 'width=400,height=500')
-      w.document.write(`
-        <html><body style="text-align:center;font-family:sans-serif;padding:24px">
-          <h2 style="margin:0 0 8px">QR Pay — ${fmtAmt(unpaidTotal)}</h2>
-          <img src="${payQrUrl}" style="width:260px;height:260px" />
-          <p style="color:#555;font-size:13px;margin-top:8px">Scan to pay</p>
-          <script>window.onload=()=>window.print()</script>
-        </body></html>`)
-      w.document.close()
-    }
+    printCombinedReceipt(orders, {
+      payQrUrl,
+      unpaidTotal,
+      tokenRef: token?.substring(0, 12) || 'combined',
+    })
   }
 
   const STATUS_CHIP = { PENDING: 'default', CONFIRMED: 'primary', PREPARING: 'warning', READY: 'success', PICKED_UP: 'success', COMPLETED: 'success', CANCELLED: 'error' }
