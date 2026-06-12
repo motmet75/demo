@@ -22,13 +22,15 @@ function parseChoices(str) {
   try { return JSON.parse(str) } catch { return str.split(',').map(s => s.trim()).filter(Boolean) }
 }
 
-export default function ItemOptionsDialog({ open, model, options = [], initialCart, onConfirm, onClose }) {
-  const [qty, setQty] = useState(1)
+export default function ItemOptionsDialog({ open, model, options = [], allowedSideOptions = [], initialCart, onConfirm, onClose }) {
+  const [qty, setQty]       = useState(1)
   const [selected, setSelected] = useState({})
-  const [note, setNote] = useState('')
+  const [note, setNote]     = useState('')
+  const [sides, setSides]   = useState({})  // { [modelId]: qty }
 
   useEffect(() => {
     if (!open) return
+    setSides({})
     if (initialCart) {
       setQty(initialCart.qty || 1)
       try { setSelected(initialCart.selectedOptions ? JSON.parse(initialCart.selectedOptions) : {}) } catch { setSelected({}) }
@@ -40,7 +42,7 @@ export default function ItemOptionsDialog({ open, model, options = [], initialCa
       setSelected(defaults)
       setNote('')
     }
-  }, [open, model?.id])
+  }, [open, model?.id]) // eslint-disable-line
 
   const handleSelect = (groupName, value, multiSelect) => {
     setSelected(prev => {
@@ -57,17 +59,45 @@ export default function ItemOptionsDialog({ open, model, options = [], initialCa
     return selected[groupName] === value
   }
 
+  const changeSideQty = (modelId, delta) =>
+    setSides(prev => {
+      const next = Math.max(0, (prev[modelId] || 0) + delta)
+      if (next === 0) { const { [modelId]: _, ...rest } = prev; return rest }
+      return { ...prev, [modelId]: next }
+    })
+
   const canConfirm = options.filter(g => g.required).every(g => {
     const val = selected[g.groupName]
     return g.multiSelect ? Array.isArray(val) && val.length > 0 : val != null && val !== ''
   })
 
+  const sidesTotal = Object.entries(sides).reduce((sum, [modelId, sQty]) => {
+    const m = allowedSideOptions.find(x => x.id === modelId)
+    return sum + (m ? Number(m.sellingPrice || 0) * sQty : 0)
+  }, 0)
+
   const handleConfirm = () => {
-    const opts = Object.fromEntries(Object.entries(selected).filter(([, v]) => v != null && v !== '' && !(Array.isArray(v) && !v.length)))
-    onConfirm({ qty, selectedOptions: Object.keys(opts).length ? JSON.stringify(opts) : null, itemNotes: note || null })
+    const opts = Object.fromEntries(
+      Object.entries(selected).filter(([, v]) => v != null && v !== '' && !(Array.isArray(v) && !v.length))
+    )
+    const sideItems = Object.entries(sides)
+      .filter(([, sQty]) => sQty > 0)
+      .map(([modelId, sQty]) => {
+        const m = allowedSideOptions.find(x => x.id === modelId)
+        return { modelId, modelName: m?.modelName || '', qty: sQty }
+      })
+    onConfirm({
+      qty,
+      selectedOptions: Object.keys(opts).length ? JSON.stringify(opts) : null,
+      itemNotes: note || null,
+      sideItems,
+    })
   }
 
   if (!model) return null
+
+  const basePrice = Number(model.sellingPrice || 0)
+  const buttonTotal = qty * basePrice + sidesTotal
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
@@ -77,7 +107,7 @@ export default function ItemOptionsDialog({ open, model, options = [], initialCa
       </DialogTitle>
       <DialogContent sx={{ pt: 0 }}>
 
-        {/* Option groups */}
+        {/* ── Option groups (sugar, ice, add-on chips) ── */}
         {options.map((group, gi) => {
           const choices = parseChoices(group.choices)
           return (
@@ -89,10 +119,10 @@ export default function ItemOptionsDialog({ open, model, options = [], initialCa
               </Box>
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
                 {choices.map((choice, ci) => {
-                  const label = typeof choice === 'object' && choice !== null ? String(choice.label ?? '') : String(choice)
-                  const price = typeof choice === 'object' && choice !== null ? Number(choice.price || 0) : 0
+                  const label    = typeof choice === 'object' && choice !== null ? String(choice.label ?? '') : String(choice)
+                  const price    = typeof choice === 'object' && choice !== null ? Number(choice.price || 0) : 0
                   const chipLabel = price > 0 ? `${label} +${fmt(price)}` : label
-                  const sel = isSelected(group.groupName, label, group.multiSelect)
+                  const sel      = isSelected(group.groupName, label, group.multiSelect)
                   return (
                     <Chip
                       key={label || ci}
@@ -109,7 +139,77 @@ export default function ItemOptionsDialog({ open, model, options = [], initialCa
           )
         })}
 
-        {options.length > 0 && <Divider sx={{ my: 1.5 }} />}
+        {/* ── Linked side / topping items (from allowedSideIds, NOT chips) ── */}
+        {allowedSideOptions.length > 0 && (
+          <>
+            {options.length > 0 && <Divider sx={{ mb: 1.5 }} />}
+            <Typography fontWeight={700} sx={{ fontSize: 15, mb: 1, color: '#334155' }}>
+              Topping / Side
+            </Typography>
+            {allowedSideOptions.map(side => {
+              const sideQty = sides[side.id] || 0
+              return (
+                <Box key={side.id} sx={{
+                  display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.25,
+                  px: 1.25, py: 1,
+                  bgcolor: sideQty > 0 ? '#f0f0ff' : '#f8faff',
+                  borderRadius: 2,
+                  border: sideQty > 0 ? '1.5px solid #6366f1' : '1px solid #e2e8f0',
+                  transition: 'border-color 0.15s, background-color 0.15s',
+                }}>
+                  {/* Thumbnail */}
+                  <Box sx={{
+                    width: 52, height: 52, flexShrink: 0, borderRadius: 1.5,
+                    bgcolor: '#e8eaf6', overflow: 'hidden',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    {side.imageUrl ? (
+                      <Box component="img" src={side.imageUrl} alt={side.modelName}
+                        sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        onError={e => { e.target.style.display = 'none' }} />
+                    ) : (
+                      <Typography sx={{ fontSize: 26, lineHeight: 1 }}>🧋</Typography>
+                    )}
+                  </Box>
+
+                  {/* Name + price */}
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography fontWeight={700} sx={{ fontSize: 14, color: '#1e293b' }} noWrap>
+                      {side.modelName}
+                    </Typography>
+                    <Typography sx={{ fontSize: 13, fontWeight: 600, color: '#6366f1' }}>
+                      +{fmt(side.sellingPrice)}
+                    </Typography>
+                  </Box>
+
+                  {/* Stepper — tap + to add, stepper appears once qty > 0 */}
+                  {sideQty === 0 ? (
+                    <IconButton onClick={() => changeSideQty(side.id, 1)}
+                      sx={{ bgcolor: '#6366f1', color: '#fff', borderRadius: 1.5, p: 0.75, '&:hover': { bgcolor: '#4f46e5' } }}>
+                      <AddIcon sx={{ fontSize: 24 }} />
+                    </IconButton>
+                  ) : (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+                      <IconButton onClick={() => changeSideQty(side.id, -1)}
+                        sx={{ p: 0.75, bgcolor: '#f1f5f9', borderRadius: 1 }}>
+                        <RemoveIcon sx={{ fontSize: 20 }} />
+                      </IconButton>
+                      <Typography fontWeight={800} sx={{ minWidth: 26, textAlign: 'center', fontSize: 17, color: '#4f46e5' }}>
+                        {sideQty}
+                      </Typography>
+                      <IconButton onClick={() => changeSideQty(side.id, 1)}
+                        sx={{ p: 0.75, bgcolor: '#6366f1', color: '#fff', borderRadius: 1, '&:hover': { bgcolor: '#4f46e5' } }}>
+                        <AddIcon sx={{ fontSize: 20 }} />
+                      </IconButton>
+                    </Box>
+                  )}
+                </Box>
+              )
+            })}
+          </>
+        )}
+
+        <Divider sx={{ my: 1.5 }} />
 
         {/* Per-item note */}
         <TextField
@@ -121,7 +221,7 @@ export default function ItemOptionsDialog({ open, model, options = [], initialCa
           InputProps={{ startAdornment: <InputAdornment position="start"><NoteAltIcon fontSize="small" color="action" /></InputAdornment> }}
         />
 
-        {/* Qty */}
+        {/* Qty stepper */}
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, mt: 2 }}>
           <IconButton onClick={() => setQty(q => Math.max(1, q - 1))}
             sx={{ bgcolor: '#f0f0f0', '&:hover': { bgcolor: '#e0e0e0' } }}>
@@ -134,13 +234,14 @@ export default function ItemOptionsDialog({ open, model, options = [], initialCa
           </IconButton>
         </Box>
       </DialogContent>
+
       <DialogActions sx={{ px: 2, pb: 2 }}>
         <Button onClick={onClose}>Cancel</Button>
         <Button
           variant="contained" fullWidth onClick={handleConfirm} disabled={!canConfirm}
           sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none' }}
         >
-          Add {qty} · {fmt(qty * Number(model.sellingPrice || 0))}
+          Add {qty} · {fmt(buttonTotal)}
         </Button>
       </DialogActions>
     </Dialog>

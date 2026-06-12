@@ -616,11 +616,11 @@ export default function ShopMenuPage() {
     cartEntries.reduce((n, e) => n + (e.modelId === modelId ? e.qty : 0), 0)
 
   // ── Cart mutations ────────────────────────────────────────────────────
-  const createEntry = (model, qty, selectedOptions, itemNotes) => {
+  const createEntry = (model, qty, selectedOptions, itemNotes, rawSides = []) => {
     const id = genUid()
     setCart(prev => ({
       ...prev,
-      [id]: { uid: id, modelId: model.id, qty, selectedOptions: selectedOptions || null, itemNotes: itemNotes || null, sideItems: [] },
+      [id]: { uid: id, modelId: model.id, qty, selectedOptions: selectedOptions || null, itemNotes: itemNotes || null, sideItems: rawSides.map(s => ({ ...s, uid: genUid() })) },
     }))
   }
 
@@ -699,8 +699,12 @@ export default function ShopMenuPage() {
   // ── Menu card click handlers ──────────────────────────────────────────
   const handleAddClick = (model) => {
     const hasOpts = (optionsByModel[model.id] || []).length > 0
-    if (hasOpts) {
-      setOptionsTarget({ model })
+    let allowedSideIds = null
+    try { allowedSideIds = model.allowedSideIds ? JSON.parse(model.allowedSideIds) : null } catch { allowedSideIds = null }
+    const allowedSideOptions = allowedSideIds ? menu.filter(x => allowedSideIds.includes(x.id)) : []
+    const hasSides = allowedSideOptions.length > 0
+    if (hasOpts || hasSides) {
+      setOptionsTarget({ model, allowedSideOptions })
     } else {
       const existing = cartEntries.find(e => e.modelId === model.id && !e.selectedOptions)
       if (existing) incrementEntry(existing.uid)
@@ -714,8 +718,8 @@ export default function ShopMenuPage() {
     decrementEntry([...entries].sort((a, b) => a.qty - b.qty)[0].uid)
   }
 
-  const handleOptionsConfirm = ({ qty, selectedOptions, itemNotes }) => {
-    if (qty > 0) createEntry(optionsTarget.model, qty, selectedOptions, itemNotes)
+  const handleOptionsConfirm = ({ qty, selectedOptions, itemNotes, sideItems }) => {
+    if (qty > 0) createEntry(optionsTarget.model, qty, selectedOptions, itemNotes, sideItems || [])
     setOptionsTarget(null)
   }
 
@@ -733,8 +737,10 @@ export default function ShopMenuPage() {
     const newCart = {}
     allItems.filter(it => !it.parentItemId).forEach(it => {
       const uid = genUid()
+      const parentQty = Number(it.quantity) || 1
       const sideItems = (children[String(it.id)] || []).map(child => ({
-        uid: genUid(), modelId: child.modelId, modelName: child.modelName, qty: Number(child.quantity) || 1,
+        uid: genUid(), modelId: child.modelId, modelName: child.modelName,
+        qty: Math.max(1, Math.round(Number(child.quantity) / parentQty)),
       }))
       newCart[uid] = { uid, modelId: it.modelId, qty: Number(it.quantity) || 1,
         selectedOptions: it.selectedOptions || null, itemNotes: it.itemNotes || null, sideItems }
@@ -851,35 +857,35 @@ export default function ShopMenuPage() {
             {/* ── Main item header ── */}
             <Box sx={{ bgcolor: '#f8faff', px: 1.5, pt: 1, pb: 0.75 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
-                <Typography variant="caption" sx={{ color: '#94a3b8', fontWeight: 700, fontSize: 11, flexShrink: 0 }}>
+                <Typography sx={{ color: '#94a3b8', fontWeight: 700, fontSize: 13, flexShrink: 0 }}>
                   {idx + 1}.
                 </Typography>
                 {/* Name + unit price stacked */}
                 <Box sx={{ flex: 1, minWidth: 80, overflow: 'hidden' }}>
-                  <Typography variant="body2" fontWeight={700} noWrap>{m.modelName}</Typography>
-                  <Typography variant="caption" sx={{ color: '#64748b', fontSize: 11 }}>
-                    {fmt(unitPrice)} / item
+                  <Typography fontWeight={700} sx={{ fontSize: 16 }} noWrap>{m.modelName}</Typography>
+                  <Typography sx={{ color: '#64748b', fontSize: 13 }}>
+                    {fmt(unitPrice)} / ly
                   </Typography>
                 </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
-                  <IconButton size="small" onClick={() => decrementEntry(entry.uid)} sx={{ p: 0.25 }}>
-                    <RemoveIcon sx={{ fontSize: 14 }} />
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <IconButton onClick={() => decrementEntry(entry.uid)} sx={{ p: 0.75 }}>
+                    <RemoveIcon sx={{ fontSize: 20 }} />
                   </IconButton>
-                  <Typography variant="body2" fontWeight={700} sx={{ minWidth: 20, textAlign: 'center', fontSize: 13 }}>
+                  <Typography fontWeight={800} sx={{ minWidth: 30, textAlign: 'center', fontSize: 18 }}>
                     {entry.qty}
                   </Typography>
-                  <IconButton size="small" onClick={() => incrementEntry(entry.uid)}
-                    sx={{ p: 0.25, bgcolor: '#1976d2', color: '#fff', borderRadius: 0.75, '&:hover': { bgcolor: '#1565c0' } }}>
-                    <AddIcon sx={{ fontSize: 14 }} />
+                  <IconButton onClick={() => incrementEntry(entry.uid)}
+                    sx={{ p: 0.75, bgcolor: '#1976d2', color: '#fff', borderRadius: 1, '&:hover': { bgcolor: '#1565c0' } }}>
+                    <AddIcon sx={{ fontSize: 20 }} />
                   </IconButton>
                 </Box>
                 {/* Main item line total (sides shown separately below) */}
-                <Typography variant="body2" color="primary" fontWeight={800}
-                  sx={{ minWidth: 70, textAlign: 'right', fontSize: 13 }}>
+                <Typography color="primary" fontWeight={800}
+                  sx={{ minWidth: 74, textAlign: 'right', fontSize: 15 }}>
                   {fmt(mainTotal)}
                 </Typography>
-                <IconButton size="small" color="error" onClick={() => deleteEntry(entry.uid)} sx={{ p: 0.25 }}>
-                  <DeleteIcon sx={{ fontSize: 14 }} />
+                <IconButton color="error" onClick={() => deleteEntry(entry.uid)} sx={{ p: 0.5 }}>
+                  <DeleteIcon sx={{ fontSize: 22 }} />
                 </IconButton>
               </Box>
 
@@ -893,10 +899,10 @@ export default function ShopMenuPage() {
                 return (
                   <Box key={grp.id} sx={{ mt: 0.5 }}>
                     <Typography variant="caption" color="text.secondary"
-                      sx={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      sx={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                       {grp.groupName}{grp.required ? ' *' : ''}{grp.isFree ? ' (free)' : ''}
                     </Typography>
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.25 }}>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 0.5 }}>
                       {choices.map(choice => {
                         const c      = typeof choice === 'object' ? choice : { label: String(choice), price: 0 }
                         const active = selArr.includes(c.label)
@@ -905,7 +911,7 @@ export default function ShopMenuPage() {
                           <Chip key={c.label} label={c.label + tag} size="small"
                             onClick={() => toggleOption(entry.uid, grp.groupName, c.label, grp.multiSelect)}
                             sx={{
-                              height: 22, fontSize: 11, cursor: 'pointer',
+                              height: 30, fontSize: 13, cursor: 'pointer',
                               bgcolor: active ? '#1976d2' : '#fff',
                               color: active ? '#fff' : '#555',
                               border: `1px solid ${active ? '#1976d2' : '#ddd'}`,
@@ -926,8 +932,8 @@ export default function ShopMenuPage() {
                 onChange={e => setEntryNotes(entry.uid, e.target.value)}
                 InputProps={{
                   disableUnderline: false,
-                  startAdornment: <InputAdornment position="start"><NoteAltIcon sx={{ fontSize: 14, color: '#ccc' }} /></InputAdornment>,
-                  sx: { fontSize: 12 },
+                  startAdornment: <InputAdornment position="start"><NoteAltIcon sx={{ fontSize: 16, color: '#ccc' }} /></InputAdornment>,
+                  sx: { fontSize: 14 },
                 }}
                 sx={{ mt: 0.5 }}
               />
@@ -944,42 +950,60 @@ export default function ShopMenuPage() {
                   const effectiveQty   = perCup * entry.qty
                   const effectivePrice = sm ? effectiveQty * Number(sm.sellingPrice || 0) : 0
                   return (
-                    <Box key={si.uid} sx={{ px: 0.75, py: 0.5, borderBottom: '1px solid #e8eaf6' }}>
-                      {/* Single row: number · name · stepper · price · delete */}
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                        <Typography variant="caption" sx={{ color: '#cbd5e1', fontWeight: 700, fontSize: 10, flexShrink: 0, minWidth: 22 }}>
-                          {idx + 1}.{siIdx + 1}
-                        </Typography>
-                        <Box sx={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
-                          <Typography variant="caption" fontWeight={600} sx={{ fontSize: 12, color: '#64748b', display: 'block' }} noWrap>
+                    <Box key={si.uid} sx={{ px: 1, py: 1, borderBottom: '1px solid #e8eaf6' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        {/* Thumbnail */}
+                        <Box sx={{
+                          width: 52, height: 52, flexShrink: 0, borderRadius: 1.5,
+                          bgcolor: '#e8eaf6', overflow: 'hidden',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          {sm?.imageUrl ? (
+                            <Box component="img" src={sm.imageUrl} alt={si.modelName}
+                              sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              onError={e => { e.target.style.display = 'none' }} />
+                          ) : (
+                            <Typography sx={{ fontSize: 24, lineHeight: 1 }}>🧋</Typography>
+                          )}
+                        </Box>
+                        {/* Name + scale hint */}
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Typography fontWeight={700} sx={{ fontSize: 14, color: '#334155' }} noWrap>
                             {si.modelName}
                           </Typography>
-                          {entry.qty > 1 && (
-                            <Typography variant="caption" sx={{ color: '#a5b4fc', fontSize: 10 }}>
-                              {perCup}/cup × {entry.qty} = {effectiveQty}×
+                          {entry.qty > 1 ? (
+                            <Typography sx={{ color: '#a5b4fc', fontSize: 12 }}>
+                              {perCup}/ly × {entry.qty} ly = {effectiveQty}×
+                            </Typography>
+                          ) : (
+                            <Typography sx={{ color: '#6366f1', fontSize: 13, fontWeight: 700 }}>
+                              {sm ? fmt(effectivePrice) : ''}
                             </Typography>
                           )}
                         </Box>
-                        {/* Stepper — same style as main item */}
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
-                          <IconButton size="small" onClick={() => changeSideQty(entry.uid, si.uid, -1)}
-                            sx={{ p: 0.25, color: '#94a3b8' }}>
-                            <RemoveIcon sx={{ fontSize: 14 }} />
+                        {/* Stepper */}
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+                          <IconButton onClick={() => changeSideQty(entry.uid, si.uid, -1)}
+                            sx={{ p: 0.75, color: '#94a3b8', bgcolor: '#f1f5f9', borderRadius: 1 }}>
+                            <RemoveIcon sx={{ fontSize: 20 }} />
                           </IconButton>
-                          <Typography fontWeight={700} sx={{ minWidth: 20, textAlign: 'center', fontSize: 13, color: '#4f46e5' }}>
+                          <Typography fontWeight={800} sx={{ minWidth: 28, textAlign: 'center', fontSize: 18, color: '#4f46e5' }}>
                             {perCup}
                           </Typography>
-                          <IconButton size="small" onClick={() => changeSideQty(entry.uid, si.uid, 1)}
-                            sx={{ p: 0.25, bgcolor: '#6366f1', color: '#fff', borderRadius: 0.75, '&:hover': { bgcolor: '#4f46e5' } }}>
-                            <AddIcon sx={{ fontSize: 14 }} />
+                          <IconButton onClick={() => changeSideQty(entry.uid, si.uid, 1)}
+                            sx={{ p: 0.75, bgcolor: '#6366f1', color: '#fff', borderRadius: 1, '&:hover': { bgcolor: '#4f46e5' } }}>
+                            <AddIcon sx={{ fontSize: 20 }} />
                           </IconButton>
                         </Box>
-                        <Typography variant="caption" fontWeight={700} sx={{ minWidth: 60, textAlign: 'right', fontSize: 12, color: '#64748b', flexShrink: 0 }}>
-                          {sm ? fmt(effectivePrice) : ''}
-                        </Typography>
-                        <IconButton size="small" onClick={() => removeSide(entry.uid, si.uid)}
-                          sx={{ p: 0.25, color: '#94a3b8', '&:hover': { color: '#dc2626' } }}>
-                          <CloseIcon sx={{ fontSize: 13 }} />
+                        {/* Price shown on right when parent > 1 cup */}
+                        {entry.qty > 1 && (
+                          <Typography fontWeight={700} sx={{ minWidth: 68, textAlign: 'right', fontSize: 14, color: '#4f46e5', flexShrink: 0 }}>
+                            {sm ? fmt(effectivePrice) : ''}
+                          </Typography>
+                        )}
+                        <IconButton onClick={() => removeSide(entry.uid, si.uid)}
+                          sx={{ p: 0.5, color: '#94a3b8', '&:hover': { color: '#dc2626' } }}>
+                          <CloseIcon sx={{ fontSize: 22 }} />
                         </IconButton>
                       </Box>
                     </Box>
@@ -988,11 +1012,11 @@ export default function ShopMenuPage() {
 
                 {/* Block total — only shown when there are side items */}
                 {sides.length > 0 && (
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 0.75, py: 0.5, borderTop: '1px dashed #c7d2fe' }}>
-                    <Typography variant="caption" sx={{ color: '#64748b', fontSize: 11 }}>
-                      {fmt(mainTotal)} + {fmt(sideTotal)} sides
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 1, py: 0.75, borderTop: '1px dashed #c7d2fe' }}>
+                    <Typography sx={{ color: '#64748b', fontSize: 13 }}>
+                      {fmt(mainTotal)} + {fmt(sideTotal)} topping
                     </Typography>
-                    <Typography variant="caption" fontWeight={800} color="primary" sx={{ fontSize: 12 }}>
+                    <Typography fontWeight={800} color="primary" sx={{ fontSize: 15 }}>
                       = {fmt(eTotal)}
                     </Typography>
                   </Box>
@@ -1000,49 +1024,47 @@ export default function ShopMenuPage() {
 
                 {/* Add side inline form — only shown when the item has configured allowed sides */}
                 {canAddSides && (
-                <Box sx={{ pt: 0.5, pb: 0.75, px: 0.75 }}>
-                  {/* Row 1: autocomplete full-width */}
+                <Box sx={{ pt: 0.75, pb: 1, px: 1 }}>
                   <Autocomplete
                     size="small"
                     options={allowedSideOptions}
                     getOptionLabel={m => m.modelName}
                     value={sf.model || null}
                     onChange={(_, v) => setSF(entry.uid, 'model', v)}
-                    renderInput={params => <TextField {...params} label="Add side / topping…" size="small" />}
+                    renderInput={params => <TextField {...params} label="Add topping / side…" size="small" />}
                     isOptionEqualToValue={(a, b) => a.id === b.id}
                     noOptionsText="No items"
                     fullWidth
                   />
-                  {/* Row 2: per-cup qty stepper + Add button */}
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.75 }}>
-                    <Typography variant="caption" sx={{ color: '#a5b4fc', fontSize: 10, flexShrink: 0 }}>
-                      qty/cup
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+                    <Typography sx={{ color: '#a5b4fc', fontSize: 13, flexShrink: 0 }}>
+                      /ly
                     </Typography>
                     <IconButton
                       onClick={() => setSF(entry.uid, 'qty', Math.max(1, (sf.qty || 1) - 1))}
-                      sx={{ p: 0, width: 32, height: 32, bgcolor: '#f1f5f9', color: '#64748b', borderRadius: 1, flexShrink: 0, '&:hover': { bgcolor: '#e2e8f0' } }}>
-                      <RemoveIcon sx={{ fontSize: 16 }} />
+                      sx={{ p: 0.75, bgcolor: '#f1f5f9', color: '#64748b', borderRadius: 1, flexShrink: 0 }}>
+                      <RemoveIcon sx={{ fontSize: 20 }} />
                     </IconButton>
-                    <Typography fontWeight={800} sx={{ minWidth: 24, textAlign: 'center', fontSize: 15, color: '#4f46e5', flexShrink: 0 }}>
+                    <Typography fontWeight={800} sx={{ minWidth: 28, textAlign: 'center', fontSize: 18, color: '#4f46e5', flexShrink: 0 }}>
                       {sf.qty || 1}
                     </Typography>
                     <IconButton
                       onClick={() => setSF(entry.uid, 'qty', (sf.qty || 1) + 1)}
-                      sx={{ p: 0, width: 32, height: 32, bgcolor: '#6366f1', color: '#fff', borderRadius: 1, flexShrink: 0, '&:hover': { bgcolor: '#4f46e5' } }}>
-                      <AddIcon sx={{ fontSize: 16 }} />
+                      sx={{ p: 0.75, bgcolor: '#6366f1', color: '#fff', borderRadius: 1, flexShrink: 0, '&:hover': { bgcolor: '#4f46e5' } }}>
+                      <AddIcon sx={{ fontSize: 20 }} />
                     </IconButton>
-                    {entry.qty > 1 && sf.qty > 1 && (
-                      <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: 10, flexShrink: 0 }}>
+                    {entry.qty > 1 && (sf.qty || 1) > 0 && (
+                      <Typography sx={{ color: '#94a3b8', fontSize: 12, flexShrink: 0 }}>
                         = {(sf.qty || 1) * entry.qty}× total
                       </Typography>
                     )}
                     <Box sx={{ flex: 1 }} />
                     <Button variant="contained"
-                      startIcon={<PlaylistAddIcon sx={{ fontSize: 15 }} />}
+                      startIcon={<PlaylistAddIcon />}
                       onClick={() => addSideInline(entry.uid)}
                       disabled={!sf.model}
                       sx={{
-                        textTransform: 'none', fontSize: 12, height: 36, flexShrink: 0,
+                        textTransform: 'none', fontSize: 14, height: 44, flexShrink: 0,
                         bgcolor: '#6366f1', '&:hover': { bgcolor: '#4f46e5' },
                         '&.Mui-disabled': { bgcolor: '#e0e0e0', color: '#9e9e9e' },
                       }}>
@@ -1075,9 +1097,9 @@ export default function ShopMenuPage() {
           <CartEntryList />
 
           <Divider />
-          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-            <Typography fontWeight={700}>Total</Typography>
-            <Typography fontWeight={800} color="primary">{fmt(totalAmount)}</Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography fontWeight={700} sx={{ fontSize: 17 }}>Total</Typography>
+            <Typography fontWeight={900} color="primary" sx={{ fontSize: 18 }}>{fmt(totalAmount)}</Typography>
           </Box>
 
           <TextField size="small" fullWidth multiline rows={2} label="Order notes" placeholder="Special requests..."
@@ -1451,34 +1473,34 @@ export default function ShopMenuPage() {
                       return (
                         <Box key={side.uid} sx={{ pl: 1.5, mb: 0.25 }}>
                           {/* Single row: number · name · stepper · price */}
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: 10, flexShrink: 0, minWidth: 22 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                            <Typography sx={{ color: '#94a3b8', fontSize: 12, flexShrink: 0, minWidth: 24 }}>
                               {idx + 1}.{siIdx + 1}
                             </Typography>
                             <Box sx={{ flex: 1, minWidth: 0 }}>
-                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }} noWrap>
+                              <Typography sx={{ display: 'block', fontSize: 14, fontWeight: 600 }} noWrap>
                                 {sm.modelName}
                               </Typography>
                               {entry.qty > 1 && (
-                                <Typography variant="caption" sx={{ color: '#a5b4fc', fontSize: 10 }}>
-                                  {perCup}/cup × {entry.qty} = {effQty}×
+                                <Typography sx={{ color: '#a5b4fc', fontSize: 12 }}>
+                                  {perCup}/ly × {entry.qty} = {effQty}×
                                 </Typography>
                               )}
                             </Box>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
-                              <IconButton size="small" onClick={() => changeSideQty(entry.uid, side.uid, -1)}
-                                sx={{ p: 0.25, color: '#94a3b8' }}>
-                                <RemoveIcon sx={{ fontSize: 14 }} />
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+                              <IconButton onClick={() => changeSideQty(entry.uid, side.uid, -1)}
+                                sx={{ p: 0.75, color: '#94a3b8', bgcolor: '#f1f5f9', borderRadius: 1 }}>
+                                <RemoveIcon sx={{ fontSize: 20 }} />
                               </IconButton>
-                              <Typography fontWeight={700} sx={{ minWidth: 20, textAlign: 'center', fontSize: 13, color: '#4f46e5' }}>
+                              <Typography fontWeight={800} sx={{ minWidth: 28, textAlign: 'center', fontSize: 17, color: '#4f46e5' }}>
                                 {perCup}
                               </Typography>
-                              <IconButton size="small" onClick={() => changeSideQty(entry.uid, side.uid, 1)}
-                                sx={{ p: 0.25, bgcolor: '#6366f1', color: '#fff', borderRadius: 0.75, '&:hover': { bgcolor: '#4f46e5' } }}>
-                                <AddIcon sx={{ fontSize: 14 }} />
+                              <IconButton onClick={() => changeSideQty(entry.uid, side.uid, 1)}
+                                sx={{ p: 0.75, bgcolor: '#6366f1', color: '#fff', borderRadius: 1, '&:hover': { bgcolor: '#4f46e5' } }}>
+                                <AddIcon sx={{ fontSize: 20 }} />
                               </IconButton>
                             </Box>
-                            <Typography variant="caption" color="primary" fontWeight={700} sx={{ minWidth: 52, textAlign: 'right', flexShrink: 0 }}>
+                            <Typography color="primary" fontWeight={700} sx={{ minWidth: 60, textAlign: 'right', flexShrink: 0, fontSize: 14 }}>
                               {fmt(effPrice)}
                             </Typography>
                           </Box>
@@ -1486,9 +1508,9 @@ export default function ShopMenuPage() {
                       )
                     })}
                     {sides.length > 0 && (
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', pl: 1.5, borderTop: '1px dotted #e2e8f0', mt: 0.25, pt: 0.25 }}>
-                        <Typography variant="caption" sx={{ color: '#64748b', fontStyle: 'italic' }}>= subtotal</Typography>
-                        <Typography variant="caption" fontWeight={900} color="primary">{fmt(mainTotal + sideTotal)}</Typography>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', pl: 1.5, borderTop: '1px dotted #e2e8f0', mt: 0.5, pt: 0.5 }}>
+                        <Typography sx={{ color: '#64748b', fontStyle: 'italic', fontSize: 13 }}>= subtotal</Typography>
+                        <Typography fontWeight={900} color="primary" sx={{ fontSize: 14 }}>{fmt(mainTotal + sideTotal)}</Typography>
                       </Box>
                     )}
                   </Box>
@@ -1582,6 +1604,7 @@ export default function ShopMenuPage() {
           open={Boolean(optionsTarget)}
           model={optionsTarget.model}
           options={optionsByModel[optionsTarget.model?.id] || []}
+          allowedSideOptions={optionsTarget.allowedSideOptions || []}
           initialCart={null}
           onConfirm={handleOptionsConfirm}
           onClose={() => setOptionsTarget(null)}
