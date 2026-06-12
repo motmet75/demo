@@ -453,10 +453,19 @@ function fmtOpts(selectedOptions) {
   if (!selectedOptions) return null
   try {
     const obj = JSON.parse(selectedOptions)
-    return Object.entries(obj)
-      .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
-      .join(' · ')
+    return Object.entries(obj).map(([k, v]) => {
+      if (Array.isArray(v)) return `${k}: ${v.join(', ')}`
+      if (v && typeof v === 'object') {
+        const parts = Object.entries(v).filter(([, q]) => q > 0).map(([label, q]) => q > 1 ? `${label}×${q}` : label)
+        return parts.length ? `${k}: ${parts.join(', ')}` : null
+      }
+      return `${k}: ${v}`
+    }).filter(Boolean).join(' · ')
   } catch { return null }
+}
+
+function hasPrice(choicesJson) {
+  try { return JSON.parse(choicesJson || '[]').some(c => typeof c === 'object' && Number(c.price) > 0) } catch { return false }
 }
 
 function parseOpts(selectedOptions) {
@@ -591,7 +600,14 @@ export default function ShopMenuPage() {
       if (grp.isFree) return sum
       let choiceDefs
       try { choiceDefs = JSON.parse(grp.choices) } catch { return sum }
-      const cur    = opts[grp.groupName]
+      const cur = opts[grp.groupName]
+      // qty-map format: {label: qty} — used for priced topping choices
+      if (cur && typeof cur === 'object' && !Array.isArray(cur)) {
+        const priceMap = {}
+        choiceDefs.forEach(c => { if (typeof c === 'object') priceMap[c.label] = Number(c.price || 0) })
+        return sum + Object.entries(cur).reduce((s, [label, qty]) => s + (priceMap[label] || 0) * qty, 0)
+      }
+      // legacy string / array format
       const selArr = Array.isArray(cur) ? cur : (cur ? [cur] : [])
       return sum + choiceDefs
         .filter(c => typeof c === 'object' && selArr.includes(c.label))
@@ -649,6 +665,19 @@ export default function ShopMenuPage() {
       } else {
         if (cur === value) delete opts[groupName]; else opts[groupName] = value
       }
+      return { ...prev, [uid]: { ...e, selectedOptions: Object.keys(opts).length ? JSON.stringify(opts) : null } }
+    })
+
+  const setOptionQty = (uid, groupName, label, delta) =>
+    setCart(prev => {
+      const e = prev[uid]; if (!e) return prev
+      const opts = parseOpts(e.selectedOptions)
+      const cur = (opts[groupName] && typeof opts[groupName] === 'object' && !Array.isArray(opts[groupName]))
+        ? opts[groupName] : {}
+      const next = Math.max(0, (cur[label] || 0) + delta)
+      const updated = { ...cur }
+      if (next === 0) delete updated[label]; else updated[label] = next
+      if (Object.keys(updated).length) opts[groupName] = updated; else delete opts[groupName]
       return { ...prev, [uid]: { ...e, selectedOptions: Object.keys(opts).length ? JSON.stringify(opts) : null } }
     })
 
@@ -889,38 +918,84 @@ export default function ShopMenuPage() {
                 </IconButton>
               </Box>
 
-              {/* Inline option chips */}
+              {/* Inline option chips / priced steppers */}
               {groups.map(grp => {
                 let choices = []
                 try { choices = JSON.parse(grp.choices) } catch {}
                 if (!choices.length) return null
+                const priced = !grp.isFree && hasPrice(grp.choices)
                 const cur    = opts[grp.groupName]
-                const selArr = Array.isArray(cur) ? cur : (cur ? [cur] : [])
                 return (
                   <Box key={grp.id} sx={{ mt: 0.5 }}>
                     <Typography variant="caption" color="text.secondary"
                       sx={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                       {grp.groupName}{grp.required ? ' *' : ''}{grp.isFree ? ' (free)' : ''}
                     </Typography>
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 0.5 }}>
-                      {choices.map(choice => {
-                        const c      = typeof choice === 'object' ? choice : { label: String(choice), price: 0 }
-                        const active = selArr.includes(c.label)
-                        const tag    = (!grp.isFree && c.price > 0) ? ` +${Number(c.price).toLocaleString('vi-VN')}đ` : ''
-                        return (
-                          <Chip key={c.label} label={c.label + tag} size="small"
-                            onClick={() => toggleOption(entry.uid, grp.groupName, c.label, grp.multiSelect)}
-                            sx={{
-                              height: 30, fontSize: 13, cursor: 'pointer',
-                              bgcolor: active ? '#1976d2' : '#fff',
-                              color: active ? '#fff' : '#555',
-                              border: `1px solid ${active ? '#1976d2' : '#ddd'}`,
-                              fontWeight: active ? 700 : 400,
-                              '&:hover': { bgcolor: active ? '#1565c0' : '#f0f4ff' },
-                            }} />
-                        )
-                      })}
-                    </Box>
+                    {priced ? (
+                      /* Priced topping choices — qty stepper rows */
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, mt: 0.5 }}>
+                        {choices.map(choice => {
+                          const c    = typeof choice === 'object' ? choice : { label: String(choice), price: 0 }
+                          const qMap = (cur && typeof cur === 'object' && !Array.isArray(cur)) ? cur : {}
+                          const cQty = qMap[c.label] || 0
+                          const tag  = c.price > 0 ? ` +${Number(c.price).toLocaleString('vi-VN')}đ` : ''
+                          return (
+                            <Box key={c.label} sx={{
+                              display: 'flex', alignItems: 'center', gap: 1,
+                              px: 1, py: 0.5,
+                              bgcolor: cQty > 0 ? '#f0f0ff' : '#f8faff',
+                              borderRadius: 1.5,
+                              border: `1px solid ${cQty > 0 ? '#6366f1' : '#e2e8f0'}`,
+                            }}>
+                              <Typography sx={{ flex: 1, fontSize: 13, fontWeight: cQty > 0 ? 700 : 400, color: cQty > 0 ? '#1e293b' : '#64748b' }} noWrap>
+                                {c.label}{tag}
+                              </Typography>
+                              {cQty === 0 ? (
+                                <IconButton size="small" onClick={() => setOptionQty(entry.uid, grp.groupName, c.label, 1)}
+                                  sx={{ p: 0.5, bgcolor: '#6366f1', color: '#fff', borderRadius: 1, '&:hover': { bgcolor: '#4f46e5' } }}>
+                                  <AddIcon sx={{ fontSize: 18 }} />
+                                </IconButton>
+                              ) : (
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+                                  <IconButton size="small" onClick={() => setOptionQty(entry.uid, grp.groupName, c.label, -1)}
+                                    sx={{ p: 0.5, bgcolor: '#f1f5f9', borderRadius: 1 }}>
+                                    <RemoveIcon sx={{ fontSize: 18 }} />
+                                  </IconButton>
+                                  <Typography fontWeight={800} sx={{ minWidth: 22, textAlign: 'center', fontSize: 15, color: '#4f46e5' }}>
+                                    {cQty}
+                                  </Typography>
+                                  <IconButton size="small" onClick={() => setOptionQty(entry.uid, grp.groupName, c.label, 1)}
+                                    sx={{ p: 0.5, bgcolor: '#6366f1', color: '#fff', borderRadius: 1, '&:hover': { bgcolor: '#4f46e5' } }}>
+                                    <AddIcon sx={{ fontSize: 18 }} />
+                                  </IconButton>
+                                </Box>
+                              )}
+                            </Box>
+                          )
+                        })}
+                      </Box>
+                    ) : (
+                      /* Non-priced choices — chips */
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 0.5 }}>
+                        {choices.map(choice => {
+                          const c      = typeof choice === 'object' ? choice : { label: String(choice), price: 0 }
+                          const selArr = Array.isArray(cur) ? cur : (cur ? [cur] : [])
+                          const active = selArr.includes(c.label)
+                          return (
+                            <Chip key={c.label} label={c.label} size="small"
+                              onClick={() => toggleOption(entry.uid, grp.groupName, c.label, grp.multiSelect)}
+                              sx={{
+                                height: 30, fontSize: 13, cursor: 'pointer',
+                                bgcolor: active ? '#1976d2' : '#fff',
+                                color: active ? '#fff' : '#555',
+                                border: `1px solid ${active ? '#1976d2' : '#ddd'}`,
+                                fontWeight: active ? 700 : 400,
+                                '&:hover': { bgcolor: active ? '#1565c0' : '#f0f4ff' },
+                              }} />
+                          )
+                        })}
+                      </Box>
+                    )}
                   </Box>
                 )
               })}
