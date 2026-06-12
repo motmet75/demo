@@ -59,6 +59,7 @@ import QrOrderDialog from './QrOrderDialog'
 import EodAuditDialog from './EodAuditDialog'
 import ConfirmActionDialog from './ConfirmActionDialog'
 import { useAppContext } from '../../context/AppContext'
+import { fetchModels } from '../../api/modelApi'
 
 const BOARD_CHANNEL = 'shop_display_board'
 function broadcastReady() {
@@ -263,9 +264,10 @@ const BOARD_STYLE = {
   PICKED_UP:  { headerBg: '#e3f2fd', border: '#0288d1',  cardBg: '#f0f9ff',  color: '#01579b',  numColor: '#0288d1' },
 }
 
-function StatusBoard({ status, orders, onAction, onDetail, onPayQr, onPickupQr, onSwitchQr, onRevertCash }) {
+function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, onPayQr, onPickupQr, onSwitchQr, onRevertCash }) {
   // onAction(type, orderId, orderNumber)
   const style = BOARD_STYLE[status] || BOARD_STYLE.CONFIRMED
+  const [imagePreview, setImagePreview] = useState(null)
 
   if (!orders.length) {
     const icons = { CONFIRMED: <KitchenIcon sx={{ fontSize: 44, opacity: 0.18 }} />, PREPARING: <HourglassTopIcon sx={{ fontSize: 44, opacity: 0.18 }} />, READY: <CheckCircleIcon sx={{ fontSize: 44, opacity: 0.18 }} />, PICKED_UP: <LocalShippingIcon sx={{ fontSize: 44, opacity: 0.18 }} /> }
@@ -278,6 +280,7 @@ function StatusBoard({ status, orders, onAction, onDetail, onPayQr, onPickupQr, 
   }
 
   return (
+    <>
     <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 1.5, p: 1.5 }}>
       {orders.map(order => {
         const since = elapsed(order.confirmedAt || order.createdAt)
@@ -358,26 +361,36 @@ function StatusBoard({ status, orders, onAction, onDetail, onPayQr, onPickupQr, 
                           <Typography sx={{ fontSize: 22, fontWeight: 900, color: style.color, lineHeight: 1, flexShrink: 0 }}>
                             {Number(root.quantity)}×
                           </Typography>
-                          <Typography sx={{ fontSize: 14, fontWeight: 800, color: '#111', lineHeight: 1.2 }}>
+                          <Typography sx={{ fontSize: 16, fontWeight: 800, color: '#111', lineHeight: 1.2 }}>
                             {root.modelName}
                           </Typography>
                         </Box>
-                        {optStr && <Typography variant="caption" sx={{ fontSize: 11, pl: 2, display: 'block', color: '#555' }}>{optStr}</Typography>}
-                        {root.itemNotes && <Typography variant="caption" sx={{ fontSize: 11, pl: 2, fontStyle: 'italic', display: 'block', color: '#c62828', fontWeight: 700 }}>⚠ {root.itemNotes}</Typography>}
+                        {optStr && <Typography sx={{ fontSize: 13, pl: 2, display: 'block', color: '#555', lineHeight: 1.4 }}>{optStr}</Typography>}
+                        {root.itemNotes && <Typography sx={{ fontSize: 13, pl: 2, fontStyle: 'italic', display: 'block', color: '#c62828', fontWeight: 700 }}>⚠ {root.itemNotes}</Typography>}
                         {/* Child / topping items */}
-                        {children.map((child, ci) => (
-                          <Box key={child.id || ci} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, ml: 3, pl: 1, mt: 0.3, borderLeft: `3px solid ${style.border}` }}>
-                            <Typography sx={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, flexShrink: 0, minWidth: 20 }}>
-                              {rIdx + 1}.{ci + 1}
-                            </Typography>
-                            <Typography sx={{ fontSize: 17, fontWeight: 900, color: '#111', lineHeight: 1, flexShrink: 0 }}>
-                              {Number(child.quantity)}×
-                            </Typography>
-                            <Typography sx={{ fontSize: 14, fontWeight: 700, color: '#374151', flex: 1 }}>
-                              {child.modelName}
-                            </Typography>
-                          </Box>
-                        ))}
+                        {children.map((child, ci) => {
+                          const img = modelImageMap[child.modelId]
+                          return (
+                            <Box key={child.id || ci} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 3, pl: 1, mt: 0.3, borderLeft: `3px solid ${style.border}` }}>
+                              <Typography sx={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, flexShrink: 0, minWidth: 20 }}>
+                                {rIdx + 1}.{ci + 1}
+                              </Typography>
+                              {img && (
+                                <Box component="img" src={img} alt={child.modelName}
+                                  onClick={() => setImagePreview({ imageUrl: img, modelName: child.modelName })}
+                                  onError={e => { e.target.style.display = 'none' }}
+                                  sx={{ width: 30, height: 30, objectFit: 'cover', borderRadius: 1, flexShrink: 0, cursor: 'pointer', border: '1px solid #e2e8f0' }} />
+                              )}
+                              <Typography sx={{ fontSize: 17, fontWeight: 900, color: '#111', lineHeight: 1, flexShrink: 0 }}>
+                                {Number(child.quantity)}×
+                              </Typography>
+                              <Typography onClick={() => img && setImagePreview({ imageUrl: img, modelName: child.modelName })}
+                                sx={{ fontSize: 14, fontWeight: 700, color: '#374151', flex: 1, ...(img ? { cursor: 'pointer', '&:hover': { color: '#1976d2', textDecoration: 'underline dotted' } } : {}) }}>
+                                {child.modelName}
+                              </Typography>
+                            </Box>
+                          )
+                        })}
                       </Box>
                     )
                   })
@@ -449,6 +462,27 @@ function StatusBoard({ status, orders, onAction, onDetail, onPayQr, onPickupQr, 
         )
       })}
     </Box>
+
+    {/* ── Sub-item image preview ── */}
+    <Dialog open={Boolean(imagePreview)} onClose={() => setImagePreview(null)} maxWidth="xs" fullWidth
+      PaperProps={{ sx: { borderRadius: 3, overflow: 'hidden' } }}>
+      {imagePreview && (
+        <>
+          <Box sx={{ position: 'relative', bgcolor: '#f0f0f0', lineHeight: 0 }}>
+            <Box component="img" src={imagePreview.imageUrl} alt={imagePreview.modelName}
+              sx={{ width: '100%', maxHeight: 300, objectFit: 'contain', display: 'block' }} />
+            <IconButton size="small" onClick={() => setImagePreview(null)}
+              sx={{ position: 'absolute', top: 8, right: 8, bgcolor: 'rgba(0,0,0,0.45)', color: '#fff', '&:hover': { bgcolor: 'rgba(0,0,0,0.65)' } }}>
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </Box>
+          <Box sx={{ px: 2.5, py: 2 }}>
+            <Typography fontWeight={800} sx={{ fontSize: 17 }}>{imagePreview.modelName}</Typography>
+          </Box>
+        </>
+      )}
+    </Dialog>
+    </>
   )
 }
 
@@ -464,9 +498,10 @@ const CARD_STYLE = {
   CANCELLED: { border: '#fca5a5', bg: '#fff5f5', num: '#ef4444' },
 }
 
-function OrderCard({ order, tables, actions, selected, onSelect }) {
-  const [editNum, setEditNum] = useState(false)
-  const [numVal, setNumVal]   = useState(String(order.orderNumber ?? ''))
+function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSelect }) {
+  const [editNum, setEditNum]       = useState(false)
+  const [numVal, setNumVal]         = useState(String(order.orderNumber ?? ''))
+  const [imagePreview, setImagePreview] = useState(null)
 
   const s       = CARD_STYLE[order.status] || CARD_STYLE.CONFIRMED
   const isQr    = order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT'
@@ -486,6 +521,7 @@ function OrderCard({ order, tables, actions, selected, onSelect }) {
   }
 
   return (
+    <>
     <Box sx={{
       border: `2px solid ${selected ? '#6366f1' : s.border}`,
       borderRadius: 2, bgcolor: s.bg,
@@ -609,20 +645,32 @@ function OrderCard({ order, tables, actions, selected, onSelect }) {
               return (
                 <Box key={root.id || rIdx} sx={{ mb: 0.6 }}>
                   <Box sx={{ display: 'flex', gap: 0.4, alignItems: 'baseline' }}>
-                    <Typography sx={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, flexShrink: 0 }}>{rIdx + 1}.</Typography>
-                    <Typography sx={{ fontSize: 20, fontWeight: 900, color: s.num, lineHeight: 1, flexShrink: 0 }}>{Number(root.quantity)}×</Typography>
-                    <Typography sx={{ fontSize: 13, fontWeight: 800, color: '#111', lineHeight: 1.2, flex: 1 }}>{root.modelName}</Typography>
-                    <Typography sx={{ fontSize: 11, color: '#64748b', flexShrink: 0, pl: 0.5 }}>{fmt(root.lineTotal)}</Typography>
+                    <Typography sx={{ fontSize: 12, color: '#94a3b8', fontWeight: 700, flexShrink: 0 }}>{rIdx + 1}.</Typography>
+                    <Typography sx={{ fontSize: 22, fontWeight: 900, color: s.num, lineHeight: 1, flexShrink: 0 }}>{Number(root.quantity)}×</Typography>
+                    <Typography sx={{ fontSize: 15, fontWeight: 800, color: '#111', lineHeight: 1.2, flex: 1 }}>{root.modelName}</Typography>
+                    <Typography sx={{ fontSize: 12, color: '#64748b', flexShrink: 0, pl: 0.5 }}>{fmt(root.lineTotal)}</Typography>
                   </Box>
-                  {optStr && <Typography sx={{ fontSize: 10, pl: 2.5, color: '#555', display: 'block', lineHeight: 1.3 }}>{optStr}</Typography>}
-                  {root.itemNotes && <Typography sx={{ fontSize: 11, pl: 2.5, fontStyle: 'italic', color: '#b91c1c', fontWeight: 700, display: 'block' }}>⚠ {root.itemNotes}</Typography>}
-                  {children.map((child, ci) => (
-                    <Box key={child.id || ci} sx={{ display: 'flex', gap: 0.4, alignItems: 'center', ml: 2.5, pl: 0.75, mt: 0.2, borderLeft: `2px solid ${s.border}` }}>
-                      <Typography sx={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, flexShrink: 0 }}>{rIdx+1}.{ci+1}</Typography>
-                      <Typography sx={{ fontSize: 15, fontWeight: 800, color: '#374151', lineHeight: 1, flexShrink: 0 }}>{Number(child.quantity)}×</Typography>
-                      <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#374151', flex: 1 }}>{child.modelName}</Typography>
-                    </Box>
-                  ))}
+                  {optStr && <Typography sx={{ fontSize: 13, pl: 2.5, color: '#555', display: 'block', lineHeight: 1.4 }}>{optStr}</Typography>}
+                  {root.itemNotes && <Typography sx={{ fontSize: 13, pl: 2.5, fontStyle: 'italic', color: '#b91c1c', fontWeight: 700, display: 'block' }}>⚠ {root.itemNotes}</Typography>}
+                  {children.map((child, ci) => {
+                    const img = modelImageMap[child.modelId]
+                    return (
+                      <Box key={child.id || ci} sx={{ display: 'flex', gap: 0.5, alignItems: 'center', ml: 2.5, pl: 0.75, mt: 0.3, borderLeft: `2px solid ${s.border}` }}>
+                        <Typography sx={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, flexShrink: 0 }}>{rIdx+1}.{ci+1}</Typography>
+                        {img && (
+                          <Box component="img" src={img} alt={child.modelName}
+                            onClick={() => setImagePreview({ imageUrl: img, modelName: child.modelName })}
+                            onError={e => { e.target.style.display = 'none' }}
+                            sx={{ width: 30, height: 30, objectFit: 'cover', borderRadius: 1, flexShrink: 0, cursor: 'pointer', border: '1px solid #e2e8f0' }} />
+                        )}
+                        <Typography sx={{ fontSize: 16, fontWeight: 800, color: '#374151', lineHeight: 1, flexShrink: 0 }}>{Number(child.quantity)}×</Typography>
+                        <Typography onClick={() => img && setImagePreview({ imageUrl: img, modelName: child.modelName })}
+                          sx={{ fontSize: 14, fontWeight: 700, color: '#374151', flex: 1, ...(img ? { cursor: 'pointer', '&:hover': { color: '#1976d2', textDecoration: 'underline dotted' } } : {}) }}>
+                          {child.modelName}
+                        </Typography>
+                      </Box>
+                    )
+                  })}
                 </Box>
               )
             })
@@ -736,6 +784,27 @@ function OrderCard({ order, tables, actions, selected, onSelect }) {
         </Box>
       </Box>
     </Box>
+
+    {/* ── Sub-item image preview ── */}
+    <Dialog open={Boolean(imagePreview)} onClose={() => setImagePreview(null)} maxWidth="xs" fullWidth
+      PaperProps={{ sx: { borderRadius: 3, overflow: 'hidden' } }}>
+      {imagePreview && (
+        <>
+          <Box sx={{ position: 'relative', bgcolor: '#f0f0f0', lineHeight: 0 }}>
+            <Box component="img" src={imagePreview.imageUrl} alt={imagePreview.modelName}
+              sx={{ width: '100%', maxHeight: 300, objectFit: 'contain', display: 'block' }} />
+            <IconButton size="small" onClick={() => setImagePreview(null)}
+              sx={{ position: 'absolute', top: 8, right: 8, bgcolor: 'rgba(0,0,0,0.45)', color: '#fff', '&:hover': { bgcolor: 'rgba(0,0,0,0.65)' } }}>
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </Box>
+          <Box sx={{ px: 2.5, py: 2 }}>
+            <Typography fontWeight={800} sx={{ fontSize: 17 }}>{imagePreview.modelName}</Typography>
+          </Box>
+        </>
+      )}
+    </Dialog>
+    </>
   )
 }
 
@@ -750,7 +819,7 @@ const SORT_OPTIONS = [
 ]
 const STATUS_SORT_ORDER = { PENDING: 0, CONFIRMED: 1, PREPARING: 2, READY: 3, PICKED_UP: 4, COMPLETED: 5, CANCELLED: 6 }
 
-function OrderCardGrid({ rows, loading, tables, actions, selectedIds, onToggleSelect }) {
+function OrderCardGrid({ rows, loading, tables, actions, modelImageMap = {}, selectedIds, onToggleSelect }) {
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState('newest')
 
@@ -806,6 +875,7 @@ function OrderCardGrid({ rows, loading, tables, actions, selectedIds, onToggleSe
                   order={order}
                   tables={tables}
                   actions={actions}
+                  modelImageMap={modelImageMap}
                   selected={selectedIds.has(order.id)}
                   onSelect={() => onToggleSelect(order.id)}
                 />
@@ -855,6 +925,7 @@ export default function ShopOrderGrid() {
   // confirmDlg shape: { title, message, confirmLabel, confirmColor, requireReason, onConfirm }
   const [pickupQrOrder, setPickupQrOrder] = useState(null)  // { id, orderNumber, orderCode, qrBase64 }
   const [combinedToken, setCombinedToken] = useState(null)  // token string — opens CombinedReceiptDialog
+  const [modelImageMap, setModelImageMap] = useState({})   // { [modelId]: imageUrl }
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
@@ -883,6 +954,13 @@ export default function ShopOrderGrid() {
   useEffect(() => { loadBoard() }, [loadBoard])
   useEffect(() => {
     fetchShopTables().then(({ data }) => setTables(Array.isArray(data) ? data : [])).catch(() => {})
+  }, [])
+  useEffect(() => {
+    fetchModels().then(list => {
+      const map = {}
+      ;(Array.isArray(list) ? list : []).forEach(m => { if (m.imageUrl) map[m.id] = m.imageUrl })
+      setModelImageMap(map)
+    }).catch(() => {})
   }, [])
 
   const reload = () => { load(); loadBoard() }
@@ -1137,6 +1215,7 @@ export default function ShopOrderGrid() {
               loading={loading}
               tables={tables}
               actions={cardActions}
+              modelImageMap={modelImageMap}
               selectedIds={selectedRows}
               onToggleSelect={id => setSelectedRows(prev => {
                 const next = new Set(prev)
@@ -1145,10 +1224,10 @@ export default function ShopOrderGrid() {
               })}
             />
           )}
-          {tab === 1 && <StatusBoard status="CONFIRMED"  orders={confirmedOrders} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} />}
-          {tab === 2 && <StatusBoard status="PREPARING"  orders={preparingOrders} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} />}
-          {tab === 3 && <StatusBoard status="READY"      orders={readyOrders}     onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} />}
-          {tab === 4 && <StatusBoard status="PICKED_UP"  orders={pickedUpOrders}  onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} />}
+          {tab === 1 && <StatusBoard status="CONFIRMED"  orders={confirmedOrders} modelImageMap={modelImageMap} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} />}
+          {tab === 2 && <StatusBoard status="PREPARING"  orders={preparingOrders} modelImageMap={modelImageMap} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} />}
+          {tab === 3 && <StatusBoard status="READY"      orders={readyOrders}     modelImageMap={modelImageMap} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} />}
+          {tab === 4 && <StatusBoard status="PICKED_UP"  orders={pickedUpOrders}  modelImageMap={modelImageMap} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} />}
         </Box>
       </Box>
 

@@ -1072,6 +1072,9 @@ export default function ShopMenuPage() {
                             sx={{ p: 0.75, bgcolor: '#6366f1', color: '#fff', borderRadius: 1, '&:hover': { bgcolor: '#4f46e5' } }}>
                             <AddIcon sx={{ fontSize: 20 }} />
                           </IconButton>
+                          <Typography sx={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, lineHeight: 1, ml: 0.25 }}>
+                            / cup
+                          </Typography>
                         </Box>
                         <IconButton onClick={() => removeSide(entry.uid, si.uid)}
                           sx={{ p: 0.5, color: '#94a3b8', '&:hover': { color: '#dc2626' } }}>
@@ -1257,16 +1260,36 @@ export default function ShopMenuPage() {
                           )}
                         </Box>
                         <Box sx={{ flex: 1, px: 1.5, py: 1.25 }}>
-                          <Typography
-                            fontWeight={800}
-                            lineHeight={1.25}
-                            onClick={() => m.imageUrl && setImagePreview(m)}
-                            sx={{
-                              fontSize: { xs: 15, md: 16 }, letterSpacing: 0,
-                              ...(m.imageUrl ? { cursor: 'pointer', '&:hover': { color: '#1976d2', textDecoration: 'underline dotted' } } : {}),
-                            }}>
-                            {m.modelName}
-                          </Typography>
+                          {/* Name row + controls inline */}
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <Typography
+                              fontWeight={800}
+                              lineHeight={1.25}
+                              onClick={() => m.imageUrl && setImagePreview(m)}
+                              sx={{
+                                flex: 1, minWidth: 0,
+                                fontSize: { xs: 15, md: 16 }, letterSpacing: 0,
+                                ...(m.imageUrl ? { cursor: 'pointer', '&:hover': { color: '#1976d2', textDecoration: 'underline dotted' } } : {}),
+                              }}>
+                              {m.modelName}
+                            </Typography>
+                            {/* ± controls inline with name */}
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+                              {qty > 0 && (
+                                <>
+                                  <IconButton size="small" onClick={() => handleRemoveClick(m.id)}
+                                    sx={{ bgcolor: '#f0f0f0', '&:hover': { bgcolor: '#e0e0e0' } }}>
+                                    <RemoveIcon sx={{ fontSize: 16 }} />
+                                  </IconButton>
+                                  <Typography variant="body2" fontWeight={700} sx={{ minWidth: 22, textAlign: 'center' }}>{qty}</Typography>
+                                </>
+                              )}
+                              <IconButton size="small" onClick={() => handleAddClick(m)}
+                                sx={{ bgcolor: '#1976d2', color: '#fff', '&:hover': { bgcolor: '#1565c0' } }}>
+                                <AddIcon sx={{ fontSize: 16 }} />
+                              </IconButton>
+                            </Box>
+                          </Box>
                           <Typography
                             color="primary" fontWeight={700}
                             sx={{ mt: 0.4, fontSize: { xs: 14, md: 15 } }}>
@@ -1277,21 +1300,6 @@ export default function ShopMenuPage() {
                               size="small" variant="outlined"
                               sx={{ mt: 0.5, fontSize: 10, height: 18, color: 'text.secondary', borderColor: '#ddd' }} />
                           )}
-                        </Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 1 }}>
-                          {qty > 0 && (
-                            <>
-                              <IconButton size="small" onClick={() => handleRemoveClick(m.id)}
-                                sx={{ bgcolor: '#f0f0f0', '&:hover': { bgcolor: '#e0e0e0' } }}>
-                                <RemoveIcon sx={{ fontSize: 16 }} />
-                              </IconButton>
-                              <Typography variant="body2" fontWeight={700} sx={{ minWidth: 22, textAlign: 'center' }}>{qty}</Typography>
-                            </>
-                          )}
-                          <IconButton size="small" onClick={() => handleAddClick(m)}
-                            sx={{ bgcolor: '#1976d2', color: '#fff', '&:hover': { bgcolor: '#1565c0' } }}>
-                            <AddIcon sx={{ fontSize: 16 }} />
-                          </IconButton>
                         </Box>
                       </Box>
 
@@ -1571,6 +1579,9 @@ export default function ShopMenuPage() {
                                 sx={{ p: 0.75, bgcolor: '#6366f1', color: '#fff', borderRadius: 1, '&:hover': { bgcolor: '#4f46e5' } }}>
                                 <AddIcon sx={{ fontSize: 20 }} />
                               </IconButton>
+                              <Typography sx={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, lineHeight: 1, ml: 0.25 }}>
+                                / cup
+                              </Typography>
                             </Box>
                             <Typography color="primary" fontWeight={700} sx={{ minWidth: 60, textAlign: 'right', flexShrink: 0, fontSize: 14 }}>
                               {fmt(effPrice)}
