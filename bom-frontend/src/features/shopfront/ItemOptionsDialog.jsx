@@ -127,7 +127,7 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
     }, 0)
   }, 0)
 
-  const buttonTotal = qty * Number(model?.sellingPrice || 0) + sidesTotal + pricedOptsTotal
+  const buttonTotal = qty * (Number(model?.sellingPrice || 0) + pricedOptsTotal + sidesTotal)
 
   // ── Confirm ───────────────────────────────────────────────────────────
   const handleConfirm = () => {
@@ -281,7 +281,7 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
                         <RemoveIcon sx={{ fontSize: 20 }} />
                       </IconButton>
                       <Typography fontWeight={800} sx={{ minWidth: 26, textAlign: 'center', fontSize: 17, color: '#4f46e5' }}>
-                        {sideQty}
+                        {sideQty * qty}
                       </Typography>
                       <IconButton onClick={() => changeSideQty(side.id, 1)}
                         sx={{ p: 0.75, bgcolor: '#6366f1', color: '#fff', borderRadius: 1, '&:hover': { bgcolor: '#4f46e5' } }}>

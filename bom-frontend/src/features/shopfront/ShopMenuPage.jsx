@@ -502,6 +502,7 @@ export default function ShopMenuPage() {
   const [sessionOpen, setSessionOpen]       = useState(false)
   const [shopConfig, setShopConfig]         = useState({ prepaidMenu: false, bankBin: '', bankAccountNumber: '', bankAccountName: '' })
   const [prepaidQrOrder, setPrepaidQrOrder] = useState(null) // show payment QR after placing order
+  const [imagePreview, setImagePreview]     = useState(null) // model whose image is being previewed
   const [form, setForm] = useState({
     fulfillmentType: 'PICKUP', customerName: '', customerPhone: '',
     deliveryAddress: '', paymentMethod: 'CASH',
@@ -1044,41 +1045,29 @@ export default function ShopMenuPage() {
                             <Typography sx={{ fontSize: 24, lineHeight: 1 }}>🧋</Typography>
                           )}
                         </Box>
-                        {/* Name + scale hint */}
+                        {/* Name + price */}
                         <Box sx={{ flex: 1, minWidth: 0 }}>
                           <Typography fontWeight={700} sx={{ fontSize: 14, color: '#334155' }} noWrap>
                             {si.modelName}
                           </Typography>
-                          {entry.qty > 1 ? (
-                            <Typography sx={{ color: '#a5b4fc', fontSize: 12 }}>
-                              {perCup}/ly × {entry.qty} ly = {effectiveQty}×
-                            </Typography>
-                          ) : (
-                            <Typography sx={{ color: '#6366f1', fontSize: 13, fontWeight: 700 }}>
-                              {sm ? fmt(effectivePrice) : ''}
-                            </Typography>
-                          )}
+                          <Typography sx={{ color: '#6366f1', fontSize: 13, fontWeight: 700 }}>
+                            {sm ? fmt(effectivePrice) : ''}
+                          </Typography>
                         </Box>
-                        {/* Stepper */}
+                        {/* Stepper — shows total quantity (perCup × parentQty) */}
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
                           <IconButton onClick={() => changeSideQty(entry.uid, si.uid, -1)}
                             sx={{ p: 0.75, color: '#94a3b8', bgcolor: '#f1f5f9', borderRadius: 1 }}>
                             <RemoveIcon sx={{ fontSize: 20 }} />
                           </IconButton>
                           <Typography fontWeight={800} sx={{ minWidth: 28, textAlign: 'center', fontSize: 18, color: '#4f46e5' }}>
-                            {perCup}
+                            {effectiveQty}
                           </Typography>
                           <IconButton onClick={() => changeSideQty(entry.uid, si.uid, 1)}
                             sx={{ p: 0.75, bgcolor: '#6366f1', color: '#fff', borderRadius: 1, '&:hover': { bgcolor: '#4f46e5' } }}>
                             <AddIcon sx={{ fontSize: 20 }} />
                           </IconButton>
                         </Box>
-                        {/* Price shown on right when parent > 1 cup */}
-                        {entry.qty > 1 && (
-                          <Typography fontWeight={700} sx={{ minWidth: 68, textAlign: 'right', fontSize: 14, color: '#4f46e5', flexShrink: 0 }}>
-                            {sm ? fmt(effectivePrice) : ''}
-                          </Typography>
-                        )}
                         <IconButton onClick={() => removeSide(entry.uid, si.uid)}
                           sx={{ p: 0.5, color: '#94a3b8', '&:hover': { color: '#dc2626' } }}>
                           <CloseIcon sx={{ fontSize: 22 }} />
@@ -1266,7 +1255,11 @@ export default function ShopMenuPage() {
                           <Typography
                             fontWeight={800}
                             lineHeight={1.25}
-                            sx={{ fontSize: { xs: 15, md: 16 }, letterSpacing: 0 }}>
+                            onClick={() => m.imageUrl && setImagePreview(m)}
+                            sx={{
+                              fontSize: { xs: 15, md: 16 }, letterSpacing: 0,
+                              ...(m.imageUrl ? { cursor: 'pointer', '&:hover': { color: '#1976d2', textDecoration: 'underline dotted' } } : {}),
+                            }}>
                             {m.modelName}
                           </Typography>
                           <Typography
@@ -1559,11 +1552,6 @@ export default function ShopMenuPage() {
                               <Typography sx={{ display: 'block', fontSize: 14, fontWeight: 600 }} noWrap>
                                 {sm.modelName}
                               </Typography>
-                              {entry.qty > 1 && (
-                                <Typography sx={{ color: '#a5b4fc', fontSize: 12 }}>
-                                  {perCup}/ly × {entry.qty} = {effQty}×
-                                </Typography>
-                              )}
                             </Box>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
                               <IconButton onClick={() => changeSideQty(entry.uid, side.uid, -1)}
@@ -1571,7 +1559,7 @@ export default function ShopMenuPage() {
                                 <RemoveIcon sx={{ fontSize: 20 }} />
                               </IconButton>
                               <Typography fontWeight={800} sx={{ minWidth: 28, textAlign: 'center', fontSize: 17, color: '#4f46e5' }}>
-                                {perCup}
+                                {effQty}
                               </Typography>
                               <IconButton onClick={() => changeSideQty(entry.uid, side.uid, 1)}
                                 sx={{ p: 0.75, bgcolor: '#6366f1', color: '#fff', borderRadius: 1, '&:hover': { bgcolor: '#4f46e5' } }}>
@@ -1679,6 +1667,29 @@ export default function ShopMenuPage() {
           onClose={() => setOptionsTarget(null)}
         />
       )}
+
+      {/* ── Item image preview ─────────────────────────────────────────── */}
+      <Dialog open={Boolean(imagePreview)} onClose={() => setImagePreview(null)} maxWidth="xs" fullWidth
+        PaperProps={{ sx: { borderRadius: 3, overflow: 'hidden' } }}>
+        {imagePreview && (
+          <>
+            <Box sx={{ position: 'relative', bgcolor: '#f0f0f0', lineHeight: 0 }}>
+              <Box component="img" src={imagePreview.imageUrl} alt={imagePreview.modelName}
+                sx={{ width: '100%', maxHeight: 340, objectFit: 'contain', display: 'block' }}
+                onError={e => { e.target.style.display = 'none' }} />
+              <IconButton size="small" onClick={() => setImagePreview(null)}
+                sx={{ position: 'absolute', top: 8, right: 8, bgcolor: 'rgba(0,0,0,0.45)', color: '#fff',
+                  '&:hover': { bgcolor: 'rgba(0,0,0,0.65)' } }}>
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </Box>
+            <Box sx={{ px: 2.5, py: 2 }}>
+              <Typography fontWeight={800} sx={{ fontSize: 18 }}>{imagePreview.modelName}</Typography>
+              <Typography color="primary" fontWeight={700} sx={{ fontSize: 17, mt: 0.5 }}>{fmt(imagePreview.sellingPrice)}</Typography>
+            </Box>
+          </>
+        )}
+      </Dialog>
     </Box>
   )
 }
