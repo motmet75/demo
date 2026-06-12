@@ -75,10 +75,39 @@ public class ShopOrderService {
 
     @Transactional(readOnly = true)
     public List<Model> getMenu(UUID tenantId, UUID companyId) {
-        return modelRepository.findAllByTenantIdAndCompanyId(tenantId, companyId)
-                .stream()
+        List<Model> all = modelRepository.findAllByTenantIdAndCompanyId(tenantId, companyId);
+        List<Model> active = all.stream()
                 .filter(m -> m.getSellingPrice() != null && Boolean.TRUE.equals(m.getIsActive()))
                 .toList();
+
+        // Collect IDs referenced in allowedSideIds of any active menu item
+        ObjectMapper om = new ObjectMapper();
+        Set<String> neededSideIds = new HashSet<>();
+        for (Model m : active) {
+            if (m.getAllowedSideIds() != null) {
+                try {
+                    List<String> ids = om.readValue(m.getAllowedSideIds(), new TypeReference<List<String>>() {});
+                    neededSideIds.addAll(ids);
+                } catch (Exception ignored) {}
+            }
+        }
+        if (neededSideIds.isEmpty()) return active;
+
+        // Include priced-but-inactive models that are used as side items
+        Set<String> activeIds = active.stream()
+                .map(m -> m.getId().toString())
+                .collect(java.util.stream.Collectors.toSet());
+        List<Model> sideOnly = all.stream()
+                .filter(m -> m.getSellingPrice() != null
+                        && !Boolean.TRUE.equals(m.getIsActive())
+                        && neededSideIds.contains(m.getId().toString())
+                        && !activeIds.contains(m.getId().toString()))
+                .toList();
+        if (sideOnly.isEmpty()) return active;
+
+        List<Model> result = new ArrayList<>(active);
+        result.addAll(sideOnly);
+        return result;
     }
 
     // ── Order creation ────────────────────────────────────────────────

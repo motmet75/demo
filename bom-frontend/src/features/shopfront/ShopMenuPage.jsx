@@ -582,6 +582,9 @@ export default function ShopMenuPage() {
             restoreCartFromOrder(data)
             setEditingOrderCode(data.orderCode)
             setCartOpen(true)
+            // Strip editOrder from URL so a refresh doesn't re-trigger the edit flow
+            const newSearch = tokenParam ? `?t=${encodeURIComponent(tokenParam)}` : ''
+            navigate(window.location.pathname + newSearch, { replace: true })
           })
           .catch(() => {})
       })
@@ -1617,16 +1620,7 @@ export default function ShopMenuPage() {
           order={trackingOrder}
           ctx={ctx}
           onEdit={handleEditOrder}
-          onOrderMore={() => {
-            if (trackingOrder?.orderCode) {
-              const tSuffix = tokenParam ? `?t=${encodeURIComponent(tokenParam)}` : ''
-              window.open(
-                window.location.origin + '/bom-inventory/shop/order/' + encodeURIComponent(trackingOrder.orderCode) + tSuffix,
-                '_blank'
-              )
-            }
-            setTrackingOrder(null)
-          }}
+          onOrderMore={() => setTrackingOrder(null)}
           onUpdated={setTrackingOrder}
         />
       )}
