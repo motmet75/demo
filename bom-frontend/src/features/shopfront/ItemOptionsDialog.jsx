@@ -158,6 +158,7 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
   if (!model) return null
 
   return (
+    <>
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
       <DialogTitle sx={{ pb: 1 }}>
         <Typography fontWeight={800} variant="h6">{model.modelName}</Typography>
@@ -354,5 +355,6 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
         </>
       )}
     </Dialog>
+    </>
   )
 }
