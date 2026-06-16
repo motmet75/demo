@@ -76,7 +76,10 @@ export default function CustomerPickupPage() {
           Order
         </Typography>
         <Typography sx={{ fontSize: 48, fontWeight: 900, lineHeight: 1, color: '#f59e0b', letterSpacing: -1 }}>
-          #{order.orderNumber ?? order.orderCode}
+          {order.orderNumber ? `#${order.orderNumber}` : '—'}
+        </Typography>
+        <Typography sx={{ fontSize: 12, color: '#64748b', mt: 0.5 }}>
+          {order.orderCode}
         </Typography>
         {order.tableName && (
           <Typography sx={{ fontSize: 16, color: '#fde68a', mt: 0.5 }}>
