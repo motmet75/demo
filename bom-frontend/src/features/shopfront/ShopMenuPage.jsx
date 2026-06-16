@@ -1,9 +1,7 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
-import Card from '@mui/material/Card'
-import CardMedia from '@mui/material/CardMedia'
 import Button from '@mui/material/Button'
 import Stack from '@mui/material/Stack'
 import Divider from '@mui/material/Divider'
@@ -29,7 +27,6 @@ import Alert from '@mui/material/Alert'
 import CircularProgress from '@mui/material/CircularProgress'
 import Chip from '@mui/material/Chip'
 import Badge from '@mui/material/Badge'
-import Collapse from '@mui/material/Collapse'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
@@ -40,6 +37,14 @@ import AddShoppingCartIcon from '@mui/icons-material/AddShoppingCart'
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import TableRestaurantIcon from '@mui/icons-material/TableRestaurant'
+import SearchIcon from '@mui/icons-material/Search'
+import GridViewIcon from '@mui/icons-material/GridView'
+import ViewListIcon from '@mui/icons-material/ViewList'
+import SupportAgentIcon from '@mui/icons-material/SupportAgent'
+import Radio from '@mui/material/Radio'
+import RadioGroup from '@mui/material/RadioGroup'
+import FormControlLabel from '@mui/material/FormControlLabel'
+import Snackbar from '@mui/material/Snackbar'
 import { resolveToken, fetchMenu, createOrder, fetchPublicMenuOptions,
          fetchActiveTableOrders, startCustomerEdit, cancelCustomerEdit,
          updatePublicOrderItems, fetchPublicOrder, fetchTokenSession,
@@ -87,56 +92,21 @@ function buildChildMap(items) {
 }
 
 const STATUS_CHIP_MAP = {
-  PENDING:   { label: 'Waiting Confirm', color: 'default' },
-  CONFIRMED: { label: 'Confirmed', color: 'success' },
-  PREPARING: { label: 'Preparing', color: 'warning' },
-  READY:     { label: 'Ready!',    color: 'info'    },
-  PICKED_UP: { label: 'Picked up', color: 'success' },
-  COMPLETED: { label: 'Done',      color: 'success' },
-  CANCELLED: { label: 'Cancelled', color: 'error'   },
+  PENDING:   { label: 'Chờ xác nhận', color: 'default' },
+  CONFIRMED: { label: 'Đã xác nhận',  color: 'success' },
+  PREPARING: { label: 'Đang chế biến', color: 'warning' },
+  READY:     { label: 'Sẵn sàng!',    color: 'info'    },
+  PICKED_UP: { label: 'Đã nhận',      color: 'success' },
+  COMPLETED: { label: 'Hoàn thành',   color: 'success' },
+  CANCELLED: { label: 'Đã huỷ',       color: 'error'   },
 }
 
-// Button shown in bottom bar / sidebar when session has orders
-function ShowOrdersButton({ session, onClick, fullWidth }) {
-  const orders   = session?.orders || []
-  const editing  = orders.some(o => o.customerEditing)
-  const count    = orders.length
-  return (
-    <Badge
-      badgeContent={editing ? '!' : null}
-      color="warning"
-      sx={{ '& .MuiBadge-badge': { fontSize: 11, fontWeight: 900 }, ...(fullWidth ? { width: '100%' } : {}) }}>
-      <Button
-        variant="outlined"
-        size="medium"
-        fullWidth={fullWidth}
-        startIcon={<ReceiptLongIcon />}
-        onClick={onClick}
-        sx={{
-          borderRadius: 2, fontWeight: 700, textTransform: 'none', flexShrink: 0,
-          borderColor: editing ? '#f59e0b' : undefined,
-          color: editing ? '#d97706' : undefined,
-          animation: editing ? 'pulse-border 1.6s infinite' : 'none',
-          '@keyframes pulse-border': {
-            '0%,100%': { boxShadow: '0 0 0 0 #f59e0b44' },
-            '50%':     { boxShadow: '0 0 0 6px #f59e0b00' },
-          },
-        }}>
-        {editing ? `✏ Editing · ${count}` : `Show Orders · ${count}`}
-      </Button>
-    </Badge>
-  )
-}
-
-// Compact order list shown inside the session dialog
 function SessionOrderList({ session, token, onEdit, onView }) {
-  const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
-  const [cancelTarget, setCancelTarget] = useState(null)   // order being cancelled
+  const [cancelTarget, setCancelTarget] = useState(null)
   const [cancelNote, setCancelNote]     = useState('')
   const [cancelling, setCancelling]     = useState(false)
   const [cancelError, setCancelError]   = useState('')
 
-  // hide cancelled orders — customers don't need to see them
   const orders = (session?.orders || []).filter(o => o.status !== 'CANCELLED')
 
   const doCancel = async () => {
@@ -144,21 +114,24 @@ function SessionOrderList({ session, token, onEdit, onView }) {
     setCancelling(true); setCancelError('')
     try {
       const { res, data } = await cancelPublicOrder(cancelTarget.orderCode, cancelNote)
-      if (!res.ok) { setCancelError(data?.error || 'Failed to cancel'); setCancelling(false); return }
+      if (!res.ok) { setCancelError(data?.error || 'Không thể huỷ'); setCancelling(false); return }
       setCancelTarget(null); setCancelNote('')
-    } catch { setCancelError('Network error') }
+    } catch { setCancelError('Lỗi mạng') }
     setCancelling(false)
   }
 
   if (!orders.length) return (
-    <Box sx={{ textAlign: 'center', py: 4, color: 'text.secondary' }}>
-      <Typography>No orders yet in this session.</Typography>
+    <Box sx={{ textAlign: 'center', py: 6, color: 'text.secondary' }}>
+      <ReceiptLongIcon sx={{ fontSize: 48, opacity: 0.2, mb: 1 }} />
+      <Typography>Chưa có đơn hàng nào</Typography>
     </Box>
   )
 
+  const grandTotal = orders.reduce((s, o) => s + Number(o.totalAmount || 0), 0)
+
   return (
     <>
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pb: 2 }}>
         {orders.map((order) => {
           const status    = order.status || 'PENDING'
           const chip      = STATUS_CHIP_MAP[status] || STATUS_CHIP_MAP.PENDING
@@ -167,88 +140,67 @@ function SessionOrderList({ session, token, onEdit, onView }) {
           const isPaid    = order.paymentStatus === 'PAID'
           const displayNum = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
           const roots      = (order.items || []).filter(i => !i.parentItemId)
-
           return (
             <Box key={order.orderCode} sx={{
-              border: editing ? '2px solid #f59e0b' : '1px solid #e2e8f0',
-              borderRadius: 2, overflow: 'hidden',
-              bgcolor: editing ? '#fffbeb' : '#fff',
-              animation: editing ? 'glow-edit 2s infinite' : 'none',
-              '@keyframes glow-edit': {
-                '0%,100%': { boxShadow: '0 0 0 3px #fde68a55' },
-                '50%':     { boxShadow: '0 0 0 6px #fde68a00' },
-              },
+              border: editing ? '2px solid #f59e0b' : '1px solid #e8e8e8',
+              borderRadius: 2.5, overflow: 'hidden', bgcolor: '#fff',
             }}>
-              {/* Header */}
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1.25,
-                bgcolor: editing ? '#fef3c7' : '#f8fafc' }}>
-                <Typography fontWeight={900} sx={{ fontSize: 20, minWidth: 38, color: editing ? '#b45309' : '#334155' }}>
+                bgcolor: editing ? '#fef3c7' : '#fafafa', borderBottom: '1px solid #f0f0f0' }}>
+                <Typography fontWeight={900} sx={{ fontSize: 18, color: editing ? '#b45309' : '#1a1a1a' }}>
                   {displayNum}
                 </Typography>
-                <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
-                  <Chip label={chip.label} color={chip.color} size="small" sx={{ fontWeight: 700, fontSize: 11 }} />
-                  {editing && (
-                    <Chip
-                      icon={<VisibilityIcon sx={{ fontSize: 13 }} />}
-                      label="Editing — finish or cancel"
-                      size="small"
-                      sx={{
-                        bgcolor: '#f59e0b', color: '#fff', fontWeight: 700, fontSize: 10,
-                        animation: 'blink-chip 1.4s infinite',
-                        '@keyframes blink-chip': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0.6 } },
-                      }}
-                    />
-                  )}
-                </Box>
-                <Typography fontWeight={800} color="primary" sx={{ fontSize: 14, flexShrink: 0 }}>
+                <Chip label={chip.label} color={chip.color} size="small" sx={{ fontWeight: 700, fontSize: 11 }} />
+                {editing && (
+                  <Chip label="Đang sửa" size="small"
+                    sx={{ bgcolor: '#f59e0b', color: '#fff', fontWeight: 700, fontSize: 10 }} />
+                )}
+                <Box sx={{ flex: 1 }} />
+                <Typography fontWeight={800} color="primary" sx={{ fontSize: 14 }}>
                   {fmt(order.totalAmount)}
                 </Typography>
               </Box>
 
-              {/* Item summary */}
               <Box sx={{ px: 2, py: 1 }}>
-                {roots.slice(0, 3).map((item) => (
-                  <Typography key={item.id} variant="caption" color="text.secondary" sx={{ display: 'block' }} noWrap>
-                    {item.quantity}× {item.modelName}
-                    {item.selectedOptions ? ` (${item.selectedOptions})` : ''}
-                  </Typography>
+                {roots.slice(0, 4).map((item) => (
+                  <Box key={item.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
+                    <Typography variant="caption" sx={{ color: '#ff5722', fontWeight: 700, flexShrink: 0 }}>
+                      ×{item.quantity}
+                    </Typography>
+                    <Typography variant="caption" sx={{ flex: 1, color: '#333' }} noWrap>
+                      {item.modelName}
+                    </Typography>
+                    <Chip label={chip.label} color={chip.color} size="small"
+                      sx={{ height: 16, fontSize: 10, fontWeight: 600 }} />
+                  </Box>
                 ))}
-                {roots.length > 3 && (
-                  <Typography variant="caption" color="text.secondary">+{roots.length - 3} more…</Typography>
+                {roots.length > 4 && (
+                  <Typography variant="caption" color="text.secondary">+{roots.length - 4} món khác…</Typography>
                 )}
               </Box>
 
-              {/* Actions */}
               <Box sx={{ px: 2, pb: 1.25, pt: 0.25, display: 'flex', gap: 1 }}>
                 {isPending && (
-                  editing ? (
-                    <Button variant="contained" size="small" color="warning"
-                      onClick={() => onEdit(order)}
-                      sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5, flex: 1 }}>
-                      ✏ Resume editing
-                    </Button>
-                  ) : (
-                    <Button variant="outlined" size="small"
-                      onClick={() => onEdit(order)}
-                      sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5, flex: 1 }}>
-                      Edit
-                    </Button>
-                  )
+                  <Button variant={editing ? 'contained' : 'outlined'} size="small"
+                    color={editing ? 'warning' : 'primary'}
+                    onClick={() => onEdit(order)}
+                    sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 20, flex: 1 }}>
+                    {editing ? '✏ Tiếp tục sửa' : 'Sửa đơn'}
+                  </Button>
                 )}
-                <Button variant="outlined" size="small"
-                  onClick={() => onView && onView(order)}
-                  sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5, flexShrink: 0 }}>
-                  View
+                <Button variant="outlined" size="small" onClick={() => onView && onView(order)}
+                  sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 20, flexShrink: 0 }}>
+                  Xem
                 </Button>
                 {isPending && !isPaid && (
                   <Button variant="outlined" size="small" color="error"
                     onClick={() => { setCancelTarget(order); setCancelNote(''); setCancelError('') }}
-                    sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 1.5, flexShrink: 0 }}>
-                    Cancel
+                    sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 20, flexShrink: 0 }}>
+                    Huỷ
                   </Button>
                 )}
-                {isPending && isPaid && (
-                  <Chip label="Paid ✓" color="success" size="small"
+                {isPaid && (
+                  <Chip label="Đã thanh toán ✓" color="success" size="small"
                     sx={{ fontWeight: 700, fontSize: 11, alignSelf: 'center' }} />
                 )}
               </Box>
@@ -257,29 +209,28 @@ function SessionOrderList({ session, token, onEdit, onView }) {
         })}
       </Box>
 
-      {/* Cancel confirmation dialog */}
+      {orders.length > 1 && (
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 1.5, borderTop: '1.5px solid #e0e0e0', mx: -2, px: 2 }}>
+          <Typography fontWeight={700} sx={{ color: '#555' }}>Cần thanh toán ({orders.length} đơn)</Typography>
+          <Typography fontWeight={900} color="primary" sx={{ fontSize: 17 }}>{fmt(grandTotal)}</Typography>
+        </Box>
+      )}
+
       <Dialog open={Boolean(cancelTarget)} onClose={() => !cancelling && setCancelTarget(null)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ pb: 1 }}>Cancel this order?</DialogTitle>
+        <DialogTitle sx={{ pb: 1 }}>Huỷ đơn này?</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Order <strong>{cancelTarget?.orderNumber ? `#${cancelTarget.orderNumber}` : cancelTarget?.orderCode}</strong> will
-            be cancelled. This cannot be undone.
+            Đơn <strong>{cancelTarget?.orderNumber ? `#${cancelTarget.orderNumber}` : cancelTarget?.orderCode}</strong> sẽ bị huỷ và không thể khôi phục.
           </Typography>
-          <TextField
-            fullWidth size="small" multiline rows={2}
-            label="Reason (optional)"
-            placeholder="e.g. changed my mind"
-            value={cancelNote}
-            onChange={e => setCancelNote(e.target.value)}
-            disabled={cancelling}
-          />
+          <TextField fullWidth size="small" multiline rows={2} label="Lý do (tuỳ chọn)"
+            value={cancelNote} onChange={e => setCancelNote(e.target.value)} disabled={cancelling} />
           {cancelError && <Alert severity="error" sx={{ mt: 1.5 }}>{cancelError}</Alert>}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setCancelTarget(null)} disabled={cancelling}>Keep order</Button>
+          <Button onClick={() => setCancelTarget(null)} disabled={cancelling}>Giữ đơn</Button>
           <Button variant="contained" color="error" onClick={doCancel} disabled={cancelling}
-            sx={{ fontWeight: 700, minWidth: 120 }}>
-            {cancelling ? <CircularProgress size={18} color="inherit" /> : 'Yes, Cancel'}
+            sx={{ fontWeight: 700, minWidth: 120, borderRadius: 20 }}>
+            {cancelling ? <CircularProgress size={18} color="inherit" /> : 'Xác nhận huỷ'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -291,7 +242,6 @@ function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpda
   const [order, setOrder] = React.useState(initialOrder)
   const fmtLocal = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 
-  // Poll for updates
   React.useEffect(() => {
     if (!order?.orderCode) return
     const id = setInterval(() => {
@@ -309,20 +259,14 @@ function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpda
   const isDone     = status === 'COMPLETED' || status === 'PICKED_UP'
   const isCancelled = status === 'CANCELLED'
   const displayNum = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
-
   const allItems   = order.items || []
   const childMap   = buildChildMap(allItems)
   const rootItems  = allItems.filter(it => !it.parentItemId)
 
   return (
-    <Box sx={{
-      position: 'fixed', inset: 0, zIndex: 2000,
-      bgcolor: '#fff', display: 'flex', flexDirection: 'column', overflow: 'hidden',
-    }}>
-      {/* Hero */}
+    <Box sx={{ position: 'fixed', inset: 0, zIndex: 2000, bgcolor: '#fff', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <Box sx={{ bgcolor: style.bg, textAlign: 'center', px: 2, pt: 5, pb: 3, flexShrink: 0 }}>
-        <Typography sx={{ fontSize: { xs: 88, md: 110 }, fontWeight: 900, lineHeight: 1,
-          color: style.color, letterSpacing: -4 }}>
+        <Typography sx={{ fontSize: { xs: 72, md: 96 }, fontWeight: 900, lineHeight: 1, color: style.color, letterSpacing: -4 }}>
           {displayNum}
         </Typography>
         <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, mt: 1.5, px: 2.5, py: 0.75,
@@ -334,16 +278,13 @@ function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpda
           )}
           <Typography fontWeight={700} sx={{ color: style.color, fontSize: 15 }}>{style.label}</Typography>
         </Box>
-
-        {/* Edit lock indicator */}
         {order.customerEditing && (
           <Box sx={{ mt: 1 }}>
-            <Chip label="✏ Editing in progress…" size="small" color="warning" sx={{ fontWeight: 700 }} />
+            <Chip label="✏ Đang sửa đơn…" size="small" color="warning" sx={{ fontWeight: 700 }} />
           </Box>
         )}
       </Box>
 
-      {/* Step bar */}
       {!isCancelled && (
         <Box sx={{ borderTop: '1px solid #f0f0f0', borderBottom: '1px solid #f0f0f0', px: 1.5, py: 1.25, flexShrink: 0 }}>
           <Box sx={{ display: 'flex', alignItems: 'flex-start', maxWidth: 520, mx: 'auto' }}>
@@ -367,8 +308,7 @@ function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpda
                     </Typography>
                   </Box>
                   {idx < TRACKING_STEPS.length - 1 && (
-                    <Box sx={{ height: 2, flex: 1, mt: '13px', mb: 'auto',
-                      bgcolor: idx < activeIdx ? '#a5d6a7' : '#eee', borderRadius: 2 }} />
+                    <Box sx={{ height: 2, flex: 1, mt: '13px', mb: 'auto', bgcolor: idx < activeIdx ? '#a5d6a7' : '#eee', borderRadius: 2 }} />
                   )}
                 </React.Fragment>
               )
@@ -377,16 +317,13 @@ function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpda
         </Box>
       )}
 
-      {/* Items list */}
       <Box sx={{ flex: 1, overflowY: 'auto', px: { xs: 2, md: 4 }, py: 1.5 }}>
         {rootItems.map((item, idx) => {
           const children = childMap[String(item.id)] || []
           return (
             <Box key={item.id || idx} sx={{ mb: 1, pb: 1, borderBottom: '1px solid #f0f0f0' }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <Typography variant="body2" fontWeight={700}>
-                  {Number(item.quantity)}× {item.modelName}
-                </Typography>
+                <Typography variant="body2" fontWeight={700}>{Number(item.quantity)}× {item.modelName}</Typography>
                 <Typography variant="body2" color="primary" fontWeight={700}>{fmtLocal(item.lineTotal)}</Typography>
               </Box>
               {item.selectedOptions && (
@@ -412,42 +349,32 @@ function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpda
           )
         })}
         <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 0.5 }}>
-          <Typography fontWeight={700}>Total</Typography>
+          <Typography fontWeight={700}>Tổng cộng</Typography>
           <Typography fontWeight={900} color="primary">{fmtLocal(order.totalAmount)}</Typography>
         </Box>
       </Box>
 
-      {/* Action buttons */}
-      <Box sx={{ px: 2, pb: 3, pt: 1.5, display: 'flex', flexDirection: 'column', gap: 1, flexShrink: 0,
-        borderTop: '1px solid #f0f0f0' }}>
+      <Box sx={{ px: 2, pb: 3, pt: 1.5, display: 'flex', flexDirection: 'column', gap: 1, flexShrink: 0, borderTop: '1px solid #f0f0f0' }}>
         {isPending && !order.customerEditing && (
-          <Button variant="outlined" fullWidth startIcon={<EditNoteIcon />}
-            onClick={() => onEdit(order)}
-            sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none', borderColor: '#f59e0b', color: '#b45309',
-              '&:hover': { bgcolor: '#fffbeb', borderColor: '#f59e0b' } }}>
-            Edit My Order
+          <Button variant="outlined" fullWidth startIcon={<EditNoteIcon />} onClick={() => onEdit(order)}
+            sx={{ borderRadius: 20, fontWeight: 700, textTransform: 'none', borderColor: '#f59e0b', color: '#b45309' }}>
+            Sửa đơn
           </Button>
         )}
-        {isPending && order.customerEditing && (
-          <Typography variant="caption" color="warning.main" textAlign="center" fontWeight={600}>
-            Your order is locked for editing — submit changes from the menu
-          </Typography>
-        )}
         {!isDone && !isCancelled && (
-          <Button variant="outlined" fullWidth startIcon={<AddShoppingCartIcon />}
-            onClick={onOrderMore}
-            sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none' }}>
-            {ctx?.tableId ? 'Order More for This Table' : 'Order Again'}
+          <Button variant="outlined" fullWidth startIcon={<AddShoppingCartIcon />} onClick={onOrderMore}
+            sx={{ borderRadius: 20, fontWeight: 700, textTransform: 'none' }}>
+            {ctx?.tableId ? 'Gọi thêm cho bàn này' : 'Đặt thêm'}
           </Button>
         )}
         {(isDone || isCancelled) && (
           <Button variant="contained" fullWidth onClick={onOrderMore}
-            sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none' }}>
-            New Order
+            sx={{ borderRadius: 20, fontWeight: 700, textTransform: 'none', bgcolor: '#ff5722', '&:hover': { bgcolor: '#e64a19' } }}>
+            Đặt đơn mới
           </Button>
         )}
         <Typography variant="caption" color="text.disabled" textAlign="center">
-          {order.orderCode} · auto-refreshes every 5s
+          {order.orderCode} · tự động cập nhật mỗi 5 giây
         </Typography>
       </Box>
     </Box>
@@ -500,27 +427,33 @@ export default function ShopMenuPage() {
   const [cartOpen, setCartOpen]             = useState(false)
   const [submitting, setSubmitting]         = useState(false)
   const [placedOrder, setPlacedOrder]       = useState(null)
-  const [trackingOrder, setTrackingOrder]   = useState(null) // inline post-order tracking
-  const [editingOrderCode, setEditingOrderCode] = useState(null) // order being edited
-  const [tableOrders, setTableOrders]       = useState(null) // occupied table dialog
-  const [tokenSession, setTokenSession]     = useState(null) // orders for this token
+  const [trackingOrder, setTrackingOrder]   = useState(null)
+  const [editingOrderCode, setEditingOrderCode] = useState(null)
+  const [tableOrders, setTableOrders]       = useState(null)
+  const [tokenSession, setTokenSession]     = useState(null)
   const [sessionOpen, setSessionOpen]       = useState(false)
   const [shopConfig, setShopConfig]         = useState({ prepaidMenu: false, bankBin: '', bankAccountNumber: '', bankAccountName: '' })
-  const [prepaidQrOrder, setPrepaidQrOrder] = useState(null) // show payment QR after placing order
-  const [imagePreview, setImagePreview]     = useState(null) // model whose image is being previewed
+  const [prepaidQrOrder, setPrepaidQrOrder] = useState(null)
+  const [imagePreview, setImagePreview]     = useState(null)
   const [form, setForm] = useState({
     fulfillmentType: 'PICKUP', customerName: '', customerPhone: '',
     deliveryAddress: '', paymentMethod: 'CASH',
   })
 
-  // cart: { [uid]: { uid, modelId, qty, selectedOptions: string|null, itemNotes: string|null,
-  //                  sideItems: [{uid, modelId, modelName, qty}] } }
+  // ── New UI state ───────────────────────────────────────────────────────
+  const [searchQuery, setSearchQuery]         = useState('')
+  const [gridView, setGridView]               = useState(false)
+  const [activeCategory, setActiveCategory]   = useState(null)
+  const [callStaffOpen, setCallStaffOpen]     = useState(false)
+  const [callStaffReason, setCallStaffReason] = useState('payment')
+  const [callStaffNote, setCallStaffNote]     = useState('')
+  const [callStaffDone, setCallStaffDone]     = useState(false)
+  const headerRef    = useRef(null)
+  const [headerH, setHeaderH] = useState(165)
+  const categoryRefs = useRef({})
+
   const [cart, setCart] = useState({})
-
-  // sideForm: { [parentUid]: { model: menuItem|null, qty: number } }
   const [sideForm, setSideForm] = useState({})
-
-  // optionsTarget: for initial add when item has configurable options
   const [optionsTarget, setOptionsTarget] = useState(null)
 
   // ── Data loading ──────────────────────────────────────────────────────
@@ -528,23 +461,22 @@ export default function ShopMenuPage() {
     if (!tokenParam) return
     resolveToken(tokenParam)
       .then(({ res, data }) => {
-        if (!res.ok) { setError('Invalid or expired QR code.'); setLoading(false); return }
+        if (!res.ok) { setError('QR code không hợp lệ hoặc đã hết hạn.'); setLoading(false); return }
         const resolved = { tenantId: data.tenantId, companyId: data.companyId, tableId: data.tableId }
         setCtx(resolved)
         if (resolved.tableId) {
           setForm(f => ({ ...f, fulfillmentType: 'DINE_IN' }))
-          // Check if this table already has active orders (group ordering scenario)
           fetchActiveTableOrders(resolved.tableId, resolved.tenantId, resolved.companyId)
             .then(({ data: orders }) => { if (Array.isArray(orders) && orders.length > 0) setTableOrders(orders) })
             .catch(() => {})
         }
       })
-      .catch(() => { setError('Failed to read QR code.'); setLoading(false) })
+      .catch(() => { setError('Không đọc được QR code.'); setLoading(false) })
   }, [tokenParam])
 
   useEffect(() => {
     if (!ctx) return
-    if (!ctx.tenantId || !ctx.companyId) { setError('Missing shop context.'); setLoading(false); return }
+    if (!ctx.tenantId || !ctx.companyId) { setError('Thiếu thông tin cửa hàng.'); setLoading(false); return }
     Promise.all([
       fetchMenu(ctx.tenantId, ctx.companyId),
       fetchPublicMenuOptions(ctx.tenantId, ctx.companyId),
@@ -559,10 +491,9 @@ export default function ShopMenuPage() {
       setOptionsByModel(byModel)
       if (cfgRes.data) setShopConfig(cfgRes.data)
       setLoading(false)
-    }).catch(() => { setError('Failed to load menu.'); setLoading(false) })
+    }).catch(() => { setError('Không tải được thực đơn.'); setLoading(false) })
   }, [ctx])
 
-  // ── Poll token session orders ─────────────────────────────────────────
   const loadTokenSession = useCallback(() => {
     if (!tokenParam) return
     fetchTokenSession(tokenParam)
@@ -577,7 +508,6 @@ export default function ShopMenuPage() {
     return () => clearInterval(id)
   }, [loadTokenSession, tokenParam])
 
-  // ── Auto-start edit when opened via tracking page "Edit Order" button ──
   useEffect(() => {
     if (!editOrderCode || loading) return
     fetchPublicOrder(editOrderCode)
@@ -588,7 +518,6 @@ export default function ShopMenuPage() {
             restoreCartFromOrder(data)
             setEditingOrderCode(data.orderCode)
             setCartOpen(true)
-            // Strip editOrder from URL so a refresh doesn't re-trigger the edit flow
             const newSearch = tokenParam ? `?t=${encodeURIComponent(tokenParam)}` : ''
             navigate(window.location.pathname + newSearch, { replace: true })
           })
@@ -597,6 +526,15 @@ export default function ShopMenuPage() {
       .catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editOrderCode, loading])
+
+  // ── Header measurement ────────────────────────────────────────────────
+  useEffect(() => {
+    const el = headerRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => setHeaderH(el.offsetHeight))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   // ── Derived values ────────────────────────────────────────────────────
   const cartEntries = Object.values(cart)
@@ -610,13 +548,11 @@ export default function ShopMenuPage() {
       let choiceDefs
       try { choiceDefs = JSON.parse(grp.choices) } catch { return sum }
       const cur = opts[grp.groupName]
-      // qty-map format: {label: qty} — used for priced topping choices
       if (cur && typeof cur === 'object' && !Array.isArray(cur)) {
         const priceMap = {}
         choiceDefs.forEach(c => { if (typeof c === 'object') priceMap[c.label] = Number(c.price || 0) })
         return sum + Object.entries(cur).reduce((s, [label, qty]) => s + (priceMap[label] || 0) * qty, 0)
       }
-      // legacy string / array format
       const selArr = Array.isArray(cur) ? cur : (cur ? [cur] : [])
       return sum + choiceDefs
         .filter(c => typeof c === 'object' && selArr.includes(c.label))
@@ -639,6 +575,18 @@ export default function ShopMenuPage() {
 
   const getModelQty = (modelId) =>
     cartEntries.reduce((n, e) => n + (e.modelId === modelId ? e.qty : 0), 0)
+
+  const grouped = menu.reduce((g, m) => {
+    const cat = m.category || 'Menu'
+    if (!g[cat]) g[cat] = []
+    g[cat].push(m)
+    return g
+  }, {})
+
+  const categories    = Object.keys(grouped)
+  const filteredItems = searchQuery.trim()
+    ? menu.filter(m => m.modelName.toLowerCase().includes(searchQuery.toLowerCase()))
+    : []
 
   // ── Cart mutations ────────────────────────────────────────────────────
   const createEntry = (model, qty, selectedOptions, itemNotes, rawSides = []) => {
@@ -702,14 +650,8 @@ export default function ShopMenuPage() {
     const id = genUid()
     setCart(prev => {
       const parent = prev[parentUid]; if (!parent) return prev
-      return {
-        ...prev,
-        [parentUid]: {
-          ...parent,
-          sideItems: [...(parent.sideItems || []),
-            { uid: id, modelId: sf.model.id, modelName: sf.model.modelName, qty: sf.qty || 1 }],
-        },
-      }
+      return { ...prev, [parentUid]: { ...parent, sideItems: [...(parent.sideItems || []),
+        { uid: id, modelId: sf.model.id, modelName: sf.model.modelName, qty: sf.qty || 1 }] } }
     })
     setSideForm(prev => ({ ...prev, [parentUid]: {} }))
   }
@@ -717,15 +659,10 @@ export default function ShopMenuPage() {
   const changeSideQty = (parentUid, sideUid, delta) =>
     setCart(prev => {
       const parent = prev[parentUid]; if (!parent) return prev
-      return {
-        ...prev,
-        [parentUid]: {
-          ...parent,
-          sideItems: parent.sideItems
-            .map(si => si.uid === sideUid ? { ...si, qty: Math.max(0, (si.qty || 1) + delta) } : si)
-            .filter(si => si.qty > 0),
-        },
-      }
+      return { ...prev, [parentUid]: { ...parent,
+        sideItems: parent.sideItems
+          .map(si => si.uid === sideUid ? { ...si, qty: Math.max(0, (si.qty || 1) + delta) } : si)
+          .filter(si => si.qty > 0) } }
     })
 
   const removeSide = (parentUid, sideUid) =>
@@ -761,7 +698,6 @@ export default function ShopMenuPage() {
     setOptionsTarget(null)
   }
 
-  // ── Restore cart from an existing order (for edit flow) ──────────────
   const restoreCartFromOrder = (order) => {
     const allItems = order.items || []
     const children = {}
@@ -783,52 +719,36 @@ export default function ShopMenuPage() {
       newCart[uid] = { uid, modelId: it.modelId, qty: Number(it.quantity) || 1,
         selectedOptions: it.selectedOptions || null, itemNotes: it.itemNotes || null, sideItems }
     })
-    setCart(newCart)
-    setSideForm({})
+    setCart(newCart); setSideForm({})
   }
 
-  // ── Build item request array from cart ────────────────────────────────
   const buildItemRequests = () => cartEntries.map(entry => ({
-    modelId: entry.modelId,
-    quantity: entry.qty,
-    selectedOptions: entry.selectedOptions || null,
-    itemNotes: entry.itemNotes || null,
-    sideItems: (entry.sideItems || []).map(side => ({
-      modelId: side.modelId, quantity: side.qty || 1,
-      selectedOptions: null, itemNotes: null, sideItems: [],
-    })),
+    modelId: entry.modelId, quantity: entry.qty,
+    selectedOptions: entry.selectedOptions || null, itemNotes: entry.itemNotes || null,
+    sideItems: (entry.sideItems || []).map(side => ({ modelId: side.modelId, quantity: side.qty || 1,
+      selectedOptions: null, itemNotes: null, sideItems: [] })),
   }))
 
-  // ── Order submission ──────────────────────────────────────────────────
   const handlePlaceOrder = async () => {
     if (!itemCount) return
     setSubmitting(true); setError('')
     const items = buildItemRequests()
     try {
       if (editingOrderCode) {
-        // Update existing order
         const { res, data } = await updatePublicOrderItems(editingOrderCode, items)
-        if (!res.ok) { setError(data?.message || data?.error || 'Failed to update order'); setSubmitting(false); return }
+        if (!res.ok) { setError(data?.message || data?.error || 'Không thể cập nhật đơn'); setSubmitting(false); return }
         setCart({}); setSideForm({}); setCheckout(false); setCartOpen(false)
-        setEditingOrderCode(null)
-        setTrackingOrder(data)
+        setEditingOrderCode(null); setTrackingOrder(data)
       } else {
-        // New order
         const body = {
-          fulfillmentType: form.fulfillmentType,
-          tableId: ctx.tableId || null,
-          customerName: form.customerName || null,
-          customerPhone: form.customerPhone || null,
+          fulfillmentType: form.fulfillmentType, tableId: ctx.tableId || null,
+          customerName: form.customerName || null, customerPhone: form.customerPhone || null,
           deliveryAddress: form.fulfillmentType === 'DELIVERY' ? form.deliveryAddress : null,
-          deliveryFee: null,
-          paymentMethod: form.paymentMethod,
-          notes: notes || null,
-          manualOrderNumber: seqParam ? Number(seqParam) : null,
-          token: tokenParam || null,
-          items,
+          deliveryFee: null, paymentMethod: form.paymentMethod, notes: notes || null,
+          manualOrderNumber: seqParam ? Number(seqParam) : null, token: tokenParam || null, items,
         }
         const { res, data } = await createOrder(ctx.tenantId, ctx.companyId, body)
-        if (!res.ok) { setError(data?.message || 'Failed to place order'); setSubmitting(false); return }
+        if (!res.ok) { setError(data?.message || 'Không thể đặt đơn'); setSubmitting(false); return }
         setCart({}); setSideForm({}); setNotes(''); setCheckout(false); setCartOpen(false)
         if (shopConfig.prepaidMenu && shopConfig.bankBin && shopConfig.bankAccountNumber) {
           setPrepaidQrOrder(data)
@@ -836,10 +756,9 @@ export default function ShopMenuPage() {
           setTrackingOrder(data)
         }
       }
-    } catch { setError('Network error') } finally { setSubmitting(false) }
+    } catch { setError('Lỗi mạng') } finally { setSubmitting(false) }
   }
 
-  // ── Customer edit: lock the order and restore cart ────────────────────
   const handleEditOrder = async (order) => {
     try {
       await startCustomerEdit(order.orderCode)
@@ -847,9 +766,7 @@ export default function ShopMenuPage() {
       setEditingOrderCode(order.orderCode)
       setTrackingOrder(null)
       setCartOpen(true)
-    } catch (e) {
-      setError('Cannot edit order right now')
-    }
+    } catch { setError('Không thể sửa đơn lúc này') }
   }
 
   const handleCancelEdit = async () => {
@@ -857,20 +774,30 @@ export default function ShopMenuPage() {
     try { await cancelCustomerEdit(editingOrderCode) } catch {}
     setCart({}); setSideForm({})
     setEditingOrderCode(null)
-    // Reload the order to show current status
     fetchPublicOrder(editingOrderCode)
       .then(({ data }) => { if (data?.orderCode) setTrackingOrder(data) })
       .catch(() => {})
   }
 
-  const grouped = menu.reduce((g, m) => {
-    const cat = m.category || 'Menu'
-    if (!g[cat]) g[cat] = []
-    g[cat].push(m)
-    return g
-  }, {})
+  const scrollToCategory = (cat) => {
+    setActiveCategory(cat)
+    setSearchQuery('')
+    setTimeout(() => {
+      const el = categoryRefs.current[cat]
+      if (!el) return
+      const top = el.getBoundingClientRect().top + window.pageYOffset - headerH - 4
+      window.scrollTo({ top, behavior: 'smooth' })
+    }, 50)
+  }
 
-  // ── Cart entry rows (used in both sidebar and mobile sheet) ───────────
+  const handleCallStaff = () => {
+    setCallStaffOpen(false)
+    setCallStaffReason('payment')
+    setCallStaffNote('')
+    setCallStaffDone(true)
+  }
+
+  // ── CartEntryList (closure for handler access) ────────────────────────
   const CartEntryList = () => (
     <Stack spacing={0.75}>
       {cartEntries.map((entry, idx) => {
@@ -891,35 +818,24 @@ export default function ShopMenuPage() {
 
         return (
           <Box key={entry.uid} sx={{ border: '1.5px solid #e2e8f0', borderRadius: 2, overflow: 'hidden' }}>
-
-            {/* ── Main item header ── */}
             <Box sx={{ bgcolor: '#f8faff', px: 1.5, pt: 1, pb: 0.75 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
-                <Typography sx={{ color: '#94a3b8', fontWeight: 700, fontSize: 13, flexShrink: 0 }}>
-                  {idx + 1}.
-                </Typography>
-                {/* Name + unit price stacked */}
+                <Typography sx={{ color: '#94a3b8', fontWeight: 700, fontSize: 13, flexShrink: 0 }}>{idx + 1}.</Typography>
                 <Box sx={{ flex: 1, minWidth: 80, overflow: 'hidden' }}>
                   <Typography fontWeight={700} sx={{ fontSize: 16 }} noWrap>{m.modelName}</Typography>
-                  <Typography sx={{ color: '#64748b', fontSize: 13 }}>
-                    {fmt(unitPrice)} / ly
-                  </Typography>
+                  <Typography sx={{ color: '#64748b', fontSize: 13 }}>{fmt(unitPrice)} / ly</Typography>
                 </Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                   <IconButton onClick={() => decrementEntry(entry.uid)} sx={{ p: 0.75 }}>
                     <RemoveIcon sx={{ fontSize: 20 }} />
                   </IconButton>
-                  <Typography fontWeight={800} sx={{ minWidth: 30, textAlign: 'center', fontSize: 18 }}>
-                    {entry.qty}
-                  </Typography>
+                  <Typography fontWeight={800} sx={{ minWidth: 30, textAlign: 'center', fontSize: 18 }}>{entry.qty}</Typography>
                   <IconButton onClick={() => incrementEntry(entry.uid)}
-                    sx={{ p: 0.75, bgcolor: '#1976d2', color: '#fff', borderRadius: 1, '&:hover': { bgcolor: '#1565c0' } }}>
+                    sx={{ p: 0.75, bgcolor: '#ff5722', color: '#fff', borderRadius: 1, '&:hover': { bgcolor: '#e64a19' } }}>
                     <AddIcon sx={{ fontSize: 20 }} />
                   </IconButton>
                 </Box>
-                {/* Main item line total (sides shown separately below) */}
-                <Typography color="primary" fontWeight={800}
-                  sx={{ minWidth: 74, textAlign: 'right', fontSize: 15 }}>
+                <Typography color="primary" fontWeight={800} sx={{ minWidth: 74, textAlign: 'right', fontSize: 15 }}>
                   {fmt(mainTotal)}
                 </Typography>
                 <IconButton color="error" onClick={() => deleteEntry(entry.uid)} sx={{ p: 0.5 }}>
@@ -927,7 +843,6 @@ export default function ShopMenuPage() {
                 </IconButton>
               </Box>
 
-              {/* Inline option chips / priced steppers */}
               {groups.map(grp => {
                 let choices = []
                 try { choices = JSON.parse(grp.choices) } catch {}
@@ -941,7 +856,6 @@ export default function ShopMenuPage() {
                       {grp.groupName}{grp.required ? ' *' : ''}{grp.isFree ? ' (free)' : ''}
                     </Typography>
                     {priced ? (
-                      /* Priced topping choices — qty stepper rows */
                       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, mt: 0.5 }}>
                         {choices.map(choice => {
                           const c    = typeof choice === 'object' ? choice : { label: String(choice), price: 0 }
@@ -950,10 +864,8 @@ export default function ShopMenuPage() {
                           const tag  = c.price > 0 ? ` +${Number(c.price).toLocaleString('vi-VN')}đ` : ''
                           return (
                             <Box key={c.label} sx={{
-                              display: 'flex', alignItems: 'center', gap: 1,
-                              px: 1, py: 0.5,
-                              bgcolor: cQty > 0 ? '#f0f0ff' : '#f8faff',
-                              borderRadius: 1.5,
+                              display: 'flex', alignItems: 'center', gap: 1, px: 1, py: 0.5,
+                              bgcolor: cQty > 0 ? '#f0f0ff' : '#f8faff', borderRadius: 1.5,
                               border: `1px solid ${cQty > 0 ? '#6366f1' : '#e2e8f0'}`,
                             }}>
                               <Typography sx={{ flex: 1, fontSize: 13, fontWeight: cQty > 0 ? 700 : 400, color: cQty > 0 ? '#1e293b' : '#64748b' }} noWrap>
@@ -961,7 +873,7 @@ export default function ShopMenuPage() {
                               </Typography>
                               {cQty === 0 ? (
                                 <IconButton size="small" onClick={() => setOptionQty(entry.uid, grp.groupName, c.label, 1)}
-                                  sx={{ p: 0.5, bgcolor: '#6366f1', color: '#fff', borderRadius: 1, '&:hover': { bgcolor: '#4f46e5' } }}>
+                                  sx={{ p: 0.5, bgcolor: '#6366f1', color: '#fff', borderRadius: 1 }}>
                                   <AddIcon sx={{ fontSize: 18 }} />
                                 </IconButton>
                               ) : (
@@ -974,7 +886,7 @@ export default function ShopMenuPage() {
                                     {cQty}
                                   </Typography>
                                   <IconButton size="small" onClick={() => setOptionQty(entry.uid, grp.groupName, c.label, 1)}
-                                    sx={{ p: 0.5, bgcolor: '#6366f1', color: '#fff', borderRadius: 1, '&:hover': { bgcolor: '#4f46e5' } }}>
+                                    sx={{ p: 0.5, bgcolor: '#6366f1', color: '#fff', borderRadius: 1 }}>
                                     <AddIcon sx={{ fontSize: 18 }} />
                                   </IconButton>
                                 </Box>
@@ -984,7 +896,6 @@ export default function ShopMenuPage() {
                         })}
                       </Box>
                     ) : (
-                      /* Non-priced choices — chips */
                       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 0.5 }}>
                         {choices.map(choice => {
                           const c      = typeof choice === 'object' ? choice : { label: String(choice), price: 0 }
@@ -993,14 +904,9 @@ export default function ShopMenuPage() {
                           return (
                             <Chip key={c.label} label={c.label} size="small"
                               onClick={() => toggleOption(entry.uid, grp.groupName, c.label, grp.multiSelect)}
-                              sx={{
-                                height: 30, fontSize: 13, cursor: 'pointer',
-                                bgcolor: active ? '#1976d2' : '#fff',
-                                color: active ? '#fff' : '#555',
-                                border: `1px solid ${active ? '#1976d2' : '#ddd'}`,
-                                fontWeight: active ? 700 : 400,
-                                '&:hover': { bgcolor: active ? '#1565c0' : '#f0f4ff' },
-                              }} />
+                              sx={{ height: 30, fontSize: 13, cursor: 'pointer',
+                                bgcolor: active ? '#ff5722' : '#fff', color: active ? '#fff' : '#555',
+                                border: `1px solid ${active ? '#ff5722' : '#ddd'}`, fontWeight: active ? 700 : 400 }} />
                           )
                         })}
                       </Box>
@@ -1009,392 +915,518 @@ export default function ShopMenuPage() {
                 )
               })}
 
-              {/* Inline item notes */}
               <TextField size="small" variant="standard" fullWidth
-                placeholder="Item note (e.g. no sugar, extra spicy…)"
+                placeholder="Ghi chú món (không đường, thêm đá…)"
                 value={entry.itemNotes || ''}
                 onChange={e => setEntryNotes(entry.uid, e.target.value)}
-                InputProps={{
-                  disableUnderline: false,
+                InputProps={{ disableUnderline: false,
                   startAdornment: <InputAdornment position="start"><NoteAltIcon sx={{ fontSize: 16, color: '#ccc' }} /></InputAdornment>,
-                  sx: { fontSize: 14 },
-                }}
+                  sx: { fontSize: 14 } }}
                 sx={{ mt: 0.5 }}
               />
             </Box>
 
-            {/* ── Side items tree ── */}
-            <Box sx={{ bgcolor: '#f0f4ff', borderTop: '1px solid #e2e8f0' }}>
-              <Box sx={{ ml: 1.5, borderLeft: '2px solid #c7d2fe' }}>
-
-                {/* Existing side items */}
-                {sides.map((si, siIdx) => {
-                  const sm = menu.find(x => x.id === si.modelId)
-                  const perCup         = si.qty || 1
-                  const effectiveQty   = perCup * entry.qty
-                  const effectivePrice = sm ? effectiveQty * Number(sm.sellingPrice || 0) : 0
-                  return (
-                    <Box key={si.uid} sx={{ px: 1, py: 1, borderBottom: '1px solid #e8eaf6' }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        {/* Thumbnail */}
-                        <Box sx={{
-                          width: 52, height: 52, flexShrink: 0, borderRadius: 1.5,
-                          bgcolor: '#e8eaf6', overflow: 'hidden',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        }}>
-                          {sm?.imageUrl ? (
-                            <Box component="img" src={sm.imageUrl} alt={si.modelName}
+            {(sides.length > 0 || canAddSides) && (
+              <Box sx={{ bgcolor: '#f0f4ff', borderTop: '1px solid #e2e8f0' }}>
+                <Box sx={{ ml: 1.5, borderLeft: '2px solid #c7d2fe' }}>
+                  {sides.map((si, siIdx) => {
+                    const sm = menu.find(x => x.id === si.modelId)
+                    const perCup = si.qty || 1; const effectiveQty = perCup * entry.qty
+                    const effectivePrice = sm ? effectiveQty * Number(sm.sellingPrice || 0) : 0
+                    return (
+                      <Box key={si.uid} sx={{ px: 1, py: 1, borderBottom: '1px solid #e8eaf6' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Box sx={{ width: 52, height: 52, flexShrink: 0, borderRadius: 1.5, bgcolor: '#e8eaf6', overflow: 'hidden',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            {sm?.imageUrl ? <Box component="img" src={sm.imageUrl} alt={si.modelName}
                               sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
                               onError={e => { e.target.style.display = 'none' }} />
-                          ) : (
-                            <Typography sx={{ fontSize: 24, lineHeight: 1 }}>🧋</Typography>
-                          )}
-                        </Box>
-                        {/* Name + price */}
-                        <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Typography fontWeight={700} sx={{ fontSize: 14, color: '#334155' }} noWrap>
-                            {si.modelName}
-                          </Typography>
-                          <Typography sx={{ color: '#6366f1', fontSize: 13, fontWeight: 700 }}>
-                            {sm ? fmt(effectivePrice) : ''}
-                          </Typography>
-                        </Box>
-                        {/* Stepper — shows total quantity (perCup × parentQty) */}
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
-                          <IconButton onClick={() => changeSideQty(entry.uid, si.uid, -1)}
-                            sx={{ p: 0.75, color: '#94a3b8', bgcolor: '#f1f5f9', borderRadius: 1 }}>
-                            <RemoveIcon sx={{ fontSize: 20 }} />
+                              : <Typography sx={{ fontSize: 24 }}>🧋</Typography>}
+                          </Box>
+                          <Box sx={{ flex: 1, minWidth: 0 }}>
+                            <Typography fontWeight={700} sx={{ fontSize: 14 }} noWrap>{si.modelName}</Typography>
+                            <Typography sx={{ color: '#6366f1', fontSize: 13, fontWeight: 700 }}>{sm ? fmt(effectivePrice) : ''}</Typography>
+                          </Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+                            <IconButton onClick={() => changeSideQty(entry.uid, si.uid, -1)}
+                              sx={{ p: 0.75, color: '#94a3b8', bgcolor: '#f1f5f9', borderRadius: 1 }}>
+                              <RemoveIcon sx={{ fontSize: 20 }} />
+                            </IconButton>
+                            <Typography fontWeight={800} sx={{ minWidth: 28, textAlign: 'center', fontSize: 18, color: '#4f46e5' }}>
+                              {effectiveQty}
+                            </Typography>
+                            <IconButton onClick={() => changeSideQty(entry.uid, si.uid, 1)}
+                              sx={{ p: 0.75, bgcolor: '#6366f1', color: '#fff', borderRadius: 1 }}>
+                              <AddIcon sx={{ fontSize: 20 }} />
+                            </IconButton>
+                          </Box>
+                          <IconButton onClick={() => removeSide(entry.uid, si.uid)} sx={{ p: 0.5, color: '#94a3b8' }}>
+                            <CloseIcon sx={{ fontSize: 22 }} />
                           </IconButton>
-                          <Typography fontWeight={800} sx={{ minWidth: 28, textAlign: 'center', fontSize: 18, color: '#4f46e5' }}>
-                            {effectiveQty}
-                          </Typography>
-                          <IconButton onClick={() => changeSideQty(entry.uid, si.uid, 1)}
-                            sx={{ p: 0.75, bgcolor: '#6366f1', color: '#fff', borderRadius: 1, '&:hover': { bgcolor: '#4f46e5' } }}>
-                            <AddIcon sx={{ fontSize: 20 }} />
-                          </IconButton>
-                          <Typography sx={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, lineHeight: 1, ml: 0.25 }}>
-                            / cup
-                          </Typography>
                         </Box>
-                        <IconButton onClick={() => removeSide(entry.uid, si.uid)}
-                          sx={{ p: 0.5, color: '#94a3b8', '&:hover': { color: '#dc2626' } }}>
-                          <CloseIcon sx={{ fontSize: 22 }} />
+                      </Box>
+                    )
+                  })}
+                  {sides.length > 0 && (
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', px: 1, py: 0.75, borderTop: '1px dashed #c7d2fe' }}>
+                      <Typography sx={{ color: '#64748b', fontSize: 13 }}>{fmt(mainTotal)} + {fmt(sideTotal)} topping</Typography>
+                      <Typography fontWeight={800} color="primary" sx={{ fontSize: 15 }}>= {fmt(eTotal)}</Typography>
+                    </Box>
+                  )}
+                  {canAddSides && (
+                    <Box sx={{ pt: 0.75, pb: 1, px: 1 }}>
+                      <Autocomplete size="small" options={allowedSideOptions} getOptionLabel={m => m.modelName}
+                        value={sf.model || null} onChange={(_, v) => setSF(entry.uid, 'model', v)}
+                        renderInput={params => <TextField {...params} label="Thêm topping…" size="small" />}
+                        isOptionEqualToValue={(a, b) => a.id === b.id} noOptionsText="Không có" fullWidth />
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+                        <IconButton onClick={() => setSF(entry.uid, 'qty', Math.max(1, (sf.qty || 1) - 1))}
+                          sx={{ p: 0.75, bgcolor: '#f1f5f9', borderRadius: 1 }}>
+                          <RemoveIcon sx={{ fontSize: 20 }} />
                         </IconButton>
+                        <Typography fontWeight={800} sx={{ minWidth: 28, textAlign: 'center', fontSize: 18, color: '#4f46e5' }}>
+                          {sf.qty || 1}
+                        </Typography>
+                        <IconButton onClick={() => setSF(entry.uid, 'qty', (sf.qty || 1) + 1)}
+                          sx={{ p: 0.75, bgcolor: '#6366f1', color: '#fff', borderRadius: 1 }}>
+                          <AddIcon sx={{ fontSize: 20 }} />
+                        </IconButton>
+                        <Box sx={{ flex: 1 }} />
+                        <Button variant="contained" startIcon={<PlaylistAddIcon />}
+                          onClick={() => addSideInline(entry.uid)} disabled={!sf.model}
+                          sx={{ textTransform: 'none', bgcolor: '#6366f1', '&:hover': { bgcolor: '#4f46e5' },
+                            '&.Mui-disabled': { bgcolor: '#e0e0e0', color: '#9e9e9e' } }}>
+                          Thêm
+                        </Button>
                       </Box>
                     </Box>
-                  )
-                })}
-
-                {/* Block total — only shown when there are side items */}
-                {sides.length > 0 && (
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 1, py: 0.75, borderTop: '1px dashed #c7d2fe' }}>
-                    <Typography sx={{ color: '#64748b', fontSize: 13 }}>
-                      {fmt(mainTotal)} + {fmt(sideTotal)} topping
-                    </Typography>
-                    <Typography fontWeight={800} color="primary" sx={{ fontSize: 15 }}>
-                      = {fmt(eTotal)}
-                    </Typography>
-                  </Box>
-                )}
-
-                {/* Add side inline form — only shown when the item has configured allowed sides */}
-                {canAddSides && (
-                <Box sx={{ pt: 0.75, pb: 1, px: 1 }}>
-                  <Autocomplete
-                    size="small"
-                    options={allowedSideOptions}
-                    getOptionLabel={m => m.modelName}
-                    value={sf.model || null}
-                    onChange={(_, v) => setSF(entry.uid, 'model', v)}
-                    renderInput={params => <TextField {...params} label="Add topping / side…" size="small" />}
-                    isOptionEqualToValue={(a, b) => a.id === b.id}
-                    noOptionsText="No items"
-                    fullWidth
-                  />
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
-                    <Typography sx={{ color: '#a5b4fc', fontSize: 13, flexShrink: 0 }}>
-                      /ly
-                    </Typography>
-                    <IconButton
-                      onClick={() => setSF(entry.uid, 'qty', Math.max(1, (sf.qty || 1) - 1))}
-                      sx={{ p: 0.75, bgcolor: '#f1f5f9', color: '#64748b', borderRadius: 1, flexShrink: 0 }}>
-                      <RemoveIcon sx={{ fontSize: 20 }} />
-                    </IconButton>
-                    <Typography fontWeight={800} sx={{ minWidth: 28, textAlign: 'center', fontSize: 18, color: '#4f46e5', flexShrink: 0 }}>
-                      {sf.qty || 1}
-                    </Typography>
-                    <IconButton
-                      onClick={() => setSF(entry.uid, 'qty', (sf.qty || 1) + 1)}
-                      sx={{ p: 0.75, bgcolor: '#6366f1', color: '#fff', borderRadius: 1, flexShrink: 0, '&:hover': { bgcolor: '#4f46e5' } }}>
-                      <AddIcon sx={{ fontSize: 20 }} />
-                    </IconButton>
-                    {entry.qty > 1 && (sf.qty || 1) > 0 && (
-                      <Typography sx={{ color: '#94a3b8', fontSize: 12, flexShrink: 0 }}>
-                        = {(sf.qty || 1) * entry.qty}× total
-                      </Typography>
-                    )}
-                    <Box sx={{ flex: 1 }} />
-                    <Button variant="contained"
-                      startIcon={<PlaylistAddIcon />}
-                      onClick={() => addSideInline(entry.uid)}
-                      disabled={!sf.model}
-                      sx={{
-                        textTransform: 'none', fontSize: 14, height: 44, flexShrink: 0,
-                        bgcolor: '#6366f1', '&:hover': { bgcolor: '#4f46e5' },
-                        '&.Mui-disabled': { bgcolor: '#e0e0e0', color: '#9e9e9e' },
-                      }}>
-                      Add
-                    </Button>
-                  </Box>
+                  )}
                 </Box>
-                )}
-
               </Box>
-            </Box>
+            )}
           </Box>
         )
       })}
     </Stack>
   )
 
-  // ── Cart panel ────────────────────────────────────────────────────────
   const CartPanel = ({ onCheckout }) => (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-      <Typography variant="h6" fontWeight={800}>Your Order</Typography>
-
+      <Typography variant="h6" fontWeight={800}>Giỏ hàng</Typography>
       {itemCount === 0 ? (
         <Box sx={{ textAlign: 'center', py: 4, color: 'text.disabled' }}>
           <ShoppingCartIcon sx={{ fontSize: 36, mb: 0.5, opacity: 0.3 }} />
-          <Typography variant="body2">Add items to start your order</Typography>
+          <Typography variant="body2">Thêm món để bắt đầu đặt hàng</Typography>
         </Box>
       ) : (
         <>
           <CartEntryList />
-
           <Divider />
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Typography fontWeight={700} sx={{ fontSize: 17 }}>Total</Typography>
+            <Typography fontWeight={700} sx={{ fontSize: 17 }}>Tổng cộng</Typography>
             <Typography fontWeight={900} color="primary" sx={{ fontSize: 18 }}>{fmt(totalAmount)}</Typography>
           </Box>
-
-          <TextField size="small" fullWidth multiline rows={2} label="Order notes" placeholder="Special requests..."
-            value={notes} onChange={e => setNotes(e.target.value)}
+          <TextField size="small" fullWidth multiline rows={2} label="Ghi chú đơn hàng"
+            placeholder="Yêu cầu đặc biệt…" value={notes} onChange={e => setNotes(e.target.value)}
             InputProps={{ startAdornment: <InputAdornment position="start"><NoteAltIcon fontSize="small" color="action" /></InputAdornment> }} />
-
           <Button variant="contained" fullWidth size="large" onClick={onCheckout}
-            sx={{ borderRadius: 2, fontWeight: 800, textTransform: 'none', fontSize: 15 }}>
-            Checkout · {fmt(totalAmount)}
+            sx={{ borderRadius: 20, fontWeight: 800, textTransform: 'none', fontSize: 15,
+              bgcolor: '#ff5722', '&:hover': { bgcolor: '#e64a19' } }}>
+            Thanh toán · {fmt(totalAmount)}
           </Button>
         </>
       )}
     </Box>
   )
 
+  // ── MenuListItem (closure for handler access) ─────────────────────────
+  const MenuListItem = ({ m }) => {
+    const qty      = getModelQty(m.id)
+    const hasOpts  = (optionsByModel[m.id] || []).length > 0
+    const variants = cartEntries.filter(e => e.modelId === m.id)
+    const optsStr  = variants.length === 1 ? fmtOpts(variants[0]?.selectedOptions) : null
+    return (
+      <Box sx={{
+        display: 'flex', alignItems: 'stretch', bgcolor: '#fff', borderRadius: 2, overflow: 'hidden',
+        border: qty > 0 ? '1.5px solid #ff5722' : '1.5px solid transparent',
+        boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
+      }}>
+        <Box onClick={() => m.imageUrl && setImagePreview(m)} sx={{
+          width: 96, flexShrink: 0, bgcolor: '#f5f5f5', overflow: 'hidden',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: m.imageUrl ? 'pointer' : 'default',
+        }}>
+          {m.imageUrl
+            ? <Box component="img" src={m.imageUrl} alt={m.modelName}
+                sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                onError={e => { e.target.style.display = 'none' }} />
+            : <Typography sx={{ fontSize: 34, opacity: 0.15, userSelect: 'none' }}>🍽</Typography>}
+        </Box>
+        <Box sx={{ flex: 1, minWidth: 0, px: 1.5, py: 1.25 }}>
+          <Typography fontWeight={700} sx={{ fontSize: 15, lineHeight: 1.3, color: '#1a1a1a' }}>
+            {m.modelName}
+          </Typography>
+          {hasOpts && !optsStr && (
+            <Typography variant="caption" sx={{ color: '#aaa', fontSize: 11 }}>Có thể tuỳ chỉnh</Typography>
+          )}
+          {optsStr && (
+            <Typography variant="caption" sx={{ color: '#ff5722', fontSize: 11, display: 'block' }} noWrap>
+              {optsStr}
+            </Typography>
+          )}
+          {variants.length > 1 && (
+            <Chip label={`${variants.length} tuỳ chọn`} size="small"
+              sx={{ height: 18, fontSize: 10, bgcolor: '#fff3e0', color: '#ff5722', mt: 0.5 }} />
+          )}
+          <Typography fontWeight={800} sx={{ color: '#ff5722', fontSize: 15, mt: 0.75 }}>
+            {fmt(m.sellingPrice)}
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 1.25, flexShrink: 0, alignSelf: 'center' }}>
+          {qty > 0 && (
+            <>
+              <IconButton size="small" onClick={() => handleRemoveClick(m.id)}
+                sx={{ width: 32, height: 32, bgcolor: '#f5f5f5', color: '#ff5722', borderRadius: 1.5 }}>
+                <RemoveIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+              <Typography fontWeight={900} sx={{ minWidth: 28, textAlign: 'center', fontSize: 17 }}>
+                {qty}
+              </Typography>
+            </>
+          )}
+          <IconButton size="small" onClick={() => handleAddClick(m)}
+            sx={{ width: 32, height: 32, bgcolor: '#ff5722', color: '#fff', borderRadius: 1.5,
+              '&:hover': { bgcolor: '#e64a19' } }}>
+            <AddIcon sx={{ fontSize: 18 }} />
+          </IconButton>
+        </Box>
+      </Box>
+    )
+  }
+
+  // ── MenuGridItem ──────────────────────────────────────────────────────
+  const MenuGridItem = ({ m }) => {
+    const qty = getModelQty(m.id)
+    return (
+      <Box sx={{
+        bgcolor: '#fff', borderRadius: 2, overflow: 'hidden', display: 'flex', flexDirection: 'column',
+        border: qty > 0 ? '1.5px solid #ff5722' : '1.5px solid transparent',
+        boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
+      }}>
+        <Box onClick={() => m.imageUrl && setImagePreview(m)} sx={{
+          width: '100%', paddingTop: '70%', position: 'relative',
+          bgcolor: '#f5f5f5', overflow: 'hidden', cursor: m.imageUrl ? 'pointer' : 'default',
+        }}>
+          {m.imageUrl
+            ? <Box component="img" src={m.imageUrl} alt={m.modelName}
+                sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                onError={e => { e.target.style.display = 'none' }} />
+            : <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Typography sx={{ fontSize: 36, opacity: 0.15, userSelect: 'none' }}>🍽</Typography>
+              </Box>}
+          {qty > 0 && (
+            <Box sx={{ position: 'absolute', top: 6, right: 6, bgcolor: '#ff5722', color: '#fff',
+              borderRadius: 10, minWidth: 22, height: 22, display: 'flex', alignItems: 'center',
+              justifyContent: 'center', fontWeight: 900, fontSize: 13 }}>
+              {qty}
+            </Box>
+          )}
+        </Box>
+        <Box sx={{ px: 1.25, pt: 1, pb: 1.25, flex: 1, display: 'flex', flexDirection: 'column' }}>
+          <Typography fontWeight={700} sx={{
+            fontSize: 13, lineHeight: 1.35, color: '#1a1a1a', flex: 1, mb: 0.75,
+            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+          }}>
+            {m.modelName}
+          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Typography fontWeight={800} sx={{ color: '#ff5722', fontSize: 14 }}>
+              {fmt(m.sellingPrice)}
+            </Typography>
+            {qty > 0 ? (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+                <IconButton onClick={() => handleRemoveClick(m.id)}
+                  sx={{ p: 0.25, width: 26, height: 26, bgcolor: '#f5f5f5', color: '#ff5722', borderRadius: 1 }}>
+                  <RemoveIcon sx={{ fontSize: 15 }} />
+                </IconButton>
+                <IconButton onClick={() => handleAddClick(m)}
+                  sx={{ p: 0.25, width: 26, height: 26, bgcolor: '#ff5722', color: '#fff', borderRadius: 1,
+                    '&:hover': { bgcolor: '#e64a19' } }}>
+                  <AddIcon sx={{ fontSize: 15 }} />
+                </IconButton>
+              </Box>
+            ) : (
+              <IconButton onClick={() => handleAddClick(m)}
+                sx={{ p: 0.5, width: 30, height: 30, bgcolor: '#ff5722', color: '#fff', borderRadius: 1.5,
+                  '&:hover': { bgcolor: '#e64a19' } }}>
+                <AddIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            )}
+          </Box>
+        </Box>
+      </Box>
+    )
+  }
+
   if (loading) return (
     <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
-      <CircularProgress />
+      <CircularProgress sx={{ color: '#ff5722' }} />
     </Box>
   )
   if (!ctx?.tenantId || !ctx?.companyId) return (
-    <Box sx={{ p: 3 }}><Alert severity="error">{error || 'Invalid QR code — missing shop context.'}</Alert></Box>
+    <Box sx={{ p: 3 }}><Alert severity="error">{error || 'QR code không hợp lệ — thiếu thông tin cửa hàng.'}</Alert></Box>
   )
 
   return (
-    <Box sx={{ bgcolor: '#fafafa', minHeight: '100vh' }}>
+    <Box sx={{ bgcolor: '#f5f5f5', minHeight: '100vh' }}>
 
-      {/* ── Top banner ──────────────────────────────────────── */}
-      <Box sx={{ background: 'linear-gradient(135deg, #1565c0 0%, #0288d1 100%)', color: '#fff', px: 2.5, py: { xs: 2.5, md: 3 }, textAlign: 'center' }}>
-        <Typography variant="h5" fontWeight={800} letterSpacing={1}>Order</Typography>
-        {ctx.tableId && (
-          <Chip icon={<TableBarIcon sx={{ color: '#fff !important', fontSize: 14 }} />}
-            label="Dine In" size="small"
-            sx={{ mt: 1, bgcolor: 'rgba(255,255,255,0.2)', color: '#fff', fontWeight: 600 }} />
-        )}
-      </Box>
-
-      {error && <Alert severity="error" sx={{ mx: 2, mt: 1 }}>{error}</Alert>}
-
-      <Box sx={{
-        display: { xs: 'block', md: 'flex' },
-        alignItems: 'flex-start',
-        maxWidth: { md: 1100 },
-        mx: 'auto',
-        px: { xs: 0, md: 2 },
-        pt: { xs: 0, md: 2 },
-        gap: 3,
+      {/* ── Fixed header ──────────────────────────────────────── */}
+      <Box ref={headerRef} sx={{
+        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
+        bgcolor: '#fff', boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
       }}>
+        {/* Row 1: Title + action buttons */}
+        <Box sx={{ display: 'flex', alignItems: 'center', px: 1.5, pt: 1.25, pb: 0.5, gap: 0.75 }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography fontWeight={900} sx={{ fontSize: 18, color: '#1a1a1a', lineHeight: 1.2 }}>
+              Gọi món
+            </Typography>
+            {ctx.tableId && (
+              <Chip icon={<TableBarIcon sx={{ fontSize: '12px !important', color: '#1976d2 !important' }} />}
+                label="Tại bàn" size="small"
+                sx={{ height: 18, fontSize: 11, bgcolor: '#e3f2fd', color: '#1565c0', fontWeight: 600 }} />
+            )}
+          </Box>
 
-        {/* ── Menu grid ─────────────────────────────────────── */}
-        <Box sx={{ flex: 1, minWidth: 0, px: { xs: 1.5, md: 0 }, pt: { xs: 1.5, md: 0 }, pb: { xs: 16, md: 4 } }}>
-          {Object.entries(grouped).map(([cat, items]) => (
-            <Box key={cat} sx={{ mb: 3 }}>
-              <Typography variant="overline" fontWeight={700} color="primary"
-                sx={{ letterSpacing: 1.5, display: 'block', mb: 1 }}>{cat}</Typography>
-              <Stack spacing={1}>
-                {items.map(m => {
-                  const qty      = getModelQty(m.id)
-                  const hasOpts  = (optionsByModel[m.id] || []).length > 0
-                  const variants = cartEntries.filter(e => e.modelId === m.id)
-                  const solo     = variants.length === 1 ? variants[0] : null
-                  const optsStr  = fmtOpts(solo?.selectedOptions)
-                  const noteStr  = solo?.itemNotes
-                  return (
-                    <Card key={m.id} elevation={0} sx={{
-                      borderRadius: 2,
-                      border: qty > 0 ? '1.5px solid #1976d2' : '1px solid #e8e8e8',
-                      bgcolor: '#fff', transition: 'border-color 0.15s', overflow: 'hidden',
-                    }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        {/* Thumbnail — always present; grey placeholder when no image */}
-                        <Box sx={{
-                          width: { xs: 88, md: 96 }, height: { xs: 88, md: 96 },
-                          flexShrink: 0, bgcolor: '#f0f0f0', overflow: 'hidden',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        }}>
-                          {m.imageUrl ? (
-                            <Box component="img" src={m.imageUrl} alt={m.modelName}
-                              sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                              onError={e => { e.target.style.display = 'none'; e.target.parentNode.style.background = '#e8eaf6' }} />
-                          ) : (
-                            <Typography sx={{ fontSize: 28, lineHeight: 1, userSelect: 'none', opacity: 0.25 }}>🍽</Typography>
-                          )}
-                        </Box>
-                        <Box sx={{ flex: 1, px: 1.5, py: 1.25 }}>
-                          {/* Name row + controls inline */}
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            <Typography
-                              fontWeight={800}
-                              lineHeight={1.25}
-                              onClick={() => m.imageUrl && setImagePreview(m)}
-                              sx={{
-                                flex: 1, minWidth: 0,
-                                fontSize: { xs: 15, md: 16 }, letterSpacing: 0,
-                                ...(m.imageUrl ? { cursor: 'pointer', '&:hover': { color: '#1976d2', textDecoration: 'underline dotted' } } : {}),
-                              }}>
-                              {m.modelName}
-                            </Typography>
-                            {/* ± controls inline with name */}
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
-                              {qty > 0 && (
-                                <>
-                                  <IconButton size="small" onClick={() => handleRemoveClick(m.id)}
-                                    sx={{ bgcolor: '#f0f0f0', '&:hover': { bgcolor: '#e0e0e0' } }}>
-                                    <RemoveIcon sx={{ fontSize: 16 }} />
-                                  </IconButton>
-                                  <Typography variant="body2" fontWeight={700} sx={{ minWidth: 22, textAlign: 'center' }}>{qty}</Typography>
-                                </>
-                              )}
-                              <IconButton size="small" onClick={() => handleAddClick(m)}
-                                sx={{ bgcolor: '#1976d2', color: '#fff', '&:hover': { bgcolor: '#1565c0' } }}>
-                                <AddIcon sx={{ fontSize: 16 }} />
-                              </IconButton>
-                            </Box>
-                          </Box>
-                          <Typography
-                            color="primary" fontWeight={700}
-                            sx={{ mt: 0.4, fontSize: { xs: 14, md: 15 } }}>
-                            {fmt(m.sellingPrice)}
-                          </Typography>
-                          {hasOpts && (
-                            <Chip icon={<TuneIcon sx={{ fontSize: '12px !important' }} />} label="customizable"
-                              size="small" variant="outlined"
-                              sx={{ mt: 0.5, fontSize: 10, height: 18, color: 'text.secondary', borderColor: '#ddd' }} />
-                          )}
-                        </Box>
-                      </Box>
+          {/* Gọi nhân viên */}
+          <Button size="small" variant="outlined" onClick={() => setCallStaffOpen(true)}
+            startIcon={<SupportAgentIcon sx={{ fontSize: '16px !important' }} />}
+            sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 20, fontSize: 12,
+              px: 1.25, py: 0.4, flexShrink: 0,
+              borderColor: '#ff5722', color: '#ff5722',
+              '&:hover': { bgcolor: '#fff3e0', borderColor: '#ff5722' } }}>
+            Gọi NV
+          </Button>
 
-                      {variants.length > 1 && (
-                        <Box sx={{ px: 1.5, py: 0.5, bgcolor: '#e3f2fd', borderTop: '1px solid #bbdefb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <Typography variant="caption" color="primary">
-                            {variants.length} variations in cart
-                          </Typography>
-                          <Typography variant="caption" color="primary" sx={{ cursor: 'pointer', fontWeight: 700, display: { xs: 'inline', md: 'none' } }}
-                            onClick={() => setCartOpen(true)}>
-                            Edit →
-                          </Typography>
-                        </Box>
-                      )}
+          {/* Món đã gọi */}
+          <Badge
+            badgeContent={tokenSession?.orders?.filter(o => o.status !== 'CANCELLED').length || null}
+            color="error"
+            sx={{ '& .MuiBadge-badge': { fontSize: 10, fontWeight: 900, minWidth: 16, height: 16 } }}>
+            <Button size="small"
+              variant={tokenSession?.orders?.length > 0 ? 'contained' : 'outlined'}
+              onClick={() => setSessionOpen(true)}
+              startIcon={<ReceiptLongIcon sx={{ fontSize: '16px !important' }} />}
+              sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 20, fontSize: 12,
+                px: 1.25, py: 0.4, flexShrink: 0,
+                ...(tokenSession?.orders?.length > 0
+                  ? { bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' } }
+                  : {}) }}>
+              Đã gọi
+            </Button>
+          </Badge>
+        </Box>
 
-                      {solo && (optsStr || noteStr) && (
-                        <Box sx={{ px: 1.5, py: 0.75, bgcolor: '#e3f2fd', borderTop: '1px solid #bbdefb', display: 'flex', gap: 1, alignItems: 'center' }}>
-                          <Box sx={{ flex: 1 }}>
-                            {optsStr && <Typography variant="caption" color="primary" display="block" noWrap>{optsStr}</Typography>}
-                            {noteStr && <Typography variant="caption" color="text.secondary" display="block" noWrap sx={{ fontStyle: 'italic' }}>{noteStr}</Typography>}
-                          </Box>
-                          <Typography variant="caption" color="primary" sx={{ cursor: 'pointer', fontWeight: 700, display: { xs: 'inline', md: 'none' } }}
-                            onClick={() => setCartOpen(true)}>
-                            Edit →
-                          </Typography>
-                        </Box>
-                      )}
-                    </Card>
-                  )
-                })}
-              </Stack>
-            </Box>
+        {/* Row 2: Category tabs */}
+        <Box sx={{
+          display: 'flex', overflowX: 'auto', px: 1.5, pb: 0.75, gap: 0.5,
+          '&::-webkit-scrollbar': { display: 'none' }, scrollbarWidth: 'none',
+        }}>
+          {categories.map(cat => (
+            <Chip key={cat} label={cat} size="small"
+              onClick={() => scrollToCategory(cat)}
+              sx={{
+                flexShrink: 0, cursor: 'pointer', height: 28, fontSize: 12, fontWeight: 600,
+                bgcolor: activeCategory === cat ? '#ff5722' : '#f0f0f0',
+                color: activeCategory === cat ? '#fff' : '#444',
+                '&:hover': { bgcolor: activeCategory === cat ? '#e64a19' : '#e0e0e0' },
+              }} />
           ))}
         </Box>
 
-        {/* ── Desktop right sidebar ──────────────────────────── */}
-        <Box sx={{
-          display: { xs: 'none', md: 'block' },
-          width: 380, flexShrink: 0,
-          position: 'sticky', top: 16,
-          bgcolor: '#fff', borderRadius: 3,
-          border: '1px solid #e8e8e8',
-          p: 2.5,
-          maxHeight: 'calc(100vh - 40px)',
-          overflowY: 'auto',
-        }}>
-          {tokenSession?.orders?.length > 0 && (
-            <Box sx={{ mb: 2 }}>
-              <ShowOrdersButton session={tokenSession} onClick={() => setSessionOpen(true)} fullWidth />
-            </Box>
-          )}
-          <CartPanel onCheckout={() => setCheckout(true)} />
+        {/* Row 3: Search + view toggle */}
+        <Box sx={{ display: 'flex', alignItems: 'center', px: 1.5, pb: 1.25, gap: 1 }}>
+          <TextField size="small" fullWidth variant="outlined"
+            placeholder="Tìm món..."
+            value={searchQuery}
+            onChange={e => { setSearchQuery(e.target.value); setActiveCategory(null) }}
+            InputProps={{
+              startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 20, color: '#bbb' }} /></InputAdornment>,
+              endAdornment: searchQuery ? (
+                <InputAdornment position="end">
+                  <IconButton size="small" edge="end" onClick={() => setSearchQuery('')}>
+                    <CloseIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </InputAdornment>
+              ) : null,
+              sx: { borderRadius: 20, bgcolor: '#f5f5f5', '& fieldset': { border: 'none' }, fontSize: 14 },
+            }}
+          />
+          <IconButton onClick={() => setGridView(v => !v)}
+            sx={{ bgcolor: gridView ? '#ff5722' : '#f0f0f0', color: gridView ? '#fff' : '#555',
+              borderRadius: 1.5, flexShrink: 0,
+              '&:hover': { bgcolor: gridView ? '#e64a19' : '#e0e0e0' } }}>
+            {gridView ? <ViewListIcon /> : <GridViewIcon />}
+          </IconButton>
         </Box>
       </Box>
 
-      {/* ── Mobile bottom bar ──────────────────────────────────── */}
-      {(itemCount > 0 || (tokenSession?.orders?.length > 0)) && (
+      {/* ── Content ───────────────────────────────────────────── */}
+      {error && <Alert severity="error" sx={{ mx: 2, mt: 1, position: 'relative', zIndex: 1 }}>{error}</Alert>}
+
+      <Box sx={{ pt: `${headerH}px`, pb: itemCount > 0 ? '80px' : '24px' }}>
+        {searchQuery.trim() ? (
+          /* Search results */
+          <Box sx={{ px: 1.5, pt: 1.5 }}>
+            {filteredItems.length === 0 ? (
+              <Box sx={{ textAlign: 'center', py: 6 }}>
+                <SearchIcon sx={{ fontSize: 48, opacity: 0.2, mb: 1 }} />
+                <Typography color="text.secondary">Không tìm thấy "{searchQuery}"</Typography>
+              </Box>
+            ) : (
+              <>
+                <Typography variant="caption" color="text.secondary" sx={{ mb: 1.5, display: 'block' }}>
+                  {filteredItems.length} kết quả
+                </Typography>
+                {gridView ? (
+                  <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.25 }}>
+                    {filteredItems.map(m => <MenuGridItem key={m.id} m={m} />)}
+                  </Box>
+                ) : (
+                  <Stack spacing={0.75}>
+                    {filteredItems.map(m => <MenuListItem key={m.id} m={m} />)}
+                  </Stack>
+                )}
+              </>
+            )}
+          </Box>
+        ) : (
+          /* Categorized menu */
+          Object.entries(grouped).map(([cat, items]) => (
+            <Box key={cat} ref={el => { categoryRefs.current[cat] = el }}>
+              <Typography sx={{
+                px: 2, py: 1, fontWeight: 700, fontSize: 13, color: '#888',
+                bgcolor: '#f5f5f5', letterSpacing: 0.8, textTransform: 'uppercase',
+                position: 'sticky', top: `${headerH}px`, zIndex: 50,
+                borderBottom: '1px solid #ebebeb',
+              }}>
+                {cat}
+              </Typography>
+              <Box sx={{ px: 1.5, pt: 1, pb: 0.5 }}>
+                {gridView ? (
+                  <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.25 }}>
+                    {items.map(m => <MenuGridItem key={m.id} m={m} />)}
+                  </Box>
+                ) : (
+                  <Stack spacing={0.75}>
+                    {items.map(m => <MenuListItem key={m.id} m={m} />)}
+                  </Stack>
+                )}
+              </Box>
+            </Box>
+          ))
+        )}
+      </Box>
+
+      {/* ── Sticky bottom bar ─────────────────────────────────── */}
+      {itemCount > 0 && (
         <Box sx={{
-          display: { xs: 'flex', md: 'none' },
           position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 200,
-          borderTop: '1px solid #e0e0e0', bgcolor: '#fff',
-          boxShadow: '0 -2px 12px rgba(0,0,0,0.10)',
-          alignItems: 'center', gap: 1, px: 2, py: 1.25,
-          flexWrap: 'wrap',
+          px: 1.5, py: 1.5,
+          background: 'linear-gradient(to top, rgba(245,245,245,1) 60%, rgba(245,245,245,0))',
         }}>
-          {tokenSession?.orders?.length > 0 && (
-            <ShowOrdersButton session={tokenSession} onClick={() => setSessionOpen(true)} />
-          )}
-          {itemCount > 0 && <>
-            <Button variant="outlined" size="medium" onClick={() => setCartOpen(true)}
-              startIcon={<ShoppingCartIcon />}
-              sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none', flexShrink: 0 }}>
-              Cart ({itemCount})
+          <Box sx={{ display: 'flex', gap: 0.75 }}>
+            {/* Cart edit button */}
+            <Button variant="outlined" onClick={() => setCartOpen(true)}
+              sx={{ borderRadius: 20, minWidth: 'auto', px: 1.75, py: 0, flexShrink: 0,
+                borderColor: '#ff5722', color: '#ff5722', fontWeight: 800, fontSize: 14,
+                '&:hover': { bgcolor: '#fff3e0', borderColor: '#ff5722' } }}>
+              <ShoppingCartIcon sx={{ fontSize: 18, mr: 0.5 }} />
+              {itemCount}
             </Button>
+
+            {/* Confirm button */}
+            <Button variant="contained" fullWidth size="large"
+              onClick={() => editingOrderCode ? setCheckout(true) : setCheckout(true)}
+              sx={{
+                bgcolor: editingOrderCode ? '#f59e0b' : '#ff5722',
+                '&:hover': { bgcolor: editingOrderCode ? '#d97706' : '#e64a19' },
+                borderRadius: 20, fontWeight: 800, fontSize: 14,
+                textTransform: 'none', boxShadow: '0 4px 16px rgba(255,87,34,0.3)',
+              }}>
+              {editingOrderCode
+                ? `Cập nhật đơn · ${fmt(totalAmount)}`
+                : `Xác nhận gọi món · ${itemCount} món · ${fmt(totalAmount)}`}
+            </Button>
+
             {editingOrderCode && (
               <Button variant="text" size="small" onClick={handleCancelEdit}
-                sx={{ textTransform: 'none', color: '#ef4444', flexShrink: 0, fontWeight: 600, fontSize: 12 }}>
-                Cancel edit
+                sx={{ textTransform: 'none', color: '#888', flexShrink: 0, fontSize: 12, px: 0.5 }}>
+                Huỷ
               </Button>
             )}
-            <Button variant="contained" size="medium" fullWidth onClick={() => setCheckout(true)}
-              sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none',
-                bgcolor: editingOrderCode ? '#f59e0b' : undefined,
-                '&:hover': { bgcolor: editingOrderCode ? '#d97706' : undefined } }}>
-              {editingOrderCode ? `Update Order · ${fmt(totalAmount)}` : `Checkout · ${fmt(totalAmount)}`}
-            </Button>
-          </>}
+          </Box>
         </Box>
       )}
 
-      {/* ── Mobile cart bottom sheet ──────────────────────────── */}
+      {/* ── "Gọi nhân viên" modal ──────────────────────────────── */}
+      <Dialog open={callStaffOpen} onClose={() => setCallStaffOpen(false)}
+        PaperProps={{ sx: { position: 'fixed', bottom: 0, left: 0, right: 0, m: 0,
+          borderRadius: '20px 20px 0 0', maxWidth: '100%', width: '100%' } }}>
+        <Box sx={{ width: 40, height: 4, bgcolor: '#e0e0e0', borderRadius: 2, mx: 'auto', mt: 1.5 }} />
+        <DialogTitle sx={{ textAlign: 'center', pt: 1.5, pb: 1, fontWeight: 900, fontSize: 18 }}>
+          Gọi nhân viên
+        </DialogTitle>
+        <DialogContent sx={{ px: 2.5, pb: 1 }}>
+          <RadioGroup value={callStaffReason} onChange={e => setCallStaffReason(e.target.value)}>
+            {[
+              { value: 'payment', label: 'Yêu cầu thanh toán' },
+              { value: 'other',   label: 'Hỗ trợ khác' },
+            ].map(opt => (
+              <FormControlLabel key={opt.value} value={opt.value}
+                control={<Radio sx={{ color: '#ff5722', '&.Mui-checked': { color: '#ff5722' } }} />}
+                label={<Typography fontWeight={callStaffReason === opt.value ? 700 : 400}>{opt.label}</Typography>}
+                sx={{
+                  py: 0.75, px: 1.5, mb: 1, mr: 0, borderRadius: 2,
+                  border: '1.5px solid', borderColor: callStaffReason === opt.value ? '#ff5722' : '#e0e0e0',
+                  bgcolor: callStaffReason === opt.value ? '#fff3e0' : 'transparent',
+                  transition: 'all 0.15s',
+                }} />
+            ))}
+          </RadioGroup>
+          <TextField fullWidth multiline rows={3} size="small"
+            placeholder="Bạn cần hỗ trợ gì?"
+            value={callStaffNote}
+            onChange={e => setCallStaffNote(e.target.value)}
+            sx={{ mt: 1, '& .MuiOutlinedInput-root': { borderRadius: 2 } }} />
+        </DialogContent>
+        <DialogActions sx={{ px: 2.5, pb: 3.5, pt: 1.5, flexDirection: 'column', gap: 1 }}>
+          <Button variant="contained" fullWidth size="large" onClick={handleCallStaff}
+            sx={{ bgcolor: '#ff5722', '&:hover': { bgcolor: '#e64a19' },
+              borderRadius: 20, fontWeight: 700, textTransform: 'none', fontSize: 15 }}>
+            Gọi nhân viên
+          </Button>
+          <Button fullWidth onClick={() => setCallStaffOpen(false)}
+            sx={{ textTransform: 'none', color: 'text.secondary', borderRadius: 20 }}>
+            Huỷ
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ── Call staff success snack ──────────────────────────── */}
+      <Snackbar open={callStaffDone} autoHideDuration={4000} onClose={() => setCallStaffDone(false)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
+        <Alert severity="success" onClose={() => setCallStaffDone(false)} sx={{ fontWeight: 700 }}>
+          Nhân viên sẽ đến hỗ trợ bạn trong giây lát!
+        </Alert>
+      </Snackbar>
+
+      {/* ── Cart bottom sheet ──────────────────────────────────── */}
       <Dialog open={cartOpen} onClose={() => setCartOpen(false)} fullWidth maxWidth="sm"
-        PaperProps={{ sx: { position: 'fixed', bottom: 0, left: 0, right: 0, m: 0, borderRadius: '16px 16px 0 0', maxHeight: '90vh' } }}>
+        PaperProps={{ sx: { position: 'fixed', bottom: 0, left: 0, right: 0, m: 0,
+          borderRadius: '16px 16px 0 0', maxHeight: '90vh' } }}>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', pb: 1 }}>
-          <Typography fontWeight={800} variant="h6" sx={{ flex: 1 }}>Your Cart</Typography>
+          <Typography fontWeight={800} variant="h6" sx={{ flex: 1 }}>Giỏ hàng</Typography>
           <IconButton size="small" onClick={() => setCartOpen(false)}><CloseIcon /></IconButton>
         </DialogTitle>
         <DialogContent sx={{ overflowY: 'auto' }}>
@@ -1402,8 +1434,7 @@ export default function ShopMenuPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Session orders dialog ───────────────────────────────── */}
-      {/* ── Prepaid payment QR ──────────────────────────────────── */}
+      {/* ── Prepaid payment QR ────────────────────────────────── */}
       {prepaidQrOrder && (() => {
         const amount = Math.round(Number(prepaidQrOrder.totalAmount || 0))
         const qrUrl = shopConfig.bankBin && shopConfig.bankAccountNumber
@@ -1413,54 +1444,57 @@ export default function ShopMenuPage() {
           : null
         const orderNum = prepaidQrOrder.orderNumber ? `#${prepaidQrOrder.orderNumber}` : prepaidQrOrder.orderCode
         return (
-          <Dialog open fullWidth maxWidth="xs"
-            PaperProps={{ sx: { borderRadius: 3 } }}>
+          <Dialog open fullWidth maxWidth="xs" PaperProps={{ sx: { borderRadius: 3 } }}>
             <DialogTitle sx={{ textAlign: 'center', pb: 0.5, pt: 2.5, fontWeight: 900, fontSize: 20 }}>
-              Pay to confirm order {orderNum}
+              Thanh toán đơn {orderNum}
             </DialogTitle>
             <DialogContent sx={{ textAlign: 'center', pt: 1 }}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Scan the QR below to pay. Your order will be confirmed after payment is received.
+                Quét mã QR để thanh toán. Đơn hàng sẽ được xác nhận sau khi thanh toán.
               </Typography>
               {qrUrl ? (
-                <Box sx={{ display: 'inline-block', p: 1.5, bgcolor: '#fff', borderRadius: 2, border: '2px solid #1976d2', mb: 1.5 }}>
+                <Box sx={{ display: 'inline-block', p: 1.5, bgcolor: '#fff', borderRadius: 2,
+                  border: '2px solid #1976d2', mb: 1.5 }}>
                   <img src={qrUrl} alt="Payment QR" style={{ width: 220, height: 220, display: 'block', borderRadius: 6 }} />
                 </Box>
               ) : (
-                <Alert severity="warning" sx={{ mb: 1.5 }}>Bank account not configured — please pay at counter.</Alert>
+                <Alert severity="warning" sx={{ mb: 1.5 }}>Chưa cấu hình tài khoản ngân hàng — vui lòng thanh toán tại quầy.</Alert>
               )}
               <Typography variant="h5" fontWeight={900} color="primary">{fmt(prepaidQrOrder.totalAmount)}</Typography>
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                Ref: <strong>{prepaidQrOrder.orderCode}</strong>
+                Mã: <strong>{prepaidQrOrder.orderCode}</strong>
                 {shopConfig.bankAccountName ? ` · ${shopConfig.bankAccountName}` : ''}
               </Typography>
             </DialogContent>
             <DialogActions sx={{ px: 3, pb: 2.5, flexDirection: 'column', gap: 1 }}>
               <Button variant="contained" fullWidth size="large"
                 onClick={() => { setPrepaidQrOrder(null); setTrackingOrder(prepaidQrOrder) }}
-                sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 2 }}>
-                I've paid — Track my order
+                sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 20 }}>
+                Đã thanh toán — Theo dõi đơn
               </Button>
               <Button fullWidth size="small" color="inherit"
                 onClick={() => { setPrepaidQrOrder(null); setTrackingOrder(prepaidQrOrder) }}
                 sx={{ textTransform: 'none', color: 'text.secondary' }}>
-                Pay later / close
+                Thanh toán sau / Đóng
               </Button>
             </DialogActions>
           </Dialog>
         )
       })()}
 
+      {/* ── "Món đã gọi" session orders sheet ────────────────── */}
       <Dialog open={sessionOpen} onClose={() => setSessionOpen(false)} fullWidth maxWidth="sm"
-        PaperProps={{ sx: { position: 'fixed', bottom: 0, left: 0, right: 0, m: 0, borderRadius: '16px 16px 0 0', maxHeight: '88vh' } }}>
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', pb: 1, pt: 2 }}>
-          <ReceiptLongIcon sx={{ mr: 1, color: '#6366f1' }} />
-          <Typography fontWeight={800} variant="h6" sx={{ flex: 1 }}>
-            Your Orders
-            <Typography component="span" variant="caption" sx={{ ml: 1, color: 'text.secondary' }}>
-              ({tokenSession?.orders?.length ?? 0})
+        PaperProps={{ sx: { position: 'fixed', bottom: 0, left: 0, right: 0, m: 0,
+          borderRadius: '16px 16px 0 0', maxHeight: '88vh' } }}>
+        <Box sx={{ width: 40, height: 4, bgcolor: '#e0e0e0', borderRadius: 2, mx: 'auto', mt: 1.5 }} />
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', pb: 1, pt: 1 }}>
+          <ReceiptLongIcon sx={{ mr: 1, color: '#1976d2' }} />
+          <Box sx={{ flex: 1 }}>
+            <Typography fontWeight={900} variant="h6">Món đã gọi</Typography>
+            <Typography variant="caption" color="text.secondary">
+              {tokenSession?.orders?.filter(o => o.status !== 'CANCELLED').length ?? 0} đơn hàng
             </Typography>
-          </Typography>
+          </Box>
           <IconButton size="small" onClick={() => setSessionOpen(false)}><CloseIcon /></IconButton>
         </DialogTitle>
         <DialogContent sx={{ overflowY: 'auto', px: 2, pb: 3 }}>
@@ -1469,66 +1503,71 @@ export default function ShopMenuPage() {
             token={tokenParam}
             onEdit={(order) => { setSessionOpen(false); handleEditOrder(order) }}
             onView={(order) => { setSessionOpen(false); setTrackingOrder(order) }}
-            onClose={() => setSessionOpen(false)}
           />
         </DialogContent>
       </Dialog>
 
-      {/* ── Checkout dialog ──────────────────────────────────────── */}
+      {/* ── Checkout dialog ───────────────────────────────────── */}
       <Dialog open={checkout} onClose={() => setCheckout(false)} fullWidth maxWidth="xs">
         <DialogTitle sx={{ pb: 1 }}>
-          <Typography fontWeight={700} variant="h6">Place Order</Typography>
+          <Typography fontWeight={700} variant="h6">
+            {editingOrderCode ? 'Cập nhật đơn' : 'Xác nhận đặt món'}
+          </Typography>
         </DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 0.5 }}>
             <Box>
-              <Typography variant="caption" color="text.secondary" sx={{ mb: 0.75, display: 'block' }}>Order type</Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 0.75, display: 'block' }}>
+                Hình thức
+              </Typography>
               <Box sx={{ display: 'flex', gap: 1 }}>
                 {FULFILLMENT_OPTIONS.map(opt => (
                   <Box key={opt.value} onClick={() => setForm(f => ({ ...f, fulfillmentType: opt.value }))} sx={{
-                    flex: 1, border: '1.5px solid', borderRadius: 2, py: 1, px: 0.5, textAlign: 'center', cursor: 'pointer',
-                    borderColor: form.fulfillmentType === opt.value ? 'primary.main' : '#e0e0e0',
-                    bgcolor: form.fulfillmentType === opt.value ? '#e3f2fd' : '#fff',
+                    flex: 1, border: '1.5px solid', borderRadius: 2, py: 1, px: 0.5, textAlign: 'center',
+                    cursor: 'pointer',
+                    borderColor: form.fulfillmentType === opt.value ? '#ff5722' : '#e0e0e0',
+                    bgcolor: form.fulfillmentType === opt.value ? '#fff3e0' : '#fff',
                     transition: 'all 0.15s',
                   }}>
-                    <Box sx={{ color: form.fulfillmentType === opt.value ? 'primary.main' : 'text.secondary' }}>{opt.icon}</Box>
+                    <Box sx={{ color: form.fulfillmentType === opt.value ? '#ff5722' : 'text.secondary' }}>{opt.icon}</Box>
                     <Typography variant="caption" fontWeight={600}
-                      color={form.fulfillmentType === opt.value ? 'primary.main' : 'text.secondary'}>{opt.label}</Typography>
+                      color={form.fulfillmentType === opt.value ? '#ff5722' : 'text.secondary'}>{opt.label}</Typography>
                   </Box>
                 ))}
               </Box>
             </Box>
 
-            <TextField label="Your name" size="small" fullWidth value={form.customerName}
+            <TextField label="Tên khách" size="small" fullWidth value={form.customerName}
               onChange={e => setForm(f => ({ ...f, customerName: e.target.value }))} />
-            <TextField label="Phone" size="small" fullWidth type="tel" value={form.customerPhone}
+            <TextField label="Số điện thoại" size="small" fullWidth type="tel" value={form.customerPhone}
               onChange={e => setForm(f => ({ ...f, customerPhone: e.target.value }))} />
             {form.fulfillmentType === 'DELIVERY' && (
-              <TextField label="Delivery address" size="small" fullWidth multiline rows={2}
+              <TextField label="Địa chỉ giao hàng" size="small" fullWidth multiline rows={2}
                 value={form.deliveryAddress} onChange={e => setForm(f => ({ ...f, deliveryAddress: e.target.value }))} />
             )}
-            <TextField label="Order notes" size="small" fullWidth multiline rows={2}
-              placeholder="Delivery instructions, special requests..."
+            <TextField label="Ghi chú đơn" size="small" fullWidth multiline rows={2}
+              placeholder="Yêu cầu đặc biệt…"
               value={notes} onChange={e => setNotes(e.target.value)}
               InputProps={{ startAdornment: <InputAdornment position="start"><NoteAltIcon fontSize="small" color="action" /></InputAdornment> }} />
             <FormControl size="small" fullWidth>
-              <InputLabel>Payment</InputLabel>
-              <Select value={form.paymentMethod} label="Payment"
+              <InputLabel>Thanh toán</InputLabel>
+              <Select value={form.paymentMethod} label="Thanh toán"
                 onChange={e => setForm(f => ({ ...f, paymentMethod: e.target.value }))}>
-                <MenuItem value="CASH">Cash</MenuItem>
-                <MenuItem value="BANK_QR">Bank QR</MenuItem>
+                <MenuItem value="CASH">Tiền mặt</MenuItem>
+                <MenuItem value="BANK_QR">Chuyển khoản QR</MenuItem>
               </Select>
             </FormControl>
 
             <Divider />
-
             <Box>
-              <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>Your order</Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                Đơn hàng của bạn
+              </Typography>
               {cartEntries.map((entry, idx) => {
-                const m       = menu.find(x => x.id === entry.modelId)
+                const m = menu.find(x => x.id === entry.modelId)
                 if (!m) return null
-                const optsStr = fmtOpts(entry.selectedOptions)
-                const sides   = entry.sideItems || []
+                const optsStr   = fmtOpts(entry.selectedOptions)
+                const sides     = entry.sideItems || []
                 const unitPrice = Number(m.sellingPrice || 0) + calcOptAddOn(entry)
                 const mainTotal = entry.qty * unitPrice
                 const sideTotal = sides.reduce((s, si) => {
@@ -1539,61 +1578,20 @@ export default function ShopMenuPage() {
                   <Box key={entry.uid} sx={{ mb: 0.75 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                       <Typography variant="body2" fontWeight={700}>{idx + 1}. {entry.qty}× {m.modelName}</Typography>
-                      <Typography variant="body2" color="primary" fontWeight={700}>{fmt(mainTotal)}</Typography>
+                      <Typography variant="body2" sx={{ color: '#ff5722' }} fontWeight={700}>{fmt(mainTotal)}</Typography>
                     </Box>
                     {optsStr && (
                       <Typography variant="caption" color="text.secondary" sx={{ pl: 1.5, display: 'block' }}>{optsStr}</Typography>
                     )}
                     {entry.itemNotes && (
                       <Typography variant="caption" color="text.secondary" sx={{ pl: 1.5, display: 'block', fontStyle: 'italic' }}>
-                        Note: {entry.itemNotes}
+                        Ghi chú: {entry.itemNotes}
                       </Typography>
                     )}
-                    {sides.map((side, siIdx) => {
-                      const sm = menu.find(x => x.id === side.modelId)
-                      if (!sm) return null
-                      const perCup   = side.qty || 1
-                      const effQty   = perCup * entry.qty
-                      const effPrice = effQty * Number(sm.sellingPrice || 0)
-                      return (
-                        <Box key={side.uid} sx={{ pl: 1.5, mb: 0.25 }}>
-                          {/* Single row: number · name · stepper · price */}
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                            <Typography sx={{ color: '#94a3b8', fontSize: 12, flexShrink: 0, minWidth: 24 }}>
-                              {idx + 1}.{siIdx + 1}
-                            </Typography>
-                            <Box sx={{ flex: 1, minWidth: 0 }}>
-                              <Typography sx={{ display: 'block', fontSize: 14, fontWeight: 600 }} noWrap>
-                                {sm.modelName}
-                              </Typography>
-                            </Box>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
-                              <IconButton onClick={() => changeSideQty(entry.uid, side.uid, -1)}
-                                sx={{ p: 0.75, color: '#94a3b8', bgcolor: '#f1f5f9', borderRadius: 1 }}>
-                                <RemoveIcon sx={{ fontSize: 20 }} />
-                              </IconButton>
-                              <Typography fontWeight={800} sx={{ minWidth: 28, textAlign: 'center', fontSize: 17, color: '#4f46e5' }}>
-                                {effQty}
-                              </Typography>
-                              <IconButton onClick={() => changeSideQty(entry.uid, side.uid, 1)}
-                                sx={{ p: 0.75, bgcolor: '#6366f1', color: '#fff', borderRadius: 1, '&:hover': { bgcolor: '#4f46e5' } }}>
-                                <AddIcon sx={{ fontSize: 20 }} />
-                              </IconButton>
-                              <Typography sx={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, lineHeight: 1, ml: 0.25 }}>
-                                / cup
-                              </Typography>
-                            </Box>
-                            <Typography color="primary" fontWeight={700} sx={{ minWidth: 60, textAlign: 'right', flexShrink: 0, fontSize: 14 }}>
-                              {fmt(effPrice)}
-                            </Typography>
-                          </Box>
-                        </Box>
-                      )
-                    })}
                     {sides.length > 0 && (
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', pl: 1.5, borderTop: '1px dotted #e2e8f0', mt: 0.5, pt: 0.5 }}>
-                        <Typography sx={{ color: '#64748b', fontStyle: 'italic', fontSize: 13 }}>= subtotal</Typography>
-                        <Typography fontWeight={900} color="primary" sx={{ fontSize: 14 }}>{fmt(mainTotal + sideTotal)}</Typography>
+                        <Typography sx={{ color: '#64748b', fontStyle: 'italic', fontSize: 13 }}>= tổng phụ</Typography>
+                        <Typography fontWeight={900} sx={{ color: '#ff5722', fontSize: 14 }}>{fmt(mainTotal + sideTotal)}</Typography>
                       </Box>
                     )}
                   </Box>
@@ -1601,25 +1599,25 @@ export default function ShopMenuPage() {
               })}
               <Divider sx={{ my: 0.75 }} />
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Typography fontWeight={700}>Total</Typography>
-                <Typography fontWeight={700} color="primary">{fmt(totalAmount)}</Typography>
+                <Typography fontWeight={700}>Tổng cộng</Typography>
+                <Typography fontWeight={700} sx={{ color: '#ff5722' }}>{fmt(totalAmount)}</Typography>
               </Box>
             </Box>
-
             {error && <Alert severity="error">{error}</Alert>}
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 2, pb: 2 }}>
-          <Button onClick={() => setCheckout(false)} disabled={submitting}>Back</Button>
+          <Button onClick={() => setCheckout(false)} disabled={submitting}>Quay lại</Button>
           <Button variant="contained" fullWidth onClick={handlePlaceOrder} disabled={submitting}
-            sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none' }}>
-            {submitting ? <CircularProgress size={20} /> :
-              editingOrderCode ? `Update Order · ${fmt(totalAmount)}` : `Confirm Order · ${fmt(totalAmount)}`}
+            sx={{ borderRadius: 20, fontWeight: 700, textTransform: 'none',
+              bgcolor: '#ff5722', '&:hover': { bgcolor: '#e64a19' } }}>
+            {submitting ? <CircularProgress size={20} color="inherit" /> :
+              editingOrderCode ? `Cập nhật · ${fmt(totalAmount)}` : `Đặt món · ${fmt(totalAmount)}`}
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* ── Inline order tracking (replaces navigate-away) ────────── */}
+      {/* ── Inline order tracking ──────────────────────────────── */}
       {trackingOrder && (
         <TrackingOverlay
           order={trackingOrder}
@@ -1630,18 +1628,17 @@ export default function ShopMenuPage() {
         />
       )}
 
-      {/* ── Table occupied dialog ────────────────────────────────── */}
+      {/* ── Table occupied dialog ──────────────────────────────── */}
       <Dialog open={Boolean(tableOrders)} onClose={() => setTableOrders(null)} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ pb: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <TableRestaurantIcon color="warning" />
-            <Typography fontWeight={700}>Table has active orders</Typography>
+            <Typography fontWeight={700}>Bàn đang có đơn hàng</Typography>
           </Box>
         </DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-            This table already has {tableOrders?.length} active order{tableOrders?.length !== 1 ? 's' : ''}.
-            Are you ordering for this group?
+            Bàn này đang có {tableOrders?.length} đơn hàng. Bạn có muốn đặt thêm không?
           </Typography>
           {(tableOrders || []).slice(0, 3).map(o => (
             <Box key={o.id} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -1649,30 +1646,29 @@ export default function ShopMenuPage() {
               <Typography variant="body2" fontWeight={700}>
                 {o.orderNumber ? `#${o.orderNumber}` : o.orderCode}
               </Typography>
-              <Chip label={o.status} size="small"
+              <Chip label={STATUS_CHIP_MAP[o.status]?.label || o.status} size="small"
                 color={o.status === 'READY' ? 'success' : o.status === 'PREPARING' ? 'warning' : 'default'} />
             </Box>
           ))}
         </DialogContent>
         <DialogActions sx={{ px: 2, pb: 2, gap: 1 }}>
-          <Button onClick={() => setTableOrders(null)} variant="outlined" sx={{ flex: 1, textTransform: 'none' }}>
-            Add New Order
+          <Button onClick={() => setTableOrders(null)} variant="outlined"
+            sx={{ flex: 1, textTransform: 'none', borderRadius: 20 }}>
+            Đặt thêm
           </Button>
-          <Button
-            variant="contained" color="warning"
+          <Button variant="contained" color="warning"
             onClick={() => {
-              // Show the most recent active order for this table
               const latest = tableOrders?.[tableOrders.length - 1]
               if (latest) setTrackingOrder(latest)
               setTableOrders(null)
             }}
-            sx={{ flex: 1, textTransform: 'none' }}>
-            View Orders
+            sx={{ flex: 1, textTransform: 'none', borderRadius: 20 }}>
+            Xem đơn
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* ── Options dialog (initial add for items with configurable options) ── */}
+      {/* ── Options dialog ─────────────────────────────────────── */}
       {optionsTarget && (
         <ItemOptionsDialog
           open={Boolean(optionsTarget)}
@@ -1685,7 +1681,7 @@ export default function ShopMenuPage() {
         />
       )}
 
-      {/* ── Item image preview ─────────────────────────────────────────── */}
+      {/* ── Item image preview ─────────────────────────────────── */}
       <Dialog open={Boolean(imagePreview)} onClose={() => setImagePreview(null)} maxWidth="xs" fullWidth
         PaperProps={{ sx: { borderRadius: 3, overflow: 'hidden' } }}>
         {imagePreview && (
@@ -1695,14 +1691,15 @@ export default function ShopMenuPage() {
                 sx={{ width: '100%', maxHeight: 340, objectFit: 'contain', display: 'block' }}
                 onError={e => { e.target.style.display = 'none' }} />
               <IconButton size="small" onClick={() => setImagePreview(null)}
-                sx={{ position: 'absolute', top: 8, right: 8, bgcolor: 'rgba(0,0,0,0.45)', color: '#fff',
-                  '&:hover': { bgcolor: 'rgba(0,0,0,0.65)' } }}>
+                sx={{ position: 'absolute', top: 8, right: 8, bgcolor: 'rgba(0,0,0,0.45)', color: '#fff' }}>
                 <CloseIcon fontSize="small" />
               </IconButton>
             </Box>
             <Box sx={{ px: 2.5, py: 2 }}>
               <Typography fontWeight={800} sx={{ fontSize: 18 }}>{imagePreview.modelName}</Typography>
-              <Typography color="primary" fontWeight={700} sx={{ fontSize: 17, mt: 0.5 }}>{fmt(imagePreview.sellingPrice)}</Typography>
+              <Typography fontWeight={700} sx={{ fontSize: 17, mt: 0.5, color: '#ff5722' }}>
+                {fmt(imagePreview.sellingPrice)}
+              </Typography>
             </Box>
           </>
         )}
