@@ -11,4 +11,5 @@ import com.ams.bomcore.domain.user.User;
 public interface UserRepository extends JpaRepository<User, Integer> {
     Optional<User> findByUsernameIgnoreCase(String username);
     boolean existsByUsernameIgnoreCase(String username);
+    Optional<User> findByEmailIgnoreCase(String email);
 }

@@ -49,6 +49,7 @@ import CounterDisplayPage from './features/shopboard/CounterDisplayPage'
 import CustomerBoardPage from './features/shopboard/CustomerBoardPage'
 import CustomerPickupPage from './features/shopboard/CustomerPickupPage'
 import ShopTokenManagePage from './features/shoptoken/ShopTokenManagePage'
+import ProfilePage from './features/profile/ProfilePage'
 
 const SIDEBAR_FULL = 200
 const SIDEBAR_MINI = 52
@@ -197,6 +198,7 @@ function MainShell({ user, logout, isAdmin }) {
         <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
           <Routes>
             <Route path="/login" element={<LoginForm />} />
+            <Route path="/profile" element={<ProfilePage />} />
             <Route path="/" element={<RequireAuth><RequireContext><MaterialPage /></RequireContext></RequireAuth>} />
             <Route path="/materials" element={<RequireAuth><RequireContext><MaterialPage /></RequireContext></RequireAuth>} />
             <Route path="/models" element={<RequireAuth><ModelPage /></RequireAuth>} />
