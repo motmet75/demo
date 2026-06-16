@@ -1350,7 +1350,7 @@ export default function ShopMenuPage() {
 
             {/* Confirm button */}
             <Button variant="contained" fullWidth size="large"
-              onClick={() => editingOrderCode ? setCheckout(true) : setCheckout(true)}
+              onClick={() => editingOrderCode ? handlePlaceOrder() : setCheckout(true)}
               sx={{
                 bgcolor: editingOrderCode ? '#f59e0b' : '#ff5722',
                 '&:hover': { bgcolor: editingOrderCode ? '#d97706' : '#e64a19' },
@@ -1433,7 +1433,7 @@ export default function ShopMenuPage() {
           <IconButton size="small" onClick={() => setCartOpen(false)}><CloseIcon /></IconButton>
         </DialogTitle>
         <DialogContent sx={{ overflowY: 'auto' }}>
-          <CartPanel onCheckout={() => { setCartOpen(false); setCheckout(true) }} />
+          <CartPanel onCheckout={() => { setCartOpen(false); editingOrderCode ? handlePlaceOrder() : setCheckout(true) }} />
         </DialogContent>
       </Dialog>
 
