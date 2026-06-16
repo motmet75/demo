@@ -13,6 +13,7 @@ public class ShopOrderResponseDto {
     private UUID id;
     private String orderCode;
     private Integer orderNumber;
+    private Integer dailySeq;
     private UUID tenantId;
     private UUID companyId;
     private String tableId;
@@ -91,6 +92,7 @@ public class ShopOrderResponseDto {
         dto.id = order.getId();
         dto.orderCode = order.getOrderCode();
         dto.orderNumber = order.getOrderNumber();
+        dto.dailySeq = order.getDailySeq();
         dto.tenantId = order.getTenantId();
         dto.companyId = order.getCompanyId();
         if (order.getTable() != null) {
@@ -129,6 +131,7 @@ public class ShopOrderResponseDto {
     public UUID getId() { return id; }
     public String getOrderCode() { return orderCode; }
     public Integer getOrderNumber() { return orderNumber; }
+    public Integer getDailySeq() { return dailySeq; }
     public UUID getTenantId() { return tenantId; }
     public UUID getCompanyId() { return companyId; }
     public String getTableId() { return tableId; }

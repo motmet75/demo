@@ -26,6 +26,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.*;
 import java.util.Map;
 
@@ -129,6 +131,15 @@ public class ShopOrderService {
                     .map(Company::getLastOrderNumber).orElse(null);
             order.setOrderNumber(nextNum);
         }
+
+        // Daily sequence: count orders placed today (resets to 1 each day, Vietnam timezone)
+        ZoneId vn = ZoneId.of("Asia/Ho_Chi_Minh");
+        LocalDate today = LocalDate.now(vn);
+        Instant dayStart = today.atStartOfDay(vn).toInstant();
+        Instant dayEnd   = today.plusDays(1).atStartOfDay(vn).toInstant();
+        long todayCount  = shopOrderRepository.countOrdersInDay(companyId, dayStart, dayEnd);
+        order.setDailySeq((int) todayCount + 1);
+
         order.setFulfillmentType(req.fulfillmentType());
         order.setCustomerName(req.customerName());
         order.setCustomerPhone(req.customerPhone());

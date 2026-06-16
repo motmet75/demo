@@ -44,6 +44,9 @@ public class ShopOrder {
     @Column(name = "order_number")
     private Integer orderNumber;
 
+    @Column(name = "daily_seq")
+    private Integer dailySeq;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "table_id")
     private ShopTable table;
@@ -143,6 +146,8 @@ public class ShopOrder {
     public void setOrderCode(String orderCode) { this.orderCode = orderCode; }
     public Integer getOrderNumber() { return orderNumber; }
     public void setOrderNumber(Integer orderNumber) { this.orderNumber = orderNumber; }
+    public Integer getDailySeq() { return dailySeq; }
+    public void setDailySeq(Integer dailySeq) { this.dailySeq = dailySeq; }
     public ShopTable getTable() { return table; }
     public void setTable(ShopTable table) { this.table = table; }
     public String getFulfillmentType() { return fulfillmentType; }
