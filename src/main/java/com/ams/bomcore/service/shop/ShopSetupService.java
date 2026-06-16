@@ -76,6 +76,83 @@ public class ShopSetupService {
     }
 
     @Transactional
+    public void setupRiceShop(UUID tenantId, UUID companyId) {
+        String[] tableNames = {"Bàn 1", "Bàn 2", "Bàn 3", "Bàn 4", "Quầy", "Mang về"};
+        for (String name : tableNames) {
+            ShopTable table = new ShopTable();
+            table.setTenantId(tenantId);
+            table.setCompanyId(companyId);
+            table.setTableName(name);
+            shopTableRepository.save(table);
+        }
+
+        String suffix = UUID.randomUUID().toString().substring(0, 6).toUpperCase();
+
+        // Main dish
+        Model comTam = new Model();
+        comTam.setTenantId(tenantId);
+        comTam.setCompanyId(companyId);
+        comTam.setModelCode("COM-TAM-" + suffix);
+        comTam.setModelName("Cơm Tấm");
+        comTam.setSellingPrice(new BigDecimal("35000"));
+        comTam.setCategory("FOOD");
+        comTam = modelRepository.save(comTam);
+
+        BomEntity comTamBom = new BomEntity();
+        comTamBom.setTenantId(tenantId);
+        comTamBom.setCompanyId(companyId);
+        comTamBom.setModel(comTam);
+        comTamBom.setBomName("Cơm Tấm BOM");
+        comTamBom.setVersion(1);
+        comTamBom.setStatus("ACTIVE");
+        bomRepository.save(comTamBom);
+
+        // Topping group (paid add-ons)
+        ModelMenuOption toppings = new ModelMenuOption();
+        toppings.setTenantId(tenantId);
+        toppings.setCompanyId(companyId);
+        toppings.setModelId(comTam.getId());
+        toppings.setGroupName("Topping");
+        toppings.setChoices("[\"Sườn\",\"Bì\",\"Chả\",\"Trứng\"]");
+        toppings.setMultiSelect(true);
+        toppings.setRequired(false);
+        toppings.setDisplayOrder(0);
+        menuOptionRepository.save(toppings);
+
+        // Free condiments group
+        ModelMenuOption extras = new ModelMenuOption();
+        extras.setTenantId(tenantId);
+        extras.setCompanyId(companyId);
+        extras.setModelId(comTam.getId());
+        extras.setGroupName("Thêm");
+        extras.setChoices("[\"Hành\",\"Ớt\",\"Tốp mỡ\"]");
+        extras.setMultiSelect(true);
+        extras.setRequired(false);
+        extras.setIsFree(true);
+        extras.setDisplayOrder(1);
+        menuOptionRepository.save(extras);
+
+        // Side drink
+        Model drink = new Model();
+        drink.setTenantId(tenantId);
+        drink.setCompanyId(companyId);
+        drink.setModelCode("NUOC-NGOT-" + suffix);
+        drink.setModelName("Nước Ngọt");
+        drink.setSellingPrice(new BigDecimal("15000"));
+        drink.setCategory("DRINK");
+        drink = modelRepository.save(drink);
+
+        BomEntity drinkBom = new BomEntity();
+        drinkBom.setTenantId(tenantId);
+        drinkBom.setCompanyId(companyId);
+        drinkBom.setModel(drink);
+        drinkBom.setBomName("Nước Ngọt BOM");
+        drinkBom.setVersion(1);
+        drinkBom.setStatus("ACTIVE");
+        bomRepository.save(drinkBom);
+    }
+
+    @Transactional
     public void setupMatchaShop(UUID tenantId, UUID companyId) {
         String[] tableNames = {"Bàn 1", "Bàn 2", "Bàn 3", "Bàn 4", "Quầy", "Mang về"};
         for (String name : tableNames) {

@@ -124,6 +124,9 @@ public class ProfileController {
             } else if ("QR".equalsIgnoreCase(request.type())) {
                 shopSetupService.setupQrShop(tid, cid);
                 return ResponseEntity.ok(new ShopSetupResponse(true, "QR shop ready — 10 tables, 3 drinks, BOMs & menu options created"));
+            } else if ("RICE".equalsIgnoreCase(request.type())) {
+                shopSetupService.setupRiceShop(tid, cid);
+                return ResponseEntity.ok(new ShopSetupResponse(true, "Quán cơm ready — 6 tables, Cơm Tấm với topping sườn/bì/chả/trứng, thêm hành/ớt/tốp mỡ"));
             } else {
                 return ResponseEntity.badRequest().body(new ShopSetupResponse(false, "Unknown type: " + request.type()));
             }

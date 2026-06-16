@@ -327,7 +327,7 @@ function MainShell({ user, logout, isAdmin }) {
         <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
           <Routes>
             <Route path="/login" element={<LoginForm />} />
-            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
             <Route path="/" element={<RequireAuth><RequireContext><MaterialPage /></RequireContext></RequireAuth>} />
             <Route path="/materials" element={<RequireAuth><RequireContext><MaterialPage /></RequireContext></RequireAuth>} />
             <Route path="/models" element={<RequireAuth><ModelPage /></RequireAuth>} />
