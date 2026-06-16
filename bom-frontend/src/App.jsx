@@ -1,13 +1,16 @@
 import React, { useState } from 'react'
-import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Tooltip from '@mui/material/Tooltip'
 import IconButton from '@mui/material/IconButton'
 import Typography from '@mui/material/Typography'
 import Divider from '@mui/material/Divider'
+import Collapse from '@mui/material/Collapse'
 import MenuIcon from '@mui/icons-material/Menu'
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import LogoutIcon from '@mui/icons-material/Logout'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 
 import MaterialPage from './features/material/MaterialPage'
 import ModelPage from './features/model/ModelPage'
@@ -23,7 +26,6 @@ import { AppProvider } from './context/AppContext'
 import { AuthProvider } from './context/AuthContext'
 import { useAuth } from './context/useAuth'
 import { TenantListProvider } from './context/TenantListContext'
-import ContextHeaderBar from './components/ContextHeaderBar'
 import TenantSelector from './components/TenantSelector'
 import CompanySelector from './components/CompanySelector'
 import BomSelector from './components/BomSelector'
@@ -51,45 +53,94 @@ import CustomerPickupPage from './features/shopboard/CustomerPickupPage'
 import ShopTokenManagePage from './features/shoptoken/ShopTokenManagePage'
 import ProfilePage from './features/profile/ProfilePage'
 
-const SIDEBAR_FULL = 200
+const SIDEBAR_FULL = 210
 const SIDEBAR_MINI = 52
 
-const NAV_ITEMS = [
-  { label: 'Materials',   path: '/materials',            icon: '🧱' },
-  { label: 'Models',      path: '/models',               icon: '📐' },
-  { label: 'BOMs',        path: '/boms',                 icon: '🧩' },
-  { divider: true },
-  { label: 'Inventory',   path: '/inventory',            icon: '📦' },
-  { label: 'Movements',   path: '/inventory-movements',  icon: '🔄' },
-  { label: 'Warehouses',  path: '/warehouses',           icon: '🏭' },
-  { divider: true },
-  { label: 'Suppliers',   path: '/suppliers',            icon: '🤝' },
-  { label: 'Contracts',   path: '/contracts',            icon: '📄' },
-  { divider: true },
-  { label: 'Orders',      path: '/orders',               icon: '🛒' },
-  { label: 'Order Lines', path: '/order-lines',          icon: '📋' },
-  { label: 'Invoices',    path: '/invoices',             icon: '🧾' },
-  { label: 'Consumption', path: '/consumption',          icon: '📊' },
-  { label: 'Cons. Log',   path: '/consumption-log',      icon: '🗒️' },
-  { divider: true },
-  { label: 'Companies',   path: '/companies',            icon: '🏢' },
-  { divider: true },
-  { label: 'Shop Orders', path: '/shop-orders',           icon: '🧋' },
-  { label: 'Tables',      path: '/shop-tables',           icon: '🪑' },
-  { label: 'Menu Setup',  path: '/shop-menu',             icon: '🍽️' },
-  { label: 'Bank Setup',  path: '/shop-bank',             icon: '🏦' },
-  { label: 'QR Tokens',   path: '/shop-tokens',           icon: '🔑' },
-  { divider: true },
-  { label: 'Profile',     path: '/profile',               icon: '👤' },
+// ── Nav data ──────────────────────────────────────────────────────────────────
+
+const NAV_GROUPS = [
+  {
+    key: 'bom',
+    label: 'BOM',
+    icon: '🧩',
+    items: [
+      { label: 'Materials', path: '/materials',           icon: '🧱' },
+      { label: 'Models',    path: '/models',              icon: '📐' },
+      { label: 'BOMs',      path: '/boms',                icon: '🧩' },
+    ],
+  },
+  {
+    key: 'inventory',
+    label: 'Inventory',
+    icon: '📦',
+    items: [
+      { label: 'Inventory',  path: '/inventory',          icon: '📦' },
+      { label: 'Movements',  path: '/inventory-movements',icon: '🔄' },
+      { label: 'Warehouses', path: '/warehouses',         icon: '🏭' },
+    ],
+  },
+  {
+    key: 'procurement',
+    label: 'Procurement',
+    icon: '🤝',
+    items: [
+      { label: 'Suppliers', path: '/suppliers', icon: '🤝' },
+      { label: 'Contracts', path: '/contracts', icon: '📄' },
+    ],
+  },
+  {
+    key: 'orders',
+    label: 'Orders',
+    icon: '🛒',
+    items: [
+      { label: 'Orders',      path: '/orders',          icon: '🛒' },
+      { label: 'Order Lines', path: '/order-lines',     icon: '📋' },
+      { label: 'Invoices',    path: '/invoices',        icon: '🧾' },
+      { label: 'Consumption', path: '/consumption',     icon: '📊' },
+      { label: 'Cons. Log',   path: '/consumption-log', icon: '🗒️' },
+    ],
+  },
+  {
+    key: 'companies',
+    label: 'Companies',
+    icon: '🏢',
+    items: [
+      { label: 'Companies', path: '/companies', icon: '🏢' },
+    ],
+  },
+  {
+    key: 'shop',
+    label: 'Shop',
+    icon: '🧋',
+    items: [
+      { label: 'Shop Orders', path: '/shop-orders', icon: '🧋' },
+      { label: 'Tables',      path: '/shop-tables', icon: '🪑' },
+      { label: 'Menu Setup',  path: '/shop-menu',   icon: '🍽️' },
+      { label: 'Bank Setup',  path: '/shop-bank',   icon: '🏦' },
+      { label: 'QR Tokens',   path: '/shop-tokens', icon: '🔑' },
+    ],
+  },
+]
+
+const BOTTOM_ITEMS = [
+  { label: 'Profile', path: '/profile', icon: '👤' },
 ]
 
 const ADMIN_ITEMS = [
-  { label: 'Admin',       path: '/admin',                icon: '🔧', adminOnly: true },
-  { label: 'Tenants',     path: '/tenants',              icon: '🏗️',  adminOnly: true },
-  { label: 'ETL',         path: '/etl',                  icon: '🔬', adminOnly: true },
+  { label: 'Admin',   path: '/admin',   icon: '🔧' },
+  { label: 'Tenants', path: '/tenants', icon: '🏗️' },
+  { label: 'ETL',     path: '/etl',     icon: '🔬' },
 ]
 
-function NavItem({ item, collapsed, active }) {
+// ── Nav components ────────────────────────────────────────────────────────────
+
+function isActive(path, pathname) {
+  return pathname === path || (path !== '/' && pathname.startsWith(path))
+}
+
+function NavItem({ item, collapsed, indent = false }) {
+  const { pathname } = useLocation()
+  const active = isActive(item.path, pathname)
   return (
     <Tooltip title={collapsed ? item.label : ''} placement="right">
       <Link
@@ -97,29 +148,88 @@ function NavItem({ item, collapsed, active }) {
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 10,
-          padding: collapsed ? '9px 0' : '9px 14px',
+          gap: 8,
+          padding: collapsed ? '8px 0' : indent ? '7px 14px 7px 28px' : '8px 14px',
           justifyContent: collapsed ? 'center' : 'flex-start',
           textDecoration: 'none',
           borderRadius: 6,
           margin: '1px 6px',
           background: active ? 'rgba(25,118,210,0.13)' : 'transparent',
-          color: active ? '#1565c0' : '#333',
+          color: active ? '#1565c0' : '#444',
           fontWeight: active ? 700 : 400,
           fontSize: 13,
           transition: 'background 0.15s',
         }}
       >
-        <span style={{ fontSize: 16, lineHeight: 1, flexShrink: 0 }}>{item.icon}</span>
+        <span style={{ fontSize: 15, lineHeight: 1, flexShrink: 0 }}>{item.icon}</span>
         {!collapsed && <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>}
       </Link>
     </Tooltip>
   )
 }
 
-function Sidebar({ collapsed, onToggle, isAdmin }) {
-  const location = useLocation()
+function NavGroup({ group, collapsed }) {
+  const { pathname } = useLocation()
 
+  const storageKey = `nav-group-${group.key}`
+  const hasActiveChild = group.items.some(item => isActive(item.path, pathname))
+
+  const [expanded, setExpanded] = useState(() => {
+    const stored = sessionStorage.getItem(storageKey)
+    if (stored !== null) return stored === 'true'
+    return hasActiveChild
+  })
+
+  const toggle = () => {
+    const next = !expanded
+    setExpanded(next)
+    sessionStorage.setItem(storageKey, String(next))
+  }
+
+  // Mini mode: show all items as icons without group wrapper
+  if (collapsed) {
+    return (
+      <>
+        {group.items.map(item => <NavItem key={item.path} item={item} collapsed={true} />)}
+      </>
+    )
+  }
+
+  return (
+    <Box>
+      {/* Group header */}
+      <Box
+        onClick={toggle}
+        sx={{
+          display: 'flex', alignItems: 'center', gap: 1,
+          mx: '6px', px: '8px', py: '6px',
+          borderRadius: 1, cursor: 'pointer', userSelect: 'none',
+          color: hasActiveChild ? '#1565c0' : '#666',
+          '&:hover': { bgcolor: 'rgba(0,0,0,0.04)' },
+        }}
+      >
+        <span style={{ fontSize: 14, lineHeight: 1 }}>{group.icon}</span>
+        <Typography sx={{
+          flex: 1, fontSize: 11, fontWeight: 700,
+          letterSpacing: 0.6, textTransform: 'uppercase',
+          color: 'inherit',
+        }}>
+          {group.label}
+        </Typography>
+        {expanded
+          ? <ExpandLessIcon sx={{ fontSize: 14, color: 'inherit' }} />
+          : <ExpandMoreIcon sx={{ fontSize: 14, color: 'inherit' }} />}
+      </Box>
+
+      {/* Items */}
+      <Collapse in={expanded} timeout={150}>
+        {group.items.map(item => <NavItem key={item.path} item={item} collapsed={false} indent />)}
+      </Collapse>
+    </Box>
+  )
+}
+
+function Sidebar({ collapsed, onToggle, isAdmin }) {
   return (
     <Box sx={{
       width: collapsed ? SIDEBAR_MINI : SIDEBAR_FULL,
@@ -136,32 +246,47 @@ function Sidebar({ collapsed, onToggle, isAdmin }) {
       zIndex: 10,
     }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'space-between', px: collapsed ? 0 : 1.5, py: 1.2, borderBottom: '1px solid #e0e0e0', minHeight: 48 }}>
-        {!collapsed && <Typography variant="subtitle2" fontWeight={700} sx={{ color: '#1565c0', letterSpacing: 0.5 }}>BOM System</Typography>}
+      <Box sx={{
+        display: 'flex', alignItems: 'center',
+        justifyContent: collapsed ? 'center' : 'space-between',
+        px: collapsed ? 0 : 1.5, py: 1.2,
+        borderBottom: '1px solid #e0e0e0', minHeight: 48,
+      }}>
+        {!collapsed && (
+          <Typography variant="subtitle2" fontWeight={700} sx={{ color: '#1565c0', letterSpacing: 0.5 }}>
+            BOM System
+          </Typography>
+        )}
         <IconButton size="small" onClick={onToggle} sx={{ flexShrink: 0 }}>
           {collapsed ? <MenuIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
         </IconButton>
       </Box>
 
-      {/* Nav items — scrollable */}
+      {/* Scrollable nav */}
       <Box sx={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', py: 0.5 }}>
-        {NAV_ITEMS.map((item, i) =>
-          item.divider
-            ? <Divider key={`d${i}`} sx={{ my: 0.5, mx: collapsed ? 0.5 : 1 }} />
-            : <NavItem key={item.path} item={item} collapsed={collapsed} active={location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path))} />
+        {NAV_GROUPS.map((group, i) => (
+          <React.Fragment key={group.key}>
+            {i > 0 && <Divider sx={{ my: 0.5, mx: collapsed ? 0.5 : 1 }} />}
+            <NavGroup group={group} collapsed={collapsed} />
+          </React.Fragment>
+        ))}
+
+        <Divider sx={{ my: 0.5, mx: collapsed ? 0.5 : 1 }} />
+        {BOTTOM_ITEMS.map(item => <NavItem key={item.path} item={item} collapsed={collapsed} />)}
+
+        {isAdmin && (
+          <>
+            <Divider sx={{ my: 0.5, mx: collapsed ? 0.5 : 1 }} />
+            {ADMIN_ITEMS.map(item => <NavItem key={item.path} item={item} collapsed={collapsed} />)}
+          </>
         )}
-        {isAdmin && <>
-          <Divider sx={{ my: 0.5, mx: collapsed ? 0.5 : 1 }} />
-          {ADMIN_ITEMS.map(item =>
-            <NavItem key={item.path} item={item} collapsed={collapsed} active={location.pathname === item.path || location.pathname.startsWith(item.path)} />
-          )}
-        </>}
       </Box>
     </Box>
   )
 }
 
-// Routes where tenant/company context controls should be hidden
+// ── Header ────────────────────────────────────────────────────────────────────
+
 const ADMIN_ONLY_PATHS = ['/admin', '/tenants', '/etl']
 
 function HeaderBar({ user, logout }) {
@@ -187,6 +312,8 @@ function HeaderBar({ user, logout }) {
     </>
   )
 }
+
+// ── Main shell ────────────────────────────────────────────────────────────────
 
 function MainShell({ user, logout, isAdmin }) {
   const [collapsed, setCollapsed] = useState(false)
@@ -233,9 +360,10 @@ function MainShell({ user, logout, isAdmin }) {
   )
 }
 
+// ── App root ──────────────────────────────────────────────────────────────────
+
 function AppShell() {
   const { user, logout, isAdmin } = useAuth()
-
   return (
     <BrowserRouter basename="/bom-inventory">
       <Routes>
@@ -246,7 +374,6 @@ function AppShell() {
         <Route path="/shop/customer-board" element={<CustomerBoardPage />} />
         <Route path="/shop/pickup/:orderCode" element={<CustomerPickupPage />} />
         <Route path="/shop/counter" element={<CounterDisplayPage />} />
-        {/* Everything else — existing authenticated shell */}
         <Route path="/*" element={<MainShell user={user} logout={logout} isAdmin={isAdmin} />} />
       </Routes>
     </BrowserRouter>
