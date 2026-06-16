@@ -79,6 +79,8 @@ const NAV_ITEMS = [
   { label: 'Menu Setup',  path: '/shop-menu',             icon: '🍽️' },
   { label: 'Bank Setup',  path: '/shop-bank',             icon: '🏦' },
   { label: 'QR Tokens',   path: '/shop-tokens',           icon: '🔑' },
+  { divider: true },
+  { label: 'Profile',     path: '/profile',               icon: '👤' },
 ]
 
 const ADMIN_ITEMS = [

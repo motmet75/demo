@@ -1,20 +1,78 @@
 package com.ams.bomcore.service.shop;
 
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.ams.bomcore.domain.bom.BomEntity;
+import com.ams.bomcore.domain.model.Model;
+import com.ams.bomcore.domain.shop.ModelMenuOption;
+import com.ams.bomcore.domain.shop.ShopOrder;
 import com.ams.bomcore.domain.shop.ShopTable;
+import com.ams.bomcore.repository.BomItemRepository;
+import com.ams.bomcore.repository.BomRepository;
+import com.ams.bomcore.repository.ModelMenuOptionRepository;
+import com.ams.bomcore.repository.ModelRepository;
+import com.ams.bomcore.repository.ShopOrderItemRepository;
+import com.ams.bomcore.repository.ShopOrderRepository;
 import com.ams.bomcore.repository.ShopTableRepository;
 
 @Service
 public class ShopSetupService {
 
     private final ShopTableRepository shopTableRepository;
+    private final ModelRepository modelRepository;
+    private final BomRepository bomRepository;
+    private final BomItemRepository bomItemRepository;
+    private final ModelMenuOptionRepository menuOptionRepository;
+    private final ShopOrderRepository shopOrderRepository;
+    private final ShopOrderItemRepository shopOrderItemRepository;
 
-    public ShopSetupService(ShopTableRepository shopTableRepository) {
+    public ShopSetupService(ShopTableRepository shopTableRepository,
+                            ModelRepository modelRepository,
+                            BomRepository bomRepository,
+                            BomItemRepository bomItemRepository,
+                            ModelMenuOptionRepository menuOptionRepository,
+                            ShopOrderRepository shopOrderRepository,
+                            ShopOrderItemRepository shopOrderItemRepository) {
         this.shopTableRepository = shopTableRepository;
+        this.modelRepository = modelRepository;
+        this.bomRepository = bomRepository;
+        this.bomItemRepository = bomItemRepository;
+        this.menuOptionRepository = menuOptionRepository;
+        this.shopOrderRepository = shopOrderRepository;
+        this.shopOrderItemRepository = shopOrderItemRepository;
+    }
+
+    @Transactional
+    public void resetShop(UUID tenantId, UUID companyId) {
+        // 1. order items → orders
+        List<ShopOrder> orders = shopOrderRepository.findAllByTenantIdAndCompanyIdOrderByCreatedAtDesc(tenantId, companyId);
+        for (ShopOrder order : orders) {
+            shopOrderItemRepository.deleteAll(shopOrderItemRepository.findAllByOrder_Id(order.getId()));
+        }
+        shopOrderRepository.deleteAll(orders);
+
+        // 2. menu options
+        menuOptionRepository.deleteAll(
+            menuOptionRepository.findAllByTenantIdAndCompanyIdOrderByDisplayOrderAsc(tenantId, companyId));
+
+        // 3. bom items → boms
+        List<BomEntity> boms = bomRepository.findAllByTenantIdAndCompanyId(tenantId, companyId);
+        for (BomEntity bom : boms) {
+            bomItemRepository.deleteByBom(bom);
+        }
+        bomRepository.deleteAll(boms);
+
+        // 4. models
+        modelRepository.deleteAll(modelRepository.findAllByTenantIdAndCompanyId(tenantId, companyId));
+
+        // 5. tables
+        shopTableRepository.deleteAll(shopTableRepository.findAllByTenantIdAndCompanyId(tenantId, companyId));
     }
 
     @Transactional
@@ -27,6 +85,8 @@ public class ShopSetupService {
             table.setTableName(name);
             shopTableRepository.save(table);
         }
+        List<Model> models = createSampleModels(tenantId, companyId);
+        createBomsAndMenuOptions(tenantId, companyId, models);
     }
 
     @Transactional
@@ -37,6 +97,62 @@ public class ShopSetupService {
             table.setCompanyId(companyId);
             table.setTableName("QR-" + String.format("%02d", i));
             shopTableRepository.save(table);
+        }
+        List<Model> models = createSampleModels(tenantId, companyId);
+        createBomsAndMenuOptions(tenantId, companyId, models);
+    }
+
+    private List<Model> createSampleModels(UUID tenantId, UUID companyId) {
+        String suffix = UUID.randomUUID().toString().substring(0, 6).toUpperCase();
+        Object[][] items = {
+            {"CA-PHE-DEN-" + suffix, "Cà Phê Đen", new BigDecimal("30000")},
+            {"CA-PHE-SUA-" + suffix, "Cà Phê Sữa", new BigDecimal("35000")},
+            {"TRA-XANH-"   + suffix, "Trà Xanh",   new BigDecimal("40000")},
+        };
+        List<Model> saved = new ArrayList<>();
+        for (Object[] row : items) {
+            Model m = new Model();
+            m.setTenantId(tenantId);
+            m.setCompanyId(companyId);
+            m.setModelCode((String) row[0]);
+            m.setModelName((String) row[1]);
+            m.setSellingPrice((BigDecimal) row[2]);
+            m.setCategory("DRINK");
+            saved.add(modelRepository.save(m));
+        }
+        return saved;
+    }
+
+    private void createBomsAndMenuOptions(UUID tenantId, UUID companyId, List<Model> models) {
+        for (Model m : models) {
+            BomEntity bom = new BomEntity();
+            bom.setTenantId(tenantId);
+            bom.setCompanyId(companyId);
+            bom.setModel(m);
+            bom.setBomName(m.getModelName() + " BOM");
+            bom.setVersion(1);
+            bom.setStatus("ACTIVE");
+            bomRepository.save(bom);
+
+            ModelMenuOption sugar = new ModelMenuOption();
+            sugar.setTenantId(tenantId);
+            sugar.setCompanyId(companyId);
+            sugar.setModelId(m.getId());
+            sugar.setGroupName("Đường");
+            sugar.setChoices("[\"30%\",\"50%\",\"70%\",\"100%\"]");
+            sugar.setDefaultValue("70%");
+            sugar.setDisplayOrder(0);
+            menuOptionRepository.save(sugar);
+
+            ModelMenuOption ice = new ModelMenuOption();
+            ice.setTenantId(tenantId);
+            ice.setCompanyId(companyId);
+            ice.setModelId(m.getId());
+            ice.setGroupName("Đá");
+            ice.setChoices("[\"Không đá\",\"Ít đá\",\"Nhiều đá\"]");
+            ice.setDefaultValue("Ít đá");
+            ice.setDisplayOrder(1);
+            menuOptionRepository.save(ice);
         }
     }
 }

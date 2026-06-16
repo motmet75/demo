@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Alert, Avatar, Box, Button, Card, CardContent,
@@ -6,6 +6,8 @@ import {
 } from '@mui/material'
 import StoreIcon from '@mui/icons-material/Store'
 import QrCodeIcon from '@mui/icons-material/QrCode'
+import DeleteForeverIcon from '@mui/icons-material/DeleteForever'
+import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import { apiFetchJson } from '../../api/client'
 import { useAuth } from '../../context/useAuth'
 
@@ -15,6 +17,9 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState(null)
   const [loadingProfile, setLoadingProfile] = useState(true)
   const [setupLoading, setSetupLoading] = useState('')
+  const [resetConfirm, setResetConfirm] = useState(false)
+  const [resetLoading, setResetLoading] = useState(false)
+  const resetTimerRef = useRef(null)
   const [snack, setSnack] = useState({ open: false, message: '', severity: 'success' })
 
   const loadProfile = useCallback(async () => {
@@ -30,6 +35,32 @@ export default function ProfilePage() {
     refreshMe().then(() => loadProfile())
   }, [refreshMe, loadProfile])
 
+  const handleResetClick = () => {
+    if (!resetConfirm) {
+      setResetConfirm(true)
+      resetTimerRef.current = setTimeout(() => setResetConfirm(false), 4000)
+      return
+    }
+    clearTimeout(resetTimerRef.current)
+    setResetConfirm(false)
+    handleResetConfirmed()
+  }
+
+  const handleResetConfirmed = async () => {
+    setResetLoading(true)
+    const { res, data } = await apiFetchJson('/auth/shop/reset', {
+      method: 'POST',
+      credentials: 'include',
+    })
+    setResetLoading(false)
+    if (res.ok && data?.success) {
+      setSnack({ open: true, message: data.message, severity: 'info' })
+      loadProfile()
+    } else {
+      setSnack({ open: true, message: data?.message || 'Reset failed', severity: 'error' })
+    }
+  }
+
   const handleSetup = async (type) => {
     setSetupLoading(type)
     const { res, data } = await apiFetchJson('/auth/shop/setup', {
@@ -41,8 +72,8 @@ export default function ProfilePage() {
     setSetupLoading('')
     if (res.ok && data?.success) {
       setSnack({ open: true, message: data.message, severity: 'success' })
-      // Reload profile so tenant/company info is fresh
       loadProfile()
+      setTimeout(() => navigate('/shop-orders'), 1200)
     } else {
       setSnack({ open: true, message: data?.message || 'Setup failed', severity: 'error' })
     }
@@ -101,7 +132,7 @@ export default function ProfilePage() {
       {/* Shop setup */}
       <Typography variant="h6" sx={{ mb: 2 }}>Set up your shop</Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Choose a template to quickly create default tables for your shop. You can customise everything afterwards.
+        One click to create tables, sample menu items (models), BOMs, and options — your shop is ready to take orders immediately.
       </Typography>
 
       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
@@ -116,7 +147,7 @@ export default function ProfilePage() {
               Matcha Shop
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              6 tables (Bàn 1–4, Quầy, Mang về) — perfect for a café or matcha tea shop
+              Creates 6 tables (Bàn 1–4, Quầy, Mang về) · 3 sample drinks with BOM & menu options — ready to order
             </Typography>
             <Button
               variant="contained"
@@ -126,7 +157,7 @@ export default function ProfilePage() {
               onClick={() => handleSetup('MATCHA')}
               startIcon={setupLoading === 'MATCHA' ? <CircularProgress size={16} color="inherit" /> : <StoreIcon />}
             >
-              {setupLoading === 'MATCHA' ? 'Creating...' : 'Create Matcha Shop'}
+              {setupLoading === 'MATCHA' ? 'Setting up...' : 'Create Matcha Shop'}
             </Button>
           </CardContent>
         </Card>
@@ -142,7 +173,7 @@ export default function ProfilePage() {
               QR Shop
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              10 QR-numbered tables (QR-01 to QR-10) — customers scan to order
+              Creates 10 QR tables (QR-01–10) · 3 sample drinks with BOM & menu options — customers scan to order
             </Typography>
             <Button
               variant="contained"
@@ -152,10 +183,39 @@ export default function ProfilePage() {
               onClick={() => handleSetup('QR')}
               startIcon={setupLoading === 'QR' ? <CircularProgress size={16} color="inherit" /> : <QrCodeIcon />}
             >
-              {setupLoading === 'QR' ? 'Creating...' : 'Create QR Shop'}
+              {setupLoading === 'QR' ? 'Setting up...' : 'Create QR Shop'}
             </Button>
           </CardContent>
         </Card>
+      </Box>
+
+      <Divider sx={{ mt: 4, mb: 3 }} />
+
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+        <WarningAmberIcon sx={{ color: 'error.main', fontSize: 20 }} />
+        <Typography variant="subtitle2" color="error.main">Danger Zone</Typography>
+      </Box>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Reset clears all tables, orders, models, BOMs and menu options for this company. This cannot be undone.
+      </Typography>
+      <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+        <Button
+          variant="outlined"
+          color="error"
+          disabled={resetLoading || !!setupLoading}
+          onClick={handleResetClick}
+          startIcon={resetLoading
+            ? <CircularProgress size={16} color="inherit" />
+            : <DeleteForeverIcon />}
+          sx={{ minWidth: 180 }}
+        >
+          {resetLoading ? 'Resetting...' : resetConfirm ? 'Confirm Reset?' : 'Reset Shop'}
+        </Button>
+        {resetConfirm && (
+          <Button variant="text" size="small" onClick={() => { clearTimeout(resetTimerRef.current); setResetConfirm(false) }}>
+            Cancel
+          </Button>
+        )}
       </Box>
 
       <Box sx={{ mt: 3, textAlign: 'center' }}>

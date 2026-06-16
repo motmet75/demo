@@ -40,6 +40,7 @@ public class ProfileController {
     public record ProfileResponse(ProfileUser user, ProfileTenant tenant, ProfileCompany company) {}
     public record ShopSetupRequest(String type) {}
     public record ShopSetupResponse(boolean success, String message) {}
+    public record ShopResetResponse(boolean success, String message) {}
 
     @GetMapping("/profile")
     public ResponseEntity<ProfileResponse> getProfile(Authentication authentication) {
@@ -74,6 +75,28 @@ public class ProfileController {
         return ResponseEntity.ok(new ProfileResponse(profileUser, profileTenant, profileCompany));
     }
 
+    @PostMapping("/shop/reset")
+    public ResponseEntity<ShopResetResponse> resetShop(Authentication authentication) {
+        if (authentication == null || !(authentication.getPrincipal() instanceof User user)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        String tenantId = user.getAssignedTenantId() != null ? user.getAssignedTenantId() : user.getLastTenantId();
+        String companyId = user.getAssignedCompanyId() != null ? user.getAssignedCompanyId() : user.getLastCompanyId();
+
+        if (tenantId == null || companyId == null) {
+            return ResponseEntity.badRequest().body(new ShopResetResponse(false, "No tenant/company assigned to this account"));
+        }
+
+        try {
+            shopSetupService.resetShop(UUID.fromString(tenantId), UUID.fromString(companyId));
+            return ResponseEntity.ok(new ShopResetResponse(true, "Shop data cleared — tables, orders, models, BOMs and menu options removed"));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new ShopResetResponse(false, "Reset failed: " + e.getMessage()));
+        }
+    }
+
     @PostMapping("/shop/setup")
     public ResponseEntity<ShopSetupResponse> setupShop(
             @RequestBody ShopSetupRequest request,
@@ -95,10 +118,10 @@ public class ProfileController {
 
             if ("MATCHA".equalsIgnoreCase(request.type())) {
                 shopSetupService.setupMatchaShop(tid, cid);
-                return ResponseEntity.ok(new ShopSetupResponse(true, "Matcha shop created with 6 default tables"));
+                return ResponseEntity.ok(new ShopSetupResponse(true, "Matcha shop ready — 6 tables, 3 drinks, BOMs & menu options created"));
             } else if ("QR".equalsIgnoreCase(request.type())) {
                 shopSetupService.setupQrShop(tid, cid);
-                return ResponseEntity.ok(new ShopSetupResponse(true, "QR shop created with 10 numbered tables"));
+                return ResponseEntity.ok(new ShopSetupResponse(true, "QR shop ready — 10 tables, 3 drinks, BOMs & menu options created"));
             } else {
                 return ResponseEntity.badRequest().body(new ShopSetupResponse(false, "Unknown type: " + request.type()));
             }
