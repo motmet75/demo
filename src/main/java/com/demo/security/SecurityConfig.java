@@ -1,6 +1,7 @@
 package com.demo.security;
 
-import org.springframework.beans.factory.annotation.Value;
+import java.util.Optional;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -15,17 +16,15 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder.BCryptVersion;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.SimpleUrlAuthenticationSuccessHandler;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
 public class SecurityConfig {
-
-    @Value("${app.frontend-url:http://localhost:5173/bom-inventory}")
-    private String frontendUrl;
 
     private final GoogleOAuth2UserService googleOAuth2UserService;
 
@@ -33,11 +32,23 @@ public class SecurityConfig {
         this.googleOAuth2UserService = googleOAuth2UserService;
     }
 
+    /** Build origin (scheme + host + optional port) from forwarded headers, falling back to the raw request. */
+    private static String origin(HttpServletRequest req) {
+        String proto = Optional.ofNullable(req.getHeader("X-Forwarded-Proto"))
+                               .filter(s -> !s.isBlank()).orElse(req.getScheme());
+        String host  = Optional.ofNullable(req.getHeader("X-Forwarded-Host"))
+                               .filter(s -> !s.isBlank())
+                               .orElseGet(() -> {
+                                   int port = req.getServerPort();
+                                   boolean std = (proto.equals("https") && port == 443)
+                                              || (proto.equals("http")  && port == 80);
+                                   return req.getServerName() + (std ? "" : ":" + port);
+                               });
+        return proto + "://" + host;
+    }
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        SimpleUrlAuthenticationSuccessHandler oauth2SuccessHandler = new SimpleUrlAuthenticationSuccessHandler(frontendUrl + "/profile");
-        oauth2SuccessHandler.setAlwaysUseDefaultTargetUrl(true);
-
         http
             .csrf(csrf -> csrf.disable())
             .cors(Customizer.withDefaults())
@@ -66,8 +77,12 @@ public class SecurityConfig {
                 .userInfoEndpoint(userInfo -> userInfo
                     .userService(googleOAuth2UserService)
                 )
-                .successHandler(oauth2SuccessHandler)
-                .failureUrl(frontendUrl + "/login?error=oauth2")
+                .successHandler((req, res, auth) ->
+                    res.sendRedirect(origin(req) + "/bom-inventory/profile")
+                )
+                .failureHandler((req, res, ex) ->
+                    res.sendRedirect(origin(req) + "/bom-inventory/login?error=oauth2")
+                )
             )
             .formLogin(form -> form.disable())
             .httpBasic(basic -> basic.disable())
