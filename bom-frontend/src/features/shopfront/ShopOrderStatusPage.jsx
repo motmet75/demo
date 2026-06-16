@@ -92,7 +92,7 @@ function SingleOrderView({ order, onEdit }) {
   return (
     <Box sx={{ bgcolor: '#fff', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ bgcolor: style.bg, textAlign: 'center', px: 2, pt: { xs: 5, md: 6 }, pb: { xs: 3, md: 4 } }}>
-        <Typography sx={{ fontSize: { xs: 100, md: 128 }, fontWeight: 900, lineHeight: 1, color: style.color, letterSpacing: -4 }}>
+        <Typography sx={{ fontSize: { xs: 48, md: 64 }, fontWeight: 900, lineHeight: 1, color: style.color, letterSpacing: -2 }}>
           {displayNum}
         </Typography>
         <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, mt: 1.5, px: 2.5, py: 0.75, bgcolor: '#fff', borderRadius: 99, border: `1.5px solid ${style.color}22` }}>

@@ -53,6 +53,9 @@ public class Company {
     @Column(name = "prepaid_menu")
     private Boolean prepaidMenu = false;
 
+    @Column(name = "valid_until")
+    private Instant validUntil;
+
     public Company() {}
 
     public UUID getId() { return id; }
@@ -83,6 +86,9 @@ public class Company {
 
     public Boolean getPrepaidMenu() { return prepaidMenu; }
     public void setPrepaidMenu(Boolean prepaidMenu) { this.prepaidMenu = prepaidMenu; }
+
+    public Instant getValidUntil() { return validUntil; }
+    public void setValidUntil(Instant validUntil) { this.validUntil = validUntil; }
 
     @PrePersist
     private void prePersist() {

@@ -36,7 +36,7 @@ public class ProfileController {
 
     public record ProfileUser(Integer id, String username, String email, String firstName, String lastName, String avatar) {}
     public record ProfileTenant(String id, String tenantCode, String tenantName) {}
-    public record ProfileCompany(String id, String companyCode, String companyName) {}
+    public record ProfileCompany(String id, String companyCode, String companyName, String validUntil) {}
     public record ProfileResponse(ProfileUser user, ProfileTenant tenant, ProfileCompany company) {}
     public record ShopSetupRequest(String type) {}
     public record ShopSetupResponse(boolean success, String message) {}
@@ -68,7 +68,9 @@ public class ProfileController {
         if (companyId != null) {
             try {
                 Company c = companyRepository.findById(UUID.fromString(companyId)).orElse(null);
-                if (c != null) profileCompany = new ProfileCompany(c.getId().toString(), c.getCompanyCode(), c.getCompanyName());
+                if (c != null) profileCompany = new ProfileCompany(
+                        c.getId().toString(), c.getCompanyCode(), c.getCompanyName(),
+                        c.getValidUntil() != null ? c.getValidUntil().toString() : null);
             } catch (IllegalArgumentException ignored) {}
         }
 

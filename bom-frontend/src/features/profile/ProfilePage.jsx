@@ -8,8 +8,59 @@ import StoreIcon from '@mui/icons-material/Store'
 import QrCodeIcon from '@mui/icons-material/QrCode'
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
+import AccessTimeIcon from '@mui/icons-material/AccessTime'
+import EmailIcon from '@mui/icons-material/Email'
 import { apiFetchJson } from '../../api/client'
 import { useAuth } from '../../context/useAuth'
+
+function ValidityCard({ company, user }) {
+  const validUntil = new Date(company.validUntil)
+  const now = new Date()
+  const daysLeft = Math.ceil((validUntil - now) / (1000 * 60 * 60 * 24))
+  const expired = daysLeft <= 0
+
+  const color = expired ? 'error' : daysLeft <= 3 ? 'warning' : 'success'
+  const bgColor = expired ? '#fce4ec' : daysLeft <= 3 ? '#fff8e1' : '#e8f5e9'
+  const textColor = expired ? '#c62828' : daysLeft <= 3 ? '#e65100' : '#2e7d32'
+
+  const displayName = [user?.firstName, user?.lastName].filter(Boolean).join(' ') || user?.username || ''
+  const subject = encodeURIComponent(`[Shop Extension] Request for ${displayName} <${user?.email}>`)
+  const body = encodeURIComponent(
+    `Hello,\n\nI would like to request an extension for my shop account.\n\nAccount: ${user?.email}\nCompany: ${company.companyName}\nCurrent expiry: ${validUntil.toLocaleDateString('vi-VN')}\n\nThank you.`
+  )
+  const mailtoHref = `mailto:services@anhmedia.vn?subject=${subject}&body=${body}`
+
+  return (
+    <Paper elevation={0} sx={{ p: 2.5, mb: 3, bgcolor: bgColor, border: `1.5px solid ${textColor}33`, borderRadius: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+        <AccessTimeIcon sx={{ color: textColor, mt: 0.25 }} />
+        <Box sx={{ flex: 1 }}>
+          <Typography variant="subtitle2" fontWeight={700} sx={{ color: textColor }}>
+            {expired
+              ? 'Trial expired'
+              : `Trial active — ${daysLeft} day${daysLeft !== 1 ? 's' : ''} remaining`}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {expired
+              ? `Expired on ${validUntil.toLocaleDateString('vi-VN')}`
+              : `Expires ${validUntil.toLocaleDateString('vi-VN')}`}
+          </Typography>
+        </Box>
+        <Button
+          component="a"
+          href={mailtoHref}
+          size="small"
+          variant={expired ? 'contained' : 'outlined'}
+          color={color}
+          startIcon={<EmailIcon />}
+          sx={{ flexShrink: 0, textTransform: 'none', fontWeight: 700, whiteSpace: 'nowrap' }}
+        >
+          Request Extension
+        </Button>
+      </Box>
+    </Paper>
+  )
+}
 
 export default function ProfilePage() {
   const { user, refreshMe } = useAuth()
@@ -128,6 +179,9 @@ export default function ProfilePage() {
           )}
         </Box>
       </Paper>
+
+      {/* Validity card */}
+      {p?.company?.validUntil && <ValidityCard company={p.company} user={p.user} />}
 
       {/* Shop setup */}
       <Typography variant="h6" sx={{ mb: 2 }}>Set up your shop</Typography>

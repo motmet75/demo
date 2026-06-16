@@ -1,5 +1,7 @@
 package com.demo.security;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 
@@ -84,6 +86,7 @@ public class GoogleOAuth2UserService implements OAuth2UserService<OAuth2UserRequ
         company.setTenant(tenant);
         company.setCompanyCode("co-" + shortId);
         company.setCompanyName(displayName + "'s Company");
+        company.setValidUntil(Instant.now().plus(15, ChronoUnit.DAYS));
         company = companyRepository.save(company);
 
         User user = new User();
