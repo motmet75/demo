@@ -521,8 +521,7 @@ export default function ShopMenuPage() {
         restoreCartFromOrder(data)
         setEditingOrderCode(data.orderCode)
         setCartOpen(true)
-        const newSearch = tokenParam ? `?t=${encodeURIComponent(tokenParam)}` : ''
-        navigate(window.location.pathname + newSearch, { replace: true })
+        navigate({ search: tokenParam ? `t=${encodeURIComponent(tokenParam)}` : '' }, { replace: true })
       })
       .catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
