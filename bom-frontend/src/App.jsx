@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Tooltip from '@mui/material/Tooltip'
@@ -55,6 +55,50 @@ import ProfilePage from './features/profile/ProfilePage'
 
 const SIDEBAR_FULL = 210
 const SIDEBAR_MINI = 52
+
+// ── Page title ────────────────────────────────────────────────────────────────
+
+const PATH_TITLES = {
+  '/':                   'Materials',
+  '/materials':          'Materials',
+  '/models':             'Models',
+  '/boms':               'BOMs',
+  '/inventory':          'Inventory',
+  '/inventory-movements':'Movements',
+  '/warehouses':         'Warehouses',
+  '/suppliers':          'Suppliers',
+  '/contracts':          'Contracts',
+  '/orders':             'Orders',
+  '/order-lines':        'Order Lines',
+  '/invoices':           'Invoices',
+  '/consumption':        'Consumption',
+  '/consumption-log':    'Consumption Log',
+  '/companies':          'Companies',
+  '/shop-orders':        'Shop Orders',
+  '/shop-tables':        'Tables',
+  '/shop-menu':          'Menu Setup',
+  '/shop-bank':          'Bank Setup',
+  '/shop-tokens':        'QR Tokens',
+  '/profile':            'Profile',
+  '/admin':              'Admin',
+  '/admin/users':        'Admin Users',
+  '/tenants':            'Tenants',
+  '/etl':                'ETL',
+  '/login':              'Login',
+  '/shop/menu':          'Shop Menu',
+  '/shop/board':         'Display Board',
+  '/shop/customer-board':'Customer Board',
+  '/shop/counter':       'Counter Display',
+}
+
+function PageTitleUpdater() {
+  const { pathname } = useLocation()
+  useEffect(() => {
+    const label = PATH_TITLES[pathname] ?? 'BOM System'
+    document.title = label === 'BOM System' ? 'BOM System' : `${label} | BOM System`
+  }, [pathname])
+  return null
+}
 
 // ── Nav data ──────────────────────────────────────────────────────────────────
 
@@ -366,6 +410,7 @@ function AppShell() {
   const { user, logout, isAdmin } = useAuth()
   return (
     <BrowserRouter basename="/bom-inventory">
+      <PageTitleUpdater />
       <Routes>
         {/* Public customer-facing shop routes — no sidebar/header */}
         <Route path="/shop/menu" element={<ShopMenuPage />} />
