@@ -457,8 +457,13 @@ export default function ShopOrderStatusPage() {
   const goEditNoToken = (ord) => {
     const base = window.location.origin + '/bom-inventory/shop/menu'
     const parts = { editOrder: ord.orderCode }
-    if (ord.tenantId)  parts.tenantId  = ord.tenantId
-    if (ord.companyId) parts.companyId = ord.companyId
+    if (ord.sourceToken) {
+      // Recover original order-slip session so the customer lands on the full menu with their token
+      parts.t = ord.sourceToken
+    } else {
+      if (ord.tenantId)  parts.tenantId  = ord.tenantId
+      if (ord.companyId) parts.companyId = ord.companyId
+    }
     window.location.href = base + '?' + new URLSearchParams(parts).toString()
   }
 
