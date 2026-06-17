@@ -48,7 +48,7 @@ import Snackbar from '@mui/material/Snackbar'
 import { resolveToken, fetchMenu, createOrder, fetchPublicMenuOptions,
          fetchActiveTableOrders, startCustomerEdit, cancelCustomerEdit,
          updatePublicOrderItems, fetchPublicOrder, fetchTokenSession,
-         cancelPublicOrder, fetchShopConfig } from '../../api/shopApi'
+         cancelPublicOrder, fetchShopConfig, callStaff } from '../../api/shopApi'
 import ItemOptionsDialog from './ItemOptionsDialog'
 import OrderReceiptDialog from './OrderReceiptDialog'
 
@@ -447,10 +447,12 @@ export default function ShopMenuPage() {
   const [searchQuery, setSearchQuery]         = useState('')
   const [gridView, setGridView]               = useState(false)
   const [activeCategory, setActiveCategory]   = useState(null)
-  const [callStaffOpen, setCallStaffOpen]     = useState(false)
-  const [callStaffReason, setCallStaffReason] = useState('payment')
-  const [callStaffNote, setCallStaffNote]     = useState('')
-  const [callStaffDone, setCallStaffDone]     = useState(false)
+  const [callStaffOpen, setCallStaffOpen]       = useState(false)
+  const [callStaffReason, setCallStaffReason]   = useState('payment')
+  const [callStaffNote, setCallStaffNote]       = useState('')
+  const [callStaffDone, setCallStaffDone]       = useState(false)
+  const [callStaffLoading, setCallStaffLoading] = useState(false)
+  const [callStaffError, setCallStaffError]     = useState('')
   const headerRef    = useRef(null)
   const [headerH, setHeaderH] = useState(165)
   const categoryRefs = useRef({})
@@ -793,11 +795,17 @@ export default function ShopMenuPage() {
     }, 50)
   }
 
-  const handleCallStaff = () => {
-    setCallStaffOpen(false)
-    setCallStaffReason('payment')
-    setCallStaffNote('')
-    setCallStaffDone(true)
+  const handleCallStaff = async () => {
+    setCallStaffLoading(true); setCallStaffError('')
+    try {
+      const { res, data } = await callStaff(ctx.tenantId, ctx.companyId, ctx.tableId, callStaffReason, callStaffNote, tokenParam)
+      if (!res.ok) { setCallStaffError(data?.message || 'Không thể gửi yêu cầu'); setCallStaffLoading(false); return }
+      setCallStaffOpen(false)
+      setCallStaffReason('payment')
+      setCallStaffNote('')
+      setCallStaffDone(true)
+    } catch { setCallStaffError('Lỗi mạng') }
+    setCallStaffLoading(false)
   }
 
   // ── CartEntryList (closure for handler access) ────────────────────────
@@ -1202,7 +1210,7 @@ export default function ShopMenuPage() {
           </Box>
 
           {/* Gọi nhân viên */}
-          <Button size="small" variant="outlined" onClick={() => setCallStaffOpen(true)}
+          <Button size="small" variant="outlined" onClick={() => { setCallStaffError(''); setCallStaffOpen(true) }}
             startIcon={<SupportAgentIcon sx={{ fontSize: '16px !important' }} />}
             sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 20, fontSize: 12,
               px: 1.25, py: 0.4, flexShrink: 0,
@@ -1373,7 +1381,7 @@ export default function ShopMenuPage() {
       )}
 
       {/* ── "Gọi nhân viên" modal ──────────────────────────────── */}
-      <Dialog open={callStaffOpen} onClose={() => setCallStaffOpen(false)}
+      <Dialog open={callStaffOpen} onClose={() => { if (!callStaffLoading) { setCallStaffOpen(false); setCallStaffError('') } }}
         PaperProps={{ sx: { position: 'fixed', bottom: 0, left: 0, right: 0, m: 0,
           borderRadius: '20px 20px 0 0', maxWidth: '100%', width: '100%' } }}>
         <Box sx={{ width: 40, height: 4, bgcolor: '#e0e0e0', borderRadius: 2, mx: 'auto', mt: 1.5 }} />
@@ -1401,15 +1409,20 @@ export default function ShopMenuPage() {
             placeholder="Bạn cần hỗ trợ gì?"
             value={callStaffNote}
             onChange={e => setCallStaffNote(e.target.value)}
+            disabled={callStaffLoading}
             sx={{ mt: 1, '& .MuiOutlinedInput-root': { borderRadius: 2 } }} />
+          {callStaffError && <Alert severity="error" sx={{ mt: 1.5 }}>{callStaffError}</Alert>}
         </DialogContent>
         <DialogActions sx={{ px: 2.5, pb: 3.5, pt: 1.5, flexDirection: 'column', gap: 1 }}>
           <Button variant="contained" fullWidth size="large" onClick={handleCallStaff}
+            disabled={callStaffLoading}
+            startIcon={callStaffLoading ? <CircularProgress size={18} color="inherit" /> : null}
             sx={{ bgcolor: '#ff5722', '&:hover': { bgcolor: '#e64a19' },
               borderRadius: 20, fontWeight: 700, textTransform: 'none', fontSize: 15 }}>
-            Gọi nhân viên
+            {callStaffLoading ? 'Đang gửi…' : 'Gọi nhân viên'}
           </Button>
-          <Button fullWidth onClick={() => setCallStaffOpen(false)}
+          <Button fullWidth onClick={() => { setCallStaffOpen(false); setCallStaffError('') }}
+            disabled={callStaffLoading}
             sx={{ textTransform: 'none', color: 'text.secondary', borderRadius: 20 }}>
             Huỷ
           </Button>

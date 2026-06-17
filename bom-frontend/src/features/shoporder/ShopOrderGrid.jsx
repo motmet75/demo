@@ -45,12 +45,14 @@ import PrintIcon from '@mui/icons-material/Print'
 import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber'
 import DriveFileMoveIcon from '@mui/icons-material/DriveFileMove'
 import AssessmentIcon from '@mui/icons-material/Assessment'
+import SupportAgentIcon from '@mui/icons-material/SupportAgent'
 import {
   fetchShopOrders, fetchActiveOrders, confirmShopOrder, prepareShopOrder, readyShopOrder,
   completeShopOrder, cancelShopOrder, resetOrderSequence, setShopOrderNumber,
   generateDisplayBoardToken, pickupShopOrder, revertShopOrder, markOrderPaid,
   fetchBankConfig, switchToQrPayment, revertToCash, fetchOrderTagQr,
-  fetchShopTables, setOrderTable, fetchPickupQr, fetchOrdersByToken
+  fetchShopTables, setOrderTable, fetchPickupQr, fetchOrdersByToken,
+  fetchStaffCalls, dismissStaffCall,
 } from '../../api/shopApi'
 import { printCupLabels, printOrderReceipt, printOrderTag, printCombinedReceipt } from '../../utils/printOrderReceipt'
 import ShopOrderDetailModal from './ShopOrderDetailModal'
@@ -64,6 +66,22 @@ import { fetchModels } from '../../api/modelApi'
 const BOARD_CHANNEL = 'shop_display_board'
 function broadcastReady() {
   try { new BroadcastChannel(BOARD_CHANNEL).postMessage({ type: 'ORDER_READY' }) } catch { /* */ }
+}
+
+function playStaffCallSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)()
+    const now = ctx.currentTime
+    ;[0, 0.28].forEach(offset => {
+      const osc = ctx.createOscillator(); const gain = ctx.createGain()
+      osc.connect(gain); gain.connect(ctx.destination)
+      osc.type = 'sine'; osc.frequency.value = 880
+      gain.gain.setValueAtTime(0, now + offset)
+      gain.gain.linearRampToValueAtTime(0.45, now + offset + 0.02)
+      gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.45)
+      osc.start(now + offset); osc.stop(now + offset + 0.45)
+    })
+  } catch { /* browser may block without user gesture */ }
 }
 
 const STATUS_COLOR  = { PENDING: 'default', CONFIRMED: 'primary', PREPARING: 'warning', READY: 'success', PICKED_UP: 'success', COMPLETED: 'success', CANCELLED: 'error' }
@@ -926,6 +944,8 @@ export default function ShopOrderGrid() {
   const [pickupQrOrder, setPickupQrOrder] = useState(null)  // { id, orderNumber, orderCode, qrBase64 }
   const [combinedToken, setCombinedToken] = useState(null)  // token string — opens CombinedReceiptDialog
   const [modelImageMap, setModelImageMap] = useState({})   // { [modelId]: imageUrl }
+  const [staffCalls, setStaffCalls]       = useState([])   // pending staff calls
+  const seenCallIdsRef = React.useRef(new Set())
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
@@ -961,6 +981,27 @@ export default function ShopOrderGrid() {
       ;(Array.isArray(list) ? list : []).forEach(m => { if (m.imageUrl) map[m.id] = m.imageUrl })
       setModelImageMap(map)
     }).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const poll = async () => {
+      try {
+        const { res, data } = await fetchStaffCalls()
+        if (cancelled || !res.ok) return
+        const calls = Array.isArray(data) ? data : []
+        setStaffCalls(calls)
+        calls.forEach(c => {
+          if (!seenCallIdsRef.current.has(c.id)) {
+            seenCallIdsRef.current.add(c.id)
+            playStaffCallSound()
+          }
+        })
+      } catch { /* silent */ }
+    }
+    poll()
+    const id = setInterval(poll, 10000)
+    return () => { cancelled = true; clearInterval(id) }
   }, [])
 
   const reload = () => { load(); loadBoard() }
@@ -1145,8 +1186,50 @@ export default function ShopOrderGrid() {
     </Badge>
   )
 
+  const handleDismissCall = async (id) => {
+    try { await dismissStaffCall(id) } catch { /* silent */ }
+    setStaffCalls(prev => prev.filter(c => c.id !== id))
+    seenCallIdsRef.current.delete(id)
+  }
+
   return (
-    <Box sx={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+    <Box sx={{ display: 'flex', height: '100%', overflow: 'hidden', flexDirection: 'column' }}>
+
+      {/* ── Staff call banner ──────────────────────────────── */}
+      {staffCalls.length > 0 && (
+        <Box sx={{ flexShrink: 0, bgcolor: '#fff3e0', borderBottom: '2px solid #ff5722', px: 2, py: 0.75, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+          {staffCalls.map(call => (
+            <Box key={call.id} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+              <SupportAgentIcon sx={{ color: '#ff5722', fontSize: 20, flexShrink: 0 }} />
+              <Typography fontWeight={800} sx={{ color: '#bf360c', fontSize: 13, flexShrink: 0 }}>
+                Gọi nhân viên
+              </Typography>
+              {call.tableId && (
+                <Chip label={`Bàn ${call.tableId}`} size="small" color="warning" sx={{ fontWeight: 700, height: 20, fontSize: 11 }} />
+              )}
+              <Chip
+                label={call.reason === 'payment' ? 'Thanh toán' : 'Hỗ trợ khác'}
+                size="small"
+                sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: '#ff5722', color: '#fff' }}
+              />
+              {call.note && (
+                <Typography variant="caption" sx={{ color: '#555', fontStyle: 'italic', flex: 1 }}>{call.note}</Typography>
+              )}
+              <Typography variant="caption" color="text.disabled" sx={{ flexShrink: 0 }}>
+                {call.createdAt ? new Date(call.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : ''}
+              </Typography>
+              <Tooltip title="Đã xử lý">
+                <IconButton size="small" onClick={() => handleDismissCall(call.id)}
+                  sx={{ color: '#ff5722', p: 0.25 }}>
+                  <CloseIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          ))}
+        </Box>
+      )}
+
+      <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
       {stockItems.length > 0 && (
         <StockPanel
           items={stockItems}
@@ -1501,6 +1584,7 @@ export default function ShopOrderGrid() {
           onRefresh={reload}
         />
       )}
+      </Box>
     </Box>
   )
 }

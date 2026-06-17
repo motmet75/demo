@@ -23,3 +23,12 @@ export async function fetchCurrentUser() {
   if (!res.ok || !data?.authenticated) return null
   return data.user || null
 }
+
+export function extendShopValidity(companyId, days) {
+  return apiFetchJson('/auth/admin/extend-validity', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ companyId, days }),
+  })
+}

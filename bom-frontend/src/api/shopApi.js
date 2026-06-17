@@ -288,6 +288,24 @@ export function deleteToken(tokenId) {
   return apiFetchJson(`/shop/staff/tokens/${tokenId}`, { method: 'DELETE' })
 }
 
+// ── Staff calls ────────────────────────────────────────────────────
+
+export function callStaff(tenantId, companyId, tableId, reason, note, token) {
+  return apiFetchJsonNoContext('/shop/public/call-staff', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tenantId, companyId, tableId: tableId || null, reason, note: note || null, token: token || null }),
+  })
+}
+
+export function fetchStaffCalls() {
+  return apiFetchJson('/shop/staff/staff-calls')
+}
+
+export function dismissStaffCall(id) {
+  return apiFetchJson(`/shop/staff/staff-calls/${id}/dismiss`, { method: 'PATCH' })
+}
+
 // ── Bank config ────────────────────────────────────────────────────
 
 export function fetchBankConfig() {

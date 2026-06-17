@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Alert, Avatar, Box, Button, Card, CardContent,
-  Chip, CircularProgress, Divider, Paper, Snackbar, Typography
+  Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
+  Divider, Paper, Snackbar, TextField, Typography
 } from '@mui/material'
 import StoreIcon from '@mui/icons-material/Store'
 import QrCodeIcon from '@mui/icons-material/QrCode'
@@ -11,10 +12,17 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import AccessTimeIcon from '@mui/icons-material/AccessTime'
 import EmailIcon from '@mui/icons-material/Email'
 import RiceBowlIcon from '@mui/icons-material/RiceBowl'
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline'
 import { apiFetchJson } from '../../api/client'
 import { useAuth } from '../../context/useAuth'
+import { extendShopValidity } from '../../api/authApi'
 
-function ValidityCard({ company, user }) {
+function ValidityCard({ company, user, isAdmin, onExtended }) {
+  const [extendOpen, setExtendOpen]   = useState(false)
+  const [days, setDays]               = useState('30')
+  const [extending, setExtending]     = useState(false)
+  const [extendError, setExtendError] = useState('')
+
   const hasExpiry = !!company.validUntil
   const validUntil = hasExpiry ? new Date(company.validUntil) : null
   const now = new Date()
@@ -45,28 +53,81 @@ function ValidityCard({ company, user }) {
       ? `Expired on ${expiryStr}`
       : `Expires ${expiryStr}`
 
+  const handleExtend = async () => {
+    const d = parseInt(days, 10)
+    if (!d || d < 1) { setExtendError('Enter a valid number of days'); return }
+    setExtending(true); setExtendError('')
+    const { res, data } = await extendShopValidity(company.id, d)
+    setExtending(false)
+    if (!res.ok) { setExtendError(data?.message || 'Failed to extend'); return }
+    setExtendOpen(false)
+    onExtended?.()
+  }
+
   return (
-    <Paper elevation={0} sx={{ p: 2.5, mb: 3, bgcolor: bgColor, border: `1.5px solid ${textColor}33`, borderRadius: 2 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
-        <AccessTimeIcon sx={{ color: textColor, flexShrink: 0 }} />
-        <Box sx={{ flex: 1, minWidth: 160 }}>
-          <Typography variant="subtitle2" fontWeight={700} sx={{ color: textColor }}>
-            {statusText}
-          </Typography>
-          <Typography variant="caption" color="text.secondary">{subText}</Typography>
+    <>
+      <Paper elevation={0} sx={{ p: 2.5, mb: 3, bgcolor: bgColor, border: `1.5px solid ${textColor}33`, borderRadius: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+          <AccessTimeIcon sx={{ color: textColor, flexShrink: 0 }} />
+          <Box sx={{ flex: 1, minWidth: 160 }}>
+            <Typography variant="subtitle2" fontWeight={700} sx={{ color: textColor }}>
+              {statusText}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">{subText}</Typography>
+          </Box>
+          {isAdmin ? (
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<AddCircleOutlineIcon />}
+              onClick={() => { setDays('30'); setExtendError(''); setExtendOpen(true) }}
+              sx={{ flexShrink: 0, textTransform: 'none', fontWeight: 700, whiteSpace: 'nowrap' }}
+            >
+              Extend Trial
+            </Button>
+          ) : (
+            <Button
+              component="a"
+              href={mailtoHref}
+              variant={expired || !hasExpiry ? 'contained' : 'outlined'}
+              color={color}
+              startIcon={<EmailIcon />}
+              sx={{ flexShrink: 0, textTransform: 'none', fontWeight: 700, whiteSpace: 'nowrap' }}
+            >
+              Request Extension
+            </Button>
+          )}
         </Box>
-        <Button
-          component="a"
-          href={mailtoHref}
-          variant={expired || !hasExpiry ? 'contained' : 'outlined'}
-          color={color}
-          startIcon={<EmailIcon />}
-          sx={{ flexShrink: 0, textTransform: 'none', fontWeight: 700, whiteSpace: 'nowrap' }}
-        >
-          Request Extension
-        </Button>
-      </Box>
-    </Paper>
+      </Paper>
+
+      <Dialog open={extendOpen} onClose={() => !extending && setExtendOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle fontWeight={700}>Extend Trial — {company.companyName}</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Current expiry: <strong>{expiryStr}</strong>. Enter how many days to add from today (or from current expiry if still valid).
+          </Typography>
+          <TextField
+            label="Days to add"
+            type="number"
+            size="small"
+            fullWidth
+            value={days}
+            onChange={e => setDays(e.target.value)}
+            inputProps={{ min: 1 }}
+            disabled={extending}
+          />
+          {extendError && <Alert severity="error" sx={{ mt: 1.5 }}>{extendError}</Alert>}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setExtendOpen(false)} disabled={extending}>Cancel</Button>
+          <Button variant="contained" onClick={handleExtend} disabled={extending}
+            startIcon={extending ? <CircularProgress size={16} color="inherit" /> : <AddCircleOutlineIcon />}
+            sx={{ fontWeight: 700, minWidth: 140 }}>
+            {extending ? 'Extending…' : `Add ${days || '?'} days`}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
   )
 }
 
@@ -189,7 +250,14 @@ export default function ProfilePage() {
       </Paper>
 
       {/* Validity card — always show when company exists */}
-      {p?.company && <ValidityCard company={p.company} user={p.user} />}
+      {p?.company && (
+        <ValidityCard
+          company={p.company}
+          user={p.user}
+          isAdmin={user?.isAdmin || user?.role === 'ADMIN'}
+          onExtended={loadProfile}
+        />
+      )}
 
       {/* Shop setup */}
       <Typography variant="h6" sx={{ mb: 2 }}>Set up your shop</Typography>
