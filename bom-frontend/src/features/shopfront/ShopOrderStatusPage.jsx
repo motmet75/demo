@@ -456,10 +456,10 @@ export default function ShopOrderStatusPage() {
 
   const goEditNoToken = (ord) => {
     const base = window.location.origin + '/bom-inventory/shop/menu'
-    const q = ord.tenantId && ord.companyId
-      ? `?tenantId=${ord.tenantId}&companyId=${ord.companyId}&editOrder=${encodeURIComponent(ord.orderCode)}`
-      : `?editOrder=${encodeURIComponent(ord.orderCode)}`
-    window.location.href = base + q
+    const parts = { editOrder: ord.orderCode }
+    if (ord.tenantId)  parts.tenantId  = ord.tenantId
+    if (ord.companyId) parts.companyId = ord.companyId
+    window.location.href = base + '?' + new URLSearchParams(parts).toString()
   }
 
   return <SingleOrderView order={order} onEdit={goEditNoToken} />

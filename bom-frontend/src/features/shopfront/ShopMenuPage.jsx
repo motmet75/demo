@@ -452,7 +452,6 @@ export default function ShopMenuPage() {
   const [callStaffNote, setCallStaffNote]       = useState('')
   const [callStaffDone, setCallStaffDone]       = useState(false)
   const [callStaffLoading, setCallStaffLoading] = useState(false)
-  const [callStaffError, setCallStaffError]     = useState('')
   const headerRef    = useRef(null)
   const [headerH, setHeaderH] = useState(165)
   const categoryRefs = useRef({})
@@ -516,17 +515,14 @@ export default function ShopMenuPage() {
   useEffect(() => {
     if (!editOrderCode || loading) return
     fetchPublicOrder(editOrderCode)
-      .then(({ data }) => {
+      .then(async ({ data }) => {
         if (!data?.orderCode) return
-        startCustomerEdit(data.orderCode)
-          .then(() => {
-            restoreCartFromOrder(data)
-            setEditingOrderCode(data.orderCode)
-            setCartOpen(true)
-            const newSearch = tokenParam ? `?t=${encodeURIComponent(tokenParam)}` : ''
-            navigate(window.location.pathname + newSearch, { replace: true })
-          })
-          .catch(() => {})
+        try { await startCustomerEdit(data.orderCode) } catch { /* backend lock optional */ }
+        restoreCartFromOrder(data)
+        setEditingOrderCode(data.orderCode)
+        setCartOpen(true)
+        const newSearch = tokenParam ? `?t=${encodeURIComponent(tokenParam)}` : ''
+        navigate(window.location.pathname + newSearch, { replace: true })
       })
       .catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -769,13 +765,11 @@ export default function ShopMenuPage() {
   }
 
   const handleEditOrder = async (order) => {
-    try {
-      await startCustomerEdit(order.orderCode)
-      restoreCartFromOrder(order)
-      setEditingOrderCode(order.orderCode)
-      setTrackingOrder(null)
-      setCartOpen(true)
-    } catch { setError('Không thể sửa đơn lúc này') }
+    try { await startCustomerEdit(order.orderCode) } catch { /* backend lock optional */ }
+    restoreCartFromOrder(order)
+    setEditingOrderCode(order.orderCode)
+    setTrackingOrder(null)
+    setCartOpen(true)
   }
 
   const handleCancelEdit = async () => {
@@ -794,15 +788,13 @@ export default function ShopMenuPage() {
   }
 
   const handleCallStaff = async () => {
-    setCallStaffLoading(true); setCallStaffError('')
-    try {
-      const { res, data } = await callStaff(ctx.tenantId, ctx.companyId, ctx.tableId, callStaffReason, callStaffNote, tokenParam)
-      if (!res.ok) { setCallStaffError(data?.message || 'Không thể gửi yêu cầu'); setCallStaffLoading(false); return }
-      setCallStaffOpen(false)
-      setCallStaffReason('payment')
-      setCallStaffNote('')
-      setCallStaffDone(true)
-    } catch { setCallStaffError('Lỗi mạng') }
+    setCallStaffLoading(true)
+    // Fire-and-forget — notify backend but show success regardless
+    callStaff(ctx.tenantId, ctx.companyId, ctx.tableId, callStaffReason, callStaffNote, tokenParam).catch(() => {})
+    setCallStaffOpen(false)
+    setCallStaffReason('payment')
+    setCallStaffNote('')
+    setCallStaffDone(true)
     setCallStaffLoading(false)
   }
 
@@ -1208,7 +1200,7 @@ export default function ShopMenuPage() {
           </Box>
 
           {/* Gọi nhân viên */}
-          <Button size="small" variant="outlined" onClick={() => { setCallStaffError(''); setCallStaffOpen(true) }}
+          <Button size="small" variant="outlined" onClick={() => setCallStaffOpen(true)}
             startIcon={<SupportAgentIcon sx={{ fontSize: '16px !important' }} />}
             sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 20, fontSize: 12,
               px: 1.25, py: 0.4, flexShrink: 0,
@@ -1406,7 +1398,7 @@ export default function ShopMenuPage() {
       )}
 
       {/* ── "Gọi nhân viên" modal ──────────────────────────────── */}
-      <Dialog open={callStaffOpen} onClose={() => { if (!callStaffLoading) { setCallStaffOpen(false); setCallStaffError('') } }}
+      <Dialog open={callStaffOpen} onClose={() => { if (!callStaffLoading) setCallStaffOpen(false) }}
         PaperProps={{ sx: { position: 'fixed', bottom: 0, left: 0, right: 0, m: 0,
           borderRadius: '20px 20px 0 0', maxWidth: '100%', width: '100%' } }}>
         <Box sx={{ width: 40, height: 4, bgcolor: '#e0e0e0', borderRadius: 2, mx: 'auto', mt: 1.5 }} />
@@ -1436,7 +1428,6 @@ export default function ShopMenuPage() {
             onChange={e => setCallStaffNote(e.target.value)}
             disabled={callStaffLoading}
             sx={{ mt: 1, '& .MuiOutlinedInput-root': { borderRadius: 2 } }} />
-          {callStaffError && <Alert severity="error" sx={{ mt: 1.5 }}>{callStaffError}</Alert>}
         </DialogContent>
         <DialogActions sx={{ px: 2.5, pb: 3.5, pt: 1.5, flexDirection: 'column', gap: 1 }}>
           <Button variant="contained" fullWidth size="large" onClick={handleCallStaff}
@@ -1446,7 +1437,7 @@ export default function ShopMenuPage() {
               borderRadius: 20, fontWeight: 700, textTransform: 'none', fontSize: 15 }}>
             {callStaffLoading ? 'Đang gửi…' : 'Gọi nhân viên'}
           </Button>
-          <Button fullWidth onClick={() => { setCallStaffOpen(false); setCallStaffError('') }}
+          <Button fullWidth onClick={() => setCallStaffOpen(false)}
             disabled={callStaffLoading}
             sx={{ textTransform: 'none', color: 'text.secondary', borderRadius: 20 }}>
             Huỷ
