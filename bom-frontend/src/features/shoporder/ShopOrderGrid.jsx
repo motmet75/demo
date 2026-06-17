@@ -620,6 +620,11 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
             )}
           </Box>
           <Box sx={{ display: 'flex' }}>
+            <Tooltip title="Show Tracking QR for Customer">
+              <IconButton size="small" onClick={() => actions.showTrackQr(order)} sx={{ p: 0.35, color: '#0288d1' }}>
+                <QrCode2Icon sx={{ fontSize: 15 }} />
+              </IconButton>
+            </Tooltip>
             <Tooltip title="Print Tracking Tag">
               <IconButton size="small" color="secondary" onClick={() => actions.printTag(order)} sx={{ p: 0.35 }}><ConfirmationNumberIcon sx={{ fontSize: 15 }} /></IconButton>
             </Tooltip>
@@ -942,6 +947,7 @@ export default function ShopOrderGrid() {
   const [confirmDlg, setConfirmDlg]     = useState(null)
   // confirmDlg shape: { title, message, confirmLabel, confirmColor, requireReason, onConfirm }
   const [pickupQrOrder, setPickupQrOrder] = useState(null)  // { id, orderNumber, orderCode, qrBase64 }
+  const [trackQrOrder, setTrackQrOrder]   = useState(null)  // { order, qrBase64, loading }
   const [combinedToken, setCombinedToken] = useState(null)  // token string — opens CombinedReceiptDialog
   const [modelImageMap, setModelImageMap] = useState({})   // { [modelId]: imageUrl }
   const [staffCalls, setStaffCalls]       = useState([])   // pending staff calls
@@ -1155,6 +1161,17 @@ export default function ShopOrderGrid() {
     } catch (e) { setError('Failed to generate pickup QR: ' + (e.message || e)) }
   }
 
+  const handleShowTrackQr = async (row) => {
+    setTrackQrOrder({ order: row, qrBase64: null, loading: true })
+    try {
+      const { data } = await fetchOrderTagQr(row.id)
+      setTrackQrOrder({ order: row, qrBase64: data?.qrBase64 || null, loading: false })
+    } catch (e) {
+      setTrackQrOrder(prev => prev ? { ...prev, loading: false } : null)
+      setError('Failed to fetch tracking QR')
+    }
+  }
+
   const cardActions = {
     detail:          (row) => setDetailOrder(row),
     combinedReceipt: (token) => setCombinedToken(token),
@@ -1176,7 +1193,8 @@ export default function ShopOrderGrid() {
     cancel:     handleCancel,
     switchToQr: (row) => askConfirm({ title: 'Switch to QR payment?', message: 'Switch this order to Bank QR and print receipt?', confirmLabel: 'Switch & Print', confirmColor: 'success' }, () => handleSwitchAndPrint(row)),
     revertCash: (row) => askConfirm({ title: 'Revert to Cash?', message: 'Change payment method back to cash?', confirmLabel: '→ Cash', confirmColor: 'warning' }, () => handleRevertToCash(row)),
-    pickupQr:   handlePickupQr,
+    pickupQr:    handlePickupQr,
+    showTrackQr: handleShowTrackQr,
   }
 
   const tabBadge = (label, count, color = 'primary') => (
@@ -1555,6 +1573,64 @@ export default function ShopOrderGrid() {
             </DialogContent>
             <DialogActions>
               <Button onClick={() => setPickupQrOrder(null)}>Close</Button>
+            </DialogActions>
+          </Dialog>
+        )
+      })()}
+
+      {/* Tracking QR dialog — show QR to customer (view only, includes session token) */}
+      {trackQrOrder && (() => {
+        const { order, qrBase64, loading } = trackQrOrder
+        const origin = window.location.origin + '/bom-inventory'
+        const trackUrl = order.sourceToken
+          ? `${origin}/shop/status/${order.orderCode}?t=${encodeURIComponent(order.sourceToken)}`
+          : `${origin}/shop/status/${order.orderCode}`
+        return (
+          <Dialog open onClose={() => setTrackQrOrder(null)} maxWidth="xs" fullWidth
+            PaperProps={{ sx: { borderRadius: 3, overflow: 'hidden' } }}>
+            <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <QrCode2Icon sx={{ color: '#0288d1' }} />
+                <Typography fontWeight={800} variant="h6">Track Order</Typography>
+              </Box>
+              <IconButton size="small" onClick={() => setTrackQrOrder(null)}><CloseIcon fontSize="small" /></IconButton>
+            </DialogTitle>
+            <DialogContent sx={{ pt: 0, textAlign: 'center' }}>
+              {order.orderNumber != null && (
+                <Typography sx={{ fontSize: 64, fontWeight: 900, lineHeight: 1, color: '#0288d1', letterSpacing: -2, mb: 0.5 }}>
+                  #{order.orderNumber}
+                </Typography>
+              )}
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+                Customer scans to track order · view only
+              </Typography>
+              {loading ? (
+                <Box sx={{ py: 4 }}><CircularProgress /></Box>
+              ) : qrBase64 ? (
+                <Box sx={{ display: 'inline-block', p: 1.5, bgcolor: '#fff', borderRadius: 2, border: '2px solid #e1f5fe', boxShadow: '0 2px 12px rgba(0,0,0,0.08)', mb: 1.5 }}>
+                  <img src={`data:image/png;base64,${qrBase64}`} alt="Tracking QR"
+                    style={{ width: 220, height: 220, display: 'block' }} />
+                </Box>
+              ) : (
+                <Alert severity="error" sx={{ mb: 2, textAlign: 'left' }}>Failed to load tracking QR</Alert>
+              )}
+              <TextField
+                value={trackUrl}
+                size="small" fullWidth
+                inputProps={{ readOnly: true, style: { fontSize: 11 } }}
+                onClick={e => e.target.select()}
+                sx={{ mt: 1 }}
+              />
+            </DialogContent>
+            <DialogActions sx={{ px: 2, pb: 2, pt: 0.5, gap: 1 }}>
+              <Button onClick={() => setTrackQrOrder(null)} sx={{ textTransform: 'none' }}>Close</Button>
+              <Button
+                variant="contained" startIcon={<PrintIcon />}
+                onClick={() => printOrderTag(order, qrBase64)}
+                disabled={!qrBase64 || loading}
+                sx={{ fontWeight: 700, textTransform: 'none', flex: 1, bgcolor: '#0288d1', '&:hover': { bgcolor: '#0277bd' } }}>
+                Print QR Note
+              </Button>
             </DialogActions>
           </Dialog>
         )
