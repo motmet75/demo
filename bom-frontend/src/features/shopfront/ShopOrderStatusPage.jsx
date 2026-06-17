@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react'
-import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import Alert from '@mui/material/Alert'
@@ -172,8 +172,12 @@ function SingleOrderView({ order, onEdit }) {
 
 // ── Session order card ────────────────────────────────────────────────────────
 
+function menuUrl(qs) {
+  const appBase = window.location.pathname.split('/shop/')[0]
+  return window.location.origin + appBase + '/shop/menu?' + new URLSearchParams(qs)
+}
+
 function OrderCard({ order, highlighted, token }) {
-  const navigate   = useNavigate()
   const [expanded, setExpanded] = useState(highlighted)
   const status   = order.status || 'PENDING'
   const chip     = STATUS_CHIP[status] || STATUS_CHIP.PENDING
@@ -183,7 +187,7 @@ function OrderCard({ order, highlighted, token }) {
   const isQrUrl   = order.paymentQr?.startsWith('https://')
 
   const goEdit = () => {
-    navigate(`/shop/menu?${new URLSearchParams({ t: token, editOrder: order.orderCode })}`)
+    window.location.href = menuUrl({ t: token, editOrder: order.orderCode })
   }
 
   // Group items: roots + children
@@ -310,7 +314,6 @@ function OrderCard({ order, highlighted, token }) {
 // ── Token session view (all orders for a token) ───────────────────────────────
 
 function TokenSessionView({ token, highlightCode }) {
-  const navigate  = useNavigate()
   const [session, setSession] = useState(null)
   const [error, setError]     = useState('')
 
@@ -402,7 +405,7 @@ function TokenSessionView({ token, highlightCode }) {
             variant="contained"
             fullWidth
             startIcon={<AddShoppingCartIcon />}
-            onClick={() => navigate(`/shop/menu?${new URLSearchParams({ t: token })}`)}
+            onClick={() => { window.location.href = menuUrl({ t: token }) }}
             sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none', py: 1.25 }}>
             {hasPending ? 'Order More' : 'New Order'}
           </Button>
@@ -421,7 +424,6 @@ function TokenSessionView({ token, highlightCode }) {
 export default function ShopOrderStatusPage() {
   const { orderCode } = useParams()
   const [searchParams] = useSearchParams()
-  const navigate = useNavigate()
   const token = searchParams.get('t')
 
   const [order, setOrder] = useState(null)
@@ -462,7 +464,9 @@ export default function ShopOrderStatusPage() {
       if (ord.tenantId)  parts.tenantId  = String(ord.tenantId)
       if (ord.companyId) parts.companyId = String(ord.companyId)
     }
-    navigate('/shop/menu?' + new URLSearchParams(parts))
+    // Derive app base from current pathname (/bom-inventory/shop/order/…) → /bom-inventory
+    const appBase = window.location.pathname.split('/shop/')[0]
+    window.location.href = window.location.origin + appBase + '/shop/menu?' + new URLSearchParams(parts)
   }
 
   return <SingleOrderView order={order} onEdit={goEditNoToken} />
