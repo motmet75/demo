@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import Alert from '@mui/material/Alert'
@@ -172,7 +172,8 @@ function SingleOrderView({ order, onEdit }) {
 
 // ── Session order card ────────────────────────────────────────────────────────
 
-function OrderCard({ order, highlighted, token, menuBase }) {
+function OrderCard({ order, highlighted, token }) {
+  const navigate   = useNavigate()
   const [expanded, setExpanded] = useState(highlighted)
   const status   = order.status || 'PENDING'
   const chip     = STATUS_CHIP[status] || STATUS_CHIP.PENDING
@@ -182,7 +183,7 @@ function OrderCard({ order, highlighted, token, menuBase }) {
   const isQrUrl   = order.paymentQr?.startsWith('https://')
 
   const goEdit = () => {
-    window.location.href = `${menuBase}?t=${encodeURIComponent(token)}&editOrder=${encodeURIComponent(order.orderCode)}`
+    navigate(`/shop/menu?${new URLSearchParams({ t: token, editOrder: order.orderCode })}`)
   }
 
   // Group items: roots + children
@@ -309,10 +310,9 @@ function OrderCard({ order, highlighted, token, menuBase }) {
 // ── Token session view (all orders for a token) ───────────────────────────────
 
 function TokenSessionView({ token, highlightCode }) {
+  const navigate  = useNavigate()
   const [session, setSession] = useState(null)
   const [error, setError]     = useState('')
-
-  const menuBase = window.location.origin + '/bom-inventory/shop/menu'
 
   const load = useCallback(() => {
     fetchTokenSession(token)
@@ -388,7 +388,6 @@ function TokenSessionView({ token, highlightCode }) {
             order={order}
             highlighted={order.orderCode === highlightCode}
             token={token}
-            menuBase={menuBase}
           />
         ))}
       </Box>
@@ -403,7 +402,7 @@ function TokenSessionView({ token, highlightCode }) {
             variant="contained"
             fullWidth
             startIcon={<AddShoppingCartIcon />}
-            onClick={() => { window.location.href = `${menuBase}?t=${encodeURIComponent(token)}` }}
+            onClick={() => navigate(`/shop/menu?${new URLSearchParams({ t: token })}`)}
             sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none', py: 1.25 }}>
             {hasPending ? 'Order More' : 'New Order'}
           </Button>
@@ -422,6 +421,7 @@ function TokenSessionView({ token, highlightCode }) {
 export default function ShopOrderStatusPage() {
   const { orderCode } = useParams()
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const token = searchParams.get('t')
 
   const [order, setOrder] = useState(null)
@@ -455,16 +455,14 @@ export default function ShopOrderStatusPage() {
   if (error && !order) return <Alert severity="error" sx={{ m: 2 }}>{error}</Alert>
 
   const goEditNoToken = (ord) => {
-    const base = window.location.origin + '/bom-inventory/shop/menu'
     const parts = { editOrder: ord.orderCode }
     if (ord.sourceToken) {
-      // Recover original order-slip session so the customer lands on the full menu with their token
       parts.t = ord.sourceToken
     } else {
-      if (ord.tenantId)  parts.tenantId  = ord.tenantId
-      if (ord.companyId) parts.companyId = ord.companyId
+      if (ord.tenantId)  parts.tenantId  = String(ord.tenantId)
+      if (ord.companyId) parts.companyId = String(ord.companyId)
     }
-    window.location.href = base + '?' + new URLSearchParams(parts).toString()
+    navigate('/shop/menu?' + new URLSearchParams(parts))
   }
 
   return <SingleOrderView order={order} onEdit={goEditNoToken} />
