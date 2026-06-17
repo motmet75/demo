@@ -588,10 +588,14 @@ export default function ShopMenuPage() {
     return g
   }, {})
 
-  const categories    = Object.keys(grouped)
+  const categories = Object.keys(grouped)
+
   const filteredItems = searchQuery.trim()
     ? menu.filter(m => m.modelName.toLowerCase().includes(searchQuery.toLowerCase()))
     : []
+
+  // Items shown when a category chip is active (no search)
+  const categoryItems = !searchQuery.trim() && activeCategory ? (grouped[activeCategory] || []) : []
 
   // ── Cart mutations ────────────────────────────────────────────────────
   const createEntry = (model, qty, selectedOptions, itemNotes, rawSides = []) => {
@@ -784,15 +788,9 @@ export default function ShopMenuPage() {
       .catch(() => {})
   }
 
-  const scrollToCategory = (cat) => {
-    setActiveCategory(cat)
+  const selectCategory = (cat) => {
     setSearchQuery('')
-    setTimeout(() => {
-      const el = categoryRefs.current[cat]
-      if (!el) return
-      const top = el.getBoundingClientRect().top + window.pageYOffset - headerH - 4
-      window.scrollTo({ top, behavior: 'smooth' })
-    }, 50)
+    setActiveCategory(prev => prev === cat ? null : cat)
   }
 
   const handleCallStaff = async () => {
@@ -1243,9 +1241,17 @@ export default function ShopMenuPage() {
           display: 'flex', overflowX: 'auto', px: 1.5, pb: 0.75, gap: 0.5,
           '&::-webkit-scrollbar': { display: 'none' }, scrollbarWidth: 'none',
         }}>
+          <Chip key="__all" label="Tất cả" size="small"
+            onClick={() => { setActiveCategory(null); setSearchQuery('') }}
+            sx={{
+              flexShrink: 0, cursor: 'pointer', height: 28, fontSize: 12, fontWeight: 600,
+              bgcolor: !activeCategory && !searchQuery ? '#ff5722' : '#f0f0f0',
+              color: !activeCategory && !searchQuery ? '#fff' : '#444',
+              '&:hover': { bgcolor: !activeCategory && !searchQuery ? '#e64a19' : '#e0e0e0' },
+            }} />
           {categories.map(cat => (
             <Chip key={cat} label={cat} size="small"
-              onClick={() => scrollToCategory(cat)}
+              onClick={() => selectCategory(cat)}
               sx={{
                 flexShrink: 0, cursor: 'pointer', height: 28, fontSize: 12, fontWeight: 600,
                 bgcolor: activeCategory === cat ? '#ff5722' : '#f0f0f0',
@@ -1287,7 +1293,7 @@ export default function ShopMenuPage() {
 
       <Box sx={{ pt: `${headerH}px`, pb: itemCount > 0 ? '80px' : '24px' }}>
         {searchQuery.trim() ? (
-          /* Search results */
+          /* ── Search results ────────────────────────────── */
           <Box sx={{ px: 1.5, pt: 1.5 }}>
             {filteredItems.length === 0 ? (
               <Box sx={{ textAlign: 'center', py: 6 }}>
@@ -1311,8 +1317,27 @@ export default function ShopMenuPage() {
               </>
             )}
           </Box>
+        ) : activeCategory ? (
+          /* ── Single category filter ────────────────────── */
+          <Box sx={{ px: 1.5, pt: 1 }}>
+            <Typography sx={{
+              py: 0.75, fontWeight: 700, fontSize: 13, color: '#888',
+              letterSpacing: 0.8, textTransform: 'uppercase', mb: 0.5,
+            }}>
+              {activeCategory} · {categoryItems.length} món
+            </Typography>
+            {gridView ? (
+              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.25 }}>
+                {categoryItems.map(m => <MenuGridItem key={m.id} m={m} />)}
+              </Box>
+            ) : (
+              <Stack spacing={0.75}>
+                {categoryItems.map(m => <MenuListItem key={m.id} m={m} />)}
+              </Stack>
+            )}
+          </Box>
         ) : (
-          /* Categorized menu */
+          /* ── All categories ────────────────────────────── */
           Object.entries(grouped).map(([cat, items]) => (
             <Box key={cat} ref={el => { categoryRefs.current[cat] = el }}>
               <Typography sx={{
