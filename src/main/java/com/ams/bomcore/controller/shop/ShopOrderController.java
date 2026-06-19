@@ -431,9 +431,10 @@ public class ShopOrderController {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
         Integer seq = body != null && body.get("seq") != null ? ((Number) body.get("seq")).intValue() : null;
-        String qrBase64 = shopOrderService.generateWalkUpQr(seq, tId, cId);
+        ShopOrderService.WalkUpQrResult qr = shopOrderService.generateWalkUpQr(seq, tId, cId);
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("qrBase64", qrBase64);
+        result.put("qrBase64", qr.qrBase64());
+        result.put("qrUrl",    qr.qrUrl());
         if (seq != null) result.put("seq", seq);
         return ResponseEntity.ok(result);
     }
@@ -685,6 +686,133 @@ public class ShopOrderController {
         validateScope(tenantId, companyId);
         BigDecimal shopeeEstimate = shopOrderService.estimateShopeeExpressFee(weightKg);
         return ResponseEntity.ok(Map.of("shopeeExpressEstimate", shopeeEstimate));
+    }
+
+    // ── Split / Merge bills ───────────────────────────────────────────
+
+    @PostMapping("/shop/staff/orders/{orderId}/split-bill")
+    public ResponseEntity<?> splitBill(@PathVariable UUID orderId,
+                                        @RequestBody Map<String, Object> body,
+                                        @RequestParam(required = false) UUID tenantId,
+                                        @RequestParam(required = false) UUID companyId,
+                                        @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                        @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        @SuppressWarnings("unchecked")
+        List<String> ids = (List<String>) body.get("rootItemIds");
+        List<UUID> rootItemIds = ids.stream().map(UUID::fromString).toList();
+        try {
+            return ResponseEntity.ok(shopOrderService.splitBill(orderId, rootItemIds, tId, cId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/shop/staff/orders/merge-bills")
+    public ResponseEntity<?> mergeBills(@RequestBody Map<String, Object> body,
+                                         @RequestParam(required = false) UUID tenantId,
+                                         @RequestParam(required = false) UUID companyId,
+                                         @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                         @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        UUID primaryId = UUID.fromString((String) body.get("primaryId"));
+        @SuppressWarnings("unchecked")
+        List<String> others = (List<String>) body.get("otherIds");
+        List<UUID> otherIds = others.stream().map(UUID::fromString).toList();
+        return ResponseEntity.ok(shopOrderService.mergeBills(primaryId, otherIds, tId, cId));
+    }
+
+    @PatchMapping("/shop/staff/orders/{orderId}/discount")
+    public ResponseEntity<?> patchDiscount(@PathVariable UUID orderId,
+                                            @RequestBody Map<String, Object> body,
+                                            @RequestParam(required = false) UUID tenantId,
+                                            @RequestParam(required = false) UUID companyId,
+                                            @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                            @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        BigDecimal discount = body.get("discountAmount") != null
+            ? new BigDecimal(body.get("discountAmount").toString()) : null;
+        String voucher = body.get("voucherCode") instanceof String s ? s : null;
+        return ResponseEntity.ok(shopOrderService.patchDiscount(orderId, discount, voucher, tId, cId));
+    }
+
+    @PatchMapping("/shop/staff/orders/{orderId}/customer")
+    public ResponseEntity<?> linkCustomer(@PathVariable UUID orderId,
+                                           @RequestBody Map<String, Object> body,
+                                           @RequestParam(required = false) UUID tenantId,
+                                           @RequestParam(required = false) UUID companyId,
+                                           @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                           @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        UUID customerId = body.get("customerId") != null ? UUID.fromString((String) body.get("customerId")) : null;
+        return ResponseEntity.ok(shopOrderService.linkCustomer(orderId, customerId, tId, cId));
+    }
+
+    // ── Customer management (/shop/staff/customers) ───────────────────
+
+    @GetMapping("/shop/staff/customers")
+    public ResponseEntity<?> listCustomers(@RequestParam(required = false) String q,
+                                            @RequestParam(required = false) UUID tenantId,
+                                            @RequestParam(required = false) UUID companyId,
+                                            @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                            @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        return ResponseEntity.ok(shopOrderService.listCustomers(tId, cId, q));
+    }
+
+    @PostMapping("/shop/staff/customers")
+    public ResponseEntity<?> createCustomer(@RequestBody com.ams.bomcore.domain.shop.ShopCustomer body,
+                                             @RequestParam(required = false) UUID tenantId,
+                                             @RequestParam(required = false) UUID companyId,
+                                             @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                             @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        body.setId(null);
+        return ResponseEntity.status(201).body(shopOrderService.saveCustomer(body, tId, cId));
+    }
+
+    @PutMapping("/shop/staff/customers/{id}")
+    public ResponseEntity<?> updateCustomer(@PathVariable UUID id,
+                                             @RequestBody com.ams.bomcore.domain.shop.ShopCustomer body,
+                                             @RequestParam(required = false) UUID tenantId,
+                                             @RequestParam(required = false) UUID companyId,
+                                             @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                             @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        body.setId(id);
+        return ResponseEntity.ok(shopOrderService.saveCustomer(body, tId, cId));
+    }
+
+    @DeleteMapping("/shop/staff/customers/{id}")
+    public ResponseEntity<Void> deleteCustomer(@PathVariable UUID id,
+                                                @RequestParam(required = false) UUID tenantId,
+                                                @RequestParam(required = false) UUID companyId,
+                                                @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                                @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        shopOrderService.deleteCustomer(id, tId, cId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/shop/staff/customers/{id}/add-points")
+    public ResponseEntity<?> addPoints(@PathVariable UUID id,
+                                        @RequestBody Map<String, Object> body,
+                                        @RequestParam(required = false) UUID tenantId,
+                                        @RequestParam(required = false) UUID companyId,
+                                        @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                        @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        int points = body.get("points") instanceof Number n ? n.intValue() : 0;
+        return ResponseEntity.ok(shopOrderService.addPoints(id, points, tId, cId));
     }
 
     // ── Helpers ───────────────────────────────────────────────────────

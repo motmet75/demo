@@ -1,6 +1,6 @@
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : '0 đ'
 
-export function printWalkUpQr(seq, qrBase64) {
+export function printWalkUpQr(seq, qrBase64, qrUrl) {
   if (!qrBase64) return
   const numLine = seq != null
     ? `<div class="num">#${seq}</div><div class="sub">Your order number</div>`
@@ -24,6 +24,7 @@ export function printWalkUpQr(seq, qrBase64) {
   .qr-box  { display: inline-block; padding: 10px; border: 2px solid #111; border-radius: 10px; }
   img      { width: 210px; height: 210px; display: block; }
   .hint    { font-size: 12px; color: #888; margin-top: 12px; }
+  .url     { font-size: 7px; color: #999; word-break: break-all; margin-top: 6px; text-align: left; padding: 0 2px; }
   .divider { border-top: 1px dashed #ccc; margin: 12px 0; }
   @media print { @page { margin: 0; } }
 </style>
@@ -32,6 +33,7 @@ export function printWalkUpQr(seq, qrBase64) {
   ${numLine}
   <div class="qr-box"><img src="data:image/png;base64,${qrBase64}" alt="QR" /></div>
   <div class="hint">Scan QR code to view menu &amp; order</div>
+  ${qrUrl ? `<div class="url">${qrUrl}</div>` : ''}
 </body>
 </html>`
 
@@ -51,6 +53,11 @@ export function printOrderTag(order, qrBase64) {
     : order.fulfillmentType === 'DELIVERY' ? 'Delivery'
     : order.customerName || 'Pickup'
 
+  const base = window.location.origin + '/bom-inventory'
+  const trackUrl = order.sourceToken
+    ? `${base}/shop/order/${order.orderCode}?t=${encodeURIComponent(order.sourceToken)}`
+    : `${base}/shop/order/${order.orderCode}`
+
   const html = `<!DOCTYPE html>
 <html lang="vi">
 <head>
@@ -67,6 +74,7 @@ export function printOrderTag(order, qrBase64) {
   .label { font-size: 16px; font-weight: 600; color: #444; margin: 6px 0 14px; }
   img    { width: 200px; height: 200px; display: block; margin: 0 auto; border-radius: 6px; }
   .hint  { font-size: 11px; color: #888; margin-top: 10px; }
+  .url   { font-size: 7px; color: #999; word-break: break-all; margin-top: 6px; text-align: left; padding: 0 2px; }
   .divider { border-top: 1px dashed #ccc; margin: 12px 0; }
   @media print { @page { margin: 0; } }
 </style>
@@ -77,6 +85,7 @@ export function printOrderTag(order, qrBase64) {
   <div class="divider"></div>
   ${qrBase64 ? `<img src="data:image/png;base64,${qrBase64}" alt="QR" />` : ''}
   <div class="hint">Scan to track your order</div>
+  <div class="url">${trackUrl}</div>
 </body>
 </html>`
 

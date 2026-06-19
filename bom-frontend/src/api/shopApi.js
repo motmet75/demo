@@ -319,3 +319,71 @@ export function updateBankConfig(body) {
     body: JSON.stringify(body)
   })
 }
+
+// ── Split / Merge bills ────────────────────────────────────────────
+
+export function splitBill(orderId, rootItemIds) {
+  return apiFetchJson(`/shop/staff/orders/${orderId}/split-bill`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rootItemIds })
+  })
+}
+
+export function mergeBills(primaryId, otherIds) {
+  return apiFetchJson('/shop/staff/orders/merge-bills', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ primaryId, otherIds })
+  })
+}
+
+export function patchOrderDiscount(orderId, discountAmount, voucherCode) {
+  return apiFetchJson(`/shop/staff/orders/${orderId}/discount`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ discountAmount, voucherCode })
+  })
+}
+
+export function linkOrderCustomer(orderId, customerId) {
+  return apiFetchJson(`/shop/staff/orders/${orderId}/customer`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ customerId })
+  })
+}
+
+// ── Customer management ────────────────────────────────────────────
+
+export function fetchCustomers(q) {
+  return apiFetchJson('/shop/staff/customers' + (q ? qs({ q }) : ''))
+}
+
+export function createCustomer(body) {
+  return apiFetchJson('/shop/staff/customers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  })
+}
+
+export function updateCustomer(id, body) {
+  return apiFetchJson(`/shop/staff/customers/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  })
+}
+
+export function deleteCustomer(id) {
+  return apiFetchJson(`/shop/staff/customers/${id}`, { method: 'DELETE' })
+}
+
+export function addCustomerPoints(id, points) {
+  return apiFetchJson(`/shop/staff/customers/${id}/add-points`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ points })
+  })
+}

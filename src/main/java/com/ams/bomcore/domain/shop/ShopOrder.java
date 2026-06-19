@@ -90,6 +90,15 @@ public class ShopOrder {
     @Column(name = "split_cash_amount", columnDefinition = "numeric")
     private BigDecimal splitCashAmount;
 
+    @Column(name = "discount_amount", columnDefinition = "numeric")
+    private BigDecimal discountAmount;
+
+    @Column(name = "voucher_code", length = 50)
+    private String voucherCode;
+
+    @Column(name = "customer_id")
+    private UUID customerId;
+
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
 
@@ -176,6 +185,12 @@ public class ShopOrder {
     public void setPaymentQr(String paymentQr) { this.paymentQr = paymentQr; }
     public BigDecimal getSplitCashAmount() { return splitCashAmount; }
     public void setSplitCashAmount(BigDecimal splitCashAmount) { this.splitCashAmount = splitCashAmount; }
+    public BigDecimal getDiscountAmount() { return discountAmount; }
+    public void setDiscountAmount(BigDecimal discountAmount) { this.discountAmount = discountAmount; }
+    public String getVoucherCode() { return voucherCode; }
+    public void setVoucherCode(String voucherCode) { this.voucherCode = voucherCode; }
+    public UUID getCustomerId() { return customerId; }
+    public void setCustomerId(UUID customerId) { this.customerId = customerId; }
     public String getNotes() { return notes; }
     public void setNotes(String notes) { this.notes = notes; }
     public Instant getCreatedAt() { return createdAt; }

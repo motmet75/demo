@@ -31,6 +31,9 @@ public class ShopOrderResponseDto {
     private String paymentStatus;
     private String paymentQr;
     private BigDecimal splitCashAmount;
+    private BigDecimal discountAmount;
+    private String voucherCode;
+    private UUID customerId;
     private String notes;
     private String staffName;
     private String sourceToken;
@@ -112,6 +115,9 @@ public class ShopOrderResponseDto {
         dto.paymentStatus = order.getPaymentStatus();
         dto.paymentQr = order.getPaymentQr();
         dto.splitCashAmount = order.getSplitCashAmount();
+        dto.discountAmount = order.getDiscountAmount();
+        dto.voucherCode = order.getVoucherCode();
+        dto.customerId = order.getCustomerId();
         dto.notes = order.getNotes();
         dto.staffName = order.getStaffName();
         dto.sourceToken = order.getSourceToken();
@@ -149,6 +155,9 @@ public class ShopOrderResponseDto {
     public String getPaymentStatus() { return paymentStatus; }
     public String getPaymentQr() { return paymentQr; }
     public BigDecimal getSplitCashAmount() { return splitCashAmount; }
+    public BigDecimal getDiscountAmount() { return discountAmount; }
+    public String getVoucherCode() { return voucherCode; }
+    public UUID getCustomerId() { return customerId; }
     public String getNotes() { return notes; }
     public String getStaffName() { return staffName; }
     public String getSourceToken() { return sourceToken; }

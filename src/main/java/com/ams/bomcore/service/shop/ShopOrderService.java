@@ -6,11 +6,14 @@ import com.ams.bomcore.domain.company.Company;
 import com.ams.bomcore.domain.model.Model;
 import com.ams.bomcore.domain.shop.ModelMenuOption;
 import com.ams.bomcore.domain.shop.ShopAccessToken;
+import com.ams.bomcore.domain.shop.ShopCustomer;
 import com.ams.bomcore.domain.shop.ShopOrder;
 import com.ams.bomcore.domain.shop.ShopOrderItem;
 import com.ams.bomcore.domain.shop.ShopTable;
 import com.ams.bomcore.repository.*;
 import com.ams.bomcore.service.bom.BomService;
+import java.util.HashSet;
+import java.util.Set;
 import com.ams.bomcore.service.inventory.OrderDeductionService;
 import com.ams.bomcore.util.QrCodeUtil;
 import com.ams.bomcore.util.VietQrBuilder;
@@ -45,6 +48,7 @@ public class ShopOrderService {
     private final ShopPricingService shopPricingService;
     private final BomService bomService;
     private final OrderDeductionService orderDeductionService;
+    private final ShopCustomerRepository shopCustomerRepository;
 
     @Value("${app.shop.public-base-url:http://localhost:5173/bom-inventory}")
     private String publicBaseUrl;
@@ -59,7 +63,8 @@ public class ShopOrderService {
                             TenantRepository tenantRepository,
                             ShopPricingService shopPricingService,
                             BomService bomService,
-                            OrderDeductionService orderDeductionService) {
+                            OrderDeductionService orderDeductionService,
+                            ShopCustomerRepository shopCustomerRepository) {
         this.shopOrderRepository = shopOrderRepository;
         this.shopOrderItemRepository = shopOrderItemRepository;
         this.shopTableRepository = shopTableRepository;
@@ -71,6 +76,7 @@ public class ShopOrderService {
         this.shopPricingService = shopPricingService;
         this.bomService = bomService;
         this.orderDeductionService = orderDeductionService;
+        this.shopCustomerRepository = shopCustomerRepository;
     }
 
     // ── Menu ─────────────────────────────────────────────────────────
@@ -496,8 +502,10 @@ public class ShopOrderService {
         return new TableQrResult(QrCodeUtil.generateBase64Png(url, 300), sat.getToken(), activeOrderCount);
     }
 
+    public record WalkUpQrResult(String qrBase64, String qrUrl, Integer seq) {}
+
     @Transactional
-    public String generateWalkUpQr(Integer seq, UUID tenantId, UUID companyId) {
+    public WalkUpQrResult generateWalkUpQr(Integer seq, UUID tenantId, UUID companyId) {
         ShopAccessToken sat = new ShopAccessToken();
         sat.setToken(UUID.randomUUID().toString());
         sat.setTenantId(tenantId);
@@ -508,7 +516,7 @@ public class ShopOrderService {
         shopAccessTokenRepository.save(sat);
         String url = publicBaseUrl + "/shop/menu?t=" + sat.getToken()
                    + (seq != null ? "&seq=" + seq : "");
-        return QrCodeUtil.generateBase64Png(url, 400);
+        return new WalkUpQrResult(QrCodeUtil.generateBase64Png(url, 400), url, seq);
     }
 
     // ── Display board ─────────────────────────────────────────────────
@@ -865,7 +873,162 @@ public class ShopOrderService {
         shopAccessTokenRepository.delete(sat);
     }
 
+    // ── Split / Merge bills ───────────────────────────────────────────
+
+    public record SplitResult(ShopOrderResponseDto original, ShopOrderResponseDto newBill) {}
+
+    @Transactional
+    public SplitResult splitBill(UUID orderId, List<UUID> rootItemIds, UUID tenantId, UUID companyId) {
+        ShopOrder order = requireOrder(orderId, tenantId, companyId);
+        List<ShopOrderItem> allItems = shopOrderItemRepository.findAllByOrder_Id(order.getId());
+        Set<UUID> splitIds = new HashSet<>(rootItemIds);
+
+        List<ShopOrderItem> toMove = allItems.stream()
+            .filter(i -> splitIds.contains(i.getId())
+                    || (i.getParentItem() != null && splitIds.contains(i.getParentItem().getId())))
+            .toList();
+
+        if (toMove.isEmpty()) throw new IllegalArgumentException("No items selected");
+        if (toMove.size() == allItems.size()) throw new IllegalArgumentException("Cannot move all items — keep at least one");
+
+        ShopOrder newOrder = new ShopOrder();
+        newOrder.setTenantId(tenantId);
+        newOrder.setCompanyId(companyId);
+        newOrder.setOrderCode(String.valueOf(System.currentTimeMillis()));
+        newOrder.setFulfillmentType(order.getFulfillmentType());
+        newOrder.setTable(order.getTable());
+        newOrder.setCustomerName(order.getCustomerName());
+        newOrder.setCustomerPhone(order.getCustomerPhone());
+        newOrder.setPaymentMethod(order.getPaymentMethod());
+        newOrder.setSourceToken(order.getSourceToken());
+        newOrder.setStaffName(order.getStaffName());
+        newOrder.setCustomerId(order.getCustomerId());
+        newOrder.setNotes(order.getNotes());
+
+        companyRepository.incrementOrderNumber(companyId);
+        companyRepository.flush();
+        newOrder.setOrderNumber(companyRepository.findById(companyId).map(Company::getLastOrderNumber).orElse(null));
+
+        ZoneId vn = ZoneId.of("Asia/Ho_Chi_Minh");
+        LocalDate today = LocalDate.now(vn);
+        Instant dayStart = today.atStartOfDay(vn).toInstant();
+        Instant dayEnd   = today.plusDays(1).atStartOfDay(vn).toInstant();
+        newOrder.setDailySeq((int) shopOrderRepository.countOrdersInDay(companyId, dayStart, dayEnd) + 1);
+        shopOrderRepository.save(newOrder);
+
+        for (ShopOrderItem item : toMove) item.setOrder(newOrder);
+        shopOrderItemRepository.saveAll(toMove);
+
+        List<ShopOrderItem> remaining = shopOrderItemRepository.findAllByOrder_Id(order.getId());
+        List<ShopOrderItem> moved     = shopOrderItemRepository.findAllByOrder_Id(newOrder.getId());
+
+        BigDecimal fee = order.getDeliveryFee() != null ? order.getDeliveryFee() : BigDecimal.ZERO;
+        order.setTotalAmount(sumLineTotals(remaining).add(fee));
+        order.setTotalRawCost(sumRawCost(remaining));
+        newOrder.setTotalAmount(sumLineTotals(moved));
+        newOrder.setTotalRawCost(sumRawCost(moved));
+        shopOrderRepository.saveAll(List.of(order, newOrder));
+
+        return new SplitResult(dto(order), dto(newOrder));
+    }
+
+    @Transactional
+    public ShopOrderResponseDto mergeBills(UUID primaryId, List<UUID> otherIds, UUID tenantId, UUID companyId) {
+        ShopOrder primary = requireOrder(primaryId, tenantId, companyId);
+        for (UUID otherId : otherIds) {
+            if (otherId.equals(primaryId)) continue;
+            ShopOrder other = requireOrder(otherId, tenantId, companyId);
+            List<ShopOrderItem> otherItems = shopOrderItemRepository.findAllByOrder_Id(other.getId());
+            for (ShopOrderItem item : otherItems) item.setOrder(primary);
+            shopOrderItemRepository.saveAll(otherItems);
+            other.setStatus(ShopOrder.STATUS_CANCELLED);
+            other.setCancelReason("Merged into #" + primary.getOrderCode());
+            shopOrderRepository.save(other);
+        }
+        List<ShopOrderItem> allItems = shopOrderItemRepository.findAllByOrder_Id(primary.getId());
+        BigDecimal fee = primary.getDeliveryFee() != null ? primary.getDeliveryFee() : BigDecimal.ZERO;
+        primary.setTotalAmount(sumLineTotals(allItems).add(fee));
+        primary.setTotalRawCost(sumRawCost(allItems));
+        shopOrderRepository.save(primary);
+        return dto(primary);
+    }
+
+    // ── Discount / voucher ─────────────────────────────────────────────
+
+    @Transactional
+    public ShopOrderResponseDto patchDiscount(UUID orderId, BigDecimal discountAmount, String voucherCode, UUID tenantId, UUID companyId) {
+        ShopOrder order = requireOrder(orderId, tenantId, companyId);
+        if (discountAmount != null) order.setDiscountAmount(discountAmount.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : discountAmount);
+        if (voucherCode != null) order.setVoucherCode(voucherCode.isBlank() ? null : voucherCode.trim());
+        shopOrderRepository.save(order);
+        return dto(order);
+    }
+
+    // ── Customer CRUD ──────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public List<ShopCustomer> listCustomers(UUID tenantId, UUID companyId, String q) {
+        if (q != null && !q.isBlank())
+            return shopCustomerRepository.search(tenantId, companyId, q.trim());
+        return shopCustomerRepository.findAllByTenantIdAndCompanyIdOrderByNameAsc(tenantId, companyId);
+    }
+
+    @Transactional(readOnly = true)
+    public java.util.Optional<ShopCustomer> getCustomer(UUID id, UUID tenantId, UUID companyId) {
+        return shopCustomerRepository.findById(id)
+            .filter(c -> c.getTenantId().equals(tenantId) && c.getCompanyId().equals(companyId));
+    }
+
+    @Transactional
+    public ShopCustomer saveCustomer(ShopCustomer customer, UUID tenantId, UUID companyId) {
+        customer.setTenantId(tenantId);
+        customer.setCompanyId(companyId);
+        return shopCustomerRepository.save(customer);
+    }
+
+    @Transactional
+    public void deleteCustomer(UUID id, UUID tenantId, UUID companyId) {
+        ShopCustomer c = shopCustomerRepository.findById(id)
+            .orElseThrow(() -> new java.util.NoSuchElementException("Customer not found"));
+        if (!c.getTenantId().equals(tenantId) || !c.getCompanyId().equals(companyId))
+            throw new IllegalArgumentException("Not your customer");
+        shopCustomerRepository.delete(c);
+    }
+
+    @Transactional
+    public ShopOrderResponseDto linkCustomer(UUID orderId, UUID customerId, UUID tenantId, UUID companyId) {
+        ShopOrder order = requireOrder(orderId, tenantId, companyId);
+        if (customerId != null) shopCustomerRepository.findById(customerId)
+            .orElseThrow(() -> new java.util.NoSuchElementException("Customer not found"));
+        order.setCustomerId(customerId);
+        shopOrderRepository.save(order);
+        return dto(order);
+    }
+
+    @Transactional
+    public ShopCustomer addPoints(UUID customerId, int points, UUID tenantId, UUID companyId) {
+        ShopCustomer c = shopCustomerRepository.findById(customerId)
+            .orElseThrow(() -> new java.util.NoSuchElementException("Customer not found"));
+        if (!c.getTenantId().equals(tenantId) || !c.getCompanyId().equals(companyId))
+            throw new IllegalArgumentException("Not your customer");
+        c.setPoints((c.getPoints() != null ? c.getPoints() : 0) + points);
+        return shopCustomerRepository.save(c);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────
+
+    private BigDecimal sumLineTotals(List<ShopOrderItem> items) {
+        return items.stream()
+            .map(i -> i.getLineTotal() != null ? i.getLineTotal() : BigDecimal.ZERO)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private BigDecimal sumRawCost(List<ShopOrderItem> items) {
+        return items.stream()
+            .map(i -> (i.getUnitRawCost() != null && i.getQuantity() != null)
+                ? i.getUnitRawCost().multiply(i.getQuantity()) : BigDecimal.ZERO)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
 
     private void disableSourceToken(ShopOrder order) {
         String token = order.getSourceToken();

@@ -30,7 +30,7 @@ export default function QrOrderDialog({ open, onClose }) {
       const seqVal = seq !== '' ? Number(seq) : null
       const { res, data } = await generateWalkUpQr(seqVal)
       if (!res.ok) { setError(data?.message || 'Failed to generate QR'); setLoading(false); return }
-      setResult({ qrBase64: data.qrBase64, seq: data.seq ?? null })
+      setResult({ qrBase64: data.qrBase64, seq: data.seq ?? null, qrUrl: data.qrUrl ?? null })
     } catch (e) { setError(e.message || 'Network error') }
     setLoading(false)
   }
@@ -133,7 +133,7 @@ export default function QrOrderDialog({ open, onClose }) {
             </Tooltip>
             <Button
               variant="contained" startIcon={<PrintIcon />}
-              onClick={() => printWalkUpQr(result.seq, result.qrBase64)}
+              onClick={() => printWalkUpQr(result.seq, result.qrBase64, result.qrUrl)}
               sx={{ fontWeight: 700, textTransform: 'none', flex: 1 }}
             >
               Print Slip
