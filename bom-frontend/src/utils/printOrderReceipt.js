@@ -565,6 +565,10 @@ export function printOrderReceipt(order, trackingQrBase64 = null) {
     ? `<div class="row"><span>Delivery fee</span><span>${fmt(order.deliveryFee)}</span></div>`
     : ''
 
+  const discountRow = order.discountAmount && Number(order.discountAmount) > 0
+    ? `<div class="row" style="color:#c62828"><span>Discount${order.voucherCode ? ` (${order.voucherCode})` : ''}</span><span>-${fmt(order.discountAmount)}</span></div>`
+    : ''
+
   const isQrUrl    = order.paymentQr?.startsWith('https://')
   const qrSrc      = order.paymentQr
     ? (isQrUrl ? order.paymentQr : `data:image/png;base64,${order.paymentQr}`)
@@ -662,6 +666,7 @@ export function printOrderReceipt(order, trackingQrBase64 = null) {
   <div class="divider"></div>
 
   ${deliveryRow}
+  ${discountRow}
   <div class="row summary-row" style="font-size:11px;color:#555;">
     <span>${rootItems.length} line${rootItems.length !== 1 ? 's' : ''}</span>
     <span style="font-weight:700;color:#111;">${rootItems.reduce((s, it) => s + Number(it.quantity || 1), 0)} items total</span>
@@ -672,7 +677,7 @@ export function printOrderReceipt(order, trackingQrBase64 = null) {
       const children = childMap[String(item.id)] || []
       const parentQty = Number(item.quantity || 1)
       return s + Number(item.lineTotal || 0) + children.reduce((cs, c) => cs + Number(c.lineTotal || 0) * parentQty, 0)
-    }, 0) + Number(order.deliveryFee || 0))}</span>
+    }, 0) + Number(order.deliveryFee || 0) - Number(order.discountAmount || 0))}</span>
   </div>
 
   ${notesSection}

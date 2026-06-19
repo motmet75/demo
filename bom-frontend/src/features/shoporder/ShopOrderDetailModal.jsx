@@ -27,11 +27,12 @@ import EditIcon from '@mui/icons-material/Edit'
 import UndoIcon from '@mui/icons-material/Undo'
 import LabelIcon from '@mui/icons-material/Label'
 import MonitorIcon from '@mui/icons-material/Monitor'
-import { fetchOrderTagQr, revertShopOrder, switchToQrPayment, splitPayment, revertToCash } from '../../api/shopApi'
+import { fetchOrderTagQr, revertShopOrder, switchToQrPayment, splitPayment, revertToCash, patchOrderDiscount, linkOrderCustomer, fetchCustomers } from '../../api/shopApi'
 import { printOrderReceipt, printOrderTag, printCupLabels } from '../../utils/printOrderReceipt'
 import { broadcastToCounter } from '../shopboard/CounterDisplayPage'
 import EditOrderDialog from './EditOrderDialog'
 import ConfirmActionDialog from './ConfirmActionDialog'
+import SplitBillDialog from './SplitBillDialog'
 
 const fmt     = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : '—'
 const fmtDots = (digits) => digits ? Number(digits).toLocaleString('vi-VN') : ''
@@ -144,8 +145,17 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
   const [splitting, setSplitting]   = useState(false)
   const [reverting2, setReverting2] = useState(false)
   const [error, setError]           = useState('')
-  const [editOpen, setEditOpen]     = useState(false)
-  const [confirmDlg, setConfirmDlg] = useState(null)
+  const [editOpen, setEditOpen]       = useState(false)
+  const [confirmDlg, setConfirmDlg]   = useState(null)
+  const [splitBillOpen, setSplitBillOpen]     = useState(false)
+  const [discountAmt, setDiscountAmt]         = useState('')
+  const [voucherCode, setVoucherCode]         = useState('')
+  const [discountSaving, setDiscountSaving]   = useState(false)
+  const [custSearch, setCustSearch]           = useState('')
+  const [custResults, setCustResults]         = useState([])
+  const [custSearching, setCustSearching]     = useState(false)
+  const [linkedCustomer, setLinkedCustomer]   = useState(null)
+  const [custLinking, setCustLinking]         = useState(false)
 
   const askConfirm = (cfg, fn) => setConfirmDlg({ ...cfg, onConfirm: async (reason) => { setConfirmDlg(null); await fn(reason) } })
 
@@ -156,6 +166,19 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
       .then(({ data }) => setTagQr(data?.qrBase64 || null))
       .catch(() => setTagQr(null))
       .finally(() => setQrLoading(false))
+  }, [open, order?.id])
+
+  useEffect(() => {
+    if (!open || !order) return
+    setDiscountAmt(order.discountAmount ? String(order.discountAmount) : '')
+    setVoucherCode(order.voucherCode || '')
+    setLinkedCustomer(null); setCustSearch(''); setCustResults([])
+    if (order.customerId) {
+      fetchCustomers().then(({ data }) => {
+        const c = (data || []).find(x => x.id === order.customerId)
+        if (c) setLinkedCustomer(c)
+      }).catch(() => {})
+    }
   }, [open, order?.id])
 
   const handleRevert = async () => {
@@ -200,6 +223,48 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
       onRefresh?.()
     } catch (e) { setError(e.message || 'Failed to revert payment') }
     setReverting2(false)
+  }
+
+  const handleApplyDiscount = async () => {
+    setDiscountSaving(true); setError('')
+    try {
+      const { res, data } = await patchOrderDiscount(order.id, discountAmt ? Number(discountAmt) : 0, voucherCode || null)
+      if (!res.ok) { setError(data?.error || 'Failed to apply discount'); setDiscountSaving(false); return }
+      onRefresh?.()
+    } catch (e) { setError(e.message || 'Network error') }
+    setDiscountSaving(false)
+  }
+
+  const handleSearchCust = async (q) => {
+    setCustSearch(q)
+    if (!q.trim()) { setCustResults([]); return }
+    setCustSearching(true)
+    try {
+      const { data } = await fetchCustomers(q)
+      setCustResults(data || [])
+    } catch {}
+    setCustSearching(false)
+  }
+
+  const handleLinkCustomer = async (c) => {
+    setCustLinking(true); setError('')
+    try {
+      const { res } = await linkOrderCustomer(order.id, c.id)
+      if (!res.ok) { setError('Failed to link customer'); setCustLinking(false); return }
+      setLinkedCustomer(c); setCustSearch(''); setCustResults([])
+      onRefresh?.()
+    } catch (e) { setError(e.message || 'Network error') }
+    setCustLinking(false)
+  }
+
+  const handleUnlinkCustomer = async () => {
+    setCustLinking(true); setError('')
+    try {
+      const { res } = await linkOrderCustomer(order.id, null)
+      if (!res.ok) { setError('Failed to unlink customer'); setCustLinking(false); return }
+      setLinkedCustomer(null); onRefresh?.()
+    } catch (e) { setError(e.message || 'Network error') }
+    setCustLinking(false)
   }
 
   if (!order) return null
@@ -345,7 +410,8 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
             const groups = buildItemGroups(order.items || [])
             const itemsTotal = groups.reduce((s, g) => s + g.subtotal, 0)
             const delivery   = Number(order.deliveryFee || 0)
-            const grandTotal = itemsTotal + delivery
+            const discount   = Number(order.discountAmount || 0)
+            const grandTotal = itemsTotal + delivery - discount
             const totalMainQty = groups.reduce((s, g) => s + Number(g.root.quantity || 1), 0)
             const totalLines   = groups.length
             return (
@@ -363,11 +429,101 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
                 {delivery > 0 && (
                   <Typography variant="body2" color="text.secondary">Items: {fmt(itemsTotal)} + Delivery: {fmt(delivery)}</Typography>
                 )}
+                {discount > 0 && (
+                  <Typography variant="body2" color="error.main">
+                    Discount: -{fmt(discount)}{order.voucherCode ? ` (${order.voucherCode})` : ''}
+                  </Typography>
+                )}
                 <Typography fontWeight={900} variant="h5" color="primary">Total: {fmt(grandTotal)}</Typography>
               </Box>
             </Box>
             )
           })()}
+
+          {/* ── Discount / Voucher ────────────────────────────────── */}
+          {!isFinal && (
+            <Box sx={{ mb: 1.5, p: 1.25, bgcolor: '#fff9f0', border: '1px solid #ffe0b2', borderRadius: 1.5 }}>
+              <Typography variant="caption" fontWeight={800} color="#e65100"
+                sx={{ textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', mb: 1 }}>
+                Discount / Voucher
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                <TextField
+                  label="Discount amount" size="small" type="text" inputMode="numeric"
+                  value={fmtDots(discountAmt)}
+                  onChange={e => setDiscountAmt(stripNonDigits(e.target.value))}
+                  InputProps={{ endAdornment: <InputAdornment position="end">đ</InputAdornment> }}
+                  sx={{ width: 180 }}
+                />
+                <TextField
+                  label="Voucher code" size="small"
+                  value={voucherCode}
+                  onChange={e => setVoucherCode(e.target.value)}
+                  sx={{ flex: 1, minWidth: 120 }}
+                />
+                <Button variant="contained" color="warning" size="small"
+                  onClick={handleApplyDiscount} disabled={discountSaving}
+                  startIcon={discountSaving ? <CircularProgress size={14} /> : null}
+                  sx={{ textTransform: 'none', fontWeight: 700, whiteSpace: 'nowrap', alignSelf: 'center' }}>
+                  Apply
+                </Button>
+              </Box>
+            </Box>
+          )}
+
+          {/* ── Customer Link ──────────────────────────────────────── */}
+          <Box sx={{ mb: 1.5, p: 1.25, bgcolor: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 1.5 }}>
+            <Typography variant="caption" fontWeight={800} color="text.secondary"
+              sx={{ textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', mb: 1 }}>
+              Customer (points)
+            </Typography>
+            {linkedCustomer ? (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Box sx={{ flex: 1 }}>
+                  <Typography fontWeight={700}>{linkedCustomer.name}</Typography>
+                  {linkedCustomer.phone && <Typography variant="caption" color="text.secondary">{linkedCustomer.phone}</Typography>}
+                  <Chip label={`${linkedCustomer.points ?? 0} pts`} size="small" color="warning" variant="outlined"
+                    sx={{ ml: 1, height: 18, fontWeight: 700, fontSize: 10 }} />
+                </Box>
+                {!isFinal && (
+                  <Button size="small" color="error" onClick={handleUnlinkCustomer} disabled={custLinking}
+                    sx={{ textTransform: 'none', flexShrink: 0 }}>
+                    Unlink
+                  </Button>
+                )}
+              </Box>
+            ) : (
+              <Box sx={{ position: 'relative' }}>
+                <TextField
+                  label="Search customer by name / phone" size="small" fullWidth
+                  value={custSearch}
+                  onChange={e => handleSearchCust(e.target.value)}
+                  InputProps={{ endAdornment: custSearching ? <InputAdornment position="end"><CircularProgress size={14} /></InputAdornment> : null }}
+                  disabled={isFinal}
+                />
+                {custResults.length > 0 && (
+                  <Box sx={{
+                    position: 'absolute', zIndex: 10, left: 0, right: 0, top: '100%',
+                    bgcolor: '#fff', border: '1px solid #e0e0e0', borderRadius: 1.5,
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.12)', mt: 0.5, maxHeight: 200, overflowY: 'auto',
+                  }}>
+                    {custResults.map(c => (
+                      <Box key={c.id} onClick={() => handleLinkCustomer(c)}
+                        sx={{ px: 1.5, py: 1, cursor: 'pointer', '&:hover': { bgcolor: '#f0f4ff' },
+                          display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Box sx={{ flex: 1 }}>
+                          <Typography variant="body2" fontWeight={700}>{c.name}</Typography>
+                          {c.phone && <Typography variant="caption" color="text.secondary">{c.phone}</Typography>}
+                        </Box>
+                        <Chip label={`${c.points ?? 0} pts`} size="small" color="warning" variant="outlined"
+                          sx={{ height: 18, fontWeight: 700, fontSize: 10 }} />
+                      </Box>
+                    ))}
+                  </Box>
+                )}
+              </Box>
+            )}
+          </Box>
 
           {/* ── Payment Panel ─────────────────────────────────────── */}
           <Divider sx={{ mb: 1.5 }} />
@@ -504,6 +660,14 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
                 </Button>
               </Tooltip>
             )}
+            {!isFinal && (order.items || []).filter(i => !i.parentItemId).length > 1 && (
+              <Tooltip title="Split items into a separate new bill">
+                <Button variant="outlined" color="secondary" startIcon={<CallSplitIcon />}
+                  onClick={() => setSplitBillOpen(true)} sx={{ textTransform: 'none', fontWeight: 700 }}>
+                  Split Bill
+                </Button>
+              </Tooltip>
+            )}
             {canSwitchToQr && (
               <Tooltip title="Switch to full Bank QR payment and print receipt">
                 <Button variant="contained" color="success" startIcon={<QrCode2Icon />}
@@ -582,6 +746,12 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
           onConfirm={confirmDlg.onConfirm}
           onCancel={() => setConfirmDlg(null)}
         />
+      )}
+
+      {splitBillOpen && (
+        <SplitBillDialog open={splitBillOpen} order={order}
+          onClose={() => setSplitBillOpen(false)}
+          onSplit={() => { setSplitBillOpen(false); onRefresh?.(); onClose() }} />
       )}
 
       {/* ── Split Payment Dialog ──────────────────────────────────── */}

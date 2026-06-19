@@ -46,6 +46,7 @@ import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber'
 import DriveFileMoveIcon from '@mui/icons-material/DriveFileMove'
 import AssessmentIcon from '@mui/icons-material/Assessment'
 import SupportAgentIcon from '@mui/icons-material/SupportAgent'
+import MergeTypeIcon from '@mui/icons-material/MergeType'
 import {
   fetchShopOrders, fetchActiveOrders, confirmShopOrder, prepareShopOrder, readyShopOrder,
   completeShopOrder, cancelShopOrder, resetOrderSequence, setShopOrderNumber,
@@ -60,6 +61,7 @@ import ManualOrderDialog from './ManualOrderDialog'
 import QrOrderDialog from './QrOrderDialog'
 import EodAuditDialog from './EodAuditDialog'
 import ConfirmActionDialog from './ConfirmActionDialog'
+import MergeBillsDialog from './MergeBillsDialog'
 import { useAppContext } from '../../context/AppContext'
 import { fetchModels } from '../../api/modelApi'
 
@@ -636,6 +638,11 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
                 <IconButton size="small" color="primary" onClick={() => actions.payQr(order)} sx={{ p: 0.35 }}><QrCode2Icon sx={{ fontSize: 15 }} /></IconButton>
               </Tooltip>
             )}
+            {!['COMPLETED','PICKED_UP','CANCELLED'].includes(order.status) && (
+              <Tooltip title="Merge other bills into this one">
+                <IconButton size="small" onClick={() => actions.mergeBills(order)} sx={{ p: 0.35, color: '#7c3aed' }}><MergeTypeIcon sx={{ fontSize: 15 }} /></IconButton>
+              </Tooltip>
+            )}
           </Box>
         </Box>
       </Box>
@@ -949,6 +956,7 @@ export default function ShopOrderGrid() {
   const [pickupQrOrder, setPickupQrOrder] = useState(null)  // { id, orderNumber, orderCode, qrBase64 }
   const [trackQrOrder, setTrackQrOrder]   = useState(null)  // { order, qrBase64, loading }
   const [combinedToken, setCombinedToken] = useState(null)  // token string — opens CombinedReceiptDialog
+  const [mergeOrder, setMergeOrder]       = useState(null)  // order to merge others into
   const [modelImageMap, setModelImageMap] = useState({})   // { [modelId]: imageUrl }
   const [staffCalls, setStaffCalls]       = useState([])   // pending staff calls
   const seenCallIdsRef = React.useRef(new Set())
@@ -1195,6 +1203,7 @@ export default function ShopOrderGrid() {
     revertCash: (row) => askConfirm({ title: 'Revert to Cash?', message: 'Change payment method back to cash?', confirmLabel: '→ Cash', confirmColor: 'warning' }, () => handleRevertToCash(row)),
     pickupQr:    handlePickupQr,
     showTrackQr: handleShowTrackQr,
+    mergeBills:  (row) => setMergeOrder(row),
   }
 
   const tabBadge = (label, count, color = 'primary') => (
@@ -1353,6 +1362,11 @@ export default function ShopOrderGrid() {
       <QrOrderDialog open={qrOrderOpen} onClose={() => setQrOrderOpen(false)} />
       {detailOrder && (
         <ShopOrderDetailModal open order={detailOrder} onClose={() => setDetailOrder(null)} onRefresh={() => { reload(); setDetailOrder(null) }} />
+      )}
+      {mergeOrder && (
+        <MergeBillsDialog open order={mergeOrder}
+          onClose={() => setMergeOrder(null)}
+          onMerge={() => { setMergeOrder(null); reload() }} />
       )}
 
       <Dialog open={boardOpen} onClose={() => setBoardOpen(false)} maxWidth="sm" fullWidth>

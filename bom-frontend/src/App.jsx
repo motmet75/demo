@@ -51,6 +51,7 @@ import CounterDisplayPage from './features/shopboard/CounterDisplayPage'
 import CustomerBoardPage from './features/shopboard/CustomerBoardPage'
 import CustomerPickupPage from './features/shopboard/CustomerPickupPage'
 import ShopTokenManagePage from './features/shoptoken/ShopTokenManagePage'
+import ShopCustomerPage from './features/shopcustomer/ShopCustomerPage'
 import ProfilePage from './features/profile/ProfilePage'
 
 const SIDEBAR_FULL = 210
@@ -79,6 +80,7 @@ const PATH_TITLES = {
   '/shop-menu':          'Menu Setup',
   '/shop-bank':          'Bank Setup',
   '/shop-tokens':        'QR Tokens',
+  '/shop-customers':     'Customers',
   '/profile':            'Profile',
   '/admin':              'Admin',
   '/admin/users':        'Admin Users',
@@ -161,7 +163,8 @@ const NAV_GROUPS = [
       { label: 'Tables',      path: '/shop-tables', icon: '🪑' },
       { label: 'Menu Setup',  path: '/shop-menu',   icon: '🍽️' },
       { label: 'Bank Setup',  path: '/shop-bank',   icon: '🏦' },
-      { label: 'QR Tokens',   path: '/shop-tokens', icon: '🔑' },
+      { label: 'QR Tokens',   path: '/shop-tokens',    icon: '🔑' },
+      { label: 'Customers',   path: '/shop-customers', icon: '👤' },
     ],
   },
 ]
@@ -392,7 +395,8 @@ function MainShell({ user, logout, isAdmin }) {
             <Route path="/shop-tables" element={<RequireAuth><RequireContext><ShopTablePage /></RequireContext></RequireAuth>} />
             <Route path="/shop-menu"   element={<RequireAuth><RequireContext><ShopMenuManagePage /></RequireContext></RequireAuth>} />
             <Route path="/shop-bank"   element={<RequireAuth><RequireContext><ShopBankConfigPage /></RequireContext></RequireAuth>} />
-            <Route path="/shop-tokens" element={<RequireAuth><RequireContext><ShopTokenManagePage /></RequireContext></RequireAuth>} />
+            <Route path="/shop-tokens"    element={<RequireAuth><RequireContext><ShopTokenManagePage /></RequireContext></RequireAuth>} />
+            <Route path="/shop-customers" element={<RequireAuth><RequireContext><ShopCustomerPage /></RequireContext></RequireAuth>} />
             <Route path="/admin" element={<RequireAuth adminOnly><AdminPage /></RequireAuth>} />
             <Route path="/admin/users" element={<RequireAuth adminOnly><AdminPage /></RequireAuth>} />
             <Route path="/tenants" element={<RequireAuth adminOnly><TenantsPage /></RequireAuth>} />
