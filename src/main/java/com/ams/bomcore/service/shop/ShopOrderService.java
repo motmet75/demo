@@ -226,6 +226,7 @@ public class ShopOrderService {
         if (!ShopOrder.STATUS_PENDING.equals(order.getStatus()))
             throw new IllegalStateException("Order can only be edited while PENDING");
         order.setCustomerEditing(true);
+        order.setCustomerEditingSince(Instant.now());
         shopOrderRepository.save(order);
         return dto(order);
     }
@@ -235,6 +236,19 @@ public class ShopOrderService {
         ShopOrder order = shopOrderRepository.findByOrderCodeAndTenantIdAndCompanyId(orderCode, tenantId, companyId)
                 .orElseThrow(() -> new NoSuchElementException("Order not found"));
         order.setCustomerEditing(false);
+        order.setCustomerEditingSince(null);
+        shopOrderRepository.save(order);
+        return dto(order);
+    }
+
+    @Transactional
+    public ShopOrderResponseDto forceConfirmOrder(UUID orderId, UUID tenantId, UUID companyId) {
+        ShopOrder order = requireOrder(orderId, tenantId, companyId);
+        requireStatus(order, ShopOrder.STATUS_PENDING);
+        order.setCustomerEditing(false);
+        order.setCustomerEditingSince(null);
+        order.setStatus(ShopOrder.STATUS_CONFIRMED);
+        order.setConfirmedAt(Instant.now());
         shopOrderRepository.save(order);
         return dto(order);
     }
@@ -1015,6 +1029,50 @@ public class ShopOrderService {
         return shopCustomerRepository.save(c);
     }
 
+    // ── Points / Loyalty ───────────────────────────────────────────────
+
+    @Transactional
+    public ShopCustomer earnPointsFromOrder(UUID orderId, UUID tenantId, UUID companyId) {
+        ShopOrder order = requireOrder(orderId, tenantId, companyId);
+        if (order.getCustomerId() == null)
+            throw new IllegalStateException("No customer linked to this order");
+        Company company = companyRepository.findById(companyId).orElseThrow();
+        BigDecimal net = order.getTotalAmount() != null ? order.getTotalAmount() : BigDecimal.ZERO;
+        if (order.getDiscountAmount() != null) net = net.subtract(order.getDiscountAmount());
+        int pts = calcPoints(net, company.getPointsConversionRate(), company.getPointsRoundUp());
+        if (pts <= 0) throw new IllegalStateException("Order total too low to earn points at current rate");
+        ShopCustomer c = shopCustomerRepository.findById(order.getCustomerId())
+            .orElseThrow(() -> new java.util.NoSuchElementException("Customer not found"));
+        c.setPoints(c.getPoints() + pts);
+        return shopCustomerRepository.save(c);
+    }
+
+    @Transactional
+    public ShopCustomer recalculateCustomerPoints(UUID customerId, UUID tenantId, UUID companyId) {
+        ShopCustomer c = shopCustomerRepository.findById(customerId)
+            .orElseThrow(() -> new java.util.NoSuchElementException("Customer not found"));
+        if (!c.getTenantId().equals(tenantId) || !c.getCompanyId().equals(companyId))
+            throw new IllegalArgumentException("Not your customer");
+        Company company = companyRepository.findById(companyId).orElseThrow();
+        List<ShopOrder> orders = shopOrderRepository.findAllByCustomerIdAndTenantIdAndCompanyId(customerId, tenantId, companyId);
+        int total = 0;
+        for (ShopOrder o : orders) {
+            if (ShopOrder.STATUS_CANCELLED.equals(o.getStatus())) continue;
+            BigDecimal net = o.getTotalAmount() != null ? o.getTotalAmount() : BigDecimal.ZERO;
+            if (o.getDiscountAmount() != null) net = net.subtract(o.getDiscountAmount());
+            total += calcPoints(net, company.getPointsConversionRate(), company.getPointsRoundUp());
+        }
+        c.setPoints(total);
+        return shopCustomerRepository.save(c);
+    }
+
+    public static int calcPoints(BigDecimal amount, int rate, boolean roundUp) {
+        if (amount == null || rate <= 0) return 0;
+        BigDecimal pts = amount.divide(BigDecimal.valueOf(rate), 10, RoundingMode.DOWN);
+        return roundUp ? pts.setScale(0, RoundingMode.CEILING).intValue()
+                       : pts.setScale(0, RoundingMode.FLOOR).intValue();
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────
 
     private BigDecimal sumLineTotals(List<ShopOrderItem> items) {
@@ -1213,6 +1271,7 @@ public class ShopOrderService {
         if (!ShopOrder.STATUS_PENDING.equals(order.getStatus()))
             throw new IllegalStateException("Order can only be edited while PENDING");
         order.setCustomerEditing(true);
+        order.setCustomerEditingSince(Instant.now());
         shopOrderRepository.save(order);
         return dto(order);
     }
@@ -1221,6 +1280,7 @@ public class ShopOrderService {
     public ShopOrderResponseDto cancelCustomerEdit(String orderCode) {
         ShopOrder order = requireOrderByCode(orderCode);
         order.setCustomerEditing(false);
+        order.setCustomerEditingSince(null);
         shopOrderRepository.save(order);
         return dto(order);
     }

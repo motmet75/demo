@@ -204,6 +204,39 @@ public class ShopOrderController {
         return ResponseEntity.ok(shopOrderService.confirmOrder(orderId, tId, cId));
     }
 
+    @PatchMapping("/shop/staff/orders/{orderId}/force-confirm")
+    public ResponseEntity<?> forceConfirm(@PathVariable UUID orderId,
+                                           @RequestParam(required = false) UUID tenantId,
+                                           @RequestParam(required = false) UUID companyId,
+                                           @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                           @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        return ResponseEntity.ok(shopOrderService.forceConfirmOrder(orderId, tId, cId));
+    }
+
+    @PostMapping("/shop/staff/orders/{orderId}/earn-points")
+    public ResponseEntity<?> earnPoints(@PathVariable UUID orderId,
+                                         @RequestParam(required = false) UUID tenantId,
+                                         @RequestParam(required = false) UUID companyId,
+                                         @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                         @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        return ResponseEntity.ok(shopOrderService.earnPointsFromOrder(orderId, tId, cId));
+    }
+
+    @PostMapping("/shop/staff/customers/{customerId}/recalculate-points")
+    public ResponseEntity<?> recalculatePoints(@PathVariable UUID customerId,
+                                                @RequestParam(required = false) UUID tenantId,
+                                                @RequestParam(required = false) UUID companyId,
+                                                @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                                @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        return ResponseEntity.ok(shopOrderService.recalculateCustomerPoints(customerId, tId, cId));
+    }
+
     @PatchMapping("/shop/staff/orders/{orderId}/prepare")
     public ResponseEntity<?> prepare(@PathVariable UUID orderId,
                                       @RequestParam(required = false) UUID tenantId,
@@ -654,10 +687,12 @@ public class ShopOrderController {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
         var company = companyRepository.findById(cId).orElseThrow();
-        if (body.containsKey("bankBin"))           company.setBankBin(String.valueOf(body.get("bankBin")));
-        if (body.containsKey("bankAccountNumber")) company.setBankAccountNumber(String.valueOf(body.get("bankAccountNumber")));
-        if (body.containsKey("bankAccountName"))   company.setBankAccountName(String.valueOf(body.get("bankAccountName")));
-        if (body.containsKey("prepaidMenu"))       company.setPrepaidMenu(Boolean.TRUE.equals(body.get("prepaidMenu")));
+        if (body.containsKey("bankBin"))              company.setBankBin(String.valueOf(body.get("bankBin")));
+        if (body.containsKey("bankAccountNumber"))    company.setBankAccountNumber(String.valueOf(body.get("bankAccountNumber")));
+        if (body.containsKey("bankAccountName"))      company.setBankAccountName(String.valueOf(body.get("bankAccountName")));
+        if (body.containsKey("prepaidMenu"))          company.setPrepaidMenu(Boolean.TRUE.equals(body.get("prepaidMenu")));
+        if (body.containsKey("pointsConversionRate")) company.setPointsConversionRate(Integer.parseInt(String.valueOf(body.get("pointsConversionRate"))));
+        if (body.containsKey("pointsRoundUp"))        company.setPointsRoundUp(Boolean.TRUE.equals(body.get("pointsRoundUp")));
         companyRepository.save(company);
         return ResponseEntity.ok(bankConfigMap(company));
     }
@@ -671,10 +706,13 @@ public class ShopOrderController {
 
     private Map<String, Object> bankConfigMap(com.ams.bomcore.domain.company.Company company) {
         Map<String, Object> m = new java.util.LinkedHashMap<>();
-        m.put("bankBin",           company.getBankBin()           != null ? company.getBankBin()           : "");
-        m.put("bankAccountNumber", company.getBankAccountNumber() != null ? company.getBankAccountNumber() : "");
-        m.put("bankAccountName",   company.getBankAccountName()   != null ? company.getBankAccountName()   : "");
-        m.put("prepaidMenu",       Boolean.TRUE.equals(company.getPrepaidMenu()));
+        m.put("bankBin",              company.getBankBin()           != null ? company.getBankBin()           : "");
+        m.put("bankAccountNumber",    company.getBankAccountNumber() != null ? company.getBankAccountNumber() : "");
+        m.put("bankAccountName",      company.getBankAccountName()   != null ? company.getBankAccountName()   : "");
+        m.put("prepaidMenu",          Boolean.TRUE.equals(company.getPrepaidMenu()));
+        m.put("pointsConversionRate", company.getPointsConversionRate());
+        m.put("pointsRoundUp",        company.getPointsRoundUp());
+        m.put("voucherSecretSet",     company.getVoucherSecret() != null && !company.getVoucherSecret().isBlank());
         return m;
     }
 

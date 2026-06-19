@@ -27,7 +27,7 @@ import EditIcon from '@mui/icons-material/Edit'
 import UndoIcon from '@mui/icons-material/Undo'
 import LabelIcon from '@mui/icons-material/Label'
 import MonitorIcon from '@mui/icons-material/Monitor'
-import { fetchOrderTagQr, revertShopOrder, switchToQrPayment, splitPayment, revertToCash, patchOrderDiscount, linkOrderCustomer, fetchCustomers } from '../../api/shopApi'
+import { fetchOrderTagQr, revertShopOrder, switchToQrPayment, splitPayment, revertToCash, patchOrderDiscount, linkOrderCustomer, fetchCustomers, earnOrderPoints, fetchBankConfig } from '../../api/shopApi'
 import { printOrderReceipt, printOrderTag, printCupLabels } from '../../utils/printOrderReceipt'
 import { broadcastToCounter } from '../shopboard/CounterDisplayPage'
 import EditOrderDialog from './EditOrderDialog'
@@ -156,6 +156,8 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
   const [custSearching, setCustSearching]     = useState(false)
   const [linkedCustomer, setLinkedCustomer]   = useState(null)
   const [custLinking, setCustLinking]         = useState(false)
+  const [ptsSaving, setPtsSaving]             = useState(false)
+  const [bankCfg, setBankCfg]                 = useState(null)
 
   const askConfirm = (cfg, fn) => setConfirmDlg({ ...cfg, onConfirm: async (reason) => { setConfirmDlg(null); await fn(reason) } })
 
@@ -179,6 +181,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
         if (c) setLinkedCustomer(c)
       }).catch(() => {})
     }
+    if (!bankCfg) fetchBankConfig().then(({ data }) => setBankCfg(data)).catch(() => {})
   }, [open, order?.id])
 
   const handleRevert = async () => {
@@ -265,6 +268,17 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
       setLinkedCustomer(null); onRefresh?.()
     } catch (e) { setError(e.message || 'Network error') }
     setCustLinking(false)
+  }
+
+  const handleEarnPoints = async () => {
+    setPtsSaving(true); setError('')
+    try {
+      const { res, data } = await earnOrderPoints(order.id)
+      if (!res.ok) { setError(data?.error || 'Failed to earn points'); setPtsSaving(false); return }
+      setLinkedCustomer(data)
+      onRefresh?.()
+    } catch (e) { setError(e.message || 'Network error') }
+    setPtsSaving(false)
   }
 
   if (!order) return null
@@ -477,22 +491,43 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
               sx={{ textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', mb: 1 }}>
               Customer (points)
             </Typography>
-            {linkedCustomer ? (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Box sx={{ flex: 1 }}>
-                  <Typography fontWeight={700}>{linkedCustomer.name}</Typography>
-                  {linkedCustomer.phone && <Typography variant="caption" color="text.secondary">{linkedCustomer.phone}</Typography>}
-                  <Chip label={`${linkedCustomer.points ?? 0} pts`} size="small" color="warning" variant="outlined"
-                    sx={{ ml: 1, height: 18, fontWeight: 700, fontSize: 10 }} />
+            {linkedCustomer ? (() => {
+              const rate = bankCfg?.pointsConversionRate || 10000
+              const roundUp = bankCfg?.pointsRoundUp || false
+              const net = Math.max(0, Number(order.totalAmount || 0) - Number(order.discountAmount || 0))
+              const preview = roundUp ? Math.ceil(net / rate) : Math.floor(net / rate)
+              return (
+              <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: preview > 0 && !isFinal ? 1 : 0 }}>
+                  <Box sx={{ flex: 1 }}>
+                    <Typography fontWeight={700}>{linkedCustomer.name}</Typography>
+                    {linkedCustomer.phone && <Typography variant="caption" color="text.secondary">{linkedCustomer.phone}</Typography>}
+                    <Chip label={`${linkedCustomer.points ?? 0} pts`} size="small" color="warning" variant="outlined"
+                      sx={{ ml: 1, height: 18, fontWeight: 700, fontSize: 10 }} />
+                  </Box>
+                  {!isFinal && (
+                    <Button size="small" color="error" onClick={handleUnlinkCustomer} disabled={custLinking}
+                      sx={{ textTransform: 'none', flexShrink: 0 }}>
+                      Unlink
+                    </Button>
+                  )}
                 </Box>
-                {!isFinal && (
-                  <Button size="small" color="error" onClick={handleUnlinkCustomer} disabled={custLinking}
-                    sx={{ textTransform: 'none', flexShrink: 0 }}>
-                    Unlink
-                  </Button>
+                {preview > 0 && !isFinal && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#fffde7', border: '1px solid #ffe082', borderRadius: 1, px: 1.25, py: 0.75 }}>
+                    <Typography variant="body2" sx={{ flex: 1, color: '#e65100', fontWeight: 600 }}>
+                      ★ +{preview} pts from this bill ({fmt(rate)} = 1 pt)
+                    </Typography>
+                    <Button size="small" variant="contained" color="warning"
+                      onClick={handleEarnPoints} disabled={ptsSaving}
+                      startIcon={ptsSaving ? <CircularProgress size={12} /> : null}
+                      sx={{ textTransform: 'none', fontWeight: 700, flexShrink: 0, fontSize: 11 }}>
+                      Earn Points
+                    </Button>
+                  </Box>
                 )}
               </Box>
-            ) : (
+              )
+            })() : (
               <Box sx={{ position: 'relative' }}>
                 <TextField
                   label="Search customer by name / phone" size="small" fullWidth

@@ -19,7 +19,7 @@ import DeleteIcon from '@mui/icons-material/Delete'
 import SearchIcon from '@mui/icons-material/Search'
 import StarIcon from '@mui/icons-material/Star'
 import PersonIcon from '@mui/icons-material/Person'
-import { fetchCustomers, createCustomer, updateCustomer, deleteCustomer, addCustomerPoints } from '../../api/shopApi'
+import { fetchCustomers, createCustomer, updateCustomer, deleteCustomer, addCustomerPoints, recalculateCustomerPoints } from '../../api/shopApi'
 
 const EMPTY = { name: '', phone: '', email: '', notes: '' }
 
@@ -200,11 +200,24 @@ export default function ShopCustomerPage() {
                 )}
                 {c.notes && <Typography variant="caption" color="text.secondary" display="block" noWrap>{c.notes}</Typography>}
               </Box>
-              <Chip icon={<StarIcon sx={{ fontSize: '14px !important' }} />}
-                label={`${c.points ?? 0} pts`}
-                size="small" color="warning" variant="outlined"
-                sx={{ fontWeight: 700, cursor: 'pointer' }}
-                onClick={() => setPtsTarget(c)} />
+              <Tooltip title="Recalculate points from all linked orders">
+                <Chip icon={<StarIcon sx={{ fontSize: '14px !important' }} />}
+                  label={`${c.points ?? 0} pts`}
+                  size="small" color="warning" variant="outlined"
+                  sx={{ fontWeight: 700, cursor: 'pointer' }}
+                  onClick={() => setPtsTarget(c)} />
+              </Tooltip>
+              <Tooltip title="Recalculate total points from all bills linked to this customer">
+                <IconButton size="small" sx={{ p: 0.25, color: '#f59e0b' }}
+                  onClick={async () => {
+                    try {
+                      const { data } = await recalculateCustomerPoints(c.id)
+                      setCustomers(prev => prev.map(x => x.id === c.id ? data : x))
+                    } catch { /* silent */ }
+                  }}>
+                  <StarIcon sx={{ fontSize: 14 }} />
+                </IconButton>
+              </Tooltip>
               <Tooltip title="Edit">
                 <IconButton size="small" onClick={() => { setEditTarget(c); setEditOpen(true) }}>
                   <EditIcon fontSize="small" />

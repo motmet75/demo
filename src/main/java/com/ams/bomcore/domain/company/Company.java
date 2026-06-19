@@ -56,6 +56,15 @@ public class Company {
     @Column(name = "valid_until")
     private Instant validUntil;
 
+    @Column(name = "points_conversion_rate")
+    private Integer pointsConversionRate = 10000;
+
+    @Column(name = "points_round_up")
+    private Boolean pointsRoundUp = false;
+
+    @Column(name = "voucher_secret", length = 100)
+    private String voucherSecret;
+
     public Company() {}
 
     public UUID getId() { return id; }
@@ -89,6 +98,12 @@ public class Company {
 
     public Instant getValidUntil() { return validUntil; }
     public void setValidUntil(Instant validUntil) { this.validUntil = validUntil; }
+    public Integer getPointsConversionRate() { return pointsConversionRate != null ? pointsConversionRate : 10000; }
+    public void setPointsConversionRate(Integer pointsConversionRate) { this.pointsConversionRate = pointsConversionRate; }
+    public Boolean getPointsRoundUp() { return Boolean.TRUE.equals(pointsRoundUp); }
+    public void setPointsRoundUp(Boolean pointsRoundUp) { this.pointsRoundUp = pointsRoundUp; }
+    public String getVoucherSecret() { return voucherSecret; }
+    public void setVoucherSecret(String voucherSecret) { this.voucherSecret = voucherSecret; }
 
     @PrePersist
     private void prePersist() {

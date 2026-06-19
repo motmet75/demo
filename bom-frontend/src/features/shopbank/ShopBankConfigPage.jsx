@@ -16,7 +16,10 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import Switch from '@mui/material/Switch'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import PaymentsIcon from '@mui/icons-material/Payments'
-import { fetchBankConfig, updateBankConfig } from '../../api/shopApi'
+import InputAdornment from '@mui/material/InputAdornment'
+import StarIcon from '@mui/icons-material/Star'
+import VpnKeyIcon from '@mui/icons-material/VpnKey'
+import { fetchBankConfig, updateBankConfig, rotateVoucherKey } from '../../api/shopApi'
 
 const POPULAR_BANKS = [
   { code: 'VCB',    name: 'Vietcombank', bin: '970436' },
@@ -34,16 +37,22 @@ const POPULAR_BANKS = [
 ]
 
 export default function ShopBankConfigPage() {
-  const [form, setForm] = useState({ bankBin: '', bankAccountNumber: '', bankAccountName: '', prepaidMenu: false })
+  const [form, setForm] = useState({ bankBin: '', bankAccountNumber: '', bankAccountName: '', prepaidMenu: false, pointsConversionRate: 10000, pointsRoundUp: false })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState('')
+  const [voucherKeySet, setVoucherKeySet] = useState(false)
+  const [rotatingKey, setRotatingKey]     = useState(false)
+  const [keyMsg, setKeyMsg]               = useState('')
 
   useEffect(() => {
     fetchBankConfig()
       .then(({ data }) => {
-        if (data) setForm({ bankBin: data.bankBin || '', bankAccountNumber: data.bankAccountNumber || '', bankAccountName: data.bankAccountName || '', prepaidMenu: Boolean(data.prepaidMenu) })
+        if (data) {
+          setForm({ bankBin: data.bankBin || '', bankAccountNumber: data.bankAccountNumber || '', bankAccountName: data.bankAccountName || '', prepaidMenu: Boolean(data.prepaidMenu), pointsConversionRate: data.pointsConversionRate || 10000, pointsRoundUp: Boolean(data.pointsRoundUp) })
+          setVoucherKeySet(Boolean(data.voucherSecretSet))
+        }
         setLoading(false)
       })
       .catch(() => { setError('Failed to load bank config'); setLoading(false) })
@@ -172,12 +181,83 @@ export default function ShopBankConfigPage() {
             </CardContent>
           </Card>
 
+          {/* Points / Loyalty */}
+          <Card variant="outlined" sx={{ borderRadius: 2 }}>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+                <StarIcon color="warning" />
+                <Typography variant="subtitle2" fontWeight={700}>Points / Loyalty Programme</Typography>
+              </Box>
+              <Stack spacing={2}>
+                <TextField
+                  label="Conversion rate (VND per 1 point)"
+                  size="small" fullWidth type="number"
+                  value={form.pointsConversionRate}
+                  onChange={e => { setForm(f => ({ ...f, pointsConversionRate: Number(e.target.value) || 10000 })); setSuccess(false) }}
+                  InputProps={{ startAdornment: <InputAdornment position="start">đ</InputAdornment> }}
+                  helperText={`e.g. ${Number(form.pointsConversionRate).toLocaleString('vi-VN')} đ spent = 1 point`}
+                />
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={form.pointsRoundUp}
+                      onChange={e => { setForm(f => ({ ...f, pointsRoundUp: e.target.checked })); setSuccess(false) }}
+                      color="warning"
+                    />
+                  }
+                  label={
+                    <Box>
+                      <Typography variant="body2" fontWeight={700}>Round up points</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Off: round down (conservative). On: round up (customer-friendly).
+                      </Typography>
+                    </Box>
+                  }
+                  sx={{ alignItems: 'flex-start', ml: 0 }}
+                />
+              </Stack>
+            </CardContent>
+          </Card>
+
           <Button
             variant="contained" size="large" onClick={handleSave} disabled={saving || !form.bankBin || !form.bankAccountNumber}
             sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none' }}
           >
-            {saving ? <CircularProgress size={20} /> : 'Save Bank Account'}
+            {saving ? <CircularProgress size={20} /> : 'Save Settings'}
           </Button>
+
+          {/* Voucher Key Management */}
+          <Card variant="outlined" sx={{ borderRadius: 2, borderColor: voucherKeySet ? '#16a34a' : '#f59e0b' }}>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                <VpnKeyIcon color={voucherKeySet ? 'success' : 'warning'} />
+                <Typography variant="subtitle2" fontWeight={700}>Voucher Secret Key</Typography>
+                <Chip label={voucherKeySet ? 'Key Set' : 'Not Set'} size="small"
+                  color={voucherKeySet ? 'success' : 'warning'} sx={{ fontWeight: 700 }} />
+              </Box>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+                A secret key used to sign voucher QR codes. Rotating the key will invalidate all existing voucher QRs — customers must re-print.
+              </Typography>
+              {keyMsg && <Alert severity="info" sx={{ mb: 1.5 }}>{keyMsg}</Alert>}
+              <Button
+                variant="outlined" color={voucherKeySet ? 'warning' : 'success'}
+                onClick={async () => {
+                  setRotatingKey(true); setKeyMsg('')
+                  try {
+                    const { data } = await rotateVoucherKey()
+                    setVoucherKeySet(true)
+                    setKeyMsg(`Key rotated. Preview: ${data.keyPreview}`)
+                  } catch { setKeyMsg('Failed to rotate key') }
+                  setRotatingKey(false)
+                }}
+                disabled={rotatingKey}
+                startIcon={rotatingKey ? <CircularProgress size={16} /> : <VpnKeyIcon />}
+                sx={{ textTransform: 'none', fontWeight: 700 }}
+              >
+                {voucherKeySet ? 'Rotate Key' : 'Generate Key'}
+              </Button>
+            </CardContent>
+          </Card>
 
           {/* QR Preview */}
           {previewUrl && (

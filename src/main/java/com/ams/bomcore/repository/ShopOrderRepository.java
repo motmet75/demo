@@ -22,4 +22,6 @@ public interface ShopOrderRepository extends JpaRepository<ShopOrder, UUID> {
 
     @Query("SELECT COUNT(o) FROM ShopOrder o WHERE o.companyId = :companyId AND o.createdAt >= :start AND o.createdAt < :end")
     long countOrdersInDay(@Param("companyId") UUID companyId, @Param("start") Instant start, @Param("end") Instant end);
+
+    List<ShopOrder> findAllByCustomerIdAndTenantIdAndCompanyId(UUID customerId, UUID tenantId, UUID companyId);
 }

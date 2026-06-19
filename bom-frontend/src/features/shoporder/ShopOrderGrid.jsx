@@ -53,7 +53,7 @@ import {
   generateDisplayBoardToken, pickupShopOrder, revertShopOrder, markOrderPaid,
   fetchBankConfig, switchToQrPayment, revertToCash, fetchOrderTagQr,
   fetchShopTables, setOrderTable, fetchPickupQr, fetchOrdersByToken,
-  fetchStaffCalls, dismissStaffCall,
+  fetchStaffCalls, dismissStaffCall, forceConfirmOrder,
 } from '../../api/shopApi'
 import { printCupLabels, printOrderReceipt, printOrderTag, printCombinedReceipt } from '../../utils/printOrderReceipt'
 import ShopOrderDetailModal from './ShopOrderDetailModal'
@@ -508,6 +508,13 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
 
 // ── OrderCard ───────────────────────────────────────────────────────
 
+function editingElapsed(since) {
+  if (!since) return '…'
+  const mins = Math.floor((Date.now() - new Date(since).getTime()) / 60000)
+  if (mins < 1) return '< 1 min'
+  return mins >= 15 ? `${mins} min ⚠` : `${mins} min`
+}
+
 const CARD_STYLE = {
   PENDING:   { border: '#f59e0b', bg: '#fffbeb', num: '#d97706' },
   CONFIRMED: { border: '#3b82f6', bg: '#eff6ff', num: '#2563eb' },
@@ -743,7 +750,14 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
         )}
 
         {order.status === 'PENDING' && order.customerEditing && (
-          <Chip label="✏ Customer is editing…" size="small" color="warning" sx={{ fontWeight: 700, fontSize: 10 }} />
+          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', alignItems: 'center' }}>
+            <Chip label={`✏ Editing${order.customerEditingSince ? ' · ' + editingElapsed(order.customerEditingSince) : '…'}`}
+              size="small" color="warning" sx={{ fontWeight: 700, fontSize: 10 }} />
+            <Button size="small" variant="outlined" color="error" onClick={() => actions.forceConfirm(order)}
+              sx={{ textTransform: 'none', fontSize: 10, px: 0.75, py: 0.25, lineHeight: 1.4, fontWeight: 700 }}>
+              ⚡ Force Confirm
+            </Button>
+          </Box>
         )}
 
         {/* Primary status transition */}
@@ -1204,6 +1218,11 @@ export default function ShopOrderGrid() {
     pickupQr:    handlePickupQr,
     showTrackQr: handleShowTrackQr,
     mergeBills:  (row) => setMergeOrder(row),
+    forceConfirm: (row) => askConfirm({
+      title: 'Force Confirm Order?',
+      message: `Override customer editing lock and confirm order #${row.orderNumber ?? row.orderCode}? Use this if the customer verbally confirmed or has been editing too long.`,
+      confirmLabel: '⚡ Force Confirm', confirmColor: 'error'
+    }, () => act(forceConfirmOrder, row.id)),
   }
 
   const tabBadge = (label, count, color = 'primary') => (

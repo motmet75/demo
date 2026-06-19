@@ -387,3 +387,49 @@ export function addCustomerPoints(id, points) {
     body: JSON.stringify({ points })
   })
 }
+
+export function recalculateCustomerPoints(customerId) {
+  return apiFetchJson(`/shop/staff/customers/${customerId}/recalculate-points`, { method: 'POST' })
+}
+
+// ── Force confirm ─────────────────────────────────────────────────
+
+export function forceConfirmOrder(orderId) {
+  return apiFetchJson(`/shop/staff/orders/${orderId}/force-confirm`, { method: 'PATCH' })
+}
+
+// ── Earn points from order ────────────────────────────────────────
+
+export function earnOrderPoints(orderId) {
+  return apiFetchJson(`/shop/staff/orders/${orderId}/earn-points`, { method: 'POST' })
+}
+
+// ── Voucher management ────────────────────────────────────────────
+
+export function fetchVouchers() {
+  return apiFetchJson('/shop/staff/vouchers')
+}
+
+export function createVoucher(body) {
+  return apiFetchJson('/shop/staff/vouchers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  })
+}
+
+export function cancelVoucher(id) {
+  return apiFetchJson(`/shop/staff/vouchers/${id}`, { method: 'DELETE' })
+}
+
+export function redeemVoucher(code, orderId) {
+  return apiFetchJson('/shop/staff/vouchers/redeem', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, orderId })
+  })
+}
+
+export function rotateVoucherKey() {
+  return apiFetchJson('/shop/staff/vouchers/rotate-key', { method: 'POST' })
+}

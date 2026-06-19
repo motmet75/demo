@@ -120,6 +120,9 @@ public class ShopOrder {
     @Column(name = "customer_editing")
     private Boolean customerEditing = false;
 
+    @Column(name = "customer_editing_since")
+    private Instant customerEditingSince;
+
     @Column(name = "pickup_scanned_at")
     private Instant pickupScannedAt;
 
@@ -213,6 +216,8 @@ public class ShopOrder {
     public void setCustomerCancelNote(String customerCancelNote) { this.customerCancelNote = customerCancelNote; }
     public Boolean getCustomerEditing() { return customerEditing; }
     public void setCustomerEditing(Boolean customerEditing) { this.customerEditing = customerEditing; }
+    public Instant getCustomerEditingSince() { return customerEditingSince; }
+    public void setCustomerEditingSince(Instant customerEditingSince) { this.customerEditingSince = customerEditingSince; }
     public Instant getPickupScannedAt() { return pickupScannedAt; }
     public void setPickupScannedAt(Instant pickupScannedAt) { this.pickupScannedAt = pickupScannedAt; }
 }
