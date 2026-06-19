@@ -1583,8 +1583,8 @@ export default function ShopOrderGrid() {
         const { order, qrBase64, loading } = trackQrOrder
         const origin = window.location.origin + '/bom-inventory'
         const trackUrl = order.sourceToken
-          ? `${origin}/shop/status/${order.orderCode}?t=${encodeURIComponent(order.sourceToken)}`
-          : `${origin}/shop/status/${order.orderCode}`
+          ? `${origin}/shop/order/${order.orderCode}?t=${encodeURIComponent(order.sourceToken)}`
+          : `${origin}/shop/order/${order.orderCode}`
         return (
           <Dialog open onClose={() => setTrackQrOrder(null)} maxWidth="xs" fullWidth
             PaperProps={{ sx: { borderRadius: 3, overflow: 'hidden' } }}>
