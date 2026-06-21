@@ -33,8 +33,9 @@ import TakeoutDiningIcon from '@mui/icons-material/TakeoutDining'
 import DeliveryDiningIcon from '@mui/icons-material/DeliveryDining'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import MonitorIcon from '@mui/icons-material/Monitor'
+import PersonIcon from '@mui/icons-material/Person'
 import { fetchModels } from '../../api/modelApi'
-import { fetchShopTables, createStaffOrder, fetchOrderTagQr, fetchMenuOptions } from '../../api/shopApi'
+import { fetchShopTables, createStaffOrder, fetchOrderTagQr, fetchMenuOptions, fetchCustomers, linkOrderCustomer } from '../../api/shopApi'
 import { printOrderReceipt, printOrderTag } from '../../utils/printOrderReceipt'
 import { broadcastToCounter } from '../shopboard/CounterDisplayPage'
 
@@ -68,6 +69,12 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
   const [optsByModel, setOptsByModel]   = useState({})
   const [sideForm, setSideForm]         = useState({})
 
+  // customer search/link
+  const [customerId, setCustomerId]         = useState(null)
+  const [custOptions, setCustOptions]       = useState([])
+  const [custSearching, setCustSearching]   = useState(false)
+  const custTimerRef = useRef(null)
+
   // post-create state
   const [createdOrder, setCreatedOrder] = useState(null)
   const [tagQr, setTagQr]               = useState('')
@@ -78,6 +85,21 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
   const bcTimerRef = useRef(null)
 
   const tableName = useMemo(() => tables.find(t => t.id === tableId)?.tableName || '', [tableId, tables])
+
+  const handleCustInput = (val) => {
+    setCustomer(c => ({ ...c, name: val }))
+    setCustomerId(null)
+    clearTimeout(custTimerRef.current)
+    if (!val || val.length < 1) { setCustOptions([]); return }
+    custTimerRef.current = setTimeout(async () => {
+      setCustSearching(true)
+      try {
+        const { data } = await fetchCustomers(val)
+        setCustOptions(Array.isArray(data) ? data : [])
+      } catch { setCustOptions([]) }
+      setCustSearching(false)
+    }, 300)
+  }
 
   const calcOptAddOn = (item) => {
     const groups = optsByModel[item.modelId] || []
@@ -168,11 +190,12 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
     bcTimerRef.current = setTimeout(() => setJustBroadcast(false), 3000)
   }, [items]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => () => clearTimeout(bcTimerRef.current), [])
+  useEffect(() => () => { clearTimeout(bcTimerRef.current); clearTimeout(custTimerRef.current) }, [])
 
   const reset = () => {
     setManualNum(''); setFulfillment(defaultTable ? 'DINE_IN' : 'PICKUP'); setTableId(defaultTable?.id || '')
-    setCustomer({ name: '', phone: '' }); setPayment('CASH'); setNotes('')
+    setCustomer({ name: '', phone: '' }); setCustomerId(null); setCustOptions([])
+    setPayment('CASH'); setNotes('')
     setItems([]); setSelectedModel(null); setError('')
     setCreatedOrder(null); setTagQr(''); setOptsByModel({})
     setJustBroadcast(false); setCustomerCash(''); setSideForm({})
@@ -318,6 +341,9 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
     try {
       const { res, data } = await createStaffOrder(body)
       if (!res.ok) { setError(data?.message || 'Failed to create order'); setSubmitting(false); return }
+      if (customerId) {
+        try { await linkOrderCustomer(data.id, customerId) } catch { /* silent */ }
+      }
       setCreatedOrder(data)
       onCreated?.(data)
       // broadcast real order (with order number), then again once tagQr is loaded
@@ -488,8 +514,49 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
 
               {/* Customer */}
               <Box sx={{ display: 'flex', gap: 1 }}>
-                <TextField size="small" label="Customer name" fullWidth value={customer.name}
-                  onChange={e => setCustomer(c => ({ ...c, name: e.target.value }))} />
+                <Autocomplete
+                  freeSolo
+                  size="small"
+                  options={custOptions}
+                  getOptionLabel={opt => typeof opt === 'string' ? opt : opt.name}
+                  filterOptions={x => x}
+                  loading={custSearching}
+                  inputValue={customer.name}
+                  onInputChange={(_, val, reason) => {
+                    if (reason === 'input') handleCustInput(val)
+                    if (reason === 'clear') { setCustomer({ name: '', phone: '' }); setCustomerId(null); setCustOptions([]) }
+                  }}
+                  onChange={(_, val) => {
+                    if (val && typeof val === 'object') {
+                      setCustomer({ name: val.name, phone: val.phone || '' })
+                      setCustomerId(val.id)
+                      setCustOptions([])
+                    }
+                  }}
+                  renderOption={(props, opt) => (
+                    <li {...props} key={opt.id}>
+                      <Box>
+                        <Typography variant="body2" fontWeight={700}>{opt.name}</Typography>
+                        {opt.phone && <Typography variant="caption" color="text.secondary">{opt.phone}</Typography>}
+                      </Box>
+                    </li>
+                  )}
+                  renderInput={params => (
+                    <TextField {...params} label={customerId ? 'Customer (linked)' : 'Customer name'}
+                      InputProps={{
+                        ...params.InputProps,
+                        endAdornment: (
+                          <>
+                            {custSearching && <CircularProgress size={14} />}
+                            {customerId && <PersonIcon sx={{ fontSize: 16, color: 'success.main', mr: 0.5 }} />}
+                            {params.InputProps.endAdornment}
+                          </>
+                        ),
+                      }}
+                    />
+                  )}
+                  sx={{ flex: 1 }}
+                />
                 <TextField size="small" label="Phone" sx={{ width: 140 }} value={customer.phone}
                   onChange={e => setCustomer(c => ({ ...c, phone: e.target.value }))} />
               </Box>
