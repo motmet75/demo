@@ -19,9 +19,31 @@ import DeleteIcon from '@mui/icons-material/Delete'
 import SearchIcon from '@mui/icons-material/Search'
 import StarIcon from '@mui/icons-material/Star'
 import PersonIcon from '@mui/icons-material/Person'
+import QrCode2Icon from '@mui/icons-material/QrCode2'
+import AutorenewIcon from '@mui/icons-material/Autorenew'
 import { fetchCustomers, createCustomer, updateCustomer, deleteCustomer, addCustomerPoints, recalculateCustomerPoints } from '../../api/shopApi'
 
-const EMPTY = { name: '', phone: '', email: '', notes: '' }
+const EMPTY = { name: '', phone: '', email: '', notes: '', customerCode: '' }
+
+const genCode = () => Math.random().toString(36).slice(2, 8).toUpperCase()
+
+function printCustomerQr(c) {
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(c.customerCode)}`
+  const w = window.open('', '_blank', 'width=420,height=520')
+  w.document.write(`<!DOCTYPE html><html><head><title>Customer QR — ${c.name}</title>
+    <style>body{font-family:sans-serif;text-align:center;padding:24px;margin:0}
+    img{display:block;margin:0 auto 12px;border:1px solid #e0e0e0;border-radius:8px}
+    code{font-size:22px;letter-spacing:4px;font-weight:800;display:block;margin:8px 0;font-family:monospace}
+    p{margin:4px 0;color:#555;font-size:14px}@media print{button{display:none}}</style>
+    </head><body>
+    <img src="${qrUrl}" width="260" height="260" />
+    <code>${c.customerCode}</code>
+    <p><strong>${c.name}</strong></p>
+    ${c.phone ? `<p>${c.phone}</p>` : ''}
+    <script>document.querySelector('img').onload=()=>window.print()<\/script>
+    </body></html>`)
+  w.document.close()
+}
 
 function CustomerEditDialog({ open, customer, onClose, onSaved }) {
   const [form, setForm]     = useState(EMPTY)
@@ -29,7 +51,9 @@ function CustomerEditDialog({ open, customer, onClose, onSaved }) {
   const [error, setError]   = useState('')
 
   useEffect(() => {
-    if (open) setForm(customer ? { name: customer.name || '', phone: customer.phone || '', email: customer.email || '', notes: customer.notes || '' } : EMPTY)
+    if (open) setForm(customer
+      ? { name: customer.name || '', phone: customer.phone || '', email: customer.email || '', notes: customer.notes || '', customerCode: customer.customerCode || '' }
+      : { ...EMPTY, customerCode: genCode() })
     setError('')
   }, [open, customer])
 
@@ -54,6 +78,19 @@ function CustomerEditDialog({ open, customer, onClose, onSaved }) {
         <TextField label="Phone" value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} size="small" fullWidth />
         <TextField label="Email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} size="small" fullWidth />
         <TextField label="Notes" value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} size="small" fullWidth multiline rows={2} />
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+          <TextField label="Customer Code" size="small" sx={{ flex: 1 }}
+            value={form.customerCode}
+            onChange={e => setForm(p => ({ ...p, customerCode: e.target.value.replace(/[^A-Z0-9a-z]/g, '').toUpperCase().slice(0, 8) }))}
+            inputProps={{ style: { fontFamily: 'monospace', fontWeight: 700, letterSpacing: 3, fontSize: 15 } }}
+            helperText="Unique code for QR tracking & point scanning"
+          />
+          <Tooltip title="Regenerate code">
+            <IconButton size="small" onClick={() => setForm(p => ({ ...p, customerCode: genCode() }))} sx={{ mt: 0.5, color: '#64748b' }}>
+              <AutorenewIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
       </DialogContent>
       <DialogActions sx={{ px: 2, pb: 2 }}>
         <Button onClick={onClose} sx={{ textTransform: 'none' }}>Cancel</Button>
@@ -192,7 +229,14 @@ export default function ShopCustomerPage() {
               border: '1px solid #e0e0e0', borderRadius: 2, bgcolor: '#fafafa',
             }}>
               <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography fontWeight={700} sx={{ fontSize: 15 }} noWrap>{c.name}</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                  <Typography fontWeight={700} sx={{ fontSize: 15 }} noWrap>{c.name}</Typography>
+                  {c.customerCode && (
+                    <Typography sx={{ fontFamily: 'monospace', fontWeight: 800, fontSize: 12, color: '#0288d1', letterSpacing: 2, bgcolor: '#e1f5fe', px: 0.75, py: 0.1, borderRadius: 1 }}>
+                      {c.customerCode}
+                    </Typography>
+                  )}
+                </Box>
                 {(c.phone || c.email) && (
                   <Typography variant="caption" color="text.secondary">
                     {[c.phone, c.email].filter(Boolean).join(' · ')}
@@ -200,6 +244,13 @@ export default function ShopCustomerPage() {
                 )}
                 {c.notes && <Typography variant="caption" color="text.secondary" display="block" noWrap>{c.notes}</Typography>}
               </Box>
+              {c.customerCode && (
+                <Tooltip title="Print QR code">
+                  <IconButton size="small" onClick={() => printCustomerQr(c)} sx={{ color: '#0288d1' }}>
+                    <QrCode2Icon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              )}
               <Tooltip title="Recalculate points from all linked orders">
                 <Chip icon={<StarIcon sx={{ fontSize: '14px !important' }} />}
                   label={`${c.points ?? 0} pts`}

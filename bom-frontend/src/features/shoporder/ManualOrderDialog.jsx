@@ -34,8 +34,10 @@ import DeliveryDiningIcon from '@mui/icons-material/DeliveryDining'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import MonitorIcon from '@mui/icons-material/Monitor'
 import PersonIcon from '@mui/icons-material/Person'
+import PersonAddIcon from '@mui/icons-material/PersonAdd'
+import AutorenewIcon from '@mui/icons-material/Autorenew'
 import { fetchModels } from '../../api/modelApi'
-import { fetchShopTables, createStaffOrder, fetchOrderTagQr, fetchMenuOptions, fetchCustomers, linkOrderCustomer } from '../../api/shopApi'
+import { fetchShopTables, createStaffOrder, fetchOrderTagQr, fetchMenuOptions, fetchCustomers, linkOrderCustomer, createCustomer } from '../../api/shopApi'
 import { printOrderReceipt, printOrderTag } from '../../utils/printOrderReceipt'
 import { broadcastToCounter } from '../shopboard/CounterDisplayPage'
 
@@ -75,6 +77,16 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
   const [custSearching, setCustSearching]   = useState(false)
   const custTimerRef = useRef(null)
 
+  // new customer inline form
+  const [newCustOpen, setNewCustOpen]       = useState(false)
+  const [newCustForm, setNewCustForm]       = useState({ name: '', phone: '', customerCode: '' })
+  const [newCustSaving, setNewCustSaving]   = useState(false)
+  const [newCustError, setNewCustError]     = useState('')
+
+  // linked customer QR
+  const [linkedCustomerCode, setLinkedCustomerCode] = useState(null)
+  const [custQrDialog, setCustQrDialog]             = useState(null)
+
   // post-create state
   const [createdOrder, setCreatedOrder] = useState(null)
   const [tagQr, setTagQr]               = useState('')
@@ -85,6 +97,51 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
   const bcTimerRef = useRef(null)
 
   const tableName = useMemo(() => tables.find(t => t.id === tableId)?.tableName || '', [tableId, tables])
+
+  const genCode = () => Math.random().toString(36).slice(2, 8).toUpperCase()
+
+  const openNewCust = () => {
+    setNewCustForm({ name: customer.name || '', phone: customer.phone || '', customerCode: genCode() })
+    setNewCustError('')
+    setNewCustOpen(true)
+  }
+
+  const saveNewCust = async () => {
+    if (!newCustForm.name.trim()) { setNewCustError('Name is required'); return }
+    setNewCustSaving(true); setNewCustError('')
+    try {
+      const { res, data } = await createCustomer({
+        name: newCustForm.name.trim(),
+        phone: newCustForm.phone || null,
+        customerCode: newCustForm.customerCode || null,
+      })
+      if (!res.ok) { setNewCustError(data?.error || data?.message || 'Failed to create customer'); setNewCustSaving(false); return }
+      setCustomer({ name: data.name, phone: data.phone || '' })
+      setCustomerId(data.id)
+      setLinkedCustomerCode(data.customerCode || newCustForm.customerCode || null)
+      setCustOptions([])
+      setNewCustOpen(false)
+    } catch (e) { setNewCustError(e.message || 'Network error') }
+    setNewCustSaving(false)
+  }
+
+  const printCustomerQr = (c) => {
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(c.customerCode)}`
+    const w = window.open('', '_blank', 'width=420,height=520')
+    w.document.write(`<!DOCTYPE html><html><head><title>Customer QR — ${c.name}</title>
+      <style>body{font-family:sans-serif;text-align:center;padding:24px;margin:0}
+      img{display:block;margin:0 auto 12px;border:1px solid #e0e0e0;border-radius:8px}
+      code{font-size:22px;letter-spacing:4px;font-weight:800;display:block;margin:8px 0;font-family:monospace}
+      p{margin:4px 0;color:#555;font-size:14px}@media print{button{display:none}}</style>
+      </head><body>
+      <img src="${qrUrl}" width="260" height="260" />
+      <code>${c.customerCode}</code>
+      <p><strong>${c.name}</strong></p>
+      ${c.phone ? `<p>${c.phone}</p>` : ''}
+      <script>document.querySelector('img').onload=()=>window.print()<\/script>
+      </body></html>`)
+    w.document.close()
+  }
 
   const handleCustInput = (val) => {
     setCustomer(c => ({ ...c, name: val }))
@@ -199,6 +256,8 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
     setItems([]); setSelectedModel(null); setError('')
     setCreatedOrder(null); setTagQr(''); setOptsByModel({})
     setJustBroadcast(false); setCustomerCash(''); setSideForm({})
+    setNewCustOpen(false); setNewCustForm({ name: '', phone: '', customerCode: '' }); setNewCustError('')
+    setLinkedCustomerCode(null); setCustQrDialog(null)
   }
 
   const handleClose = () => { reset(); onClose() }
@@ -513,7 +572,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
               )}
 
               {/* Customer */}
-              <Box sx={{ display: 'flex', gap: 1 }}>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
                 <Autocomplete
                   freeSolo
                   size="small"
@@ -524,19 +583,30 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                   inputValue={customer.name}
                   onInputChange={(_, val, reason) => {
                     if (reason === 'input') handleCustInput(val)
-                    if (reason === 'clear') { setCustomer({ name: '', phone: '' }); setCustomerId(null); setCustOptions([]) }
+                    if (reason === 'clear') {
+                      setCustomer({ name: '', phone: '' }); setCustomerId(null); setCustOptions([])
+                      setLinkedCustomerCode(null)
+                    }
                   }}
                   onChange={(_, val) => {
                     if (val && typeof val === 'object') {
                       setCustomer({ name: val.name, phone: val.phone || '' })
                       setCustomerId(val.id)
+                      setLinkedCustomerCode(val.customerCode || null)
                       setCustOptions([])
                     }
                   }}
                   renderOption={(props, opt) => (
                     <li {...props} key={opt.id}>
                       <Box>
-                        <Typography variant="body2" fontWeight={700}>{opt.name}</Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Typography variant="body2" fontWeight={700}>{opt.name}</Typography>
+                          {opt.customerCode && (
+                            <Typography variant="caption" sx={{ fontFamily: 'monospace', color: '#0288d1', fontWeight: 700 }}>
+                              {opt.customerCode}
+                            </Typography>
+                          )}
+                        </Box>
                         {opt.phone && <Typography variant="caption" color="text.secondary">{opt.phone}</Typography>}
                       </Box>
                     </li>
@@ -557,9 +627,71 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                   )}
                   sx={{ flex: 1 }}
                 />
-                <TextField size="small" label="Phone" sx={{ width: 140 }} value={customer.phone}
+                <TextField size="small" label="Phone" sx={{ width: 130 }} value={customer.phone}
                   onChange={e => setCustomer(c => ({ ...c, phone: e.target.value }))} />
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25, flexShrink: 0, pt: 0.5 }}>
+                  <Tooltip title="Register new customer">
+                    <IconButton size="small" onClick={openNewCust}
+                      sx={{ bgcolor: '#e3f2fd', color: '#1565c0', '&:hover': { bgcolor: '#bbdefb' }, borderRadius: 1 }}>
+                      <PersonAddIcon sx={{ fontSize: 17 }} />
+                    </IconButton>
+                  </Tooltip>
+                  {customerId && linkedCustomerCode && (
+                    <Tooltip title="View / print customer QR">
+                      <IconButton size="small"
+                        onClick={() => setCustQrDialog({ name: customer.name, phone: customer.phone, customerCode: linkedCustomerCode })}
+                        sx={{ color: '#0288d1' }}>
+                        <QrCode2Icon sx={{ fontSize: 17 }} />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                </Box>
               </Box>
+
+              {/* Inline new customer form */}
+              {newCustOpen && (
+                <Box sx={{ bgcolor: '#f0fdf4', borderRadius: 2, p: 1.5, border: '1.5px solid #4caf50' }}>
+                  <Typography variant="caption" fontWeight={800} color="success.dark" sx={{ display: 'block', mb: 1, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    New Customer
+                  </Typography>
+                  {newCustError && <Alert severity="error" sx={{ mb: 1 }} onClose={() => setNewCustError('')}>{newCustError}</Alert>}
+                  <Stack spacing={1}>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <TextField size="small" label="Name *" sx={{ flex: 1 }}
+                        value={newCustForm.name}
+                        onChange={e => setNewCustForm(p => ({ ...p, name: e.target.value }))}
+                        autoFocus
+                      />
+                      <TextField size="small" label="Phone" sx={{ width: 130 }}
+                        value={newCustForm.phone}
+                        onChange={e => setNewCustForm(p => ({ ...p, phone: e.target.value }))}
+                      />
+                    </Box>
+                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                      <TextField size="small" label="Customer Code" sx={{ flex: 1 }}
+                        value={newCustForm.customerCode}
+                        onChange={e => setNewCustForm(p => ({ ...p, customerCode: e.target.value.replace(/[^A-Z0-9a-z]/g, '').toUpperCase().slice(0, 8) }))}
+                        inputProps={{ style: { fontFamily: 'monospace', fontWeight: 700, letterSpacing: 3, fontSize: 15 } }}
+                        helperText="Unique code — used for QR scan & point tracking"
+                      />
+                      <Tooltip title="Regenerate code">
+                        <IconButton size="small" onClick={() => setNewCustForm(p => ({ ...p, customerCode: genCode() }))}
+                          sx={{ mt: 0.5, color: '#64748b' }}>
+                          <AutorenewIcon sx={{ fontSize: 18 }} />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                    <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                      <Button size="small" onClick={() => setNewCustOpen(false)} sx={{ textTransform: 'none' }}>Cancel</Button>
+                      <Button size="small" variant="contained" color="success" onClick={saveNewCust}
+                        disabled={newCustSaving || !newCustForm.name.trim()}
+                        sx={{ textTransform: 'none', fontWeight: 700 }}>
+                        {newCustSaving ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : 'Create & Link'}
+                      </Button>
+                    </Box>
+                  </Stack>
+                </Box>
+              )}
 
               {/* Payment */}
               <FormControl size="small" fullWidth>
@@ -884,6 +1016,49 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
           )}
         </Box>
       </DialogContent>
+
+      {/* Customer QR dialog */}
+      <Dialog open={!!custQrDialog} onClose={() => setCustQrDialog(null)} maxWidth="xs" fullWidth
+        PaperProps={{ sx: { borderRadius: 3 } }}>
+        <DialogTitle sx={{ pb: 0.5 }}>
+          <Typography fontWeight={800}>Customer QR Code</Typography>
+          {custQrDialog && (
+            <Typography variant="caption" color="text.secondary">
+              {custQrDialog.name}{custQrDialog.phone ? ` · ${custQrDialog.phone}` : ''}
+            </Typography>
+          )}
+        </DialogTitle>
+        <DialogContent sx={{ textAlign: 'center', py: 2 }}>
+          {custQrDialog?.customerCode ? (
+            <Box>
+              <Box
+                component="img"
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(custQrDialog.customerCode)}`}
+                alt="Customer QR"
+                sx={{ width: 220, height: 220, borderRadius: 2, border: '1px solid #e0e0e0', display: 'block', mx: 'auto', mb: 1.5 }}
+              />
+              <Typography sx={{ fontFamily: 'monospace', fontWeight: 900, fontSize: 22, letterSpacing: 5, color: '#1e293b' }}>
+                {custQrDialog.customerCode}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Scan to identify customer or add points
+              </Typography>
+            </Box>
+          ) : (
+            <Typography color="text.secondary">No customer code available for this customer.</Typography>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 2, pb: 2 }}>
+          <Button onClick={() => setCustQrDialog(null)} sx={{ textTransform: 'none' }}>Close</Button>
+          {custQrDialog?.customerCode && (
+            <Button variant="contained" startIcon={<PrintIcon />}
+              onClick={() => printCustomerQr(custQrDialog)}
+              sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 2 }}>
+              Print QR
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
 
       {/* Actions */}
       <DialogActions sx={{ px: 2, pb: 2, gap: 1 }}>
