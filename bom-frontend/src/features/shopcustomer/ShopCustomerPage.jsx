@@ -21,7 +21,7 @@ import StarIcon from '@mui/icons-material/Star'
 import PersonIcon from '@mui/icons-material/Person'
 import QrCode2Icon from '@mui/icons-material/QrCode2'
 import AutorenewIcon from '@mui/icons-material/Autorenew'
-import { fetchCustomers, createCustomer, updateCustomer, deleteCustomer, addCustomerPoints, recalculateCustomerPoints } from '../../api/shopApi'
+import { fetchCustomers, fetchCustomerHistory, createCustomer, updateCustomer, deleteCustomer, addCustomerPoints, recalculateCustomerPoints } from '../../api/shopApi'
 
 const EMPTY = { name: '', phone: '', email: '', notes: '', customerCode: '' }
 
@@ -155,6 +155,9 @@ export default function ShopCustomerPage() {
   const [ptsTarget, setPtsTarget] = useState(null)
   const [delTarget, setDelTarget] = useState(null)
   const [deleting, setDeleting]   = useState(false)
+  const [historyTarget, setHistoryTarget] = useState(null)
+  const [historyData, setHistoryData]     = useState(null)
+  const [historyLoading, setHistoryLoading] = useState(false)
 
   const load = async (search = q) => {
     setLoading(true); setError('')
@@ -183,6 +186,17 @@ export default function ShopCustomerPage() {
     setPtsTarget(null)
   }
 
+
+  const openHistory = async (customer) => {
+    setHistoryTarget(customer)
+    setHistoryData(null)
+    setHistoryLoading(true)
+    try {
+      const { data } = await fetchCustomerHistory(customer.id)
+      setHistoryData(data || null)
+    } catch { setError('Failed to load customer history') }
+    setHistoryLoading(false)
+  }
   const handleDelete = async () => {
     if (!delTarget) return
     setDeleting(true)
@@ -231,7 +245,7 @@ export default function ShopCustomerPage() {
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
                   <Typography fontWeight={700} sx={{ fontSize: 15 }} noWrap>{c.name}</Typography>
-                  {c.customerCode && (
+{c.customerCode && (
                     <Typography sx={{ fontFamily: 'monospace', fontWeight: 800, fontSize: 12, color: '#0288d1', letterSpacing: 2, bgcolor: '#e1f5fe', px: 0.75, py: 0.1, borderRadius: 1 }}>
                       {c.customerCode}
                     </Typography>
@@ -244,6 +258,11 @@ export default function ShopCustomerPage() {
                 )}
                 {c.notes && <Typography variant="caption" color="text.secondary" display="block" noWrap>{c.notes}</Typography>}
               </Box>
+              <Tooltip title="View order history">
+                <IconButton size="small" onClick={() => openHistory(c)} sx={{ color: '#475569' }}>
+                  <ReceiptLongIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
               {c.customerCode && (
                 <Tooltip title="Print QR code">
                   <IconButton size="small" onClick={() => printCustomerQr(c)} sx={{ color: '#0288d1' }}>
@@ -284,6 +303,12 @@ export default function ShopCustomerPage() {
         </Box>
       )}
 
+
+      <CustomerHistoryDialog open={!!historyTarget}
+        customer={historyTarget}
+        history={historyData}
+        loading={historyLoading}
+        onClose={() => { setHistoryTarget(null); setHistoryData(null) }} />
       <CustomerEditDialog open={editOpen} customer={editTarget && Object.keys(editTarget).length ? editTarget : null}
         onClose={() => setEditOpen(false)} onSaved={handleSaved} />
 
