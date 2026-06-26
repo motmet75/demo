@@ -147,7 +147,7 @@ function AddPointsDialog({ open, customer, onClose, onUpdated }) {
 }
 
 function CustomerHistoryDialog({ open, customer, history, loading, onClose }) {
-  const orders = Array.isArray(history) ? history : (history?.orders || [])
+  const orders = Array.isArray(history) ? history : (history?.purchases || history?.orders || [])
   const totalSpent = history?.totalSpent ?? orders.reduce((sum, o) => sum + Number(o.totalAmount ?? o.total ?? o.grandTotal ?? 0), 0)
   const totalPoints = history?.totalPoints ?? history?.pointsEarned ?? orders.reduce((sum, o) => sum + Number(o.pointsEarned ?? 0), 0)
 
