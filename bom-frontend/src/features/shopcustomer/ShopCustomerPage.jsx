@@ -21,6 +21,7 @@ import StarIcon from '@mui/icons-material/Star'
 import PersonIcon from '@mui/icons-material/Person'
 import QrCode2Icon from '@mui/icons-material/QrCode2'
 import AutorenewIcon from '@mui/icons-material/Autorenew'
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong'
 import { fetchCustomers, fetchCustomerHistory, createCustomer, updateCustomer, deleteCustomer, addCustomerPoints, recalculateCustomerPoints } from '../../api/shopApi'
 
 const EMPTY = { name: '', phone: '', email: '', notes: '', customerCode: '' }
@@ -145,6 +146,66 @@ function AddPointsDialog({ open, customer, onClose, onUpdated }) {
   )
 }
 
+function CustomerHistoryDialog({ open, customer, history, loading, onClose }) {
+  const orders = Array.isArray(history) ? history : (history?.orders || [])
+  const totalSpent = history?.totalSpent ?? orders.reduce((sum, o) => sum + Number(o.totalAmount ?? o.total ?? o.grandTotal ?? 0), 0)
+  const totalPoints = history?.totalPoints ?? history?.pointsEarned ?? orders.reduce((sum, o) => sum + Number(o.pointsEarned ?? 0), 0)
+
+  const formatMoney = (value) =>
+    Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })
+
+  const formatDate = (value) => {
+    if (!value) return ''
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString()
+  }
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+      <DialogTitle fontWeight={800}>Order History{customer?.name ? ` - ${customer.name}` : ''}</DialogTitle>
+      <DialogContent sx={{ pt: '8px !important' }}>
+        {loading ? (
+          <Box sx={{ textAlign: 'center', py: 4 }}><CircularProgress /></Box>
+        ) : (
+          <>
+            <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+              <Chip size="small" label={`${orders.length} orders`} />
+              <Chip size="small" color="success" variant="outlined" label={`${formatMoney(totalSpent)} total`} />
+              <Chip size="small" color="warning" variant="outlined" label={`${formatMoney(totalPoints)} pts earned`} />
+            </Box>
+            {orders.length === 0 ? (
+              <Typography color="text.secondary" sx={{ py: 3, textAlign: 'center' }}>No linked orders found</Typography>
+            ) : (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                {orders.map((o, idx) => {
+                  const amount = o.totalAmount ?? o.total ?? o.grandTotal ?? 0
+                  const code = o.orderNumber ?? o.orderCode ?? o.code ?? `Order ${idx + 1}`
+                  const date = o.createdAt ?? o.orderDate ?? o.completedAt
+                  return (
+                    <Box key={o.id || code || idx} sx={{ border: '1px solid #e5e7eb', borderRadius: 2, p: 1.25, bgcolor: '#fafafa' }}>
+                      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                        <Typography fontWeight={800} sx={{ flex: 1, minWidth: 0 }} noWrap>{code}</Typography>
+                        <Typography fontWeight={800}>{formatMoney(amount)}</Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', gap: 1, mt: 0.5, flexWrap: 'wrap' }}>
+                        {date && <Typography variant="caption" color="text.secondary">{formatDate(date)}</Typography>}
+                        {o.status && <Chip size="small" label={o.status} sx={{ height: 20, fontSize: 11 }} />}
+                        {o.pointsEarned != null && <Chip size="small" color="warning" variant="outlined" label={`${o.pointsEarned} pts`} sx={{ height: 20, fontSize: 11 }} />}
+                      </Box>
+                    </Box>
+                  )
+                })}
+              </Box>
+            )}
+          </>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ px: 2, pb: 2 }}>
+        <Button onClick={onClose} sx={{ textTransform: 'none' }}>Close</Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
 export default function ShopCustomerPage() {
   const [customers, setCustomers] = useState([])
   const [q, setQ]                 = useState('')
