@@ -49,6 +49,7 @@ public class ShopOrderService {
     private final BomService bomService;
     private final OrderDeductionService orderDeductionService;
     private final ShopCustomerRepository shopCustomerRepository;
+    private final ShopVoucherRepository shopVoucherRepository;
 
     @Value("${app.shop.public-base-url:http://localhost:5173/bom-inventory}")
     private String publicBaseUrl;
@@ -64,7 +65,8 @@ public class ShopOrderService {
                             ShopPricingService shopPricingService,
                             BomService bomService,
                             OrderDeductionService orderDeductionService,
-                            ShopCustomerRepository shopCustomerRepository) {
+                            ShopCustomerRepository shopCustomerRepository,
+                            ShopVoucherRepository shopVoucherRepository) {
         this.shopOrderRepository = shopOrderRepository;
         this.shopOrderItemRepository = shopOrderItemRepository;
         this.shopTableRepository = shopTableRepository;
@@ -77,6 +79,7 @@ public class ShopOrderService {
         this.bomService = bomService;
         this.orderDeductionService = orderDeductionService;
         this.shopCustomerRepository = shopCustomerRepository;
+        this.shopVoucherRepository = shopVoucherRepository;
     }
 
     // ── Menu ─────────────────────────────────────────────────────────
@@ -991,6 +994,62 @@ public class ShopOrderService {
     public java.util.Optional<ShopCustomer> getCustomer(UUID id, UUID tenantId, UUID companyId) {
         return shopCustomerRepository.findById(id)
             .filter(c -> c.getTenantId().equals(tenantId) && c.getCompanyId().equals(companyId));
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> getCustomerHistory(UUID customerId, UUID tenantId, UUID companyId) {
+        ShopCustomer c = shopCustomerRepository.findById(customerId)
+            .orElseThrow(() -> new java.util.NoSuchElementException("Customer not found"));
+        if (!c.getTenantId().equals(tenantId) || !c.getCompanyId().equals(companyId))
+            throw new IllegalArgumentException("Not your customer");
+
+        List<ShopOrderResponseDto> purchases = shopOrderRepository
+            .findAllByCustomerIdAndTenantIdAndCompanyId(customerId, tenantId, companyId)
+            .stream()
+            .sorted(Comparator.comparing(ShopOrder::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder())).reversed())
+            .map(this::dto)
+            .toList();
+
+        List<Map<String, Object>> vouchers = shopVoucherRepository
+            .findAllByCustomerIdAndTenantIdAndCompanyIdOrderByCreatedAtDesc(customerId, tenantId, companyId)
+            .stream()
+            .map(v -> {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("id", v.getId());
+                m.put("code", v.getCode());
+                m.put("faceValue", v.getFaceValue());
+                m.put("salePrice", v.getSalePrice());
+                m.put("status", v.getStatus());
+                m.put("issuedOrderId", v.getIssuedOrderId());
+                m.put("redeemedOrderId", v.getRedeemedOrderId());
+                m.put("redeemedAt", v.getRedeemedAt());
+                m.put("expiryDate", v.getExpiryDate());
+                m.put("createdAt", v.getCreatedAt());
+                m.put("notes", v.getNotes());
+                return m;
+            })
+            .toList();
+
+        List<Map<String, Object>> appliedOrders = purchases.stream()
+            .filter(o -> o.getVoucherCode() != null && !o.getVoucherCode().isBlank())
+            .map(o -> {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("orderId", o.getId());
+                m.put("orderNumber", o.getOrderNumber());
+                m.put("orderCode", o.getOrderCode());
+                m.put("voucherCode", o.getVoucherCode());
+                m.put("discountAmount", o.getDiscountAmount());
+                m.put("createdAt", o.getCreatedAt());
+                return m;
+            })
+            .toList();
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("customer", c);
+        result.put("purchases", purchases);
+        result.put("vouchers", vouchers);
+        result.put("appliedOrders", appliedOrders);
+        return result;
     }
 
     @Transactional

@@ -9,6 +9,7 @@ import java.util.UUID;
 
 public interface ShopVoucherRepository extends JpaRepository<ShopVoucher, UUID> {
     List<ShopVoucher> findAllByTenantIdAndCompanyIdOrderByCreatedAtDesc(UUID tenantId, UUID companyId);
+    List<ShopVoucher> findAllByCustomerIdAndTenantIdAndCompanyIdOrderByCreatedAtDesc(UUID customerId, UUID tenantId, UUID companyId);
     Optional<ShopVoucher> findByTenantIdAndCompanyIdAndCode(UUID tenantId, UUID companyId, String code);
     boolean existsByTenantIdAndCompanyIdAndCode(UUID tenantId, UUID companyId, String code);
 }

@@ -27,7 +27,7 @@ import EditIcon from '@mui/icons-material/Edit'
 import UndoIcon from '@mui/icons-material/Undo'
 import LabelIcon from '@mui/icons-material/Label'
 import MonitorIcon from '@mui/icons-material/Monitor'
-import { fetchOrderTagQr, revertShopOrder, switchToQrPayment, splitPayment, revertToCash, patchOrderDiscount, linkOrderCustomer, fetchCustomers, earnOrderPoints, fetchBankConfig } from '../../api/shopApi'
+import { fetchOrderTagQr, revertShopOrder, switchToQrPayment, splitPayment, revertToCash, patchOrderDiscount, linkOrderCustomer, fetchCustomers, fetchCustomerHistory, earnOrderPoints, fetchBankConfig } from '../../api/shopApi'
 import { printOrderReceipt, printOrderTag, printCupLabels } from '../../utils/printOrderReceipt'
 import { broadcastToCounter } from '../shopboard/CounterDisplayPage'
 import EditOrderDialog from './EditOrderDialog'
@@ -158,6 +158,8 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
   const [custLinking, setCustLinking]         = useState(false)
   const [ptsSaving, setPtsSaving]             = useState(false)
   const [bankCfg, setBankCfg]                 = useState(null)
+  const [custHistory, setCustHistory]         = useState(null)
+  const [custHistoryLoading, setCustHistoryLoading] = useState(false)
 
   const askConfirm = (cfg, fn) => setConfirmDlg({ ...cfg, onConfirm: async (reason) => { setConfirmDlg(null); await fn(reason) } })
 
@@ -174,7 +176,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
     if (!open || !order) return
     setDiscountAmt(order.discountAmount ? String(order.discountAmount) : '')
     setVoucherCode(order.voucherCode || '')
-    setLinkedCustomer(null); setCustSearch(''); setCustResults([])
+    setLinkedCustomer(null); setCustSearch(''); setCustResults([]); setCustHistory(null)
     if (order.customerId) {
       fetchCustomers().then(({ data }) => {
         const c = (data || []).find(x => x.id === order.customerId)
@@ -281,6 +283,80 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
     setPtsSaving(false)
   }
 
+
+  const renderCustomerHistory = () => {
+    if (!linkedCustomer && !order.customerId) return null
+    const purchases = custHistory?.purchases || []
+    const vouchers = custHistory?.vouchers || []
+    const appliedOrders = custHistory?.appliedOrders || []
+    return (
+      <Box sx={{ mt: 1.25, display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 1 }}>
+        <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: 1, overflow: 'hidden' }}>
+          <Box sx={{ px: 1, py: 0.75, bgcolor: '#f8fafc', display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="caption" fontWeight={800} sx={{ flex: 1 }}>Purchase History</Typography>
+            <Chip size="small" label={`${purchases.length} bills`} sx={{ height: 18, fontSize: 10, fontWeight: 700 }} />
+          </Box>
+          {custHistoryLoading ? (
+            <Box sx={{ p: 1.5, textAlign: 'center' }}><CircularProgress size={18} /></Box>
+          ) : purchases.length ? (
+            <Table size="small">
+              <TableBody>
+                {purchases.slice(0, 5).map(p => (
+                  <TableRow key={p.id}>
+                    <TableCell sx={{ py: 0.6 }}>
+                      <Typography variant="body2" fontWeight={700}>#{p.orderNumber ?? p.orderCode}</Typography>
+                      <Typography variant="caption" color="text.secondary">{dateFmt(p.createdAt)}</Typography>
+                    </TableCell>
+                    <TableCell sx={{ py: 0.6 }}><Chip size="small" label={p.status} color={STATUS_COLOR[p.status] || 'default'} sx={{ height: 18, fontSize: 10 }} /></TableCell>
+                    <TableCell align="right" sx={{ py: 0.6, fontWeight: 700 }}>{fmt(p.totalAmount)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', p: 1.25 }}>No linked purchases yet.</Typography>
+          )}
+        </Box>
+
+        <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: 1, overflow: 'hidden' }}>
+          <Box sx={{ px: 1, py: 0.75, bgcolor: '#f8fafc', display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="caption" fontWeight={800} sx={{ flex: 1 }}>Voucher History</Typography>
+            <Chip size="small" label={`${vouchers.length + appliedOrders.length} records`} sx={{ height: 18, fontSize: 10, fontWeight: 700 }} />
+          </Box>
+          {custHistoryLoading ? (
+            <Box sx={{ p: 1.5, textAlign: 'center' }}><CircularProgress size={18} /></Box>
+          ) : vouchers.length || appliedOrders.length ? (
+            <Table size="small">
+              <TableBody>
+                {vouchers.slice(0, 4).map(v => (
+                  <TableRow key={v.id}>
+                    <TableCell sx={{ py: 0.6 }}>
+                      <Typography variant="body2" fontWeight={700}>{v.code}</Typography>
+                      <Typography variant="caption" color="text.secondary">{v.redeemedAt ? `Used ${dateFmt(v.redeemedAt)}` : `Issued ${dateFmt(v.createdAt)}`}</Typography>
+                    </TableCell>
+                    <TableCell sx={{ py: 0.6 }}><Chip size="small" label={v.status} color={v.status === 'USED' ? 'success' : v.status === 'ACTIVE' ? 'primary' : 'default'} sx={{ height: 18, fontSize: 10 }} /></TableCell>
+                    <TableCell align="right" sx={{ py: 0.6, fontWeight: 700 }}>{fmt(v.faceValue)}</TableCell>
+                  </TableRow>
+                ))}
+                {appliedOrders.slice(0, Math.max(0, 5 - Math.min(vouchers.length, 4))).map(a => (
+                  <TableRow key={`${a.orderId}:${a.voucherCode}`}>
+                    <TableCell sx={{ py: 0.6 }}>
+                      <Typography variant="body2" fontWeight={700}>{a.voucherCode}</Typography>
+                      <Typography variant="caption" color="text.secondary">Applied on #{a.orderNumber ?? a.orderCode}</Typography>
+                    </TableCell>
+                    <TableCell sx={{ py: 0.6 }}><Chip size="small" label="APPLIED" color="warning" sx={{ height: 18, fontSize: 10 }} /></TableCell>
+                    <TableCell align="right" sx={{ py: 0.6, fontWeight: 700 }}>-{fmt(a.discountAmount)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', p: 1.25 }}>No voucher activity yet.</Typography>
+          )}
+        </Box>
+      </Box>
+    )
+  }
   if (!order) return null
 
   const isPending     = order.status === 'PENDING'

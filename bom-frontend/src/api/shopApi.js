@@ -360,6 +360,10 @@ export function fetchCustomers(q) {
   return apiFetchJson('/shop/staff/customers' + (q ? qs({ q }) : ''))
 }
 
+export function fetchCustomerHistory(customerId) {
+  return apiFetchJson(`/shop/staff/customers/${customerId}/history`)
+}
+
 export function createCustomer(body) {
   return apiFetchJson('/shop/staff/customers', {
     method: 'POST',

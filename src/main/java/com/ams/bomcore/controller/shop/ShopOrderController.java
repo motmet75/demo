@@ -852,7 +852,16 @@ public class ShopOrderController {
         int points = body.get("points") instanceof Number n ? n.intValue() : 0;
         return ResponseEntity.ok(shopOrderService.addPoints(id, points, tId, cId));
     }
-
+    @GetMapping("/shop/staff/customers/{id}/history")
+    public ResponseEntity<?> customerHistory(@PathVariable UUID id,
+                                             @RequestParam(required = false) UUID tenantId,
+                                             @RequestParam(required = false) UUID companyId,
+                                             @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                             @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        return ResponseEntity.ok(shopOrderService.getCustomerHistory(id, tId, cId));
+    }
     // ── Helpers ───────────────────────────────────────────────────────
 
     private UUID resolve(UUID param, String header) {
