@@ -360,8 +360,13 @@ export function printCombinedReceipt(orders, opts = {}) {
     const itemsHtml = roots.map((item, idx) => {
       const children     = childMap[String(item.id)] || []
       const parentQty    = Number(item.quantity || 1)
-      const fmtOptV3 = v => Array.isArray(v) ? v.join(', ') : (typeof v === 'object' && v !== null ? Object.entries(v).map(([lbl, qty]) => qty > 1 ? `${lbl}×${qty}` : lbl).join(', ') : v)
-      const opts_        = Object.entries(parseOpts(item.selectedOptions)).map(([k, v]) => `${k}: ${fmtOptV3(v)}`).join(' · ')
+      const opts = parseOptsObj(item.selectedOptions)
+      const fmtOptV3 = v => Array.isArray(v)
+        ? v.join(', ')
+        : (typeof v === 'object' && v !== null
+          ? Object.entries(v).map(([lbl, qty]) => qty > 1 ? `${lbl}×${qty}` : lbl).join(', ')
+          : v)
+      const opts_ = Object.entries(opts).map(([k, v]) => `${k}: ${fmtOptV3(v)}`).join(' · ')
       const childrenHtml = children.map(child => {
         const effectiveQty = Number(child.quantity || 1) * parentQty
         return `<div class="row side-row">
