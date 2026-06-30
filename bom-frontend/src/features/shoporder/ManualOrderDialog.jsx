@@ -37,13 +37,19 @@ import PersonIcon from '@mui/icons-material/Person'
 import PersonAddIcon from '@mui/icons-material/PersonAdd'
 import AutorenewIcon from '@mui/icons-material/Autorenew'
 import { fetchModels } from '../../api/modelApi'
-import { fetchShopTables, createStaffOrder, fetchOrderTagQr, fetchMenuOptions, fetchCustomers, linkOrderCustomer, createCustomer } from '../../api/shopApi'
+import { fetchShopTables, createStaffOrder, fetchOrderTagQr, fetchMenuOptions, fetchCustomers, linkOrderCustomer, createCustomer, redeemVoucher } from '../../api/shopApi'
 import { printOrderReceipt, printOrderTag } from '../../utils/printOrderReceipt'
 import { broadcastToCounter } from '../shopboard/CounterDisplayPage'
+import VoucherQrScanDialog from './VoucherQrScanDialog'
 
 const fmt         = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 const fmtDots     = (digits) => digits ? Number(digits).toLocaleString('vi-VN') : ''
 const stripDigits = (s) => s.replace(/[^0-9]/g, '')
+const voucherLabel = (value) => {
+  const raw = String(value || '').trim()
+  if (raw.startsWith('BV:')) return raw.split(':')[1] || raw
+  return raw.toUpperCase()
+}
 
 const FULFILLMENT = [
   { value: 'PICKUP',   label: 'Pickup',   icon: <TakeoutDiningIcon fontSize="small" /> },
@@ -86,6 +92,13 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
   // linked customer QR
   const [linkedCustomerCode, setLinkedCustomerCode] = useState(null)
   const [custQrDialog, setCustQrDialog]             = useState(null)
+
+  // voucher QR
+  const [voucherScanOpen, setVoucherScanOpen]       = useState(false)
+  const [scannedVoucherPayload, setScannedVoucherPayload] = useState('')
+  const [voucherRedeeming, setVoucherRedeeming]     = useState(false)
+  const [voucherResult, setVoucherResult]           = useState(null)
+  const [voucherError, setVoucherError]             = useState('')
 
   // post-create state
   const [createdOrder, setCreatedOrder] = useState(null)
@@ -258,6 +271,8 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
     setJustBroadcast(false); setCustomerCash(''); setSideForm({})
     setNewCustOpen(false); setNewCustForm({ name: '', phone: '', customerCode: '' }); setNewCustError('')
     setLinkedCustomerCode(null); setCustQrDialog(null)
+    setVoucherScanOpen(false); setScannedVoucherPayload(''); setVoucherRedeeming(false)
+    setVoucherResult(null); setVoucherError('')
   }
 
   const handleClose = () => { reset(); onClose() }
@@ -372,6 +387,47 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
     )
   }
 
+  const redeemVoucherForOrder = async (payload, orderToRedeem) => {
+    const clean = String(payload || '').trim()
+    if (!clean || !orderToRedeem?.id) return orderToRedeem
+    setVoucherRedeeming(true); setVoucherError('')
+    try {
+      const { res, data } = await redeemVoucher(clean, orderToRedeem.id)
+      if (!res.ok) {
+        setVoucherError(data?.error || data?.message || 'Invalid voucher')
+        return orderToRedeem
+      }
+      setVoucherResult(data)
+      setScannedVoucherPayload('')
+      return data?.order || {
+        ...orderToRedeem,
+        discountAmount: data?.newDiscountTotal ?? orderToRedeem.discountAmount,
+        voucherCode: data?.voucher?.code || orderToRedeem.voucherCode,
+      }
+    } catch (e) {
+      setVoucherError(e.message || 'Network error')
+      return orderToRedeem
+    } finally {
+      setVoucherRedeeming(false)
+    }
+  }
+
+  const handleVoucherScan = async (payload) => {
+    const clean = String(payload || '').trim()
+    if (!clean) return
+    setVoucherScanOpen(false)
+    if (createdOrder?.id) {
+      const updated = await redeemVoucherForOrder(clean, createdOrder)
+      setCreatedOrder(updated)
+      onCreated?.(updated)
+      broadcastToCounter(updated, tagQr || null)
+      return
+    }
+    setScannedVoucherPayload(clean)
+    setVoucherResult(null)
+    setVoucherError('')
+  }
+
   const handleSubmit = async () => {
     if (!items.length) { setError('Add at least one item'); return }
     setSubmitting(true); setError('')
@@ -400,19 +456,26 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
     try {
       const { res, data } = await createStaffOrder(body)
       if (!res.ok) { setError(data?.message || 'Failed to create order'); setSubmitting(false); return }
+      let orderData = data
       if (customerId) {
-        try { await linkOrderCustomer(data.id, customerId) } catch { /* silent */ }
+        try {
+          const { res: linkRes, data: linked } = await linkOrderCustomer(data.id, customerId)
+          if (linkRes.ok && linked?.id) orderData = linked
+        } catch { /* silent */ }
       }
-      setCreatedOrder(data)
-      onCreated?.(data)
+      if (scannedVoucherPayload) {
+        orderData = await redeemVoucherForOrder(scannedVoucherPayload, orderData)
+      }
+      setCreatedOrder(orderData)
+      onCreated?.(orderData)
       // broadcast real order (with order number), then again once tagQr is loaded
-      broadcastToCounter(data, null)
+      broadcastToCounter(orderData, null)
       setTagLoading(true)
-      fetchOrderTagQr(data.id)
+      fetchOrderTagQr(orderData.id)
         .then(({ data: qr }) => {
           const qrB64 = qr?.qrBase64 || ''
           setTagQr(qrB64)
-          broadcastToCounter(data, qrB64 || null)
+          broadcastToCounter(orderData, qrB64 || null)
         })
         .catch(() => {})
         .finally(() => setTagLoading(false))
@@ -471,6 +534,8 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
         {/* ── Success banner (appears after order created) ── */}
         {createdOrder && (() => {
           const num = createdOrder.orderNumber ? `#${createdOrder.orderNumber}` : createdOrder.orderCode
+          const discount = Number(createdOrder.discountAmount || 0)
+          const payable = Math.max(0, Number(createdOrder.totalAmount || 0) - discount)
           return (
             <Box sx={{
               bgcolor: '#1e293b', borderRadius: 2, px: 2, py: 1.5, mb: 2,
@@ -489,6 +554,10 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                     label={`Table ${createdOrder.tableName}`} size="small"
                     sx={{ mt: 0.25, bgcolor: 'rgba(255,255,255,0.12)', color: '#fff', fontSize: 11 }} />
                 )}
+                {discount > 0 && (
+                  <Chip label={`Voucher -${fmt(discount)}`} size="small"
+                    sx={{ mt: 0.25, ml: 0.5, bgcolor: 'rgba(74,222,128,0.18)', color: '#bbf7d0', fontSize: 11, fontWeight: 700 }} />
+                )}
               </Box>
               {/* Payment QR for BANK_QR orders */}
               {createdOrder.paymentMethod === 'BANK_QR' && createdOrder.paymentQr && (
@@ -502,7 +571,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                     style={{ width: 90, height: 90, borderRadius: 6, background: '#fff', padding: 4 }}
                   />
                   <Typography sx={{ fontSize: 10, color: 'rgba(255,255,255,0.55)', mt: 0.25 }}>
-                    {fmt(createdOrder.totalAmount)}
+                    {fmt(payable)}
                   </Typography>
                 </Box>
               )}
@@ -520,10 +589,24 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                   onClick={() => printOrderReceipt(createdOrder)}>
                   Receipt
                 </Button>
+                <Button size="small" variant="outlined"
+                  sx={{ color: '#fff', borderColor: 'rgba(255,255,255,0.3)', textTransform: 'none', fontSize: 12 }}
+                  startIcon={voucherRedeeming ? <CircularProgress size={12} sx={{ color: '#fff' }} /> : <QrCode2Icon />}
+                  disabled={voucherRedeeming || !!createdOrder.voucherCode}
+                  onClick={() => setVoucherScanOpen(true)}>
+                  {createdOrder.voucherCode ? 'Voucher Used' : 'Voucher'}
+                </Button>
               </Box>
             </Box>
           )
         })()}
+
+        {voucherError && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setVoucherError('')}>{voucherError}</Alert>}
+        {voucherResult && createdOrder && (
+          <Alert severity="success" sx={{ mb: 2 }} onClose={() => setVoucherResult(null)}>
+            Voucher {voucherResult.voucher?.code} redeemed. Discount: {fmt(voucherResult.discountApplied)}
+          </Alert>
+        )}
 
         {/* ── Form (dimmed after order created) ── */}
         <Box sx={{ opacity: createdOrder ? 0.45 : 1, pointerEvents: createdOrder ? 'none' : 'auto', transition: 'opacity 0.3s' }}>
@@ -694,13 +777,28 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
               )}
 
               {/* Payment */}
-              <FormControl size="small" fullWidth>
-                <InputLabel>Payment</InputLabel>
-                <Select value={payment} label="Payment" onChange={e => setPayment(e.target.value)}>
-                  <MenuItem value="CASH">Cash</MenuItem>
-                  <MenuItem value="BANK_QR">Bank QR</MenuItem>
-                </Select>
-              </FormControl>
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                <FormControl size="small" sx={{ flex: 1, minWidth: 160 }}>
+                  <InputLabel>Payment</InputLabel>
+                  <Select value={payment} label="Payment" onChange={e => setPayment(e.target.value)}>
+                    <MenuItem value="CASH">Cash</MenuItem>
+                    <MenuItem value="BANK_QR">Bank QR</MenuItem>
+                  </Select>
+                </FormControl>
+                <Button
+                  variant="outlined"
+                  startIcon={voucherRedeeming ? <CircularProgress size={14} /> : <QrCode2Icon />}
+                  onClick={() => setVoucherScanOpen(true)}
+                  disabled={voucherRedeeming}
+                  sx={{ textTransform: 'none', fontWeight: 700, height: 40, flexShrink: 0 }}>
+                  {scannedVoucherPayload ? 'Replace Voucher' : 'Scan Voucher'}
+                </Button>
+              </Box>
+              {scannedVoucherPayload && !createdOrder && (
+                <Alert severity="info" onClose={() => setScannedVoucherPayload('')}>
+                  Voucher {voucherLabel(scannedVoucherPayload)} scanned. It will redeem when order is created.
+                </Alert>
+              )}
 
               <Divider>
                 <Typography variant="caption" color="text.secondary" fontWeight={600}>Items</Typography>
@@ -1059,6 +1157,12 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
           )}
         </DialogActions>
       </Dialog>
+
+      <VoucherQrScanDialog
+        open={voucherScanOpen}
+        onClose={() => setVoucherScanOpen(false)}
+        onScan={handleVoucherScan}
+      />
 
       {/* Actions */}
       <DialogActions sx={{ px: 2, pb: 2, gap: 1 }}>

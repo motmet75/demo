@@ -1022,6 +1022,8 @@ public class ShopOrderService {
                 m.put("status", v.getStatus());
                 m.put("issuedOrderId", v.getIssuedOrderId());
                 m.put("redeemedOrderId", v.getRedeemedOrderId());
+                m.put("redeemedCustomerId", v.getRedeemedCustomerId());
+                m.put("redeemedCustomerName", v.getRedeemedCustomerName());
                 m.put("redeemedAt", v.getRedeemedAt());
                 m.put("expiryDate", v.getExpiryDate());
                 m.put("createdAt", v.getCreatedAt());

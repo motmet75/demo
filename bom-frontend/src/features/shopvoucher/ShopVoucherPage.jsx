@@ -22,6 +22,22 @@ import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber'
 import { fetchVouchers, createVoucher, cancelVoucher, redeemVoucher } from '../../api/shopApi'
 
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : '—'
+const fmtDate = (value) => {
+  if (!value) return ''
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString()
+}
+const voucherRedeemedText = (v) => {
+  if (v.status !== 'USED') return ''
+  const parts = []
+  if (v.redeemedAt) parts.push(fmtDate(v.redeemedAt))
+  if (v.redeemedCustomerName) parts.push(v.redeemedCustomerName)
+  const orderRef = v.redeemedOrderNumber
+    ? `Order #${v.redeemedOrderNumber}`
+    : (v.redeemedOrderCode ? `Order ${v.redeemedOrderCode}` : (v.redeemedOrderId ? `Order ${String(v.redeemedOrderId).slice(0, 8)}` : ''))
+  if (orderRef) parts.push(orderRef)
+  return parts.length ? `Used: ${parts.join(' · ')}` : 'Used'
+}
 const STATUS_COLOR = { ACTIVE: 'success', USED: 'default', EXPIRED: 'warning', CANCELLED: 'error' }
 
 function CreateVoucherDialog({ open, onClose, onCreated }) {
@@ -265,6 +281,9 @@ export default function ShopVoucherPage() {
                 </Typography>
                 {v.salePrice && <Typography variant="caption" color="text.secondary">Sold: {fmt(v.salePrice)}</Typography>}
                 {v.expiryDate && <Typography variant="caption" color="text.secondary" display="block">Exp: {v.expiryDate}</Typography>}
+                {voucherRedeemedText(v) && (
+                  <Typography variant="caption" color="text.secondary" display="block">{voucherRedeemedText(v)}</Typography>
+                )}
                 {v.notes && <Typography variant="caption" color="text.secondary" display="block">{v.notes}</Typography>}
               </Box>
               <Chip label={v.status} size="small" color={STATUS_COLOR[v.status] || 'default'}

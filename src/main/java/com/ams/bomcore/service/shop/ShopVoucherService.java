@@ -1,8 +1,10 @@
 package com.ams.bomcore.service.shop;
 
+import com.ams.bomcore.controller.shop.dto.ShopOrderResponseDto;
 import com.ams.bomcore.domain.shop.ShopOrder;
 import com.ams.bomcore.domain.shop.ShopVoucher;
 import com.ams.bomcore.repository.CompanyRepository;
+import com.ams.bomcore.repository.ShopOrderItemRepository;
 import com.ams.bomcore.repository.ShopOrderRepository;
 import com.ams.bomcore.repository.ShopVoucherRepository;
 import com.ams.bomcore.util.QrCodeUtil;
@@ -24,16 +26,19 @@ public class ShopVoucherService {
     private static final String ALPHA = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // unambiguous chars
     private static final SecureRandom RNG = new SecureRandom();
 
-    private final ShopVoucherRepository voucherRepository;
-    private final ShopOrderRepository   orderRepository;
-    private final CompanyRepository     companyRepository;
+    private final ShopVoucherRepository  voucherRepository;
+    private final ShopOrderRepository    orderRepository;
+    private final ShopOrderItemRepository orderItemRepository;
+    private final CompanyRepository      companyRepository;
 
     public ShopVoucherService(ShopVoucherRepository voucherRepository,
                               ShopOrderRepository orderRepository,
+                              ShopOrderItemRepository orderItemRepository,
                               CompanyRepository companyRepository) {
-        this.voucherRepository = voucherRepository;
-        this.orderRepository   = orderRepository;
-        this.companyRepository = companyRepository;
+        this.voucherRepository   = voucherRepository;
+        this.orderRepository     = orderRepository;
+        this.orderItemRepository = orderItemRepository;
+        this.companyRepository   = companyRepository;
     }
 
     // ── QR signing ────────────────────────────────────────────────────
@@ -153,12 +158,17 @@ public class ShopVoucherService {
         v.setStatus(ShopVoucher.STATUS_USED);
         v.setRedeemedAt(Instant.now());
         v.setRedeemedOrderId(orderId);
+        v.setRedeemedCustomerId(order.getCustomerId());
+        v.setRedeemedCustomerName(order.getCustomerName());
         voucherRepository.save(v);
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("voucher", toMap(v, secret));
         result.put("discountApplied", v.getFaceValue());
         result.put("newDiscountTotal", order.getDiscountAmount());
+        result.put("redeemedCustomerId", order.getCustomerId());
+        result.put("redeemedCustomerName", order.getCustomerName());
+        result.put("order", ShopOrderResponseDto.from(order, orderItemRepository.findAllByOrder_Id(order.getId())));
         return result;
     }
 
@@ -201,7 +211,15 @@ public class ShopVoucherService {
         m.put("customerId",     v.getCustomerId());
         m.put("issuedOrderId",  v.getIssuedOrderId());
         m.put("redeemedOrderId",v.getRedeemedOrderId());
+        m.put("redeemedCustomerId", v.getRedeemedCustomerId());
+        m.put("redeemedCustomerName", v.getRedeemedCustomerName());
         m.put("redeemedAt",     v.getRedeemedAt());
+        if (v.getRedeemedOrderId() != null) {
+            orderRepository.findById(v.getRedeemedOrderId()).ifPresent(order -> {
+                m.put("redeemedOrderNumber", order.getOrderNumber());
+                m.put("redeemedOrderCode", order.getOrderCode());
+            });
+        }
         m.put("expiryDate",     v.getExpiryDate());
         m.put("notes",          v.getNotes());
         m.put("createdAt",      v.getCreatedAt());

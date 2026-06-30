@@ -22,7 +22,9 @@ import PersonIcon from '@mui/icons-material/Person'
 import QrCode2Icon from '@mui/icons-material/QrCode2'
 import AutorenewIcon from '@mui/icons-material/Autorenew'
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong'
-import { fetchCustomers, fetchCustomerHistory, createCustomer, updateCustomer, deleteCustomer, addCustomerPoints, recalculateCustomerPoints } from '../../api/shopApi'
+import VisibilityIcon from '@mui/icons-material/Visibility'
+import { fetchCustomers, fetchCustomerHistory, fetchShopOrder, createCustomer, updateCustomer, deleteCustomer, addCustomerPoints, recalculateCustomerPoints } from '../../api/shopApi'
+import ShopOrderDetailModal from '../shoporder/ShopOrderDetailModal'
 
 const EMPTY = { name: '', phone: '', email: '', notes: '', customerCode: '' }
 
@@ -146,7 +148,7 @@ function AddPointsDialog({ open, customer, onClose, onUpdated }) {
   )
 }
 
-function CustomerHistoryDialog({ open, customer, history, loading, onClose }) {
+function CustomerHistoryDialog({ open, customer, history, loading, onClose, onViewOrder, detailLoadingId }) {
   const orders = Array.isArray(history) ? history : (history?.purchases || history?.orders || [])
   const totalSpent = history?.totalSpent ?? orders.reduce((sum, o) => sum + Number(o.totalAmount ?? o.total ?? o.grandTotal ?? 0), 0)
   const totalPoints = history?.totalPoints ?? history?.pointsEarned ?? orders.reduce((sum, o) => sum + Number(o.pointsEarned ?? 0), 0)
@@ -179,13 +181,31 @@ function CustomerHistoryDialog({ open, customer, history, loading, onClose }) {
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                 {orders.map((o, idx) => {
                   const amount = o.totalAmount ?? o.total ?? o.grandTotal ?? 0
-                  const code = o.orderNumber ?? o.orderCode ?? o.code ?? `Order ${idx + 1}`
+                  const orderNumber = o.orderNumber ?? null
+                  const orderCode = o.orderCode ?? o.code ?? ''
+                  const label = orderNumber ? `Order #${orderNumber}` : (orderCode || `Order ${idx + 1}`)
                   const date = o.createdAt ?? o.orderDate ?? o.completedAt
                   return (
-                    <Box key={o.id || code || idx} sx={{ border: '1px solid #e5e7eb', borderRadius: 2, p: 1.25, bgcolor: '#fafafa' }}>
-                      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                        <Typography fontWeight={800} sx={{ flex: 1, minWidth: 0 }} noWrap>{code}</Typography>
-                        <Typography fontWeight={800}>{formatMoney(amount)}</Typography>
+                    <Box key={o.id || orderCode || idx} sx={{ border: '1px solid #e5e7eb', borderRadius: 2, p: 1.25, bgcolor: '#fafafa' }}>
+                      <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                        <Box sx={{ flex: 1, minWidth: 160 }}>
+                          <Typography fontWeight={800} sx={{ minWidth: 0 }} noWrap>{label}</Typography>
+                          {orderCode && orderCode !== String(orderNumber || '') && (
+                            <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace', display: 'block' }}>
+                              Code {orderCode}
+                            </Typography>
+                          )}
+                        </Box>
+                        <Typography fontWeight={800} sx={{ pt: 0.25 }}>{formatMoney(amount)}</Typography>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          startIcon={detailLoadingId === o.id ? <CircularProgress size={14} /> : <VisibilityIcon fontSize="small" />}
+                          disabled={!o.id || detailLoadingId === o.id}
+                          onClick={() => onViewOrder?.(o)}
+                          sx={{ textTransform: 'none', fontWeight: 700, minWidth: 74 }}>
+                          View
+                        </Button>
                       </Box>
                       <Box sx={{ display: 'flex', gap: 1, mt: 0.5, flexWrap: 'wrap' }}>
                         {date && <Typography variant="caption" color="text.secondary">{formatDate(date)}</Typography>}
@@ -219,6 +239,8 @@ export default function ShopCustomerPage() {
   const [historyTarget, setHistoryTarget] = useState(null)
   const [historyData, setHistoryData]     = useState(null)
   const [historyLoading, setHistoryLoading] = useState(false)
+  const [detailOrder, setDetailOrder]     = useState(null)
+  const [detailLoadingId, setDetailLoadingId] = useState(null)
 
   const load = async (search = q) => {
     setLoading(true); setError('')
@@ -257,6 +279,26 @@ export default function ShopCustomerPage() {
       setHistoryData(data || null)
     } catch { setError('Failed to load customer history') }
     setHistoryLoading(false)
+  }
+
+  const openOrderDetail = async (order) => {
+    if (!order?.id) return
+    setDetailLoadingId(order.id)
+    try {
+      const { res, data } = await fetchShopOrder(order.id)
+      if (!res.ok) { setError(data?.error || data?.message || 'Failed to load order detail'); return }
+      setDetailOrder(data)
+    } catch (e) {
+      setError(e.message || 'Failed to load order detail')
+    } finally {
+      setDetailLoadingId(null)
+    }
+  }
+
+  const refreshDetailOrder = async () => {
+    if (!detailOrder?.id) return
+    await openOrderDetail(detailOrder)
+    if (historyTarget) openHistory(historyTarget)
   }
   const handleDelete = async () => {
     if (!delTarget) return
@@ -369,7 +411,14 @@ export default function ShopCustomerPage() {
         customer={historyTarget}
         history={historyData}
         loading={historyLoading}
+        detailLoadingId={detailLoadingId}
+        onViewOrder={openOrderDetail}
         onClose={() => { setHistoryTarget(null); setHistoryData(null) }} />
+      {detailOrder && (
+        <ShopOrderDetailModal open order={detailOrder}
+          onClose={() => setDetailOrder(null)}
+          onRefresh={refreshDetailOrder} />
+      )}
       <CustomerEditDialog open={editOpen} customer={editTarget && Object.keys(editTarget).length ? editTarget : null}
         onClose={() => setEditOpen(false)} onSaved={handleSaved} />
 

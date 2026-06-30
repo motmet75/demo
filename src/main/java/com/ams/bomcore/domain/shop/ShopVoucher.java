@@ -46,6 +46,12 @@ public class ShopVoucher {
     @Column(name = "redeemed_order_id")
     private UUID redeemedOrderId;
 
+    @Column(name = "redeemed_customer_id")
+    private UUID redeemedCustomerId;
+
+    @Column(name = "redeemed_customer_name", length = 150)
+    private String redeemedCustomerName;
+
     @Column(name = "redeemed_at")
     private Instant redeemedAt;
 
@@ -85,6 +91,10 @@ public class ShopVoucher {
     public void setIssuedOrderId(UUID issuedOrderId) { this.issuedOrderId = issuedOrderId; }
     public UUID getRedeemedOrderId() { return redeemedOrderId; }
     public void setRedeemedOrderId(UUID redeemedOrderId) { this.redeemedOrderId = redeemedOrderId; }
+    public UUID getRedeemedCustomerId() { return redeemedCustomerId; }
+    public void setRedeemedCustomerId(UUID redeemedCustomerId) { this.redeemedCustomerId = redeemedCustomerId; }
+    public String getRedeemedCustomerName() { return redeemedCustomerName; }
+    public void setRedeemedCustomerName(String redeemedCustomerName) { this.redeemedCustomerName = redeemedCustomerName; }
     public Instant getRedeemedAt() { return redeemedAt; }
     public void setRedeemedAt(Instant redeemedAt) { this.redeemedAt = redeemedAt; }
     public LocalDate getExpiryDate() { return expiryDate; }
