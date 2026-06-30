@@ -27,6 +27,18 @@ public class ShopStaffCall {
     @Column(name = "table_name", length = 100)
     private String tableName;
 
+    @Column(name = "order_id")
+    private UUID orderId;
+
+    @Column(name = "order_number")
+    private Integer orderNumber;
+
+    @Column(name = "daily_seq")
+    private Integer dailySeq;
+
+    @Column(name = "order_code", length = 50)
+    private String orderCode;
+
     @Column(name = "reason", nullable = false, length = 40)
     private String reason;
 
@@ -62,6 +74,14 @@ public class ShopStaffCall {
     public void setTableId(UUID tableId) { this.tableId = tableId; }
     public String getTableName() { return tableName; }
     public void setTableName(String tableName) { this.tableName = tableName; }
+    public UUID getOrderId() { return orderId; }
+    public void setOrderId(UUID orderId) { this.orderId = orderId; }
+    public Integer getOrderNumber() { return orderNumber; }
+    public void setOrderNumber(Integer orderNumber) { this.orderNumber = orderNumber; }
+    public Integer getDailySeq() { return dailySeq; }
+    public void setDailySeq(Integer dailySeq) { this.dailySeq = dailySeq; }
+    public String getOrderCode() { return orderCode; }
+    public void setOrderCode(String orderCode) { this.orderCode = orderCode; }
     public String getReason() { return reason; }
     public void setReason(String reason) { this.reason = reason; }
     public String getNote() { return note; }

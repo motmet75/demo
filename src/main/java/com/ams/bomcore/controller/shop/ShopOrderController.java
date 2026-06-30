@@ -2,10 +2,12 @@ package com.ams.bomcore.controller.shop;
 
 import com.ams.bomcore.controller.shop.dto.ShopOrderResponseDto;
 import com.ams.bomcore.domain.shop.ShopAccessToken;
+import com.ams.bomcore.domain.shop.ShopOrder;
 import com.ams.bomcore.domain.shop.ShopStaffCall;
 import com.ams.bomcore.domain.shop.ShopTable;
 import com.ams.bomcore.repository.CompanyRepository;
 import com.ams.bomcore.repository.ShopAccessTokenRepository;
+import com.ams.bomcore.repository.ShopOrderRepository;
 import com.ams.bomcore.repository.ShopStaffCallRepository;
 import com.ams.bomcore.repository.ShopTableRepository;
 import com.ams.bomcore.repository.TenantRepository;
@@ -37,6 +39,7 @@ public class ShopOrderController {
     private final TenantRepository tenantRepository;
     private final CompanyRepository companyRepository;
     private final ShopAccessTokenRepository shopAccessTokenRepository;
+    private final ShopOrderRepository shopOrderRepository;
     private final ShopStaffCallRepository shopStaffCallRepository;
     private final ShopTableRepository shopTableRepository;
 
@@ -45,6 +48,7 @@ public class ShopOrderController {
                                TenantRepository tenantRepository,
                                CompanyRepository companyRepository,
                                ShopAccessTokenRepository shopAccessTokenRepository,
+                               ShopOrderRepository shopOrderRepository,
                                ShopStaffCallRepository shopStaffCallRepository,
                                ShopTableRepository shopTableRepository) {
         this.shopOrderService = shopOrderService;
@@ -52,6 +56,7 @@ public class ShopOrderController {
         this.tenantRepository = tenantRepository;
         this.companyRepository = companyRepository;
         this.shopAccessTokenRepository = shopAccessTokenRepository;
+        this.shopOrderRepository = shopOrderRepository;
         this.shopStaffCallRepository = shopStaffCallRepository;
         this.shopTableRepository = shopTableRepository;
     }
@@ -131,8 +136,9 @@ public class ShopOrderController {
 
     @Transactional
     @PostMapping("/shop/public/call-staff")
-    public ResponseEntity<?> callStaff(@RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> callStaff(@RequestBody(required = false) Map<String, Object> body) {
         try {
+            if (body == null) body = Collections.emptyMap();
             String token = stringValue(body.get("token"));
             ShopAccessToken sat = null;
             if (token != null) {
@@ -170,6 +176,15 @@ public class ShopOrderController {
             String note = stringValue(body.get("note"));
             if (note != null && note.length() > 500) note = note.substring(0, 500);
 
+            ShopOrder order = resolveStaffCallOrder(
+                    parseUuid(body.get("orderId")),
+                    stringValue(body.get("orderCode")),
+                    token,
+                    tableId,
+                    tenantId,
+                    companyId
+            );
+
             ShopStaffCall call = new ShopStaffCall();
             call.setTenantId(tenantId);
             call.setCompanyId(companyId);
@@ -178,6 +193,12 @@ public class ShopOrderController {
             call.setReason(reason);
             call.setNote(note);
             call.setToken(token);
+            if (order != null) {
+                call.setOrderId(order.getId());
+                call.setOrderNumber(order.getOrderNumber());
+                call.setDailySeq(order.getDailySeq());
+                call.setOrderCode(order.getOrderCode());
+            }
             call.setStatus(ShopStaffCall.STATUS_OPEN);
             return ResponseEntity.status(HttpStatus.CREATED).body(staffCallMap(shopStaffCallRepository.save(call)));
         } catch (IllegalArgumentException e) {
@@ -986,6 +1007,57 @@ public class ShopOrderController {
     }
     // ── Helpers ───────────────────────────────────────────────────────
 
+    private ShopOrder resolveStaffCallOrder(UUID orderId, String orderCode, String token,
+                                            UUID tableId, UUID tenantId, UUID companyId) {
+        if (orderId != null) {
+            ShopOrder order = shopOrderRepository.findById(orderId)
+                    .orElseThrow(() -> new IllegalArgumentException("Order not found"));
+            validateStaffCallOrderScope(order, tenantId, companyId);
+            return order;
+        }
+        if (orderCode != null) {
+            return shopOrderRepository.findByOrderCodeAndTenantIdAndCompanyId(orderCode, tenantId, companyId)
+                    .orElse(null);
+        }
+        if (token != null) {
+            List<ShopOrder> orders = shopOrderRepository.findAllBySourceTokenOrderByCreatedAtDesc(token)
+                    .stream()
+                    .filter(o -> tenantId.equals(o.getTenantId()) && companyId.equals(o.getCompanyId()))
+                    .toList();
+            Optional<ShopOrder> active = orders.stream()
+                    .filter(ShopOrderController::isStaffCallActiveOrder)
+                    .findFirst();
+            if (active.isPresent()) return active.get();
+            if (!orders.isEmpty()) return orders.get(0);
+        }
+        if (tableId != null) {
+            return shopOrderRepository.findAllByTable_IdAndTenantIdAndCompanyIdAndStatusIn(
+                            tableId,
+                            tenantId,
+                            companyId,
+                            List.of(ShopOrder.STATUS_PENDING, ShopOrder.STATUS_CONFIRMED,
+                                    ShopOrder.STATUS_PREPARING, ShopOrder.STATUS_READY))
+                    .stream()
+                    .max(Comparator.comparing(ShopOrder::getCreatedAt, Comparator.nullsFirst(Comparator.naturalOrder())))
+                    .orElse(null);
+        }
+        return null;
+    }
+
+    private void validateStaffCallOrderScope(ShopOrder order, UUID tenantId, UUID companyId) {
+        if (!tenantId.equals(order.getTenantId()) || !companyId.equals(order.getCompanyId())) {
+            throw new IllegalArgumentException("Order does not belong to this company");
+        }
+    }
+
+    private static boolean isStaffCallActiveOrder(ShopOrder order) {
+        if (order == null) return false;
+        String status = order.getStatus();
+        return ShopOrder.STATUS_PENDING.equals(status)
+                || ShopOrder.STATUS_CONFIRMED.equals(status)
+                || ShopOrder.STATUS_PREPARING.equals(status)
+                || ShopOrder.STATUS_READY.equals(status);
+    }
     private Map<String, Object> staffCallMap(ShopStaffCall call) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", call.getId());
@@ -993,6 +1065,10 @@ public class ShopOrderController {
         m.put("companyId", call.getCompanyId());
         m.put("tableId", call.getTableId());
         m.put("tableName", call.getTableName());
+        m.put("orderId", call.getOrderId());
+        m.put("orderNumber", call.getOrderNumber());
+        m.put("dailySeq", call.getDailySeq());
+        m.put("orderCode", call.getOrderCode());
         m.put("reason", call.getReason());
         m.put("note", call.getNote());
         m.put("status", call.getStatus());
