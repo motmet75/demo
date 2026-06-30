@@ -338,6 +338,14 @@ export function mergeBills(primaryId, otherIds) {
   })
 }
 
+export function undoMergeBills(orderId, mergeBatchId) {
+  return apiFetchJson(`/shop/staff/orders/${orderId}/undo-merge`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mergeBatchId: mergeBatchId || null })
+  })
+}
+
 export function patchOrderDiscount(orderId, discountAmount, voucherCode) {
   return apiFetchJson(`/shop/staff/orders/${orderId}/discount`, {
     method: 'PATCH',

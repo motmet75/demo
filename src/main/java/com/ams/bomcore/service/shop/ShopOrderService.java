@@ -6,6 +6,8 @@ import com.ams.bomcore.domain.company.Company;
 import com.ams.bomcore.domain.model.Model;
 import com.ams.bomcore.domain.shop.ModelMenuOption;
 import com.ams.bomcore.domain.shop.ShopAccessToken;
+import com.ams.bomcore.domain.shop.ShopBill;
+import com.ams.bomcore.domain.shop.ShopBillItem;
 import com.ams.bomcore.domain.shop.ShopCustomer;
 import com.ams.bomcore.domain.shop.ShopOrder;
 import com.ams.bomcore.domain.shop.ShopOrderItem;
@@ -50,6 +52,8 @@ public class ShopOrderService {
     private final OrderDeductionService orderDeductionService;
     private final ShopCustomerRepository shopCustomerRepository;
     private final ShopVoucherRepository shopVoucherRepository;
+    private final ShopBillRepository shopBillRepository;
+    private final ShopBillItemRepository shopBillItemRepository;
 
     @Value("${app.shop.public-base-url:http://localhost:5173/bom-inventory}")
     private String publicBaseUrl;
@@ -66,7 +70,9 @@ public class ShopOrderService {
                             BomService bomService,
                             OrderDeductionService orderDeductionService,
                             ShopCustomerRepository shopCustomerRepository,
-                            ShopVoucherRepository shopVoucherRepository) {
+                            ShopVoucherRepository shopVoucherRepository,
+                            ShopBillRepository shopBillRepository,
+                            ShopBillItemRepository shopBillItemRepository) {
         this.shopOrderRepository = shopOrderRepository;
         this.shopOrderItemRepository = shopOrderItemRepository;
         this.shopTableRepository = shopTableRepository;
@@ -80,6 +86,8 @@ public class ShopOrderService {
         this.orderDeductionService = orderDeductionService;
         this.shopCustomerRepository = shopCustomerRepository;
         this.shopVoucherRepository = shopVoucherRepository;
+        this.shopBillRepository = shopBillRepository;
+        this.shopBillItemRepository = shopBillItemRepository;
     }
 
     // ── Menu ─────────────────────────────────────────────────────────
@@ -202,8 +210,9 @@ public class ShopOrderService {
         }
 
         shopOrderRepository.save(order);
+        resetOrderBills(order, items);
 
-        return ShopOrderResponseDto.from(order, items);
+        return dto(order);
     }
 
     // ── Status transitions ────────────────────────────────────────────
@@ -276,7 +285,8 @@ public class ShopOrderService {
         order.setTotalRawCost(totals[1]);
         order.setCustomerEditing(false);
         shopOrderRepository.save(order);
-        return ShopOrderResponseDto.from(order, items);
+        resetOrderBills(order, items);
+        return dto(order);
     }
 
     @Transactional(readOnly = true)
@@ -446,7 +456,7 @@ public class ShopOrderService {
         List<ShopOrder> orders = status != null && !status.isBlank()
                 ? shopOrderRepository.findAllByTenantIdAndCompanyIdAndStatusOrderByCreatedAtDesc(tenantId, companyId, status)
                 : shopOrderRepository.findAllByTenantIdAndCompanyIdOrderByCreatedAtDesc(tenantId, companyId);
-        return orders.stream().map(o -> ShopOrderResponseDto.from(o, shopOrderItemRepository.findAllByOrder_Id(o.getId()))).toList();
+        return orders.stream().map(this::dto).toList();
     }
 
     // ── Table management ──────────────────────────────────────────────
@@ -751,7 +761,8 @@ public class ShopOrderService {
         }
 
         shopOrderRepository.save(order);
-        return ShopOrderResponseDto.from(order, items);
+        resetOrderBills(order, items);
+        return dto(order);
     }
 
     // ── Recursive item builder ────────────────────────────────────────
@@ -897,79 +908,168 @@ public class ShopOrderService {
     @Transactional
     public SplitResult splitBill(UUID orderId, List<UUID> rootItemIds, UUID tenantId, UUID companyId) {
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
-        List<ShopOrderItem> allItems = shopOrderItemRepository.findAllByOrder_Id(order.getId());
-        Set<UUID> splitIds = new HashSet<>(rootItemIds);
+        if (rootItemIds == null || rootItemIds.isEmpty()) {
+            throw new IllegalArgumentException("Select at least one item");
+        }
+        ensureOrderBills(order);
 
-        List<ShopOrderItem> toMove = allItems.stream()
-            .filter(i -> splitIds.contains(i.getId())
-                    || (i.getParentItem() != null && splitIds.contains(i.getParentItem().getId())))
-            .toList();
+        List<ShopBillItem> visibleAssignments = activeAssignmentsForOrder(order);
+        Set<UUID> rootIds = new HashSet<>(rootItemIds);
+        Set<UUID> selectedIds = new HashSet<>();
+        long rootCount = 0;
+        long selectedRootCount = 0;
+        for (ShopBillItem assignment : visibleAssignments) {
+            ShopOrderItem item = assignment.getOrderItem();
+            if (item == null) continue;
+            boolean root = item.getParentItem() == null;
+            if (root) rootCount++;
+            boolean selected = rootIds.contains(item.getId())
+                    || (item.getParentItem() != null && rootIds.contains(item.getParentItem().getId()));
+            if (selected) {
+                selectedIds.add(item.getId());
+                if (root) selectedRootCount++;
+            }
+        }
 
-        if (toMove.isEmpty()) throw new IllegalArgumentException("No items selected");
-        if (toMove.size() == allItems.size()) throw new IllegalArgumentException("Cannot move all items — keep at least one");
+        if (selectedIds.isEmpty()) throw new IllegalArgumentException("No items selected");
+        if (rootCount > 0 && selectedRootCount >= rootCount) {
+            throw new IllegalArgumentException("Cannot move all items - keep at least one item in the original bill");
+        }
 
-        ShopOrder newOrder = new ShopOrder();
-        newOrder.setTenantId(tenantId);
-        newOrder.setCompanyId(companyId);
-        newOrder.setOrderCode(String.valueOf(System.currentTimeMillis()));
-        newOrder.setFulfillmentType(order.getFulfillmentType());
-        newOrder.setTable(order.getTable());
-        newOrder.setCustomerName(order.getCustomerName());
-        newOrder.setCustomerPhone(order.getCustomerPhone());
-        newOrder.setPaymentMethod(order.getPaymentMethod());
-        newOrder.setSourceToken(order.getSourceToken());
-        newOrder.setStaffName(order.getStaffName());
-        newOrder.setCustomerId(order.getCustomerId());
-        newOrder.setNotes(order.getNotes());
+        List<ShopBillItem> toMove = visibleAssignments.stream()
+                .filter(assignment -> assignment.getOrderItem() != null && selectedIds.contains(assignment.getOrderItem().getId()))
+                .toList();
+        if (toMove.isEmpty()) throw new IllegalArgumentException("No bill items selected");
 
-        companyRepository.incrementOrderNumber(companyId);
-        companyRepository.flush();
-        newOrder.setOrderNumber(companyRepository.findById(companyId).map(Company::getLastOrderNumber).orElse(null));
-
-        ZoneId vn = ZoneId.of("Asia/Ho_Chi_Minh");
-        LocalDate today = LocalDate.now(vn);
-        Instant dayStart = today.atStartOfDay(vn).toInstant();
-        Instant dayEnd   = today.plusDays(1).atStartOfDay(vn).toInstant();
-        newOrder.setDailySeq((int) shopOrderRepository.countOrdersInDay(companyId, dayStart, dayEnd) + 1);
-        shopOrderRepository.save(newOrder);
-
-        for (ShopOrderItem item : toMove) item.setOrder(newOrder);
-        shopOrderItemRepository.saveAll(toMove);
-
-        List<ShopOrderItem> remaining = shopOrderItemRepository.findAllByOrder_Id(order.getId());
-        List<ShopOrderItem> moved     = shopOrderItemRepository.findAllByOrder_Id(newOrder.getId());
-
-        BigDecimal fee = order.getDeliveryFee() != null ? order.getDeliveryFee() : BigDecimal.ZERO;
-        order.setTotalAmount(sumLineTotals(remaining).add(fee));
-        order.setTotalRawCost(sumRawCost(remaining));
-        newOrder.setTotalAmount(sumLineTotals(moved));
-        newOrder.setTotalRawCost(sumRawCost(moved));
-        shopOrderRepository.saveAll(List.of(order, newOrder));
-
-        return new SplitResult(dto(order), dto(newOrder));
+        ShopBill splitFrom = toMove.get(0).getBill();
+        ShopBill newBill = createBill(order, nextBillNumber(order), splitFrom);
+        Set<UUID> affectedBillIds = new HashSet<>();
+        affectedBillIds.add(newBill.getId());
+        for (ShopBillItem assignment : toMove) {
+            if (assignment.getBill() != null) affectedBillIds.add(assignment.getBill().getId());
+            assignment.setBill(newBill);
+            ShopOrder sourceOrder = assignment.getOrderItem() != null ? assignment.getOrderItem().getOrder() : null;
+            if (sourceOrder != null && sourceOrder.getId().equals(order.getId())) {
+                assignment.setOriginalBill(newBill);
+            }
+        }
+        shopBillItemRepository.saveAll(toMove);
+        recalcBillsByIds(affectedBillIds);
+        recalcOrderFromBills(order);
+        return new SplitResult(dto(order), null);
     }
 
     @Transactional
     public ShopOrderResponseDto mergeBills(UUID primaryId, List<UUID> otherIds, UUID tenantId, UUID companyId) {
+        if (otherIds == null || otherIds.isEmpty()) {
+            throw new IllegalArgumentException("Select at least one order to merge");
+        }
         ShopOrder primary = requireOrder(primaryId, tenantId, companyId);
+        ensureOrderBills(primary);
+        ShopBill primaryBill = firstActiveBill(primary)
+                .orElseGet(() -> createBill(primary, nextBillNumber(primary), null));
+        UUID mergeBatchId = UUID.randomUUID();
+        Instant now = Instant.now();
+        boolean mergedAny = false;
+
         for (UUID otherId : otherIds) {
-            if (otherId.equals(primaryId)) continue;
+            if (otherId == null || otherId.equals(primaryId)) continue;
             ShopOrder other = requireOrder(otherId, tenantId, companyId);
-            List<ShopOrderItem> otherItems = shopOrderItemRepository.findAllByOrder_Id(other.getId());
-            for (ShopOrderItem item : otherItems) item.setOrder(primary);
-            shopOrderItemRepository.saveAll(otherItems);
+            if (isFinalStatus(other.getStatus())) {
+                throw new IllegalArgumentException("Cannot merge final order #" + orderDisplay(other));
+            }
+            ensureOrderBills(other);
+            List<ShopBill> sourceBills = activeBills(other);
+            for (ShopBill sourceBill : sourceBills) {
+                if (sourceBill.getId().equals(primaryBill.getId())) continue;
+                List<ShopBillItem> assignments = shopBillItemRepository.findAllByBill_Id(sourceBill.getId());
+                for (ShopBillItem assignment : assignments) {
+                    assignment.setBill(primaryBill);
+                    assignment.setOriginalBill(sourceBill);
+                }
+                shopBillItemRepository.saveAll(assignments);
+
+                sourceBill.setStatus(ShopBill.STATUS_MERGED);
+                sourceBill.setMergedIntoBill(primaryBill);
+                sourceBill.setMergeBatchId(mergeBatchId);
+                sourceBill.setPreMergeOrderStatus(other.getStatus());
+                sourceBill.setPreMergeCancelReason(other.getCancelReason());
+                sourceBill.setMergedAt(now);
+                shopBillRepository.save(sourceBill);
+                mergedAny = true;
+            }
             other.setStatus(ShopOrder.STATUS_CANCELLED);
-            other.setCancelReason("Merged into #" + primary.getOrderCode());
+            other.setCancelReason("Merged into #" + orderDisplay(primary));
             shopOrderRepository.save(other);
         }
-        List<ShopOrderItem> allItems = shopOrderItemRepository.findAllByOrder_Id(primary.getId());
-        BigDecimal fee = primary.getDeliveryFee() != null ? primary.getDeliveryFee() : BigDecimal.ZERO;
-        primary.setTotalAmount(sumLineTotals(allItems).add(fee));
-        primary.setTotalRawCost(sumRawCost(allItems));
-        shopOrderRepository.save(primary);
+
+        if (!mergedAny) throw new IllegalArgumentException("No active bills were merged");
+        recalcBillTotals(primaryBill);
+        recalcOrderFromBills(primary);
         return dto(primary);
     }
 
+    @Transactional
+    public ShopOrderResponseDto undoMergeBills(UUID primaryId, UUID mergeBatchId, UUID tenantId, UUID companyId) {
+        ShopOrder primary = requireOrder(primaryId, tenantId, companyId);
+        List<ShopBill> targetBills = activeBills(primary);
+        if (targetBills.isEmpty()) throw new IllegalArgumentException("This order has no active bill to undo");
+
+        List<UUID> targetBillIds = targetBills.stream().map(ShopBill::getId).toList();
+        List<ShopBill> mergedBills = shopBillRepository.findAllByMergedIntoBill_IdInAndStatus(targetBillIds, ShopBill.STATUS_MERGED);
+        if (mergeBatchId != null) {
+            mergedBills = mergedBills.stream()
+                    .filter(bill -> mergeBatchId.equals(bill.getMergeBatchId()))
+                    .toList();
+        } else if (!mergedBills.isEmpty()) {
+            Optional<UUID> latestBatch = mergedBills.stream()
+                    .filter(bill -> bill.getMergeBatchId() != null)
+                    .max(Comparator.comparing(ShopBill::getMergedAt, Comparator.nullsFirst(Comparator.naturalOrder())))
+                    .map(ShopBill::getMergeBatchId);
+            if (latestBatch.isPresent()) {
+                UUID batch = latestBatch.get();
+                mergedBills = mergedBills.stream()
+                        .filter(bill -> batch.equals(bill.getMergeBatchId()))
+                        .toList();
+            }
+        }
+        if (mergedBills.isEmpty()) throw new IllegalArgumentException("No merge found to undo");
+
+        Set<UUID> affectedTargetBillIds = new HashSet<>(targetBillIds);
+        for (ShopBill sourceBill : mergedBills) {
+            List<ShopBillItem> assignments = shopBillItemRepository.findAllByOriginalBill_Id(sourceBill.getId()).stream()
+                    .filter(assignment -> assignment.getBill() != null
+                            && assignment.getBill().getOrder() != null
+                            && primary.getId().equals(assignment.getBill().getOrder().getId()))
+                    .toList();
+            for (ShopBillItem assignment : assignments) {
+                if (assignment.getBill() != null) affectedTargetBillIds.add(assignment.getBill().getId());
+                assignment.setBill(sourceBill);
+                assignment.setOriginalBill(sourceBill);
+            }
+            shopBillItemRepository.saveAll(assignments);
+
+            sourceBill.setStatus(ShopBill.STATUS_ACTIVE);
+            sourceBill.setMergedIntoBill(null);
+            sourceBill.setMergeBatchId(null);
+            sourceBill.setMergedAt(null);
+            shopBillRepository.save(sourceBill);
+
+            ShopOrder sourceOrder = sourceBill.getOrder();
+            if (sourceOrder != null) {
+                String previousStatus = sourceBill.getPreMergeOrderStatus();
+                sourceOrder.setStatus(previousStatus != null && !previousStatus.isBlank() ? previousStatus : ShopOrder.STATUS_PENDING);
+                sourceOrder.setCancelReason(sourceBill.getPreMergeCancelReason());
+                shopOrderRepository.save(sourceOrder);
+                recalcBillTotals(sourceBill);
+                recalcOrderFromBills(sourceOrder);
+            }
+        }
+
+        recalcBillsByIds(affectedTargetBillIds);
+        recalcOrderFromBills(primary);
+        return dto(primary);
+    }
     // ── Discount / voucher ─────────────────────────────────────────────
 
     @Transactional
@@ -1187,8 +1287,166 @@ public class ShopOrderService {
         }
     }
 
+    private ShopBill createBill(ShopOrder order, int billNumber, ShopBill splitFromBill) {
+        ShopBill bill = new ShopBill();
+        bill.setTenantId(order.getTenantId());
+        bill.setCompanyId(order.getCompanyId());
+        bill.setOrder(order);
+        bill.setBillNumber(billNumber);
+        bill.setStatus(ShopBill.STATUS_ACTIVE);
+        bill.setSplitFromBill(splitFromBill);
+        bill.setTotalAmount(BigDecimal.ZERO);
+        bill.setTotalRawCost(BigDecimal.ZERO);
+        return shopBillRepository.save(bill);
+    }
+
+    private int nextBillNumber(ShopOrder order) {
+        long current = shopBillRepository.countByOrder_Id(order.getId());
+        return (int) current + 1;
+    }
+
+    private List<ShopBill> activeBills(ShopOrder order) {
+        return shopBillRepository.findAllByOrder_IdAndStatusOrderByCreatedAtAsc(order.getId(), ShopBill.STATUS_ACTIVE);
+    }
+
+    private Optional<ShopBill> firstActiveBill(ShopOrder order) {
+        return activeBills(order).stream().findFirst();
+    }
+
+    private List<ShopBillItem> activeAssignmentsForOrder(ShopOrder order) {
+        return shopBillItemRepository.findAllByBill_Order_Id(order.getId()).stream()
+                .filter(assignment -> assignment.getBill() != null
+                        && ShopBill.STATUS_ACTIVE.equals(assignment.getBill().getStatus()))
+                .toList();
+    }
+
+    private void resetOrderBills(ShopOrder order, List<ShopOrderItem> items) {
+        shopBillRepository.deleteAllByOrder_Id(order.getId());
+        ShopBill bill = createBill(order, 1, null);
+        List<ShopBillItem> assignments = new ArrayList<>();
+        for (ShopOrderItem item : items) {
+            ShopBillItem assignment = new ShopBillItem();
+            assignment.setBill(bill);
+            assignment.setOriginalBill(bill);
+            assignment.setOrderItem(item);
+            assignments.add(assignment);
+        }
+        shopBillItemRepository.saveAll(assignments);
+        recalcBillTotals(bill);
+        recalcOrderFromBills(order);
+    }
+
+    private void ensureOrderBills(ShopOrder order) {
+        List<ShopOrderItem> sourceItems = shopOrderItemRepository.findAllByOrder_Id(order.getId());
+        List<ShopBill> activeBills = activeBills(order);
+        ShopBill defaultBill = activeBills.stream().findFirst()
+                .orElseGet(() -> createBill(order, nextBillNumber(order), null));
+        Map<UUID, ShopBillItem> byItemId = new HashMap<>();
+        for (ShopBillItem assignment : shopBillItemRepository.findAllByOrderItem_Order_Id(order.getId())) {
+            if (assignment.getOrderItem() != null) byItemId.put(assignment.getOrderItem().getId(), assignment);
+        }
+        List<ShopBillItem> missing = new ArrayList<>();
+        for (ShopOrderItem item : sourceItems) {
+            if (byItemId.containsKey(item.getId())) continue;
+            ShopBillItem assignment = new ShopBillItem();
+            assignment.setBill(defaultBill);
+            assignment.setOriginalBill(defaultBill);
+            assignment.setOrderItem(item);
+            missing.add(assignment);
+        }
+        if (!missing.isEmpty()) shopBillItemRepository.saveAll(missing);
+        recalcBillsByIds(activeBills(order).stream().map(ShopBill::getId).toList());
+        recalcOrderFromBills(order);
+    }
+
+    private void recalcBillsByIds(Collection<UUID> billIds) {
+        if (billIds == null || billIds.isEmpty()) return;
+        for (UUID billId : billIds) {
+            shopBillRepository.findById(billId).ifPresent(this::recalcBillTotals);
+        }
+    }
+
+    private void recalcBillTotals(ShopBill bill) {
+        List<ShopOrderItem> items = shopBillItemRepository.findAllByBill_Id(bill.getId()).stream()
+                .map(ShopBillItem::getOrderItem)
+                .filter(Objects::nonNull)
+                .toList();
+        bill.setTotalAmount(sumLineTotals(items));
+        bill.setTotalRawCost(sumRawCost(items));
+        shopBillRepository.save(bill);
+    }
+
+    private void recalcOrderFromBills(ShopOrder order) {
+        List<ShopBill> bills = activeBills(order);
+        BigDecimal itemTotal = bills.stream()
+                .map(bill -> bill.getTotalAmount() != null ? bill.getTotalAmount() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal rawTotal = bills.stream()
+                .map(bill -> bill.getTotalRawCost() != null ? bill.getTotalRawCost() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal fee = order.getDeliveryFee() != null ? order.getDeliveryFee() : BigDecimal.ZERO;
+        order.setTotalAmount(itemTotal.add(fee));
+        order.setTotalRawCost(rawTotal);
+        shopOrderRepository.save(order);
+    }
+
+    private String orderDisplay(ShopOrder order) {
+        return order.getOrderNumber() != null ? String.valueOf(order.getOrderNumber()) : order.getOrderCode();
+    }
+
     private ShopOrderResponseDto dto(ShopOrder order) {
-        return ShopOrderResponseDto.from(order, shopOrderItemRepository.findAllByOrder_Id(order.getId()));
+        List<ShopBill> ownedBills = shopBillRepository.findAllByOrder_IdOrderByCreatedAtAsc(order.getId());
+        if (ownedBills.isEmpty()) {
+            return ShopOrderResponseDto.from(order, shopOrderItemRepository.findAllByOrder_Id(order.getId()));
+        }
+
+        List<ShopBillItem> currentAssignments = activeAssignmentsForOrder(order);
+        Map<UUID, ShopBill> itemBillMap = new LinkedHashMap<>();
+        Map<UUID, List<ShopOrderItem>> billItemsMap = new LinkedHashMap<>();
+        List<ShopOrderItem> visibleItems = new ArrayList<>();
+        Set<UUID> seenItemIds = new HashSet<>();
+        for (ShopBillItem assignment : currentAssignments) {
+            ShopBill bill = assignment.getBill();
+            ShopOrderItem item = assignment.getOrderItem();
+            if (bill == null || item == null) continue;
+            itemBillMap.put(item.getId(), bill);
+            billItemsMap.computeIfAbsent(bill.getId(), ignored -> new ArrayList<>()).add(item);
+            if (seenItemIds.add(item.getId())) visibleItems.add(item);
+        }
+
+        List<ShopBill> responseBills = new ArrayList<>(ownedBills);
+        Set<UUID> responseBillIds = new HashSet<>();
+        for (ShopBill bill : responseBills) responseBillIds.add(bill.getId());
+        List<UUID> activeOwnedIds = ownedBills.stream()
+                .filter(bill -> ShopBill.STATUS_ACTIVE.equals(bill.getStatus()))
+                .map(ShopBill::getId)
+                .toList();
+        if (!activeOwnedIds.isEmpty()) {
+            for (ShopBill mergedSource : shopBillRepository.findAllByMergedIntoBill_IdInAndStatus(activeOwnedIds, ShopBill.STATUS_MERGED)) {
+                if (responseBillIds.add(mergedSource.getId())) responseBills.add(mergedSource);
+            }
+        }
+
+        for (ShopBill bill : responseBills) {
+            if (billItemsMap.containsKey(bill.getId())) continue;
+            List<ShopOrderItem> items = shopBillItemRepository.findAllByOriginalBill_Id(bill.getId()).stream()
+                    .map(ShopBillItem::getOrderItem)
+                    .filter(Objects::nonNull)
+                    .toList();
+            if (!items.isEmpty()) billItemsMap.put(bill.getId(), items);
+        }
+
+        if (visibleItems.isEmpty()) {
+            visibleItems = shopOrderItemRepository.findAllByOrder_Id(order.getId());
+            for (ShopBillItem assignment : shopBillItemRepository.findAllByOrderItem_Order_Id(order.getId())) {
+                if (assignment.getOrderItem() != null) {
+                    ShopBill displayBill = assignment.getOriginalBill() != null ? assignment.getOriginalBill() : assignment.getBill();
+                    if (displayBill != null) itemBillMap.putIfAbsent(assignment.getOrderItem().getId(), displayBill);
+                }
+            }
+        }
+
+        return ShopOrderResponseDto.from(order, visibleItems, responseBills, itemBillMap, billItemsMap);
     }
 
     // ── Request DTOs ──────────────────────────────────────────────────
@@ -1364,7 +1622,8 @@ public class ShopOrderService {
         order.setTotalRawCost(totals[1]);
         order.setCustomerEditing(false);
         shopOrderRepository.save(order);
-        return ShopOrderResponseDto.from(order, items);
+        resetOrderBills(order, items);
+        return dto(order);
     }
 
     // ── Pickup scan (public — no auth) ────────────────────────────────

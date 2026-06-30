@@ -1,11 +1,14 @@
 package com.ams.bomcore.controller.shop.dto;
 
+import com.ams.bomcore.domain.shop.ShopBill;
 import com.ams.bomcore.domain.shop.ShopOrder;
 import com.ams.bomcore.domain.shop.ShopOrderItem;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public class ShopOrderResponseDto {
@@ -48,6 +51,7 @@ public class ShopOrderResponseDto {
     private Instant readyAt;
     private Instant completedAt;
     private List<ItemDto> items;
+    private List<BillDto> bills = Collections.emptyList();
 
     public static class ItemDto {
         private UUID id;
@@ -61,6 +65,11 @@ public class ShopOrderResponseDto {
         private BigDecimal optionAddOn;
         private String itemNotes;
         private UUID parentItemId;
+        private UUID billId;
+        private Integer billNumber;
+        private UUID sourceOrderId;
+        private Integer sourceOrderNumber;
+        private String sourceOrderCode;
 
         public static ItemDto from(ShopOrderItem item) {
             ItemDto dto = new ItemDto();
@@ -75,6 +84,11 @@ public class ShopOrderResponseDto {
             dto.optionAddOn = item.getOptionAddOn();
             dto.itemNotes = item.getItemNotes();
             dto.parentItemId = item.getParentItem() != null ? item.getParentItem().getId() : null;
+            if (item.getOrder() != null) {
+                dto.sourceOrderId = item.getOrder().getId();
+                dto.sourceOrderNumber = item.getOrder().getOrderNumber();
+                dto.sourceOrderCode = item.getOrder().getOrderCode();
+            }
             return dto;
         }
 
@@ -89,8 +103,65 @@ public class ShopOrderResponseDto {
         public BigDecimal getOptionAddOn() { return optionAddOn; }
         public String getItemNotes() { return itemNotes; }
         public UUID getParentItemId() { return parentItemId; }
+        public UUID getBillId() { return billId; }
+        public Integer getBillNumber() { return billNumber; }
+        public UUID getSourceOrderId() { return sourceOrderId; }
+        public Integer getSourceOrderNumber() { return sourceOrderNumber; }
+        public String getSourceOrderCode() { return sourceOrderCode; }
     }
 
+    public static class BillDto {
+        private UUID id;
+        private Integer billNumber;
+        private String status;
+        private UUID orderId;
+        private Integer orderNumber;
+        private String orderCode;
+        private UUID splitFromBillId;
+        private UUID mergedIntoBillId;
+        private UUID mergeBatchId;
+        private BigDecimal totalAmount;
+        private BigDecimal totalRawCost;
+        private Instant createdAt;
+        private Instant mergedAt;
+        private List<UUID> itemIds;
+
+        public static BillDto from(ShopBill bill, List<ShopOrderItem> items) {
+            BillDto dto = new BillDto();
+            dto.id = bill.getId();
+            dto.billNumber = bill.getBillNumber();
+            dto.status = bill.getStatus();
+            if (bill.getOrder() != null) {
+                dto.orderId = bill.getOrder().getId();
+                dto.orderNumber = bill.getOrder().getOrderNumber();
+                dto.orderCode = bill.getOrder().getOrderCode();
+            }
+            dto.splitFromBillId = bill.getSplitFromBill() != null ? bill.getSplitFromBill().getId() : null;
+            dto.mergedIntoBillId = bill.getMergedIntoBill() != null ? bill.getMergedIntoBill().getId() : null;
+            dto.mergeBatchId = bill.getMergeBatchId();
+            dto.totalAmount = bill.getTotalAmount();
+            dto.totalRawCost = bill.getTotalRawCost();
+            dto.createdAt = bill.getCreatedAt();
+            dto.mergedAt = bill.getMergedAt();
+            dto.itemIds = items == null ? Collections.emptyList() : items.stream().map(ShopOrderItem::getId).toList();
+            return dto;
+        }
+
+        public UUID getId() { return id; }
+        public Integer getBillNumber() { return billNumber; }
+        public String getStatus() { return status; }
+        public UUID getOrderId() { return orderId; }
+        public Integer getOrderNumber() { return orderNumber; }
+        public String getOrderCode() { return orderCode; }
+        public UUID getSplitFromBillId() { return splitFromBillId; }
+        public UUID getMergedIntoBillId() { return mergedIntoBillId; }
+        public UUID getMergeBatchId() { return mergeBatchId; }
+        public BigDecimal getTotalAmount() { return totalAmount; }
+        public BigDecimal getTotalRawCost() { return totalRawCost; }
+        public Instant getCreatedAt() { return createdAt; }
+        public Instant getMergedAt() { return mergedAt; }
+        public List<UUID> getItemIds() { return itemIds; }
+    }
     public static ShopOrderResponseDto from(ShopOrder order, List<ShopOrderItem> items) {
         ShopOrderResponseDto dto = new ShopOrderResponseDto();
         dto.id = order.getId();
@@ -136,6 +207,26 @@ public class ShopOrderResponseDto {
         return dto;
     }
 
+    public static ShopOrderResponseDto from(ShopOrder order, List<ShopOrderItem> items,
+                                            List<ShopBill> bills,
+                                            Map<UUID, ShopBill> itemBillMap,
+                                            Map<UUID, List<ShopOrderItem>> billItemsMap) {
+        ShopOrderResponseDto dto = from(order, items);
+        if (itemBillMap != null) {
+            dto.items.forEach(item -> {
+                ShopBill bill = itemBillMap.get(item.getId());
+                if (bill != null) {
+                    item.billId = bill.getId();
+                    item.billNumber = bill.getBillNumber();
+                }
+            });
+        }
+        dto.bills = bills == null ? Collections.emptyList() : bills.stream()
+            .map(b -> BillDto.from(b, billItemsMap != null ? billItemsMap.getOrDefault(b.getId(), Collections.emptyList()) : Collections.emptyList()))
+            .toList();
+        return dto;
+    }
+
     public UUID getId() { return id; }
     public String getOrderCode() { return orderCode; }
     public Integer getOrderNumber() { return orderNumber; }
@@ -174,4 +265,5 @@ public class ShopOrderResponseDto {
     public Instant getReadyAt() { return readyAt; }
     public Instant getCompletedAt() { return completedAt; }
     public List<ItemDto> getItems() { return items; }
+    public List<BillDto> getBills() { return bills; }
 }

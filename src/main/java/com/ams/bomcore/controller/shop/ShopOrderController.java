@@ -755,11 +755,36 @@ public class ShopOrderController {
                                          @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
-        UUID primaryId = UUID.fromString((String) body.get("primaryId"));
-        @SuppressWarnings("unchecked")
-        List<String> others = (List<String>) body.get("otherIds");
-        List<UUID> otherIds = others.stream().map(UUID::fromString).toList();
-        return ResponseEntity.ok(shopOrderService.mergeBills(primaryId, otherIds, tId, cId));
+        try {
+            UUID primaryId = UUID.fromString((String) body.get("primaryId"));
+            @SuppressWarnings("unchecked")
+            List<String> others = (List<String>) body.get("otherIds");
+            List<UUID> otherIds = others.stream().map(UUID::fromString).toList();
+            return ResponseEntity.ok(shopOrderService.mergeBills(primaryId, otherIds, tId, cId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/shop/staff/orders/{orderId}/undo-merge")
+    public ResponseEntity<?> undoMergeBills(@PathVariable UUID orderId,
+                                            @RequestBody(required = false) Map<String, Object> body,
+                                            @RequestParam(required = false) UUID tenantId,
+                                            @RequestParam(required = false) UUID companyId,
+                                            @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                            @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        try {
+            UUID mergeBatchId = null;
+            Object raw = body != null ? body.get("mergeBatchId") : null;
+            if (raw != null && !String.valueOf(raw).isBlank()) {
+                mergeBatchId = UUID.fromString(String.valueOf(raw));
+            }
+            return ResponseEntity.ok(shopOrderService.undoMergeBills(orderId, mergeBatchId, tId, cId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     @PatchMapping("/shop/staff/orders/{orderId}/discount")

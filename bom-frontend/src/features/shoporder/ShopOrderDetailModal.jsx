@@ -27,7 +27,7 @@ import EditIcon from '@mui/icons-material/Edit'
 import UndoIcon from '@mui/icons-material/Undo'
 import LabelIcon from '@mui/icons-material/Label'
 import MonitorIcon from '@mui/icons-material/Monitor'
-import { fetchOrderTagQr, revertShopOrder, switchToQrPayment, splitPayment, revertToCash, patchOrderDiscount, linkOrderCustomer, fetchCustomers, fetchCustomerHistory, earnOrderPoints, fetchBankConfig } from '../../api/shopApi'
+import { fetchOrderTagQr, revertShopOrder, switchToQrPayment, splitPayment, revertToCash, patchOrderDiscount, linkOrderCustomer, fetchCustomers, fetchCustomerHistory, earnOrderPoints, fetchBankConfig, undoMergeBills } from '../../api/shopApi'
 import { printOrderReceipt, printOrderTag, printCupLabels } from '../../utils/printOrderReceipt'
 import { broadcastToCounter } from '../shopboard/CounterDisplayPage'
 import EditOrderDialog from './EditOrderDialog'
@@ -120,7 +120,11 @@ function ChangeCalc({ label, due, color = '#e65100', bg = '#fff7ed', borderColor
 }
 
 function buildItemGroups(items) {
-  const roots = (items || []).filter(it => !it.parentItemId)
+  const roots = [...(items || []).filter(it => !it.parentItemId)].sort((a, b) => {
+    const bill = Number(a.billNumber || 0) - Number(b.billNumber || 0)
+    if (bill) return bill
+    return Number(a.sourceOrderNumber || 0) - Number(b.sourceOrderNumber || 0)
+  })
   return roots.map((root, rIdx) => {
     const children = (items || [])
       .filter(it => it.parentItemId === root.id)
@@ -158,6 +162,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
   const [custLinking, setCustLinking]         = useState(false)
   const [ptsSaving, setPtsSaving]             = useState(false)
   const [bankCfg, setBankCfg]                 = useState(null)
+  const [undoMerging, setUndoMerging]         = useState(false)
   const [custHistory, setCustHistory]         = useState(null)
   const [custHistoryLoading, setCustHistoryLoading] = useState(false)
 
@@ -238,6 +243,17 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
       onRefresh?.()
     } catch (e) { setError(e.message || 'Network error') }
     setDiscountSaving(false)
+  }
+
+  const handleUndoMerge = async () => {
+    const batchId = (order.bills || []).find(b => b.status === 'MERGED' && b.mergeBatchId)?.mergeBatchId || null
+    setUndoMerging(true); setError('')
+    try {
+      const { res, data } = await undoMergeBills(order.id, batchId)
+      if (!res.ok) { setError(data?.error || 'Failed to undo merge'); setUndoMerging(false); return }
+      onRefresh?.()
+    } catch (e) { setError(e.message || 'Network error') }
+    setUndoMerging(false)
   }
 
   const handleSearchCust = async (q) => {
@@ -376,6 +392,11 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
     ? order.paymentQr
     : order.paymentQr ? `data:image/png;base64,${order.paymentQr}` : null
 
+  const bills = order.bills || []
+  const activeBills = bills.filter(b => b.status === 'ACTIVE')
+  const mergedBills = bills.filter(b => b.status === 'MERGED' && b.mergedIntoBillId)
+  const showBillSummary = activeBills.length > 1 || mergedBills.length > 0
+
   return (
     <>
       <Dialog open={!!open} onClose={onClose} fullWidth maxWidth="md"
@@ -418,6 +439,24 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
             {order.notes && <Typography variant="body2" sx={{ gridColumn: '1/-1', fontStyle: 'italic', color: 'text.secondary' }}>Note: {order.notes}</Typography>}
           </Box>
 
+          {showBillSummary && (
+            <Box sx={{ mb: 1.5, p: 1, bgcolor: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 1.5 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+                <Typography variant="caption" fontWeight={800} color="text.secondary" sx={{ mr: 0.5 }}>Bills</Typography>
+                {activeBills.map(b => (
+                  <Chip key={b.id} size="small" color="primary" variant="outlined"
+                    label={`Bill #${b.billNumber || '?'} · ${fmt(b.totalAmount)}`}
+                    sx={{ height: 22, fontSize: 11, fontWeight: 700 }} />
+                ))}
+                {mergedBills.map(b => (
+                  <Chip key={b.id} size="small" color="warning"
+                    label={`Merged #${b.orderNumber ?? b.orderCode}`}
+                    sx={{ height: 22, fontSize: 11, fontWeight: 700 }} />
+                ))}
+              </Box>
+            </Box>
+          )}
+
           {/* ── Items ─────────────────────────────────────────────── */}
           <Table size="small">
             <TableHead>
@@ -439,6 +478,14 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
                       <Typography variant="caption" sx={{ color: '#94a3b8', fontWeight: 700, fontSize: 10, flexShrink: 0 }}>{root._label}</Typography>
                       <Box>
                         <Typography variant="body2" fontWeight={700} fontSize={14}>{root.modelName}</Typography>
+                        {(root.billNumber || (root.sourceOrderId && String(root.sourceOrderId) !== String(order.id))) && (
+                          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.35 }}>
+                            {root.billNumber && <Chip size="small" label={`Bill #${root.billNumber}`} sx={{ height: 18, fontSize: 10, fontWeight: 700 }} />}
+                            {root.sourceOrderId && String(root.sourceOrderId) !== String(order.id) && (
+                              <Chip size="small" color="warning" variant="outlined" label={`From #${root.sourceOrderNumber ?? root.sourceOrderCode}`} sx={{ height: 18, fontSize: 10, fontWeight: 700 }} />
+                            )}
+                          </Box>
+                        )}
                         <OptionsDisplay selectedOptions={root.selectedOptions} />
                         {root.itemNotes && (
                           <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', display: 'block', mt: 0.25 }}>{root.itemNotes}</Typography>
@@ -776,6 +823,16 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
                 <Button variant="outlined" color="secondary" startIcon={<CallSplitIcon />}
                   onClick={() => setSplitBillOpen(true)} sx={{ textTransform: 'none', fontWeight: 700 }}>
                   Split Bill
+                </Button>
+              </Tooltip>
+            )}
+            {!isFinal && mergedBills.length > 0 && (
+              <Tooltip title="Undo the latest bill merge">
+                <Button variant="outlined" color="warning"
+                  startIcon={undoMerging ? <CircularProgress size={14} /> : <UndoIcon />}
+                  onClick={handleUndoMerge} disabled={undoMerging}
+                  sx={{ textTransform: 'none', fontWeight: 700 }}>
+                  Undo Merge
                 </Button>
               </Tooltip>
             )}

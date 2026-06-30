@@ -69,7 +69,7 @@ export default function SplitBillDialog({ open, order, onClose, onSplit }) {
 
       <DialogContent sx={{ pt: 0 }}>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-          Select items to move to a new bill. The rest stay in the original.
+          Select items to move to a new bill under this order. The rest stay in the original bill.
         </Typography>
 
         {error && <Alert severity="error" sx={{ mb: 1.5 }}>{error}</Alert>}

@@ -70,7 +70,7 @@ export default function MergeBillsDialog({ open, order, onClose, onMerge }) {
 
       <DialogContent sx={{ pt: 0 }}>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-          Select orders to merge into <strong>{primaryNum}</strong>. Those orders will be cancelled after merging.
+          Select orders to merge into <strong>{primaryNum}</strong>. Those orders will be cancelled, but the merge can be undone from order detail.
         </Typography>
 
         {error && <Alert severity="error" sx={{ mb: 1.5 }}>{error}</Alert>}
