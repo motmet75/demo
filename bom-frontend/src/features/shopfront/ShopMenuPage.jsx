@@ -48,7 +48,7 @@ import Snackbar from '@mui/material/Snackbar'
 import { resolveToken, fetchMenu, createOrder, fetchPublicMenuOptions,
          fetchActiveTableOrders, startCustomerEdit, cancelCustomerEdit,
          updatePublicOrderItems, fetchPublicOrder, fetchTokenSession,
-         cancelPublicOrder, fetchShopConfig, callStaff } from '../../api/shopApi'
+         cancelPublicOrder, fetchShopConfig, callStaff, fetchPublicStaffCall } from '../../api/shopApi'
 import ItemOptionsDialog from './ItemOptionsDialog'
 import OrderReceiptDialog from './OrderReceiptDialog'
 
@@ -451,6 +451,7 @@ export default function ShopMenuPage() {
   const [callStaffReason, setCallStaffReason]   = useState('payment')
   const [callStaffNote, setCallStaffNote]       = useState('')
   const [callStaffDone, setCallStaffDone]       = useState(false)
+  const [activeStaffCall, setActiveStaffCall]   = useState(null)
   const [callStaffLoading, setCallStaffLoading] = useState(false)
   const headerRef    = useRef(null)
   const [headerH, setHeaderH] = useState(165)
@@ -511,6 +512,22 @@ export default function ShopMenuPage() {
     const id = setInterval(loadTokenSession, 5000)
     return () => clearInterval(id)
   }, [loadTokenSession, tokenParam])
+  useEffect(() => {
+    if (!activeStaffCall?.id || activeStaffCall.replyMessage) return
+    let cancelled = false
+    const poll = async () => {
+      try {
+        const { data } = await fetchPublicStaffCall(activeStaffCall.id, tokenParam, ctx?.tenantId, ctx?.companyId, ctx?.tableId)
+        if (cancelled || !data?.id) return
+        setActiveStaffCall(data)
+        if (data.replyMessage) setCallStaffDone(true)
+      } catch { /* silent */ }
+    }
+    const intervalId = setInterval(poll, 3000)
+    const timeoutId = setTimeout(() => clearInterval(intervalId), 120000)
+    poll()
+    return () => { cancelled = true; clearInterval(intervalId); clearTimeout(timeoutId) }
+  }, [activeStaffCall?.id, activeStaffCall?.replyMessage, tokenParam, ctx?.tenantId, ctx?.companyId, ctx?.tableId])
 
   useEffect(() => {
     if (!editOrderCode || loading) return
@@ -808,6 +825,7 @@ export default function ShopMenuPage() {
         setCallStaffLoading(false)
         return
       }
+      setActiveStaffCall(data || null)
       setCallStaffOpen(false)
       setCallStaffReason('payment')
       setCallStaffNote('')
@@ -1466,10 +1484,10 @@ export default function ShopMenuPage() {
       </Dialog>
 
       {/* ── Call staff success snack ──────────────────────────── */}
-      <Snackbar open={callStaffDone} autoHideDuration={4000} onClose={() => setCallStaffDone(false)}
+      <Snackbar open={callStaffDone} autoHideDuration={activeStaffCall?.replyMessage ? 8000 : 4000} onClose={() => setCallStaffDone(false)}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
-        <Alert severity="success" onClose={() => setCallStaffDone(false)} sx={{ fontWeight: 700 }}>
-          Nhân viên sẽ đến hỗ trợ bạn trong giây lát!
+        <Alert severity={activeStaffCall?.replyMessage ? 'info' : 'success'} onClose={() => setCallStaffDone(false)} sx={{ fontWeight: 700 }}>
+          {activeStaffCall?.replyMessage || 'Nhân viên sẽ đến hỗ trợ bạn trong giây lát!'}
         </Alert>
       </Snackbar>
 

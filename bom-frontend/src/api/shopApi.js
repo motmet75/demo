@@ -310,8 +310,20 @@ export function callStaff(tenantId, companyId, tableId, reason, note, token, ord
   })
 }
 
+export function fetchPublicStaffCall(id, token, tenantId, companyId, tableId) {
+  return apiFetchJsonNoContext(`/shop/public/call-staff/${encodeURIComponent(id)}` + qs({ token, tenantId, companyId, tableId }))
+}
+
 export function fetchStaffCalls() {
   return apiFetchJson('/shop/staff/staff-calls')
+}
+
+export function replyStaffCall(id, message) {
+  return apiFetchJson(`/shop/staff/staff-calls/${id}/reply`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message }),
+  })
 }
 
 export function dismissStaffCall(id) {

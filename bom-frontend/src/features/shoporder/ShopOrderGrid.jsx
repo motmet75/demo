@@ -53,7 +53,7 @@ import {
   generateDisplayBoardToken, pickupShopOrder, revertShopOrder, markOrderPaid,
   fetchBankConfig, switchToQrPayment, revertToCash, fetchOrderTagQr,
   fetchShopTables, setOrderTable, fetchPickupQr, fetchOrdersByToken,
-  fetchStaffCalls, dismissStaffCall, forceConfirmOrder,
+  fetchStaffCalls, dismissStaffCall, replyStaffCall, forceConfirmOrder,
 } from '../../api/shopApi'
 import { printCupLabels, printOrderReceipt, printOrderTag, printCombinedReceipt } from '../../utils/printOrderReceipt'
 import ShopOrderDetailModal from './ShopOrderDetailModal'
@@ -70,6 +70,11 @@ function broadcastReady() {
   try { new BroadcastChannel(BOARD_CHANNEL).postMessage({ type: 'ORDER_READY' }) } catch { /* */ }
 }
 
+const STAFF_CALL_QUICK_REPLIES = [
+  'Nhân viên sẽ có mặt trong ít phút',
+  'Đã nhận yêu cầu, vui lòng chờ trong giây lát',
+  'Nhân viên đang chuẩn bị thanh toán',
+]
 function playStaffCallSound() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)()
@@ -1232,6 +1237,14 @@ export default function ShopOrderGrid() {
     </Badge>
   )
 
+  const handleReplyCall = async (id, message) => {
+    try {
+      const { data } = await replyStaffCall(id, message)
+      setStaffCalls(prev => prev.map(c => c.id === id ? { ...c, ...data } : c))
+    } catch {
+      setError('Không gửi được phản hồi cho khách')
+    }
+  }
   const handleDismissCall = async (id) => {
     try { await dismissStaffCall(id) } catch { /* silent */ }
     setStaffCalls(prev => prev.filter(c => c.id !== id))
@@ -1263,7 +1276,8 @@ export default function ShopOrderGrid() {
                   color="primary"
                   sx={{ fontWeight: 700, height: 20, fontSize: 11 }}
                 />
-              )}              <Chip
+              )}
+              <Chip
                 label={call.reason === 'payment' ? 'Thanh toán' : 'Hỗ trợ khác'}
                 size="small"
                 sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: '#ff5722', color: '#fff' }}
@@ -1271,7 +1285,18 @@ export default function ShopOrderGrid() {
               {call.note && (
                 <Typography variant="caption" sx={{ color: '#555', fontStyle: 'italic', flex: 1 }}>{call.note}</Typography>
               )}
-              <Typography variant="caption" color="text.disabled" sx={{ flexShrink: 0 }}>
+              {call.replyMessage && (
+                <Chip label={`Đã trả lời: ${call.replyMessage}`} size="small" sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: '#e8f5e9', color: '#1b5e20' }} />
+              )}
+              <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', flex: '1 1 360px', minWidth: 240 }}>
+                {STAFF_CALL_QUICK_REPLIES.map(message => (
+                  <Button key={message} size="small" variant={call.replyMessage === message ? 'contained' : 'outlined'}
+                    onClick={() => handleReplyCall(call.id, message)}
+                    sx={{ textTransform: 'none', borderRadius: 20, minHeight: 22, py: 0.1, px: 1, fontSize: 11, fontWeight: 700, lineHeight: 1.2 }}>
+                    {message}
+                  </Button>
+                ))}
+              </Box>              <Typography variant="caption" color="text.disabled" sx={{ flexShrink: 0 }}>
                 {call.createdAt ? new Date(call.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : ''}
               </Typography>
               <Tooltip title="Đã xử lý">

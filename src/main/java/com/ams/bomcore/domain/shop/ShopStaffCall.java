@@ -48,6 +48,12 @@ public class ShopStaffCall {
     @Column(name = "token", length = 100)
     private String token;
 
+    @Column(name = "reply_message", columnDefinition = "TEXT")
+    private String replyMessage;
+
+    @Column(name = "replied_at")
+    private Instant repliedAt;
+
     @Column(name = "status", nullable = false, length = 20)
     private String status = STATUS_OPEN;
 
@@ -88,6 +94,10 @@ public class ShopStaffCall {
     public void setNote(String note) { this.note = note; }
     public String getToken() { return token; }
     public void setToken(String token) { this.token = token; }
+    public String getReplyMessage() { return replyMessage; }
+    public void setReplyMessage(String replyMessage) { this.replyMessage = replyMessage; }
+    public Instant getRepliedAt() { return repliedAt; }
+    public void setRepliedAt(Instant repliedAt) { this.repliedAt = repliedAt; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
     public Instant getCreatedAt() { return createdAt; }

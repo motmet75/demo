@@ -206,6 +206,19 @@ public class ShopOrderController {
         }
     }
 
+    @GetMapping("/shop/public/call-staff/{id}")
+    public ResponseEntity<?> getPublicStaffCall(@PathVariable UUID id,
+                                                @RequestParam(required = false) String token,
+                                                @RequestParam(required = false) UUID tenantId,
+                                                @RequestParam(required = false) UUID companyId,
+                                                @RequestParam(required = false) UUID tableId) {
+        ShopStaffCall call = shopStaffCallRepository.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("Staff call not found"));
+        if (!canReadPublicStaffCall(call, token, tenantId, companyId, tableId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "Cannot read staff call"));
+        }
+        return ResponseEntity.ok(staffCallMap(call));
+    }
     // ── STAFF endpoints (/shop/staff/**) ──────────────────────────────
 
     @GetMapping("/shop/staff/staff-calls")
@@ -221,6 +234,24 @@ public class ShopOrderController {
     }
 
     @Transactional
+    @PatchMapping("/shop/staff/staff-calls/{id}/reply")
+    public ResponseEntity<?> replyStaffCall(@PathVariable UUID id,
+                                            @RequestBody(required = false) Map<String, Object> body,
+                                            @RequestParam(required = false) UUID tenantId,
+                                            @RequestParam(required = false) UUID companyId,
+                                            @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                            @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        String message = body == null ? null : stringValue(body.get("message"));
+        if (message == null) return ResponseEntity.badRequest().body(Map.of("error", "message is required"));
+        if (message.length() > 300) message = message.substring(0, 300);
+        ShopStaffCall call = requireScopedStaffCall(id, tId, cId);
+        call.setReplyMessage(message);
+        call.setRepliedAt(Instant.now());
+        return ResponseEntity.ok(staffCallMap(shopStaffCallRepository.save(call)));
+    }
+    @Transactional
     @PatchMapping("/shop/staff/staff-calls/{id}/dismiss")
     public ResponseEntity<?> dismissStaffCall(@PathVariable UUID id,
                                               @RequestParam(required = false) UUID tenantId,
@@ -229,11 +260,7 @@ public class ShopOrderController {
                                               @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
-        ShopStaffCall call = shopStaffCallRepository.findById(id)
-                .orElseThrow(() -> new NoSuchElementException("Staff call not found"));
-        if (!tId.equals(call.getTenantId()) || !cId.equals(call.getCompanyId())) {
-            throw new IllegalArgumentException("Staff call does not belong to this company");
-        }
+        ShopStaffCall call = requireScopedStaffCall(id, tId, cId);
         call.setStatus(ShopStaffCall.STATUS_DISMISSED);
         call.setDismissedAt(Instant.now());
         return ResponseEntity.ok(staffCallMap(shopStaffCallRepository.save(call)));
@@ -1058,6 +1085,25 @@ public class ShopOrderController {
                 || ShopOrder.STATUS_PREPARING.equals(status)
                 || ShopOrder.STATUS_READY.equals(status);
     }
+    private ShopStaffCall requireScopedStaffCall(UUID id, UUID tenantId, UUID companyId) {
+        ShopStaffCall call = shopStaffCallRepository.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("Staff call not found"));
+        if (!tenantId.equals(call.getTenantId()) || !companyId.equals(call.getCompanyId())) {
+            throw new IllegalArgumentException("Staff call does not belong to this company");
+        }
+        return call;
+    }
+
+    private boolean canReadPublicStaffCall(ShopStaffCall call, String token,
+                                           UUID tenantId, UUID companyId, UUID tableId) {
+        String callToken = call.getToken();
+        if (callToken != null && !callToken.isBlank()) {
+            return callToken.equals(token);
+        }
+        if (tenantId == null || companyId == null) return false;
+        if (!tenantId.equals(call.getTenantId()) || !companyId.equals(call.getCompanyId())) return false;
+        return call.getTableId() == null || call.getTableId().equals(tableId);
+    }
     private Map<String, Object> staffCallMap(ShopStaffCall call) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", call.getId());
@@ -1071,6 +1117,8 @@ public class ShopOrderController {
         m.put("orderCode", call.getOrderCode());
         m.put("reason", call.getReason());
         m.put("note", call.getNote());
+        m.put("replyMessage", call.getReplyMessage());
+        m.put("repliedAt", call.getRepliedAt());
         m.put("status", call.getStatus());
         m.put("createdAt", call.getCreatedAt());
         m.put("dismissedAt", call.getDismissedAt());
