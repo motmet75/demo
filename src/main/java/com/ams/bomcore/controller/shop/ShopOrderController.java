@@ -2,9 +2,12 @@ package com.ams.bomcore.controller.shop;
 
 import com.ams.bomcore.controller.shop.dto.ShopOrderResponseDto;
 import com.ams.bomcore.domain.shop.ShopAccessToken;
+import com.ams.bomcore.domain.shop.ShopStaffCall;
 import com.ams.bomcore.domain.shop.ShopTable;
 import com.ams.bomcore.repository.CompanyRepository;
 import com.ams.bomcore.repository.ShopAccessTokenRepository;
+import com.ams.bomcore.repository.ShopStaffCallRepository;
+import com.ams.bomcore.repository.ShopTableRepository;
 import com.ams.bomcore.repository.TenantRepository;
 import com.ams.bomcore.service.shop.ShopOrderService;
 import com.ams.bomcore.service.shop.ShopPricingService;
@@ -23,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.*;
 
 @RestController
@@ -33,17 +37,23 @@ public class ShopOrderController {
     private final TenantRepository tenantRepository;
     private final CompanyRepository companyRepository;
     private final ShopAccessTokenRepository shopAccessTokenRepository;
+    private final ShopStaffCallRepository shopStaffCallRepository;
+    private final ShopTableRepository shopTableRepository;
 
     public ShopOrderController(ShopOrderService shopOrderService,
                                ShopPricingService shopPricingService,
                                TenantRepository tenantRepository,
                                CompanyRepository companyRepository,
-                               ShopAccessTokenRepository shopAccessTokenRepository) {
+                               ShopAccessTokenRepository shopAccessTokenRepository,
+                               ShopStaffCallRepository shopStaffCallRepository,
+                               ShopTableRepository shopTableRepository) {
         this.shopOrderService = shopOrderService;
         this.shopPricingService = shopPricingService;
         this.tenantRepository = tenantRepository;
         this.companyRepository = companyRepository;
         this.shopAccessTokenRepository = shopAccessTokenRepository;
+        this.shopStaffCallRepository = shopStaffCallRepository;
+        this.shopTableRepository = shopTableRepository;
     }
 
     // ── PUBLIC endpoints (/shop/public/**) ────────────────────────────
@@ -119,7 +129,94 @@ public class ShopOrderController {
                 .orElse(ResponseEntity.noContent().build());
     }
 
+    @Transactional
+    @PostMapping("/shop/public/call-staff")
+    public ResponseEntity<?> callStaff(@RequestBody Map<String, Object> body) {
+        try {
+            String token = stringValue(body.get("token"));
+            ShopAccessToken sat = null;
+            if (token != null) {
+                sat = shopAccessTokenRepository.findByToken(token).orElse(null);
+                if (sat != null && !sat.isValid()) {
+                    return ResponseEntity.status(HttpStatus.GONE).body(Map.of("error", "Token expired"));
+                }
+            }
+
+            UUID tenantId = parseUuid(body.get("tenantId"));
+            UUID companyId = parseUuid(body.get("companyId"));
+            UUID tableId = parseUuid(body.get("tableId"));
+            if (sat != null) {
+                if (tenantId == null) tenantId = sat.getTenantId();
+                if (companyId == null) companyId = sat.getCompanyId();
+                if (tableId == null) tableId = sat.getTableId();
+                if (!sat.getTenantId().equals(tenantId) || !sat.getCompanyId().equals(companyId)) {
+                    return ResponseEntity.badRequest().body(Map.of("error", "Token does not match shop"));
+                }
+            }
+
+            validateScope(tenantId, companyId);
+            String tableName = null;
+            if (tableId != null) {
+                ShopTable table = shopTableRepository.findById(tableId)
+                        .orElseThrow(() -> new IllegalArgumentException("Table not found"));
+                if (!tenantId.equals(table.getTenantId()) || !companyId.equals(table.getCompanyId())) {
+                    throw new IllegalArgumentException("Table does not belong to this company");
+                }
+                tableName = table.getTableName();
+            }
+
+            String reason = stringValue(body.get("reason"));
+            if (!"payment".equals(reason) && !"other".equals(reason)) reason = "other";
+            String note = stringValue(body.get("note"));
+            if (note != null && note.length() > 500) note = note.substring(0, 500);
+
+            ShopStaffCall call = new ShopStaffCall();
+            call.setTenantId(tenantId);
+            call.setCompanyId(companyId);
+            call.setTableId(tableId);
+            call.setTableName(tableName);
+            call.setReason(reason);
+            call.setNote(note);
+            call.setToken(token);
+            call.setStatus(ShopStaffCall.STATUS_OPEN);
+            return ResponseEntity.status(HttpStatus.CREATED).body(staffCallMap(shopStaffCallRepository.save(call)));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     // ── STAFF endpoints (/shop/staff/**) ──────────────────────────────
+
+    @GetMapping("/shop/staff/staff-calls")
+    public ResponseEntity<?> listStaffCalls(@RequestParam(required = false) UUID tenantId,
+                                            @RequestParam(required = false) UUID companyId,
+                                            @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                            @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        return ResponseEntity.ok(shopStaffCallRepository
+                .findAllByTenantIdAndCompanyIdAndStatusOrderByCreatedAtDesc(tId, cId, ShopStaffCall.STATUS_OPEN)
+                .stream().map(this::staffCallMap).toList());
+    }
+
+    @Transactional
+    @PatchMapping("/shop/staff/staff-calls/{id}/dismiss")
+    public ResponseEntity<?> dismissStaffCall(@PathVariable UUID id,
+                                              @RequestParam(required = false) UUID tenantId,
+                                              @RequestParam(required = false) UUID companyId,
+                                              @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                              @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        ShopStaffCall call = shopStaffCallRepository.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("Staff call not found"));
+        if (!tId.equals(call.getTenantId()) || !cId.equals(call.getCompanyId())) {
+            throw new IllegalArgumentException("Staff call does not belong to this company");
+        }
+        call.setStatus(ShopStaffCall.STATUS_DISMISSED);
+        call.setDismissedAt(Instant.now());
+        return ResponseEntity.ok(staffCallMap(shopStaffCallRepository.save(call)));
+    }
 
     @GetMapping("/shop/staff/orders")
     public ResponseEntity<?> listOrders(@RequestParam(required = false) UUID tenantId,
@@ -888,6 +985,32 @@ public class ShopOrderController {
         return ResponseEntity.ok(shopOrderService.getCustomerHistory(id, tId, cId));
     }
     // ── Helpers ───────────────────────────────────────────────────────
+
+    private Map<String, Object> staffCallMap(ShopStaffCall call) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", call.getId());
+        m.put("tenantId", call.getTenantId());
+        m.put("companyId", call.getCompanyId());
+        m.put("tableId", call.getTableId());
+        m.put("tableName", call.getTableName());
+        m.put("reason", call.getReason());
+        m.put("note", call.getNote());
+        m.put("status", call.getStatus());
+        m.put("createdAt", call.getCreatedAt());
+        m.put("dismissedAt", call.getDismissedAt());
+        return m;
+    }
+
+    private String stringValue(Object raw) {
+        if (raw == null) return null;
+        String value = String.valueOf(raw).trim();
+        return value.isBlank() ? null : value;
+    }
+
+    private UUID parseUuid(Object raw) {
+        String value = stringValue(raw);
+        return value == null ? null : UUID.fromString(value);
+    }
 
     private UUID resolve(UUID param, String header) {
         if (header != null && !header.isBlank()) {

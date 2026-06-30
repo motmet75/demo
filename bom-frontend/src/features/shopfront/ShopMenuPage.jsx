@@ -787,13 +787,21 @@ export default function ShopMenuPage() {
   }
 
   const handleCallStaff = async () => {
-    setCallStaffLoading(true)
-    // Fire-and-forget — notify backend but show success regardless
-    callStaff(ctx.tenantId, ctx.companyId, ctx.tableId, callStaffReason, callStaffNote, tokenParam).catch(() => {})
-    setCallStaffOpen(false)
-    setCallStaffReason('payment')
-    setCallStaffNote('')
-    setCallStaffDone(true)
+    setCallStaffLoading(true); setError('')
+    try {
+      const { res, data } = await callStaff(ctx.tenantId, ctx.companyId, ctx.tableId, callStaffReason, callStaffNote, tokenParam)
+      if (!res.ok) {
+        setError(data?.error || 'Không gọi được nhân viên. Vui lòng báo trực tiếp.')
+        setCallStaffLoading(false)
+        return
+      }
+      setCallStaffOpen(false)
+      setCallStaffReason('payment')
+      setCallStaffNote('')
+      setCallStaffDone(true)
+    } catch {
+      setError('Lỗi mạng khi gọi nhân viên. Vui lòng thử lại.')
+    }
     setCallStaffLoading(false)
   }
 

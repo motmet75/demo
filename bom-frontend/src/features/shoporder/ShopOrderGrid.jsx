@@ -1250,8 +1250,8 @@ export default function ShopOrderGrid() {
               <Typography fontWeight={800} sx={{ color: '#bf360c', fontSize: 13, flexShrink: 0 }}>
                 Gọi nhân viên
               </Typography>
-              {call.tableId && (
-                <Chip label={`Bàn ${call.tableId}`} size="small" color="warning" sx={{ fontWeight: 700, height: 20, fontSize: 11 }} />
+              {(call.tableName || call.tableId) && (
+                <Chip label={`Bàn ${call.tableName || call.tableId}`} size="small" color="warning" sx={{ fontWeight: 700, height: 20, fontSize: 11 }} />
               )}
               <Chip
                 label={call.reason === 'payment' ? 'Thanh toán' : 'Hỗ trợ khác'}
