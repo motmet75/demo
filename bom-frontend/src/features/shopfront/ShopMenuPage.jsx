@@ -786,10 +786,23 @@ export default function ShopMenuPage() {
     setActiveCategory(prev => prev === cat ? null : cat)
   }
 
+  const pickCallStaffOrder = () => {
+    const activeStatuses = new Set(['PENDING', 'CONFIRMED', 'PREPARING', 'READY'])
+    const timestamp = order => Number(new Date(order?.createdAt || 0)) || 0
+    const candidates = [...(tokenSession?.orders || []), ...(tableOrders || [])].filter(Boolean)
+    const active = candidates
+      .filter(order => activeStatuses.has(order.status))
+      .sort((a, b) => timestamp(b) - timestamp(a))
+    if (active.length > 0) return active[0]
+    return candidates
+      .filter(order => order.status !== 'CANCELLED')
+      .sort((a, b) => timestamp(b) - timestamp(a))[0] || null
+  }
   const handleCallStaff = async () => {
     setCallStaffLoading(true); setError('')
     try {
-      const { res, data } = await callStaff(ctx.tenantId, ctx.companyId, ctx.tableId, callStaffReason, callStaffNote, tokenParam)
+      const callOrder = pickCallStaffOrder()
+      const { res, data } = await callStaff(ctx.tenantId, ctx.companyId, ctx.tableId, callStaffReason, callStaffNote, tokenParam, callOrder)
       if (!res.ok) {
         setError(data?.error || 'Không gọi được nhân viên. Vui lòng báo trực tiếp.')
         setCallStaffLoading(false)

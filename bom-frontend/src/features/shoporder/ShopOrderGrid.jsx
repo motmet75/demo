@@ -1253,7 +1253,17 @@ export default function ShopOrderGrid() {
               {(call.tableName || call.tableId) && (
                 <Chip label={`Bàn ${call.tableName || call.tableId}`} size="small" color="warning" sx={{ fontWeight: 700, height: 20, fontSize: 11 }} />
               )}
-              <Chip
+              {call.dailySeq != null && (
+                <Chip label={`STT ${call.dailySeq}`} size="small" color="info" sx={{ fontWeight: 700, height: 20, fontSize: 11 }} />
+              )}
+              {(call.orderNumber != null || call.orderCode) && (
+                <Chip
+                  label={call.orderNumber != null ? `Đơn #${call.orderNumber}` : call.orderCode}
+                  size="small"
+                  color="primary"
+                  sx={{ fontWeight: 700, height: 20, fontSize: 11 }}
+                />
+              )}              <Chip
                 label={call.reason === 'payment' ? 'Thanh toán' : 'Hỗ trợ khác'}
                 size="small"
                 sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: '#ff5722', color: '#fff' }}
