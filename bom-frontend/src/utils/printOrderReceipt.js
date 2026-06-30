@@ -97,17 +97,29 @@ export function printOrderTag(order, qrBase64) {
   win.onload = () => { win.focus(); win.print(); setTimeout(() => win.close(), 800) }
 }
 
+function formatOptValue(v) {
+  if (Array.isArray(v)) return v.join(', ')
+  if (v && typeof v === 'object') {
+    return Object.entries(v)
+      .map(([lbl, qty]) => Number(qty) > 1 ? `${lbl}×${qty}` : lbl)
+      .join(', ')
+  }
+  return v == null ? '' : String(v)
+}
+
 function parseOpts(str) {
-  if (!str) return null
-  try {
-    const obj = JSON.parse(str)
-    return Object.entries(obj).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join(' · ')
-  } catch { return null }
+  const obj = parseOptsObj(str)
+  const entries = Object.entries(obj)
+  if (!entries.length) return null
+  return entries.map(([k, v]) => `${k}: ${formatOptValue(v)}`).join(' · ')
 }
 
 function parseOptsObj(str) {
   if (!str) return {}
-  try { return JSON.parse(str) } catch { return {} }
+  try {
+    const obj = typeof str === 'string' ? JSON.parse(str) : str
+    return obj && typeof obj === 'object' && !Array.isArray(obj) ? obj : {}
+  } catch { return {} }
 }
 
 // Build a map: parentId (string) -> [child items]
@@ -135,7 +147,7 @@ export function printCupLabels(order) {
   const labelHtml = rootItems.flatMap(item => {
     const qty = Number(item.quantity) || 1
     const opts = parseOptsObj(item.selectedOptions)
-    const fmtOptV = v => Array.isArray(v) ? v.join(', ') : (typeof v === 'object' && v !== null ? Object.entries(v).map(([lbl, qty]) => qty > 1 ? `${lbl}×${qty}` : lbl).join(', ') : v)
+    const fmtOptV = formatOptValue
     const optParts = Object.entries(opts)
       .map(([k, v]) => `<span class="opt-key">${k}:</span> <span class="opt-val">${fmtOptV(v)}</span>`)
     const optLine = optParts.length > 0
@@ -361,12 +373,7 @@ export function printCombinedReceipt(orders, opts = {}) {
       const children     = childMap[String(item.id)] || []
       const parentQty    = Number(item.quantity || 1)
       const opts = parseOptsObj(item.selectedOptions)
-      const fmtOptV3 = v => Array.isArray(v)
-        ? v.join(', ')
-        : (typeof v === 'object' && v !== null
-          ? Object.entries(v).map(([lbl, qty]) => qty > 1 ? `${lbl}×${qty}` : lbl).join(', ')
-          : v)
-      const opts_ = Object.entries(opts).map(([k, v]) => `${k}: ${fmtOptV3(v)}`).join(' · ')
+      const opts_ = Object.entries(opts).map(([k, v]) => `${k}: ${formatOptValue(v)}`).join(' · ')
       const childrenHtml = children.map(child => {
         const effectiveQty = Number(child.quantity || 1) * parentQty
         return `<div class="row side-row">
@@ -521,7 +528,7 @@ export function printOrderReceipt(order, trackingQrBase64 = null) {
   const itemsHtml = rootItems.map((item, idx) => {
     const rowNum = idx + 1
     const opts = parseOptsObj(item.selectedOptions)
-    const fmtOptV2 = v => Array.isArray(v) ? v.join(', ') : (typeof v === 'object' && v !== null ? Object.entries(v).map(([lbl, qty]) => qty > 1 ? `${lbl}×${qty}` : lbl).join(', ') : v)
+    const fmtOptV2 = formatOptValue
     const optsInline = Object.entries(opts)
       .map(([k, v]) => `${k}: ${fmtOptV2(v)}`)
       .join(' · ')
