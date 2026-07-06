@@ -53,6 +53,7 @@ import CustomerPickupPage from './features/shopboard/CustomerPickupPage'
 import ShopTokenManagePage from './features/shoptoken/ShopTokenManagePage'
 import ShopCustomerPage from './features/shopcustomer/ShopCustomerPage'
 import ShopVoucherPage from './features/shopvoucher/ShopVoucherPage'
+import ShopPrintingCenterPage from './features/shopprinting/ShopPrintingCenterPage'
 import ProfilePage from './features/profile/ProfilePage'
 
 const SIDEBAR_FULL = 210
@@ -83,6 +84,7 @@ const PATH_TITLES = {
   '/shop-tokens':        'QR Tokens',
   '/shop-customers':     'Customers',
   '/shop-vouchers':      'Vouchers',
+  '/shop-printing':      'Printing Center',
   '/profile':            'Profile',
   '/admin':              'Admin',
   '/admin/users':        'Admin Users',
@@ -168,6 +170,7 @@ const NAV_GROUPS = [
       { label: 'QR Tokens',   path: '/shop-tokens',    icon: '🔑' },
       { label: 'Customers',   path: '/shop-customers', icon: '👤' },
       { label: 'Vouchers',    path: '/shop-vouchers',  icon: '🎫' },
+      { label: 'Printing',    path: '/shop-printing',  icon: '🖨️' },
     ],
   },
 ]
@@ -401,6 +404,7 @@ function MainShell({ user, logout, isAdmin }) {
             <Route path="/shop-tokens"    element={<RequireAuth><RequireContext><ShopTokenManagePage /></RequireContext></RequireAuth>} />
             <Route path="/shop-customers" element={<RequireAuth><RequireContext><ShopCustomerPage /></RequireContext></RequireAuth>} />
             <Route path="/shop-vouchers"  element={<RequireAuth><RequireContext><ShopVoucherPage /></RequireContext></RequireAuth>} />
+            <Route path="/shop-printing"  element={<RequireAuth><RequireContext><ShopPrintingCenterPage /></RequireContext></RequireAuth>} />
             <Route path="/admin" element={<RequireAuth adminOnly><AdminPage /></RequireAuth>} />
             <Route path="/admin/users" element={<RequireAuth adminOnly><AdminPage /></RequireAuth>} />
             <Route path="/tenants" element={<RequireAuth adminOnly><TenantsPage /></RequireAuth>} />

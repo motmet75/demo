@@ -3,11 +3,13 @@ package com.ams.bomcore.controller.shop;
 import com.ams.bomcore.controller.shop.dto.ShopOrderResponseDto;
 import com.ams.bomcore.domain.shop.ShopAccessToken;
 import com.ams.bomcore.domain.shop.ShopOrder;
+import com.ams.bomcore.domain.shop.ShopPrintHistory;
 import com.ams.bomcore.domain.shop.ShopStaffCall;
 import com.ams.bomcore.domain.shop.ShopTable;
 import com.ams.bomcore.repository.CompanyRepository;
 import com.ams.bomcore.repository.ShopAccessTokenRepository;
 import com.ams.bomcore.repository.ShopOrderRepository;
+import com.ams.bomcore.repository.ShopPrintHistoryRepository;
 import com.ams.bomcore.repository.ShopStaffCallRepository;
 import com.ams.bomcore.repository.ShopTableRepository;
 import com.ams.bomcore.repository.TenantRepository;
@@ -41,6 +43,7 @@ public class ShopOrderController {
     private final ShopAccessTokenRepository shopAccessTokenRepository;
     private final ShopOrderRepository shopOrderRepository;
     private final ShopStaffCallRepository shopStaffCallRepository;
+    private final ShopPrintHistoryRepository shopPrintHistoryRepository;
     private final ShopTableRepository shopTableRepository;
 
     public ShopOrderController(ShopOrderService shopOrderService,
@@ -50,6 +53,7 @@ public class ShopOrderController {
                                ShopAccessTokenRepository shopAccessTokenRepository,
                                ShopOrderRepository shopOrderRepository,
                                ShopStaffCallRepository shopStaffCallRepository,
+                               ShopPrintHistoryRepository shopPrintHistoryRepository,
                                ShopTableRepository shopTableRepository) {
         this.shopOrderService = shopOrderService;
         this.shopPricingService = shopPricingService;
@@ -58,6 +62,7 @@ public class ShopOrderController {
         this.shopAccessTokenRepository = shopAccessTokenRepository;
         this.shopOrderRepository = shopOrderRepository;
         this.shopStaffCallRepository = shopStaffCallRepository;
+        this.shopPrintHistoryRepository = shopPrintHistoryRepository;
         this.shopTableRepository = shopTableRepository;
     }
 
@@ -206,6 +211,26 @@ public class ShopOrderController {
         }
     }
 
+    @GetMapping("/shop/public/call-staff/latest")
+    public ResponseEntity<?> getLatestPublicStaffCall(@RequestParam(required = false) String token,
+                                                      @RequestParam(required = false) UUID tenantId,
+                                                      @RequestParam(required = false) UUID companyId,
+                                                      @RequestParam(required = false) UUID tableId) {
+        Optional<ShopStaffCall> latest = Optional.empty();
+        if (token != null && !token.isBlank()) {
+            latest = shopStaffCallRepository.findFirstByTokenAndStatusOrderByCreatedAtDesc(token, ShopStaffCall.STATUS_OPEN);
+        } else if (tenantId != null && companyId != null && tableId != null) {
+            validateScope(tenantId, companyId);
+            latest = shopStaffCallRepository.findFirstByTenantIdAndCompanyIdAndTableIdAndStatusOrderByCreatedAtDesc(
+                    tenantId, companyId, tableId, ShopStaffCall.STATUS_OPEN);
+        }
+        if (latest.isEmpty()) return ResponseEntity.noContent().build();
+        ShopStaffCall call = latest.get();
+        if (!canReadPublicStaffCall(call, token, tenantId, companyId, tableId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "Cannot read staff call"));
+        }
+        return ResponseEntity.ok(staffCallMap(call));
+    }
     @GetMapping("/shop/public/call-staff/{id}")
     public ResponseEntity<?> getPublicStaffCall(@PathVariable UUID id,
                                                 @RequestParam(required = false) String token,
@@ -266,6 +291,70 @@ public class ShopOrderController {
         return ResponseEntity.ok(staffCallMap(shopStaffCallRepository.save(call)));
     }
 
+    @GetMapping("/shop/staff/printing-history")
+    public ResponseEntity<?> listPrintHistory(@RequestParam(required = false) UUID tenantId,
+                                              @RequestParam(required = false) UUID companyId,
+                                              @RequestParam(required = false) String printType,
+                                              @RequestParam(required = false) String sourceType,
+                                              @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                              @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        return ResponseEntity.ok(shopPrintHistoryRepository.findTop200ByTenantIdAndCompanyIdOrderByPrintedAtDesc(tId, cId)
+                .stream()
+                .filter(p -> printType == null || printType.isBlank() || printType.equals(p.getPrintType()))
+                .filter(p -> sourceType == null || sourceType.isBlank() || sourceType.equals(p.getSourceType()))
+                .map(this::printHistoryMap)
+                .toList());
+    }
+
+    @Transactional
+    @PostMapping("/shop/staff/printing-history")
+    public ResponseEntity<?> createPrintHistory(@RequestBody(required = false) Map<String, Object> body,
+                                                @RequestParam(required = false) UUID tenantId,
+                                                @RequestParam(required = false) UUID companyId,
+                                                @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                                @RequestHeader(value = "X-Company-Id", required = false) String hCompany,
+                                                @RequestHeader(value = "X-Username", required = false) String hUsername) {
+        if (body == null) body = Collections.emptyMap();
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+
+        String printType = bounded(stringValue(body.get("printType")), 50);
+        String sourceType = bounded(stringValue(body.get("sourceType")), 50);
+        if (printType == null) printType = "GENERAL";
+        if (sourceType == null) sourceType = "GENERAL";
+
+        UUID sourceId = parseUuidOrNull(body.get("sourceId"));
+        String sourceCode = bounded(stringValue(body.get("sourceCode")), 120);
+        String sourceNumber = bounded(stringValue(body.get("sourceNumber")), 60);
+        String sourceKey = bounded(stringValue(body.get("sourceKey")), 180);
+        if (sourceKey == null && sourceId != null) sourceKey = sourceId.toString();
+        if (sourceKey == null && sourceCode != null) sourceKey = sourceCode;
+        if (sourceKey == null && sourceNumber != null) sourceKey = sourceNumber;
+        if (sourceKey == null) sourceKey = UUID.randomUUID().toString();
+
+        Integer maxSlip = shopPrintHistoryRepository.maxSlipNumber(tId, cId);
+        long copyCount = shopPrintHistoryRepository.countByTenantIdAndCompanyIdAndPrintTypeAndSourceTypeAndSourceKey(
+                tId, cId, printType, sourceType, sourceKey);
+
+        ShopPrintHistory history = new ShopPrintHistory();
+        history.setTenantId(tId);
+        history.setCompanyId(cId);
+        history.setSlipNumber((maxSlip == null ? 0 : maxSlip) + 1);
+        history.setCopyNumber((int) copyCount + 1);
+        history.setPrintType(printType);
+        history.setSourceType(sourceType);
+        history.setSourceId(sourceId);
+        history.setSourceKey(sourceKey);
+        history.setSourceCode(sourceCode);
+        history.setSourceNumber(sourceNumber);
+        history.setTitle(bounded(stringValue(body.get("title")), 180));
+        history.setAmount(decimalValue(body.get("amount")));
+        history.setPrintedBy(bounded(stringValue(body.get("printedBy")) != null ? stringValue(body.get("printedBy")) : hUsername, 120));
+        history.setNotes(stringValue(body.get("notes")));
+        return ResponseEntity.status(HttpStatus.CREATED).body(printHistoryMap(shopPrintHistoryRepository.save(history)));
+    }
     @GetMapping("/shop/staff/orders")
     public ResponseEntity<?> listOrders(@RequestParam(required = false) UUID tenantId,
                                          @RequestParam(required = false) UUID companyId,
@@ -1125,6 +1214,43 @@ public class ShopOrderController {
         return m;
     }
 
+    private Map<String, Object> printHistoryMap(ShopPrintHistory history) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", history.getId());
+        m.put("tenantId", history.getTenantId());
+        m.put("companyId", history.getCompanyId());
+        m.put("slipNumber", history.getSlipNumber());
+        m.put("copyNumber", history.getCopyNumber());
+        m.put("printType", history.getPrintType());
+        m.put("sourceType", history.getSourceType());
+        m.put("sourceId", history.getSourceId());
+        m.put("sourceKey", history.getSourceKey());
+        m.put("sourceCode", history.getSourceCode());
+        m.put("sourceNumber", history.getSourceNumber());
+        m.put("title", history.getTitle());
+        m.put("amount", history.getAmount());
+        m.put("printedBy", history.getPrintedBy());
+        m.put("printedAt", history.getPrintedAt());
+        m.put("notes", history.getNotes());
+        return m;
+    }
+
+    private String bounded(String value, int max) {
+        if (value == null) return null;
+        return value.length() <= max ? value : value.substring(0, max);
+    }
+
+    private BigDecimal decimalValue(Object raw) {
+        String value = stringValue(raw);
+        if (value == null) return null;
+        try { return new BigDecimal(value); } catch (Exception ignored) { return null; }
+    }
+
+    private UUID parseUuidOrNull(Object raw) {
+        String value = stringValue(raw);
+        if (value == null) return null;
+        try { return UUID.fromString(value); } catch (Exception ignored) { return null; }
+    }
     private String stringValue(Object raw) {
         if (raw == null) return null;
         String value = String.valueOf(raw).trim();

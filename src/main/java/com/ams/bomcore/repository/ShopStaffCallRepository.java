@@ -4,8 +4,11 @@ import com.ams.bomcore.domain.shop.ShopStaffCall;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface ShopStaffCallRepository extends JpaRepository<ShopStaffCall, UUID> {
     List<ShopStaffCall> findAllByTenantIdAndCompanyIdAndStatusOrderByCreatedAtDesc(UUID tenantId, UUID companyId, String status);
+    Optional<ShopStaffCall> findFirstByTokenAndStatusOrderByCreatedAtDesc(String token, String status);
+    Optional<ShopStaffCall> findFirstByTenantIdAndCompanyIdAndTableIdAndStatusOrderByCreatedAtDesc(UUID tenantId, UUID companyId, UUID tableId, String status);
 }

@@ -88,6 +88,17 @@ export function fetchShopOrders(status) {
   return apiFetchJson('/shop/staff/orders' + (status ? qs({ status }) : ''))
 }
 
+export function fetchPrintHistory(params = {}) {
+  return apiFetchJson('/shop/staff/printing-history' + qs(params))
+}
+
+export function createPrintHistory(body) {
+  return apiFetchJson('/shop/staff/printing-history', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {})
+  })
+}
 export function fetchOrdersByToken(token) {
   return apiFetchJson('/shop/staff/orders/by-token' + qs({ token }))
 }
@@ -312,6 +323,10 @@ export function callStaff(tenantId, companyId, tableId, reason, note, token, ord
 
 export function fetchPublicStaffCall(id, token, tenantId, companyId, tableId) {
   return apiFetchJsonNoContext(`/shop/public/call-staff/${encodeURIComponent(id)}` + qs({ token, tenantId, companyId, tableId }))
+}
+
+export function fetchLatestPublicStaffCall(token, tenantId, companyId, tableId) {
+  return apiFetchJsonNoContext('/shop/public/call-staff/latest' + qs({ token, tenantId, companyId, tableId }))
 }
 
 export function fetchStaffCalls() {

@@ -55,7 +55,7 @@ import {
   fetchShopTables, setOrderTable, fetchPickupQr, fetchOrdersByToken,
   fetchStaffCalls, dismissStaffCall, replyStaffCall, forceConfirmOrder,
 } from '../../api/shopApi'
-import { printCupLabels, printOrderReceipt, printOrderTag, printCombinedReceipt } from '../../utils/printOrderReceipt'
+import { printCupLabelsTracked, printOrderReceiptTracked, printOrderTagTracked, printCombinedReceiptTracked } from '../../utils/printWithHistory'
 import ShopOrderDetailModal from './ShopOrderDetailModal'
 import ManualOrderDialog from './ManualOrderDialog'
 import QrOrderDialog from './QrOrderDialog'
@@ -345,7 +345,7 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                 </Box>
                 <Box sx={{ display: 'flex', gap: 0.25 }}>
                   <Tooltip title="Print cup labels">
-                    <IconButton size="small" onClick={() => printCupLabels(order)} sx={{ p: 0.25, color: style.color }}>
+                    <IconButton size="small" onClick={() => printCupLabelsTracked(order)} sx={{ p: 0.25, color: style.color }}>
                       <LabelIcon sx={{ fontSize: 16 }} />
                     </IconButton>
                   </Tooltip>
@@ -625,7 +625,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
               <IconButton size="small" onClick={() => actions.detail(order)} sx={{ p: 0.35 }}><VisibilityIcon sx={{ fontSize: 15 }} /></IconButton>
             </Tooltip>
             <Tooltip title="Print Receipt">
-              <IconButton size="small" color="primary" onClick={() => printOrderReceipt(order)} sx={{ p: 0.35 }}><PrintIcon sx={{ fontSize: 15 }} /></IconButton>
+              <IconButton size="small" color="primary" onClick={() => printOrderReceiptTracked(order)} sx={{ p: 0.35 }}><PrintIcon sx={{ fontSize: 15 }} /></IconButton>
             </Tooltip>
             {order.sourceToken && (
               <Tooltip title="Combined Receipt">
@@ -643,7 +643,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
               <IconButton size="small" color="secondary" onClick={() => actions.printTag(order)} sx={{ p: 0.35 }}><ConfirmationNumberIcon sx={{ fontSize: 15 }} /></IconButton>
             </Tooltip>
             <Tooltip title="Print Cup Labels">
-              <IconButton size="small" onClick={() => printCupLabels(order)} sx={{ p: 0.35 }}><LabelIcon sx={{ fontSize: 15 }} /></IconButton>
+              <IconButton size="small" onClick={() => printCupLabelsTracked(order)} sx={{ p: 0.35 }}><LabelIcon sx={{ fontSize: 15 }} /></IconButton>
             </Tooltip>
             {order.paymentStatus !== 'PAID' && order.status !== 'CANCELLED' && (
               <Tooltip title="Payment QR">
@@ -1133,7 +1133,7 @@ export default function ShopOrderGrid() {
     try {
       const { res, data } = await switchToQrPayment(row.id)
       if (!res.ok) { setError(data?.message || 'Failed to switch payment method'); return }
-      printOrderReceipt(data)
+      printOrderReceiptTracked(data)
       reload()
     } catch (e) { setError(e.message || 'Failed to switch payment method') }
   }
@@ -1165,7 +1165,7 @@ export default function ShopOrderGrid() {
   const handlePrintTrack = async (row) => {
     try {
       const { data } = await fetchOrderTagQr(row.id)
-      printOrderTag(row, data?.qrBase64 || null)
+      printOrderTagTracked(row, data?.qrBase64 || null)
     } catch (e) { setError(e.message || 'Failed to fetch tracking QR') }
   }
 
@@ -1694,7 +1694,7 @@ export default function ShopOrderGrid() {
               <Button onClick={() => setTrackQrOrder(null)} sx={{ textTransform: 'none' }}>Close</Button>
               <Button
                 variant="contained" startIcon={<PrintIcon />}
-                onClick={() => printOrderTag(order, qrBase64)}
+                onClick={() => printOrderTagTracked(order, qrBase64)}
                 disabled={!qrBase64 || loading}
                 sx={{ fontWeight: 700, textTransform: 'none', flex: 1, bgcolor: '#0288d1', '&:hover': { bgcolor: '#0277bd' } }}>
                 Print QR Note
@@ -1825,7 +1825,7 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
   }
 
   const handlePrintWithQr = () => {
-    printCombinedReceipt(orders, {
+    printCombinedReceiptTracked(orders, {
       payQrUrl,
       unpaidTotal,
       tokenRef: token?.substring(0, 12) || 'combined',
@@ -1962,7 +1962,7 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
       <DialogActions sx={{ px: 3, pb: 2, gap: 1, flexWrap: 'wrap' }}>
         <Button onClick={onClose} sx={{ textTransform: 'none' }}>Close</Button>
         <Button variant="outlined" startIcon={<PrintIcon />}
-          onClick={() => printCombinedReceipt(orders)}
+          onClick={() => printCombinedReceiptTracked(orders)}
           disabled={loading || !orders.length}
           sx={{ textTransform: 'none', fontWeight: 700 }}>
           Print

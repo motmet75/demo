@@ -1,6 +1,21 @@
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : '0 đ'
 
-export function printWalkUpQr(seq, qrBase64, qrUrl) {
+function fmtPrintTime(value) {
+  if (!value) return ''
+  try { return new Date(value).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' }) } catch { return '' }
+}
+
+function printMetaHtml(meta) {
+  if (!meta) return ''
+  const slip = meta.slipNumber != null ? `Slip #${String(meta.slipNumber).padStart(5, '0')}` : ''
+  const copy = Number(meta.copyNumber || 1) > 1 ? `Copy #${meta.copyNumber}` : 'Original'
+  const time = fmtPrintTime(meta.printedAt)
+  return `<div style="margin:6px 0 8px;padding:5px 6px;border:1px solid #ddd;border-radius:4px;text-align:center;font-size:10px;line-height:1.35;color:#333;background:#fafafa">
+    ${slip ? `<div style="font-weight:900;letter-spacing:.4px">${slip}</div>` : ''}
+    <div>${copy}${time ? ` &middot; ${time}` : ''}</div>
+  </div>`
+}
+export function printWalkUpQr(seq, qrBase64, qrUrl, printMeta = null) {
   if (!qrBase64) return
   const numLine = seq != null
     ? `<div class="num">#${seq}</div><div class="sub">Your order number</div>`
@@ -31,6 +46,7 @@ export function printWalkUpQr(seq, qrBase64, qrUrl) {
 </head>
 <body>
   ${numLine}
+  ${printMetaHtml(printMeta)}
   <div class="qr-box"><img src="data:image/png;base64,${qrBase64}" alt="QR" /></div>
   <div class="hint">Scan QR code to view menu &amp; order</div>
   ${qrUrl ? `<div class="url">${qrUrl}</div>` : ''}
@@ -45,7 +61,7 @@ export function printWalkUpQr(seq, qrBase64, qrUrl) {
   win.onload = () => { win.focus(); win.print(); setTimeout(() => win.close(), 800) }
 }
 
-export function printOrderTag(order, qrBase64) {
+export function printOrderTag(order, qrBase64, printMeta = null) {
   if (!order) return
   const num   = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
   const label = order.tableName
@@ -82,6 +98,7 @@ export function printOrderTag(order, qrBase64) {
 <body>
   <div class="num">${num}</div>
   <div class="label">${label}</div>
+  ${printMetaHtml(printMeta)}
   <div class="divider"></div>
   ${qrBase64 ? `<img src="data:image/png;base64,${qrBase64}" alt="QR" />` : ''}
   <div class="hint">Scan to track your order</div>
@@ -135,7 +152,7 @@ function buildChildMap(items) {
   return map
 }
 
-export function printCupLabels(order) {
+export function printCupLabels(order, printMeta = null) {
   if (!order?.items?.length) return
   const num = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
 
@@ -322,6 +339,7 @@ export function printCupLabels(order) {
 </style>
 </head>
 <body>
+  ${printMetaHtml(printMeta)}
   ${labelHtml}
 </body>
 </html>`
@@ -337,7 +355,7 @@ export function printCupLabels(order) {
 // opts: { payQrUrl, unpaidTotal, tokenRef }
 export function printCombinedReceipt(orders, opts = {}) {
   if (!orders?.length) return
-  const { payQrUrl = null, unpaidTotal = null, tokenRef = '' } = opts
+  const { payQrUrl = null, unpaidTotal = null, tokenRef = '', printMeta = null } = opts
   const time = new Date().toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
 
   const activeOrders = orders.filter(o => o.status !== 'CANCELLED')
@@ -480,6 +498,7 @@ export function printCombinedReceipt(orders, opts = {}) {
   <div class="center title">COMBINED RECEIPT</div>
   <div class="divider"></div>
   <div class="center grey" style="font-size:12px">${time}</div>
+  ${printMetaHtml(printMeta)}
   <div class="center grey" style="font-size:11px;margin-top:2px">${activeOrders.length} order${activeOrders.length !== 1 ? 's' : ''} combined</div>
   <div class="divider"></div>
 
@@ -504,7 +523,7 @@ export function printCombinedReceipt(orders, opts = {}) {
   win.onload = () => { win.focus(); win.print(); setTimeout(() => win.close(), 1000) }
 }
 
-export function printOrderReceipt(order, trackingQrBase64 = null) {
+export function printOrderReceipt(order, trackingQrBase64 = null, printMeta = null) {
   if (!order) return
 
   const num     = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
@@ -665,6 +684,7 @@ export function printOrderReceipt(order, trackingQrBase64 = null) {
   <div class="big-num">${num}</div>
   <div class="center grey" style="font-size:12px">${order.orderCode}</div>
   <div class="center grey" style="font-size:12px;margin-top:2px">${time}</div>
+  ${printMetaHtml(printMeta)}
 
   <div class="divider"></div>
 

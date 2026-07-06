@@ -48,13 +48,50 @@ import Snackbar from '@mui/material/Snackbar'
 import { resolveToken, fetchMenu, createOrder, fetchPublicMenuOptions,
          fetchActiveTableOrders, startCustomerEdit, cancelCustomerEdit,
          updatePublicOrderItems, fetchPublicOrder, fetchTokenSession,
-         cancelPublicOrder, fetchShopConfig, callStaff, fetchPublicStaffCall } from '../../api/shopApi'
+         cancelPublicOrder, fetchShopConfig, callStaff, fetchPublicStaffCall,
+         fetchLatestPublicStaffCall } from '../../api/shopApi'
 import ItemOptionsDialog from './ItemOptionsDialog'
 import OrderReceiptDialog from './OrderReceiptDialog'
 
 const genUid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
 const fmt    = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 
+const STAFF_CALL_STORAGE_PREFIX = 'shop_customer_staff_call_v1'
+
+function staffCallStorageKey(token, ctx) {
+  if (token) return `${STAFF_CALL_STORAGE_PREFIX}:token:${token}`
+  if (ctx?.tenantId && ctx?.companyId && ctx?.tableId) {
+    return `${STAFF_CALL_STORAGE_PREFIX}:table:${ctx.tenantId}:${ctx.companyId}:${ctx.tableId}`
+  }
+  return null
+}
+
+function readStoredStaffCall(key) {
+  if (!key) return null
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (parsed?.call?.id) return parsed.call
+    if (parsed?.id) return { id: parsed.id }
+  } catch { /* ignore */ }
+  return null
+}
+
+function formatStaffCallAge(value, now) {
+  const ts = Number(new Date(value || 0))
+  if (!Number.isFinite(ts) || ts <= 0) return ''
+  const mins = Math.max(0, Math.floor((now - ts) / 60000))
+  if (mins < 1) return 'vừa xong'
+  if (mins < 60) return `${mins} phút trước`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours} giờ trước`
+  return `${Math.floor(hours / 24)} ngày trước`
+}
+
+function staffCallReasonLabel(reason) {
+  return reason === 'payment' ? 'Thanh toán' : 'Hỗ trợ'
+}
 const FULFILLMENT_OPTIONS = [
   { value: 'PICKUP',   label: 'Pickup',   icon: <TakeoutDiningIcon fontSize="small" /> },
   { value: 'DINE_IN',  label: 'Dine In',  icon: <TableBarIcon fontSize="small" /> },
@@ -453,9 +490,11 @@ export default function ShopMenuPage() {
   const [callStaffDone, setCallStaffDone]       = useState(false)
   const [activeStaffCall, setActiveStaffCall]   = useState(null)
   const [callStaffLoading, setCallStaffLoading] = useState(false)
+  const [staffCallNow, setStaffCallNow]         = useState(Date.now())
   const headerRef    = useRef(null)
   const [headerH, setHeaderH] = useState(165)
   const categoryRefs = useRef({})
+  const staffCallKey = staffCallStorageKey(tokenParam, ctx)
 
   const [cart, setCart] = useState({})
   const [sideForm, setSideForm] = useState({})
@@ -507,13 +546,44 @@ export default function ShopMenuPage() {
   }, [tokenParam])
 
   useEffect(() => {
+    const id = setInterval(() => setStaffCallNow(Date.now()), 60000)
+    return () => clearInterval(id)
+  }, [])
+
+  useEffect(() => {
+    if (!staffCallKey || !activeStaffCall?.id) return
+    try {
+      localStorage.setItem(staffCallKey, JSON.stringify({ call: activeStaffCall, savedAt: new Date().toISOString() }))
+    } catch { /* ignore */ }
+  }, [staffCallKey, activeStaffCall])
+
+  useEffect(() => {
+    if (!staffCallKey || !ctx?.tenantId || !ctx?.companyId) return
+    let cancelled = false
+    const stored = readStoredStaffCall(staffCallKey)
+    if (stored?.id) setActiveStaffCall(prev => prev?.id ? prev : stored)
+    const loadStaffCall = async () => {
+      try {
+        if (stored?.id) {
+          const { res, data } = await fetchPublicStaffCall(stored.id, tokenParam, ctx.tenantId, ctx.companyId, ctx.tableId)
+          if (cancelled) return
+          if (res.ok && data?.id) { setActiveStaffCall(data); return }
+        }
+        const { res, data } = await fetchLatestPublicStaffCall(tokenParam, ctx.tenantId, ctx.companyId, ctx.tableId)
+        if (!cancelled && res.ok && data?.id) setActiveStaffCall(data)
+      } catch { /* silent */ }
+    }
+    loadStaffCall()
+    return () => { cancelled = true }
+  }, [staffCallKey, tokenParam, ctx?.tenantId, ctx?.companyId, ctx?.tableId])
+  useEffect(() => {
     loadTokenSession()
     if (!tokenParam) return
     const id = setInterval(loadTokenSession, 5000)
     return () => clearInterval(id)
   }, [loadTokenSession, tokenParam])
   useEffect(() => {
-    if (!activeStaffCall?.id || activeStaffCall.replyMessage) return
+    if (!activeStaffCall?.id || activeStaffCall.replyMessage || activeStaffCall.status === 'DISMISSED') return
     let cancelled = false
     const poll = async () => {
       try {
@@ -523,11 +593,10 @@ export default function ShopMenuPage() {
         if (data.replyMessage) setCallStaffDone(true)
       } catch { /* silent */ }
     }
-    const intervalId = setInterval(poll, 3000)
-    const timeoutId = setTimeout(() => clearInterval(intervalId), 120000)
+    const intervalId = setInterval(poll, 5000)
     poll()
-    return () => { cancelled = true; clearInterval(intervalId); clearTimeout(timeoutId) }
-  }, [activeStaffCall?.id, activeStaffCall?.replyMessage, tokenParam, ctx?.tenantId, ctx?.companyId, ctx?.tableId])
+    return () => { cancelled = true; clearInterval(intervalId) }
+  }, [activeStaffCall?.id, activeStaffCall?.replyMessage, activeStaffCall?.status, tokenParam, ctx?.tenantId, ctx?.companyId, ctx?.tableId])
 
   useEffect(() => {
     if (!editOrderCode || loading) return
@@ -609,6 +678,20 @@ export default function ShopMenuPage() {
   // Items shown when a category chip is active (no search)
   const categoryItems = !searchQuery.trim() && activeCategory ? (grouped[activeCategory] || []) : []
 
+  const staffCallAge = activeStaffCall
+    ? formatStaffCallAge(activeStaffCall.repliedAt || activeStaffCall.createdAt, staffCallNow)
+    : ''
+  const staffCallHasReply = Boolean(activeStaffCall?.replyMessage)
+  const staffCallTitle = staffCallHasReply
+    ? 'Quầy đã phản hồi'
+    : activeStaffCall?.status === 'DISMISSED'
+      ? 'Nhân viên đã xử lý'
+      : 'Đã gọi nhân viên'
+  const staffCallMessage = staffCallHasReply
+    ? activeStaffCall.replyMessage
+    : activeStaffCall?.status === 'DISMISSED'
+      ? 'Yêu cầu đã được xử lý.'
+      : 'Đang chờ nhân viên phản hồi.'
   // ── Cart mutations ────────────────────────────────────────────────────
   const createEntry = (model, qty, selectedOptions, itemNotes, rawSides = []) => {
     const id = genUid()
@@ -825,7 +908,13 @@ export default function ShopMenuPage() {
         setCallStaffLoading(false)
         return
       }
-      setActiveStaffCall(data || null)
+      const nextStaffCall = data || null
+      setActiveStaffCall(nextStaffCall)
+      if (staffCallKey && nextStaffCall?.id) {
+        try {
+          localStorage.setItem(staffCallKey, JSON.stringify({ call: nextStaffCall, savedAt: new Date().toISOString() }))
+        } catch { /* ignore */ }
+      }
       setCallStaffOpen(false)
       setCallStaffReason('payment')
       setCallStaffNote('')
@@ -1071,7 +1160,7 @@ export default function ShopMenuPage() {
           <Button variant="contained" fullWidth size="large" onClick={onCheckout}
             sx={{ borderRadius: 20, fontWeight: 800, textTransform: 'none', fontSize: 15,
               bgcolor: '#ff5722', '&:hover': { bgcolor: '#e64a19' } }}>
-            Thanh toán · {fmt(totalAmount)}
+            Gọi món · {fmt(totalAmount)}
           </Button>
         </>
       )}
@@ -1266,6 +1355,40 @@ export default function ShopMenuPage() {
           </Badge>
         </Box>
 
+        {activeStaffCall?.id && (
+          <Box sx={{
+            mx: 1.5, mb: 0.75, px: 1.25, py: 1,
+            display: 'flex', alignItems: 'flex-start', gap: 1,
+            borderRadius: 2,
+            border: '1px solid',
+            borderColor: staffCallHasReply ? '#a5d6a7' : '#ffcc80',
+            bgcolor: staffCallHasReply ? '#e8f5e9' : '#fff8e1',
+          }}>
+            <SupportAgentIcon sx={{ fontSize: 20, color: staffCallHasReply ? '#2e7d32' : '#ff5722', mt: 0.1, flexShrink: 0 }} />
+            <Box sx={{ minWidth: 0, flex: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+                <Typography fontWeight={900} sx={{ fontSize: 13, color: staffCallHasReply ? '#1b5e20' : '#bf360c', lineHeight: 1.2 }}>
+                  {staffCallTitle}
+                </Typography>
+                <Chip label={staffCallReasonLabel(activeStaffCall.reason)} size="small"
+                  sx={{ height: 18, fontSize: 10, fontWeight: 800, bgcolor: '#fff', color: staffCallHasReply ? '#2e7d32' : '#ff5722' }} />
+                {staffCallAge && (
+                  <Typography variant="caption" sx={{ color: staffCallHasReply ? '#2e7d32' : '#8a4b00', fontSize: 11 }}>
+                    {staffCallAge}
+                  </Typography>
+                )}
+              </Box>
+              <Typography variant="body2" sx={{ mt: 0.25, fontSize: 12.5, color: '#333', overflowWrap: 'anywhere', lineHeight: 1.35 }}>
+                {staffCallMessage}
+              </Typography>
+              {activeStaffCall.note && (
+                <Typography variant="caption" sx={{ display: 'block', mt: 0.25, color: '#666', overflowWrap: 'anywhere' }}>
+                  {activeStaffCall.note}
+                </Typography>
+              )}
+            </Box>
+          </Box>
+        )}
         {/* Row 2: Category tabs */}
         <Box sx={{
           display: 'flex', overflowX: 'auto', px: 1.5, pb: 0.75, gap: 0.5,

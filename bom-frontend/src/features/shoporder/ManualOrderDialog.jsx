@@ -38,7 +38,7 @@ import PersonAddIcon from '@mui/icons-material/PersonAdd'
 import AutorenewIcon from '@mui/icons-material/Autorenew'
 import { fetchModels } from '../../api/modelApi'
 import { fetchShopTables, createStaffOrder, fetchOrderTagQr, fetchMenuOptions, fetchCustomers, linkOrderCustomer, createCustomer, redeemVoucher } from '../../api/shopApi'
-import { printOrderReceipt, printOrderTag } from '../../utils/printOrderReceipt'
+import { printOrderReceiptTracked, printOrderTagTracked } from '../../utils/printWithHistory'
 import { broadcastToCounter } from '../shopboard/CounterDisplayPage'
 import VoucherQrScanDialog from './VoucherQrScanDialog'
 
@@ -580,13 +580,13 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                   sx={{ color: '#fff', borderColor: 'rgba(255,255,255,0.3)', textTransform: 'none', fontSize: 12 }}
                   startIcon={tagLoading ? <CircularProgress size={12} sx={{ color: '#fff' }} /> : <QrCode2Icon />}
                   disabled={tagLoading || !tagQr}
-                  onClick={() => printOrderTag(createdOrder, tagQr)}>
+                  onClick={() => printOrderTagTracked(createdOrder, tagQr, setError)}>
                   Print Tag
                 </Button>
                 <Button size="small" variant="outlined"
                   sx={{ color: '#fff', borderColor: 'rgba(255,255,255,0.3)', textTransform: 'none', fontSize: 12 }}
                   startIcon={<PrintIcon />}
-                  onClick={() => printOrderReceipt(createdOrder)}>
+                  onClick={() => printOrderReceiptTracked(createdOrder, null, setError)}>
                   Receipt
                 </Button>
                 <Button size="small" variant="outlined"

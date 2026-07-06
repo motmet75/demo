@@ -28,7 +28,7 @@ import UndoIcon from '@mui/icons-material/Undo'
 import LabelIcon from '@mui/icons-material/Label'
 import MonitorIcon from '@mui/icons-material/Monitor'
 import { fetchOrderTagQr, revertShopOrder, switchToQrPayment, splitPayment, revertToCash, patchOrderDiscount, linkOrderCustomer, fetchCustomers, fetchCustomerHistory, earnOrderPoints, fetchBankConfig, undoMergeBills } from '../../api/shopApi'
-import { printOrderReceipt, printOrderTag, printCupLabels } from '../../utils/printOrderReceipt'
+import { printOrderReceiptTracked, printOrderTagTracked, printCupLabelsTracked } from '../../utils/printWithHistory'
 import { broadcastToCounter } from '../shopboard/CounterDisplayPage'
 import EditOrderDialog from './EditOrderDialog'
 import ConfirmActionDialog from './ConfirmActionDialog'
@@ -206,7 +206,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
     try {
       const { res, data } = await switchToQrPayment(order.id)
       if (!res.ok) { setError(data?.message || 'Failed to switch payment method'); return }
-      printOrderReceipt(data)
+      printOrderReceiptTracked(data)
       onRefresh?.()
     } catch (e) { setError(e.message || 'Failed to switch payment method') }
     setSwitching(false)
@@ -876,18 +876,18 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
             <Tooltip title="Print order tag with tracking QR — give to customer to track order status">
               <Button variant="outlined" color="secondary"
                 startIcon={qrLoading ? <CircularProgress size={14} /> : <QrCode2Icon />}
-                onClick={() => tagQr && printOrderTag(order, tagQr)}
+                onClick={() => tagQr && printOrderTagTracked(order, tagQr)}
                 disabled={qrLoading || !tagQr} sx={{ textTransform: 'none' }}>
                 Print · Track
               </Button>
             </Tooltip>
             <Button variant="outlined" color="primary" startIcon={<PrintIcon />}
-              onClick={() => printOrderReceipt(order, tagQr)} sx={{ textTransform: 'none' }}>
+              onClick={() => printOrderReceiptTracked(order, tagQr)} sx={{ textTransform: 'none' }}>
               Print · Pay
             </Button>
             <Tooltip title="Print one cup label per item unit">
               <Button variant="outlined" color="secondary" startIcon={<LabelIcon />}
-                onClick={() => printCupLabels(order)} sx={{ textTransform: 'none' }}>
+                onClick={() => printCupLabelsTracked(order)} sx={{ textTransform: 'none' }}>
                 Cup Labels
               </Button>
             </Tooltip>

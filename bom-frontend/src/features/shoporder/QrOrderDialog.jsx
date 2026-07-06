@@ -16,7 +16,7 @@ import PrintIcon from '@mui/icons-material/Print'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import CloseIcon from '@mui/icons-material/Close'
 import { generateWalkUpQr } from '../../api/shopApi'
-import { printWalkUpQr } from '../../utils/printOrderReceipt'
+import { printWalkUpQrTracked } from '../../utils/printWithHistory'
 
 export default function QrOrderDialog({ open, onClose }) {
   const [seq, setSeq]         = useState('')
@@ -133,7 +133,7 @@ export default function QrOrderDialog({ open, onClose }) {
             </Tooltip>
             <Button
               variant="contained" startIcon={<PrintIcon />}
-              onClick={() => printWalkUpQr(result.seq, result.qrBase64, result.qrUrl)}
+              onClick={() => printWalkUpQrTracked(result, setError)}
               sx={{ fontWeight: 700, textTransform: 'none', flex: 1 }}
             >
               Print Slip
