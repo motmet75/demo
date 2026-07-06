@@ -61,6 +61,51 @@ export function printWalkUpQr(seq, qrBase64, qrUrl, printMeta = null) {
   win.onload = () => { win.focus(); win.print(); setTimeout(() => win.close(), 800) }
 }
 
+export function printQueueQr(qrBase64, qrUrl, opts = {}, printMeta = null) {
+  if (!qrBase64) return
+  const valid = opts.expiresAt
+    ? `Valid until ${fmtPrintTime(opts.expiresAt)}`
+    : opts.validDays ? `Valid ${opts.validDays} day${Number(opts.validDays) === 1 ? '' : 's'}` : ''
+
+  const html = `<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Queue QR</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: Arial, sans-serif;
+    width: 280px; margin: 0 auto; padding: 20px 14px;
+    text-align: center; color: #111;
+  }
+  .title { font-size: 24px; font-weight: 900; margin-bottom: 6px; }
+  .copy  { font-size: 13px; line-height: 1.35; color: #333; margin: 0 2px 12px; font-weight: 700; }
+  .qr-box { display: inline-block; padding: 10px; border: 2px solid #111; border-radius: 10px; }
+  img { width: 220px; height: 220px; display: block; }
+  .valid { font-size: 11px; color: #555; margin-top: 10px; font-weight: 700; }
+  .url { font-size: 7px; color: #999; word-break: break-all; margin-top: 6px; text-align: left; padding: 0 2px; }
+  @media print { @page { margin: 0; } }
+</style>
+</head>
+<body>
+  <div class="title">Scan to Order</div>
+  <div class="copy">Find a table and sit down. Input your table and name, then order. We will come.</div>
+  ${printMetaHtml(printMeta)}
+  <div class="qr-box"><img src="data:image/png;base64,${qrBase64}" alt="Queue QR" /></div>
+  ${valid ? `<div class="valid">${valid}</div>` : ''}
+  ${qrUrl ? `<div class="url">${qrUrl}</div>` : ''}
+</body>
+</html>`
+
+  const pw = Math.max(Math.round(screen.width * 0.5), 600)
+  const ph = Math.min(Math.round(screen.height * 0.9), 900)
+  const win = window.open('', '_blank', `width=${pw},height=${ph},left=${Math.round((screen.width-pw)/2)},top=40`)
+  win.document.write(html)
+  win.document.close()
+  win.onload = () => { win.focus(); win.print(); setTimeout(() => win.close(), 800) }
+}
+
 export function printOrderTag(order, qrBase64, printMeta = null) {
   if (!order) return
   const num   = order.orderNumber ? `#${order.orderNumber}` : order.orderCode

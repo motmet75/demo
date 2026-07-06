@@ -546,6 +546,28 @@ public class ShopOrderService {
         return new WalkUpQrResult(QrCodeUtil.generateBase64Png(url, 400), url, seq);
     }
 
+    public record QueueQrResult(String qrBase64, String qrUrl, String token, Instant expiresAt, int validDays) {}
+
+    @Transactional
+    public QueueQrResult generateQueueQr(Integer validDays, UUID tenantId, UUID companyId) {
+        int days = validDays != null ? validDays : 30;
+        if (days < 1) days = 1;
+        if (days > 366) days = 366;
+
+        ShopAccessToken sat = new ShopAccessToken();
+        sat.setToken(UUID.randomUUID().toString());
+        sat.setTenantId(tenantId);
+        sat.setCompanyId(companyId);
+        sat.setTokenType(ShopAccessToken.TYPE_QUEUE_QR);
+        sat.setDescription("Queue QR - customer chooses table and name");
+        Instant expiresAt = Instant.now().plus(days, java.time.temporal.ChronoUnit.DAYS);
+        sat.setExpiresAt(expiresAt);
+        shopAccessTokenRepository.save(sat);
+
+        String url = publicBaseUrl + "/shop/queue?t=" + sat.getToken();
+        return new QueueQrResult(QrCodeUtil.generateBase64Png(url, 400), url, sat.getToken(), expiresAt, days);
+    }
+
     // ── Display board ─────────────────────────────────────────────────
 
     @Transactional

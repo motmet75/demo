@@ -23,6 +23,7 @@ import { fetchPrintHistory } from '../../api/shopApi'
 
 const PRINT_TYPE_LABEL = {
   QR_ORDER_SLIP: 'QR order slip',
+  QUEUE_QR: 'Queue QR',
   ORDER_RECEIPT: 'Order receipt',
   ORDER_QR_TAG: 'Tracking QR tag',
   CUP_LABELS: 'Cup labels',
@@ -76,7 +77,7 @@ export default function ShopPrintingCenterPage() {
     const copies = filteredRows.filter(row => Number(row.copyNumber || 1) > 1).length
     const billPrints = filteredRows.filter(row => row.sourceType === 'BILL' || row.printType === 'BILL_RECEIPT').length
     const orderPrints = filteredRows.filter(row => row.sourceType === 'ORDER').length
-    const qrSlips = filteredRows.filter(row => row.printType === 'QR_ORDER_SLIP').length
+    const qrSlips = filteredRows.filter(row => row.printType === 'QR_ORDER_SLIP' || row.printType === 'QUEUE_QR').length
     return { total: filteredRows.length, copies, billPrints, orderPrints, qrSlips }
   }, [filteredRows])
 

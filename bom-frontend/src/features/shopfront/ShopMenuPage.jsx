@@ -452,6 +452,7 @@ export default function ShopMenuPage() {
   const rawTenantId   = params.get('tenantId')
   const rawCompanyId  = params.get('companyId')
   const rawTableId    = params.get('tableId')
+  const rawCustomerName = params.get('customerName') || ''
   const seqParam      = params.get('seq')
   const editOrderCode = params.get('editOrder')
 
@@ -476,7 +477,7 @@ export default function ShopMenuPage() {
   const [prepaidQrOrder, setPrepaidQrOrder] = useState(null)
   const [imagePreview, setImagePreview]     = useState(null)
   const [form, setForm] = useState({
-    fulfillmentType: 'PICKUP', customerName: '', customerPhone: '',
+    fulfillmentType: 'PICKUP', customerName: rawCustomerName, customerPhone: '',
     deliveryAddress: '', paymentMethod: 'CASH',
   })
 
@@ -506,17 +507,24 @@ export default function ShopMenuPage() {
     resolveToken(tokenParam)
       .then(({ res, data }) => {
         if (!res.ok) { setError('QR code không hợp lệ hoặc đã hết hạn.'); setLoading(false); return }
-        const resolved = { tenantId: data.tenantId, companyId: data.companyId, tableId: data.tableId }
+        const tableId = data.tableId || (data.tokenType === 'QUEUE_QR' ? rawTableId : null)
+        const resolved = { tenantId: data.tenantId, companyId: data.companyId, tableId, tokenType: data.tokenType }
         setCtx(resolved)
+        if (resolved.tableId || rawCustomerName) {
+          setForm(f => ({
+            ...f,
+            ...(resolved.tableId ? { fulfillmentType: 'DINE_IN' } : {}),
+            ...(rawCustomerName ? { customerName: rawCustomerName } : {}),
+          }))
+        }
         if (resolved.tableId) {
-          setForm(f => ({ ...f, fulfillmentType: 'DINE_IN' }))
           fetchActiveTableOrders(resolved.tableId, resolved.tenantId, resolved.companyId)
             .then(({ data: orders }) => { if (Array.isArray(orders) && orders.length > 0) setTableOrders(orders) })
             .catch(() => {})
         }
       })
       .catch(() => { setError('Không đọc được QR code.'); setLoading(false) })
-  }, [tokenParam])
+  }, [tokenParam, rawTableId, rawCustomerName])
 
   useEffect(() => {
     if (!ctx) return
@@ -926,7 +934,7 @@ export default function ShopMenuPage() {
   }
 
   // ── CartEntryList (closure for handler access) ────────────────────────
-  const CartEntryList = () => (
+  const renderCartEntryList = () => (
     <Stack spacing={0.75}>
       {cartEntries.map((entry, idx) => {
         const m      = menu.find(x => x.id === entry.modelId)
@@ -1138,7 +1146,7 @@ export default function ShopMenuPage() {
     </Stack>
   )
 
-  const CartPanel = ({ onCheckout }) => (
+  const renderCartPanel = (onCheckout) => (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
       <Typography variant="h6" fontWeight={800}>Giỏ hàng</Typography>
       {itemCount === 0 ? (
@@ -1148,7 +1156,7 @@ export default function ShopMenuPage() {
         </Box>
       ) : (
         <>
-          <CartEntryList />
+          {renderCartEntryList()}
           <Divider />
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Typography fontWeight={700} sx={{ fontSize: 17 }}>Tổng cộng</Typography>
@@ -1623,7 +1631,7 @@ export default function ShopMenuPage() {
           <IconButton size="small" onClick={() => setCartOpen(false)}><CloseIcon /></IconButton>
         </DialogTitle>
         <DialogContent sx={{ overflowY: 'auto' }}>
-          <CartPanel onCheckout={() => { setCartOpen(false); editingOrderCode ? handlePlaceOrder() : setCheckout(true) }} />
+          {renderCartPanel(() => { setCartOpen(false); editingOrderCode ? handlePlaceOrder() : setCheckout(true) })}
         </DialogContent>
       </Dialog>
 

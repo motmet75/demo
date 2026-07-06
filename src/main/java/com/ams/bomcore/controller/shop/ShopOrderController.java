@@ -102,6 +102,15 @@ public class ShopOrderController {
         return ResponseEntity.ok(shopOrderService.getMenu(tenantId, companyId));
     }
 
+    @GetMapping("/shop/public/tables")
+    public ResponseEntity<?> listPublicTables(@RequestParam UUID tenantId, @RequestParam UUID companyId) {
+        validateScope(tenantId, companyId);
+        return ResponseEntity.ok(shopOrderService.listTables(tenantId, companyId).stream()
+                .filter(table -> Boolean.TRUE.equals(table.getIsActive()))
+                .map(this::publicTableMap)
+                .toList());
+    }
+
     @GetMapping("/shop/public/tables/{tableId}")
     public ResponseEntity<?> getTable(@PathVariable UUID tableId,
                                        @RequestParam UUID tenantId, @RequestParam UUID companyId) {
@@ -706,6 +715,26 @@ public class ShopOrderController {
         return ResponseEntity.ok(result);
     }
 
+    @PostMapping("/shop/staff/queue-qr")
+    public ResponseEntity<?> generateQueueQr(
+            @RequestBody(required = false) Map<String, Object> body,
+            @RequestParam(required = false) UUID tenantId,
+            @RequestParam(required = false) UUID companyId,
+            @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+            @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        Integer validDays = body != null ? integerValue(body.get("validDays")) : null;
+        ShopOrderService.QueueQrResult qr = shopOrderService.generateQueueQr(validDays, tId, cId);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("qrBase64", qr.qrBase64());
+        result.put("qrUrl", qr.qrUrl());
+        result.put("token", qr.token());
+        result.put("expiresAt", qr.expiresAt());
+        result.put("validDays", qr.validDays());
+        return ResponseEntity.ok(result);
+    }
+
     @GetMapping("/shop/staff/tables/{tableId}/qrcode")
     public ResponseEntity<?> tableQr(@PathVariable UUID tableId,
                                       @RequestParam(required = false) UUID tenantId,
@@ -1193,6 +1222,14 @@ public class ShopOrderController {
         if (!tenantId.equals(call.getTenantId()) || !companyId.equals(call.getCompanyId())) return false;
         return call.getTableId() == null || call.getTableId().equals(tableId);
     }
+    private Map<String, Object> publicTableMap(ShopTable table) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", table.getId());
+        m.put("tableName", table.getTableName());
+        m.put("isActive", table.getIsActive());
+        return m;
+    }
+
     private Map<String, Object> staffCallMap(ShopStaffCall call) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", call.getId());
@@ -1233,6 +1270,12 @@ public class ShopOrderController {
         m.put("printedAt", history.getPrintedAt());
         m.put("notes", history.getNotes());
         return m;
+    }
+
+    private Integer integerValue(Object raw) {
+        String value = stringValue(raw);
+        if (value == null) return null;
+        try { return Integer.parseInt(value); } catch (Exception ignored) { return null; }
     }
 
     private String bounded(String value, int max) {

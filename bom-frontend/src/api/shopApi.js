@@ -38,6 +38,10 @@ export function fetchActiveTableOrders(tableId, tenantId, companyId) {
   return apiFetchJsonNoContext('/shop/public/table-orders' + qs({ tableId, tenantId, companyId }))
 }
 
+export function fetchPublicTables(tenantId, companyId) {
+  return apiFetchJsonNoContext('/shop/public/tables' + qs({ tenantId, companyId }))
+}
+
 export function cancelPublicOrder(orderCode, note) {
   return apiFetchJsonNoContext(`/shop/public/orders/${encodeURIComponent(orderCode)}/cancel-by-customer`, {
     method: 'PATCH',
@@ -81,6 +85,14 @@ export function generateWalkUpQr(seq) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(seq != null ? { seq } : {})
+  })
+}
+
+export function generateQueueQr(validDays = 30) {
+  return apiFetchJson('/shop/staff/queue-qr', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ validDays })
   })
 }
 

@@ -10,6 +10,7 @@ import java.util.UUID;
 public class ShopAccessToken {
 
     public static final String TYPE_TABLE_QR     = "TABLE_QR";
+    public static final String TYPE_QUEUE_QR     = "QUEUE_QR";
     public static final String TYPE_DISPLAY_BOARD = "DISPLAY_BOARD";
 
     @Id

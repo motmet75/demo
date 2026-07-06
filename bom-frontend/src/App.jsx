@@ -41,6 +41,7 @@ import AdminPage from './features/admin/AdminPage'
 import TenantsPage from './features/tenant/TenantsPage'
 import ETLPage from './features/etl/ETLPage'
 import ShopMenuPage from './features/shopfront/ShopMenuPage'
+import ShopQueuePage from './features/shopfront/ShopQueuePage'
 import ShopOrderStatusPage from './features/shopfront/ShopOrderStatusPage'
 import ShopOrderPage from './features/shoporder/ShopOrderPage'
 import ShopTablePage from './features/shoptable/ShopTablePage'
@@ -92,6 +93,7 @@ const PATH_TITLES = {
   '/etl':                'ETL',
   '/login':              'Login',
   '/shop/menu':          'Shop Menu',
+  '/shop/queue':         'Queue QR',
   '/shop/board':         'Display Board',
   '/shop/customer-board':'Customer Board',
   '/shop/counter':       'Counter Display',
@@ -426,6 +428,7 @@ function AppShell() {
       <Routes>
         {/* Public customer-facing shop routes — no sidebar/header */}
         <Route path="/shop/menu" element={<ShopMenuPage />} />
+        <Route path="/shop/queue" element={<ShopQueuePage />} />
         <Route path="/shop/order/:orderCode" element={<ShopOrderStatusPage />} />
         <Route path="/shop/board" element={<DisplayBoardPage />} />
         <Route path="/shop/customer-board" element={<CustomerBoardPage />} />

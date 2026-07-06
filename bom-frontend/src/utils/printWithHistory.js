@@ -1,6 +1,7 @@
 import { createPrintHistory } from '../api/shopApi'
 import {
   printWalkUpQr,
+  printQueueQr,
   printOrderReceipt,
   printOrderTag,
   printCupLabels,
@@ -48,6 +49,23 @@ export async function printWalkUpQrTracked(result, onError) {
     notes: 'Walk-up customer ordering QR slip',
   }, onError)
   printWalkUpQr(result.seq, result.qrBase64, result.qrUrl, meta)
+}
+
+export async function printQueueQrTracked(result, onError) {
+  if (!result?.qrBase64) return
+  const validText = result.expiresAt
+    ? `Valid until ${new Date(result.expiresAt).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })}`
+    : result.validDays ? `Valid ${result.validDays} day${Number(result.validDays) === 1 ? '' : 's'}` : 'Long-validity queue QR'
+  const meta = await recordPrint({
+    printType: 'QUEUE_QR',
+    sourceType: 'QR_SLIP',
+    sourceKey: result.token || result.qrUrl || `queue-qr:${String(result.qrBase64).slice(0, 24)}`,
+    sourceCode: result.qrUrl || null,
+    sourceNumber: result.validDays != null ? `${result.validDays} days` : null,
+    title: 'Queue QR',
+    notes: validText,
+  }, onError)
+  printQueueQr(result.qrBase64, result.qrUrl, { validDays: result.validDays, expiresAt: result.expiresAt }, meta)
 }
 
 export async function printOrderReceiptTracked(order, trackingQrBase64 = null, onError) {
