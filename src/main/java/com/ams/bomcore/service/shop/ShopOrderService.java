@@ -11,6 +11,7 @@ import com.ams.bomcore.domain.shop.ShopBillItem;
 import com.ams.bomcore.domain.shop.ShopCustomer;
 import com.ams.bomcore.domain.shop.ShopOrder;
 import com.ams.bomcore.domain.shop.ShopOrderItem;
+import com.ams.bomcore.domain.shop.ShopMaterialAudit;
 import com.ams.bomcore.domain.shop.ShopTable;
 import com.ams.bomcore.repository.*;
 import com.ams.bomcore.service.bom.BomService;
@@ -50,6 +51,7 @@ public class ShopOrderService {
     private final ShopPricingService shopPricingService;
     private final BomService bomService;
     private final OrderDeductionService orderDeductionService;
+    private final ShopMaterialAuditService shopMaterialAuditService;
     private final ShopCustomerRepository shopCustomerRepository;
     private final ShopVoucherRepository shopVoucherRepository;
     private final ShopBillRepository shopBillRepository;
@@ -69,6 +71,7 @@ public class ShopOrderService {
                             ShopPricingService shopPricingService,
                             BomService bomService,
                             OrderDeductionService orderDeductionService,
+                            ShopMaterialAuditService shopMaterialAuditService,
                             ShopCustomerRepository shopCustomerRepository,
                             ShopVoucherRepository shopVoucherRepository,
                             ShopBillRepository shopBillRepository,
@@ -84,6 +87,7 @@ public class ShopOrderService {
         this.shopPricingService = shopPricingService;
         this.bomService = bomService;
         this.orderDeductionService = orderDeductionService;
+        this.shopMaterialAuditService = shopMaterialAuditService;
         this.shopCustomerRepository = shopCustomerRepository;
         this.shopVoucherRepository = shopVoucherRepository;
         this.shopBillRepository = shopBillRepository;
@@ -222,14 +226,18 @@ public class ShopOrderService {
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         requireStatus(order, ShopOrder.STATUS_PENDING);
         if (Boolean.TRUE.equals(order.getCustomerEditing()))
-            throw new IllegalStateException("Customer is currently editing this order — please wait.");
+            throw new IllegalStateException("Customer is currently editing this order - please wait.");
         order.setStatus(ShopOrder.STATUS_CONFIRMED);
         order.setConfirmedAt(Instant.now());
         shopOrderRepository.save(order);
+        Company company = companyRepository.findById(companyId).orElse(null);
+        if (company != null && Boolean.TRUE.equals(company.getRealtimeInventory())) {
+            shopMaterialAuditService.recordOrderDemand(order, ShopMaterialAudit.SOURCE_CONFIRM);
+        }
         return dto(order);
     }
 
-    // ── Customer edit-lock endpoints ──────────────────────────────────
+    // Customer edit-lock endpoints ──────────────────────────────────
 
     @Transactional
     public ShopOrderResponseDto startCustomerEdit(String orderCode, UUID tenantId, UUID companyId) {
@@ -262,6 +270,7 @@ public class ShopOrderService {
         order.setStatus(ShopOrder.STATUS_CONFIRMED);
         order.setConfirmedAt(Instant.now());
         shopOrderRepository.save(order);
+        shopMaterialAuditService.recordOrderDemand(order, ShopMaterialAudit.SOURCE_FORCE_CONFIRM);
         return dto(order);
     }
 
@@ -303,33 +312,7 @@ public class ShopOrderService {
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         requireStatus(order, ShopOrder.STATUS_CONFIRMED);
 
-        List<ShopOrderItem> items = shopOrderItemRepository.findAllByOrder_Id(orderId);
-        for (ShopOrderItem item : items) {
-            // Resolve the BOM model from selectedOptions (choice may link to a different model's BOM)
-            List<ModelMenuOption> optionGroups = menuOptionRepository
-                    .findAllByModelIdAndTenantIdAndCompanyIdOrderByDisplayOrderAsc(
-                            item.getModel().getId(), tenantId, companyId);
-            UUID bomModelId = shopPricingService.resolveEffectiveBomModel(
-                    item.getModel().getId(), item.getSelectedOptions(), optionGroups);
-            var bomOpt = bomService.getActiveBomForModel(bomModelId, tenantId);
-            if (bomOpt.isEmpty()) continue;
-            List<BomItemEntity> bomItems = bomService.getBomItems(bomOpt.get().getId(), tenantId, companyId);
-
-            // Build BOM tree to correctly compute deduction quantities for recursive structures.
-            // effectiveOrderQty for a child = parentChainMultiplier × shopItemQty where
-            // parentChainMultiplier is the product of all ancestor BOM item quantities.
-            Map<UUID, List<BomItemEntity>> childMap = new HashMap<>();
-            List<BomItemEntity> bomRoots = new ArrayList<>();
-            for (BomItemEntity bi : bomItems) {
-                if (bi.getParentItem() == null) {
-                    bomRoots.add(bi);
-                } else {
-                    UUID parentId = bi.getParentItem().getId();
-                    childMap.computeIfAbsent(parentId, k -> new ArrayList<>()).add(bi);
-                }
-            }
-            deductBomTree(bomRoots, BigDecimal.ONE, childMap, item.getQuantity(), tenantId, companyId);
-        }
+        shopMaterialAuditService.deductOrderMaterials(order, ShopMaterialAudit.SOURCE_PREPARE);
 
         order.setStatus(ShopOrder.STATUS_PREPARING);
         shopOrderRepository.save(order);
@@ -701,6 +684,46 @@ public class ShopOrderService {
     }
 
     @Transactional
+    public ShopOrderResponseDto revertOrder(UUID orderId, UUID tenantId, UUID companyId) {
+        ShopOrder order = requireOrder(orderId, tenantId, companyId);
+        if (!ShopOrder.STATUS_CONFIRMED.equals(order.getStatus())
+                && !ShopOrder.STATUS_PREPARING.equals(order.getStatus())) {
+            throw new IllegalStateException("Only confirmed or preparing orders can be reverted");
+        }
+        if (ShopOrder.PAY_STATUS_PAID.equals(order.getPaymentStatus())) {
+            throw new IllegalStateException("Cannot revert a paid order");
+        }
+        order.setStatus(ShopOrder.STATUS_PENDING);
+        order.setConfirmedAt(null);
+        shopOrderRepository.save(order);
+        return dto(order);
+    }
+
+    @Transactional
+    public ShopOrderResponseDto revertToCash(UUID orderId, UUID tenantId, UUID companyId) {
+        ShopOrder order = requireOrder(orderId, tenantId, companyId);
+        if (isFinalStatus(order.getStatus())) {
+            throw new IllegalStateException("Cannot change payment method of a completed or cancelled order");
+        }
+        order.setPaymentMethod(ShopOrder.PAYMENT_CASH);
+        order.setSplitCashAmount(null);
+        order.setPaymentQr(null);
+        shopOrderRepository.save(order);
+        return dto(order);
+    }
+
+    @Transactional
+    public ShopOrderResponseDto markAsPaid(UUID orderId, UUID tenantId, UUID companyId) {
+        ShopOrder order = requireOrder(orderId, tenantId, companyId);
+        if (ShopOrder.STATUS_CANCELLED.equals(order.getStatus())) {
+            throw new IllegalStateException("Cannot mark a cancelled order as paid");
+        }
+        order.setPaymentStatus(ShopOrder.PAY_STATUS_PAID);
+        shopOrderRepository.save(order);
+        return dto(order);
+    }
+
+    @Transactional
     public ShopOrderResponseDto setOrderTable(UUID orderId, UUID tableId, UUID tenantId, UUID companyId) {
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         if (tableId == null) {
@@ -713,43 +736,6 @@ public class ShopOrderService {
             }
             order.setTable(table);
         }
-        shopOrderRepository.save(order);
-        List<ShopOrderItem> items = shopOrderItemRepository.findAllByOrder_Id(orderId);
-        return ShopOrderResponseDto.from(order, items);
-    }
-
-    @Transactional
-    public ShopOrderResponseDto revertToCash(UUID orderId, UUID tenantId, UUID companyId) {
-        ShopOrder order = requireOrder(orderId, tenantId, companyId);
-        if (isFinalStatus(order.getStatus())) {
-            throw new IllegalStateException("Cannot change payment method of a completed or cancelled order");
-        }
-        order.setPaymentMethod(ShopOrder.PAYMENT_CASH);
-        order.setPaymentQr(null);
-        order.setSplitCashAmount(null);
-        shopOrderRepository.save(order);
-        return dto(order);
-    }
-
-    @Transactional
-    public ShopOrderResponseDto markAsPaid(UUID orderId, UUID tenantId, UUID companyId) {
-        ShopOrder order = requireOrder(orderId, tenantId, companyId);
-        if (ShopOrder.STATUS_CANCELLED.equals(order.getStatus())) {
-            throw new IllegalStateException("Cannot mark cancelled order as paid");
-        }
-        order.setPaymentStatus(ShopOrder.PAY_STATUS_PAID);
-        shopOrderRepository.save(order);
-        return dto(order);
-    }
-
-    // ── Order editing & revert ────────────────────────────────────────
-
-    @Transactional
-    public ShopOrderResponseDto revertOrder(UUID orderId, UUID tenantId, UUID companyId) {
-        ShopOrder order = requireOrder(orderId, tenantId, companyId);
-        requireStatus(order, ShopOrder.STATUS_CONFIRMED);
-        order.setStatus(ShopOrder.STATUS_PENDING);
-        order.setConfirmedAt(null);
         shopOrderRepository.save(order);
         return dto(order);
     }
@@ -1671,3 +1657,4 @@ public class ShopOrderService {
         return QrCodeUtil.generateBase64Png(url, 300);
     }
 }
+

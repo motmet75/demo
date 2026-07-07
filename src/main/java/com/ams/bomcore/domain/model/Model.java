@@ -60,6 +60,9 @@ public class Model {
     @Column(name = "allowed_side_ids", columnDefinition = "TEXT")
     private String allowedSideIds;
 
+    @Column(name = "shop_available_units_override", columnDefinition = "numeric")
+    private BigDecimal shopAvailableUnitsOverride;
+
     public Model() {
         // default constructor required by JPA
     }
@@ -147,6 +150,8 @@ public class Model {
 
     public String getAllowedSideIds() { return allowedSideIds; }
     public void setAllowedSideIds(String allowedSideIds) { this.allowedSideIds = allowedSideIds; }
+    public BigDecimal getShopAvailableUnitsOverride() { return shopAvailableUnitsOverride; }
+    public void setShopAvailableUnitsOverride(BigDecimal shopAvailableUnitsOverride) { this.shopAvailableUnitsOverride = shopAvailableUnitsOverride; }
 
     @PrePersist
     private void prePersist() {

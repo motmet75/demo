@@ -14,6 +14,7 @@ import com.ams.bomcore.repository.ShopStaffCallRepository;
 import com.ams.bomcore.repository.ShopTableRepository;
 import com.ams.bomcore.repository.TenantRepository;
 import com.ams.bomcore.service.shop.ShopOrderService;
+import com.ams.bomcore.service.shop.ShopMaterialAuditService;
 import com.ams.bomcore.service.shop.ShopPricingService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -38,6 +39,7 @@ public class ShopOrderController {
 
     private final ShopOrderService shopOrderService;
     private final ShopPricingService shopPricingService;
+    private final ShopMaterialAuditService shopMaterialAuditService;
     private final TenantRepository tenantRepository;
     private final CompanyRepository companyRepository;
     private final ShopAccessTokenRepository shopAccessTokenRepository;
@@ -48,6 +50,7 @@ public class ShopOrderController {
 
     public ShopOrderController(ShopOrderService shopOrderService,
                                ShopPricingService shopPricingService,
+                               ShopMaterialAuditService shopMaterialAuditService,
                                TenantRepository tenantRepository,
                                CompanyRepository companyRepository,
                                ShopAccessTokenRepository shopAccessTokenRepository,
@@ -57,6 +60,7 @@ public class ShopOrderController {
                                ShopTableRepository shopTableRepository) {
         this.shopOrderService = shopOrderService;
         this.shopPricingService = shopPricingService;
+        this.shopMaterialAuditService = shopMaterialAuditService;
         this.tenantRepository = tenantRepository;
         this.companyRepository = companyRepository;
         this.shopAccessTokenRepository = shopAccessTokenRepository;
@@ -954,6 +958,8 @@ public class ShopOrderController {
         if (body.containsKey("bankAccountNumber"))    company.setBankAccountNumber(String.valueOf(body.get("bankAccountNumber")));
         if (body.containsKey("bankAccountName"))      company.setBankAccountName(String.valueOf(body.get("bankAccountName")));
         if (body.containsKey("prepaidMenu"))          company.setPrepaidMenu(Boolean.TRUE.equals(body.get("prepaidMenu")));
+        if (body.containsKey("realtimeInventory"))    company.setRealtimeInventory(Boolean.TRUE.equals(body.get("realtimeInventory")));
+        if (body.containsKey("processingInventoryRecheck")) company.setShopProcessingInventoryRecheck(Boolean.TRUE.equals(body.get("processingInventoryRecheck")));
         if (body.containsKey("pointsConversionRate")) company.setPointsConversionRate(Integer.parseInt(String.valueOf(body.get("pointsConversionRate"))));
         if (body.containsKey("pointsRoundUp"))        company.setPointsRoundUp(Boolean.TRUE.equals(body.get("pointsRoundUp")));
         companyRepository.save(company);
@@ -973,6 +979,8 @@ public class ShopOrderController {
         m.put("bankAccountNumber",    company.getBankAccountNumber() != null ? company.getBankAccountNumber() : "");
         m.put("bankAccountName",      company.getBankAccountName()   != null ? company.getBankAccountName()   : "");
         m.put("prepaidMenu",          Boolean.TRUE.equals(company.getPrepaidMenu()));
+        m.put("realtimeInventory",    Boolean.TRUE.equals(company.getRealtimeInventory()));
+        m.put("processingInventoryRecheck", Boolean.TRUE.equals(company.getShopProcessingInventoryRecheck()));
         m.put("pointsConversionRate", company.getPointsConversionRate());
         m.put("pointsRoundUp",        company.getPointsRoundUp());
         m.put("voucherSecretSet",     company.getVoucherSecret() != null && !company.getVoucherSecret().isBlank());
@@ -1079,6 +1087,98 @@ public class ShopOrderController {
     }
 
     // ── Customer management (/shop/staff/customers) ───────────────────
+
+    // Shop material audit / processing inventory
+
+    @GetMapping("/shop/staff/material-audit/open")
+    public ResponseEntity<?> openMaterialAudit(@RequestParam(required = false) UUID tenantId,
+                                               @RequestParam(required = false) UUID companyId,
+                                               @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                               @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        return ResponseEntity.ok(shopMaterialAuditService.listOpenAudit(tId, cId));
+    }
+
+    @GetMapping("/shop/staff/material-audit/report")
+    public ResponseEntity<?> materialAuditReport(@RequestParam(required = false) java.time.LocalDate from,
+                                                 @RequestParam(required = false) java.time.LocalDate to,
+                                                 @RequestParam(required = false) UUID tenantId,
+                                                 @RequestParam(required = false) UUID companyId,
+                                                 @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                                 @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        java.time.ZoneId zone = java.time.ZoneId.of("Asia/Ho_Chi_Minh");
+        java.time.LocalDate fromDate = from != null ? from : java.time.LocalDate.now(zone);
+        java.time.LocalDate toDate = to != null ? to.plusDays(1) : fromDate.plusDays(1);
+        return ResponseEntity.ok(shopMaterialAuditService.report(
+                tId, cId, fromDate.atStartOfDay(zone).toInstant(), toDate.atStartOfDay(zone).toInstant()));
+    }
+
+    @GetMapping("/shop/staff/materials/menu-availability")
+    public ResponseEntity<?> menuAvailability(@RequestParam(required = false) UUID tenantId,
+                                              @RequestParam(required = false) UUID companyId,
+                                              @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                              @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        return ResponseEntity.ok(shopMaterialAuditService.menuAvailability(tId, cId));
+    }
+
+    @PutMapping("/shop/staff/materials/menu-availability/{modelId}/override")
+    public ResponseEntity<?> setMenuAvailabilityOverride(@PathVariable UUID modelId,
+                                                         @RequestBody(required = false) Map<String, Object> body,
+                                                         @RequestParam(required = false) UUID tenantId,
+                                                         @RequestParam(required = false) UUID companyId,
+                                                         @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                                         @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        BigDecimal units = body != null && body.get("units") != null && !String.valueOf(body.get("units")).isBlank()
+                ? new BigDecimal(String.valueOf(body.get("units")))
+                : null;
+        return ResponseEntity.ok(shopMaterialAuditService.updateAvailabilityOverride(modelId, units, tId, cId));
+    }
+
+    @GetMapping("/shop/staff/orders/{orderId}/material-audit")
+    public ResponseEntity<?> orderMaterialAudit(@PathVariable UUID orderId,
+                                                @RequestParam(required = false) UUID tenantId,
+                                                @RequestParam(required = false) UUID companyId,
+                                                @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                                @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        ShopOrder order = shopOrderRepository.findById(orderId).orElseThrow(() -> new NoSuchElementException("Order not found"));
+        validateStaffCallOrderScope(order, tId, cId);
+        return ResponseEntity.ok(shopMaterialAuditService.listOrderAudit(orderId, tId, cId));
+    }
+
+    @PostMapping("/shop/staff/orders/{orderId}/material-audit/recheck")
+    public ResponseEntity<?> recheckOrderMaterialAudit(@PathVariable UUID orderId,
+                                                       @RequestParam(required = false) UUID tenantId,
+                                                       @RequestParam(required = false) UUID companyId,
+                                                       @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                                       @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        ShopOrder order = shopOrderRepository.findById(orderId).orElseThrow(() -> new NoSuchElementException("Order not found"));
+        validateStaffCallOrderScope(order, tId, cId);
+        return ResponseEntity.ok(shopMaterialAuditService.recordOrderDemand(order, com.ams.bomcore.domain.shop.ShopMaterialAudit.SOURCE_RECHECK));
+    }
+
+    @PostMapping("/shop/staff/orders/{orderId}/material-audit/deduct")
+    public ResponseEntity<?> deductOrderMaterialAudit(@PathVariable UUID orderId,
+                                                      @RequestParam(required = false) UUID tenantId,
+                                                      @RequestParam(required = false) UUID companyId,
+                                                      @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                                      @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        ShopOrder order = shopOrderRepository.findById(orderId).orElseThrow(() -> new NoSuchElementException("Order not found"));
+        validateStaffCallOrderScope(order, tId, cId);
+        return ResponseEntity.ok(shopMaterialAuditService.deductOrderMaterials(order, com.ams.bomcore.domain.shop.ShopMaterialAudit.SOURCE_DEDUCT_LATER));
+    }
 
     @GetMapping("/shop/staff/customers")
     public ResponseEntity<?> listCustomers(@RequestParam(required = false) String q,
@@ -1321,3 +1421,5 @@ public class ShopOrderController {
         }
     }
 }
+
+

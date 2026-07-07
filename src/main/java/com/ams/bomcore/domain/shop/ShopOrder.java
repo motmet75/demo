@@ -126,6 +126,20 @@ public class ShopOrder {
     @Column(name = "pickup_scanned_at")
     private Instant pickupScannedAt;
 
+    @Column(name = "audit_material_later")
+    private Boolean auditMaterialLater = false;
+
+    @Column(name = "material_audit_status", length = 30)
+    private String materialAuditStatus = "NOT_CHECKED";
+
+    @Column(name = "material_audit_note", columnDefinition = "TEXT")
+    private String materialAuditNote;
+
+    @Column(name = "inventory_checked_at")
+    private Instant inventoryCheckedAt;
+
+    @Column(name = "material_deducted_at")
+    private Instant materialDeductedAt;
     @Column(name = "created_at")
     private Instant createdAt;
 
@@ -146,6 +160,8 @@ public class ShopOrder {
         if (createdAt == null) createdAt = Instant.now();
         if (status == null) status = STATUS_PENDING;
         if (paymentStatus == null) paymentStatus = PAY_STATUS_UNPAID;
+        if (auditMaterialLater == null) auditMaterialLater = false;
+        if (materialAuditStatus == null) materialAuditStatus = "NOT_CHECKED";
     }
 
     public UUID getId() { return id; }
@@ -220,4 +236,16 @@ public class ShopOrder {
     public void setCustomerEditingSince(Instant customerEditingSince) { this.customerEditingSince = customerEditingSince; }
     public Instant getPickupScannedAt() { return pickupScannedAt; }
     public void setPickupScannedAt(Instant pickupScannedAt) { this.pickupScannedAt = pickupScannedAt; }
+    public Boolean getAuditMaterialLater() { return Boolean.TRUE.equals(auditMaterialLater); }
+    public void setAuditMaterialLater(Boolean auditMaterialLater) { this.auditMaterialLater = auditMaterialLater; }
+    public String getMaterialAuditStatus() { return materialAuditStatus; }
+    public void setMaterialAuditStatus(String materialAuditStatus) { this.materialAuditStatus = materialAuditStatus; }
+    public String getMaterialAuditNote() { return materialAuditNote; }
+    public void setMaterialAuditNote(String materialAuditNote) { this.materialAuditNote = materialAuditNote; }
+    public Instant getInventoryCheckedAt() { return inventoryCheckedAt; }
+    public void setInventoryCheckedAt(Instant inventoryCheckedAt) { this.inventoryCheckedAt = inventoryCheckedAt; }
+    public Instant getMaterialDeductedAt() { return materialDeductedAt; }
+    public void setMaterialDeductedAt(Instant materialDeductedAt) { this.materialDeductedAt = materialDeductedAt; }
 }
+
+

@@ -102,6 +102,13 @@ const elapsed       = (v) => {
   return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`
 }
 
+function materialAuditChip(order) {
+  const status = order?.materialAuditStatus
+  if (!order?.auditMaterialLater && status !== 'WAITING_STOCK' && status !== 'PARTIAL') return null
+  if (status === 'PARTIAL') return { label: 'Partial material', color: 'warning' }
+  if (status === 'WAITING_STOCK') return { label: 'Audit material later', color: 'error' }
+  return { label: 'Material audit', color: 'warning' }
+}
 function parseOpts(str) {
   if (!str) return {}
   try { return JSON.parse(str) } catch { return {} }
@@ -328,6 +335,10 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                       ? <Chip icon={<PaidIcon sx={{ fontSize: 12 }} />} label="PAID" size="small" color="success" sx={{ height: 20, fontSize: 11, fontWeight: 800 }} />
                       : <Chip label="UNPAID" size="small" color="warning" variant="outlined" sx={{ height: 20, fontSize: 10, fontWeight: 700 }} />
                     }
+                    {(() => {
+                      const chip = materialAuditChip(order)
+                      return chip ? <Chip label={chip.label} size="small" color={chip.color} sx={{ height: 20, fontSize: 10, fontWeight: 800 }} /> : null
+                    })()}
                   </Box>
                   {order.customerName && <Typography variant="caption" display="block" noWrap>{order.customerName}</Typography>}
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
@@ -610,6 +621,10 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
             }
             {order.paymentMethod === 'BANK_QR' && <Chip label="QR" size="small" color="info" sx={{ height: 18, fontSize: 10 }} />}
             {order.paymentMethod === 'SPLIT' && <Chip label="Split" size="small" color="secondary" sx={{ height: 18, fontSize: 10 }} />}
+            {(() => {
+              const chip = materialAuditChip(order)
+              return chip ? <Chip label={chip.label} size="small" color={chip.color} sx={{ height: 18, fontSize: 10, fontWeight: 800 }} /> : null
+            })()}
           </Box>
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
             {order.customerName && <Typography sx={{ fontSize: 12, fontWeight: 700, color: '#1e293b', flex: 1 }} noWrap>{order.customerName}</Typography>}

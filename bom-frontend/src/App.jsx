@@ -47,6 +47,7 @@ import ShopOrderPage from './features/shoporder/ShopOrderPage'
 import ShopTablePage from './features/shoptable/ShopTablePage'
 import ShopMenuManagePage from './features/shopmenu/ShopMenuManagePage'
 import ShopBankConfigPage from './features/shopbank/ShopBankConfigPage'
+import ShopMaterialPage from './features/shopmaterials/ShopMaterialPage'
 import DisplayBoardPage from './features/shopboard/DisplayBoardPage'
 import CounterDisplayPage from './features/shopboard/CounterDisplayPage'
 import CustomerBoardPage from './features/shopboard/CustomerBoardPage'
@@ -82,6 +83,7 @@ const PATH_TITLES = {
   '/shop-tables':        'Tables',
   '/shop-menu':          'Menu Setup',
   '/shop-bank':          'Bank Setup',
+  '/shop-materials':     'Shop Materials',
   '/shop-tokens':        'QR Tokens',
   '/shop-customers':     'Customers',
   '/shop-vouchers':      'Vouchers',
@@ -168,6 +170,7 @@ const NAV_GROUPS = [
       { label: 'Shop Orders', path: '/shop-orders', icon: '🧋' },
       { label: 'Tables',      path: '/shop-tables', icon: '🪑' },
       { label: 'Menu Setup',  path: '/shop-menu',   icon: '🍽️' },
+      { label: 'Shop Materials', path: '/shop-materials', icon: '📦' },
       { label: 'Bank Setup',  path: '/shop-bank',   icon: '🏦' },
       { label: 'QR Tokens',   path: '/shop-tokens',    icon: '🔑' },
       { label: 'Customers',   path: '/shop-customers', icon: '👤' },
@@ -402,6 +405,7 @@ function MainShell({ user, logout, isAdmin }) {
             <Route path="/shop-orders" element={<RequireAuth><RequireContext><ShopOrderPage /></RequireContext></RequireAuth>} />
             <Route path="/shop-tables" element={<RequireAuth><RequireContext><ShopTablePage /></RequireContext></RequireAuth>} />
             <Route path="/shop-menu"   element={<RequireAuth><RequireContext><ShopMenuManagePage /></RequireContext></RequireAuth>} />
+            <Route path="/shop-materials" element={<RequireAuth><RequireContext><ShopMaterialPage /></RequireContext></RequireAuth>} />
             <Route path="/shop-bank"   element={<RequireAuth><RequireContext><ShopBankConfigPage /></RequireContext></RequireAuth>} />
             <Route path="/shop-tokens"    element={<RequireAuth><RequireContext><ShopTokenManagePage /></RequireContext></RequireAuth>} />
             <Route path="/shop-customers" element={<RequireAuth><RequireContext><ShopCustomerPage /></RequireContext></RequireAuth>} />

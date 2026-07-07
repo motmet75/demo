@@ -53,6 +53,12 @@ public class Company {
     @Column(name = "prepaid_menu")
     private Boolean prepaidMenu = false;
 
+    @Column(name = "realtime_inventory")
+    private Boolean realtimeInventory = false;
+
+    @Column(name = "shop_processing_inventory_recheck")
+    private Boolean shopProcessingInventoryRecheck = true;
+
     @Column(name = "valid_until")
     private Instant validUntil;
 
@@ -95,6 +101,10 @@ public class Company {
 
     public Boolean getPrepaidMenu() { return prepaidMenu; }
     public void setPrepaidMenu(Boolean prepaidMenu) { this.prepaidMenu = prepaidMenu; }
+    public Boolean getRealtimeInventory() { return Boolean.TRUE.equals(realtimeInventory); }
+    public void setRealtimeInventory(Boolean realtimeInventory) { this.realtimeInventory = realtimeInventory; }
+    public Boolean getShopProcessingInventoryRecheck() { return !Boolean.FALSE.equals(shopProcessingInventoryRecheck); }
+    public void setShopProcessingInventoryRecheck(Boolean shopProcessingInventoryRecheck) { this.shopProcessingInventoryRecheck = shopProcessingInventoryRecheck; }
 
     public Instant getValidUntil() { return validUntil; }
     public void setValidUntil(Instant validUntil) { this.validUntil = validUntil; }

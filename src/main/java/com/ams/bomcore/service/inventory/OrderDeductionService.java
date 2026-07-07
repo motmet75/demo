@@ -266,6 +266,61 @@ public class OrderDeductionService {
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
+     * Issue a direct material quantity using the same FEFO/quota rules as BOM production.
+     * This is used by shop material audit rows when stock was short at confirmation time
+     * and needs to be deducted later after inventory is received.
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ConsumptionResult consumeMaterial(UUID materialId, BigDecimal requiredQty,
+                                             UUID tenantId, UUID companyId) {
+        BigDecimal baseQty = requiredQty != null ? requiredQty : BigDecimal.ZERO;
+
+        List<InventoryEntity> rows = inventoryRepository
+                .findAllByTenantIdAndCompanyId(tenantId, companyId)
+                .stream()
+                .filter(e -> e.getMaterial() != null
+                        && e.getMaterial().getId().equals(materialId)
+                        && Boolean.TRUE.equals(e.getVisible())
+                        && !Boolean.TRUE.equals(e.getLocked()))
+                .sorted(deductionLabelComparator())
+                .toList();
+
+        BigDecimal remaining = baseQty;
+        List<ConsumptionLine> lines = new ArrayList<>();
+
+        for (InventoryEntity row : rows) {
+            if (remaining.compareTo(BigDecimal.ZERO) <= 0) {
+                break;
+            }
+
+            BigDecimal available = orZero(row.getQuantityOnHand());
+            BigDecimal locked    = orZero(row.getQuantityLocked());
+            BigDecimal usable    = available.subtract(locked);
+            if (usable.compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+
+            BigDecimal factor = quotaFactor(row.getMaterialQuotaPercentage());
+            BigDecimal maxBase = usable.divide(factor, 10, RoundingMode.HALF_UP);
+            BigDecimal basePortion = remaining.min(maxBase).setScale(4, RoundingMode.HALF_UP);
+            BigDecimal physicalDeduct = basePortion.multiply(factor).setScale(4, RoundingMode.HALF_UP);
+            BigDecimal newQty = available.subtract(physicalDeduct).setScale(4, RoundingMode.HALF_UP);
+
+            Instant now = Instant.now();
+            inventoryRepository.updateQuantityOnHand(row.getId(), newQty, now);
+            row.setQuantityOnHand(newQty);
+            row.setUpdatedAt(now);
+
+            lines.add(new ConsumptionLine(row.getId(), row.getBatchNo(),
+                    row.getOrderToDeduction(), basePortion, physicalDeduct,
+                    factor, row.getMaterialQuotaPercentage()));
+            remaining = remaining.subtract(basePortion);
+        }
+
+        boolean fulfilled = remaining.compareTo(new BigDecimal("0.0001")) <= 0;
+        return new ConsumptionResult(materialId, baseQty, remaining, fulfilled, lines);
+    }
+    /**
      * Comparator: sort inventory by {@code orderToDeduction} label alphabetically
      * ascending (null / blank → placed last), then FEFO as tiebreaker.
      */

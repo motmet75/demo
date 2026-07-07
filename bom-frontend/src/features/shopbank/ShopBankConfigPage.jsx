@@ -37,7 +37,7 @@ const POPULAR_BANKS = [
 ]
 
 export default function ShopBankConfigPage() {
-  const [form, setForm] = useState({ bankBin: '', bankAccountNumber: '', bankAccountName: '', prepaidMenu: false, pointsConversionRate: 10000, pointsRoundUp: false })
+  const [form, setForm] = useState({ bankBin: '', bankAccountNumber: '', bankAccountName: '', prepaidMenu: false, realtimeInventory: false, processingInventoryRecheck: true, pointsConversionRate: 10000, pointsRoundUp: false })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -50,7 +50,7 @@ export default function ShopBankConfigPage() {
     fetchBankConfig()
       .then(({ data }) => {
         if (data) {
-          setForm({ bankBin: data.bankBin || '', bankAccountNumber: data.bankAccountNumber || '', bankAccountName: data.bankAccountName || '', prepaidMenu: Boolean(data.prepaidMenu), pointsConversionRate: data.pointsConversionRate || 10000, pointsRoundUp: Boolean(data.pointsRoundUp) })
+          setForm({ bankBin: data.bankBin || '', bankAccountNumber: data.bankAccountNumber || '', bankAccountName: data.bankAccountName || '', prepaidMenu: Boolean(data.prepaidMenu), realtimeInventory: Boolean(data.realtimeInventory), processingInventoryRecheck: data.processingInventoryRecheck !== false, pointsConversionRate: data.pointsConversionRate || 10000, pointsRoundUp: Boolean(data.pointsRoundUp) })
           setVoucherKeySet(Boolean(data.voucherSecretSet))
         }
         setLoading(false)
@@ -173,6 +173,43 @@ export default function ShopBankConfigPage() {
                     <Typography variant="body2" fontWeight={700}>Prepaid Menu</Typography>
                     <Typography variant="caption" color="text.secondary">
                       Customer pays before staff confirms. Paid orders cannot be cancelled.
+                    </Typography>
+                  </Box>
+                }
+                sx={{ alignItems: 'flex-start', ml: 0 }}
+              />
+              <Divider sx={{ my: 1.5 }} />
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={form.realtimeInventory}
+                    onChange={e => { setForm(f => ({ ...f, realtimeInventory: e.target.checked })); setSuccess(false) }}
+                    color="warning"
+                  />
+                }
+                label={
+                  <Box>
+                    <Typography variant="body2" fontWeight={700}>Real-time inventory check</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Confirming an order checks BOM material stock and marks waiting stock when material is short.
+                    </Typography>
+                  </Box>
+                }
+                sx={{ alignItems: 'flex-start', ml: 0 }}
+              />
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={form.processingInventoryRecheck}
+                    onChange={e => { setForm(f => ({ ...f, processingInventoryRecheck: e.target.checked })); setSuccess(false) }}
+                    color="success"
+                  />
+                }
+                label={
+                  <Box>
+                    <Typography variant="body2" fontWeight={700}>Processing unit recheck</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Let the processing page refresh material inventory and manually input left units for menu availability.
                     </Typography>
                   </Box>
                 }

@@ -371,6 +371,40 @@ export function updateBankConfig(body) {
   })
 }
 
+// Shop material audit / processing inventory
+
+export function fetchMaterialAuditOpen() {
+  return apiFetchJson('/shop/staff/material-audit/open')
+}
+
+export function fetchMaterialAuditReport(params = {}) {
+  return apiFetchJson('/shop/staff/material-audit/report' + qs(params))
+}
+
+export function fetchMenuAvailability() {
+  return apiFetchJson('/shop/staff/materials/menu-availability')
+}
+
+export function updateMenuAvailabilityOverride(modelId, units) {
+  return apiFetchJson(`/shop/staff/materials/menu-availability/${modelId}/override`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ units })
+  })
+}
+
+export function fetchOrderMaterialAudit(orderId) {
+  return apiFetchJson(`/shop/staff/orders/${orderId}/material-audit`)
+}
+
+export function recheckOrderMaterialAudit(orderId) {
+  return apiFetchJson(`/shop/staff/orders/${orderId}/material-audit/recheck`, { method: 'POST' })
+}
+
+export function deductOrderMaterialAudit(orderId) {
+  return apiFetchJson(`/shop/staff/orders/${orderId}/material-audit/deduct`, { method: 'POST' })
+}
+
 // ── Split / Merge bills ────────────────────────────────────────────
 
 export function splitBill(orderId, rootItemIds) {

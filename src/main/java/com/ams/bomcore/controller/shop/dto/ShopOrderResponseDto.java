@@ -46,6 +46,11 @@ public class ShopOrderResponseDto {
     private Boolean customerEditing;
     private Instant customerEditingSince;
     private Instant pickupScannedAt;
+    private Boolean auditMaterialLater;
+    private String materialAuditStatus;
+    private String materialAuditNote;
+    private Instant inventoryCheckedAt;
+    private Instant materialDeductedAt;
     private Instant createdAt;
     private Instant confirmedAt;
     private Instant readyAt;
@@ -199,6 +204,11 @@ public class ShopOrderResponseDto {
         dto.customerEditing = Boolean.TRUE.equals(order.getCustomerEditing());
         dto.customerEditingSince = order.getCustomerEditingSince();
         dto.pickupScannedAt = order.getPickupScannedAt();
+        dto.auditMaterialLater = order.getAuditMaterialLater();
+        dto.materialAuditStatus = order.getMaterialAuditStatus();
+        dto.materialAuditNote = order.getMaterialAuditNote();
+        dto.inventoryCheckedAt = order.getInventoryCheckedAt();
+        dto.materialDeductedAt = order.getMaterialDeductedAt();
         dto.createdAt = order.getCreatedAt();
         dto.confirmedAt = order.getConfirmedAt();
         dto.readyAt = order.getReadyAt();
@@ -260,6 +270,11 @@ public class ShopOrderResponseDto {
     public Boolean getCustomerEditing() { return customerEditing; }
     public Instant getCustomerEditingSince() { return customerEditingSince; }
     public Instant getPickupScannedAt() { return pickupScannedAt; }
+    public Boolean getAuditMaterialLater() { return auditMaterialLater; }
+    public String getMaterialAuditStatus() { return materialAuditStatus; }
+    public String getMaterialAuditNote() { return materialAuditNote; }
+    public Instant getInventoryCheckedAt() { return inventoryCheckedAt; }
+    public Instant getMaterialDeductedAt() { return materialDeductedAt; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getConfirmedAt() { return confirmedAt; }
     public Instant getReadyAt() { return readyAt; }
@@ -267,3 +282,4 @@ public class ShopOrderResponseDto {
     public List<ItemDto> getItems() { return items; }
     public List<BillDto> getBills() { return bills; }
 }
+
