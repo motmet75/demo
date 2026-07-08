@@ -13,30 +13,35 @@ import Chip from '@mui/material/Chip'
 import CameraAltIcon from '@mui/icons-material/CameraAlt'
 import UploadFileIcon from '@mui/icons-material/UploadFile'
 import QrCode2Icon from '@mui/icons-material/QrCode2'
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode'
 
 export default function VoucherQrScanDialog({ open, onClose, onScan }) {
-  const videoRef = useRef(null)
-  const streamRef = useRef(null)
-  const rafRef = useRef(null)
+  const scannerRef = useRef(null)
   const detectedRef = useRef(false)
+  const readerIdRef = useRef(`voucher-qr-reader-${Math.random().toString(36).slice(2)}`)
 
   const [manualValue, setManualValue] = useState('')
   const [starting, setStarting] = useState(false)
   const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState('')
 
-  const scannerSupported = typeof window !== 'undefined' && 'BarcodeDetector' in window
+  const cameraSupported = typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia)
 
-  const stopCamera = useCallback(() => {
-    if (rafRef.current) {
-      window.cancelAnimationFrame(rafRef.current)
-      rafRef.current = null
+  const stopCamera = useCallback(async () => {
+    const scanner = scannerRef.current
+    scannerRef.current = null
+    if (scanner) {
+      try {
+        if (scanner.isScanning) await scanner.stop()
+      } catch {
+        // Ignore stop errors caused by browser camera teardown timing.
+      }
+      try {
+        await scanner.clear()
+      } catch {
+        // The element may already be cleared during dialog close.
+      }
     }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop())
-      streamRef.current = null
-    }
-    if (videoRef.current) videoRef.current.srcObject = null
     setStreaming(false)
   }, [])
 
@@ -44,82 +49,65 @@ export default function VoucherQrScanDialog({ open, onClose, onScan }) {
     const value = String(rawValue || '').trim()
     if (!value || detectedRef.current) return
     detectedRef.current = true
-    stopCamera()
+    void stopCamera()
     onScan?.(value)
   }, [onScan, stopCamera])
 
+  const createScanner = useCallback(() => new Html5Qrcode(readerIdRef.current, {
+    formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+    verbose: false,
+  }), [])
+
   const startCamera = useCallback(async () => {
-    if (!scannerSupported) {
-      setError('Camera QR scanning is not supported by this browser.')
-      return
-    }
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setError('Camera access is not available in this browser.')
+    if (!cameraSupported) {
+      setError('Camera access is not available in this browser. Use image upload or manual entry.')
       return
     }
 
     setStarting(true)
     setError('')
     detectedRef.current = false
-    stopCamera()
+    await stopCamera()
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' } },
-        audio: false,
-      })
-      streamRef.current = stream
-      const video = videoRef.current
-      if (!video) return
-      video.srcObject = stream
-      await video.play()
+      const scanner = createScanner()
+      scannerRef.current = scanner
+      await scanner.start(
+        { facingMode: 'environment' },
+        {
+          fps: 10,
+          qrbox: (width, height) => {
+            const size = Math.floor(Math.min(width, height) * 0.72)
+            return { width: size, height: size }
+          },
+        },
+        decodedText => handleDetected(decodedText),
+        () => {}
+      )
       setStreaming(true)
-
-      const Detector = window.BarcodeDetector
-      const detector = new Detector({ formats: ['qr_code'] })
-
-      const scanFrame = async () => {
-        if (!streamRef.current || detectedRef.current) return
-        try {
-          if (video.readyState >= 2) {
-            const codes = await detector.detect(video)
-            if (codes.length > 0) {
-              handleDetected(codes[0].rawValue)
-              return
-            }
-          }
-        } catch {
-          // Some browsers throw while the video metadata settles; keep scanning.
-        }
-        rafRef.current = window.requestAnimationFrame(scanFrame)
-      }
-
-      rafRef.current = window.requestAnimationFrame(scanFrame)
     } catch (e) {
       setError(e?.message || 'Unable to start camera.')
-      stopCamera()
+      await stopCamera()
     } finally {
       setStarting(false)
     }
-  }, [handleDetected, scannerSupported, stopCamera])
+  }, [cameraSupported, createScanner, handleDetected, stopCamera])
 
   const decodeImageFile = async (file) => {
     if (!file) return
-    if (!scannerSupported || !window.createImageBitmap) {
-      setError('Image QR scanning is not supported by this browser.')
-      return
-    }
     setError('')
+    detectedRef.current = false
+    await stopCamera()
+
+    const scanner = createScanner()
+    scannerRef.current = scanner
     try {
-      const Detector = window.BarcodeDetector
-      const detector = new Detector({ formats: ['qr_code'] })
-      const bitmap = await window.createImageBitmap(file)
-      const codes = await detector.detect(bitmap)
-      bitmap.close?.()
-      if (codes.length > 0) handleDetected(codes[0].rawValue)
-      else setError('No QR code found in image.')
+      const decodedText = await scanner.scanFile(file, true)
+      handleDetected(decodedText)
     } catch (e) {
-      setError(e?.message || 'Unable to read image.')
+      setError(e?.message || 'No QR code found in image.')
+      try { await scanner.clear() } catch { /* ignore */ }
+      if (scannerRef.current === scanner) scannerRef.current = null
     }
   }
 
@@ -128,8 +116,8 @@ export default function VoucherQrScanDialog({ open, onClose, onScan }) {
     setManualValue('')
     setError('')
     detectedRef.current = false
-    startCamera()
-    return stopCamera
+    void startCamera()
+    return () => { void stopCamera() }
   }, [open, startCamera, stopCamera])
 
   const submitManual = () => {
@@ -155,34 +143,28 @@ export default function VoucherQrScanDialog({ open, onClose, onScan }) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          '& video': { width: '100% !important', height: '100% !important', objectFit: 'cover' },
+          '& img': { maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' },
         }}>
-          {scannerSupported ? (
-            <>
-              <video
-                ref={videoRef}
-                muted
-                playsInline
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: streaming ? 'block' : 'none' }}
-              />
-              {!streaming && (
-                <Box sx={{ textAlign: 'center', color: '#e2e8f0' }}>
-                  {starting ? <CircularProgress size={28} sx={{ color: '#fff' }} /> : <CameraAltIcon sx={{ fontSize: 40 }} />}
-                  <Typography variant="body2" sx={{ mt: 1 }}>{starting ? 'Starting camera' : 'Camera paused'}</Typography>
-                </Box>
-              )}
-              <Chip
-                size="small"
-                label={streaming ? 'Camera active' : 'Camera'}
-                color={streaming ? 'success' : 'default'}
-                sx={{ position: 'absolute', top: 8, right: 8, fontWeight: 700 }}
-              />
-            </>
-          ) : (
-            <Box sx={{ textAlign: 'center', color: '#e2e8f0', px: 2 }}>
+          <Box id={readerIdRef.current} sx={{ position: 'absolute', inset: 0 }} />
+          {!streaming && !starting && (
+            <Box sx={{ textAlign: 'center', color: '#e2e8f0', px: 2, zIndex: 1, pointerEvents: 'none' }}>
               <QrCode2Icon sx={{ fontSize: 42, mb: 1 }} />
-              <Typography variant="body2">Manual entry available</Typography>
+              <Typography variant="body2">Camera or image scanner</Typography>
             </Box>
           )}
+          {starting && (
+            <Box sx={{ textAlign: 'center', color: '#e2e8f0', zIndex: 1 }}>
+              <CircularProgress size={28} sx={{ color: '#fff' }} />
+              <Typography variant="body2" sx={{ mt: 1 }}>Starting camera</Typography>
+            </Box>
+          )}
+          <Chip
+            size="small"
+            label={streaming ? 'Camera active' : 'Scanner'}
+            color={streaming ? 'success' : 'default'}
+            sx={{ position: 'absolute', top: 8, right: 8, fontWeight: 700, zIndex: 2 }}
+          />
         </Box>
 
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
@@ -191,7 +173,7 @@ export default function VoucherQrScanDialog({ open, onClose, onScan }) {
             variant="outlined"
             startIcon={starting ? <CircularProgress size={14} /> : <CameraAltIcon />}
             onClick={startCamera}
-            disabled={starting || !scannerSupported}
+            disabled={starting || !cameraSupported}
             sx={{ textTransform: 'none', fontWeight: 700 }}
           >
             Start Camera
@@ -201,7 +183,6 @@ export default function VoucherQrScanDialog({ open, onClose, onScan }) {
             variant="outlined"
             component="label"
             startIcon={<UploadFileIcon />}
-            disabled={!scannerSupported}
             sx={{ textTransform: 'none', fontWeight: 700 }}
           >
             Image
@@ -225,7 +206,7 @@ export default function VoucherQrScanDialog({ open, onClose, onScan }) {
         />
       </DialogContent>
       <DialogActions sx={{ px: 2, pb: 2 }}>
-        <Button onClick={() => { stopCamera(); onClose?.() }} sx={{ textTransform: 'none' }}>Cancel</Button>
+        <Button onClick={() => { void stopCamera(); onClose?.() }} sx={{ textTransform: 'none' }}>Cancel</Button>
         <Button
           variant="contained"
           onClick={submitManual}

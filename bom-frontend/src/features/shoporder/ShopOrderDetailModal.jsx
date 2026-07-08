@@ -131,10 +131,9 @@ function buildItemGroups(items) {
       .map((child, cIdx) => ({
         ...child,
         _label: `${rIdx + 1}.${cIdx + 1}`,
-        _parentQty: Number(root.quantity || 1),
       }))
     const rootTotal     = Number(root.lineTotal || 0)
-    const childrenTotal = children.reduce((s, c) => s + Number(c.lineTotal || 0) * Number(root.quantity || 1), 0)
+    const childrenTotal = children.reduce((s, c) => s + Number(c.lineTotal || 0), 0)
     return { root: { ...root, _label: `${rIdx + 1}.` }, children, subtotal: rootTotal + childrenTotal }
   })
 }
@@ -502,8 +501,8 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
 
                 /* ── Child rows ── */
                 ...children.map(child => {
-                  const effectiveQty   = Number(child.quantity || 1) * child._parentQty
-                  const effectiveTotal = Number(child.lineTotal || 0) * child._parentQty
+                  const effectiveQty   = Number(child.quantity || 1)
+                  const effectiveTotal = Number(child.lineTotal || 0)
                   return (
                     <TableRow key={child.id} sx={{ verticalAlign: 'top', bgcolor: '#f8f9ff' }}>
                       <TableCell>
@@ -517,7 +516,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
                           </Box>
                         </Box>
                       </TableCell>
-                      <TableCell align="center"><Typography fontWeight={800} fontSize={13} color="#6366f1">{child._parentQty}×{Number(child.quantity)}</Typography></TableCell>
+                      <TableCell align="center"><Typography fontWeight={800} fontSize={13} color="#6366f1">{effectiveQty}</Typography></TableCell>
                       <TableCell align="right"><Typography fontSize={13} color="text.secondary">{fmt(child.unitPrice)}</Typography></TableCell>
                       <TableCell align="right"><Typography variant="caption" color="text.secondary">{fmt(child.unitRawCost)}</Typography></TableCell>
                       <TableCell align="right"><Typography variant="caption" color="success.main">{pct(child.unitPrice, child.unitRawCost)}</Typography></TableCell>

@@ -837,7 +837,7 @@ export default function ShopMenuPage() {
   const buildItemRequests = () => cartEntries.map(entry => ({
     modelId: entry.modelId, quantity: entry.qty,
     selectedOptions: entry.selectedOptions || null, itemNotes: entry.itemNotes || null,
-    sideItems: (entry.sideItems || []).map(side => ({ modelId: side.modelId, quantity: side.qty || 1,
+    sideItems: (entry.sideItems || []).map(side => ({ modelId: side.modelId, quantity: (side.qty || 1) * (entry.qty || 1),
       selectedOptions: null, itemNotes: null, sideItems: [] })),
   }))
 

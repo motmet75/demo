@@ -61,7 +61,7 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
         uid: crypto.randomUUID(),
         modelId: si.modelId, modelName: si.modelName,
         customPriceDigits: String(Math.round(Number(si.unitPrice) || 0)),
-        qty: Number(si.quantity) || 1,
+        qty: Math.max(1, Math.round((Number(si.quantity) || 1) / (Number(item.quantity) || 1))),
       })),
     }))
     setItems(initial)
@@ -208,8 +208,12 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
     }, 0)
   }
 
+  const sideEffectiveQty = (item, sideItem) => (sideItem.qty || 1) * (item.qty || 1)
+  const sideLineTotal = (item, sideItem) =>
+    (Number(sideItem.customPriceDigits) || 0) * sideEffectiveQty(item, sideItem)
+
   const sidesTotal = (item) =>
-    item.sideItems.reduce((s, si) => s + (Number(si.customPriceDigits) || 0) * (si.qty || 1), 0)
+    item.sideItems.reduce((s, si) => s + sideLineTotal(item, si), 0)
 
   const itemBasePrice = (item) => Number(item.customPriceDigits) || 0
 
@@ -228,7 +232,7 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
       itemNotes: i.itemNotes || null,
       unitPriceOverride: Number(i.customPriceDigits) || null,
       sideItems: i.sideItems.map(si => ({
-        modelId: si.modelId, quantity: si.qty || 1,
+        modelId: si.modelId, quantity: sideEffectiveQty(i, si),
         selectedOptions: null, itemNotes: null,
         unitPriceOverride: Number(si.customPriceDigits) || null,
         sideItems: [],
@@ -410,7 +414,7 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
                                   <RemoveIcon sx={{ fontSize: 12 }} />
                                 </IconButton>
                                 <Typography variant="caption" fontWeight={700} sx={{ minWidth: 18, textAlign: 'center', fontSize: 13 }}>
-                                  {si.qty || 1}
+                                  {sideEffectiveQty(item, si)}
                                 </Typography>
                                 <IconButton size="small" onClick={() => changeSideQty(item.uid, si.uid, 1)}
                                   sx={{ p: 0.2, bgcolor: '#6366f1', color: '#fff', borderRadius: 0.5, '&:hover': { bgcolor: '#4f46e5' } }}>
@@ -427,7 +431,7 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
                                 />
                                 <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: 11 }}>=</Typography>
                                 <Typography variant="caption" color="primary" fontWeight={800} sx={{ fontSize: 12 }}>
-                                  {fmt((Number(si.customPriceDigits) || 0) * (si.qty || 1))}
+                                  {fmt(sideLineTotal(item, si))}
                                 </Typography>
                               </Box>
                             </Box>

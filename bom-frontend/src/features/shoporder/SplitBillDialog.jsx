@@ -55,8 +55,7 @@ export default function SplitBillDialog({ open, order, onClose, onSplit }) {
     .filter(i => selected.has(i.id))
     .reduce((s, i) => {
       const children = childMap[String(i.id)] || []
-      const pQty = Number(i.quantity || 1)
-      return s + Number(i.lineTotal || 0) + children.reduce((cs, c) => cs + Number(c.lineTotal || 0) * pQty, 0)
+      return s + Number(i.lineTotal || 0) + children.reduce((cs, c) => cs + Number(c.lineTotal || 0), 0)
     }, 0)
 
   return (
@@ -77,8 +76,7 @@ export default function SplitBillDialog({ open, order, onClose, onSplit }) {
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
           {rootItems.map(item => {
             const children = childMap[String(item.id)] || []
-            const pQty = Number(item.quantity || 1)
-            const subtotal = Number(item.lineTotal || 0) + children.reduce((s, c) => s + Number(c.lineTotal || 0) * pQty, 0)
+            const subtotal = Number(item.lineTotal || 0) + children.reduce((s, c) => s + Number(c.lineTotal || 0), 0)
             return (
               <Box key={item.id}
                 onClick={() => toggle(item.id)}
