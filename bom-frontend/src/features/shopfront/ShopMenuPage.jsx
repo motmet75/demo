@@ -41,6 +41,7 @@ import SearchIcon from '@mui/icons-material/Search'
 import GridViewIcon from '@mui/icons-material/GridView'
 import ViewListIcon from '@mui/icons-material/ViewList'
 import SupportAgentIcon from '@mui/icons-material/SupportAgent'
+import QrCode2Icon from '@mui/icons-material/QrCode2'
 import Radio from '@mui/material/Radio'
 import RadioGroup from '@mui/material/RadioGroup'
 import FormControlLabel from '@mui/material/FormControlLabel'
@@ -49,9 +50,10 @@ import { resolveToken, fetchMenu, createOrder, fetchPublicMenuOptions,
          fetchActiveTableOrders, startCustomerEdit, cancelCustomerEdit,
          updatePublicOrderItems, fetchPublicOrder, fetchTokenSession,
          cancelPublicOrder, fetchShopConfig, callStaff, fetchPublicStaffCall,
-         fetchLatestPublicStaffCall } from '../../api/shopApi'
+         fetchLatestPublicStaffCall, redeemPublicVoucher } from '../../api/shopApi'
 import ItemOptionsDialog from './ItemOptionsDialog'
 import OrderReceiptDialog from './OrderReceiptDialog'
+import VoucherQrScanDialog from '../shoporder/VoucherQrScanDialog'
 
 const genUid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
 const fmt    = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
@@ -477,6 +479,9 @@ export default function ShopMenuPage() {
   const [shopConfig, setShopConfig]         = useState({ prepaidMenu: false, bankBin: '', bankAccountNumber: '', bankAccountName: '' })
   const [prepaidQrOrder, setPrepaidQrOrder] = useState(null)
   const [imagePreview, setImagePreview]     = useState(null)
+  const [voucherScanOpen, setVoucherScanOpen] = useState(false)
+  const [voucherPayload, setVoucherPayload] = useState('')
+  const [voucherSnack, setVoucherSnack]     = useState({ open: false, message: '', severity: 'success' })
   const [form, setForm] = useState({
     fulfillmentType: 'PICKUP', customerName: rawCustomerName, customerPhone: '',
     deliveryAddress: '', paymentMethod: 'CASH',
@@ -667,6 +672,9 @@ export default function ShopMenuPage() {
   }
 
   const totalAmount = cartEntries.reduce((t, e) => t + entryTotal(e), 0)
+  const voucherDisplayCode = voucherPayload
+    ? (voucherPayload.startsWith('BV:') ? voucherPayload.split(':')[1] || 'Voucher QR' : voucherPayload)
+    : ''
 
   const getModelQty = (modelId) =>
     cartEntries.reduce((n, e) => n + (e.modelId === modelId ? e.qty : 0), 0)
@@ -842,6 +850,35 @@ export default function ShopMenuPage() {
       selectedOptions: null, itemNotes: null, sideItems: [] })),
   }))
 
+  const showVoucherSnack = (message, severity = 'success') =>
+    setVoucherSnack({ open: true, message, severity })
+
+  const handleVoucherScan = (payload) => {
+    const clean = String(payload || '').trim()
+    setVoucherScanOpen(false)
+    if (!clean) return
+    setVoucherPayload(clean)
+    setError('')
+  }
+
+  const applyVoucherToOrder = async (order) => {
+    const code = voucherPayload.trim()
+    if (!code || !order?.orderCode) return order
+    try {
+      const { res, data } = await redeemPublicVoucher(code, order.orderCode)
+      if (!res.ok) {
+        showVoucherSnack(data?.error || data?.message || 'Voucher không hợp lệ hoặc đã hết hạn.', 'error')
+        return order
+      }
+      const nextOrder = data?.order || order
+      setVoucherPayload('')
+      showVoucherSnack(`Đã áp dụng voucher ${data?.voucher?.code || ''}`.trim())
+      return nextOrder
+    } catch {
+      showVoucherSnack('Không áp dụng được voucher. Đơn vẫn được tạo.', 'error')
+      return order
+    }
+  }
   const handlePlaceOrder = async () => {
     if (!itemCount) return
     setSubmitting(true); setError('')
@@ -850,8 +887,9 @@ export default function ShopMenuPage() {
       if (editingOrderCode) {
         const { res, data } = await updatePublicOrderItems(editingOrderCode, items)
         if (!res.ok) { setError(data?.message || data?.error || 'Không thể cập nhật đơn'); setSubmitting(false); return }
+        const finalOrder = await applyVoucherToOrder(data)
         setCart({}); setSideForm({}); setCheckout(false); setCartOpen(false)
-        setEditingOrderCode(null); setTrackingOrder(data)
+        setEditingOrderCode(null); setTrackingOrder(finalOrder)
       } else {
         const body = {
           fulfillmentType: form.fulfillmentType, tableId: ctx.tableId || null,
@@ -862,11 +900,12 @@ export default function ShopMenuPage() {
         }
         const { res, data } = await createOrder(ctx.tenantId, ctx.companyId, body)
         if (!res.ok) { setError(data?.message || 'Không thể đặt đơn'); setSubmitting(false); return }
+        const finalOrder = await applyVoucherToOrder(data)
         setCart({}); setSideForm({}); setNotes(''); setCheckout(false); setCartOpen(false)
         if (shopConfig.prepaidMenu && shopConfig.bankBin && shopConfig.bankAccountNumber) {
-          setPrepaidQrOrder(data)
+          setPrepaidQrOrder(finalOrder)
         } else {
-          setTrackingOrder(data)
+          setTrackingOrder(finalOrder)
         }
       }
     } catch { setError('Lỗi mạng') } finally { setSubmitting(false) }
@@ -1617,6 +1656,15 @@ export default function ShopMenuPage() {
         </Alert>
       </Snackbar>
 
+      <Snackbar open={voucherSnack.open} autoHideDuration={5000}
+        onClose={() => setVoucherSnack(s => ({ ...s, open: false }))}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
+        <Alert severity={voucherSnack.severity || 'success'} onClose={() => setVoucherSnack(s => ({ ...s, open: false }))} sx={{ fontWeight: 700 }}>
+          {voucherSnack.message}
+        </Alert>
+      </Snackbar>
+
+
       {/* ── Cart bottom sheet ──────────────────────────────────── */}
       <Dialog open={cartOpen} onClose={() => setCartOpen(false)} fullWidth maxWidth="sm"
         PaperProps={{ sx: { position: 'fixed', bottom: 0, left: 0, right: 0, m: 0,
@@ -1753,6 +1801,18 @@ export default function ShopMenuPage() {
                 <MenuItem value="BANK_QR">Chuyển khoản QR</MenuItem>
               </Select>
             </FormControl>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+              <Button variant="outlined" size="small" startIcon={<QrCode2Icon />}
+                onClick={() => setVoucherScanOpen(true)}
+                sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 20 }}>
+                {voucherPayload ? 'Đổi voucher' : 'Quét / nhập voucher'}
+              </Button>
+              {voucherPayload && (
+                <Chip size="small" color="warning" label={voucherDisplayCode}
+                  onDelete={() => setVoucherPayload('')}
+                  sx={{ maxWidth: '100%', fontWeight: 700, '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' } }} />
+              )}
+            </Box>
 
             <Divider />
             <Box>
@@ -1812,6 +1872,12 @@ export default function ShopMenuPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <VoucherQrScanDialog
+        open={voucherScanOpen}
+        onClose={() => setVoucherScanOpen(false)}
+        onScan={handleVoucherScan}
+      />
 
       {/* ── Inline order tracking ──────────────────────────────── */}
       {trackingOrder && (

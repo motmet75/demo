@@ -27,12 +27,13 @@ import EditIcon from '@mui/icons-material/Edit'
 import UndoIcon from '@mui/icons-material/Undo'
 import LabelIcon from '@mui/icons-material/Label'
 import MonitorIcon from '@mui/icons-material/Monitor'
-import { fetchOrderTagQr, revertShopOrder, switchToQrPayment, splitPayment, revertToCash, patchOrderDiscount, linkOrderCustomer, fetchCustomers, fetchCustomerHistory, earnOrderPoints, fetchBankConfig, undoMergeBills } from '../../api/shopApi'
+import { fetchOrderTagQr, revertShopOrder, switchToQrPayment, splitPayment, revertToCash, patchOrderDiscount, redeemVoucher, fetchVoucherDetail, removeOrderVoucher, linkOrderCustomer, fetchCustomers, fetchCustomerHistory, earnOrderPoints, fetchBankConfig, undoMergeBills } from '../../api/shopApi'
 import { printOrderReceiptTracked, printOrderTagTracked, printCupLabelsTracked } from '../../utils/printWithHistory'
 import { broadcastToCounter } from '../shopboard/CounterDisplayPage'
 import EditOrderDialog from './EditOrderDialog'
 import ConfirmActionDialog from './ConfirmActionDialog'
 import SplitBillDialog from './SplitBillDialog'
+import VoucherQrScanDialog from './VoucherQrScanDialog'
 
 const fmt     = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : '—'
 const payableAmount = (order) => Math.max(0, Number(order?.totalAmount || 0) - Number(order?.discountAmount || 0))
@@ -167,6 +168,11 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
   const [undoMerging, setUndoMerging]         = useState(false)
   const [custHistory, setCustHistory]         = useState(null)
   const [custHistoryLoading, setCustHistoryLoading] = useState(false)
+  const [voucherScanOpen, setVoucherScanOpen] = useState(false)
+  const [voucherDetailOpen, setVoucherDetailOpen] = useState(false)
+  const [voucherDetail, setVoucherDetail]     = useState(null)
+  const [voucherLoading, setVoucherLoading]   = useState(false)
+  const [voucherRemoving, setVoucherRemoving] = useState(false)
 
   const askConfirm = (cfg, fn) => setConfirmDlg({ ...cfg, onConfirm: async (reason) => { setConfirmDlg(null); await fn(reason) } })
 
@@ -183,7 +189,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
     if (!open || !order) return
     setDiscountAmt(order.discountAmount ? String(order.discountAmount) : '')
     setVoucherCode(order.voucherCode || '')
-    setLinkedCustomer(null); setCustSearch(''); setCustResults([]); setCustHistory(null)
+    setLinkedCustomer(null); setCustSearch(''); setCustResults([]); setCustHistory(null); setVoucherDetail(null); setVoucherDetailOpen(false)
     if (order.customerId) {
       fetchCustomers().then(({ data }) => {
         const c = (data || []).find(x => x.id === order.customerId)
@@ -241,10 +247,55 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
     setDiscountSaving(true); setError('')
     try {
       const { res, data } = await patchOrderDiscount(order.id, discountAmt ? Number(discountAmt) : 0, voucherCode || null)
-      if (!res.ok) { setError(data?.error || 'Failed to apply discount'); setDiscountSaving(false); return }
+      if (!res.ok) { setError(data?.error || data?.message || 'Failed to apply discount'); setDiscountSaving(false); return }
       onRefresh?.()
     } catch (e) { setError(e.message || 'Network error') }
     setDiscountSaving(false)
+  }
+
+  const handleVoucherScan = async (payload) => {
+    const clean = String(payload || '').trim()
+    setVoucherScanOpen(false)
+    if (!clean) return
+    setDiscountSaving(true); setError('')
+    try {
+      const { res, data } = await redeemVoucher(clean, order.id)
+      if (!res.ok) { setError(data?.error || data?.message || 'Voucher could not be applied'); setDiscountSaving(false); return }
+      const nextOrder = data?.order
+      if (nextOrder) {
+        setDiscountAmt(nextOrder.discountAmount ? String(nextOrder.discountAmount) : '')
+        setVoucherCode(nextOrder.voucherCode || '')
+      }
+      setVoucherDetail(data?.voucher || null)
+      onRefresh?.()
+    } catch (e) { setError(e.message || 'Network error') }
+    setDiscountSaving(false)
+  }
+
+  const handleViewVoucher = async () => {
+    const code = order.voucherCode || voucherCode
+    if (!code) return
+    setVoucherLoading(true); setError('')
+    try {
+      const { res, data } = await fetchVoucherDetail(code)
+      if (!res.ok) { setError(data?.error || data?.message || 'Voucher not found'); setVoucherLoading(false); return }
+      setVoucherDetail(data)
+      setVoucherDetailOpen(true)
+    } catch (e) { setError(e.message || 'Network error') }
+    setVoucherLoading(false)
+  }
+
+  const handleRemoveVoucher = async () => {
+    setVoucherRemoving(true); setError('')
+    try {
+      const { res, data } = await removeOrderVoucher(order.id)
+      if (!res.ok) { setError(data?.error || data?.message || 'Failed to remove voucher'); setVoucherRemoving(false); return }
+      setVoucherCode('')
+      setDiscountAmt(data?.discountAmount ? String(data.discountAmount) : '')
+      setVoucherDetail(null)
+      onRefresh?.()
+    } catch (e) { setError(e.message || 'Network error') }
+    setVoucherRemoving(false)
   }
 
   const handleUndoMerge = async () => {
@@ -573,6 +624,15 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
                     Discount: -{fmt(discount)}{order.voucherCode ? ` (${order.voucherCode})` : ''}
                   </Typography>
                 )}
+                {order.voucherCode && (
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 0.75, mt: 0.25 }}>
+                    <Chip size="small" color={voucherDetail?.expired ? 'error' : 'warning'} label={order.voucherCode} sx={{ fontWeight: 700 }} />
+                    <Button size="small" variant="outlined" onClick={handleViewVoucher}
+                      disabled={voucherLoading} sx={{ textTransform: 'none', py: 0.15 }}>
+                      {voucherLoading ? 'Loading...' : 'View Voucher'}
+                    </Button>
+                  </Box>
+                )}
                 <Typography fontWeight={900} variant="h5" color="primary">Total: {fmt(grandTotal)}</Typography>
               </Box>
             </Box>
@@ -601,11 +661,32 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
                   sx={{ flex: 1, minWidth: 120 }}
                 />
                 <Button variant="contained" color="warning" size="small"
-                  onClick={handleApplyDiscount} disabled={discountSaving}
+                  onClick={handleApplyDiscount} disabled={discountSaving || voucherRemoving}
                   startIcon={discountSaving ? <CircularProgress size={14} /> : null}
                   sx={{ textTransform: 'none', fontWeight: 700, whiteSpace: 'nowrap', alignSelf: 'center' }}>
                   Apply
                 </Button>
+                <Button variant="outlined" color="primary" size="small"
+                  onClick={() => setVoucherScanOpen(true)} disabled={discountSaving || voucherRemoving}
+                  startIcon={<QrCode2Icon />}
+                  sx={{ textTransform: 'none', fontWeight: 700, whiteSpace: 'nowrap', alignSelf: 'center' }}>
+                  Scan Voucher
+                </Button>
+                {(order.voucherCode || voucherCode) && (
+                  <Button variant="outlined" size="small" onClick={handleViewVoucher}
+                    disabled={voucherLoading || discountSaving || voucherRemoving}
+                    sx={{ textTransform: 'none', fontWeight: 700, whiteSpace: 'nowrap', alignSelf: 'center' }}>
+                    {voucherLoading ? 'Loading...' : 'View'}
+                  </Button>
+                )}
+                {order.voucherCode && (
+                  <Button variant="outlined" color="error" size="small" onClick={handleRemoveVoucher}
+                    disabled={voucherRemoving || discountSaving}
+                    startIcon={voucherRemoving ? <CircularProgress size={14} /> : null}
+                    sx={{ textTransform: 'none', fontWeight: 700, whiteSpace: 'nowrap', alignSelf: 'center' }}>
+                    Remove Voucher
+                  </Button>
+                )}
               </Box>
             </Box>
           )}
@@ -985,6 +1066,55 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
             sx={{ textTransform: 'none', fontWeight: 700 }}>
             Confirm
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      <VoucherQrScanDialog
+        open={voucherScanOpen}
+        onClose={() => setVoucherScanOpen(false)}
+        onScan={handleVoucherScan}
+      />
+
+      <Dialog open={voucherDetailOpen} onClose={() => setVoucherDetailOpen(false)} maxWidth="xs" fullWidth
+        PaperProps={{ sx: { borderRadius: 2 } }}>
+        <DialogTitle sx={{ pb: 0.5 }}>
+          <Typography fontWeight={800}>Voucher Detail</Typography>
+          <Typography variant="caption" color="text.secondary">{voucherDetail?.code || order.voucherCode || voucherCode}</Typography>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 1.5 }}>
+          {voucherDetail ? (
+            <Stack spacing={1.1}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Chip size="small" label={voucherDetail.status || 'UNKNOWN'}
+                  color={voucherDetail.expired ? 'error' : voucherDetail.status === 'USED' ? 'success' : voucherDetail.status === 'ACTIVE' ? 'primary' : 'default'}
+                  sx={{ fontWeight: 800 }} />
+                {voucherDetail.expired && <Chip size="small" color="error" label="Expired" sx={{ fontWeight: 800 }} />}
+              </Box>
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+                <Typography variant="body2"><strong>Face:</strong> {fmt(voucherDetail.faceValue)}</Typography>
+                <Typography variant="body2"><strong>Sale:</strong> {fmt(voucherDetail.salePrice)}</Typography>
+                <Typography variant="body2"><strong>Expiry:</strong> {voucherDetail.expiryDate || '—'}</Typography>
+                <Typography variant="body2"><strong>Issued:</strong> {dateFmt(voucherDetail.createdAt)}</Typography>
+              </Box>
+              <Divider />
+              <Typography variant="body2"><strong>Redeemed order:</strong> {voucherDetail.redeemedOrderNumber ? `#${voucherDetail.redeemedOrderNumber}` : voucherDetail.redeemedOrderCode || '—'}</Typography>
+              <Typography variant="body2"><strong>Redeemed at:</strong> {dateFmt(voucherDetail.redeemedAt)}</Typography>
+              <Typography variant="body2"><strong>Customer:</strong> {voucherDetail.redeemedCustomerName || voucherDetail.customerId || '—'}</Typography>
+              {voucherDetail.notes && <Typography variant="body2"><strong>Notes:</strong> {voucherDetail.notes}</Typography>}
+            </Stack>
+          ) : (
+            <Box sx={{ py: 2, textAlign: 'center' }}><CircularProgress size={22} /></Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 2, pb: 2 }}>
+          {order.voucherCode && !isFinal && (
+            <Button color="error" onClick={handleRemoveVoucher} disabled={voucherRemoving}
+              startIcon={voucherRemoving ? <CircularProgress size={14} /> : null}
+              sx={{ textTransform: 'none' }}>
+              Remove Voucher
+            </Button>
+          )}
+          <Button onClick={() => setVoucherDetailOpen(false)} sx={{ textTransform: 'none' }}>Close</Button>
         </DialogActions>
       </Dialog>
     </>

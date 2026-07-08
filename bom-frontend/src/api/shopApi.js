@@ -66,6 +66,14 @@ export function updatePublicOrderItems(orderCode, items) {
   })
 }
 
+export function redeemPublicVoucher(code, orderCode) {
+  return apiFetchJsonNoContext('/shop/public/vouchers/redeem', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, orderCode })
+  })
+}
+
 // ── Staff (authenticated) ──────────────────────────────────────────
 
 export function createStaffOrder(body) {
@@ -525,6 +533,18 @@ export function redeemVoucher(code, orderId) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ code, orderId })
   })
+}
+
+export function fetchVoucherDetail(code) {
+  return apiFetchJson('/shop/staff/vouchers/detail', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code })
+  })
+}
+
+export function removeOrderVoucher(orderId) {
+  return apiFetchJson(`/shop/staff/orders/${orderId}/voucher`, { method: 'DELETE' })
 }
 
 export function rotateVoucherKey() {

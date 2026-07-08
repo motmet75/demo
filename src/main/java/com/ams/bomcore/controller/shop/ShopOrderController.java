@@ -1070,7 +1070,11 @@ public class ShopOrderController {
         BigDecimal discount = body.get("discountAmount") != null
             ? new BigDecimal(body.get("discountAmount").toString()) : null;
         String voucher = body.get("voucherCode") instanceof String s ? s : null;
-        return ResponseEntity.ok(shopOrderService.patchDiscount(orderId, discount, voucher, tId, cId));
+        try {
+            return ResponseEntity.ok(shopOrderService.patchDiscount(orderId, discount, voucher, tId, cId));
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     @PatchMapping("/shop/staff/orders/{orderId}/customer")

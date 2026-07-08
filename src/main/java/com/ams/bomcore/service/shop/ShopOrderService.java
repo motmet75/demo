@@ -13,6 +13,7 @@ import com.ams.bomcore.domain.shop.ShopOrder;
 import com.ams.bomcore.domain.shop.ShopOrderItem;
 import com.ams.bomcore.domain.shop.ShopMaterialAudit;
 import com.ams.bomcore.domain.shop.ShopTable;
+import com.ams.bomcore.domain.shop.ShopVoucher;
 import com.ams.bomcore.repository.*;
 import com.ams.bomcore.service.bom.BomService;
 import java.util.HashSet;
@@ -1103,10 +1104,28 @@ public class ShopOrderService {
     public ShopOrderResponseDto patchDiscount(UUID orderId, BigDecimal discountAmount, String voucherCode, UUID tenantId, UUID companyId) {
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         if (discountAmount != null) order.setDiscountAmount(discountAmount.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : discountAmount);
-        if (voucherCode != null) order.setVoucherCode(voucherCode.isBlank() ? null : voucherCode.trim());
+        if (voucherCode != null) {
+            String clean = voucherCode.trim();
+            if (clean.isBlank()) {
+                order.setVoucherCode(null);
+            } else {
+                shopVoucherRepository.findByTenantIdAndCompanyIdAndCode(tenantId, companyId, clean.toUpperCase())
+                    .ifPresent(v -> validateManualVoucherCode(v, orderId));
+                order.setVoucherCode(clean);
+            }
+        }
         refreshPaymentQr(order, companyRepository.findById(companyId).orElse(null));
         shopOrderRepository.save(order);
         return dto(order);
+    }
+
+    private void validateManualVoucherCode(ShopVoucher voucher, UUID orderId) {
+        if (voucher.getExpiryDate() != null && voucher.getExpiryDate().isBefore(LocalDate.now()))
+            throw new IllegalStateException("Voucher has expired");
+        if (ShopVoucher.STATUS_CANCELLED.equals(voucher.getStatus()))
+            throw new IllegalStateException("Voucher is cancelled");
+        if (ShopVoucher.STATUS_USED.equals(voucher.getStatus()) && !orderId.equals(voucher.getRedeemedOrderId()))
+            throw new IllegalStateException("Voucher is already used");
     }
 
     // ── Customer CRUD ──────────────────────────────────────────────────

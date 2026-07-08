@@ -127,29 +127,66 @@ public class ShopVoucherService {
     @Transactional
     public Map<String, Object> redeemVoucher(String codeOrPayload, UUID orderId,
                                               UUID tenantId, UUID companyId) {
+        ShopOrder order = orderRepository.findById(orderId)
+            .filter(o -> o.getTenantId().equals(tenantId) && o.getCompanyId().equals(companyId))
+            .orElseThrow(() -> new NoSuchElementException("Order not found"));
+        return redeemVoucherForOrder(codeOrPayload, order, tenantId, companyId);
+    }
+
+    @Transactional
+    public Map<String, Object> redeemVoucherForOrderCode(String codeOrPayload, String orderCode) {
+        ShopOrder order = orderRepository.findByOrderCode(orderCode)
+            .orElseThrow(() -> new NoSuchElementException("Order not found: " + orderCode));
+        return redeemVoucherForOrder(codeOrPayload, order, order.getTenantId(), order.getCompanyId());
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> getVoucherDetail(String codeOrPayload, UUID tenantId, UUID companyId) {
         var company = companyRepository.findById(companyId).orElseThrow();
         String secret = company.getVoucherSecret();
+        String code = normalizeVoucherCode(codeOrPayload, secret);
+        ShopVoucher v = voucherRepository
+            .findByTenantIdAndCompanyIdAndCode(tenantId, companyId, code)
+            .orElseThrow(() -> new NoSuchElementException("Voucher not found: " + code));
+        return toMap(v, secret);
+    }
+
+    @Transactional
+    public ShopOrderResponseDto removeVoucher(UUID orderId, UUID tenantId, UUID companyId) {
+        var company = companyRepository.findById(companyId).orElseThrow();
+        ShopOrder order = orderRepository.findById(orderId)
+            .filter(o -> o.getTenantId().equals(tenantId) && o.getCompanyId().equals(companyId))
+            .orElseThrow(() -> new NoSuchElementException("Order not found"));
+        removeExistingVoucherFromOrder(order, tenantId, companyId);
+        refreshPaymentQr(order, company);
+        orderRepository.save(order);
+        return ShopOrderResponseDto.from(order, orderItemRepository.findAllByOrder_Id(order.getId()));
+    }
+
+    private Map<String, Object> redeemVoucherForOrder(String codeOrPayload, ShopOrder order,
+                                                       UUID tenantId, UUID companyId) {
+        var company = companyRepository.findById(companyId).orElseThrow();
+        String secret = company.getVoucherSecret();
+        if (!order.getTenantId().equals(tenantId) || !order.getCompanyId().equals(companyId))
+            throw new IllegalArgumentException("Order does not belong to this company");
 
         // Accept either raw code or QR payload
-        String code;
-        if (codeOrPayload.startsWith("BV:")) {
-            code = decodeQrPayload(codeOrPayload, secret);
-        } else {
-            code = codeOrPayload.trim().toUpperCase();
-        }
+        String code = normalizeVoucherCode(codeOrPayload, secret);
 
         ShopVoucher v = voucherRepository
             .findByTenantIdAndCompanyIdAndCode(tenantId, companyId, code)
             .orElseThrow(() -> new NoSuchElementException("Voucher not found: " + code));
 
+        if (sameVoucher(order, v)) {
+            return redeemResult(v, order, secret, BigDecimal.ZERO);
+        }
+
         if (!ShopVoucher.STATUS_ACTIVE.equals(v.getStatus()))
             throw new IllegalStateException("Voucher is " + v.getStatus().toLowerCase());
-        if (v.getExpiryDate() != null && v.getExpiryDate().isBefore(LocalDate.now()))
+        if (isExpired(v))
             throw new IllegalStateException("Voucher has expired");
 
-        ShopOrder order = orderRepository.findById(orderId)
-            .filter(o -> o.getTenantId().equals(tenantId) && o.getCompanyId().equals(companyId))
-            .orElseThrow(() -> new NoSuchElementException("Order not found"));
+        removeExistingVoucherFromOrder(order, tenantId, companyId);
 
         // Apply as discount
         BigDecimal current = order.getDiscountAmount() != null ? order.getDiscountAmount() : BigDecimal.ZERO;
@@ -160,14 +197,18 @@ public class ShopVoucherService {
 
         v.setStatus(ShopVoucher.STATUS_USED);
         v.setRedeemedAt(Instant.now());
-        v.setRedeemedOrderId(orderId);
+        v.setRedeemedOrderId(order.getId());
         v.setRedeemedCustomerId(order.getCustomerId());
         v.setRedeemedCustomerName(order.getCustomerName());
         voucherRepository.save(v);
 
+        return redeemResult(v, order, secret, v.getFaceValue());
+    }
+
+    private Map<String, Object> redeemResult(ShopVoucher v, ShopOrder order, String secret, BigDecimal discountApplied) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("voucher", toMap(v, secret));
-        result.put("discountApplied", v.getFaceValue());
+        result.put("discountApplied", discountApplied);
         result.put("newDiscountTotal", order.getDiscountAmount());
         result.put("redeemedCustomerId", order.getCustomerId());
         result.put("redeemedCustomerName", order.getCustomerName());
@@ -204,6 +245,46 @@ public class ShopVoucherService {
         BigDecimal discount = order.getDiscountAmount() != null ? order.getDiscountAmount() : BigDecimal.ZERO;
         BigDecimal payable = total.subtract(discount);
         return payable.compareTo(BigDecimal.ZERO) > 0 ? payable : BigDecimal.ZERO;
+    }
+
+    private String normalizeVoucherCode(String codeOrPayload, String secret) {
+        if (codeOrPayload == null || codeOrPayload.isBlank())
+            throw new IllegalArgumentException("Voucher code is required");
+        String clean = codeOrPayload.trim();
+        if (clean.startsWith("BV:")) return decodeQrPayload(clean, secret);
+        return clean.toUpperCase();
+    }
+
+    private boolean isExpired(ShopVoucher v) {
+        return v.getExpiryDate() != null && v.getExpiryDate().isBefore(LocalDate.now());
+    }
+
+    private boolean sameVoucher(ShopOrder order, ShopVoucher v) {
+        return order.getVoucherCode() != null
+            && order.getVoucherCode().equalsIgnoreCase(v.getCode())
+            && order.getId().equals(v.getRedeemedOrderId());
+    }
+
+    private void removeExistingVoucherFromOrder(ShopOrder order, UUID tenantId, UUID companyId) {
+        String currentCode = order.getVoucherCode();
+        if (currentCode == null || currentCode.isBlank()) return;
+
+        voucherRepository
+            .findByTenantIdAndCompanyIdAndCode(tenantId, companyId, currentCode.trim().toUpperCase())
+            .filter(v -> order.getId().equals(v.getRedeemedOrderId()))
+            .ifPresent(v -> {
+                BigDecimal discount = order.getDiscountAmount() != null ? order.getDiscountAmount() : BigDecimal.ZERO;
+                BigDecimal face = v.getFaceValue() != null ? v.getFaceValue() : BigDecimal.ZERO;
+                BigDecimal next = discount.subtract(face);
+                order.setDiscountAmount(next.compareTo(BigDecimal.ZERO) > 0 ? next : BigDecimal.ZERO);
+                v.setStatus(ShopVoucher.STATUS_ACTIVE);
+                v.setRedeemedAt(null);
+                v.setRedeemedOrderId(null);
+                v.setRedeemedCustomerId(null);
+                v.setRedeemedCustomerName(null);
+                voucherRepository.save(v);
+            });
+        order.setVoucherCode(null);
     }
 
     private BigDecimal splitCashPortion(ShopOrder order) {
@@ -266,9 +347,10 @@ public class ShopVoucherService {
             });
         }
         m.put("expiryDate",     v.getExpiryDate());
+        m.put("expired",        isExpired(v));
         m.put("notes",          v.getNotes());
         m.put("createdAt",      v.getCreatedAt());
-        if (secret != null && ShopVoucher.STATUS_ACTIVE.equals(v.getStatus())) {
+        if (secret != null && ShopVoucher.STATUS_ACTIVE.equals(v.getStatus()) && !isExpired(v)) {
             String payload = encodeQrPayload(v.getCode(), secret);
             m.put("qrPayload", payload);
             try { m.put("qrBase64", QrCodeUtil.generateBase64Png(payload, 300)); } catch (Exception e) { /* skip */ }

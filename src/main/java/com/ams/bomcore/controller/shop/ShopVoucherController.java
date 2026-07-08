@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.UUID;
 
 @RestController
@@ -59,6 +60,17 @@ public class ShopVoucherController {
         return ResponseEntity.ok(voucherService.cancelVoucher(id, tId, cId));
     }
 
+    @PostMapping("/shop/staff/vouchers/detail")
+    public ResponseEntity<?> detail(@RequestBody Map<String, Object> body,
+                                    @RequestParam(required = false) UUID tenantId,
+                                    @RequestParam(required = false) UUID companyId,
+                                    @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                    @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        String code = String.valueOf(body.get("code"));
+        return ResponseEntity.ok(voucherService.getVoucherDetail(code, tId, cId));
+    }
+
     /** Redeem a voucher (by code or QR payload) against an order. */
     @PostMapping("/shop/staff/vouchers/redeem")
     public ResponseEntity<?> redeem(@RequestBody Map<String, Object> body,
@@ -70,6 +82,27 @@ public class ShopVoucherController {
         String code    = String.valueOf(body.get("code"));
         UUID   orderId = UUID.fromString(String.valueOf(body.get("orderId")));
         return ResponseEntity.ok(voucherService.redeemVoucher(code, orderId, tId, cId));
+    }
+
+    @DeleteMapping("/shop/staff/orders/{orderId}/voucher")
+    public ResponseEntity<?> removeFromOrder(@PathVariable UUID orderId,
+                                             @RequestParam(required = false) UUID tenantId,
+                                             @RequestParam(required = false) UUID companyId,
+                                             @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                             @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        return ResponseEntity.ok(voucherService.removeVoucher(orderId, tId, cId));
+    }
+
+    @PostMapping("/shop/public/vouchers/redeem")
+    public ResponseEntity<?> redeemPublic(@RequestBody Map<String, Object> body) {
+        try {
+            String code = String.valueOf(body.get("code"));
+            String orderCode = String.valueOf(body.get("orderCode"));
+            return ResponseEntity.ok(voucherService.redeemVoucherForOrderCode(code, orderCode));
+        } catch (IllegalArgumentException | IllegalStateException | NoSuchElementException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     // ── Key management ────────────────────────────────────────────────
