@@ -9,6 +9,9 @@ import { pickupScan, fetchPublicOrder } from '../../api/shopApi'
 function fmt(n) {
   return Number(n || 0).toLocaleString('vi-VN') + ' đ'
 }
+const payableAmount = (order) => Math.max(0, Number(order?.totalAmount || 0) - Number(order?.discountAmount || 0))
+const splitCashPortion = (order) => Math.max(0, Math.min(Number(order?.splitCashAmount || 0), payableAmount(order)))
+const splitQrPortion = (order) => Math.max(0, payableAmount(order) - splitCashPortion(order))
 
 export default function CustomerPickupPage() {
   const { orderCode } = useParams()
@@ -122,10 +125,10 @@ export default function CustomerPickupPage() {
                 <Box key={ch.id} sx={{ display: 'flex', alignItems: 'baseline', gap: 1, ml: 3, pl: 1, borderLeft: '2px solid #334155' }}>
                   <Typography sx={{ fontSize: 11, color: '#64748b', minWidth: 28 }}>{ri + 1}.{ci + 1}</Typography>
                   <Typography sx={{ fontSize: 12, color: '#94a3b8', flex: 1 }}>
-                    {parentQty}×{Number(ch.quantity || 1)} {ch.modelName}
+                    {Number(ch.quantity || 1)}× {ch.modelName}
                   </Typography>
                   <Typography sx={{ fontSize: 12, color: '#64748b' }}>
-                    {fmt(Number(ch.lineTotal || 0) * parentQty)}
+                    {fmt(Number(ch.lineTotal || 0))}
                   </Typography>
                 </Box>
               ))}
@@ -135,7 +138,7 @@ export default function CustomerPickupPage() {
         <Box sx={{ borderTop: '1px solid #334155', pt: 1, mt: 0.5, display: 'flex', justifyContent: 'space-between' }}>
           <Typography sx={{ fontSize: 14, fontWeight: 700, color: '#f1f5f9' }}>Total</Typography>
           <Typography sx={{ fontSize: 16, fontWeight: 900, color: '#fbbf24' }}>
-            {fmt(order.totalAmount)}
+            {fmt(payableAmount(order))}
           </Typography>
         </Box>
       </Box>
@@ -148,8 +151,8 @@ export default function CustomerPickupPage() {
           ? order.paymentQr
           : order.paymentQr ? `data:image/png;base64,${order.paymentQr}` : null
         if (!(isQr || isSplit) || !payQrSrc) return null
-        const splitCash = isSplit ? Number(order.splitCashAmount || 0) : 0
-        const qrAmount = isSplit ? Number(order.totalAmount || 0) - splitCash : Number(order.totalAmount || 0)
+        const splitCash = isSplit ? splitCashPortion(order) : 0
+        const qrAmount = isSplit ? splitQrPortion(order) : payableAmount(order)
         return (
           <Box sx={{
             width: '100%',

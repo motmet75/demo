@@ -95,6 +95,7 @@ const STATUS_COLOR  = { PENDING: 'default', CONFIRMED: 'primary', PREPARING: 'wa
 const STATUS_LABEL  = { PENDING: 'Placed', CONFIRMED: 'Confirmed', PREPARING: 'Preparing', READY: 'Ready ✓', PICKED_UP: 'Picked Up ✓', COMPLETED: 'Done', CANCELLED: 'Cancelled' }
 const STATUSES      = ['', 'PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'PICKED_UP', 'COMPLETED', 'CANCELLED']
 const fmt           = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
+const payableAmount = (order) => Math.max(0, Number(order?.totalAmount || 0) - Number(order?.discountAmount || 0))
 const dateFmt       = (v) => v ? new Date(v).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) + ' ' + new Date(v).toLocaleDateString('vi-VN') : ''
 const elapsed       = (v) => {
   if (!v) return ''
@@ -740,7 +741,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
         {order.notes && <Typography sx={{ fontSize: 11, fontStyle: 'italic', color: '#64748b', mb: 0.25 }}>📝 {order.notes}</Typography>}
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Typography sx={{ fontSize: 10, color: '#94a3b8' }}>{dateFmt(order.createdAt)}</Typography>
-          <Typography sx={{ fontSize: 17, fontWeight: 900, color: s.num }}>{fmt(order.totalAmount)}</Typography>
+          <Typography sx={{ fontSize: 17, fontWeight: 900, color: s.num }}>{fmt(payableAmount(order))}</Typography>
         </Box>
       </Box>
 
@@ -1536,9 +1537,10 @@ export default function ShopOrderGrid() {
       {/* Payment QR dialog — generate VietQR (qr_only, no logo in center) for any unpaid order */}
       {payQrOrder && (() => {
         const cfg = bankConfig
+        const payAmount = payableAmount(payQrOrder)
         const qrUrl = cfg?.bankBin && cfg?.bankAccountNumber
           ? `https://img.vietqr.io/image/${cfg.bankBin}-${cfg.bankAccountNumber}-qr_only.png`
-            + `?amount=${Math.round(Number(payQrOrder.totalAmount || 0))}`
+            + `?amount=${Math.round(payAmount)}`
             + `&addInfo=${encodeURIComponent(payQrOrder.orderCode || '')}`
             + `&accountName=${encodeURIComponent(cfg.bankAccountName || '')}`
           : null
@@ -1563,7 +1565,7 @@ export default function ShopOrderGrid() {
                       style={{ width: 200, height: 200, display: 'block', borderRadius: 6 }} />
                   </Box>
                   <Typography variant="h6" fontWeight={900} color="primary" sx={{ mt: 1.25 }}>
-                    {fmt(payQrOrder.totalAmount)}
+                    {fmt(payAmount)}
                   </Typography>
                   {payQrOrder.orderNumber && (
                     <Typography variant="body2" fontWeight={700} color="text.secondary">
@@ -1787,8 +1789,8 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
     (o.paymentMethod === 'BANK_QR' || o.paymentMethod === 'SPLIT') &&
     !['COMPLETED', 'PICKED_UP', 'CANCELLED'].includes(o.status)
   )
-  const grandTotal    = activeOrders.reduce((s, o) => s + Number(o.totalAmount || 0), 0)
-  const unpaidTotal   = unpaidOrders.reduce((s, o) => s + Number(o.totalAmount || 0), 0)
+  const grandTotal    = activeOrders.reduce((s, o) => s + payableAmount(o), 0)
+  const unpaidTotal   = unpaidOrders.reduce((s, o) => s + payableAmount(o), 0)
 
   // After switching to QR, show the combined QR for the unpaid total
   const anyQrPay = activeOrders.some(o =>
@@ -1921,7 +1923,7 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
                       <Box sx={{ flex: 1 }} />
                       <Typography fontWeight={800} color={isCancelled ? 'text.disabled' : 'primary'}
                         sx={{ textDecoration: isCancelled ? 'line-through' : 'none' }}>
-                        {fmtAmt(order.totalAmount)}
+                        {fmtAmt(payableAmount(order))}
                       </Typography>
                       {order.paymentStatus === 'PAID' && (
                         <Chip label="Paid" color="success" size="small" sx={{ fontWeight: 700, fontSize: 10 }} />

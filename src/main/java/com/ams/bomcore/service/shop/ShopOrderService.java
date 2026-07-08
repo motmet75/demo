@@ -199,19 +199,7 @@ public class ShopOrderService {
         order.setTotalRawCost(totals[1]);
 
         // Generate payment QR immediately for prepayment (BANK_QR) orders
-        if ("BANK_QR".equals(order.getPaymentMethod())) {
-            Company company = companyRepository.findById(companyId).orElse(null);
-            if (company != null && company.getBankBin() != null && !company.getBankBin().isBlank()
-                    && company.getBankAccountNumber() != null && !company.getBankAccountNumber().isBlank()) {
-                order.setPaymentQr(VietQrBuilder.buildUrl(
-                        company.getBankBin(),
-                        company.getBankAccountNumber(),
-                        company.getBankAccountName(),
-                        order.getTotalAmount(),
-                        order.getOrderCode()
-                ));
-            }
-        }
+        refreshPaymentQr(order, companyRepository.findById(companyId).orElse(null));
 
         shopOrderRepository.save(order);
         resetOrderBills(order, items);
@@ -293,6 +281,7 @@ public class ShopOrderService {
         order.setTotalAmount(totals[0].add(fee));
         order.setTotalRawCost(totals[1]);
         order.setCustomerEditing(false);
+        refreshPaymentQr(order, companyRepository.findById(companyId).orElse(null));
         shopOrderRepository.save(order);
         resetOrderBills(order, items);
         return dto(order);
@@ -350,17 +339,7 @@ public class ShopOrderService {
         order.setReadyAt(Instant.now());
 
         // Regenerate VietQR URL at ready time (ensures amount is final)
-        Company company = companyRepository.findById(companyId).orElse(null);
-        if (company != null && company.getBankBin() != null && !company.getBankBin().isBlank()
-                && company.getBankAccountNumber() != null && !company.getBankAccountNumber().isBlank()) {
-            order.setPaymentQr(VietQrBuilder.buildUrl(
-                    company.getBankBin(),
-                    company.getBankAccountNumber(),
-                    company.getBankAccountName(),
-                    order.getTotalAmount(),
-                    order.getOrderCode()
-            ));
-        }
+        refreshPaymentQr(order, companyRepository.findById(companyId).orElse(null));
         shopOrderRepository.save(order);
         return dto(order);
     }
@@ -637,6 +616,52 @@ public class ShopOrderService {
 
     // ── Payment ───────────────────────────────────────────────────────
 
+    private boolean hasBankConfig(Company company) {
+        return company != null
+                && company.getBankBin() != null && !company.getBankBin().isBlank()
+                && company.getBankAccountNumber() != null && !company.getBankAccountNumber().isBlank();
+    }
+
+    private BigDecimal payableAmount(ShopOrder order) {
+        BigDecimal total = order.getTotalAmount() != null ? order.getTotalAmount() : BigDecimal.ZERO;
+        BigDecimal discount = order.getDiscountAmount() != null ? order.getDiscountAmount() : BigDecimal.ZERO;
+        BigDecimal payable = total.subtract(discount);
+        return payable.compareTo(BigDecimal.ZERO) > 0 ? payable : BigDecimal.ZERO;
+    }
+
+    private BigDecimal splitCashPortion(ShopOrder order) {
+        BigDecimal payable = payableAmount(order);
+        BigDecimal cash = order.getSplitCashAmount() != null ? order.getSplitCashAmount() : BigDecimal.ZERO;
+        if (cash.compareTo(BigDecimal.ZERO) < 0) return BigDecimal.ZERO;
+        return cash.compareTo(payable) > 0 ? payable : cash;
+    }
+
+    private BigDecimal splitQrPortion(ShopOrder order) {
+        return payableAmount(order).subtract(splitCashPortion(order));
+    }
+
+    private void refreshPaymentQr(ShopOrder order, Company company) {
+        BigDecimal amount;
+        if (ShopOrder.PAYMENT_BANK_QR.equals(order.getPaymentMethod())) {
+            amount = payableAmount(order);
+        } else if (ShopOrder.PAYMENT_SPLIT.equals(order.getPaymentMethod())) {
+            BigDecimal cash = splitCashPortion(order);
+            order.setSplitCashAmount(cash);
+            amount = payableAmount(order).subtract(cash);
+        } else {
+            order.setPaymentQr(null);
+            return;
+        }
+
+        if (amount.compareTo(BigDecimal.ZERO) <= 0 || !hasBankConfig(company)) {
+            order.setPaymentQr(null);
+            return;
+        }
+
+        order.setPaymentQr(VietQrBuilder.buildUrl(
+                company.getBankBin(), company.getBankAccountNumber(),
+                company.getBankAccountName(), amount, order.getOrderCode()));
+    }
     @Transactional
     public ShopOrderResponseDto switchToQrPayment(UUID orderId, UUID tenantId, UUID companyId) {
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
@@ -645,13 +670,7 @@ public class ShopOrderService {
         }
         order.setPaymentMethod(ShopOrder.PAYMENT_BANK_QR);
         order.setSplitCashAmount(null);
-        Company company = companyRepository.findById(companyId).orElse(null);
-        if (company != null && company.getBankBin() != null && !company.getBankBin().isBlank()
-                && company.getBankAccountNumber() != null && !company.getBankAccountNumber().isBlank()) {
-            order.setPaymentQr(VietQrBuilder.buildUrl(
-                    company.getBankBin(), company.getBankAccountNumber(),
-                    company.getBankAccountName(), order.getTotalAmount(), order.getOrderCode()));
-        }
+        refreshPaymentQr(order, companyRepository.findById(companyId).orElse(null));
         shopOrderRepository.save(order);
         return dto(order);
     }
@@ -662,23 +681,13 @@ public class ShopOrderService {
         if (isFinalStatus(order.getStatus())) {
             throw new IllegalStateException("Cannot change payment method of a completed or cancelled order");
         }
-        BigDecimal total = order.getTotalAmount() != null ? order.getTotalAmount() : BigDecimal.ZERO;
+        BigDecimal total = payableAmount(order);
         if (cashAmount == null || cashAmount.compareTo(BigDecimal.ZERO) < 0 || cashAmount.compareTo(total) > 0) {
             throw new IllegalArgumentException("Cash amount must be between 0 and " + total);
         }
-        BigDecimal qrAmount = total.subtract(cashAmount);
         order.setPaymentMethod(ShopOrder.PAYMENT_SPLIT);
         order.setSplitCashAmount(cashAmount);
-        Company company = companyRepository.findById(companyId).orElse(null);
-        if (qrAmount.compareTo(BigDecimal.ZERO) > 0 && company != null
-                && company.getBankBin() != null && !company.getBankBin().isBlank()
-                && company.getBankAccountNumber() != null && !company.getBankAccountNumber().isBlank()) {
-            order.setPaymentQr(VietQrBuilder.buildUrl(
-                    company.getBankBin(), company.getBankAccountNumber(),
-                    company.getBankAccountName(), qrAmount, order.getOrderCode()));
-        } else {
-            order.setPaymentQr(null);
-        }
+        refreshPaymentQr(order, companyRepository.findById(companyId).orElse(null));
         shopOrderRepository.save(order);
         return dto(order);
     }
@@ -758,15 +767,7 @@ public class ShopOrderService {
         order.setTotalAmount(totals[0].add(fee));
         order.setTotalRawCost(totals[1]);
 
-        if ("BANK_QR".equals(order.getPaymentMethod())) {
-            Company company = companyRepository.findById(companyId).orElse(null);
-            if (company != null && company.getBankBin() != null && !company.getBankBin().isBlank()
-                    && company.getBankAccountNumber() != null && !company.getBankAccountNumber().isBlank()) {
-                order.setPaymentQr(VietQrBuilder.buildUrl(
-                        company.getBankBin(), company.getBankAccountNumber(),
-                        company.getBankAccountName(), order.getTotalAmount(), order.getOrderCode()));
-            }
-        }
+        refreshPaymentQr(order, companyRepository.findById(companyId).orElse(null));
 
         shopOrderRepository.save(order);
         resetOrderBills(order, items);
@@ -1103,6 +1104,7 @@ public class ShopOrderService {
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         if (discountAmount != null) order.setDiscountAmount(discountAmount.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : discountAmount);
         if (voucherCode != null) order.setVoucherCode(voucherCode.isBlank() ? null : voucherCode.trim());
+        refreshPaymentQr(order, companyRepository.findById(companyId).orElse(null));
         shopOrderRepository.save(order);
         return dto(order);
     }
@@ -1647,6 +1649,7 @@ public class ShopOrderService {
         order.setTotalAmount(totals[0].add(fee));
         order.setTotalRawCost(totals[1]);
         order.setCustomerEditing(false);
+        refreshPaymentQr(order, companyRepository.findById(companyId).orElse(null));
         shopOrderRepository.save(order);
         resetOrderBills(order, items);
         return dto(order);

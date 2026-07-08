@@ -1,6 +1,7 @@
 package com.ams.bomcore.service.shop;
 
 import com.ams.bomcore.controller.shop.dto.ShopOrderResponseDto;
+import com.ams.bomcore.domain.company.Company;
 import com.ams.bomcore.domain.shop.ShopOrder;
 import com.ams.bomcore.domain.shop.ShopVoucher;
 import com.ams.bomcore.repository.CompanyRepository;
@@ -8,6 +9,7 @@ import com.ams.bomcore.repository.ShopOrderItemRepository;
 import com.ams.bomcore.repository.ShopOrderRepository;
 import com.ams.bomcore.repository.ShopVoucherRepository;
 import com.ams.bomcore.util.QrCodeUtil;
+import com.ams.bomcore.util.VietQrBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -153,6 +155,7 @@ public class ShopVoucherService {
         BigDecimal current = order.getDiscountAmount() != null ? order.getDiscountAmount() : BigDecimal.ZERO;
         order.setDiscountAmount(current.add(v.getFaceValue()));
         order.setVoucherCode(v.getCode());
+        refreshPaymentQr(order, company);
         orderRepository.save(order);
 
         v.setStatus(ShopVoucher.STATUS_USED);
@@ -190,6 +193,48 @@ public class ShopVoucherService {
 
     // ── Helpers ───────────────────────────────────────────────────────
 
+    private boolean hasBankConfig(Company company) {
+        return company != null
+                && company.getBankBin() != null && !company.getBankBin().isBlank()
+                && company.getBankAccountNumber() != null && !company.getBankAccountNumber().isBlank();
+    }
+
+    private BigDecimal payableAmount(ShopOrder order) {
+        BigDecimal total = order.getTotalAmount() != null ? order.getTotalAmount() : BigDecimal.ZERO;
+        BigDecimal discount = order.getDiscountAmount() != null ? order.getDiscountAmount() : BigDecimal.ZERO;
+        BigDecimal payable = total.subtract(discount);
+        return payable.compareTo(BigDecimal.ZERO) > 0 ? payable : BigDecimal.ZERO;
+    }
+
+    private BigDecimal splitCashPortion(ShopOrder order) {
+        BigDecimal payable = payableAmount(order);
+        BigDecimal cash = order.getSplitCashAmount() != null ? order.getSplitCashAmount() : BigDecimal.ZERO;
+        if (cash.compareTo(BigDecimal.ZERO) < 0) return BigDecimal.ZERO;
+        return cash.compareTo(payable) > 0 ? payable : cash;
+    }
+
+    private void refreshPaymentQr(ShopOrder order, Company company) {
+        BigDecimal amount;
+        if (ShopOrder.PAYMENT_BANK_QR.equals(order.getPaymentMethod())) {
+            amount = payableAmount(order);
+        } else if (ShopOrder.PAYMENT_SPLIT.equals(order.getPaymentMethod())) {
+            BigDecimal cash = splitCashPortion(order);
+            order.setSplitCashAmount(cash);
+            amount = payableAmount(order).subtract(cash);
+        } else {
+            order.setPaymentQr(null);
+            return;
+        }
+
+        if (amount.compareTo(BigDecimal.ZERO) <= 0 || !hasBankConfig(company)) {
+            order.setPaymentQr(null);
+            return;
+        }
+
+        order.setPaymentQr(VietQrBuilder.buildUrl(
+                company.getBankBin(), company.getBankAccountNumber(),
+                company.getBankAccountName(), amount, order.getOrderCode()));
+    }
     private String generateUniqueCode(UUID tenantId, UUID companyId) {
         for (int attempt = 0; attempt < 20; attempt++) {
             StringBuilder sb = new StringBuilder(10);

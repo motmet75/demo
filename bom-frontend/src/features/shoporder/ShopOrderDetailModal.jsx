@@ -35,6 +35,9 @@ import ConfirmActionDialog from './ConfirmActionDialog'
 import SplitBillDialog from './SplitBillDialog'
 
 const fmt     = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : '—'
+const payableAmount = (order) => Math.max(0, Number(order?.totalAmount || 0) - Number(order?.discountAmount || 0))
+const splitCashPortion = (order) => Math.max(0, Math.min(Number(order?.splitCashAmount || 0), payableAmount(order)))
+const splitQrPortion = (order) => Math.max(0, payableAmount(order) - splitCashPortion(order))
 const fmtDots = (digits) => digits ? Number(digits).toLocaleString('vi-VN') : ''
 const stripNonDigits = (s) => s.replace(/[^0-9]/g, '')
 const pct = (sell, raw) => {
@@ -380,12 +383,12 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
   const canSwitchToQr = order.paymentMethod === 'CASH' && !isFinal
   const canSplit      = !isFinal && order.paymentMethod !== 'SPLIT'
   const canRevertCash = !isFinal && (order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT')
-  const total         = Number(order.totalAmount || 0)
+  const total         = payableAmount(order)
   const cashNum       = Number(cashInput) || 0
   const qrPortion     = Math.max(0, total - cashNum)
 
-  const splitCash = Number(order.splitCashAmount || 0)
-  const splitQr   = total - splitCash
+  const splitCash = splitCashPortion(order)
+  const splitQr   = splitQrPortion(order)
 
   const payQrSrc = order.paymentQr?.startsWith('https://')
     ? order.paymentQr
@@ -547,7 +550,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
             const itemsTotal = groups.reduce((s, g) => s + g.subtotal, 0)
             const delivery   = Number(order.deliveryFee || 0)
             const discount   = Number(order.discountAmount || 0)
-            const grandTotal = itemsTotal + delivery - discount
+            const grandTotal = Math.max(0, itemsTotal + delivery - discount)
             const totalMainQty = groups.reduce((s, g) => s + Number(g.root.quantity || 1), 0)
             const totalLines   = groups.length
             return (
@@ -616,7 +619,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
             {linkedCustomer ? (() => {
               const rate = bankCfg?.pointsConversionRate || 10000
               const roundUp = bankCfg?.pointsRoundUp || false
-              const net = Math.max(0, Number(order.totalAmount || 0) - Number(order.discountAmount || 0))
+              const net = payableAmount(order)
               const preview = roundUp ? Math.ceil(net / rate) : Math.floor(net / rate)
               return (
               <Box>

@@ -55,6 +55,7 @@ import OrderReceiptDialog from './OrderReceiptDialog'
 
 const genUid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
 const fmt    = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
+const payableAmount = (order) => Math.max(0, Number(order?.totalAmount || 0) - Number(order?.discountAmount || 0))
 
 const STAFF_CALL_STORAGE_PREFIX = 'shop_customer_staff_call_v1'
 
@@ -164,7 +165,7 @@ function SessionOrderList({ session, token, onEdit, onView }) {
     </Box>
   )
 
-  const grandTotal = orders.reduce((s, o) => s + Number(o.totalAmount || 0), 0)
+  const grandTotal = orders.reduce((s, o) => s + payableAmount(o), 0)
 
   return (
     <>
@@ -194,7 +195,7 @@ function SessionOrderList({ session, token, onEdit, onView }) {
                 )}
                 <Box sx={{ flex: 1 }} />
                 <Typography fontWeight={800} color="primary" sx={{ fontSize: 14 }}>
-                  {fmt(order.totalAmount)}
+                  {fmt(payableAmount(order))}
                 </Typography>
               </Box>
 
@@ -390,7 +391,7 @@ function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpda
         })}
         <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 0.5 }}>
           <Typography fontWeight={700}>Tổng cộng</Typography>
-          <Typography fontWeight={900} color="primary">{fmtLocal(order.totalAmount)}</Typography>
+          <Typography fontWeight={900} color="primary">{fmtLocal(payableAmount(order))}</Typography>
         </Box>
       </Box>
 
@@ -1631,7 +1632,7 @@ export default function ShopMenuPage() {
 
       {/* ── Prepaid payment QR ────────────────────────────────── */}
       {prepaidQrOrder && (() => {
-        const amount = Math.round(Number(prepaidQrOrder.totalAmount || 0))
+        const amount = Math.round(payableAmount(prepaidQrOrder))
         const qrUrl = shopConfig.bankBin && shopConfig.bankAccountNumber
           ? `https://img.vietqr.io/image/${shopConfig.bankBin}-${shopConfig.bankAccountNumber}-qr_only.png`
             + `?amount=${amount}&addInfo=${encodeURIComponent(prepaidQrOrder.orderCode)}`
@@ -1655,7 +1656,7 @@ export default function ShopMenuPage() {
               ) : (
                 <Alert severity="warning" sx={{ mb: 1.5 }}>Chưa cấu hình tài khoản ngân hàng — vui lòng thanh toán tại quầy.</Alert>
               )}
-              <Typography variant="h5" fontWeight={900} color="primary">{fmt(prepaidQrOrder.totalAmount)}</Typography>
+              <Typography variant="h5" fontWeight={900} color="primary">{fmt(payableAmount(prepaidQrOrder))}</Typography>
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
                 Mã: <strong>{prepaidQrOrder.orderCode}</strong>
                 {shopConfig.bankAccountName ? ` · ${shopConfig.bankAccountName}` : ''}

@@ -17,6 +17,7 @@ import { fetchPublicOrder, fetchTokenSession } from '../../api/shopApi'
 import { printOrderReceipt } from '../../utils/printOrderReceipt'
 
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
+const payableAmount = (order) => Math.max(0, Number(order?.totalAmount || 0) - Number(order?.discountAmount || 0))
 
 const STEPS = [
   { key: 'PENDING',   label: 'Placed',    emoji: '📋' },
@@ -127,7 +128,7 @@ function SingleOrderView({ order, onEdit }) {
           <Typography variant="subtitle2" fontWeight={700} color="#0277bd" sx={{ mb: 1.5 }}>Scan to Pay</Typography>
           <img src={isQrUrl ? order.paymentQr : `data:image/png;base64,${order.paymentQr}`} alt="Payment QR"
             style={{ width: 200, height: 200, display: 'block', margin: '0 auto', borderRadius: 8 }} />
-          <Typography variant="h6" fontWeight={800} color="primary" sx={{ mt: 1.25 }}>{fmt(order.totalAmount)}</Typography>
+          <Typography variant="h6" fontWeight={800} color="primary" sx={{ mt: 1.25 }}>{fmt(payableAmount(order))}</Typography>
           <Typography variant="caption" color="text.secondary">ref: {order.orderCode}</Typography>
         </Box>
       )}
@@ -218,7 +219,7 @@ function OrderCard({ order, highlighted, token }) {
               animation: 'blink2 1.4s infinite', '@keyframes blink2': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0.2 } } }} />
           )}
         </Box>
-        <Typography fontWeight={800} color="primary" sx={{ fontSize: 15 }}>{fmt(order.totalAmount)}</Typography>
+        <Typography fontWeight={800} color="primary" sx={{ fontSize: 15 }}>{fmt(payableAmount(order))}</Typography>
         <Box sx={{ color: '#94a3b8' }}>{expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}</Box>
       </Box>
 

@@ -13,6 +13,7 @@ import TrackChangesIcon from '@mui/icons-material/TrackChanges'
 import { printOrderReceipt } from '../../utils/printOrderReceipt'
 
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
+const payableAmount = (order) => Math.max(0, Number(order?.totalAmount || 0) - Number(order?.discountAmount || 0))
 
 function parseOpts(str) {
   if (!str) return null
@@ -33,6 +34,8 @@ export default function OrderReceiptDialog({ open, order, onClose, onTrack }) {
   const displayNum = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
   const bankCode   = isQrUrl ? order.paymentQr.split('/image/')[1]?.split('-')[0] : null
   const bankLogoUrl = bankCode ? `https://img.vietqr.io/img/${bankCode}.png` : null
+  const discount   = Number(order.discountAmount || 0)
+  const payable    = payableAmount(order)
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs"
@@ -68,7 +71,7 @@ export default function OrderReceiptDialog({ open, order, onClose, onTrack }) {
             <img src={qrSrc} alt="Payment QR"
               style={{ width: 180, height: 180, display: 'block', margin: '0 auto', borderRadius: 8 }} />
             <Typography variant="h6" fontWeight={900} color="primary" sx={{ mt: 1.25 }}>
-              {fmt(order.totalAmount)}
+              {fmt(payable)}
             </Typography>
             <Typography variant="caption" color="text.secondary">
               Transfer exact amount · ref: {order.orderCode}
@@ -79,7 +82,7 @@ export default function OrderReceiptDialog({ open, order, onClose, onTrack }) {
         {isBankQr && !qrSrc && (
           <Box sx={{ bgcolor: '#fff8e1', px: 2, py: 1.5, borderBottom: '1px solid #ffe082', textAlign: 'center' }}>
             <Typography variant="body2" color="#e65100" fontWeight={700}>
-              Bank transfer · {fmt(order.totalAmount)}
+              Bank transfer · {fmt(payable)}
             </Typography>
             <Typography variant="caption" color="text.secondary">ref: {order.orderCode}</Typography>
           </Box>
@@ -126,11 +129,18 @@ export default function OrderReceiptDialog({ open, order, onClose, onTrack }) {
             </Box>
           )}
 
+          {discount > 0 && (
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+              <Typography variant="body2" color="error.main">Discount{order.voucherCode ? ` (${order.voucherCode})` : ''}</Typography>
+              <Typography variant="body2" color="error.main">-{fmt(discount)}</Typography>
+            </Box>
+          )}
+
           <Divider sx={{ my: 1 }} />
 
           <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
             <Typography fontWeight={800}>Total</Typography>
-            <Typography fontWeight={800} color="primary">{fmt(order.totalAmount)}</Typography>
+            <Typography fontWeight={800} color="primary">{fmt(payable)}</Typography>
           </Box>
 
           {!isBankQr && (

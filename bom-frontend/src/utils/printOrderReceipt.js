@@ -414,17 +414,18 @@ export function printCombinedReceipt(orders, opts = {}) {
     const childMap = buildChildMap(allItems)
     const roots    = allItems.filter(i => !i.parentItemId)
 
-    const orderTotal = roots.reduce((s, item) => {
+    const grossTotal = roots.reduce((s, item) => {
       const children  = childMap[String(item.id)] || []
-      const parentQty = Number(item.quantity || 1)
-      return s + Number(item.lineTotal || 0) + children.reduce((cs, c) => cs + Number(c.lineTotal || 0) * parentQty, 0)
+      return s + Number(item.lineTotal || 0) + children.reduce((cs, c) => cs + Number(c.lineTotal || 0), 0)
     }, 0) + Number(order.deliveryFee || 0)
+    const discount   = Number(order.discountAmount || 0)
+    const orderTotal = Math.max(0, grossTotal - discount)
     grandTotal += orderTotal
 
     const isQr   = order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT'
     const isSplit = order.paymentMethod === 'SPLIT'
-    const cashPortion = isSplit ? Number(order.splitCashAmount || 0) : isQr ? 0 : orderTotal
-    const qrPortion   = isSplit ? orderTotal - cashPortion : isQr ? orderTotal : 0
+    const cashPortion = isSplit ? Math.max(0, Math.min(Number(order.splitCashAmount || 0), orderTotal)) : isQr ? 0 : orderTotal
+    const qrPortion   = isSplit ? Math.max(0, orderTotal - cashPortion) : isQr ? orderTotal : 0
     totalQr   += qrPortion
     totalCash += cashPortion
 
@@ -434,15 +435,14 @@ export function printCombinedReceipt(orders, opts = {}) {
 
     const itemsHtml = roots.map((item, idx) => {
       const children     = childMap[String(item.id)] || []
-      const parentQty    = Number(item.quantity || 1)
       const opts = parseOptsObj(item.selectedOptions)
       const opts_ = Object.entries(opts).map(([k, v]) => `${k}: ${formatOptValue(v)}`).join(' · ')
       const childrenHtml = children.map(child => {
-        const effectiveQty = Number(child.quantity || 1) * parentQty
+        const effectiveQty = Number(child.quantity || 1)
         return `<div class="row side-row">
           <span class="side-qty">${effectiveQty}&#215;</span>
           <span class="side-name">${child.modelName}</span>
-          <span class="item-price">${fmt(Number(child.lineTotal || 0) * parentQty)}</span>
+          <span class="item-price">${fmt(Number(child.lineTotal || 0))}</span>
         </div>`
       }).join('')
       return `
@@ -457,8 +457,11 @@ export function printCombinedReceipt(orders, opts = {}) {
       `
     }).join('')
 
-    const tableInfo  = order.tableName ? `Table ${order.tableName}` : order.fulfillmentType === 'DELIVERY' ? 'Delivery' : 'Pickup'
-    const noteHtml   = order.notes ? `<div class="order-note">&#9888; ${order.notes}</div>` : ''
+    const tableInfo    = order.tableName ? `Table ${order.tableName}` : order.fulfillmentType === 'DELIVERY' ? 'Delivery' : 'Pickup'
+    const discountHtml = discount > 0
+      ? `<div class="row" style="color:#c62828;padding:0 6px"><span>Discount${order.voucherCode ? ` (${order.voucherCode})` : ''}</span><span>-${fmt(discount)}</span></div>`
+      : ''
+    const noteHtml     = order.notes ? `<div class="order-note">&#9888; ${order.notes}</div>` : ''
 
     return `
       <div class="order-block">
@@ -469,6 +472,7 @@ export function printCombinedReceipt(orders, opts = {}) {
           <span class="order-subtotal">${fmt(orderTotal)}</span>
         </div>
         ${itemsHtml}
+        ${discountHtml}
         ${noteHtml}
       </div>
     `
@@ -597,14 +601,13 @@ export function printOrderReceipt(order, trackingQrBase64 = null, printMeta = nu
       .map(([k, v]) => `${k}: ${fmtOptV2(v)}`)
       .join(' · ')
     const children = childMap[String(item.id)] || []
-    const parentQty = Number(item.quantity || 1)
     const childrenHtml = children.map((child, ci) => {
       const childOpts = parseOptsObj(child.selectedOptions)
       const childOptsInline = Object.entries(childOpts)
         .map(([k, v]) => `${k}: ${fmtOptV2(v)}`)
         .join(' · ')
-      const effectiveQty   = Number(child.quantity || 1) * parentQty
-      const effectiveTotal = Number(child.lineTotal || 0) * parentQty
+      const effectiveQty   = Number(child.quantity || 1)
+      const effectiveTotal = Number(child.lineTotal || 0)
       return `
         <div class="row side-row">
           <span class="side-num">${rowNum}.${ci + 1}</span>
@@ -618,7 +621,7 @@ export function printOrderReceipt(order, trackingQrBase64 = null, printMeta = nu
     }).join('')
 
     const subtotal = Number(item.lineTotal || 0)
-      + children.reduce((s, c) => s + Number(c.lineTotal || 0) * parentQty, 0)
+      + children.reduce((s, c) => s + Number(c.lineTotal || 0), 0)
     const subtotalHtml = children.length > 0
       ? `<div class="row subtotal-row"><span class="subtotal-label">= subtotal</span><span class="subtotal-val">${fmt(subtotal)}</span></div>`
       : ''
@@ -654,13 +657,17 @@ export function printOrderReceipt(order, trackingQrBase64 = null, printMeta = nu
     ? `<div class="center" style="margin-bottom:6px"><img src="https://img.vietqr.io/img/${bankCode}.png" height="36" style="max-width:120px;object-fit:contain" /></div>`
     : ''
 
-  const cashAmt = order.splitCashAmount != null ? Number(order.splitCashAmount) : null
-  const qrAmt   = cashAmt != null ? Number(order.totalAmount) - cashAmt : null
+  const payableTotal = Math.max(0, Number(order.totalAmount || 0) - Number(order.discountAmount || 0))
+  const cashAmt = order.splitCashAmount != null
+    ? Math.max(0, Math.min(Number(order.splitCashAmount || 0), payableTotal))
+    : null
+  const qrAmt   = cashAmt != null ? Math.max(0, payableTotal - cashAmt) : null
 
   const paymentSection = order.paymentMethod === 'BANK_QR' ? `
     ${bankLogoTag}
     <div class="center bold" style="margin-bottom:6px">Scan to Pay</div>
     ${qrSrc ? `<div class="center"><img src="${qrSrc}" width="190" height="190" style="display:block;margin:0 auto" /></div>` : ''}
+    <div class="center bold" style="margin-top:6px">${fmt(payableTotal)}</div>
     <div class="center grey" style="margin-top:6px">Transfer exact amount</div>
     <div class="center bold">Ref: ${order.orderCode}</div>
   ` : order.paymentMethod === 'SPLIT' ? `
@@ -750,11 +757,7 @@ export function printOrderReceipt(order, trackingQrBase64 = null, printMeta = nu
   </div>
   <div class="row total-row">
     <span>TOTAL</span>
-    <span>${fmt(rootItems.reduce((s, item) => {
-      const children = childMap[String(item.id)] || []
-      const parentQty = Number(item.quantity || 1)
-      return s + Number(item.lineTotal || 0) + children.reduce((cs, c) => cs + Number(c.lineTotal || 0) * parentQty, 0)
-    }, 0) + Number(order.deliveryFee || 0) - Number(order.discountAmount || 0))}</span>
+    <span>${fmt(payableTotal)}</span>
   </div>
 
   ${notesSection}

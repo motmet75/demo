@@ -25,6 +25,10 @@ function orderNum(order) {
   return order?.orderNumber != null ? `#${order.orderNumber}` : order?.orderCode || ''
 }
 
+function payableAmount(order) {
+  return Math.max(0, Number(order?.totalAmount || 0) - Number(order?.discountAmount || 0))
+}
+
 function orderSource(order) {
   return {
     sourceType: 'ORDER',
@@ -32,7 +36,7 @@ function orderSource(order) {
     sourceKey: order?.id || order?.orderCode || null,
     sourceCode: order?.orderCode || null,
     sourceNumber: order?.orderNumber != null ? String(order.orderNumber) : null,
-    amount: order?.totalAmount ?? null,
+    amount: order ? payableAmount(order) : null,
   }
 }
 
@@ -104,7 +108,7 @@ export async function printCupLabelsTracked(order, onError) {
 export async function printCombinedReceiptTracked(orders, opts = {}, onError) {
   const activeOrders = (orders || []).filter(order => order.status !== 'CANCELLED')
   if (!activeOrders.length) return
-  const total = activeOrders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0)
+  const total = activeOrders.reduce((sum, order) => sum + payableAmount(order), 0)
   const token = opts.tokenRef || activeOrders.find(order => order.sourceToken)?.sourceToken || ''
   const sourceKey = token || activeOrders.map(order => order.id || order.orderCode).filter(Boolean).join('|')
   const meta = await recordPrint({

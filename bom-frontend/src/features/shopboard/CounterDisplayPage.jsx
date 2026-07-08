@@ -29,6 +29,9 @@ function parseOpts(str) {
 }
 
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : '0 đ'
+const payableAmount = (order) => Math.max(0, Number(order?.totalAmount || 0) - Number(order?.discountAmount || 0))
+const splitCashPortion = (order) => Math.max(0, Math.min(Number(order?.splitCashAmount || 0), payableAmount(order)))
+const splitQrPortion = (order) => Math.max(0, payableAmount(order) - splitCashPortion(order))
 
 function Clock() {
   const [t, setT] = useState(new Date())
@@ -150,8 +153,8 @@ function PaymentPanel({ order, flash }) {
   const isQr     = order.paymentMethod === 'BANK_QR'
   const isCash   = order.paymentMethod === 'CASH' || (!isSplit && !isQr)
 
-  const splitCash = isSplit ? Number(order.splitCashAmount || 0) : 0
-  const splitQrAmt = isSplit ? Number(order.totalAmount || 0) - splitCash : 0
+  const splitCash = isSplit ? splitCashPortion(order) : 0
+  const splitQrAmt = isSplit ? splitQrPortion(order) : 0
 
   const payQrSrc = order.paymentQr?.startsWith('https://')
     ? order.paymentQr
@@ -255,7 +258,7 @@ function PaymentPanel({ order, flash }) {
             mt: 1, fontSize: { xs: 18, md: 24 }, fontWeight: 900,
             color: '#4ade80', fontVariantNumeric: 'tabular-nums',
           }}>
-            {fmt(order.totalAmount)}
+            {fmt(payableAmount(order))}
           </Typography>
         </Box>
       )}
@@ -278,7 +281,7 @@ function PaymentPanel({ order, flash }) {
             fontSize: { xs: 32, md: 48 }, fontWeight: 900,
             color: '#fde68a', fontVariantNumeric: 'tabular-nums', lineHeight: 1,
           }}>
-            {fmt(order.totalAmount)}
+            {fmt(payableAmount(order))}
           </Typography>
         </Box>
       )}
@@ -369,13 +372,13 @@ function ActiveOrder({ order, flash }) {
                   <Box sx={{ bgcolor: '#166534', border: '2px solid #4ade80', borderRadius: 1.5, px: 1.25, py: 0.5, textAlign: 'center' }}>
                     <Typography sx={{ fontSize: { xs: 10, md: 12 }, color: '#4ade80', fontWeight: 800 }}>💳 QR</Typography>
                     <Typography sx={{ fontSize: { xs: 12, md: 14 }, color: '#86efac', fontWeight: 900 }}>
-                      {fmt(Number(order.totalAmount) - Number(order.splitCashAmount || 0))}
+                      {fmt(splitQrPortion(order))}
                     </Typography>
                   </Box>
                   <Box sx={{ bgcolor: '#1c1200', border: '2px solid #f59e0b', borderRadius: 1.5, px: 1.25, py: 0.5, textAlign: 'center' }}>
                     <Typography sx={{ fontSize: { xs: 10, md: 12 }, color: '#fbbf24', fontWeight: 800 }}>💵 Cash</Typography>
                     <Typography sx={{ fontSize: { xs: 12, md: 14 }, color: '#fde68a', fontWeight: 900 }}>
-                      {fmt(order.splitCashAmount)}
+                      {fmt(splitCashPortion(order))}
                     </Typography>
                   </Box>
                 </Box>
@@ -425,7 +428,7 @@ function ActiveOrder({ order, flash }) {
               Total
             </Typography>
             <Typography sx={{ fontSize: { xs: 24, md: 36 }, fontWeight: 900, color: '#38bdf8', fontVariantNumeric: 'tabular-nums' }}>
-              {fmt(order.totalAmount)}
+              {fmt(payableAmount(order))}
             </Typography>
           </Box>
         </Box>

@@ -17,6 +17,9 @@ import { fetchShopOrders } from '../../api/shopApi'
 const fmt         = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : '0 đ'
 const fmtDots     = (digits) => digits ? Number(digits).toLocaleString('vi-VN') : ''
 const stripDigits = (s) => s.replace(/[^0-9]/g, '')
+const payableAmount = (order) => Math.max(0, Number(order?.totalAmount || 0) - Number(order?.discountAmount || 0))
+const splitCashPortion = (order) => Math.max(0, Math.min(Number(order?.splitCashAmount || 0), payableAmount(order)))
+const splitQrPortion = (order) => Math.max(0, payableAmount(order) - splitCashPortion(order))
 
 function localDateTimeStr(d) {
   const p = n => String(n).padStart(2, '0')
@@ -68,14 +71,14 @@ export default function EodAuditDialog({ open, onClose }) {
       let unpaidTotal = 0, unpaidCount = 0
 
       orders.forEach(o => {
-        const amt    = Number(o.totalAmount || 0)
-        const sCash  = Number(o.splitCashAmount || 0)
+        const amt    = payableAmount(o)
+        const sCash  = splitCashPortion(o)
         if (o.paymentMethod === 'CASH') {
           cashTotal += amt; cashCount++
         } else if (o.paymentMethod === 'BANK_QR') {
           qrTotal += amt; qrCount++
         } else if (o.paymentMethod === 'SPLIT') {
-          splitCash += sCash; splitQr += (amt - sCash); splitCount++
+          splitCash += sCash; splitQr += splitQrPortion(o); splitCount++
         }
         if (o.paymentStatus !== 'PAID') {
           unpaidTotal += amt; unpaidCount++
