@@ -59,6 +59,16 @@ const parseAllowedSideIds = (model) => {
   }
 }
 
+const hasPricedChoices = (choices) =>
+  choices.some(choice => typeof choice === 'object' && choice !== null && Number(choice.price || 0) > 0)
+
+const choiceQtyFromValue = (value, label) => {
+  if (!value) return 0
+  if (typeof value === 'object' && !Array.isArray(value)) return Number(value[label] || 0)
+  if (typeof value === 'string') return value === label ? 1 : 0
+  if (Array.isArray(value)) return value.includes(label) ? 1 : 0
+  return 0
+}
 const FULFILLMENT = [
   { value: 'PICKUP',   label: 'Pickup',   icon: <TakeoutDiningIcon fontSize="small" /> },
   { value: 'DINE_IN',  label: 'Dine In',  icon: <TableBarIcon fontSize="small" /> },
@@ -185,6 +195,11 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
       let choiceDefs
       try { choiceDefs = JSON.parse(grp.choices) } catch { return sum }
       const cur = item.selectedOptions[grp.groupName]
+      if (cur && typeof cur === 'object' && !Array.isArray(cur)) {
+        const priceMap = {}
+        choiceDefs.forEach(c => { if (typeof c === 'object' && c !== null) priceMap[c.label] = Number(c.price || 0) })
+        return sum + Object.entries(cur).reduce((s, [label, qty]) => s + (priceMap[label] || 0) * (Number(qty) || 0), 0)
+      }
       const selArr = Array.isArray(cur) ? cur : (cur ? [cur] : [])
       return sum + choiceDefs
         .filter(c => typeof c === 'object' && selArr.includes(c.label))
@@ -410,6 +425,23 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
       const opts = { ...item.selectedOptions }
       if (next === undefined) delete opts[groupName]
       else opts[groupName] = next
+      return { ...item, selectedOptions: opts }
+    }))
+  }
+
+  const changeOptionQty = (uid, groupName, label, delta) => {
+    setItems(prev => prev.map(item => {
+      if (item.uid !== uid) return item
+      const cur = item.selectedOptions[groupName]
+      const currentQty = choiceQtyFromValue(cur, label)
+      const nextQty = Math.max(0, currentQty + delta)
+      const qtyMap = (cur && typeof cur === 'object' && !Array.isArray(cur)) ? { ...cur } : {}
+      if (nextQty === 0) delete qtyMap[label]
+      else qtyMap[label] = nextQty
+
+      const opts = { ...item.selectedOptions }
+      if (Object.keys(qtyMap).length) opts[groupName] = qtyMap
+      else delete opts[groupName]
       return { ...item, selectedOptions: opts }
     }))
   }
@@ -973,6 +1005,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                             const rawChoices = (() => { try { return JSON.parse(grp.choices) } catch { return [] } })()
                             const choices = rawChoices.map(c => typeof c === 'object' ? c : { label: String(c), price: 0 })
                             if (!choices.length) return null
+                            const priced = !grp.isFree && hasPricedChoices(choices)
                             const curVal = item.selectedOptions[grp.groupName]
                             const selArr = Array.isArray(curVal) ? curVal : (curVal ? [curVal] : [])
                             return (
@@ -981,23 +1014,68 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                                   sx={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                                   {grp.groupName}{grp.isFree ? ' (free)' : ''}
                                 </Typography>
-                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.25 }}>
-                                  {choices.map(choice => {
-                                    const active = selArr.includes(choice.label)
-                                    const priceTag = (!grp.isFree && choice.price > 0)
-                                      ? ` +${Number(choice.price).toLocaleString('vi-VN')}đ` : ''
-                                    return (
-                                      <Chip key={choice.label} label={choice.label + priceTag} size="small"
-                                        onClick={() => toggleOption(item.uid, grp.groupName, choice.label, grp.multiSelect)}
-                                        sx={{
-                                          height: 22, fontSize: 11, cursor: 'pointer',
-                                          bgcolor: active ? '#1976d2' : '#fff', color: active ? '#fff' : '#555',
-                                          border: `1px solid ${active ? '#1976d2' : '#ddd'}`, fontWeight: active ? 700 : 400,
-                                          '&:hover': { bgcolor: active ? '#1565c0' : '#f0f4ff' },
-                                        }} />
-                                    )
-                                  })}
-                                </Box>
+                                {priced ? (
+                                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mt: 0.35 }}>
+                                    {choices.map(choice => {
+                                      const cQty = choiceQtyFromValue(curVal, choice.label)
+                                      const price = Number(choice.price || 0)
+                                      return (
+                                        <Box key={choice.label} sx={{
+                                          display: 'flex', alignItems: 'center', gap: 0.75, px: 0.75, py: 0.5,
+                                          border: `1.5px solid ${cQty > 0 ? '#6366f1' : '#dbe3ef'}`,
+                                          borderRadius: 1.25, bgcolor: cQty > 0 ? '#eef2ff' : '#fff',
+                                        }}>
+                                          <Box sx={{ flex: 1, minWidth: 0 }}>
+                                            <Typography fontWeight={800} sx={{ fontSize: 12, lineHeight: 1.2, overflowWrap: 'anywhere' }}>
+                                              {choice.label}
+                                            </Typography>
+                                            {price > 0 && (
+                                              <Typography color="primary" fontWeight={900} sx={{ fontSize: 11 }}>
+                                                +{fmt(price)}{cQty > 0 ? ` = ${fmt(price * cQty * item.qty)}` : ''}
+                                              </Typography>
+                                            )}
+                                          </Box>
+                                          {cQty === 0 ? (
+                                            <IconButton size="small" onClick={() => changeOptionQty(item.uid, grp.groupName, choice.label, 1)}
+                                              sx={{ p: 0.55, bgcolor: '#6366f1', color: '#fff', borderRadius: 1, '&:hover': { bgcolor: '#4f46e5' } }}>
+                                              <AddIcon sx={{ fontSize: 18 }} />
+                                            </IconButton>
+                                          ) : (
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.35, flexShrink: 0 }}>
+                                              <IconButton size="small" onClick={() => changeOptionQty(item.uid, grp.groupName, choice.label, -1)}
+                                                sx={{ p: 0.5, bgcolor: '#f1f5f9', borderRadius: 1 }}>
+                                                <RemoveIcon sx={{ fontSize: 16 }} />
+                                              </IconButton>
+                                              <Typography fontWeight={900} sx={{ minWidth: 24, textAlign: 'center', color: '#4f46e5', fontSize: 15 }}>
+                                                {cQty * item.qty}
+                                              </Typography>
+                                              <IconButton size="small" onClick={() => changeOptionQty(item.uid, grp.groupName, choice.label, 1)}
+                                                sx={{ p: 0.5, bgcolor: '#6366f1', color: '#fff', borderRadius: 1, '&:hover': { bgcolor: '#4f46e5' } }}>
+                                                <AddIcon sx={{ fontSize: 16 }} />
+                                              </IconButton>
+                                            </Box>
+                                          )}
+                                        </Box>
+                                      )
+                                    })}
+                                  </Box>
+                                ) : (
+                                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.25 }}>
+                                    {choices.map(choice => {
+                                      const active = selArr.includes(choice.label)
+                                      return (
+                                        <Chip key={choice.label} label={choice.label} size="small"
+                                          onClick={() => toggleOption(item.uid, grp.groupName, choice.label, grp.multiSelect)}
+                                          sx={{
+                                            height: 22, fontSize: 11, cursor: 'pointer',
+                                            bgcolor: active ? '#1976d2' : '#fff', color: active ? '#fff' : '#555',
+                                            border: `1px solid ${active ? '#1976d2' : '#ddd'}`, fontWeight: active ? 700 : 400,
+                                            '&:hover': { bgcolor: active ? '#1565c0' : '#f0f4ff' },
+                                          }} />
+                                      )
+                                    })}
+                                  </Box>
+                                )}
                               </Box>
                             )
                           })}

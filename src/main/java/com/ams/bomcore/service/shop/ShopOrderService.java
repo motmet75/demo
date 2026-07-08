@@ -859,28 +859,46 @@ public class ShopOrderService {
                 continue;
             }
 
-            // Normalize chosen value(s) to a set of label strings
-            Set<String> chosenLabels = new HashSet<>();
-            if (chosenRaw instanceof List<?> list) {
-                for (Object o : list) chosenLabels.add(o.toString());
+            Map<String, BigDecimal> chosenQuantities = new HashMap<>();
+            if (chosenRaw instanceof Map<?, ?> chosenMap) {
+                for (Map.Entry<?, ?> entry : chosenMap.entrySet()) {
+                    if (entry.getKey() == null) continue;
+                    BigDecimal qty = selectedOptionQuantity(entry.getValue());
+                    if (qty.compareTo(BigDecimal.ZERO) > 0) {
+                        chosenQuantities.put(entry.getKey().toString(), qty);
+                    }
+                }
+            } else if (chosenRaw instanceof Collection<?> chosenList) {
+                for (Object label : chosenList) {
+                    if (label != null) chosenQuantities.merge(label.toString(), BigDecimal.ONE, BigDecimal::add);
+                }
             } else {
-                chosenLabels.add(chosenRaw.toString());
+                chosenQuantities.put(chosenRaw.toString(), BigDecimal.ONE);
             }
 
             for (Map<String, Object> choice : choiceDefs) {
                 Object labelObj = choice.get("label");
                 Object priceObj = choice.get("price");
                 if (labelObj == null || priceObj == null) continue;
-                if (chosenLabels.contains(labelObj.toString())) {
-                    try {
-                        total = total.add(new BigDecimal(priceObj.toString()));
-                    } catch (NumberFormatException ignored) {}
-                }
+                BigDecimal qty = chosenQuantities.get(labelObj.toString());
+                if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) continue;
+                try {
+                    total = total.add(new BigDecimal(priceObj.toString()).multiply(qty));
+                } catch (NumberFormatException ignored) {}
             }
         }
         return total;
     }
 
+    private BigDecimal selectedOptionQuantity(Object raw) {
+        if (raw == null) return BigDecimal.ZERO;
+        try {
+            BigDecimal qty = new BigDecimal(raw.toString());
+            return qty.compareTo(BigDecimal.ZERO) > 0 ? qty : BigDecimal.ZERO;
+        } catch (NumberFormatException e) {
+            return BigDecimal.ZERO;
+        }
+    }
     // ── Token management ──────────────────────────────────────────────
 
     @Transactional(readOnly = true)
