@@ -6,6 +6,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -63,6 +64,9 @@ public class ShopMaterialAudit {
 
     @Column(name = "material_name", columnDefinition = "TEXT")
     private String materialName;
+
+    @Transient
+    private String materialUnit;
 
     @Column(name = "required_qty", nullable = false, columnDefinition = "numeric")
     private BigDecimal requiredQty = BigDecimal.ZERO;
@@ -135,6 +139,8 @@ public class ShopMaterialAudit {
     public void setMaterialCode(String materialCode) { this.materialCode = materialCode; }
     public String getMaterialName() { return materialName; }
     public void setMaterialName(String materialName) { this.materialName = materialName; }
+    public String getMaterialUnit() { return materialUnit; }
+    public void setMaterialUnit(String materialUnit) { this.materialUnit = materialUnit; }
     public BigDecimal getRequiredQty() { return requiredQty; }
     public void setRequiredQty(BigDecimal requiredQty) { this.requiredQty = requiredQty; }
     public BigDecimal getAvailableBeforeQty() { return availableBeforeQty; }

@@ -9,20 +9,32 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ams.bomcore.domain.bom.BomEntity;
+import com.ams.bomcore.domain.bom.BomItemEntity;
+import com.ams.bomcore.domain.company.Company;
+import com.ams.bomcore.domain.inventory.WarehouseEntity;
+import com.ams.bomcore.domain.material.Material;
 import com.ams.bomcore.domain.model.Model;
 import com.ams.bomcore.domain.shop.ModelMenuOption;
 import com.ams.bomcore.domain.shop.ShopOrder;
 import com.ams.bomcore.domain.shop.ShopTable;
+import com.ams.bomcore.domain.tenant.Tenant;
 import com.ams.bomcore.repository.BomItemRepository;
 import com.ams.bomcore.repository.BomRepository;
+import com.ams.bomcore.repository.CompanyRepository;
+import com.ams.bomcore.repository.MaterialRepository;
 import com.ams.bomcore.repository.ModelMenuOptionRepository;
 import com.ams.bomcore.repository.ModelRepository;
 import com.ams.bomcore.repository.ShopOrderItemRepository;
 import com.ams.bomcore.repository.ShopOrderRepository;
 import com.ams.bomcore.repository.ShopTableRepository;
+import com.ams.bomcore.repository.TenantRepository;
+import com.ams.bomcore.repository.WarehouseRepository;
+import com.ams.bomcore.service.inventory.InventoryService;
 
 @Service
 public class ShopSetupService {
+
+    private static final BigDecimal DEFAULT_SETUP_STOCK_QTY = new BigDecimal("10");
 
     private final ShopTableRepository shopTableRepository;
     private final ModelRepository modelRepository;
@@ -31,6 +43,11 @@ public class ShopSetupService {
     private final ModelMenuOptionRepository menuOptionRepository;
     private final ShopOrderRepository shopOrderRepository;
     private final ShopOrderItemRepository shopOrderItemRepository;
+    private final TenantRepository tenantRepository;
+    private final CompanyRepository companyRepository;
+    private final MaterialRepository materialRepository;
+    private final WarehouseRepository warehouseRepository;
+    private final InventoryService inventoryService;
 
     public ShopSetupService(ShopTableRepository shopTableRepository,
                             ModelRepository modelRepository,
@@ -38,7 +55,12 @@ public class ShopSetupService {
                             BomItemRepository bomItemRepository,
                             ModelMenuOptionRepository menuOptionRepository,
                             ShopOrderRepository shopOrderRepository,
-                            ShopOrderItemRepository shopOrderItemRepository) {
+                            ShopOrderItemRepository shopOrderItemRepository,
+                            TenantRepository tenantRepository,
+                            CompanyRepository companyRepository,
+                            MaterialRepository materialRepository,
+                            WarehouseRepository warehouseRepository,
+                            InventoryService inventoryService) {
         this.shopTableRepository = shopTableRepository;
         this.modelRepository = modelRepository;
         this.bomRepository = bomRepository;
@@ -46,6 +68,11 @@ public class ShopSetupService {
         this.menuOptionRepository = menuOptionRepository;
         this.shopOrderRepository = shopOrderRepository;
         this.shopOrderItemRepository = shopOrderItemRepository;
+        this.tenantRepository = tenantRepository;
+        this.companyRepository = companyRepository;
+        this.materialRepository = materialRepository;
+        this.warehouseRepository = warehouseRepository;
+        this.inventoryService = inventoryService;
     }
 
     @Transactional
@@ -150,6 +177,15 @@ public class ShopSetupService {
         drinkBom.setVersion(1);
         drinkBom.setStatus("ACTIVE");
         bomRepository.save(drinkBom);
+
+        WarehouseEntity warehouse = createSetupWarehouse(tenantId, companyId, suffix);
+        List<Material> materials = createRiceSetupMaterials(tenantId, companyId, suffix);
+        seedInventory(tenantId, companyId, warehouse, materials, suffix);
+        createBomItems(comTamBom, tenantId, companyId, List.of(
+                new BomMaterialPlan(materials.get(0), BigDecimal.ONE),
+                new BomMaterialPlan(materials.get(1), BigDecimal.ONE)));
+        createBomItems(drinkBom, tenantId, companyId, List.of(
+                new BomMaterialPlan(materials.get(2), BigDecimal.ONE)));
     }
 
     @Transactional
@@ -162,8 +198,12 @@ public class ShopSetupService {
             table.setTableName(name);
             shopTableRepository.save(table);
         }
-        List<Model> models = createSampleModels(tenantId, companyId);
-        createBomsAndMenuOptions(tenantId, companyId, models);
+        String suffix = randomSuffix();
+        List<Model> models = createSampleModels(tenantId, companyId, suffix);
+        WarehouseEntity warehouse = createSetupWarehouse(tenantId, companyId, suffix);
+        List<Material> materials = createDrinkSetupMaterials(tenantId, companyId, suffix);
+        seedInventory(tenantId, companyId, warehouse, materials, suffix);
+        createBomsAndMenuOptions(tenantId, companyId, models, drinkMaterialPlans(materials));
     }
 
     @Transactional
@@ -175,12 +215,15 @@ public class ShopSetupService {
             table.setTableName("QR-" + String.format("%02d", i));
             shopTableRepository.save(table);
         }
-        List<Model> models = createSampleModels(tenantId, companyId);
-        createBomsAndMenuOptions(tenantId, companyId, models);
+        String suffix = randomSuffix();
+        List<Model> models = createSampleModels(tenantId, companyId, suffix);
+        WarehouseEntity warehouse = createSetupWarehouse(tenantId, companyId, suffix);
+        List<Material> materials = createDrinkSetupMaterials(tenantId, companyId, suffix);
+        seedInventory(tenantId, companyId, warehouse, materials, suffix);
+        createBomsAndMenuOptions(tenantId, companyId, models, drinkMaterialPlans(materials));
     }
 
-    private List<Model> createSampleModels(UUID tenantId, UUID companyId) {
-        String suffix = UUID.randomUUID().toString().substring(0, 6).toUpperCase();
+    private List<Model> createSampleModels(UUID tenantId, UUID companyId, String suffix) {
         Object[][] items = {
             {"CA-PHE-DEN-" + suffix, "Cà Phê Đen", new BigDecimal("30000")},
             {"CA-PHE-SUA-" + suffix, "Cà Phê Sữa", new BigDecimal("35000")},
@@ -200,8 +243,10 @@ public class ShopSetupService {
         return saved;
     }
 
-    private void createBomsAndMenuOptions(UUID tenantId, UUID companyId, List<Model> models) {
-        for (Model m : models) {
+    private void createBomsAndMenuOptions(UUID tenantId, UUID companyId, List<Model> models,
+                                          List<List<BomMaterialPlan>> materialPlans) {
+        for (int i = 0; i < models.size(); i++) {
+            Model m = models.get(i);
             BomEntity bom = new BomEntity();
             bom.setTenantId(tenantId);
             bom.setCompanyId(companyId);
@@ -210,6 +255,7 @@ public class ShopSetupService {
             bom.setVersion(1);
             bom.setStatus("ACTIVE");
             bomRepository.save(bom);
+            createBomItems(bom, tenantId, companyId, i < materialPlans.size() ? materialPlans.get(i) : List.of());
 
             ModelMenuOption sugar = new ModelMenuOption();
             sugar.setTenantId(tenantId);
@@ -232,4 +278,98 @@ public class ShopSetupService {
             menuOptionRepository.save(ice);
         }
     }
+
+    private List<Material> createDrinkSetupMaterials(UUID tenantId, UUID companyId, String suffix) {
+        Tenant tenant = requireTenant(tenantId);
+        Company company = requireCompany(companyId);
+        return List.of(
+                createSetupMaterial(tenant, company, "SHOP-COFFEE-" + suffix, "Shop Coffee Mix", "grm", "INGREDIENT"),
+                createSetupMaterial(tenant, company, "SHOP-MILK-" + suffix, "Shop Milk Mix", "grm", "INGREDIENT"),
+                createSetupMaterial(tenant, company, "SHOP-TEA-" + suffix, "Shop Tea Mix", "grm", "INGREDIENT"),
+                createSetupMaterial(tenant, company, "SHOP-CUP-" + suffix, "Shop Cup", "pcs", "PACKAGING"));
+    }
+
+    private List<List<BomMaterialPlan>> drinkMaterialPlans(List<Material> materials) {
+        Material coffee = materials.get(0);
+        Material milk = materials.get(1);
+        Material tea = materials.get(2);
+        Material cup = materials.get(3);
+        return List.of(
+                List.of(new BomMaterialPlan(coffee, BigDecimal.ONE), new BomMaterialPlan(cup, BigDecimal.ONE)),
+                List.of(new BomMaterialPlan(milk, BigDecimal.ONE), new BomMaterialPlan(cup, BigDecimal.ONE)),
+                List.of(new BomMaterialPlan(tea, BigDecimal.ONE), new BomMaterialPlan(cup, BigDecimal.ONE)));
+    }
+
+    private List<Material> createRiceSetupMaterials(UUID tenantId, UUID companyId, String suffix) {
+        Tenant tenant = requireTenant(tenantId);
+        Company company = requireCompany(companyId);
+        return List.of(
+                createSetupMaterial(tenant, company, "SHOP-RICE-" + suffix, "Shop Rice", "grm", "INGREDIENT"),
+                createSetupMaterial(tenant, company, "SHOP-PORK-" + suffix, "Shop Pork", "grm", "INGREDIENT"),
+                createSetupMaterial(tenant, company, "SHOP-SOFT-DRINK-" + suffix, "Shop Soft Drink", "pcs", "DRINK"));
+    }
+
+    private Material createSetupMaterial(Tenant tenant, Company company, String code, String name, String unit, String type) {
+        Material material = new Material();
+        material.setTenant(tenant);
+        material.setCompany(company);
+        material.setMaterialCode(code);
+        material.setMaterialName(name);
+        material.setUnit(unit);
+        material.setMaterialType(type);
+        material.setPrice(BigDecimal.ZERO);
+        material.setDescription("Auto shop setup material");
+        material.setIsActive(Boolean.TRUE);
+        return materialRepository.save(material);
+    }
+
+    private WarehouseEntity createSetupWarehouse(UUID tenantId, UUID companyId, String suffix) {
+        WarehouseEntity warehouse = new WarehouseEntity();
+        warehouse.setTenantId(tenantId);
+        warehouse.setCompanyId(companyId);
+        warehouse.setCode("SHOP-STOCK-" + suffix);
+        warehouse.setName("Shop Stock " + suffix);
+        warehouse.setLocation("Auto shop setup");
+        warehouse.setNote("Default stock created by shop setup");
+        warehouse.setIsActive(Boolean.TRUE);
+        return warehouseRepository.save(warehouse);
+    }
+
+    private void seedInventory(UUID tenantId, UUID companyId, WarehouseEntity warehouse, List<Material> materials, String suffix) {
+        for (Material material : materials) {
+            inventoryService.addStock(
+                    material.getMaterialCode(), warehouse.getCode(), DEFAULT_SETUP_STOCK_QTY,
+                    "AUTO-SETUP-" + suffix, null, null, BigDecimal.ZERO,
+                    tenantId, companyId, "Auto shop setup", "system", "Default stock for 10 menu units", null);
+        }
+    }
+
+    private void createBomItems(BomEntity bom, UUID tenantId, UUID companyId, List<BomMaterialPlan> plans) {
+        for (BomMaterialPlan plan : plans) {
+            BomItemEntity item = new BomItemEntity();
+            item.setTenantId(tenantId);
+            item.setCompanyId(companyId);
+            item.setBom(bom);
+            item.setMaterial(plan.material());
+            item.setQuantity(plan.quantity());
+            item.setLevel(0);
+            bomItemRepository.save(item);
+        }
+    }
+
+    private Tenant requireTenant(UUID tenantId) {
+        return tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new IllegalArgumentException("Tenant not found: " + tenantId));
+    }
+
+    private Company requireCompany(UUID companyId) {
+        return companyRepository.findById(companyId)
+                .orElseThrow(() -> new IllegalArgumentException("Company not found: " + companyId));
+    }
+
+    private String randomSuffix() {
+        return UUID.randomUUID().toString().substring(0, 6).toUpperCase();
+    }
+
+    private record BomMaterialPlan(Material material, BigDecimal quantity) {}
 }

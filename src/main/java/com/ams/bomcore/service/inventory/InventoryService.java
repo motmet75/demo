@@ -112,6 +112,7 @@ public class InventoryService {
         InventoryEntity inv;
         if (existing.isPresent()) {
             inv = existing.get();
+            inv.setUnit(unitFor(m));
             inv.setQuantityOnHand(inv.getQuantityOnHand().add(qty));
             // quantityTotal is NOT changed by movements — only set at import/initial creation
             if (quantityReserved != null) {
@@ -124,6 +125,7 @@ public class InventoryService {
             inv = new InventoryEntity();
             inv.setMaterial(m);
             inv.setWarehouse(w);
+            inv.setUnit(unitFor(m));
             inv.setBatchNo(batchNo);
             inv.setQuantityOnHand(qty);
             // quantityTotal is NOT set here — only set at import/initial creation
@@ -154,7 +156,7 @@ public class InventoryService {
         // Record IN movement — inventoryId = this row, referenceId = invoice (if provided)
         movementService.recordInMovement(
                 m.getId(), w.getId(), qty,
-                m.getUnit() != null ? m.getUnit() : "pcs",
+                unitFor(m),
                 batchNo,
                 reason != null ? reason : "Manual add stock",
                 createdBy != null ? createdBy : "system",
@@ -227,6 +229,7 @@ public class InventoryService {
         InventoryEntity inv;
         if (existing.isPresent()) {
             inv = existing.get();
+            inv.setUnit(unitFor(m));
             inv.setQuantityOnHand(inv.getQuantityOnHand().add(qty));
             // quantityTotal is NOT changed by movements — only set at import/initial creation
             if (quantityReserved != null) {
@@ -239,6 +242,7 @@ public class InventoryService {
             inv = new InventoryEntity();
             inv.setMaterial(m);
             inv.setWarehouse(w);
+            inv.setUnit(unitFor(m));
             inv.setBatchNo(batchNo);
             inv.setQuantityOnHand(qty);
             // quantityTotal is NOT set here — only set at import/initial creation
@@ -269,7 +273,7 @@ public class InventoryService {
         // Record IN movement — inventoryId = this row, referenceId = invoice (if provided)
         movementService.recordInMovement(
                 m.getId(), w.getId(), qty,
-                m.getUnit() != null ? m.getUnit() : "pcs",
+                unitFor(m),
                 batchNo,
                 reason != null ? reason : "Manual add stock",
                 createdBy != null ? createdBy : "system",
@@ -336,6 +340,9 @@ public class InventoryService {
         BigDecimal oldQty = inv.getQuantityOnHand() == null ? BigDecimal.ZERO : inv.getQuantityOnHand();
         BigDecimal delta  = newQuantityOnHand.subtract(oldQty);
 
+        if (inv.getMaterial() != null) {
+            inv.setUnit(unitFor(inv.getMaterial()));
+        }
         inv.setQuantityOnHand(newQuantityOnHand);
         if (batchNo != null) {
 			inv.setBatchNo(batchNo);
@@ -371,7 +378,7 @@ public class InventoryService {
                     inv.getMaterial().getId(),
                     inv.getWarehouse().getId(),
                     delta,
-                    inv.getMaterial().getUnit() != null ? inv.getMaterial().getUnit() : "pcs",
+                    unitFor(inv.getMaterial()),
                     inv.getBatchNo(),
                     reason != null ? reason : "Manual update stock",
                     createdBy != null ? createdBy : "system",
@@ -380,6 +387,13 @@ public class InventoryService {
         }
 
         return updated;
+    }
+
+    private static String unitFor(Material material) {
+        if (material != null && material.getUnit() != null && !material.getUnit().isBlank()) {
+            return material.getUnit().trim();
+        }
+        return "pcs";
     }
 
     // Keep previous signature for backward compatibility by delegating (optional)

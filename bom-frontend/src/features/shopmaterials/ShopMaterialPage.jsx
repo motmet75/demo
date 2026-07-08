@@ -47,6 +47,9 @@ const fmtQty = (value) => {
   return n.toLocaleString(undefined, { maximumFractionDigits: 4 })
 }
 
+const fmtUnit = (unit) => unit || 'pcs'
+const fmtQtyWithUnit = (value, unit) => `${fmtQty(value)} ${fmtUnit(unit)}`
+
 const fmtOrder = (row) => row.orderNumber != null ? `#${row.orderNumber}` : (row.orderCode || '-')
 
 const statusColor = (status) => {
@@ -269,7 +272,7 @@ export default function ShopMaterialPage() {
                           <Stack spacing={0.4}>
                             {sortedLimits.slice(0, 3).map(limit => (
                               <Typography key={limit.materialId} variant="caption" sx={{ display: 'block' }}>
-                                <strong>{limit.materialCode || limit.materialName}</strong>: {fmtQty(limit.availableQty)} available / {fmtQty(limit.requiredPerUnit)} per unit = {fmtQty(limit.possibleUnits)}
+                                <strong>{limit.materialCode || limit.materialName}</strong>: {fmtQtyWithUnit(limit.availableQty, limit.materialUnit)} available / {fmtQtyWithUnit(limit.requiredPerUnit, limit.materialUnit)} per unit = {fmtQty(limit.possibleUnits)}
                               </Typography>
                             ))}
                           </Stack>
@@ -340,11 +343,11 @@ export default function ShopMaterialPage() {
                       <Typography fontWeight={800}>{row.materialCode || '-'}</Typography>
                       <Typography variant="caption" color="text.secondary">{row.materialName || '-'}</Typography>
                     </TableCell>
-                    <TableCell align="right">{fmtQty(row.requiredQty)}</TableCell>
-                    <TableCell align="right">{fmtQty(row.deductedQty)}</TableCell>
+                    <TableCell align="right">{fmtQtyWithUnit(row.requiredQty, row.materialUnit)}</TableCell>
+                    <TableCell align="right">{fmtQtyWithUnit(row.deductedQty, row.materialUnit)}</TableCell>
                     <TableCell align="right">
                       <Typography fontWeight={900} color={Number(row.waitingQty || 0) > 0 ? 'error.main' : 'success.main'}>
-                        {fmtQty(row.waitingQty)}
+                        {fmtQtyWithUnit(row.waitingQty, row.materialUnit)}
                       </Typography>
                     </TableCell>
                     <TableCell><Chip label={row.status} color={statusColor(row.status)} size="small" sx={{ fontWeight: 800 }} /></TableCell>
@@ -398,9 +401,9 @@ export default function ShopMaterialPage() {
                       <Typography fontWeight={800}>{row.materialCode || '-'}</Typography>
                       <Typography variant="caption" color="text.secondary">{row.materialName || '-'}</Typography>
                     </TableCell>
-                    <TableCell align="right">{fmtQty(row.requiredQty)}</TableCell>
-                    <TableCell align="right">{fmtQty(row.deductedQty)}</TableCell>
-                    <TableCell align="right">{fmtQty(row.waitingQty)}</TableCell>
+                    <TableCell align="right">{fmtQtyWithUnit(row.requiredQty, row.materialUnit)}</TableCell>
+                    <TableCell align="right">{fmtQtyWithUnit(row.deductedQty, row.materialUnit)}</TableCell>
+                    <TableCell align="right">{fmtQtyWithUnit(row.waitingQty, row.materialUnit)}</TableCell>
                     <TableCell align="right">{row.orderCount ?? 0}</TableCell>
                   </TableRow>
                 ))}

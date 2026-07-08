@@ -1363,40 +1363,6 @@ export default function ShopMenuPage() {
           </Badge>
         </Box>
 
-        {activeStaffCall?.id && (
-          <Box sx={{
-            mx: 1.5, mb: 0.75, px: 1.25, py: 1,
-            display: 'flex', alignItems: 'flex-start', gap: 1,
-            borderRadius: 2,
-            border: '1px solid',
-            borderColor: staffCallHasReply ? '#a5d6a7' : '#ffcc80',
-            bgcolor: staffCallHasReply ? '#e8f5e9' : '#fff8e1',
-          }}>
-            <SupportAgentIcon sx={{ fontSize: 20, color: staffCallHasReply ? '#2e7d32' : '#ff5722', mt: 0.1, flexShrink: 0 }} />
-            <Box sx={{ minWidth: 0, flex: 1 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
-                <Typography fontWeight={900} sx={{ fontSize: 13, color: staffCallHasReply ? '#1b5e20' : '#bf360c', lineHeight: 1.2 }}>
-                  {staffCallTitle}
-                </Typography>
-                <Chip label={staffCallReasonLabel(activeStaffCall.reason)} size="small"
-                  sx={{ height: 18, fontSize: 10, fontWeight: 800, bgcolor: '#fff', color: staffCallHasReply ? '#2e7d32' : '#ff5722' }} />
-                {staffCallAge && (
-                  <Typography variant="caption" sx={{ color: staffCallHasReply ? '#2e7d32' : '#8a4b00', fontSize: 11 }}>
-                    {staffCallAge}
-                  </Typography>
-                )}
-              </Box>
-              <Typography variant="body2" sx={{ mt: 0.25, fontSize: 12.5, color: '#333', overflowWrap: 'anywhere', lineHeight: 1.35 }}>
-                {staffCallMessage}
-              </Typography>
-              {activeStaffCall.note && (
-                <Typography variant="caption" sx={{ display: 'block', mt: 0.25, color: '#666', overflowWrap: 'anywhere' }}>
-                  {activeStaffCall.note}
-                </Typography>
-              )}
-            </Box>
-          </Box>
-        )}
         {/* Row 2: Category tabs */}
         <Box sx={{
           display: 'flex', overflowX: 'auto', px: 1.5, pb: 0.75, gap: 0.5,
@@ -1525,6 +1491,34 @@ export default function ShopMenuPage() {
         )}
       </Box>
 
+      {activeStaffCall?.id && (
+        <Box sx={{
+          position: 'fixed', left: 12, right: 12, bottom: itemCount > 0 ? 88 : 16, zIndex: 260,
+          px: 1, py: 0.75, display: 'flex', alignItems: 'flex-start', gap: 0.75,
+          borderRadius: 2, border: '1px solid', boxShadow: '0 8px 24px rgba(15,23,42,0.18)',
+          borderColor: staffCallHasReply ? '#a5d6a7' : '#ffcc80',
+          bgcolor: staffCallHasReply ? '#e8f5e9' : '#fff8e1',
+        }}>
+          <SupportAgentIcon sx={{ fontSize: 18, color: staffCallHasReply ? '#2e7d32' : '#ff5722', mt: 0.1, flexShrink: 0 }} />
+          <Box sx={{ minWidth: 0, flex: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
+              <Typography fontWeight={900} sx={{ fontSize: 12.5, color: staffCallHasReply ? '#1b5e20' : '#bf360c', lineHeight: 1.2, flexShrink: 0 }}>
+                {staffCallTitle}
+              </Typography>
+              <Chip label={staffCallReasonLabel(activeStaffCall.reason)} size="small"
+                sx={{ height: 17, fontSize: 10, fontWeight: 800, bgcolor: '#fff', color: staffCallHasReply ? '#2e7d32' : '#ff5722' }} />
+              {staffCallAge && (
+                <Typography variant="caption" noWrap sx={{ color: staffCallHasReply ? '#2e7d32' : '#8a4b00', fontSize: 10.5, minWidth: 0 }}>
+                  {staffCallAge}
+                </Typography>
+              )}
+            </Box>
+            <Typography variant="body2" sx={{ mt: 0.15, fontSize: 12, color: '#333', overflowWrap: 'anywhere', lineHeight: 1.25, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+              {staffCallMessage}
+            </Typography>
+          </Box>
+        </Box>
+      )}
       {/* ── Sticky bottom bar ─────────────────────────────────── */}
       {itemCount > 0 && (
         <Box sx={{

@@ -226,7 +226,7 @@ public class InventoryImportService {
                //  inv.setQuantityReserved(row.quantityReserved);
                  inv.setQuantityLocked(row.quantityLocked);
 
-                inv.setUnit(row.unit != null ? row.unit : "pcs");
+                inv.setUnit(row.unit != null && !row.unit.isBlank() ? row.unit : unitFor(materialMap.get(row.materialCode)));
 
                 inv.setCurrency(row.currency != null ? row.currency : "USD");
 
@@ -515,6 +515,13 @@ public class InventoryImportService {
         }
 
         return true;
+    }
+
+    private static String unitFor(Material material) {
+        if (material != null && material.getUnit() != null && !material.getUnit().isBlank()) {
+            return material.getUnit().trim();
+        }
+        return "pcs";
     }
 
     // =============================================================

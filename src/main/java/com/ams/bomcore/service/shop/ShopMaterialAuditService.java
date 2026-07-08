@@ -2,12 +2,14 @@ package com.ams.bomcore.service.shop;
 
 import com.ams.bomcore.domain.bom.BomItemEntity;
 import com.ams.bomcore.domain.inventory.InventoryEntity;
+import com.ams.bomcore.domain.material.Material;
 import com.ams.bomcore.domain.model.Model;
 import com.ams.bomcore.domain.shop.ModelMenuOption;
 import com.ams.bomcore.domain.shop.ShopMaterialAudit;
 import com.ams.bomcore.domain.shop.ShopOrder;
 import com.ams.bomcore.domain.shop.ShopOrderItem;
 import com.ams.bomcore.repository.InventoryRepository;
+import com.ams.bomcore.repository.MaterialRepository;
 import com.ams.bomcore.repository.ModelMenuOptionRepository;
 import com.ams.bomcore.repository.ModelRepository;
 import com.ams.bomcore.repository.ShopMaterialAuditRepository;
@@ -47,6 +49,7 @@ public class ShopMaterialAuditService {
     private final ModelMenuOptionRepository menuOptionRepository;
     private final ModelRepository modelRepository;
     private final InventoryRepository inventoryRepository;
+    private final MaterialRepository materialRepository;
     private final BomService bomService;
     private final ShopPricingService shopPricingService;
     private final OrderDeductionService orderDeductionService;
@@ -57,6 +60,7 @@ public class ShopMaterialAuditService {
                                     ModelMenuOptionRepository menuOptionRepository,
                                     ModelRepository modelRepository,
                                     InventoryRepository inventoryRepository,
+                                    MaterialRepository materialRepository,
                                     BomService bomService,
                                     ShopPricingService shopPricingService,
                                     OrderDeductionService orderDeductionService) {
@@ -66,6 +70,7 @@ public class ShopMaterialAuditService {
         this.menuOptionRepository = menuOptionRepository;
         this.modelRepository = modelRepository;
         this.inventoryRepository = inventoryRepository;
+        this.materialRepository = materialRepository;
         this.bomService = bomService;
         this.shopPricingService = shopPricingService;
         this.orderDeductionService = orderDeductionService;
@@ -117,6 +122,7 @@ public class ShopMaterialAuditService {
             row.setMaterialId(req.materialId);
             row.setMaterialCode(req.materialCode);
             row.setMaterialName(req.materialName);
+            row.setMaterialUnit(req.materialUnit);
             row.setRequiredQty(required);
             row.setAvailableBeforeQty(scale(before));
             row.setDeductedQty(BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP));
@@ -141,6 +147,7 @@ public class ShopMaterialAuditService {
                 : "Material demand reserved for later deduction.");
         order.setInventoryCheckedAt(Instant.now());
         shopOrderRepository.save(order);
+        enrichAuditUnits(rows);
         return new AuditResult(order.getId(), order.getMaterialAuditStatus(), hasShortage, scale(totalWaiting), rows);
     }
 
@@ -191,6 +198,7 @@ public class ShopMaterialAuditService {
                 : "Material demand reserved for later deduction.");
         order.setInventoryCheckedAt(Instant.now());
         shopOrderRepository.save(order);
+        enrichAuditUnits(rows);
         return new AuditResult(order.getId(), order.getMaterialAuditStatus(), hasShortage, scale(totalWaiting), rows);
     }
     @Transactional
@@ -239,7 +247,7 @@ public class ShopMaterialAuditService {
             auditRepository.save(row);
         }
 
-        List<ShopMaterialAudit> refreshed = auditRepository.findAllByOrderIdOrderByMaterialCodeAsc(order.getId());
+        List<ShopMaterialAudit> refreshed = enrichAuditUnits(auditRepository.findAllByOrderIdOrderByMaterialCodeAsc(order.getId()));
         totalWaiting = refreshed.stream()
                 .map(ShopMaterialAudit::getWaitingQty)
                 .filter(Objects::nonNull)
@@ -257,15 +265,15 @@ public class ShopMaterialAuditService {
 
     @Transactional(readOnly = true)
     public List<ShopMaterialAudit> listOrderAudit(UUID orderId, UUID tenantId, UUID companyId) {
-        return auditRepository.findAllByOrderIdOrderByMaterialCodeAsc(orderId).stream()
+        return enrichAuditUnits(auditRepository.findAllByOrderIdOrderByMaterialCodeAsc(orderId).stream()
                 .filter(row -> tenantId.equals(row.getTenantId()) && companyId.equals(row.getCompanyId()))
-                .toList();
+                .toList());
     }
 
     @Transactional(readOnly = true)
     public List<ShopMaterialAudit> listOpenAudit(UUID tenantId, UUID companyId) {
-        return auditRepository.findAllByTenantIdAndCompanyIdAndStatusInOrderByCreatedAtDesc(
-                tenantId, companyId, OPEN_STATUSES);
+        return enrichAuditUnits(auditRepository.findAllByTenantIdAndCompanyIdAndStatusInOrderByCreatedAtDesc(
+                tenantId, companyId, OPEN_STATUSES));
     }
 
     @Transactional(readOnly = true)
@@ -273,10 +281,12 @@ public class ShopMaterialAuditService {
         List<ShopMaterialAudit> rows = auditRepository
                 .findAllByTenantIdAndCompanyIdAndCreatedAtGreaterThanEqualAndCreatedAtLessThanOrderByCreatedAtDesc(
                         tenantId, companyId, from, to);
+        Map<UUID, String> units = unitByMaterial(materialIds(rows));
         Map<UUID, ReportAccumulator> acc = new LinkedHashMap<>();
         for (ShopMaterialAudit row : rows) {
             ReportAccumulator a = acc.computeIfAbsent(row.getMaterialId(),
-                    ignored -> new ReportAccumulator(row.getMaterialId(), row.getMaterialCode(), row.getMaterialName()));
+                    ignored -> new ReportAccumulator(row.getMaterialId(), row.getMaterialCode(), row.getMaterialName(),
+                            units.getOrDefault(row.getMaterialId(), "pcs")));
             a.requiredQty = a.requiredQty.add(orZero(row.getRequiredQty()));
             a.deductedQty = a.deductedQty.add(orZero(row.getDeductedQty()));
             a.waitingQty = a.waitingQty.add(orZero(row.getWaitingQty()));
@@ -284,7 +294,7 @@ public class ShopMaterialAuditService {
         }
         return acc.values().stream()
                 .map(a -> new MaterialUsageReportRow(a.materialId, a.materialCode, a.materialName,
-                        scale(a.requiredQty), scale(a.deductedQty), scale(a.waitingQty), a.orderIds.size()))
+                        a.materialUnit, scale(a.requiredQty), scale(a.deductedQty), scale(a.waitingQty), a.orderIds.size()))
                 .toList();
     }
 
@@ -332,7 +342,7 @@ public class ShopMaterialAuditService {
             if (calculated == null || possible.compareTo(calculated) < 0) {
                 calculated = possible;
             }
-            limits.add(new MaterialLimitRow(req.materialId, req.materialCode, req.materialName,
+            limits.add(new MaterialLimitRow(req.materialId, req.materialCode, req.materialName, req.materialUnit,
                     requiredPerUnit, scale(available), possible));
         }
 
@@ -452,6 +462,35 @@ public class ShopMaterialAuditService {
         return availableByMaterial(tenantId, companyId).getOrDefault(materialId, BigDecimal.ZERO);
     }
 
+    private List<ShopMaterialAudit> enrichAuditUnits(List<ShopMaterialAudit> rows) {
+        Map<UUID, String> units = unitByMaterial(materialIds(rows));
+        for (ShopMaterialAudit row : rows) {
+            row.setMaterialUnit(units.getOrDefault(row.getMaterialId(), "pcs"));
+        }
+        return rows;
+    }
+
+    private Set<UUID> materialIds(List<ShopMaterialAudit> rows) {
+        Set<UUID> ids = new HashSet<>();
+        for (ShopMaterialAudit row : rows) {
+            if (row.getMaterialId() != null) {
+                ids.add(row.getMaterialId());
+            }
+        }
+        return ids;
+    }
+
+    private Map<UUID, String> unitByMaterial(Set<UUID> materialIds) {
+        if (materialIds == null || materialIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, String> units = new HashMap<>();
+        for (Material material : materialRepository.findAllById(materialIds)) {
+            units.put(material.getId(), unitFor(material));
+        }
+        return units;
+    }
+
     private void subtractOpenDemand(Map<UUID, BigDecimal> available, UUID tenantId, UUID companyId, UUID excludeOrderId) {
         for (ShopMaterialAudit row : auditRepository.findOpenDemand(tenantId, companyId, OPEN_STATUSES, excludeOrderId)) {
             BigDecimal outstanding = positive(orZero(row.getRequiredQty()).subtract(orZero(row.getDeductedQty())));
@@ -479,6 +518,13 @@ public class ShopMaterialAuditService {
         return value != null && !value.isBlank() ? value : "material";
     }
 
+    private static String unitFor(Material material) {
+        if (material != null && material.getUnit() != null && !material.getUnit().isBlank()) {
+            return material.getUnit().trim();
+        }
+        return "pcs";
+    }
+
     private static BigDecimal orZero(BigDecimal value) {
         return value == null ? BigDecimal.ZERO : value;
     }
@@ -495,6 +541,7 @@ public class ShopMaterialAuditService {
                               BigDecimal waitingQty, List<ShopMaterialAudit> rows) {}
 
     public record MaterialUsageReportRow(UUID materialId, String materialCode, String materialName,
+                                         String materialUnit,
                                          BigDecimal requiredQty, BigDecimal deductedQty,
                                          BigDecimal waitingQty, int orderCount) {}
 
@@ -506,6 +553,7 @@ public class ShopMaterialAuditService {
                                       List<MaterialLimitRow> materialLimits) {}
 
     public record MaterialLimitRow(UUID materialId, String materialCode, String materialName,
+                                   String materialUnit,
                                    BigDecimal requiredPerUnit, BigDecimal availableQty,
                                    BigDecimal possibleUnits) {}
 
@@ -517,15 +565,17 @@ public class ShopMaterialAuditService {
         private final UUID materialId;
         private final String materialCode;
         private final String materialName;
+        private final String materialUnit;
         private BigDecimal requiredQty = BigDecimal.ZERO;
         private BigDecimal deductedQty = BigDecimal.ZERO;
         private BigDecimal waitingQty = BigDecimal.ZERO;
         private final Set<UUID> orderIds = new HashSet<>();
 
-        private ReportAccumulator(UUID materialId, String materialCode, String materialName) {
+        private ReportAccumulator(UUID materialId, String materialCode, String materialName, String materialUnit) {
             this.materialId = materialId;
             this.materialCode = materialCode;
             this.materialName = materialName;
+            this.materialUnit = materialUnit;
         }
     }
 
@@ -536,6 +586,7 @@ public class ShopMaterialAuditService {
         private UUID materialId;
         private String materialCode;
         private String materialName;
+        private String materialUnit;
         private BigDecimal requiredQty = BigDecimal.ZERO;
 
         private static MaterialRequirement forItem(ShopOrderItem item, BomItemEntity node) {
@@ -560,6 +611,7 @@ public class ShopMaterialAuditService {
             req.materialId = node.getMaterial().getId();
             req.materialCode = node.getMaterial().getMaterialCode();
             req.materialName = node.getMaterial().getMaterialName();
+            req.materialUnit = unitFor(node.getMaterial());
             return req;
         }
     }

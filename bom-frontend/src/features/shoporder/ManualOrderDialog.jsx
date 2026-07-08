@@ -51,6 +51,15 @@ const voucherLabel = (value) => {
   return raw.toUpperCase()
 }
 
+const parseAllowedSideIds = (model) => {
+  try {
+    const ids = model?.allowedSideIds ? JSON.parse(model.allowedSideIds) : []
+    return Array.isArray(ids) ? ids.map(String) : []
+  } catch {
+    return []
+  }
+}
+
 const FULFILLMENT = [
   { value: 'PICKUP',   label: 'Pickup',   icon: <TakeoutDiningIcon fontSize="small" /> },
   { value: 'DINE_IN',  label: 'Dine In',  icon: <TableBarIcon fontSize="small" /> },
@@ -192,6 +201,11 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
 
   const total = items.reduce((s, i) => s + i.qty * (itemBasePrice(i) + calcOptAddOn(i)) + sidesTotal(i), 0)
 
+  const mainModels = useMemo(
+    () => models.filter(model => Boolean(model.isActive) !== false),
+    [models]
+  )
+
   // Load models + tables when dialog opens
   useEffect(() => {
     if (!open) return
@@ -281,9 +295,19 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
   const setSF = (parentUid, field, value) =>
     setSideForm(prev => ({ ...prev, [parentUid]: { ...(prev[parentUid] || {}), [field]: value } }))
 
+  const allowedSideOptionsFor = (modelId) => {
+    const model = models.find(m => String(m.id) === String(modelId))
+    const allowedIds = parseAllowedSideIds(model)
+    return allowedIds.length ? models.filter(m => allowedIds.includes(String(m.id))) : []
+  }
+
+  const isAllowedSideModel = (parentModelId, sideModelId) =>
+    allowedSideOptionsFor(parentModelId).some(m => String(m.id) === String(sideModelId))
+
   const addSideItem = (parentUid) => {
     const sf = sideForm[parentUid] || {}
-    if (!sf.model) return
+    const parent = items.find(i => i.uid === parentUid)
+    if (!sf.model || !parent || !isAllowedSideModel(parent.modelId, sf.model.id)) return
     const price = sf.priceDigits ?? String(Math.round(Number(sf.model.sellingPrice) || 0))
     const qty = sf.qty || 1
     setItems(prev => prev.map(i =>
@@ -322,7 +346,9 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
       }
     ))
 
-  const changeSideModel = (parentUid, sideUid, newModel) =>
+  const changeSideModel = (parentUid, sideUid, newModel) => {
+    const parent = items.find(i => i.uid === parentUid)
+    if (!parent || !isAllowedSideModel(parent.modelId, newModel.id)) return
     setItems(prev => prev.map(i =>
       i.uid !== parentUid ? i : {
         ...i, sideItems: i.sideItems.map(si =>
@@ -335,15 +361,16 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
         )
       }
     ))
+  }
 
-  const addItem = () => {
-    if (!selectedModel) return
-    const mid = selectedModel.id
+  const addModelToOrder = (model) => {
+    if (!model) return
+    const mid = model.id
     setItems(prev => [...prev, {
       uid: crypto.randomUUID(),
-      modelId: mid, modelName: selectedModel.modelName,
-      sellingPrice: selectedModel.sellingPrice,
-      customPriceDigits: String(Math.round(Number(selectedModel.sellingPrice) || 0)),
+      modelId: mid, modelName: model.modelName,
+      sellingPrice: model.sellingPrice,
+      customPriceDigits: String(Math.round(Number(model.sellingPrice) || 0)),
       qty: 1, selectedOptions: {}, itemNotes: '',
       sideItems: [],
     }])
@@ -352,6 +379,10 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
         .then(({ data }) => setOptsByModel(prev => ({ ...prev, [mid]: Array.isArray(data) ? data : [] })))
         .catch(() => setOptsByModel(prev => ({ ...prev, [mid]: [] })))
     }
+  }
+
+  const addItem = () => {
+    addModelToOrder(selectedModel)
     setSelectedModel(null)
   }
 
@@ -517,8 +548,8 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
 
   // ── Render ───────────────────────────────────────────────────────────
   return (
-    <Dialog open={open} onClose={!submitting ? handleClose : undefined} fullWidth maxWidth="sm"
-      PaperProps={{ sx: { borderRadius: 3 } }}>
+    <Dialog open={open} onClose={!submitting ? handleClose : undefined} fullWidth maxWidth="lg"
+      PaperProps={{ sx: { borderRadius: { xs: 0, sm: 2 }, height: { xs: '100dvh', sm: 'calc(100vh - 48px)' }, maxHeight: { xs: '100dvh', sm: 'calc(100vh - 48px)' } } }}>
 
       {/* Title row — always visible */}
       <DialogTitle sx={{ pb: 1, display: 'flex', alignItems: 'flex-start', gap: 1 }}>
@@ -529,7 +560,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
         {counterBtn}
       </DialogTitle>
 
-      <DialogContent sx={{ pt: 0 }}>
+      <DialogContent sx={{ pt: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
 
         {/* ── Success banner (appears after order created) ── */}
         {createdOrder && (() => {
@@ -808,20 +839,53 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
               <Box sx={{ display: 'flex', gap: 1 }}>
                 <Autocomplete
                   size="small"
-                  options={models}
+                  options={mainModels}
                   getOptionLabel={m => `${m.modelName} — ${fmt(m.sellingPrice)}`}
                   value={selectedModel}
                   onChange={(_, v) => setSelectedModel(v)}
                   renderInput={params => <TextField {...params} label="Search item…" />}
                   sx={{ flex: 1 }}
                   isOptionEqualToValue={(a, b) => a.id === b.id}
-                  noOptionsText="No items with price"
+                  noOptionsText="No active menu items"
                 />
                 <Button variant="contained" onClick={addItem} disabled={!selectedModel}
                   startIcon={<AddIcon />} sx={{ textTransform: 'none', flexShrink: 0 }}>
                   Add
                 </Button>
               </Box>
+
+              {mainModels.length > 0 && (
+                <Box sx={{
+                  display: 'grid', gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(3, minmax(0, 1fr))', md: 'repeat(4, minmax(0, 1fr))' },
+                  gap: 1, maxHeight: 230, overflowY: 'auto', pr: 0.25,
+                }}>
+                  {mainModels.map(model => (
+                    <Box key={model.id} role="button" tabIndex={0}
+                      onClick={() => addModelToOrder(model)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') addModelToOrder(model) }}
+                      sx={{
+                        minHeight: 118, border: '1px solid #dbe3ef', borderRadius: 1.5, overflow: 'hidden', bgcolor: '#fff',
+                        display: 'grid', gridTemplateColumns: '72px 1fr', cursor: 'pointer', boxShadow: '0 1px 2px rgba(15,23,42,0.06)',
+                        '&:hover': { borderColor: '#1976d2', bgcolor: '#f8fbff' },
+                      }}>
+                      <Box sx={{ bgcolor: '#eef2f7', minHeight: 118, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                        {model.imageUrl ? (
+                          <Box component="img" src={model.imageUrl} alt={model.modelName}
+                            sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          <Typography fontWeight={900} color="text.secondary" sx={{ fontSize: 24 }}>
+                            {String(model.modelName || '?').slice(0, 1)}
+                          </Typography>
+                        )}
+                      </Box>
+                      <Box sx={{ p: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                        <Typography fontWeight={800} sx={{ fontSize: 14, lineHeight: 1.2, overflowWrap: 'anywhere' }}>{model.modelName}</Typography>
+                        <Typography color="primary" fontWeight={900} sx={{ fontSize: 14 }}>{fmt(model.sellingPrice)}</Typography>
+                      </Box>
+                    </Box>
+                  ))}
+                </Box>
+              )}
 
               {/* Items list */}
               {items.length > 0 ? (
@@ -850,6 +914,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                   {items.map((item, itemIdx) => {
                     const modelOpts = optsByModel[item.modelId] || []
                     const sf = sideForm[item.uid] || {}
+                    const allowedSideOptions = allowedSideOptionsFor(item.modelId)
                     const mainSubtotal = item.qty * (itemBasePrice(item) + calcOptAddOn(item))
                     const blockTotal = mainSubtotal + sidesTotal(item)
                     return (
@@ -949,9 +1014,9 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                   <Box sx={{ width: 14, height: 2, bgcolor: '#c7d2fe', flexShrink: 0 }} />
                                   <Autocomplete
-                                    size="small" disableClearable options={models}
+                                    size="small" disableClearable options={allowedSideOptions}
                                     getOptionLabel={m => m.modelName}
-                                    value={{ id: si.modelId, modelName: si.modelName, sellingPrice: si.customPriceDigits }}
+                                    value={allowedSideOptions.find(m => String(m.id) === String(si.modelId)) || { id: si.modelId, modelName: si.modelName, sellingPrice: si.customPriceDigits }}
                                     onChange={(_, v) => v && changeSideModel(item.uid, si.uid, v)}
                                     isOptionEqualToValue={(a, b) => a.id === b.id}
                                     renderInput={params => (
@@ -962,7 +1027,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                                       />
                                     )}
                                     sx={{ flex: 1, '& .MuiAutocomplete-endAdornment': { top: 'calc(50% - 10px)' } }}
-                                    noOptionsText="No items"
+                                    noOptionsText="No configured sides"
                                   />
                                   <IconButton size="small" onClick={() => removeSideItem(item.uid, si.uid)}
                                     sx={{ p: 0.25, color: '#94a3b8', '&:hover': { color: '#dc2626' } }}>
@@ -1009,52 +1074,82 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                             )}
 
                             {/* Add side item */}
-                            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5, py: 0.6, pr: 0.75, flexWrap: 'wrap' }}>
-                              <Box sx={{ width: 14, height: 2, bgcolor: '#a5b4fc', flexShrink: 0, mt: 2.25 }} />
-                              <Autocomplete
-                                size="small" options={models} getOptionLabel={m => m.modelName}
-                                value={sf.model || null}
-                                onChange={(_, v) => {
-                                  setSF(item.uid, 'model', v)
-                                  if (v) setSF(item.uid, 'priceDigits', String(Math.round(Number(v.sellingPrice) || 0)))
-                                }}
-                                renderInput={params => <TextField {...params} label="Add topping / side…" size="small" />}
-                                sx={{ flex: 1, minWidth: 130 }}
-                                isOptionEqualToValue={(a, b) => a.id === b.id}
-                                noOptionsText="No items"
-                              />
-                              {/* Qty for the new side item */}
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0, mt: 0.5 }}>
-                                <IconButton size="small"
-                                  onClick={() => setSF(item.uid, 'qty', Math.max(1, (sf.qty || 1) - 1))}
-                                  sx={{ p: 0.2 }}>
-                                  <RemoveIcon sx={{ fontSize: 12 }} />
-                                </IconButton>
-                                <Typography variant="caption" fontWeight={700} sx={{ minWidth: 18, textAlign: 'center', fontSize: 12 }}>
-                                  {sf.qty || 1}
-                                </Typography>
-                                <IconButton size="small"
-                                  onClick={() => setSF(item.uid, 'qty', (sf.qty || 1) + 1)}
-                                  sx={{ p: 0.2, bgcolor: '#6366f1', color: '#fff', borderRadius: 0.5, '&:hover': { bgcolor: '#4f46e5' } }}>
-                                  <AddIcon sx={{ fontSize: 12 }} />
-                                </IconButton>
+                            {allowedSideOptions.length > 0 && (
+                              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75, py: 0.75, pr: 0.75 }}>
+                                <Box sx={{ width: 14, height: 2, bgcolor: '#a5b4fc', flexShrink: 0, mt: 4.25 }} />
+                                <Box sx={{ flex: 1, minWidth: 0 }}>
+                                  <Typography variant="caption" color="text.secondary" fontWeight={800} sx={{ display: 'block', mb: 0.5 }}>
+                                    Related side / topping
+                                  </Typography>
+                                  <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(3, minmax(0, 1fr))' }, gap: 0.75 }}>
+                                    {allowedSideOptions.map(option => {
+                                      const selected = sf.model?.id === option.id
+                                      return (
+                                        <Box key={option.id} role="button" tabIndex={0}
+                                          onClick={() => setSideForm(prev => ({
+                                            ...prev,
+                                            [item.uid]: {
+                                              ...(prev[item.uid] || {}),
+                                              model: option,
+                                              priceDigits: String(Math.round(Number(option.sellingPrice) || 0)),
+                                              qty: prev[item.uid]?.qty || 1,
+                                            }
+                                          }))}
+                                          onKeyDown={(e) => { if (e.key === 'Enter') setSF(item.uid, 'model', option) }}
+                                          sx={{
+                                            minHeight: 72, border: `1.5px solid ${selected ? '#6366f1' : '#dbe3ef'}`, borderRadius: 1.25, overflow: 'hidden',
+                                            bgcolor: selected ? '#eef2ff' : '#fff', display: 'grid', gridTemplateColumns: '58px 1fr', cursor: 'pointer',
+                                          }}>
+                                          <Box sx={{ bgcolor: '#eef2f7', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                                            {option.imageUrl ? (
+                                              <Box component="img" src={option.imageUrl} alt={option.modelName}
+                                                sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                            ) : (
+                                              <Typography fontWeight={900} color="text.secondary" sx={{ fontSize: 18 }}>
+                                                {String(option.modelName || '?').slice(0, 1)}
+                                              </Typography>
+                                            )}
+                                          </Box>
+                                          <Box sx={{ p: 0.75, minWidth: 0 }}>
+                                            <Typography fontWeight={800} sx={{ fontSize: 12, lineHeight: 1.2, overflowWrap: 'anywhere' }}>{option.modelName}</Typography>
+                                            <Typography color="primary" fontWeight={900} sx={{ fontSize: 12 }}>{fmt(option.sellingPrice)}</Typography>
+                                          </Box>
+                                        </Box>
+                                      )
+                                    })}
+                                  </Box>
+                                  {sf.model && (
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.75, flexWrap: 'wrap' }}>
+                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
+                                        <IconButton size="small" onClick={() => setSF(item.uid, 'qty', Math.max(1, (sf.qty || 1) - 1))} sx={{ p: 0.25 }}>
+                                          <RemoveIcon sx={{ fontSize: 14 }} />
+                                        </IconButton>
+                                        <Typography variant="caption" fontWeight={800} sx={{ minWidth: 22, textAlign: 'center', fontSize: 13 }}>{sf.qty || 1}</Typography>
+                                        <IconButton size="small" onClick={() => setSF(item.uid, 'qty', (sf.qty || 1) + 1)}
+                                          sx={{ p: 0.25, bgcolor: '#6366f1', color: '#fff', borderRadius: 0.75, '&:hover': { bgcolor: '#4f46e5' } }}>
+                                          <AddIcon sx={{ fontSize: 14 }} />
+                                        </IconButton>
+                                      </Box>
+                                      <TextField
+                                        size="small" type="text" inputMode="numeric" label="Price" placeholder="0"
+                                        value={fmtDots(sf.priceDigits || '')}
+                                        onChange={e => setSF(item.uid, 'priceDigits', stripDigits(e.target.value))}
+                                        inputProps={{ maxLength: 12 }}
+                                        InputProps={{ endAdornment: <InputAdornment position="end">đ</InputAdornment> }}
+                                        sx={{ width: 112 }}
+                                      />
+                                      <Button size="small" variant="contained"
+                                        startIcon={<PlaylistAddIcon sx={{ fontSize: 16 }} />}
+                                        onClick={() => addSideItem(item.uid)}
+                                        sx={{ textTransform: 'none', fontWeight: 800, height: 40, flexShrink: 0,
+                                          bgcolor: '#6366f1', '&:hover': { bgcolor: '#4f46e5' } }}>
+                                        Add
+                                      </Button>
+                                    </Box>
+                                  )}
+                                </Box>
                               </Box>
-                              <TextField
-                                size="small" type="text" inputMode="numeric" label="Price" placeholder="0"
-                                value={fmtDots(sf.priceDigits || '')}
-                                onChange={e => setSF(item.uid, 'priceDigits', stripDigits(e.target.value))}
-                                inputProps={{ maxLength: 12 }}
-                                InputProps={{ endAdornment: <InputAdornment position="end">đ</InputAdornment> }}
-                                sx={{ width: 98 }}
-                              />
-                              <Button size="small" variant="contained"
-                                startIcon={<PlaylistAddIcon sx={{ fontSize: 14 }} />}
-                                onClick={() => addSideItem(item.uid)} disabled={!sf.model}
-                                sx={{ textTransform: 'none', fontSize: 11, height: 40, flexShrink: 0,
-                                  bgcolor: '#6366f1', '&:hover': { bgcolor: '#4f46e5' }, '&.Mui-disabled': { bgcolor: '#e0e0e0' } }}>
-                                Add
-                              </Button>
-                            </Box>
+                            )}
 
                           </Box>
                         </Box>

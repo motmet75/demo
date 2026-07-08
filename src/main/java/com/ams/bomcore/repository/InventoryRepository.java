@@ -64,7 +64,7 @@ public interface InventoryRepository extends JpaRepository<InventoryEntity, UUID
     // Projection for grid display
     @Query("SELECT new com.ams.bomcore.controller.inventory.dto.InventoryViewDTO("
             + "i.id, i.tenantId, i.companyId, m.id, m.materialCode, m.materialName, w.id, w.code, w.name, "
-            + "i.quantityOnHand, i.quantityTotal, i.quantityReserved, i.quantityLocked, i.batchNo, i.contractCode, i.orderToDeduction, i.unit, i.unitPrice, i.currency, "
+            + "i.quantityOnHand, i.quantityTotal, i.quantityReserved, i.quantityLocked, i.batchNo, i.contractCode, i.orderToDeduction, m.unit, i.unitPrice, i.currency, "
             + "i.expirationDateTime, i.productionDateTime, i.createdAt, i.updatedAt, i.visible, i.approved, i.locked, i.materialQuotaPercentage,  i.userName) "
             + "FROM InventoryEntity i "
             + "JOIN i.material m "

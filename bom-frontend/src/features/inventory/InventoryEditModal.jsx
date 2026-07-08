@@ -100,7 +100,12 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
           if (x.material && x.material.uuid != null) return String(x.material.uuid)
           return null
         }
-        setMaterials(Array.isArray(m) ? m.map(x => ({ id: extractId(x), code: x.materialCode ?? x.code ?? (x.material && x.material.materialCode) ?? '', name: x.materialName ?? x.name ?? (x.material && x.material.materialName) ?? '' })) : [])
+        setMaterials(Array.isArray(m) ? m.map(x => ({
+          id: extractId(x),
+          code: x.materialCode ?? x.code ?? (x.material && x.material.materialCode) ?? '',
+          name: x.materialName ?? x.name ?? (x.material && x.material.materialName) ?? '',
+          unit: x.unit ?? (x.material && x.material.unit) ?? 'pcs'
+        })) : [])
       } catch (e) {
         console.error('Failed to load materials', e)
         setMaterials([])
@@ -146,10 +151,13 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
     if (reason === 'input') {
       // if the typed value equals the selected option's code, keep the id
       const selected = materials.find(m => m.id === form.materialId)
+      const typed = materials.find(m => m.code === inputValue)
       if (selected && selected.code === inputValue) {
-        setForm(prev => ({ ...prev, materialCode: inputValue }))
+        setForm(prev => ({ ...prev, materialCode: inputValue, unit: selected.unit || prev.unit || 'pcs' }))
+      } else if (typed) {
+        setForm(prev => ({ ...prev, materialCode: inputValue, materialId: typed.id, unit: typed.unit || 'pcs' }))
       } else {
-        setForm(prev => ({ ...prev, materialCode: inputValue, materialId: undefined }))
+        setForm(prev => ({ ...prev, materialCode: inputValue, materialId: undefined, unit: 'pcs' }))
       }
     } else {
       // for other reasons (reset/blur), just update the code text
@@ -160,13 +168,14 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
   const handleMaterialChange = (event, option) => {
     if (!option) {
       // cleared selection
-      setForm(prev => ({ ...prev, materialCode: '', materialId: undefined }))
+      setForm(prev => ({ ...prev, materialCode: '', materialId: undefined, unit: 'pcs' }))
       return
     }
     if (typeof option === 'string') {
-      setForm(prev => ({ ...prev, materialCode: option, materialId: undefined }))
+      const matched = materials.find(m => m.code === option)
+      setForm(prev => ({ ...prev, materialCode: option, materialId: matched ? matched.id : undefined, unit: matched?.unit || 'pcs' }))
     } else {
-      setForm(prev => ({ ...prev, materialCode: option.code, materialId: option.id ? String(option.id) : undefined }))
+      setForm(prev => ({ ...prev, materialCode: option.code, materialId: option.id ? String(option.id) : undefined, unit: option.unit || 'pcs' }))
     }
   }
 
@@ -430,7 +439,7 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
               helperText={isEditing ? 'Managed by Reserve/Release actions — Available = On Hand − Locked' : 'Qty blocked from use: Available = On Hand − Locked'} />
 
             <TextField label="Contract Code" value={form.contractCode} onChange={handleChange('contractCode')} disabled={isSubmitting} />
-            <TextField label="Unit" value={form.unit} onChange={handleChange('unit')} disabled={isSubmitting} />
+            <TextField label="Unit" value={form.unit || 'pcs'} disabled helperText="From selected material" InputProps={{ readOnly: true }} />
             <TextField label="Unit Price" type="number" value={form.unitPrice} onChange={handleChange('unitPrice')} disabled={isSubmitting} />
             <TextField label="Currency" value={form.currency} onChange={handleChange('currency')} disabled={isSubmitting} />
 
