@@ -76,7 +76,7 @@ public class InventoryService {
                                      UUID tenantId, UUID companyId, String reason, String createdBy, String notes,
                                      UUID invoiceId) {
         return addStock(materialCode, warehouseCode, qty, batchNo, expirationDateTime, productionDateTime,
-                quantityReserved, null, null, tenantId, companyId, reason, createdBy, notes, invoiceId);
+                quantityReserved, null, null, null, tenantId, companyId, reason, createdBy, notes, invoiceId);
     }
 
     /**
@@ -86,7 +86,7 @@ public class InventoryService {
     @Transactional(rollbackFor = Exception.class)
     public InventoryEntity addStock(String materialCode, String warehouseCode, BigDecimal qty, String batchNo,
                                      Instant expirationDateTime, Instant productionDateTime, BigDecimal quantityReserved,
-                                     String orderToDeduction, BigDecimal materialQuotaPercentage,
+                                     BigDecimal quantityLocked, String orderToDeduction, BigDecimal materialQuotaPercentage,
                                      UUID tenantId, UUID companyId, String reason, String createdBy, String notes,
                                      UUID invoiceId) {
         if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) {
@@ -119,7 +119,13 @@ public class InventoryService {
                 if (quantityReserved.compareTo(inv.getQuantityOnHand()) > 0) {
 					throw new InventoryException("Reserved quantity cannot exceed on-hand quantity");
 				}
-                inv.setQuantityLocked(quantityReserved);
+                inv.setQuantityReserved(quantityReserved);
+            }
+            if (quantityLocked != null) {
+                if (quantityLocked.compareTo(inv.getQuantityOnHand()) > 0) {
+					throw new InventoryException("Locked quantity cannot exceed on-hand quantity");
+				}
+                inv.setQuantityLocked(quantityLocked);
             }
         } else {
             inv = new InventoryEntity();
@@ -128,10 +134,14 @@ public class InventoryService {
             inv.setUnit(unitFor(m));
             inv.setBatchNo(batchNo);
             inv.setQuantityOnHand(qty);
-            // quantityTotal is NOT set here — only set at import/initial creation
-            inv.setQuantityLocked(quantityReserved == null ? BigDecimal.ZERO : quantityReserved);
-            if (inv.getQuantityLocked().compareTo(inv.getQuantityOnHand()) > 0) {
+            // quantityTotal is set by InventoryEntity.prePersist from initial on-hand quantity.
+            inv.setQuantityReserved(quantityReserved == null ? BigDecimal.ZERO : quantityReserved);
+            inv.setQuantityLocked(quantityLocked == null ? BigDecimal.ZERO : quantityLocked);
+            if (inv.getQuantityReserved().compareTo(inv.getQuantityOnHand()) > 0) {
 				throw new InventoryException("Reserved quantity cannot exceed on-hand quantity");
+			}
+            if (inv.getQuantityLocked().compareTo(inv.getQuantityOnHand()) > 0) {
+				throw new InventoryException("Locked quantity cannot exceed on-hand quantity");
 			}
             inv.setExpirationDateTime(expirationDateTime);
             inv.setProductionDateTime(productionDateTime);
@@ -153,16 +163,15 @@ public class InventoryService {
 
         InventoryEntity saved = inventoryRepository.save(inv);
 
-        // Record IN movement — inventoryId = this row, referenceId = invoice (if provided)
-        movementService.recordInMovement(
-                m.getId(), w.getId(), qty,
+        // Record IN movement log only; on-hand was already applied above.
+        movementService.recordInMovementLogOnly(
+                saved.getId(), m.getId(), w.getId(), qty,
                 unitFor(m),
                 batchNo,
                 reason != null ? reason : "Manual add stock",
                 createdBy != null ? createdBy : "system",
                 invoiceId != null ? "INVOICE" : "INVENTORY",
                 invoiceId != null ? invoiceId : saved.getId(),
-                saved.getId(),
                 notes,
                 tenantId, companyId);
 
@@ -192,7 +201,7 @@ public class InventoryService {
                                           BigDecimal quantityReserved, UUID tenantId, UUID companyId,
                                           String reason, String createdBy, String notes, UUID invoiceId) {
         return addStockByIds(materialId, warehouseId, qty, batchNo, expirationDateTime, productionDateTime,
-                quantityReserved, null, null, tenantId, companyId, reason, createdBy, notes, invoiceId);
+                quantityReserved, null, null, null, tenantId, companyId, reason, createdBy, notes, invoiceId);
     }
 
     /**
@@ -202,7 +211,7 @@ public class InventoryService {
     @Transactional(rollbackFor = Exception.class)
     public InventoryEntity addStockByIds(UUID materialId, UUID warehouseId, BigDecimal qty, String batchNo,
                                           Instant expirationDateTime, Instant productionDateTime,
-                                          BigDecimal quantityReserved,
+                                          BigDecimal quantityReserved, BigDecimal quantityLocked,
                                           String orderToDeduction, BigDecimal materialQuotaPercentage,
                                           UUID tenantId, UUID companyId,
                                           String reason, String createdBy, String notes, UUID invoiceId) {
@@ -236,7 +245,13 @@ public class InventoryService {
                 if (quantityReserved.compareTo(inv.getQuantityOnHand()) > 0) {
 					throw new InventoryException("Reserved quantity cannot exceed on-hand quantity");
 				}
-                inv.setQuantityLocked(quantityReserved);
+                inv.setQuantityReserved(quantityReserved);
+            }
+            if (quantityLocked != null) {
+                if (quantityLocked.compareTo(inv.getQuantityOnHand()) > 0) {
+					throw new InventoryException("Locked quantity cannot exceed on-hand quantity");
+				}
+                inv.setQuantityLocked(quantityLocked);
             }
         } else {
             inv = new InventoryEntity();
@@ -245,10 +260,14 @@ public class InventoryService {
             inv.setUnit(unitFor(m));
             inv.setBatchNo(batchNo);
             inv.setQuantityOnHand(qty);
-            // quantityTotal is NOT set here — only set at import/initial creation
-            inv.setQuantityLocked(quantityReserved == null ? BigDecimal.ZERO : quantityReserved);
-            if (inv.getQuantityLocked().compareTo(inv.getQuantityOnHand()) > 0) {
+            // quantityTotal is set by InventoryEntity.prePersist from initial on-hand quantity.
+            inv.setQuantityReserved(quantityReserved == null ? BigDecimal.ZERO : quantityReserved);
+            inv.setQuantityLocked(quantityLocked == null ? BigDecimal.ZERO : quantityLocked);
+            if (inv.getQuantityReserved().compareTo(inv.getQuantityOnHand()) > 0) {
 				throw new InventoryException("Reserved quantity cannot exceed on-hand quantity");
+			}
+            if (inv.getQuantityLocked().compareTo(inv.getQuantityOnHand()) > 0) {
+				throw new InventoryException("Locked quantity cannot exceed on-hand quantity");
 			}
             inv.setExpirationDateTime(expirationDateTime);
             inv.setProductionDateTime(productionDateTime);
@@ -270,16 +289,15 @@ public class InventoryService {
 
         InventoryEntity savedById = inventoryRepository.save(inv);
 
-        // Record IN movement — inventoryId = this row, referenceId = invoice (if provided)
-        movementService.recordInMovement(
-                m.getId(), w.getId(), qty,
+        // Record IN movement log only; on-hand was already applied above.
+        movementService.recordInMovementLogOnly(
+                savedById.getId(), m.getId(), w.getId(), qty,
                 unitFor(m),
                 batchNo,
                 reason != null ? reason : "Manual add stock",
                 createdBy != null ? createdBy : "system",
                 invoiceId != null ? "INVOICE" : "INVENTORY",
                 invoiceId != null ? invoiceId : savedById.getId(),
-                savedById.getId(),
                 notes,
                 tenantId, companyId);
 

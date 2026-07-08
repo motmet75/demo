@@ -425,8 +425,10 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
 
             <Divider />
 
-            <TextField label="Total Qty" type="number" value={form.quantityTotal} disabled
-              helperText="Total quantity ever received — set at import/creation, not editable" InputProps={{ readOnly: true }} />
+            {isEditing && (
+              <TextField label="Total Qty" type="number" value={form.quantityTotal} disabled
+                helperText="Total quantity ever received - set at import/creation, not editable" InputProps={{ readOnly: true }} />
+            )}
             <TextField label="Quantity Reserved (info only)" type="number" value={form.quantityReserved}
               onChange={isEditing ? undefined : handleChange('quantityReserved')}
               disabled={isSubmitting || isEditing}
