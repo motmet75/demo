@@ -995,15 +995,29 @@ export default function ShopOrderGrid() {
   const [modelImageMap, setModelImageMap] = useState({})   // { [modelId]: imageUrl }
   const [staffCalls, setStaffCalls]       = useState([])   // pending staff calls
   const seenCallIdsRef = React.useRef(new Set())
+  const [counterPublicIp, setCounterPublicIp] = useState('')
+  const [allowedPublicIps, setAllowedPublicIps] = useState([])
+  const [counterIpUpdatedAt, setCounterIpUpdatedAt] = useState(null)
+
+  const rememberCounterIp = useCallback((result) => {
+    if (!result) return
+    if ('counterPublicIp' in result) setCounterPublicIp(result.counterPublicIp || '')
+    if ('counterPublicIpUpdatedAt' in result) setCounterIpUpdatedAt(result.counterPublicIpUpdatedAt || null)
+    if (Array.isArray(result.allowedPublicIps)) setAllowedPublicIps(result.allowedPublicIps)
+  }, [])
+
+  const allowedIpText = allowedPublicIps.length ? allowedPublicIps.join(', ') : 'Press Refresh to add this counter IP'
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
     try {
-      const { data } = await fetchShopOrders(statusFilter || null)
+      const result = await fetchShopOrders(statusFilter || null)
+      rememberCounterIp(result)
+      const { data } = result
       setRows(Array.isArray(data) ? data : [])
     } catch { setError('Failed to load orders') }
     setLoading(false)
-  }, [statusFilter])
+  }, [statusFilter, rememberCounterIp])
 
   const loadBoard = useCallback(async () => {
     try {
@@ -1011,13 +1025,15 @@ export default function ShopOrderGrid() {
         fetchActiveOrders(),
         fetchShopOrders('PICKED_UP'),
       ])
+      rememberCounterIp(activeRes)
+      rememberCounterIp(pickedRes)
       const all = [
         ...(Array.isArray(activeRes.data) ? activeRes.data : []),
         ...(Array.isArray(pickedRes.data) ? pickedRes.data : []),
       ]
       setBoardRows(all)
     } catch { /* silent */ }
-  }, [])
+  }, [rememberCounterIp])
 
   useEffect(() => { load() }, [load])
   useEffect(() => { loadBoard() }, [loadBoard])
@@ -1337,7 +1353,26 @@ export default function ShopOrderGrid() {
       )}
 
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-
+        <Box sx={{ px: 1.5, py: 0.5, display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', borderBottom: '1px solid #e5e7eb', bgcolor: '#f8fafc', flexShrink: 0 }}>
+          <Typography variant="caption" sx={{ fontWeight: 800, color: '#334155', flexShrink: 0 }}>Counter IP</Typography>
+          <Chip
+            size="small"
+            label={counterPublicIp || 'Not captured'}
+            color={counterPublicIp ? 'success' : 'warning'}
+            variant="outlined"
+            sx={{ height: 22, maxWidth: 220, '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' } }}
+          />
+          <Tooltip title={allowedIpText}>
+            <Typography variant="caption" color="text.secondary" sx={{ minWidth: 0, flex: '1 1 280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              Allowed IPs: {allowedIpText}
+            </Typography>
+          </Tooltip>
+          {counterIpUpdatedAt && (
+            <Typography variant="caption" color="text.disabled" sx={{ flexShrink: 0 }}>
+              Updated {dateFmt(counterIpUpdatedAt)}
+            </Typography>
+          )}
+        </Box>
         {/* Toolbar */}
         <Box sx={{ px: 1.5, py: 1, display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', borderBottom: '1px solid #e0e0e0', flexShrink: 0 }}>
           <TextField select label="Status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} size="small" sx={{ width: 148 }}>

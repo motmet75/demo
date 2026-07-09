@@ -71,6 +71,15 @@ public class Company {
     @Column(name = "voucher_secret", length = 100)
     private String voucherSecret;
 
+    @Column(name = "shop_counter_public_ip", length = 100)
+    private String shopCounterPublicIp;
+
+    @Column(name = "shop_counter_public_ip_updated_at")
+    private Instant shopCounterPublicIpUpdatedAt;
+
+    @Column(name = "shop_allowed_public_ips", columnDefinition = "TEXT")
+    private String shopAllowedPublicIps;
+
     public Company() {}
 
     public UUID getId() { return id; }
@@ -114,6 +123,12 @@ public class Company {
     public void setPointsRoundUp(Boolean pointsRoundUp) { this.pointsRoundUp = pointsRoundUp; }
     public String getVoucherSecret() { return voucherSecret; }
     public void setVoucherSecret(String voucherSecret) { this.voucherSecret = voucherSecret; }
+    public String getShopCounterPublicIp() { return shopCounterPublicIp; }
+    public void setShopCounterPublicIp(String shopCounterPublicIp) { this.shopCounterPublicIp = shopCounterPublicIp; }
+    public Instant getShopCounterPublicIpUpdatedAt() { return shopCounterPublicIpUpdatedAt; }
+    public void setShopCounterPublicIpUpdatedAt(Instant shopCounterPublicIpUpdatedAt) { this.shopCounterPublicIpUpdatedAt = shopCounterPublicIpUpdatedAt; }
+    public String getShopAllowedPublicIps() { return shopAllowedPublicIps; }
+    public void setShopAllowedPublicIps(String shopAllowedPublicIps) { this.shopAllowedPublicIps = shopAllowedPublicIps; }
 
     @PrePersist
     private void prePersist() {

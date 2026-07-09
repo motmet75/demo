@@ -1,6 +1,7 @@
 package com.ams.bomcore.controller.shop;
 
 import com.ams.bomcore.controller.shop.dto.ShopOrderResponseDto;
+import com.ams.bomcore.domain.company.Company;
 import com.ams.bomcore.domain.shop.ShopAccessToken;
 import com.ams.bomcore.domain.shop.ShopOrder;
 import com.ams.bomcore.domain.shop.ShopPrintHistory;
@@ -29,8 +30,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import jakarta.servlet.http.HttpServletRequest;
 
 import java.math.BigDecimal;
+import java.net.InetAddress;
 import java.time.Instant;
 import java.util.*;
 
@@ -47,6 +50,8 @@ public class ShopOrderController {
     private final ShopStaffCallRepository shopStaffCallRepository;
     private final ShopPrintHistoryRepository shopPrintHistoryRepository;
     private final ShopTableRepository shopTableRepository;
+
+    private record CounterIpSnapshot(String publicIp, Instant updatedAt, List<String> allowedPublicIps) {}
 
     public ShopOrderController(ShopOrderService shopOrderService,
                                ShopPricingService shopPricingService,
@@ -128,10 +133,18 @@ public class ShopOrderController {
 
     @PostMapping("/shop/public/orders")
     public ResponseEntity<?> createOrder(@RequestBody ShopOrderService.CreateOrderRequest req,
-                                          @RequestParam UUID tenantId, @RequestParam UUID companyId) {
+                                          @RequestParam UUID tenantId, @RequestParam UUID companyId,
+                                          HttpServletRequest request) {
         validateScope(tenantId, companyId);
-        ShopOrderResponseDto dto = shopOrderService.createOrder(req, tenantId, companyId);
-        return ResponseEntity.status(HttpStatus.CREATED).body(dto);
+        ResponseEntity<?> rejected = rejectPublicOrderingIfIpMismatch(tenantId, companyId, clientPublicIp(request));
+        if (rejected != null) return rejected;
+        try {
+            ShopOrderResponseDto dto = shopOrderService.createOrder(req, tenantId, companyId);
+            return ResponseEntity.status(HttpStatus.CREATED).body(dto);
+        } catch (IllegalArgumentException e) {
+            String message = e.getMessage() != null ? e.getMessage() : "Cannot create order";
+            return ResponseEntity.badRequest().body(Map.of("error", message, "message", message));
+        }
     }
 
     @GetMapping("/shop/public/orders/{orderCode}")
@@ -374,14 +387,17 @@ public class ShopOrderController {
                                          @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
                                          @RequestHeader(value = "X-Company-Id", required = false) String hCompany,
                                          @RequestParam(required = false) String status,
-                                         @RequestParam(required = false) Boolean active) {
+                                         @RequestParam(required = false) Boolean active,
+                                         HttpServletRequest request) {
         UUID tId = resolve(tenantId, hTenant);
         UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
-        if (Boolean.TRUE.equals(active)) return ResponseEntity.ok(shopOrderService.listActiveOrders(tId, cId));
-        return ResponseEntity.ok(shopOrderService.listOrders(tId, cId, status));
+        CounterIpSnapshot counterIp = recordCounterPublicIp(cId, request);
+        Object orders = Boolean.TRUE.equals(active)
+                ? shopOrderService.listActiveOrders(tId, cId)
+                : shopOrderService.listOrders(tId, cId, status);
+        return staffOrdersResponse(orders, counterIp);
     }
-
     @GetMapping("/shop/staff/orders/by-token")
     public ResponseEntity<?> getOrdersByToken(@RequestParam String token,
                                                @RequestParam(required = false) UUID tenantId,
@@ -791,14 +807,21 @@ public class ShopOrderController {
 
     @PutMapping("/shop/public/orders/{orderCode}/items")
     public ResponseEntity<?> updateOrderByCustomer(@PathVariable String orderCode,
-                                                    @RequestBody List<ShopOrderService.ItemRequest> items) {
+                                                    @RequestBody List<ShopOrderService.ItemRequest> items,
+                                                    HttpServletRequest request) {
+        ShopOrder order = shopOrderRepository.findByOrderCode(orderCode).orElse(null);
+        if (order == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", "Order not found", "message", "Order not found"));
+        }
+        ResponseEntity<?> rejected = rejectPublicOrderingIfIpMismatch(order.getTenantId(), order.getCompanyId(), clientPublicIp(request));
+        if (rejected != null) return rejected;
         try {
             return ResponseEntity.ok(shopOrderService.updateOrderByCustomer(orderCode, items));
         } catch (IllegalStateException e) {
-            return ResponseEntity.status(409).body(Map.of("error", e.getMessage()));
+            return ResponseEntity.status(409).body(Map.of("error", e.getMessage(), "message", e.getMessage()));
         }
     }
-
     @GetMapping("/shop/public/menu-options")
     public ResponseEntity<?> publicMenuOptions(@RequestParam UUID tenantId, @RequestParam UUID companyId) {
         validateScope(tenantId, companyId);
@@ -1256,6 +1279,160 @@ public class ShopOrderController {
     }
     // ── Helpers ───────────────────────────────────────────────────────
 
+    private CounterIpSnapshot recordCounterPublicIp(UUID companyId, HttpServletRequest request) {
+        String publicIp = clientPublicIp(request);
+        if (publicIp == null) return new CounterIpSnapshot(null, null, List.of());
+
+        Instant now = Instant.now();
+        Company company = companyRepository.findById(companyId)
+                .orElseThrow(() -> new IllegalArgumentException("Company not found"));
+        List<String> allowedIps = parseAllowedPublicIps(company.getShopAllowedPublicIps());
+        String lastCounterIp = cleanIp(company.getShopCounterPublicIp());
+        if (lastCounterIp != null && !containsNormalizedIp(allowedIps, lastCounterIp)) {
+            allowedIps.add(lastCounterIp);
+        }
+        if (!containsNormalizedIp(allowedIps, publicIp)) {
+            allowedIps.add(publicIp);
+        }
+        company.setShopCounterPublicIp(publicIp);
+        company.setShopCounterPublicIpUpdatedAt(now);
+        company.setShopAllowedPublicIps(joinAllowedPublicIps(allowedIps));
+        companyRepository.save(company);
+        return new CounterIpSnapshot(publicIp, now, allowedIps);
+    }
+
+    private ResponseEntity<?> staffOrdersResponse(Object body, CounterIpSnapshot counterIp) {
+        ResponseEntity.BodyBuilder builder = ResponseEntity.ok();
+        if (counterIp != null && counterIp.publicIp() != null) {
+            builder.header("X-Counter-Public-Ip", counterIp.publicIp());
+            if (counterIp.updatedAt() != null) {
+                builder.header("X-Counter-Public-Ip-Updated-At", counterIp.updatedAt().toString());
+            }
+            if (counterIp.allowedPublicIps() != null && !counterIp.allowedPublicIps().isEmpty()) {
+                builder.header("X-Allowed-Public-Ips", String.join(",", counterIp.allowedPublicIps()));
+            }
+        }
+        return builder.body(body);
+    }
+
+    private ResponseEntity<?> rejectPublicOrderingIfIpMismatch(UUID tenantId, UUID companyId, String deviceIp) {
+        Company company = companyRepository.findById(companyId)
+                .orElseThrow(() -> new IllegalArgumentException("Company not found"));
+        if (company.getTenant() == null || !tenantId.equals(company.getTenant().getId())) {
+            throw new IllegalArgumentException("Company does not belong to tenant");
+        }
+
+        List<String> allowedIps = parseAllowedPublicIps(company.getShopAllowedPublicIps());
+        String lastCounterIp = cleanIp(company.getShopCounterPublicIp());
+        if (lastCounterIp != null && !containsNormalizedIp(allowedIps, lastCounterIp)) {
+            allowedIps.add(lastCounterIp);
+        }
+        String normalizedDeviceIp = normalizeIp(deviceIp);
+        if (allowedIps.isEmpty()) {
+            return forbiddenPublicIp("Counter public IP list is not captured yet. Ask staff to press Refresh on Shop Orders.", deviceIp, allowedIps, company.getShopCounterPublicIpUpdatedAt());
+        }
+        if (normalizedDeviceIp == null) {
+            return forbiddenPublicIp("Cannot verify your network. Please connect to shop Wi-Fi and try again.", deviceIp, allowedIps, company.getShopCounterPublicIpUpdatedAt());
+        }
+        if (!containsNormalizedIp(allowedIps, deviceIp)) {
+            return forbiddenPublicIp("Ordering is allowed only from the shop network.", deviceIp, allowedIps, company.getShopCounterPublicIpUpdatedAt());
+        }
+        return null;
+    }
+
+    private ResponseEntity<?> forbiddenPublicIp(String message, String deviceIp, List<String> allowedIps, Instant updatedAt) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("error", message);
+        body.put("message", message);
+        if (deviceIp != null) body.put("devicePublicIp", deviceIp);
+        if (allowedIps != null && !allowedIps.isEmpty()) body.put("allowedPublicIps", allowedIps);
+        if (updatedAt != null) body.put("counterPublicIpUpdatedAt", updatedAt);
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
+    }
+
+    private List<String> parseAllowedPublicIps(String raw) {
+        List<String> ips = new ArrayList<>();
+        if (raw == null || raw.isBlank()) return ips;
+        for (String part : raw.split("[,;\\r\\n]+")) {
+            String ip = cleanIp(part);
+            if (ip != null && !containsNormalizedIp(ips, ip)) {
+                ips.add(ip);
+            }
+        }
+        return ips;
+    }
+
+    private String joinAllowedPublicIps(List<String> ips) {
+        if (ips == null || ips.isEmpty()) return null;
+        return String.join("\n", ips);
+    }
+
+    private boolean containsNormalizedIp(List<String> ips, String candidate) {
+        String normalizedCandidate = normalizeIp(candidate);
+        if (normalizedCandidate == null) return false;
+        for (String ip : ips) {
+            if (normalizedCandidate.equals(normalizeIp(ip))) return true;
+        }
+        return false;
+    }
+
+    private String clientPublicIp(HttpServletRequest request) {
+        if (request == null) return null;
+        String forwarded = forwardedForIp(request.getHeader("Forwarded"));
+        if (forwarded != null) return forwarded;
+        for (String header : List.of("X-Forwarded-For", "CF-Connecting-IP", "True-Client-IP", "X-Real-IP")) {
+            String value = cleanIp(firstHeaderValue(request.getHeader(header)));
+            if (value != null) return value;
+        }
+        return cleanIp(request.getRemoteAddr());
+    }
+
+    private String forwardedForIp(String header) {
+        String first = firstHeaderValue(header);
+        if (first == null) return null;
+        for (String part : first.split(";")) {
+            String[] pair = part.trim().split("=", 2);
+            if (pair.length == 2 && "for".equalsIgnoreCase(pair[0].trim())) {
+                return cleanIp(pair[1]);
+            }
+        }
+        return null;
+    }
+
+    private String firstHeaderValue(String header) {
+        if (header == null || header.isBlank()) return null;
+        String first = header.split(",", 2)[0].trim();
+        return first.isBlank() ? null : first;
+    }
+
+    private String cleanIp(String raw) {
+        if (raw == null) return null;
+        String value = raw.trim();
+        if (value.isBlank() || "unknown".equalsIgnoreCase(value)) return null;
+        if (value.startsWith("\"") && value.endsWith("\"") && value.length() > 1) {
+            value = value.substring(1, value.length() - 1).trim();
+        }
+        if (value.startsWith("/")) value = value.substring(1).trim();
+        if (value.startsWith("[")) {
+            int end = value.indexOf(']');
+            if (end > 0) value = value.substring(1, end);
+        } else if (value.indexOf(':') == value.lastIndexOf(':') && value.contains(".")) {
+            int portStart = value.lastIndexOf(':');
+            if (portStart > -1) value = value.substring(0, portStart);
+        }
+        return value.isBlank() ? null : value;
+    }
+
+    private String normalizeIp(String raw) {
+        String value = cleanIp(raw);
+        if (value == null) return null;
+        try {
+            if (value.matches("[0-9a-fA-F:.]+")) {
+                return InetAddress.getByName(value).getHostAddress();
+            }
+        } catch (Exception ignored) {}
+        return value.toLowerCase(Locale.ROOT);
+    }
     private ShopOrder resolveStaffCallOrder(UUID orderId, String orderCode, String token,
                                             UUID tableId, UUID tenantId, UUID companyId) {
         if (orderId != null) {

@@ -4,6 +4,15 @@ function qs(params) {
   return '?' + new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v != null))).toString()
 }
 
+function withCounterIpMeta(result) {
+  const allowedRaw = result?.res?.headers?.get('X-Allowed-Public-Ips') || ''
+  return {
+    ...result,
+    counterPublicIp: result?.res?.headers?.get('X-Counter-Public-Ip') || '',
+    counterPublicIpUpdatedAt: result?.res?.headers?.get('X-Counter-Public-Ip-Updated-At') || '',
+    allowedPublicIps: allowedRaw ? allowedRaw.split(',').map(ip => ip.trim()).filter(Boolean) : [],
+  }
+}
 // ── Public (no auth) ───────────────────────────────────────────────
 
 export function resolveToken(token) {
@@ -104,8 +113,8 @@ export function generateQueueQr(validDays = 30) {
   })
 }
 
-export function fetchShopOrders(status) {
-  return apiFetchJson('/shop/staff/orders' + (status ? qs({ status }) : ''))
+export async function fetchShopOrders(status) {
+  return withCounterIpMeta(await apiFetchJson('/shop/staff/orders' + (status ? qs({ status }) : '')))
 }
 
 export function fetchPrintHistory(params = {}) {
@@ -123,8 +132,8 @@ export function fetchOrdersByToken(token) {
   return apiFetchJson('/shop/staff/orders/by-token' + qs({ token }))
 }
 
-export function fetchActiveOrders() {
-  return apiFetchJson('/shop/staff/orders?active=true')
+export async function fetchActiveOrders() {
+  return withCounterIpMeta(await apiFetchJson('/shop/staff/orders?active=true'))
 }
 
 export function pickupShopOrder(orderId) {
