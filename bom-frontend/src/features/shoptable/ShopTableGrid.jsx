@@ -47,6 +47,7 @@ const dateFmt = (v) => v ? new Date(v).toLocaleString('vi-VN', { dateStyle: 'sho
 const orderLabel = (order) => order?.orderNumber != null ? `#${order.orderNumber}` : order?.orderCode || '-'
 const isActiveOrder = (order) => ACTIVE_STATUSES.has(order?.status)
 const isCompletableOrder = (order) => order?.status === 'READY'
+const makeSelectionModel = (ids = []) => ({ type: 'include', ids: new Set(ids) })
 
 function selectionIds(model) {
   if (Array.isArray(model)) return model
@@ -187,6 +188,7 @@ export default function ShopTableGrid() {
 
   const selectedReadyCount = (ordersDialog?.orders || [])
     .filter(order => selectedOrderIds.includes(order.id) && isCompletableOrder(order)).length
+  const selectedOrderModel = React.useMemo(() => makeSelectionModel(selectedOrderIds), [selectedOrderIds])
 
   const columns = [
     {
@@ -361,7 +363,7 @@ export default function ShopTableGrid() {
             checkboxSelection
             disableRowSelectionOnClick
             isRowSelectable={({ row }) => isCompletableOrder(row)}
-            rowSelectionModel={selectedOrderIds}
+            rowSelectionModel={selectedOrderModel}
             onRowSelectionModelChange={model => setSelectedOrderIds(selectionIds(model))}
             pageSizeOptions={[10, 25, 50]}
             density="compact"
