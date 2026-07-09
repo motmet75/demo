@@ -389,16 +389,14 @@ public class ShopOrderController {
                                          @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
                                          @RequestHeader(value = "X-Company-Id", required = false) String hCompany,
                                          @RequestParam(required = false) String status,
-                                         @RequestParam(required = false) Boolean active,
-                                         HttpServletRequest request) {
+                                         @RequestParam(required = false) Boolean active) {
         UUID tId = resolve(tenantId, hTenant);
         UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
-        CounterIpSnapshot counterIp = recordCounterPublicIp(cId, request);
         Object orders = Boolean.TRUE.equals(active)
                 ? shopOrderService.listActiveOrders(tId, cId)
                 : shopOrderService.listOrders(tId, cId, status);
-        return staffOrdersResponse(orders, counterIp);
+        return ResponseEntity.ok(orders);
     }
     @GetMapping("/shop/staff/orders/by-token")
     public ResponseEntity<?> getOrdersByToken(@RequestParam String token,
@@ -1020,6 +1018,44 @@ public class ShopOrderController {
         return ResponseEntity.ok(bankConfigMap(company));
     }
 
+    @GetMapping("/shop/staff/allowed-public-ips")
+    public ResponseEntity<?> getAllowedPublicIps(@RequestParam(required = false) UUID tenantId,
+                                                 @RequestParam(required = false) UUID companyId,
+                                                 @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                                 @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        Company company = companyRepository.findById(cId).orElseThrow();
+        return ResponseEntity.ok(allowedPublicIpMap(company));
+    }
+
+    @PutMapping("/shop/staff/allowed-public-ips")
+    public ResponseEntity<?> updateAllowedPublicIps(@RequestBody(required = false) Map<String, Object> body,
+                                                    @RequestParam(required = false) UUID tenantId,
+                                                    @RequestParam(required = false) UUID companyId,
+                                                    @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                                    @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        Company company = companyRepository.findById(cId).orElseThrow();
+        List<String> ips = allowedPublicIpsValue(body != null ? body.get("allowedPublicIps") : null);
+        company.setShopAllowedPublicIps(joinAllowedPublicIps(ips));
+        companyRepository.save(company);
+        return ResponseEntity.ok(allowedPublicIpMap(company));
+    }
+
+    @PostMapping("/shop/staff/allowed-public-ips/refresh")
+    public ResponseEntity<?> refreshAllowedPublicIps(@RequestParam(required = false) UUID tenantId,
+                                                     @RequestParam(required = false) UUID companyId,
+                                                     @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                                     @RequestHeader(value = "X-Company-Id", required = false) String hCompany,
+                                                     HttpServletRequest request) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        recordCounterPublicIp(cId, request);
+        Company company = companyRepository.findById(cId).orElseThrow();
+        return ResponseEntity.ok(allowedPublicIpMap(company));
+    }
     @GetMapping("/shop/public/shop-config")
     public ResponseEntity<?> getPublicShopConfig(@RequestParam UUID tenantId, @RequestParam UUID companyId) {
         validateScope(tenantId, companyId);
@@ -1027,6 +1063,13 @@ public class ShopOrderController {
         return ResponseEntity.ok(bankConfigMap(company));
     }
 
+    private Map<String, Object> allowedPublicIpMap(Company company) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("allowedPublicIps", parseAllowedPublicIps(company.getShopAllowedPublicIps()));
+        m.put("counterPublicIp", company.getShopCounterPublicIp() != null ? company.getShopCounterPublicIp() : "");
+        m.put("counterPublicIpUpdatedAt", company.getShopCounterPublicIpUpdatedAt());
+        return m;
+    }
     private Map<String, Object> bankConfigMap(com.ams.bomcore.domain.company.Company company) {
         Map<String, Object> m = new java.util.LinkedHashMap<>();
         m.put("bankBin",              company.getBankBin()           != null ? company.getBankBin()           : "");
@@ -1402,7 +1445,7 @@ public class ShopOrderController {
         }
         String normalizedDeviceIp = normalizeIp(deviceIp);
         if (allowedIps.isEmpty()) {
-            return forbiddenPublicIp("Counter public IP list is not captured yet. Ask staff to press Refresh on Shop Orders.", deviceIp, allowedIps, company.getShopCounterPublicIpUpdatedAt());
+            return forbiddenPublicIp("Counter public IP list is not captured yet. Ask staff to press Refresh IP on QR Tokens.", deviceIp, allowedIps, company.getShopCounterPublicIpUpdatedAt());
         }
         if (normalizedDeviceIp == null) {
             return forbiddenPublicIp("Cannot verify your network. Please connect to shop Wi-Fi and try again.", deviceIp, allowedIps, company.getShopCounterPublicIpUpdatedAt());
@@ -1423,6 +1466,19 @@ public class ShopOrderController {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
     }
 
+    private List<String> allowedPublicIpsValue(Object raw) {
+        List<String> ips = new ArrayList<>();
+        if (raw instanceof Collection<?> values) {
+            for (Object value : values) {
+                String ip = cleanIp(stringValue(value));
+                if (ip != null && !containsNormalizedIp(ips, ip)) {
+                    ips.add(ip);
+                }
+            }
+            return ips;
+        }
+        return parseAllowedPublicIps(stringValue(raw));
+    }
     private List<String> parseAllowedPublicIps(String raw) {
         List<String> ips = new ArrayList<>();
         if (raw == null || raw.isBlank()) return ips;

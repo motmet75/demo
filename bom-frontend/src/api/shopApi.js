@@ -120,6 +120,21 @@ export async function fetchShopOrders(status) {
   return withCounterIpMeta(await apiFetchJson('/shop/staff/orders' + (status ? qs({ status }) : '')))
 }
 
+export function fetchAllowedPublicIps() {
+  return apiFetchJson('/shop/staff/allowed-public-ips')
+}
+
+export function updateAllowedPublicIps(allowedPublicIps) {
+  return apiFetchJson('/shop/staff/allowed-public-ips', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ allowedPublicIps: allowedPublicIps || [] })
+  })
+}
+
+export function refreshAllowedPublicIps() {
+  return apiFetchJson('/shop/staff/allowed-public-ips/refresh', { method: 'POST' })
+}
 export function fetchPrintHistory(params = {}) {
   return apiFetchJson('/shop/staff/printing-history' + qs(params))
 }

@@ -7,18 +7,41 @@ import Alert from '@mui/material/Alert'
 import Tooltip from '@mui/material/Tooltip'
 import IconButton from '@mui/material/IconButton'
 import Typography from '@mui/material/Typography'
+import TextField from '@mui/material/TextField'
+import Stack from '@mui/material/Stack'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import DeleteIcon from '@mui/icons-material/Delete'
 import ToggleOnIcon from '@mui/icons-material/ToggleOn'
 import ToggleOffIcon from '@mui/icons-material/ToggleOff'
-import { fetchTokens, enableToken, disableToken, deleteToken } from '../../api/shopApi'
+import SettingsEthernetIcon from '@mui/icons-material/SettingsEthernet'
+import { fetchTokens, enableToken, disableToken, deleteToken, fetchAllowedPublicIps, updateAllowedPublicIps, refreshAllowedPublicIps } from '../../api/shopApi'
 
-const dateFmt = (v) => v ? new Date(v).toLocaleString('vi-VN') : '—'
+const dateFmt = (v) => v ? new Date(v).toLocaleString('vi-VN') : '-'
+
+const splitIps = (value) => String(value || '')
+  .split(/[,;\r\n]+/)
+  .map(ip => ip.trim())
+  .filter(Boolean)
+  .filter((ip, index, arr) => arr.findIndex(other => other.toLowerCase() === ip.toLowerCase()) === index)
 
 export default function ShopTokenManagePage() {
-  const [rows, setRows]     = useState([])
+  const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(false)
-  const [error, setError]   = useState('')
+  const [error, setError] = useState('')
+  const [ipInfo, setIpInfo] = useState({ allowedPublicIps: [], counterPublicIp: '', counterPublicIpUpdatedAt: null })
+  const [ipText, setIpText] = useState('')
+  const [ipLoading, setIpLoading] = useState(false)
+  const [ipSaving, setIpSaving] = useState(false)
+
+  const applyIpInfo = useCallback((data) => {
+    const next = {
+      allowedPublicIps: Array.isArray(data?.allowedPublicIps) ? data.allowedPublicIps : [],
+      counterPublicIp: data?.counterPublicIp || '',
+      counterPublicIpUpdatedAt: data?.counterPublicIpUpdatedAt || null,
+    }
+    setIpInfo(next)
+    setIpText(next.allowedPublicIps.join('\n'))
+  }, [])
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
@@ -29,15 +52,57 @@ export default function ShopTokenManagePage() {
     setLoading(false)
   }, [])
 
+  const loadIpInfo = useCallback(async () => {
+    setIpLoading(true)
+    try {
+      const { res, data } = await fetchAllowedPublicIps()
+      if (!res.ok) throw new Error(data?.message || data?.error || 'Failed to load allowed IPs')
+      applyIpInfo(data)
+    } catch (e) {
+      setError(e.message || 'Failed to load allowed IPs')
+    } finally {
+      setIpLoading(false)
+    }
+  }, [applyIpInfo])
+
   useEffect(() => { load() }, [load])
+  useEffect(() => { loadIpInfo() }, [loadIpInfo])
+
+  const handleRefreshIp = async () => {
+    setIpLoading(true); setError('')
+    try {
+      const { res, data } = await refreshAllowedPublicIps()
+      if (!res.ok) throw new Error(data?.message || data?.error || 'Failed to refresh counter IP')
+      applyIpInfo(data)
+    } catch (e) {
+      setError(e.message || 'Failed to refresh counter IP')
+    } finally {
+      setIpLoading(false)
+    }
+  }
+
+  const handleSaveIps = async () => {
+    setIpSaving(true); setError('')
+    try {
+      const { res, data } = await updateAllowedPublicIps(splitIps(ipText))
+      if (!res.ok) throw new Error(data?.message || data?.error || 'Failed to save allowed IPs')
+      applyIpInfo(data)
+    } catch (e) {
+      setError(e.message || 'Failed to save allowed IPs')
+    } finally {
+      setIpSaving(false)
+    }
+  }
+
+  const handleAddCurrentIp = () => {
+    if (!ipInfo.counterPublicIp) return
+    setIpText(splitIps(`${ipText}\n${ipInfo.counterPublicIp}`).join('\n'))
+  }
 
   const handleToggle = async (row) => {
     try {
-      if (row.enabled) {
-        await disableToken(row.id)
-      } else {
-        await enableToken(row.id)
-      }
+      if (row.enabled) await disableToken(row.id)
+      else await enableToken(row.id)
       load()
     } catch (e) { setError(e.message || 'Failed to update token') }
   }
@@ -66,9 +131,7 @@ export default function ShopTokenManagePage() {
       headerName: 'Description',
       flex: 1,
       minWidth: 160,
-      renderCell: ({ value }) => (
-        <Typography variant="body2" noWrap>{value || '—'}</Typography>
-      ),
+      renderCell: ({ value }) => <Typography variant="body2" noWrap>{value || '-'}</Typography>,
     },
     {
       field: 'token',
@@ -77,7 +140,7 @@ export default function ShopTokenManagePage() {
       renderCell: ({ value }) => (
         <Tooltip title={value}>
           <Typography variant="caption" sx={{ fontFamily: 'monospace', fontSize: 11 }} noWrap>
-            {value?.slice(0, 8)}…{value?.slice(-4)}
+            {value?.slice(0, 8)}...{value?.slice(-4)}
           </Typography>
         </Tooltip>
       ),
@@ -100,17 +163,13 @@ export default function ShopTokenManagePage() {
       field: 'lastAccessedAt',
       headerName: 'Last Used',
       width: 160,
-      renderCell: ({ value }) => (
-        <Typography variant="caption" color="text.secondary">{dateFmt(value)}</Typography>
-      ),
+      renderCell: ({ value }) => <Typography variant="caption" color="text.secondary">{dateFmt(value)}</Typography>,
     },
     {
       field: 'createdAt',
       headerName: 'Created',
       width: 160,
-      renderCell: ({ value }) => (
-        <Typography variant="caption" color="text.secondary">{dateFmt(value)}</Typography>
-      ),
+      renderCell: ({ value }) => <Typography variant="caption" color="text.secondary">{dateFmt(value)}</Typography>,
     },
     {
       field: 'expiresAt',
@@ -146,17 +205,56 @@ export default function ShopTokenManagePage() {
 
   return (
     <Box sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column', gap: 1 }}>
-
       <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
         <Typography variant="h6" fontWeight={700}>QR Token Management</Typography>
         <Box sx={{ flex: 1 }} />
-        <Button startIcon={<RefreshIcon />} onClick={load} variant="outlined" size="small">Refresh</Button>
+        <Button startIcon={<RefreshIcon />} onClick={load} variant="outlined" size="small">Refresh Tokens</Button>
       </Box>
 
       <Typography variant="body2" color="text.secondary">
         Walk-up QR tokens are automatically disabled when their order is completed or picked up.
         Table QR tokens remain active permanently. You can manually enable or disable any token here.
       </Typography>
+
+      <Box sx={{ border: '1px solid #e5e7eb', borderRadius: 1, p: 1.5, bgcolor: '#f8fafc' }}>
+        <Stack spacing={1.25}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+            <SettingsEthernetIcon color="primary" fontSize="small" />
+            <Typography fontWeight={800}>Shop Network Access</Typography>
+            <Chip
+              size="small"
+              label={ipInfo.counterPublicIp || 'Counter IP not captured'}
+              color={ipInfo.counterPublicIp ? 'success' : 'warning'}
+              variant="outlined"
+              sx={{ maxWidth: 240, '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' } }}
+            />
+            {ipInfo.counterPublicIpUpdatedAt && (
+              <Typography variant="caption" color="text.secondary">Updated {dateFmt(ipInfo.counterPublicIpUpdatedAt)}</Typography>
+            )}
+            <Box sx={{ flex: 1 }} />
+            <Button startIcon={<RefreshIcon />} onClick={handleRefreshIp} disabled={ipLoading} size="small" variant="outlined">
+              {ipLoading ? 'Refreshing...' : 'Refresh IP'}
+            </Button>
+          </Box>
+          <TextField
+            label="Allowed public IPs"
+            value={ipText}
+            onChange={e => setIpText(e.target.value)}
+            size="small"
+            fullWidth
+            multiline
+            minRows={2}
+            placeholder="One public IP per line"
+            helperText="Only customers from these public IPs can place QR orders. Refresh IP adds this counter public IP automatically."
+          />
+          <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+            <Button onClick={handleAddCurrentIp} disabled={!ipInfo.counterPublicIp || ipSaving} size="small" variant="outlined" sx={{ textTransform: 'none' }}>Add current IP</Button>
+            <Button onClick={handleSaveIps} disabled={ipSaving} size="small" variant="contained" sx={{ textTransform: 'none', fontWeight: 700 }}>
+              {ipSaving ? 'Saving...' : 'Save Allowed IPs'}
+            </Button>
+          </Box>
+        </Stack>
+      </Box>
 
       {error && <Alert severity="error" onClose={() => setError('')}>{error}</Alert>}
 

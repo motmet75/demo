@@ -284,6 +284,7 @@ public class ShopOrderService {
         order.setTotalAmount(totals[0].add(fee));
         order.setTotalRawCost(totals[1]);
         order.setCustomerEditing(false);
+        order.setCustomerEditingSince(null);
         refreshPaymentQr(order, companyRepository.findById(companyId).orElse(null));
         shopOrderRepository.save(order);
         resetOrderBills(order, items);
@@ -1725,6 +1726,7 @@ public class ShopOrderService {
         order.setTotalAmount(totals[0].add(fee));
         order.setTotalRawCost(totals[1]);
         order.setCustomerEditing(false);
+        order.setCustomerEditingSince(null);
         refreshPaymentQr(order, companyRepository.findById(companyId).orElse(null));
         shopOrderRepository.save(order);
         resetOrderBills(order, items);

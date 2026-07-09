@@ -282,6 +282,8 @@ function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpda
   const [order, setOrder] = React.useState(initialOrder)
   const fmtLocal = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 
+  React.useEffect(() => { setOrder(initialOrder) }, [initialOrder])
+
   React.useEffect(() => {
     if (!order?.orderCode) return
     const id = setInterval(() => {
@@ -887,9 +889,16 @@ export default function ShopMenuPage() {
       if (editingOrderCode) {
         const { res, data } = await updatePublicOrderItems(editingOrderCode, items)
         if (!res.ok) { setError(data?.message || data?.error || 'Không thể cập nhật đơn'); setSubmitting(false); return }
-        const finalOrder = await applyVoucherToOrder(data)
+        const updatedOrder = { ...data, customerEditing: false, customerEditingSince: null }
+        const finalOrderRaw = await applyVoucherToOrder(updatedOrder)
+        const finalOrder = { ...finalOrderRaw, customerEditing: false, customerEditingSince: null }
+        setTokenSession(prev => prev?.orders ? {
+          ...prev,
+          orders: prev.orders.map(order => order.orderCode === finalOrder.orderCode ? finalOrder : order),
+        } : prev)
         setCart({}); setSideForm({}); setCheckout(false); setCartOpen(false)
         setEditingOrderCode(null); setTrackingOrder(finalOrder)
+        loadTokenSession()
       } else {
         const body = {
           fulfillmentType: form.fulfillmentType, tableId: ctx.tableId || null,
