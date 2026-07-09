@@ -28,6 +28,7 @@ function fmtDate(value) {
 
 export default function QrOrderDialog({ open, onClose }) {
   const [seq, setSeq] = useState('')
+  const [maxOrders, setMaxOrders] = useState('12')
   const [queueDays, setQueueDays] = useState('30')
   const [loadingType, setLoadingType] = useState('')
   const [error, setError] = useState('')
@@ -44,9 +45,22 @@ export default function QrOrderDialog({ open, onClose }) {
         setError('Order number must be a positive number')
         return
       }
-      const { res, data } = await generateWalkUpQr(seqVal)
+      const maxOrdersRaw = maxOrders !== '' ? Number(maxOrders) : 12
+      if (!Number.isFinite(maxOrdersRaw) || maxOrdersRaw < 1) {
+        setError('Max orders must be at least 1')
+        return
+      }
+      const maxOrdersLimit = Math.min(Math.floor(maxOrdersRaw), 500)
+      const { res, data } = await generateWalkUpQr(seqVal, maxOrdersLimit)
       if (!res.ok) { setError(data?.message || 'Failed to generate QR'); return }
-      setResult({ type: 'ORDER', qrBase64: data.qrBase64, seq: data.seq ?? null, qrUrl: data.qrUrl ?? null })
+      setResult({
+        type: 'ORDER',
+        qrBase64: data.qrBase64,
+        seq: data.seq ?? null,
+        qrUrl: data.qrUrl ?? null,
+        token: data.token ?? null,
+        maxOrders: data.maxOrders ?? maxOrdersLimit,
+      })
     } catch (e) {
       setError(e.message || 'Network error')
     } finally {
@@ -80,7 +94,7 @@ export default function QrOrderDialog({ open, onClose }) {
     }
   }
 
-  const handleReset = () => { setResult(null); setSeq(''); setError('') }
+  const handleReset = () => { setResult(null); setSeq(''); setMaxOrders('12'); setError('') }
   const handleClose = () => { handleReset(); onClose() }
 
   return (
@@ -116,6 +130,17 @@ export default function QrOrderDialog({ open, onClose }) {
                 inputProps={{ min: 1 }}
                 helperText={seq ? `Order will be assigned #${seq}` : 'Next available number will be used'}
               />
+              <TextField
+                label="Max orders accepted"
+                type="number"
+                size="small"
+                fullWidth
+                value={maxOrders}
+                onChange={e => setMaxOrders(e.target.value)}
+                inputProps={{ min: 1, max: 500 }}
+                helperText="Default 12. Increase only when counter can accept more orders on this slip."
+                sx={{ mt: 1.5 }}
+              />
             </Box>
 
             <Divider />
@@ -142,7 +167,7 @@ export default function QrOrderDialog({ open, onClose }) {
             {isQueue ? (
               <Box sx={{ mb: 1.5 }}>
                 <Typography variant="caption" color="text.secondary"
-                  sx={{ textTransform: 'uppercase', letterSpacing: 1, fontSize: 10 }}>
+                  sx={{ textTransform: 'uppercase', letterSpacing: 0, fontSize: 10 }}>
                   Queue QR
                 </Typography>
                 <Typography sx={{ fontSize: 30, fontWeight: 900, lineHeight: 1.15, color: '#ff5722' }}>
@@ -153,13 +178,20 @@ export default function QrOrderDialog({ open, onClose }) {
             ) : result.seq != null && (
               <Box sx={{ mb: 1.5 }}>
                 <Typography variant="caption" color="text.secondary"
-                  sx={{ textTransform: 'uppercase', letterSpacing: 1, fontSize: 10 }}>
+                  sx={{ textTransform: 'uppercase', letterSpacing: 0, fontSize: 10 }}>
                   Order number
                 </Typography>
-                <Typography sx={{ fontSize: 72, fontWeight: 900, lineHeight: 1, color: '#1976d2', letterSpacing: -3 }}>
+                <Typography sx={{ fontSize: 72, fontWeight: 900, lineHeight: 1, color: '#1976d2', letterSpacing: 0 }}>
                   #{result.seq}
                 </Typography>
               </Box>
+            )}
+            {!isQueue && (
+              <Chip
+                label={`Max ${result.maxOrders || 12} order${Number(result.maxOrders || 12) === 1 ? '' : 's'}`}
+                size="small"
+                sx={{ mb: 1.5, fontWeight: 700 }}
+              />
             )}
 
             <Box sx={{

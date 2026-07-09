@@ -50,9 +50,9 @@ export async function printWalkUpQrTracked(result, onError) {
     sourceCode: result.qrUrl || null,
     sourceNumber: result.seq != null ? seqText : null,
     title: result.seq != null ? `QR Order Slip #${result.seq}` : 'QR Order Slip',
-    notes: 'Walk-up customer ordering QR slip',
+    notes: result.maxOrders ? `Walk-up customer ordering QR slip - max ${result.maxOrders} orders` : 'Walk-up customer ordering QR slip',
   }, onError)
-  printWalkUpQr(result.seq, result.qrBase64, result.qrUrl, meta)
+  printWalkUpQr(result.seq, result.qrBase64, result.qrUrl, { maxOrders: result.maxOrders }, meta)
 }
 
 export async function printQueueQrTracked(result, onError) {

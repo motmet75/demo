@@ -22,18 +22,45 @@ import PrintIcon from '@mui/icons-material/Print'
 import TableBarIcon from '@mui/icons-material/TableBar'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import NoteAddIcon from '@mui/icons-material/NoteAdd'
+import VisibilityIcon from '@mui/icons-material/Visibility'
 import {
-  fetchShopTables, deleteShopTable, fetchTableQr, fetchActiveOrders,
-  completeShopOrder, pickupShopOrder
+  fetchShopTables, deleteShopTable, fetchTableQr, fetchShopOrders,
+  completeShopOrder
 } from '../../api/shopApi'
 import ShopTableEditModal from './ShopTableEditModal'
 import ManualOrderDialog from '../shoporder/ManualOrderDialog'
+import ShopOrderDetailModal from '../shoporder/ShopOrderDetailModal'
 
+const ACTIVE_STATUSES = new Set(['PENDING', 'CONFIRMED', 'PREPARING', 'READY'])
 const STATUS_CHIP = {
-  PENDING:   { label: 'Placed',     color: 'default' },
-  CONFIRMED: { label: 'Confirmed',  color: 'success' },
-  PREPARING: { label: 'Preparing',  color: 'warning' },
-  READY:     { label: 'Ready ✓',   color: 'info'    },
+  PENDING:   { label: 'Placed',    color: 'default' },
+  CONFIRMED: { label: 'Confirmed', color: 'success' },
+  PREPARING: { label: 'Preparing', color: 'warning' },
+  READY:     { label: 'Ready',     color: 'info' },
+  PICKED_UP: { label: 'Picked Up', color: 'success' },
+  COMPLETED: { label: 'Completed', color: 'success' },
+  CANCELLED: { label: 'Cancelled', color: 'error' },
+}
+
+const fmtMoney = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' VND' : '-'
+const dateFmt = (v) => v ? new Date(v).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' }) : '-'
+const orderLabel = (order) => order?.orderNumber != null ? `#${order.orderNumber}` : order?.orderCode || '-'
+const isActiveOrder = (order) => ACTIVE_STATUSES.has(order?.status)
+const isCompletableOrder = (order) => order?.status === 'READY'
+
+function selectionIds(model) {
+  if (Array.isArray(model)) return model
+  if (model?.ids) return Array.from(model.ids)
+  return []
+}
+
+function statusChip(status, size = 'small') {
+  const chip = STATUS_CHIP[status] || { label: status || '-', color: 'default' }
+  return <Chip label={chip.label} size={size} color={chip.color} sx={{ fontWeight: 700 }} />
+}
+
+function sortOrders(orders) {
+  return [...orders].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
 }
 
 export default function ShopTableGrid() {
@@ -41,19 +68,32 @@ export default function ShopTableGrid() {
   const [loading, setLoading]             = useState(false)
   const [error, setError]                 = useState('')
   const [editTable, setEditTable]         = useState(null)
-  const [qrDialog, setQrDialog]           = useState(null)   // { table, qrBase64, activeOrderCount }
+  const [qrDialog, setQrDialog]           = useState(null)
   const [newOrderTable, setNewOrderTable] = useState(null)
-  const [printConfirm, setPrintConfirm]   = useState(null)   // { row, qrBase64, activeOrderCount }
+  const [printConfirm, setPrintConfirm]   = useState(null)
+  const [ordersDialog, setOrdersDialog]   = useState(null)
+  const [selectedOrderIds, setSelectedOrderIds] = useState([])
+  const [completingSelected, setCompletingSelected] = useState(false)
+  const [detailOrder, setDetailOrder] = useState(null)
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
     try {
-      const [tablesRes, ordersRes] = await Promise.all([fetchShopTables(), fetchActiveOrders()])
+      const [tablesRes, ordersRes] = await Promise.all([fetchShopTables(), fetchShopOrders()])
       const tables = Array.isArray(tablesRes.data) ? tablesRes.data : []
       const orders = Array.isArray(ordersRes.data) ? ordersRes.data : []
-      const byTable = {}
-      orders.forEach(o => { if (o.tableId) byTable[o.tableId] = o })
-      setRows(tables.map(t => ({ ...t, activeOrder: byTable[t.id] || null })))
+      setRows(tables.map(table => {
+        const tableOrders = sortOrders(orders.filter(order => order.tableId && String(order.tableId) === String(table.id)))
+        const activeOrders = tableOrders.filter(isActiveOrder)
+        return {
+          ...table,
+          orders: tableOrders,
+          activeOrders,
+          activeOrder: activeOrders[0] || null,
+          orderCount: tableOrders.length,
+          activeOrderCount: activeOrders.length,
+        }
+      }))
     } catch { setError('Failed to load tables') }
     setLoading(false)
   }, [])
@@ -76,7 +116,7 @@ export default function ShopTableGrid() {
   const doPrint = (row, qr) => {
     const win = window.open('', '_blank', 'width=500,height=600')
     win.document.write(`<!DOCTYPE html><html><head>
-      <title>Table QR — ${row.tableName}</title>
+      <title>Table QR - ${row.tableName}</title>
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; background: #fff; padding: 24px; }
@@ -112,106 +152,111 @@ export default function ShopTableGrid() {
     } catch { setError('Failed to load QR for printing') }
   }
 
-  const handleClearTable = async (row) => {
-    const order = row.activeOrder
-    if (!order) return
-    if (!window.confirm(`Mark order #${order.orderNumber || order.orderCode} on ${row.tableName} as complete?`)) return
-    try {
-      if (order.paymentMethod === 'BANK_QR') await pickupShopOrder(order.id)
-      else await completeShopOrder(order.id)
-      load()
-    } catch (e) { setError(e.message || 'Failed to clear table') }
+  const openOrders = (row) => {
+    setSelectedOrderIds([])
+    setOrdersDialog({ table: row, orders: row.orders || [] })
   }
+
+  const completeSelectedOrders = async () => {
+    if (!ordersDialog) return
+    const selected = ordersDialog.orders.filter(order => selectedOrderIds.includes(order.id) && isCompletableOrder(order))
+    if (!selected.length) {
+      setError('Select at least one Ready order to complete')
+      return
+    }
+    if (!window.confirm(`Complete ${selected.length} selected order${selected.length > 1 ? 's' : ''} for ${ordersDialog.table.tableName}?`)) return
+    setCompletingSelected(true)
+    try {
+      await Promise.all(selected.map(order => completeShopOrder(order.id)))
+      const completedIds = new Set(selected.map(order => order.id))
+      const now = new Date().toISOString()
+      setOrdersDialog(prev => prev ? {
+        ...prev,
+        orders: prev.orders.map(order => completedIds.has(order.id)
+          ? { ...order, status: 'COMPLETED', paymentStatus: 'PAID', completedAt: now }
+          : order),
+      } : prev)
+      setSelectedOrderIds([])
+      await load()
+    } catch (e) {
+      setError(e.message || 'Failed to complete selected orders')
+    } finally {
+      setCompletingSelected(false)
+    }
+  }
+
+  const selectedReadyCount = (ordersDialog?.orders || [])
+    .filter(order => selectedOrderIds.includes(order.id) && isCompletableOrder(order)).length
 
   const columns = [
     {
-      field: 'tableName', headerName: 'Table', width: 120,
+      field: 'tableName', headerName: 'Table', width: 130,
       renderCell: ({ value, row }) => (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <TableBarIcon sx={{ fontSize: 16, color: row.activeOrder ? '#0277bd' : '#bdbdbd' }} />
-          <Typography variant="body2" fontWeight={row.activeOrder ? 700 : 400}>{value}</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+          <TableBarIcon sx={{ fontSize: 16, color: row.activeOrderCount ? '#0277bd' : '#bdbdbd', flexShrink: 0 }} />
+          <Typography variant="body2" fontWeight={row.activeOrderCount ? 800 : 500} noWrap>{value}</Typography>
         </Box>
       ),
     },
     {
-      field: 'activeOrder', headerName: 'Order #', width: 80,
+      field: 'activeOrderCount', headerName: 'Open', width: 80,
+      renderCell: ({ value }) => value
+        ? <Chip label={value} size="small" color="primary" sx={{ fontWeight: 800 }} />
+        : <Chip label="Free" size="small" variant="outlined" sx={{ color: '#78909c', borderColor: '#cfd8dc' }} />,
+    },
+    {
+      field: 'activeOrders', headerName: 'Open Orders', flex: 1, minWidth: 230,
       renderCell: ({ value }) => {
-        if (!value) return <Typography variant="caption" color="text.disabled">—</Typography>
+        const list = value || []
+        if (!list.length) return <Typography variant="caption" color="text.disabled">No open orders</Typography>
         return (
-          <Box sx={{
-            width: 40, height: 40, borderRadius: '50%', bgcolor: '#1976d2',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <Typography sx={{ color: '#fff', fontWeight: 900, fontSize: 14, lineHeight: 1 }}>
-              {value.orderNumber ?? '?'}
-            </Typography>
+          <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', overflow: 'hidden' }}>
+            {list.slice(0, 3).map(order => (
+              <Chip key={order.id} label={`${orderLabel(order)} ${order.status}`} size="small" variant="outlined" sx={{ maxWidth: 110, fontWeight: 700 }} />
+            ))}
+            {list.length > 3 && <Typography variant="caption" color="text.secondary">+{list.length - 3}</Typography>}
           </Box>
         )
       },
     },
     {
-      field: 'orderCode', headerName: 'Code', width: 130,
+      field: 'latestOrder', headerName: 'Last Order', width: 125,
+      valueGetter: (_, row) => row.orders?.[0] || null,
       renderCell: ({ row }) => {
-        const o = row.activeOrder
-        if (!o) return null
-        return (
-          <Typography sx={{ fontFamily: 'monospace', fontWeight: 800, fontSize: 12, letterSpacing: 0.5, color: '#37474f' }}>
-            {o.orderCode}
-          </Typography>
-        )
+        const order = row.orders?.[0]
+        return order ? <Typography variant="caption" fontWeight={800}>{orderLabel(order)}</Typography> : null
       },
     },
     {
-      field: 'status', headerName: 'Status', width: 130,
-      renderCell: ({ row }) => {
-        const o = row.activeOrder
-        if (!o) return <Chip label="Free" size="small" variant="outlined" sx={{ color: '#9e9e9e', borderColor: '#e0e0e0' }} />
-        const chip = STATUS_CHIP[o.status] || { label: o.status, color: 'default' }
-        return <Chip label={chip.label} size="small" color={chip.color} sx={{ fontWeight: 600 }} />
-      },
+      field: 'orderCount', headerName: 'All Orders', width: 90,
+      renderCell: ({ value }) => <Typography variant="caption" fontWeight={800}>{value || 0}</Typography>,
     },
     {
-      field: 'orderTotal', headerName: 'Total', width: 110,
-      renderCell: ({ row }) => {
-        const o = row.activeOrder
-        if (!o) return null
-        return (
-          <Typography variant="caption" fontWeight={700} color="primary">
-            {o.totalAmount ? Number(o.totalAmount).toLocaleString('vi-VN') + ' đ' : '—'}
-          </Typography>
-        )
-      },
-    },
-    { field: 'isActive', headerName: 'Active', width: 70,
+      field: 'isActive', headerName: 'Active', width: 80,
       renderCell: ({ value }) => <Chip label={value ? 'Yes' : 'No'} color={value ? 'success' : 'default'} size="small" />,
     },
     {
-      field: 'actions', headerName: 'Actions', width: 260, sortable: false,
+      field: 'actions', headerName: 'Actions', width: 360, sortable: false,
       renderCell: ({ row }) => (
         <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', flexWrap: 'nowrap' }}>
-          {row.activeOrder ? (
-            <Tooltip title="Clear table (complete order)">
-              <Button
-                size="small" variant="contained" color="success"
-                startIcon={<CheckCircleOutlineIcon />}
-                onClick={() => handleClearTable(row)}
-                sx={{ textTransform: 'none', fontWeight: 700, fontSize: 11, px: 1 }}
-              >
-                Clear
-              </Button>
-            </Tooltip>
-          ) : (
-            <Tooltip title="New order for this table">
-              <Button
-                size="small" variant="outlined" color="primary"
-                startIcon={<NoteAddIcon />}
-                onClick={() => setNewOrderTable(row)}
-                sx={{ textTransform: 'none', fontSize: 11, px: 1 }}
-              >
-                Order
-              </Button>
-            </Tooltip>
-          )}
+          <Button
+            size="small" variant="contained" color="primary"
+            startIcon={<VisibilityIcon />}
+            onClick={() => openOrders(row)}
+            sx={{ textTransform: 'none', fontWeight: 800, fontSize: 11, px: 1 }}
+          >
+            Orders
+          </Button>
+          <Tooltip title="New order for this table">
+            <Button
+              size="small" variant="outlined" color="primary"
+              startIcon={<NoteAddIcon />}
+              onClick={() => setNewOrderTable(row)}
+              sx={{ textTransform: 'none', fontSize: 11, px: 1 }}
+            >
+              Order
+            </Button>
+          </Tooltip>
           <Tooltip title="QR Code"><IconButton size="small" onClick={() => handleQr(row)}><QrCode2Icon fontSize="small" /></IconButton></Tooltip>
           <Tooltip title="Print QR"><IconButton size="small" onClick={() => handlePrint(row)}><PrintIcon fontSize="small" /></IconButton></Tooltip>
           <Tooltip title="Edit"><IconButton size="small" onClick={() => setEditTable(row)}><EditIcon fontSize="small" /></IconButton></Tooltip>
@@ -219,6 +264,45 @@ export default function ShopTableGrid() {
         </Box>
       )
     }
+  ]
+
+  const orderColumns = [
+    {
+      field: 'orderNumber', headerName: 'Order', width: 95,
+      renderCell: ({ row }) => <Typography fontWeight={900}>{orderLabel(row)}</Typography>,
+    },
+    {
+      field: 'status', headerName: 'Status', width: 125,
+      renderCell: ({ value }) => statusChip(value),
+    },
+    {
+      field: 'createdAt', headerName: 'Created', width: 150,
+      renderCell: ({ value }) => <Typography variant="caption">{dateFmt(value)}</Typography>,
+    },
+    {
+      field: 'customerName', headerName: 'Customer', minWidth: 130, flex: 1,
+      renderCell: ({ value }) => <Typography variant="caption" noWrap>{value || '-'}</Typography>,
+    },
+    {
+      field: 'items', headerName: 'Items', width: 70,
+      renderCell: ({ value }) => <Typography variant="caption" fontWeight={800}>{Array.isArray(value) ? value.length : 0}</Typography>,
+    },
+    {
+      field: 'totalAmount', headerName: 'Total', width: 120,
+      renderCell: ({ value }) => <Typography variant="caption" fontWeight={800}>{fmtMoney(value)}</Typography>,
+    },
+    {
+      field: 'paymentStatus', headerName: 'Payment', width: 105,
+      renderCell: ({ value }) => <Chip label={value || '-'} size="small" color={value === 'PAID' ? 'success' : 'default'} variant="outlined" />,
+    },
+    {
+      field: 'view', headerName: '', width: 70, sortable: false,
+      renderCell: ({ row }) => (
+        <Tooltip title="View order">
+          <IconButton size="small" onClick={() => setDetailOrder(row)}><VisibilityIcon fontSize="small" /></IconButton>
+        </Tooltip>
+      ),
+    },
   ]
 
   return (
@@ -234,9 +318,9 @@ export default function ShopTableGrid() {
           columns={columns}
           loading={loading}
           getRowId={r => r.id}
-          pageSizeOptions={[25]}
+          pageSizeOptions={[25, 50]}
           density="compact"
-          getRowClassName={({ row }) => row.activeOrder ? 'occupied-row' : ''}
+          getRowClassName={({ row }) => row.activeOrderCount ? 'occupied-row' : ''}
           sx={{
             '& .occupied-row': { bgcolor: '#e3f2fd' },
             '& .occupied-row:hover': { bgcolor: '#bbdefb !important' },
@@ -262,20 +346,65 @@ export default function ShopTableGrid() {
         />
       )}
 
-      {/* QR dialog */}
+      <Dialog open={!!ordersDialog} onClose={() => setOrdersDialog(null)} fullWidth maxWidth="lg">
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          <TableBarIcon color="primary" />
+          <Typography component="span" fontWeight={900}>{ordersDialog?.table?.tableName}</Typography>
+          <Chip label={`${ordersDialog?.orders?.length || 0} orders`} size="small" />
+          <Chip label={`${(ordersDialog?.orders || []).filter(isActiveOrder).length} open`} size="small" color="primary" variant="outlined" />
+        </DialogTitle>
+        <DialogContent sx={{ height: 520 }}>
+          <DataGrid
+            rows={ordersDialog?.orders || []}
+            columns={orderColumns}
+            getRowId={row => row.id}
+            checkboxSelection
+            disableRowSelectionOnClick
+            isRowSelectable={({ row }) => isCompletableOrder(row)}
+            rowSelectionModel={selectedOrderIds}
+            onRowSelectionModelChange={model => setSelectedOrderIds(selectionIds(model))}
+            pageSizeOptions={[10, 25, 50]}
+            density="compact"
+            initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
+          />
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+            Only Ready orders can be selected for completion.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOrdersDialog(null)}>Close</Button>
+          <Button
+            variant="contained"
+            color="success"
+            startIcon={completingSelected ? <CircularProgress size={16} color="inherit" /> : <CheckCircleOutlineIcon />}
+            disabled={!selectedReadyCount || completingSelected}
+            onClick={completeSelectedOrders}
+          >
+            Complete Selected{selectedReadyCount ? ` (${selectedReadyCount})` : ''}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <ShopOrderDetailModal
+        open={!!detailOrder}
+        order={detailOrder}
+        onClose={() => setDetailOrder(null)}
+        onRefresh={() => { setDetailOrder(null); load() }}
+      />
+
       <Dialog open={!!qrDialog} onClose={() => setQrDialog(null)}>
-        <DialogTitle>QR Code — {qrDialog?.table?.tableName}</DialogTitle>
+        <DialogTitle>QR Code - {qrDialog?.table?.tableName}</DialogTitle>
         <DialogContent sx={{ textAlign: 'center', minWidth: 320 }}>
           {qrDialog?.activeOrderCount > 0 && (
             <Alert severity="warning" icon={<WarningAmberIcon />} sx={{ mb: 2, textAlign: 'left' }}>
-              <strong>Table not clear</strong> — {qrDialog.activeOrderCount} active order{qrDialog.activeOrderCount > 1 ? 's' : ''} still in progress.
+              <strong>Table not clear</strong> - {qrDialog.activeOrderCount} active order{qrDialog.activeOrderCount > 1 ? 's' : ''} still in progress.
               A new session has been started. Clear the table when those orders are done.
             </Alert>
           )}
           {qrDialog?.qrBase64 ? (
             <>
               <img src={`data:image/png;base64,${qrDialog.qrBase64}`} alt="Table QR" style={{ width: 280, height: 280 }} />
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>New session — customers scan to order</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>New session - customers scan to order</Typography>
             </>
           ) : <CircularProgress sx={{ my: 4 }} />}
         </DialogContent>
@@ -292,7 +421,6 @@ export default function ShopTableGrid() {
         </DialogActions>
       </Dialog>
 
-      {/* Print confirm dialog — shown only when table has active orders */}
       <Dialog open={!!printConfirm} onClose={() => setPrintConfirm(null)}>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <WarningAmberIcon color="warning" /> Table not clear
@@ -301,7 +429,7 @@ export default function ShopTableGrid() {
           <Typography>
             <strong>{printConfirm?.row?.tableName}</strong> has{' '}
             <strong>{printConfirm?.activeOrderCount}</strong> active order{printConfirm?.activeOrderCount > 1 ? 's' : ''} that
-            haven't been cleared yet.
+            have not been cleared yet.
           </Typography>
           <Typography sx={{ mt: 1.5, color: 'text.secondary' }}>
             Printing a new QR will start a fresh ordering session. Print anyway?

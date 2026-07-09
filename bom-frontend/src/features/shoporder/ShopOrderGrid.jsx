@@ -53,6 +53,7 @@ import {
   generateDisplayBoardToken, pickupShopOrder, revertShopOrder, markOrderPaid,
   fetchBankConfig, switchToQrPayment, revertToCash, fetchOrderTagQr,
   fetchShopTables, setOrderTable, fetchPickupQr, fetchOrdersByToken,
+  lockTokenSession, unlockTokenSession,
   fetchStaffCalls, dismissStaffCall, replyStaffCall, forceConfirmOrder,
 } from '../../api/shopApi'
 import { printCupLabelsTracked, printOrderReceiptTracked, printOrderTagTracked, printCombinedReceiptTracked } from '../../utils/printWithHistory'
@@ -1793,6 +1794,9 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
   const [paying, setPaying]       = useState(false)
   const [switching, setSwitching] = useState(false)  // 'toQr' | 'toCash' | false
   const [bankConfig, setBankConfig] = useState(null)
+  const [sessionLocked, setSessionLocked] = useState(false)
+  const [lockError, setLockError] = useState('')
+  const [closing, setClosing] = useState(false)
 
   const fmtAmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : '—'
 
@@ -1808,6 +1812,22 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
   }
 
   useEffect(() => { reload() }, [token]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    let active = true
+    setSessionLocked(false)
+    setLockError('')
+    lockTokenSession(token)
+      .then(({ res, data }) => {
+        if (!active) return
+        if (res.ok) setSessionLocked(true)
+        else setLockError(data?.message || data?.error || 'Could not pause customer ordering for this QR session')
+      })
+      .catch(() => { if (active) setLockError('Could not pause customer ordering for this QR session') })
+    return () => {
+      active = false
+      unlockTokenSession(token).catch(() => {})
+    }
+  }, [token])
 
   useEffect(() => {
     fetchBankConfig().then(({ data }) => setBankConfig(data || {})).catch(() => {})
@@ -1838,12 +1858,19 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
       + `&accountName=${encodeURIComponent(bankConfig.bankAccountName || '')}`
     : null
 
+  const handleClose = async () => {
+    if (closing) return
+    setClosing(true)
+    try { await unlockTokenSession(token) } catch { /* unlock is best-effort */ }
+    setClosing(false)
+    onClose()
+  }
   const handleMarkAllPaid = async () => {
     if (!unpaidOrders.length) return
     setPaying(true)
     try {
       for (const o of unpaidOrders) await markOrderPaid(o.id)
-      onRefresh(); onClose()
+      onRefresh(); await handleClose(); return
     } catch { setError('Failed to mark orders paid') }
     setPaying(false)
   }
@@ -1887,17 +1914,19 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
   const STATUS_CHIP = { PENDING: 'default', CONFIRMED: 'primary', PREPARING: 'warning', READY: 'success', PICKED_UP: 'success', COMPLETED: 'success', CANCELLED: 'error' }
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <PeopleAltIcon color="secondary" />
           <Typography fontWeight={800}>Combined Receipt</Typography>
         </Box>
-        <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+        <IconButton size="small" onClick={handleClose} disabled={closing}><CloseIcon fontSize="small" /></IconButton>
       </DialogTitle>
 
       <DialogContent sx={{ pt: 0 }}>
         {loading && <Box sx={{ textAlign: 'center', py: 4 }}><CircularProgress /></Box>}
+        {sessionLocked && <Alert severity="info" sx={{ mb: 2 }}>Customer ordering is paused while this counter receipt is open.</Alert>}
+        {lockError && <Alert severity="warning" sx={{ mb: 2 }}>{lockError}</Alert>}
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
         {!loading && !error && (
@@ -2012,7 +2041,7 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
       </DialogContent>
 
       <DialogActions sx={{ px: 3, pb: 2, gap: 1, flexWrap: 'wrap' }}>
-        <Button onClick={onClose} sx={{ textTransform: 'none' }}>Close</Button>
+        <Button onClick={handleClose} disabled={closing} sx={{ textTransform: 'none' }}>{closing ? 'Closing...' : 'Close'}</Button>
         <Button variant="outlined" startIcon={<PrintIcon />}
           onClick={() => printCombinedReceiptTracked(orders)}
           disabled={loading || !orders.length}

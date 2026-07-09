@@ -50,6 +50,18 @@ public class ShopAccessToken {
     @Column(name = "enabled")
     private Boolean enabled = true;
 
+    @Column(name = "max_orders")
+    private Integer maxOrders;
+
+    @Column(name = "counter_locked")
+    private Boolean counterLocked = false;
+
+    @Column(name = "counter_locked_at")
+    private Instant counterLockedAt;
+
+    @Column(name = "counter_locked_by", length = 120)
+    private String counterLockedBy;
+
     public ShopAccessToken() {}
 
     @PrePersist
@@ -58,6 +70,7 @@ public class ShopAccessToken {
         if (createdAt == null) createdAt = Instant.now();
         if (enabled == null) enabled = true;
         if (accessCount == null) accessCount = 0;
+        if (counterLocked == null) counterLocked = false;
     }
 
     public boolean isValid() {
@@ -95,4 +108,12 @@ public class ShopAccessToken {
     public void setExpiresAt(Instant expiresAt) { this.expiresAt = expiresAt; }
     public Boolean getEnabled() { return enabled; }
     public void setEnabled(Boolean enabled) { this.enabled = enabled; }
+    public Integer getMaxOrders() { return maxOrders; }
+    public void setMaxOrders(Integer maxOrders) { this.maxOrders = maxOrders; }
+    public Boolean getCounterLocked() { return Boolean.TRUE.equals(counterLocked); }
+    public void setCounterLocked(Boolean counterLocked) { this.counterLocked = counterLocked; }
+    public Instant getCounterLockedAt() { return counterLockedAt; }
+    public void setCounterLockedAt(Instant counterLockedAt) { this.counterLockedAt = counterLockedAt; }
+    public String getCounterLockedBy() { return counterLockedBy; }
+    public void setCounterLockedBy(String counterLockedBy) { this.counterLockedBy = counterLockedBy; }
 }

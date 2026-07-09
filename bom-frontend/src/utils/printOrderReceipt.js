@@ -15,11 +15,13 @@ function printMetaHtml(meta) {
     <div>${copy}${time ? ` &middot; ${time}` : ''}</div>
   </div>`
 }
-export function printWalkUpQr(seq, qrBase64, qrUrl, printMeta = null) {
+export function printWalkUpQr(seq, qrBase64, qrUrl, opts = {}, printMeta = null) {
   if (!qrBase64) return
   const numLine = seq != null
     ? `<div class="num">#${seq}</div><div class="sub">Your order number</div>`
     : `<div class="sub-big">Scan to Order</div>`
+  const maxOrders = opts?.maxOrders ? Number(opts.maxOrders) : null
+  const limitLine = maxOrders ? `<div class="limit">Max ${maxOrders} order${maxOrders === 1 ? '' : 's'}</div>` : ''
 
   const html = `<!DOCTYPE html>
 <html lang="vi">
@@ -33,11 +35,12 @@ export function printWalkUpQr(seq, qrBase64, qrUrl, printMeta = null) {
     width: 260px; margin: 0 auto; padding: 20px 14px;
     text-align: center; color: #111;
   }
-  .num     { font-size: 88px; font-weight: 900; line-height: 1; letter-spacing: -4px; color: #1976d2; }
+  .num     { font-size: 88px; font-weight: 900; line-height: 1; letter-spacing: 0; color: #1976d2; }
   .sub     { font-size: 13px; color: #666; margin-bottom: 14px; font-weight: 500; }
   .sub-big { font-size: 22px; font-weight: 800; margin-bottom: 14px; }
   .qr-box  { display: inline-block; padding: 10px; border: 2px solid #111; border-radius: 10px; }
   img      { width: 210px; height: 210px; display: block; }
+  .limit   { font-size: 12px; font-weight: 800; color: #111; margin: 8px 0 10px; }
   .hint    { font-size: 12px; color: #888; margin-top: 12px; }
   .url     { font-size: 7px; color: #999; word-break: break-all; margin-top: 6px; text-align: left; padding: 0 2px; }
   .divider { border-top: 1px dashed #ccc; margin: 12px 0; }
@@ -47,6 +50,7 @@ export function printWalkUpQr(seq, qrBase64, qrUrl, printMeta = null) {
 <body>
   ${numLine}
   ${printMetaHtml(printMeta)}
+  ${limitLine}
   <div class="qr-box"><img src="data:image/png;base64,${qrBase64}" alt="QR" /></div>
   <div class="hint">Scan QR code to view menu &amp; order</div>
   ${qrUrl ? `<div class="url">${qrUrl}</div>` : ''}

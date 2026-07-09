@@ -97,11 +97,14 @@ export function fetchOrderTagQr(orderId) {
   return apiFetchJson(`/shop/staff/orders/${orderId}/tag-qr`)
 }
 
-export function generateWalkUpQr(seq) {
+export function generateWalkUpQr(seq, maxOrders = 12) {
+  const body = {}
+  if (seq != null) body.seq = seq
+  if (maxOrders != null) body.maxOrders = maxOrders
   return apiFetchJson('/shop/staff/qr-order', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(seq != null ? { seq } : {})
+    body: JSON.stringify(body)
   })
 }
 
@@ -130,6 +133,14 @@ export function createPrintHistory(body) {
 }
 export function fetchOrdersByToken(token) {
   return apiFetchJson('/shop/staff/orders/by-token' + qs({ token }))
+}
+
+export function lockTokenSession(token) {
+  return apiFetchJson(`/shop/staff/tokens/by-token/${encodeURIComponent(token)}/counter-lock`, { method: 'PATCH' })
+}
+
+export function unlockTokenSession(token) {
+  return apiFetchJson(`/shop/staff/tokens/by-token/${encodeURIComponent(token)}/counter-unlock`, { method: 'PATCH' })
 }
 
 export async function fetchActiveOrders() {

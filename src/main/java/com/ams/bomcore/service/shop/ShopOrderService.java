@@ -41,6 +41,8 @@ import java.util.Map;
 @Service
 public class ShopOrderService {
 
+    public static final int DEFAULT_WALK_UP_MAX_ORDERS = 12;
+
     private final ShopOrderRepository shopOrderRepository;
     private final ShopOrderItemRepository shopOrderItemRepository;
     private final ShopTableRepository shopTableRepository;
@@ -492,10 +494,11 @@ public class ShopOrderService {
         return new TableQrResult(QrCodeUtil.generateBase64Png(url, 300), sat.getToken(), activeOrderCount);
     }
 
-    public record WalkUpQrResult(String qrBase64, String qrUrl, Integer seq) {}
+    public record WalkUpQrResult(String qrBase64, String qrUrl, String token, Integer seq, Integer maxOrders) {}
 
     @Transactional
-    public WalkUpQrResult generateWalkUpQr(Integer seq, UUID tenantId, UUID companyId) {
+    public WalkUpQrResult generateWalkUpQr(Integer seq, Integer maxOrders, UUID tenantId, UUID companyId) {
+        int limit = normalizeMaxOrders(maxOrders);
         ShopAccessToken sat = new ShopAccessToken();
         sat.setToken(UUID.randomUUID().toString());
         sat.setTenantId(tenantId);
@@ -503,10 +506,18 @@ public class ShopOrderService {
         sat.setTokenType(ShopAccessToken.TYPE_TABLE_QR);
         sat.setDescription("Walk-up QR" + (seq != null ? " #" + seq : ""));
         sat.setExpiresAt(java.time.Instant.now().plus(4, java.time.temporal.ChronoUnit.HOURS));
+        sat.setMaxOrders(limit);
         shopAccessTokenRepository.save(sat);
         String url = publicBaseUrl + "/shop/menu?t=" + sat.getToken()
                    + (seq != null ? "&seq=" + seq : "");
-        return new WalkUpQrResult(QrCodeUtil.generateBase64Png(url, 400), url, seq);
+        return new WalkUpQrResult(QrCodeUtil.generateBase64Png(url, 400), url, sat.getToken(), seq, limit);
+    }
+
+    private int normalizeMaxOrders(Integer maxOrders) {
+        if (maxOrders == null) return DEFAULT_WALK_UP_MAX_ORDERS;
+        if (maxOrders < 1) return 1;
+        if (maxOrders > 500) return 500;
+        return maxOrders;
     }
 
     public record QueueQrResult(String qrBase64, String qrUrl, String token, Instant expiresAt, int validDays) {}
@@ -929,7 +940,44 @@ public class ShopOrderService {
         shopAccessTokenRepository.delete(sat);
     }
 
-    // ── Split / Merge bills ───────────────────────────────────────────
+    // Token session controls
+
+    @Transactional
+    public ShopAccessToken lockCounterSession(String token, UUID tenantId, UUID companyId, String lockedBy) {
+        ShopAccessToken sat = requireScopedToken(token, tenantId, companyId);
+        sat.setCounterLocked(true);
+        sat.setCounterLockedAt(Instant.now());
+        sat.setCounterLockedBy(lockedBy != null && !lockedBy.isBlank() ? lockedBy : null);
+        return shopAccessTokenRepository.save(sat);
+    }
+
+    @Transactional
+    public ShopAccessToken unlockCounterSession(String token, UUID tenantId, UUID companyId) {
+        ShopAccessToken sat = requireScopedToken(token, tenantId, companyId);
+        sat.setCounterLocked(false);
+        sat.setCounterLockedAt(null);
+        sat.setCounterLockedBy(null);
+        return shopAccessTokenRepository.save(sat);
+    }
+
+    @Transactional(readOnly = true)
+    public ShopAccessToken requireScopedToken(String token, UUID tenantId, UUID companyId) {
+        ShopAccessToken sat = shopAccessTokenRepository.findByToken(token)
+                .orElseThrow(() -> new NoSuchElementException("Token not found"));
+        if (!sat.getTenantId().equals(tenantId) || !sat.getCompanyId().equals(companyId)) {
+            throw new IllegalArgumentException("Token does not belong to this company");
+        }
+        return sat;
+    }
+
+    public long countAcceptedOrdersForToken(String token) {
+        if (token == null || token.isBlank()) return 0;
+        return shopOrderRepository.findAllBySourceTokenOrderByCreatedAtDesc(token).stream()
+                .filter(order -> !ShopOrder.STATUS_CANCELLED.equals(order.getStatus()))
+                .count();
+    }
+
+    // Split / Merge bills
 
     public record SplitResult(ShopOrderResponseDto original, ShopOrderResponseDto newBill) {}
 
@@ -1595,6 +1643,11 @@ public class ShopOrderService {
         boolean valid,
         java.time.Instant expiresAt,
         java.time.Instant createdAt,
+        Integer maxOrders,
+        long acceptedOrderCount,
+        boolean counterLocked,
+        java.time.Instant counterLockedAt,
+        String counterLockedBy,
         List<ShopOrderResponseDto> orders
     ) {}
 
@@ -1602,10 +1655,14 @@ public class ShopOrderService {
     public TokenSessionDto getOrdersByToken(String token) {
         ShopAccessToken sat = shopAccessTokenRepository.findByToken(token)
                 .orElseThrow(() -> new NoSuchElementException("Token not found"));
-        List<ShopOrderResponseDto> orders = shopOrderRepository
-                .findAllBySourceTokenOrderByCreatedAtDesc(token)
-                .stream().map(this::dto).toList();
-        return new TokenSessionDto(token, sat.isValid(), sat.getExpiresAt(), sat.getCreatedAt(), orders);
+        List<ShopOrder> sessionOrders = shopOrderRepository.findAllBySourceTokenOrderByCreatedAtDesc(token);
+        List<ShopOrderResponseDto> orders = sessionOrders.stream().map(this::dto).toList();
+        long acceptedOrderCount = sessionOrders.stream()
+                .filter(order -> !ShopOrder.STATUS_CANCELLED.equals(order.getStatus()))
+                .count();
+        return new TokenSessionDto(token, sat.isValid(), sat.getExpiresAt(), sat.getCreatedAt(),
+                sat.getMaxOrders(), acceptedOrderCount, Boolean.TRUE.equals(sat.getCounterLocked()),
+                sat.getCounterLockedAt(), sat.getCounterLockedBy(), orders);
     }
 
     // ── Staff: combined receipt for a token ──────────────────────────

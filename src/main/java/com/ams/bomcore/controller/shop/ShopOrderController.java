@@ -138,6 +138,8 @@ public class ShopOrderController {
         validateScope(tenantId, companyId);
         ResponseEntity<?> rejected = rejectPublicOrderingIfIpMismatch(tenantId, companyId, clientPublicIp(request));
         if (rejected != null) return rejected;
+        rejected = rejectPublicTokenOrder(req != null ? req.token() : null, tenantId, companyId);
+        if (rejected != null) return rejected;
         try {
             ShopOrderResponseDto dto = shopOrderService.createOrder(req, tenantId, companyId);
             return ResponseEntity.status(HttpStatus.CREATED).body(dto);
@@ -726,12 +728,15 @@ public class ShopOrderController {
             @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
-        Integer seq = body != null && body.get("seq") != null ? ((Number) body.get("seq")).intValue() : null;
-        ShopOrderService.WalkUpQrResult qr = shopOrderService.generateWalkUpQr(seq, tId, cId);
+        Integer seq = body != null ? integerValue(body.get("seq")) : null;
+        Integer maxOrders = body != null ? integerValue(body.get("maxOrders")) : null;
+        ShopOrderService.WalkUpQrResult qr = shopOrderService.generateWalkUpQr(seq, maxOrders, tId, cId);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("qrBase64", qr.qrBase64());
         result.put("qrUrl",    qr.qrUrl());
-        if (seq != null) result.put("seq", seq);
+        result.put("token", qr.token());
+        result.put("maxOrders", qr.maxOrders());
+        if (qr.seq() != null) result.put("seq", qr.seq());
         return ResponseEntity.ok(result);
     }
 
@@ -815,6 +820,8 @@ public class ShopOrderController {
                     .body(Map.of("error", "Order not found", "message", "Order not found"));
         }
         ResponseEntity<?> rejected = rejectPublicOrderingIfIpMismatch(order.getTenantId(), order.getCompanyId(), clientPublicIp(request));
+        if (rejected != null) return rejected;
+        rejected = rejectPublicTokenLock(order.getSourceToken());
         if (rejected != null) return rejected;
         try {
             return ResponseEntity.ok(shopOrderService.updateOrderByCustomer(orderCode, items));
@@ -957,6 +964,30 @@ public class ShopOrderController {
 
     // ── Bank config (/shop/staff/bank-config) ─────────────────────────
 
+    @PatchMapping("/shop/staff/tokens/by-token/{token}/counter-lock")
+    public ResponseEntity<?> lockTokenCounterSession(
+            @PathVariable String token,
+            @RequestParam(required = false) UUID tenantId,
+            @RequestParam(required = false) UUID companyId,
+            @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+            @RequestHeader(value = "X-Company-Id", required = false) String hCompany,
+            @RequestHeader(value = "X-Username", required = false) String hUsername) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        return ResponseEntity.ok(shopOrderService.lockCounterSession(token, tId, cId, hUsername));
+    }
+
+    @PatchMapping("/shop/staff/tokens/by-token/{token}/counter-unlock")
+    public ResponseEntity<?> unlockTokenCounterSession(
+            @PathVariable String token,
+            @RequestParam(required = false) UUID tenantId,
+            @RequestParam(required = false) UUID companyId,
+            @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+            @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        return ResponseEntity.ok(shopOrderService.unlockCounterSession(token, tId, cId));
+    }
     @GetMapping("/shop/staff/bank-config")
     public ResponseEntity<?> getBankConfig(@RequestParam(required = false) UUID tenantId,
                                             @RequestParam(required = false) UUID companyId,
@@ -1315,6 +1346,48 @@ public class ShopOrderController {
         return builder.body(body);
     }
 
+    private ResponseEntity<?> rejectPublicTokenOrder(String token, UUID tenantId, UUID companyId) {
+        if (token == null || token.isBlank()) return null;
+        ShopAccessToken sat = shopAccessTokenRepository.findByToken(token).orElse(null);
+        if (sat == null || !sat.isValid()) {
+            return tokenRejection(HttpStatus.GONE, "Ordering QR expired. Ask staff for a new QR slip.");
+        }
+        if (!tenantId.equals(sat.getTenantId()) || !companyId.equals(sat.getCompanyId())) {
+            return tokenRejection(HttpStatus.BAD_REQUEST, "Ordering QR does not match this shop.");
+        }
+        ResponseEntity<?> locked = rejectPublicTokenLock(sat);
+        if (locked != null) return locked;
+        Integer maxOrders = sat.getMaxOrders();
+        if (maxOrders != null && maxOrders > 0) {
+            long acceptedOrderCount = shopOrderService.countAcceptedOrdersForToken(token);
+            if (acceptedOrderCount >= maxOrders) {
+                Map<String, Object> body = new LinkedHashMap<>();
+                String message = "This QR slip reached its ordering limit. Ask staff to accept more orders.";
+                body.put("error", message);
+                body.put("message", message);
+                body.put("maxOrders", maxOrders);
+                body.put("acceptedOrderCount", acceptedOrderCount);
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+            }
+        }
+        return null;
+    }
+
+    private ResponseEntity<?> rejectPublicTokenLock(String token) {
+        if (token == null || token.isBlank()) return null;
+        return shopAccessTokenRepository.findByToken(token)
+                .map(this::rejectPublicTokenLock)
+                .orElse(null);
+    }
+
+    private ResponseEntity<?> rejectPublicTokenLock(ShopAccessToken sat) {
+        if (sat == null || !Boolean.TRUE.equals(sat.getCounterLocked())) return null;
+        return tokenRejection(HttpStatus.LOCKED, "Counter is reviewing this QR slip. Ordering is paused for this session.");
+    }
+
+    private ResponseEntity<?> tokenRejection(HttpStatus status, String message) {
+        return ResponseEntity.status(status).body(Map.of("error", message, "message", message));
+    }
     private ResponseEntity<?> rejectPublicOrderingIfIpMismatch(UUID tenantId, UUID companyId, String deviceIp) {
         Company company = companyRepository.findById(companyId)
                 .orElseThrow(() -> new IllegalArgumentException("Company not found"));
