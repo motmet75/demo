@@ -1087,7 +1087,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
       {editOpen && (
         <EditOrderDialog open={editOpen} order={order}
           onClose={() => setEditOpen(false)}
-          onUpdated={() => { setEditOpen(false); onRefresh?.() }} />
+          onUpdated={(updated) => { setEditOpen(false); onRefresh?.(updated) }} />
       )}
 
       {confirmDlg && (
@@ -1107,7 +1107,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
       {splitBillOpen && (
         <SplitBillDialog open={splitBillOpen} order={order}
           onClose={() => setSplitBillOpen(false)}
-          onSplit={() => { setSplitBillOpen(false); onRefresh?.(); onClose() }} />
+          onSplit={(result) => { setSplitBillOpen(false); onRefresh?.(result?.original || result); onClose() }} />
       )}
 
       {/* ── Split Payment Dialog ──────────────────────────────────── */}

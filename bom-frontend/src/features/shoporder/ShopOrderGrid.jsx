@@ -51,7 +51,7 @@ import {
   fetchShopOrders, fetchActiveOrders, confirmShopOrder, prepareShopOrder, readyShopOrder,
   completeShopOrder, cancelShopOrder, resetOrderSequence, setShopOrderNumber,
   generateDisplayBoardToken, pickupShopOrder, revertShopOrder, markOrderPaid,
-  fetchBankConfig, switchToQrPayment, revertToCash, fetchOrderTagQr,
+  fetchBankConfig, switchToQrPayment, revertToCash, fetchOrderTagQr, fetchShopOrder,
   fetchShopTables, setOrderTable, fetchPickupQr, fetchOrdersByToken,
   lockTokenSession, unlockTokenSession,
   fetchStaffCalls, dismissStaffCall, replyStaffCall, forceConfirmOrder,
@@ -67,6 +67,8 @@ import { useAppContext } from '../../context/AppContext'
 import { fetchModels } from '../../api/modelApi'
 
 const BOARD_CHANNEL = 'shop_display_board'
+const ORDER_POLL_MS = 30000
+const BOARD_VISIBLE_STATUSES = new Set(['CONFIRMED', 'PREPARING', 'READY', 'PICKED_UP'])
 function broadcastReady() {
   try { new BroadcastChannel(BOARD_CHANNEL).postMessage({ type: 'ORDER_READY' }) } catch { /* */ }
 }
@@ -88,6 +90,21 @@ function playStaffCallSound() {
       gain.gain.linearRampToValueAtTime(0.45, now + offset + 0.02)
       gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.45)
       osc.start(now + offset); osc.stop(now + offset + 0.45)
+    })
+  } catch { /* browser may block without user gesture */ }
+}
+function playNewOrderSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)()
+    const now = ctx.currentTime
+    ;[0, 0.18, 0.36].forEach((offset, idx) => {
+      const osc = ctx.createOscillator(); const gain = ctx.createGain()
+      osc.connect(gain); gain.connect(ctx.destination)
+      osc.type = 'triangle'; osc.frequency.value = [784, 988, 1175][idx]
+      gain.gain.setValueAtTime(0, now + offset)
+      gain.gain.linearRampToValueAtTime(0.35, now + offset + 0.015)
+      gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.28)
+      osc.start(now + offset); osc.stop(now + offset + 0.28)
     })
   } catch { /* browser may block without user gesture */ }
 }
@@ -114,6 +131,15 @@ function materialAuditChip(order) {
 function parseOpts(str) {
   if (!str) return {}
   try { return JSON.parse(str) } catch { return {} }
+}
+function replaceOrderInList(list, order, include) {
+  if (!order?.id) return list
+  const idx = list.findIndex(r => r.id === order.id)
+  if (!include) return idx >= 0 ? list.filter(r => r.id !== order.id) : list
+  if (idx < 0) return [order, ...list]
+  const next = [...list]
+  next[idx] = order
+  return next
 }
 
 // ── Stock panel ─────────────────────────────────────────────────────
@@ -995,16 +1021,83 @@ export default function ShopOrderGrid() {
   const [mergeOrder, setMergeOrder]       = useState(null)  // order to merge others into
   const [modelImageMap, setModelImageMap] = useState({})   // { [modelId]: imageUrl }
   const [staffCalls, setStaffCalls]       = useState([])   // pending staff calls
+  const [newOrderNotice, setNewOrderNotice] = useState(null)
   const seenCallIdsRef = React.useRef(new Set())
+  const knownOrderIdsRef = React.useRef(new Set())
+  const orderPollReadyRef = React.useRef(false)
+  const rememberOrders = useCallback((orders) => {
+    ;(Array.isArray(orders) ? orders : []).forEach(order => {
+      if (order?.id) knownOrderIdsRef.current.add(order.id)
+    })
+  }, [])
+
+  const notifyNewOrders = useCallback((orders) => {
+    const list = Array.isArray(orders) ? orders : []
+    const fresh = list.filter(order => order?.id && !knownOrderIdsRef.current.has(order.id))
+    rememberOrders(list)
+    if (!orderPollReadyRef.current) {
+      orderPollReadyRef.current = true
+      return
+    }
+    if (!fresh.length) return
+    playNewOrderSound()
+    const first = fresh[0]
+    setNewOrderNotice({
+      count: fresh.length,
+      orderNumber: first.orderNumber ?? null,
+      orderCode: first.orderCode || '',
+      at: Date.now(),
+    })
+  }, [rememberOrders])
+
+  const shouldShowInRows = useCallback((order) => !statusFilter || order?.status === statusFilter, [statusFilter])
+
+  const mergeOrderIntoState = useCallback((order) => {
+    if (!order?.id) return
+    rememberOrders([order])
+    setRows(prev => replaceOrderInList(prev, order, shouldShowInRows(order)))
+    setBoardRows(prev => replaceOrderInList(prev, order, BOARD_VISIBLE_STATUSES.has(order.status)))
+    setDetailOrder(prev => prev?.id === order.id ? order : prev)
+  }, [rememberOrders, shouldShowInRows])
+
+  const applyOrderSnapshot = useCallback((orders, { notify = false } = {}) => {
+    const list = Array.isArray(orders) ? orders : []
+    if (notify) notifyNewOrders(list)
+    else rememberOrders(list)
+    setRows(statusFilter ? list.filter(order => order?.status === statusFilter) : list)
+    setBoardRows(list.filter(order => BOARD_VISIBLE_STATUSES.has(order?.status)))
+  }, [notifyNewOrders, rememberOrders, statusFilter])
+
+  const refreshOrderCard = useCallback(async (orderId) => {
+    if (!orderId) return null
+    const { res, data } = await fetchShopOrder(orderId)
+    if (!res.ok) throw new Error(data?.message || data?.error || 'Failed to refresh order')
+    if (data?.id) mergeOrderIntoState(data)
+    return data || null
+  }, [mergeOrderIntoState])
+
+  const applyOrderResult = useCallback(async (result, orderId, fallbackMessage = 'Action failed') => {
+    const { res, data } = result || {}
+    if (res && !res.ok) throw new Error(data?.message || data?.error || fallbackMessage)
+    if (data?.id) {
+      mergeOrderIntoState(data)
+      return data
+    }
+    return refreshOrderCard(orderId)
+  }, [mergeOrderIntoState, refreshOrderCard])
+
   const load = useCallback(async () => {
     setLoading(true); setError('')
     try {
       const result = await fetchShopOrders(statusFilter || null)
       const { data } = result
-      setRows(Array.isArray(data) ? data : [])
+      const list = Array.isArray(data) ? data : []
+      setRows(list)
+      rememberOrders(list)
+      if (!statusFilter) orderPollReadyRef.current = true
     } catch { setError('Failed to load orders') }
     setLoading(false)
-  }, [statusFilter])
+  }, [rememberOrders, statusFilter])
 
   const loadBoard = useCallback(async () => {
     try {
@@ -1017,8 +1110,9 @@ export default function ShopOrderGrid() {
         ...(Array.isArray(pickedRes.data) ? pickedRes.data : []),
       ]
       setBoardRows(all)
+      rememberOrders(all)
     } catch { /* silent */ }
-  }, [])
+  }, [rememberOrders])
 
   useEffect(() => { load() }, [load])
   useEffect(() => { loadBoard() }, [loadBoard])
@@ -1054,6 +1148,26 @@ export default function ShopOrderGrid() {
     return () => { cancelled = true; clearInterval(id) }
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+    const pollOrders = async () => {
+      try {
+        const { res, data } = await fetchShopOrders(null)
+        if (cancelled || !res.ok) return
+        applyOrderSnapshot(data, { notify: true })
+      } catch { /* silent */ }
+    }
+    pollOrders()
+    const id = setInterval(pollOrders, ORDER_POLL_MS)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [applyOrderSnapshot])
+
+  useEffect(() => {
+    if (!newOrderNotice) return undefined
+    const id = setTimeout(() => setNewOrderNotice(null), 12000)
+    return () => clearTimeout(id)
+  }, [newOrderNotice])
+
   const reload = () => { load(); loadBoard() }
 
   // Derived per-status slices for board tabs
@@ -1062,8 +1176,11 @@ export default function ShopOrderGrid() {
   const readyOrders     = boardRows.filter(r => r.status === 'READY')
   const pickedUpOrders  = boardRows.filter(r => r.status === 'PICKED_UP')
 
-  const act = async (fn, id) => {
-    try { await fn(id); reload() } catch (e) { setError(e.message || 'Action failed') }
+  const act = async (fn, id, afterSuccess) => {
+    try {
+      const updated = await applyOrderResult(await fn(id), id)
+      afterSuccess?.(updated)
+    } catch (e) { setError(e.message || 'Action failed') }
   }
 
   const askConfirm = (cfg, fn) => setConfirmDlg({ ...cfg, onConfirm: async (reason) => { setConfirmDlg(null); await fn(reason) } })
@@ -1084,19 +1201,22 @@ export default function ShopOrderGrid() {
       'prepare': prepareShopOrder,
       'revert': revertShopOrder,
       'revert-from-preparing': revertShopOrder,
-      'ready': async (i) => { await readyShopOrder(i); broadcastReady() },
+      'ready': readyShopOrder,
       'complete': completeShopOrder,
       'pickup': pickupShopOrder,
       'pay': markOrderPaid,
     }
     askConfirm(cfg, async () => {
-      try { await fns[type](id); reload() } catch (e) { setError(e.message || 'Action failed') }
+      try {
+        await applyOrderResult(await fns[type](id), id)
+        if (type === 'ready') broadcastReady()
+      } catch (e) { setError(e.message || 'Action failed') }
     })
   }
 
   const doCancelOrder = async (row, reason) => {
     try {
-      await cancelShopOrder(row.id, reason)
+      await applyOrderResult(await cancelShopOrder(row.id, reason), row.id, 'Failed to cancel')
       if (row.items?.length) {
         const newStock = row.items.map(item => ({
           uid: crypto.randomUUID(),
@@ -1109,7 +1229,6 @@ export default function ShopOrderGrid() {
         }))
         setStockItems(prev => [...prev, ...newStock])
       }
-      reload()
     } catch (e) { setError(e.message || 'Failed to cancel') }
   }
 
@@ -1148,18 +1267,14 @@ export default function ShopOrderGrid() {
 
   const handleSwitchAndPrint = async (row) => {
     try {
-      const { res, data } = await switchToQrPayment(row.id)
-      if (!res.ok) { setError(data?.message || 'Failed to switch payment method'); return }
-      printOrderReceiptTracked(data)
-      reload()
+      const updated = await applyOrderResult(await switchToQrPayment(row.id), row.id, 'Failed to switch payment method')
+      if (updated) printOrderReceiptTracked(updated)
     } catch (e) { setError(e.message || 'Failed to switch payment method') }
   }
 
   const handleRevertToCash = async (row) => {
     try {
-      const { res, data } = await revertToCash(row.id)
-      if (!res.ok) { setError(data?.message || 'Failed to revert payment'); return }
-      reload()
+      await applyOrderResult(await revertToCash(row.id), row.id, 'Failed to revert payment')
     } catch (e) { setError(e.message || 'Failed to revert payment') }
   }
 
@@ -1167,15 +1282,16 @@ export default function ShopOrderGrid() {
     if (!selectedRows.size) return
     setMoving(true)
     try {
-      await Promise.all(Array.from(selectedRows).map(id => setOrderTable(id, moveTableTarget || null)))
+      await Promise.all(Array.from(selectedRows).map(async id =>
+        applyOrderResult(await setOrderTable(id, moveTableTarget || null), id, 'Failed to move orders')
+      ))
       setMoveTableOpen(false); setMoveTableTarget(''); setSelectedRows(new Set())
-      reload()
     } catch (e) { setError(e.message || 'Failed to move orders') }
     setMoving(false)
   }
 
   const handleInlineTableChange = async (orderId, tableId) => {
-    try { await setOrderTable(orderId, tableId || null); reload() }
+    try { await applyOrderResult(await setOrderTable(orderId, tableId || null), orderId, 'Failed to set table') }
     catch (e) { setError(e.message || 'Failed to set table') }
   }
 
@@ -1225,12 +1341,12 @@ export default function ShopOrderGrid() {
     setOrderNumber:  async (id, num) => {
       const n = parseInt(num, 10)
       if (isNaN(n) || n < 1) return
-      try { await setShopOrderNumber(id, n); reload() }
+      try { await applyOrderResult(await setShopOrderNumber(id, n), id, 'Failed to update number') }
       catch (e) { setError(e.message || 'Failed to update number') }
     },
     confirm:    (row) => askConfirm({ title: 'Confirm Order?', message: `Confirm order #${row.orderNumber ?? row.orderCode}?`, confirmLabel: 'Confirm', confirmColor: 'primary' }, () => act(confirmShopOrder, row.id)),
     prepare:    (row) => askConfirm({ title: 'Start Preparing?', message: `Start preparing order #${row.orderNumber ?? row.orderCode}?`, confirmLabel: 'Start', confirmColor: 'warning' }, () => act(prepareShopOrder, row.id)),
-    ready:      (row) => askConfirm({ title: 'Mark as Ready?', message: `Mark order #${row.orderNumber ?? row.orderCode} as ready?`, confirmLabel: 'Mark Ready', confirmColor: 'success' }, async () => { await act(readyShopOrder, row.id); broadcastReady() }),
+    ready:      (row) => askConfirm({ title: 'Mark as Ready?', message: `Mark order #${row.orderNumber ?? row.orderCode} as ready?`, confirmLabel: 'Mark Ready', confirmColor: 'success' }, () => act(readyShopOrder, row.id, () => broadcastReady())),
     complete:   (row) => askConfirm({ title: 'Complete Order?', message: `Complete order #${row.orderNumber ?? row.orderCode}?`, confirmLabel: 'Complete', confirmColor: 'success' }, () => act(completeShopOrder, row.id)),
     pickup:     (row) => askConfirm({ title: 'Mark as Picked Up?', message: 'Confirm customer has picked up this order?', confirmLabel: 'Picked Up', confirmColor: 'primary' }, () => act(pickupShopOrder, row.id)),
     markPaid:   (row) => askConfirm({ title: 'Mark as Paid?', message: `Mark order #${row.orderNumber ?? row.orderCode} as paid?`, confirmLabel: 'Mark Paid', confirmColor: 'success' }, () => act(markOrderPaid, row.id)),
@@ -1375,6 +1491,13 @@ export default function ShopOrderGrid() {
         </Box>
 
         {error && <Alert severity="error" onClose={() => setError('')} sx={{ mx: 1.5, mt: 0.5 }}>{error}</Alert>}
+        {newOrderNotice && (
+          <Alert severity="info" onClose={() => setNewOrderNotice(null)} sx={{ mx: 1.5, mt: 0.5 }}>
+            {newOrderNotice.count > 1
+              ? `${newOrderNotice.count} new orders received`
+              : `New order ${newOrderNotice.orderNumber != null ? `#${newOrderNotice.orderNumber}` : newOrderNotice.orderCode || ''} received`}
+          </Alert>
+        )}
 
         {/* Tabs */}
         <Box sx={{ borderBottom: '1px solid #e0e0e0', px: 1.5, flexShrink: 0 }}>
@@ -1424,14 +1547,22 @@ export default function ShopOrderGrid() {
             ))
           }
           setPendingStockUids([])
-          reload()
+          if (createdOrder?.id) mergeOrderIntoState(createdOrder)
+          else reload()
         }}
         defaultItems={manualDefaults}
       />
       <EodAuditDialog open={eodOpen} onClose={() => setEodOpen(false)} />
       <QrOrderDialog open={qrOrderOpen} onClose={() => setQrOrderOpen(false)} />
       {detailOrder && (
-        <ShopOrderDetailModal open order={detailOrder} onClose={() => setDetailOrder(null)} onRefresh={() => { reload(); setDetailOrder(null) }} />
+        <ShopOrderDetailModal open order={detailOrder} onClose={() => setDetailOrder(null)} onRefresh={async (updatedOrder) => {
+          try {
+            if (updatedOrder?.id) mergeOrderIntoState(updatedOrder)
+            else if (detailOrder?.id) await refreshOrderCard(detailOrder.id)
+            else reload()
+          } catch { reload() }
+          setDetailOrder(null)
+        }} />
       )}
       {mergeOrder && (
         <MergeBillsDialog open order={mergeOrder}
