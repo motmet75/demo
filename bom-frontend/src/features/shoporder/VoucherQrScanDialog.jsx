@@ -15,7 +15,7 @@ import UploadFileIcon from '@mui/icons-material/UploadFile'
 import QrCode2Icon from '@mui/icons-material/QrCode2'
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode'
 
-export default function VoucherQrScanDialog({ open, onClose, onScan }) {
+export default function VoucherQrScanDialog({ open, onClose, onScan, title = 'Scan Voucher QR', manualLabel = 'Voucher code or QR payload', scannerLabel = 'Camera or image scanner' }) {
   const scannerRef = useRef(null)
   const detectedRef = useRef(false)
   const readerIdRef = useRef(`voucher-qr-reader-${Math.random().toString(36).slice(2)}`)
@@ -129,7 +129,7 @@ export default function VoucherQrScanDialog({ open, onClose, onScan }) {
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, fontWeight: 800 }}>
-        <QrCode2Icon color="primary" /> Scan Voucher QR
+        <QrCode2Icon color="primary" /> {title}
       </DialogTitle>
       <DialogContent sx={{ pt: '8px !important', display: 'flex', flexDirection: 'column', gap: 1.5 }}>
         {error && <Alert severity="warning">{error}</Alert>}
@@ -150,7 +150,7 @@ export default function VoucherQrScanDialog({ open, onClose, onScan }) {
           {!streaming && !starting && (
             <Box sx={{ textAlign: 'center', color: '#e2e8f0', px: 2, zIndex: 1, pointerEvents: 'none' }}>
               <QrCode2Icon sx={{ fontSize: 42, mb: 1 }} />
-              <Typography variant="body2">Camera or image scanner</Typography>
+              <Typography variant="body2">{scannerLabel}</Typography>
             </Box>
           )}
           {starting && (
@@ -197,7 +197,7 @@ export default function VoucherQrScanDialog({ open, onClose, onScan }) {
         </Box>
 
         <TextField
-          label="Voucher code or QR payload"
+          label={manualLabel}
           size="small"
           fullWidth
           value={manualValue}

@@ -327,7 +327,7 @@ export default function ShopCustomerPage() {
 
       <Box component="form" onSubmit={handleSearch} sx={{ display: 'flex', gap: 1, mb: 2 }}>
         <TextField
-          size="small" fullWidth placeholder="Search by name or phone…"
+          size="small" fullWidth placeholder="Search by code, name, or phone..."
           value={q} onChange={e => setQ(e.target.value)}
           InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
         />

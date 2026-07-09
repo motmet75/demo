@@ -37,7 +37,7 @@ const POPULAR_BANKS = [
 ]
 
 export default function ShopBankConfigPage() {
-  const [form, setForm] = useState({ bankBin: '', bankAccountNumber: '', bankAccountName: '', prepaidMenu: false, realtimeInventory: false, processingInventoryRecheck: true, pointsConversionRate: 10000, pointsRoundUp: false })
+  const [form, setForm] = useState({ bankBin: '', bankAccountNumber: '', bankAccountName: '', prepaidMenu: false, realtimeInventory: false, processingInventoryRecheck: true, pointsConversionRate: 10000, pointsRoundUp: false, loyaltyDiscountPointThreshold: 0, loyaltyDiscountPercent: 0 })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -50,7 +50,7 @@ export default function ShopBankConfigPage() {
     fetchBankConfig()
       .then(({ data }) => {
         if (data) {
-          setForm({ bankBin: data.bankBin || '', bankAccountNumber: data.bankAccountNumber || '', bankAccountName: data.bankAccountName || '', prepaidMenu: Boolean(data.prepaidMenu), realtimeInventory: Boolean(data.realtimeInventory), processingInventoryRecheck: data.processingInventoryRecheck !== false, pointsConversionRate: data.pointsConversionRate || 10000, pointsRoundUp: Boolean(data.pointsRoundUp) })
+          setForm({ bankBin: data.bankBin || '', bankAccountNumber: data.bankAccountNumber || '', bankAccountName: data.bankAccountName || '', prepaidMenu: Boolean(data.prepaidMenu), realtimeInventory: Boolean(data.realtimeInventory), processingInventoryRecheck: data.processingInventoryRecheck !== false, pointsConversionRate: data.pointsConversionRate || 10000, pointsRoundUp: Boolean(data.pointsRoundUp), loyaltyDiscountPointThreshold: data.loyaltyDiscountPointThreshold || 0, loyaltyDiscountPercent: data.loyaltyDiscountPercent || 0 })
           setVoucherKeySet(Boolean(data.voucherSecretSet))
         }
         setLoading(false)
@@ -251,6 +251,22 @@ export default function ShopBankConfigPage() {
                     </Box>
                   }
                   sx={{ alignItems: 'flex-start', ml: 0 }}
+                />
+                <Divider />
+                <TextField
+                  label="Discount starts at points"
+                  size="small" fullWidth type="number"
+                  value={form.loyaltyDiscountPointThreshold}
+                  onChange={e => { setForm(f => ({ ...f, loyaltyDiscountPointThreshold: Math.max(0, Number(e.target.value) || 0) })); setSuccess(false) }}
+                  helperText="Customer reaches this point total to unlock the loyalty percentage discount"
+                />
+                <TextField
+                  label="Loyalty discount percent"
+                  size="small" fullWidth type="number"
+                  value={form.loyaltyDiscountPercent}
+                  onChange={e => { setForm(f => ({ ...f, loyaltyDiscountPercent: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })); setSuccess(false) }}
+                  InputProps={{ endAdornment: <InputAdornment position="end">%</InputAdornment> }}
+                  helperText={form.loyaltyDiscountPercent > 0 ? `${form.loyaltyDiscountPercent}% off when customer has at least ${Number(form.loyaltyDiscountPointThreshold || 0).toLocaleString('vi-VN')} points` : 'Set 0 to disable automatic loyalty discount suggestions'}
                 />
               </Stack>
             </CardContent>

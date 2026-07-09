@@ -1252,9 +1252,44 @@ public class ShopOrderService {
 
     @Transactional
     public ShopCustomer saveCustomer(ShopCustomer customer, UUID tenantId, UUID companyId) {
-        customer.setTenantId(tenantId);
-        customer.setCompanyId(companyId);
-        return shopCustomerRepository.save(customer);
+        String cleanCode = normalizeCustomerCode(customer.getCustomerCode());
+        ShopCustomer target;
+        if (customer.getId() != null) {
+            target = shopCustomerRepository.findById(customer.getId())
+                .orElseThrow(() -> new java.util.NoSuchElementException("Customer not found"));
+            if (!target.getTenantId().equals(tenantId) || !target.getCompanyId().equals(companyId))
+                throw new IllegalArgumentException("Not your customer");
+        } else {
+            target = new ShopCustomer();
+            target.setTenantId(tenantId);
+            target.setCompanyId(companyId);
+            target.setPoints(customer.getPoints() != null ? customer.getPoints() : 0);
+        }
+
+        if (cleanCode == null) cleanCode = generateCustomerCode();
+        final UUID currentId = target.getId();
+        final String candidateCode = cleanCode;
+        shopCustomerRepository.findByTenantIdAndCompanyIdAndCustomerCodeIgnoreCase(tenantId, companyId, candidateCode)
+            .filter(existing -> currentId == null || !existing.getId().equals(currentId))
+            .ifPresent(existing -> { throw new IllegalArgumentException("Customer code already exists"); });
+
+        target.setName(customer.getName());
+        target.setPhone(customer.getPhone());
+        target.setEmail(customer.getEmail());
+        target.setNotes(customer.getNotes());
+        target.setCustomerCode(cleanCode);
+        return shopCustomerRepository.save(target);
+    }
+
+    private String generateCustomerCode() {
+        return UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
+    }
+
+    private String normalizeCustomerCode(String value) {
+        if (value == null) return null;
+        String clean = value.replaceAll("[^A-Za-z0-9]", "").toUpperCase();
+        if (clean.isBlank()) return null;
+        return clean.length() > 20 ? clean.substring(0, 20) : clean;
     }
 
     @Transactional
@@ -1269,8 +1304,12 @@ public class ShopOrderService {
     @Transactional
     public ShopOrderResponseDto linkCustomer(UUID orderId, UUID customerId, UUID tenantId, UUID companyId) {
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
-        if (customerId != null) shopCustomerRepository.findById(customerId)
-            .orElseThrow(() -> new java.util.NoSuchElementException("Customer not found"));
+        if (customerId != null) {
+            ShopCustomer c = shopCustomerRepository.findById(customerId)
+                .orElseThrow(() -> new java.util.NoSuchElementException("Customer not found"));
+            if (!c.getTenantId().equals(tenantId) || !c.getCompanyId().equals(companyId))
+                throw new IllegalArgumentException("Not your customer");
+        }
         order.setCustomerId(customerId);
         shopOrderRepository.save(order);
         return dto(order);

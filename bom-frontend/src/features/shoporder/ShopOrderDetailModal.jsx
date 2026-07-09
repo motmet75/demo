@@ -47,6 +47,33 @@ const pct = (sell, raw) => {
 }
 const dateFmt = (v) => v ? new Date(v).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' }) : '—'
 
+function extractCustomerLookup(raw) {
+  const value = String(raw || '').trim()
+  if (!value) return ''
+  const match = value.match(/(?:customerCode|customer|code)[:=]\s*([A-Za-z0-9-]+)/i)
+  if (match) return match[1].trim()
+  try {
+    const url = new URL(value)
+    return (url.searchParams.get('customerCode') || url.searchParams.get('code') || url.pathname.split('/').filter(Boolean).pop() || value).trim()
+  } catch {
+    return value
+  }
+}
+
+const normalizeLookup = (value) => String(value || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase()
+
+function customerDiscountPercent(customer, config) {
+  const percent = Number(config?.loyaltyDiscountPercent || 0)
+  const threshold = Number(config?.loyaltyDiscountPointThreshold || 0)
+  const points = Number(customer?.points || 0)
+  return percent > 0 && points >= threshold ? percent : 0
+}
+
+function customerDiscountAmount(order, percent) {
+  const total = Number(order?.totalAmount || 0)
+  if (!total || !percent) return 0
+  return Math.max(0, Math.min(total, Math.round(total * percent / 100)))
+}
 const STATUS_COLOR = { PENDING: 'default', CONFIRMED: 'primary', PREPARING: 'warning', READY: 'success', PICKED_UP: 'success', COMPLETED: 'success', CANCELLED: 'error' }
 
 function parseOpts(str) {
@@ -169,6 +196,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
   const [custHistory, setCustHistory]         = useState(null)
   const [custHistoryLoading, setCustHistoryLoading] = useState(false)
   const [voucherScanOpen, setVoucherScanOpen] = useState(false)
+  const [customerScanOpen, setCustomerScanOpen] = useState(false)
   const [voucherDetailOpen, setVoucherDetailOpen] = useState(false)
   const [voucherDetail, setVoucherDetail]     = useState(null)
   const [voucherLoading, setVoucherLoading]   = useState(false)
@@ -309,15 +337,42 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
     setUndoMerging(false)
   }
 
+  const findExactCustomer = (list, q) => {
+    const lookup = normalizeLookup(q)
+    if (!lookup) return null
+    return (list || []).find(c => normalizeLookup(c.customerCode) === lookup || normalizeLookup(c.phone) === lookup) || null
+  }
+
   const handleSearchCust = async (q) => {
     setCustSearch(q)
-    if (!q.trim()) { setCustResults([]); return }
+    if (!q.trim()) { setCustResults([]); return [] }
     setCustSearching(true)
     try {
       const { data } = await fetchCustomers(q)
-      setCustResults(data || [])
-    } catch {}
-    setCustSearching(false)
+      const list = data || []
+      setCustResults(list)
+      return list
+    } catch {
+      return []
+    } finally {
+      setCustSearching(false)
+    }
+  }
+
+  const handleCustomerLookupSubmit = async () => {
+    const list = await handleSearchCust(custSearch)
+    const exact = findExactCustomer(list, custSearch)
+    if (exact) handleLinkCustomer(exact)
+  }
+
+  const handleCustomerScan = async (payload) => {
+    setCustomerScanOpen(false)
+    const lookup = extractCustomerLookup(payload)
+    if (!lookup) return
+    const list = await handleSearchCust(lookup)
+    const exact = findExactCustomer(list, lookup)
+    if (exact) handleLinkCustomer(exact)
+    else setError(`No customer found for code: ${lookup}`)
   }
 
   const handleLinkCustomer = async (c) => {
@@ -350,6 +405,20 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
       onRefresh?.()
     } catch (e) { setError(e.message || 'Network error') }
     setPtsSaving(false)
+  }
+
+  const handleApplyCustomerDiscount = async () => {
+    const percent = customerDiscountPercent(linkedCustomer, bankCfg)
+    const amount = customerDiscountAmount(order, percent)
+    if (!percent || !amount) return
+    setDiscountSaving(true); setError('')
+    try {
+      const { res, data } = await patchOrderDiscount(order.id, amount, null)
+      if (!res.ok) { setError(data?.error || data?.message || 'Failed to apply customer discount'); setDiscountSaving(false); return }
+      setDiscountAmt(data?.discountAmount ? String(data.discountAmount) : String(amount))
+      onRefresh?.()
+    } catch (e) { setError(e.message || 'Network error') }
+    setDiscountSaving(false)
   }
 
 
@@ -702,14 +771,20 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
               const roundUp = bankCfg?.pointsRoundUp || false
               const net = payableAmount(order)
               const preview = roundUp ? Math.ceil(net / rate) : Math.floor(net / rate)
+              const discountPct = customerDiscountPercent(linkedCustomer, bankCfg)
+              const discountValue = customerDiscountAmount(order, discountPct)
+              const threshold = Number(bankCfg?.loyaltyDiscountPointThreshold || 0)
               return (
               <Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: preview > 0 && !isFinal ? 1 : 0 }}>
-                  <Box sx={{ flex: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: (preview > 0 || discountPct > 0) && !isFinal ? 1 : 0 }}>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography fontWeight={700}>{linkedCustomer.name}</Typography>
-                    {linkedCustomer.phone && <Typography variant="caption" color="text.secondary">{linkedCustomer.phone}</Typography>}
-                    <Chip label={`${linkedCustomer.points ?? 0} pts`} size="small" color="warning" variant="outlined"
-                      sx={{ ml: 1, height: 18, fontWeight: 700, fontSize: 10 }} />
+                    <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'center', flexWrap: 'wrap' }}>
+                      {linkedCustomer.customerCode && <Chip label={linkedCustomer.customerCode} size="small" color="primary" variant="outlined" sx={{ height: 18, fontWeight: 800, fontSize: 10, fontFamily: 'monospace' }} />}
+                      {linkedCustomer.phone && <Typography variant="caption" color="text.secondary">{linkedCustomer.phone}</Typography>}
+                      <Chip label={`${linkedCustomer.points ?? 0} pts`} size="small" color="warning" variant="outlined" sx={{ height: 18, fontWeight: 700, fontSize: 10 }} />
+                      {discountPct > 0 && <Chip label={`${discountPct}% discount`} size="small" color="success" sx={{ height: 18, fontWeight: 800, fontSize: 10 }} />}
+                    </Box>
                   </Box>
                   {!isFinal && (
                     <Button size="small" color="error" onClick={handleUnlinkCustomer} disabled={custLinking}
@@ -718,10 +793,23 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
                     </Button>
                   )}
                 </Box>
+                {discountPct > 0 && !isFinal && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#ecfdf5', border: '1px solid #bbf7d0', borderRadius: 1, px: 1.25, py: 0.75, mb: preview > 0 ? 0.75 : 0 }}>
+                    <Typography variant="body2" sx={{ flex: 1, color: '#047857', fontWeight: 700 }}>
+                      Loyalty discount {discountPct}% = -{fmt(discountValue)}{threshold > 0 ? ` (${threshold}+ pts)` : ''}
+                    </Typography>
+                    <Button size="small" variant="contained" color="success"
+                      onClick={handleApplyCustomerDiscount} disabled={discountSaving || !discountValue}
+                      startIcon={discountSaving ? <CircularProgress size={12} /> : null}
+                      sx={{ textTransform: 'none', fontWeight: 700, flexShrink: 0, fontSize: 11 }}>
+                      Apply Discount
+                    </Button>
+                  </Box>
+                )}
                 {preview > 0 && !isFinal && (
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#fffde7', border: '1px solid #ffe082', borderRadius: 1, px: 1.25, py: 0.75 }}>
                     <Typography variant="body2" sx={{ flex: 1, color: '#e65100', fontWeight: 600 }}>
-                      ★ +{preview} pts from this bill ({fmt(rate)} = 1 pt)
+                      +{preview} pts from this bill ({fmt(rate)} = 1 pt)
                     </Typography>
                     <Button size="small" variant="contained" color="warning"
                       onClick={handleEarnPoints} disabled={ptsSaving}
@@ -735,31 +823,48 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
               )
             })() : (
               <Box sx={{ position: 'relative' }}>
-                <TextField
-                  label="Search customer by name / phone" size="small" fullWidth
-                  value={custSearch}
-                  onChange={e => handleSearchCust(e.target.value)}
-                  InputProps={{ endAdornment: custSearching ? <InputAdornment position="end"><CircularProgress size={14} /></InputAdornment> : null }}
-                  disabled={isFinal}
-                />
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                  <TextField
+                    label="Customer code / phone / name" size="small" fullWidth
+                    value={custSearch}
+                    onChange={e => handleSearchCust(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleCustomerLookupSubmit() } }}
+                    InputProps={{ endAdornment: custSearching ? <InputAdornment position="end"><CircularProgress size={14} /></InputAdornment> : null }}
+                    disabled={isFinal}
+                  />
+                  <Button size="small" variant="outlined" onClick={handleCustomerLookupSubmit} disabled={isFinal || custSearching || !custSearch.trim()}
+                    sx={{ textTransform: 'none', fontWeight: 700, flexShrink: 0, mt: 0.25 }}>
+                    Find
+                  </Button>
+                  <Button size="small" variant="outlined" startIcon={<QrCode2Icon />} onClick={() => setCustomerScanOpen(true)} disabled={isFinal}
+                    sx={{ textTransform: 'none', fontWeight: 700, flexShrink: 0, mt: 0.25 }}>
+                    Scan
+                  </Button>
+                </Box>
                 {custResults.length > 0 && (
                   <Box sx={{
                     position: 'absolute', zIndex: 10, left: 0, right: 0, top: '100%',
                     bgcolor: '#fff', border: '1px solid #e0e0e0', borderRadius: 1.5,
-                    boxShadow: '0 4px 16px rgba(0,0,0,0.12)', mt: 0.5, maxHeight: 200, overflowY: 'auto',
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.12)', mt: 0.5, maxHeight: 220, overflowY: 'auto',
                   }}>
-                    {custResults.map(c => (
+                    {custResults.map(c => {
+                      const discountPct = customerDiscountPercent(c, bankCfg)
+                      return (
                       <Box key={c.id} onClick={() => handleLinkCustomer(c)}
                         sx={{ px: 1.5, py: 1, cursor: 'pointer', '&:hover': { bgcolor: '#f0f4ff' },
                           display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Box sx={{ flex: 1 }}>
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
                           <Typography variant="body2" fontWeight={700}>{c.name}</Typography>
-                          {c.phone && <Typography variant="caption" color="text.secondary">{c.phone}</Typography>}
+                          <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'center', flexWrap: 'wrap' }}>
+                            {c.customerCode && <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 800, color: '#0288d1' }}>{c.customerCode}</Typography>}
+                            {c.phone && <Typography variant="caption" color="text.secondary">{c.phone}</Typography>}
+                          </Box>
                         </Box>
-                        <Chip label={`${c.points ?? 0} pts`} size="small" color="warning" variant="outlined"
-                          sx={{ height: 18, fontWeight: 700, fontSize: 10 }} />
+                        <Chip label={`${c.points ?? 0} pts`} size="small" color="warning" variant="outlined" sx={{ height: 18, fontWeight: 700, fontSize: 10 }} />
+                        {discountPct > 0 && <Chip label={`${discountPct}%`} size="small" color="success" sx={{ height: 18, fontWeight: 800, fontSize: 10 }} />}
                       </Box>
-                    ))}
+                      )
+                    })}
                   </Box>
                 )}
               </Box>
@@ -1073,6 +1178,15 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
         open={voucherScanOpen}
         onClose={() => setVoucherScanOpen(false)}
         onScan={handleVoucherScan}
+      />
+
+      <VoucherQrScanDialog
+        open={customerScanOpen}
+        onClose={() => setCustomerScanOpen(false)}
+        onScan={handleCustomerScan}
+        title="Scan Customer QR"
+        manualLabel="Customer code, phone, or QR payload"
+        scannerLabel="Customer code scanner"
       />
 
       <Dialog open={voucherDetailOpen} onClose={() => setVoucherDetailOpen(false)} maxWidth="xs" fullWidth

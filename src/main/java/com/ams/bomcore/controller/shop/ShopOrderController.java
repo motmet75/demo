@@ -1014,6 +1014,16 @@ public class ShopOrderController {
         if (body.containsKey("processingInventoryRecheck")) company.setShopProcessingInventoryRecheck(Boolean.TRUE.equals(body.get("processingInventoryRecheck")));
         if (body.containsKey("pointsConversionRate")) company.setPointsConversionRate(Integer.parseInt(String.valueOf(body.get("pointsConversionRate"))));
         if (body.containsKey("pointsRoundUp"))        company.setPointsRoundUp(Boolean.TRUE.equals(body.get("pointsRoundUp")));
+        if (body.containsKey("loyaltyDiscountPointThreshold")) {
+            Integer threshold = integerValue(body.get("loyaltyDiscountPointThreshold"));
+            company.setLoyaltyDiscountPointThreshold(Math.max(0, threshold != null ? threshold : 0));
+        }
+        if (body.containsKey("loyaltyDiscountPercent")) {
+            BigDecimal percent = decimalValue(body.get("loyaltyDiscountPercent"));
+            if (percent == null || percent.compareTo(BigDecimal.ZERO) < 0) percent = BigDecimal.ZERO;
+            if (percent.compareTo(BigDecimal.valueOf(100)) > 0) percent = BigDecimal.valueOf(100);
+            company.setLoyaltyDiscountPercent(percent);
+        }
         companyRepository.save(company);
         return ResponseEntity.ok(bankConfigMap(company));
     }
@@ -1080,6 +1090,8 @@ public class ShopOrderController {
         m.put("processingInventoryRecheck", Boolean.TRUE.equals(company.getShopProcessingInventoryRecheck()));
         m.put("pointsConversionRate", company.getPointsConversionRate());
         m.put("pointsRoundUp",        company.getPointsRoundUp());
+        m.put("loyaltyDiscountPointThreshold", company.getLoyaltyDiscountPointThreshold());
+        m.put("loyaltyDiscountPercent", company.getLoyaltyDiscountPercent());
         m.put("voucherSecretSet",     company.getVoucherSecret() != null && !company.getVoucherSecret().isBlank());
         return m;
     }
@@ -1300,8 +1312,12 @@ public class ShopOrderController {
                                              @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
-        body.setId(null);
-        return ResponseEntity.status(201).body(shopOrderService.saveCustomer(body, tId, cId));
+        try {
+            body.setId(null);
+            return ResponseEntity.status(201).body(shopOrderService.saveCustomer(body, tId, cId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     @PutMapping("/shop/staff/customers/{id}")
@@ -1313,8 +1329,12 @@ public class ShopOrderController {
                                              @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
-        body.setId(id);
-        return ResponseEntity.ok(shopOrderService.saveCustomer(body, tId, cId));
+        try {
+            body.setId(id);
+            return ResponseEntity.ok(shopOrderService.saveCustomer(body, tId, cId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     @DeleteMapping("/shop/staff/customers/{id}")

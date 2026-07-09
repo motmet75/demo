@@ -1,5 +1,6 @@
 package com.ams.bomcore.domain.company;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
@@ -68,6 +69,12 @@ public class Company {
     @Column(name = "points_round_up")
     private Boolean pointsRoundUp = false;
 
+    @Column(name = "loyalty_discount_point_threshold")
+    private Integer loyaltyDiscountPointThreshold = 0;
+
+    @Column(name = "loyalty_discount_percent", columnDefinition = "numeric")
+    private BigDecimal loyaltyDiscountPercent = BigDecimal.ZERO;
+
     @Column(name = "voucher_secret", length = 100)
     private String voucherSecret;
 
@@ -121,6 +128,10 @@ public class Company {
     public void setPointsConversionRate(Integer pointsConversionRate) { this.pointsConversionRate = pointsConversionRate; }
     public Boolean getPointsRoundUp() { return Boolean.TRUE.equals(pointsRoundUp); }
     public void setPointsRoundUp(Boolean pointsRoundUp) { this.pointsRoundUp = pointsRoundUp; }
+    public Integer getLoyaltyDiscountPointThreshold() { return loyaltyDiscountPointThreshold != null ? loyaltyDiscountPointThreshold : 0; }
+    public void setLoyaltyDiscountPointThreshold(Integer loyaltyDiscountPointThreshold) { this.loyaltyDiscountPointThreshold = loyaltyDiscountPointThreshold; }
+    public BigDecimal getLoyaltyDiscountPercent() { return loyaltyDiscountPercent != null ? loyaltyDiscountPercent : BigDecimal.ZERO; }
+    public void setLoyaltyDiscountPercent(BigDecimal loyaltyDiscountPercent) { this.loyaltyDiscountPercent = loyaltyDiscountPercent; }
     public String getVoucherSecret() { return voucherSecret; }
     public void setVoucherSecret(String voucherSecret) { this.voucherSecret = voucherSecret; }
     public String getShopCounterPublicIp() { return shopCounterPublicIp; }

@@ -27,6 +27,9 @@ public class ShopCustomer {
     @Column(name = "email", length = 100)
     private String email;
 
+    @Column(name = "customer_code", length = 20)
+    private String customerCode;
+
     @Column(name = "points")
     private Integer points = 0;
 
@@ -45,11 +48,21 @@ public class ShopCustomer {
         if (createdAt == null) createdAt = Instant.now();
         updatedAt = Instant.now();
         if (points == null) points = 0;
+        if (customerCode == null || customerCode.isBlank()) customerCode = UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
+        else customerCode = normalizeCustomerCode(customerCode);
     }
 
     @PreUpdate
     private void preUpdate() {
         updatedAt = Instant.now();
+        customerCode = normalizeCustomerCode(customerCode);
+    }
+
+    private String normalizeCustomerCode(String value) {
+        if (value == null) return null;
+        String clean = value.replaceAll("[^A-Za-z0-9]", "").toUpperCase();
+        if (clean.isBlank()) return null;
+        return clean.length() > 20 ? clean.substring(0, 20) : clean;
     }
 
     public UUID getId() { return id; }
@@ -64,6 +77,8 @@ public class ShopCustomer {
     public void setPhone(String phone) { this.phone = phone; }
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
+    public String getCustomerCode() { return customerCode; }
+    public void setCustomerCode(String customerCode) { this.customerCode = customerCode; }
     public Integer getPoints() { return points; }
     public void setPoints(Integer points) { this.points = points; }
     public String getNotes() { return notes; }

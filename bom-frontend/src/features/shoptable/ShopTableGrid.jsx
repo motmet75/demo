@@ -15,6 +15,7 @@ import Typography from '@mui/material/Typography'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import AddIcon from '@mui/icons-material/Add'
 import RefreshIcon from '@mui/icons-material/Refresh'
+import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import EditIcon from '@mui/icons-material/Edit'
 import DeleteIcon from '@mui/icons-material/Delete'
 import QrCode2Icon from '@mui/icons-material/QrCode2'
@@ -25,7 +26,7 @@ import NoteAddIcon from '@mui/icons-material/NoteAdd'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import {
   fetchShopTables, deleteShopTable, fetchTableQr, fetchShopOrders,
-  completeShopOrder
+  completeShopOrder, resetOrderSequence
 } from '../../api/shopApi'
 import ShopTableEditModal from './ShopTableEditModal'
 import ManualOrderDialog from '../shoporder/ManualOrderDialog'
@@ -75,6 +76,7 @@ export default function ShopTableGrid() {
   const [ordersDialog, setOrdersDialog]   = useState(null)
   const [selectedOrderIds, setSelectedOrderIds] = useState([])
   const [completingSelected, setCompletingSelected] = useState(false)
+  const [resettingSequence, setResettingSequence] = useState(false)
   const [detailOrder, setDetailOrder] = useState(null)
 
   const load = useCallback(async () => {
@@ -151,6 +153,19 @@ export default function ShopTableGrid() {
         doPrint(row, qr)
       }
     } catch { setError('Failed to load QR for printing') }
+  }
+
+  const resetDailyOrderNumber = async () => {
+    if (!window.confirm('Reset last order number to 0 so the next order starts at #1? Use this at the start of a new day.')) return
+    setResettingSequence(true); setError('')
+    try {
+      await resetOrderSequence(0)
+      await load()
+    } catch (e) {
+      setError(e.message || 'Failed to reset order number')
+    } finally {
+      setResettingSequence(false)
+    }
   }
 
   const openOrders = (row) => {
@@ -312,6 +327,7 @@ export default function ShopTableGrid() {
       <Box sx={{ display: 'flex', gap: 1 }}>
         <Button startIcon={<AddIcon />} variant="contained" size="small" onClick={() => setEditTable({})}>New Table</Button>
         <Button startIcon={<RefreshIcon />} onClick={load} variant="outlined" size="small">Refresh</Button>
+        <Button startIcon={resettingSequence ? <CircularProgress size={14} /> : <RestartAltIcon />} onClick={resetDailyOrderNumber} variant="outlined" color="warning" size="small" disabled={resettingSequence}>Reset Order #</Button>
       </Box>
       {error && <Alert severity="error" onClose={() => setError('')}>{error}</Alert>}
       <Box sx={{ flex: 1, minHeight: 300 }}>
