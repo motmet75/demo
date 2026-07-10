@@ -125,11 +125,14 @@ export function fetchAllowedPublicIps() {
   return apiFetchJson('/shop/staff/allowed-public-ips')
 }
 
-export function updateAllowedPublicIps(allowedPublicIps, allowAllNetworks = false) {
+export function updateAllowedPublicIps(allowedPublicIps, allowAllNetworks = false, counterNetworkRules = null) {
+  const body = counterNetworkRules
+    ? { counterNetworkRules }
+    : { allowedPublicIps: allowedPublicIps || [], allowAllNetworks }
   return apiFetchJson('/shop/staff/allowed-public-ips', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ allowedPublicIps: allowedPublicIps || [], allowAllNetworks })
+    body: JSON.stringify(body)
   })
 }
 

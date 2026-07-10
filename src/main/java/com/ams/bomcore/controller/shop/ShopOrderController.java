@@ -17,6 +17,8 @@ import com.ams.bomcore.repository.TenantRepository;
 import com.ams.bomcore.service.shop.ShopOrderService;
 import com.ams.bomcore.service.shop.ShopMaterialAuditService;
 import com.ams.bomcore.service.shop.ShopPricingService;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
@@ -51,7 +53,10 @@ public class ShopOrderController {
     private final ShopPrintHistoryRepository shopPrintHistoryRepository;
     private final ShopTableRepository shopTableRepository;
 
+    private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
+
     private record CounterIpSnapshot(String publicIp, Instant updatedAt, List<String> allowedPublicIps, boolean allowAllNetworks) {}
+    private record CounterNetworkRule(String counterPublicIp, List<String> allowedPublicIps, boolean allowAllNetworks) {}
 
     public ShopOrderController(ShopOrderService shopOrderService,
                                ShopPricingService shopPricingService,
@@ -1049,11 +1054,28 @@ public class ShopOrderController {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
         Company company = companyRepository.findById(cId).orElseThrow();
-        List<String> ips = allowedPublicIpsValue(body != null ? body.get("allowedPublicIps") : null);
-        if (body != null && body.containsKey("allowAllNetworks")) {
-            company.setShopAllowAllNetworks(Boolean.TRUE.equals(body.get("allowAllNetworks")));
+        if (body != null && body.containsKey("counterNetworkRules")) {
+            List<CounterNetworkRule> rules = counterNetworkRulesValue(body.get("counterNetworkRules"));
+            company.setShopCounterNetworkRules(serializeCounterNetworkRules(rules));
+            CounterNetworkRule effective = findCounterNetworkRule(rules, company.getShopCounterPublicIp());
+            if (effective != null) {
+                company.setShopAllowedPublicIps(joinAllowedPublicIps(effective.allowedPublicIps()));
+                company.setShopAllowAllNetworks(effective.allowAllNetworks());
+            }
+        } else {
+            List<String> ips = allowedPublicIpsValue(body != null ? body.get("allowedPublicIps") : null);
+            boolean allowAll = body != null && body.containsKey("allowAllNetworks")
+                    ? booleanValue(body.get("allowAllNetworks"))
+                    : Boolean.TRUE.equals(company.getShopAllowAllNetworks());
+            company.setShopAllowedPublicIps(joinAllowedPublicIps(ips));
+            company.setShopAllowAllNetworks(allowAll);
+            String counterIp = cleanIp(company.getShopCounterPublicIp());
+            if (counterIp != null) {
+                List<CounterNetworkRule> rules = parseCounterNetworkRules(company.getShopCounterNetworkRules());
+                rules = upsertCounterNetworkRule(rules, new CounterNetworkRule(counterIp, ips, allowAll));
+                company.setShopCounterNetworkRules(serializeCounterNetworkRules(rules));
+            }
         }
-        company.setShopAllowedPublicIps(joinAllowedPublicIps(ips));
         companyRepository.save(company);
         return ResponseEntity.ok(allowedPublicIpMap(company));
     }
@@ -1079,10 +1101,13 @@ public class ShopOrderController {
 
     private Map<String, Object> allowedPublicIpMap(Company company) {
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("allowedPublicIps", parseAllowedPublicIps(company.getShopAllowedPublicIps()));
+        CounterNetworkRule effectiveRule = effectiveCounterNetworkRule(company);
+        List<CounterNetworkRule> rules = ensureCurrentCounterRule(parseCounterNetworkRules(company.getShopCounterNetworkRules()), company);
+        m.put("allowedPublicIps", effectiveRule.allowedPublicIps());
         m.put("counterPublicIp", company.getShopCounterPublicIp() != null ? company.getShopCounterPublicIp() : "");
         m.put("counterPublicIpUpdatedAt", company.getShopCounterPublicIpUpdatedAt());
-        m.put("allowAllNetworks", Boolean.TRUE.equals(company.getShopAllowAllNetworks()));
+        m.put("allowAllNetworks", effectiveRule.allowAllNetworks());
+        m.put("counterNetworkRules", rules.stream().map(this::counterNetworkRuleMap).toList());
         return m;
     }
     private Map<String, Object> bankConfigMap(com.ams.bomcore.domain.company.Company company) {
@@ -1385,19 +1410,25 @@ public class ShopOrderController {
         Instant now = Instant.now();
         Company company = companyRepository.findById(companyId)
                 .orElseThrow(() -> new IllegalArgumentException("Company not found"));
-        List<String> allowedIps = parseAllowedPublicIps(company.getShopAllowedPublicIps());
-        String lastCounterIp = cleanIp(company.getShopCounterPublicIp());
-        if (lastCounterIp != null && !containsNormalizedIp(allowedIps, lastCounterIp)) {
-            allowedIps.add(lastCounterIp);
+        String counterIp = cleanIp(publicIp);
+        List<CounterNetworkRule> rules = parseCounterNetworkRules(company.getShopCounterNetworkRules());
+        CounterNetworkRule rule = findCounterNetworkRule(rules, counterIp);
+        if (rule == null) {
+            rule = new CounterNetworkRule(counterIp, List.of(counterIp), false);
+            rules = upsertCounterNetworkRule(rules, rule);
+        } else if (!rule.allowAllNetworks() && !containsNormalizedIp(rule.allowedPublicIps(), counterIp)) {
+            List<String> allowed = new ArrayList<>(rule.allowedPublicIps());
+            allowed.add(counterIp);
+            rule = new CounterNetworkRule(counterIp, allowed, false);
+            rules = upsertCounterNetworkRule(rules, rule);
         }
-        if (!containsNormalizedIp(allowedIps, publicIp)) {
-            allowedIps.add(publicIp);
-        }
-        company.setShopCounterPublicIp(publicIp);
+        company.setShopCounterPublicIp(counterIp);
         company.setShopCounterPublicIpUpdatedAt(now);
-        company.setShopAllowedPublicIps(joinAllowedPublicIps(allowedIps));
+        company.setShopAllowedPublicIps(joinAllowedPublicIps(rule.allowedPublicIps()));
+        company.setShopAllowAllNetworks(rule.allowAllNetworks());
+        company.setShopCounterNetworkRules(serializeCounterNetworkRules(rules));
         companyRepository.save(company);
-        return new CounterIpSnapshot(publicIp, now, allowedIps, Boolean.TRUE.equals(company.getShopAllowAllNetworks()));
+        return new CounterIpSnapshot(counterIp, now, rule.allowedPublicIps(), rule.allowAllNetworks());
     }
 
     private ResponseEntity<?> staffOrdersResponse(Object body, CounterIpSnapshot counterIp) {
@@ -1465,12 +1496,13 @@ public class ShopOrderController {
         if (company.getTenant() == null || !tenantId.equals(company.getTenant().getId())) {
             throw new IllegalArgumentException("Company does not belong to tenant");
         }
-        if (Boolean.TRUE.equals(company.getShopAllowAllNetworks())) return null;
+        CounterNetworkRule rule = effectiveCounterNetworkRule(company);
+        if (rule.allowAllNetworks()) return null;
 
-        List<String> allowedIps = parseAllowedPublicIps(company.getShopAllowedPublicIps());
-        String lastCounterIp = cleanIp(company.getShopCounterPublicIp());
-        if (lastCounterIp != null && !containsNormalizedIp(allowedIps, lastCounterIp)) {
-            allowedIps.add(lastCounterIp);
+        List<String> allowedIps = new ArrayList<>(rule.allowedPublicIps());
+        String counterIp = cleanIp(rule.counterPublicIp() != null ? rule.counterPublicIp() : company.getShopCounterPublicIp());
+        if (counterIp != null && !containsNormalizedIp(allowedIps, counterIp)) {
+            allowedIps.add(counterIp);
         }
         String normalizedDeviceIp = normalizeIp(deviceIp);
         if (allowedIps.isEmpty()) {
@@ -1480,7 +1512,7 @@ public class ShopOrderController {
             return forbiddenPublicIp("Cannot verify your network. Please connect to shop Wi-Fi and try again.", deviceIp, allowedIps, company.getShopCounterPublicIpUpdatedAt());
         }
         if (!containsNormalizedIp(allowedIps, deviceIp)) {
-            return forbiddenPublicIp("Ordering is allowed only from the shop network.", deviceIp, allowedIps, company.getShopCounterPublicIpUpdatedAt());
+            return forbiddenPublicIp("Ordering is allowed only from the configured network for this counter.", deviceIp, allowedIps, company.getShopCounterPublicIpUpdatedAt());
         }
         return null;
     }
@@ -1495,6 +1527,129 @@ public class ShopOrderController {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
     }
 
+    private Map<String, Object> counterNetworkRuleMap(CounterNetworkRule rule) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("counterPublicIp", rule.counterPublicIp() != null ? rule.counterPublicIp() : "");
+        m.put("allowedPublicIps", rule.allowedPublicIps() != null ? rule.allowedPublicIps() : List.of());
+        m.put("allowAllNetworks", rule.allowAllNetworks());
+        return m;
+    }
+
+    private CounterNetworkRule effectiveCounterNetworkRule(Company company) {
+        String counterIp = cleanIp(company.getShopCounterPublicIp());
+        List<CounterNetworkRule> rules = parseCounterNetworkRules(company.getShopCounterNetworkRules());
+        CounterNetworkRule rule = findCounterNetworkRule(rules, counterIp);
+        if (rule != null) return normalizeCounterNetworkRule(rule);
+        List<String> legacyAllowed = parseAllowedPublicIps(company.getShopAllowedPublicIps());
+        boolean legacyAllowAll = Boolean.TRUE.equals(company.getShopAllowAllNetworks());
+        if (counterIp != null && !legacyAllowAll && !containsNormalizedIp(legacyAllowed, counterIp)) {
+            legacyAllowed.add(counterIp);
+        }
+        return new CounterNetworkRule(counterIp, legacyAllowed, legacyAllowAll);
+    }
+
+    private List<CounterNetworkRule> ensureCurrentCounterRule(List<CounterNetworkRule> rules, Company company) {
+        List<CounterNetworkRule> normalized = new ArrayList<>();
+        for (CounterNetworkRule rule : rules) {
+            normalized = upsertCounterNetworkRule(normalized, normalizeCounterNetworkRule(rule));
+        }
+        String counterIp = cleanIp(company.getShopCounterPublicIp());
+        if (counterIp != null && findCounterNetworkRule(normalized, counterIp) == null) {
+            normalized.add(effectiveCounterNetworkRule(company));
+        }
+        return normalized;
+    }
+
+    private CounterNetworkRule normalizeCounterNetworkRule(CounterNetworkRule rule) {
+        String counterIp = cleanIp(rule != null ? rule.counterPublicIp() : null);
+        boolean allowAll = rule != null && rule.allowAllNetworks();
+        List<String> allowed = new ArrayList<>();
+        if (rule != null && rule.allowedPublicIps() != null) {
+            for (String ip : rule.allowedPublicIps()) {
+                String clean = cleanIp(ip);
+                if (clean != null && !containsNormalizedIp(allowed, clean)) allowed.add(clean);
+            }
+        }
+        if (counterIp != null && !allowAll && !containsNormalizedIp(allowed, counterIp)) {
+            allowed.add(0, counterIp);
+        }
+        return new CounterNetworkRule(counterIp, allowed, allowAll);
+    }
+
+    private CounterNetworkRule findCounterNetworkRule(List<CounterNetworkRule> rules, String counterIp) {
+        String normalizedCounter = normalizeIp(counterIp);
+        if (normalizedCounter == null) return null;
+        for (CounterNetworkRule rule : rules) {
+            if (normalizedCounter.equals(normalizeIp(rule.counterPublicIp()))) return rule;
+        }
+        return null;
+    }
+
+    private List<CounterNetworkRule> upsertCounterNetworkRule(List<CounterNetworkRule> rules, CounterNetworkRule rule) {
+        CounterNetworkRule normalizedRule = normalizeCounterNetworkRule(rule);
+        String normalizedCounter = normalizeIp(normalizedRule.counterPublicIp());
+        if (normalizedCounter == null) return rules != null ? rules : new ArrayList<>();
+        List<CounterNetworkRule> result = new ArrayList<>();
+        boolean replaced = false;
+        for (CounterNetworkRule existing : rules != null ? rules : List.<CounterNetworkRule>of()) {
+            if (normalizedCounter.equals(normalizeIp(existing.counterPublicIp()))) {
+                if (!replaced) result.add(normalizedRule);
+                replaced = true;
+            } else {
+                result.add(normalizeCounterNetworkRule(existing));
+            }
+        }
+        if (!replaced) result.add(normalizedRule);
+        return result;
+    }
+
+    private List<CounterNetworkRule> parseCounterNetworkRules(String raw) {
+        if (raw == null || raw.isBlank()) return new ArrayList<>();
+        try {
+            List<Map<String, Object>> values = JSON_MAPPER.readValue(raw, new TypeReference<>() {});
+            return counterNetworkRulesValue(values);
+        } catch (Exception ignored) {
+            return new ArrayList<>();
+        }
+    }
+
+    private String serializeCounterNetworkRules(List<CounterNetworkRule> rules) {
+        try {
+            List<Map<String, Object>> values = (rules != null ? rules : List.<CounterNetworkRule>of())
+                    .stream().map(this::counterNetworkRuleMap).toList();
+            return values.isEmpty() ? null : JSON_MAPPER.writeValueAsString(values);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private List<CounterNetworkRule> counterNetworkRulesValue(Object raw) {
+        List<CounterNetworkRule> rules = new ArrayList<>();
+        if (raw instanceof Collection<?> values) {
+            for (Object value : values) {
+                CounterNetworkRule rule = counterNetworkRuleValue(value);
+                if (rule != null) rules = upsertCounterNetworkRule(rules, rule);
+            }
+        }
+        return rules;
+    }
+
+    private CounterNetworkRule counterNetworkRuleValue(Object raw) {
+        if (!(raw instanceof Map<?, ?> map)) return null;
+        String counterIp = cleanIp(stringValue(map.get("counterPublicIp")));
+        if (counterIp == null) counterIp = cleanIp(stringValue(map.get("counterIp")));
+        if (counterIp == null) return null;
+        List<String> allowedIps = allowedPublicIpsValue(map.get("allowedPublicIps"));
+        boolean allowAll = booleanValue(map.get("allowAllNetworks"));
+        return normalizeCounterNetworkRule(new CounterNetworkRule(counterIp, allowedIps, allowAll));
+    }
+
+    private boolean booleanValue(Object raw) {
+        if (raw instanceof Boolean b) return b;
+        if (raw == null) return false;
+        String value = String.valueOf(raw).trim();
+        return "true".equalsIgnoreCase(value) || "1".equals(value) || "yes".equalsIgnoreCase(value) || "on".equalsIgnoreCase(value);
+    }
     private List<String> allowedPublicIpsValue(Object raw) {
         List<String> ips = new ArrayList<>();
         if (raw instanceof Collection<?> values) {

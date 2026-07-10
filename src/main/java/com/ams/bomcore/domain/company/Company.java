@@ -90,6 +90,9 @@ public class Company {
     @Column(name = "shop_allow_all_networks")
     private Boolean shopAllowAllNetworks = false;
 
+    @Column(name = "shop_counter_network_rules", columnDefinition = "TEXT")
+    private String shopCounterNetworkRules;
+
     public Company() {}
 
     public UUID getId() { return id; }
@@ -145,6 +148,8 @@ public class Company {
     public void setShopAllowedPublicIps(String shopAllowedPublicIps) { this.shopAllowedPublicIps = shopAllowedPublicIps; }
     public Boolean getShopAllowAllNetworks() { return Boolean.TRUE.equals(shopAllowAllNetworks); }
     public void setShopAllowAllNetworks(Boolean shopAllowAllNetworks) { this.shopAllowAllNetworks = shopAllowAllNetworks; }
+    public String getShopCounterNetworkRules() { return shopCounterNetworkRules; }
+    public void setShopCounterNetworkRules(String shopCounterNetworkRules) { this.shopCounterNetworkRules = shopCounterNetworkRules; }
 
     @PrePersist
     private void prePersist() {

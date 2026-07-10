@@ -12,6 +12,7 @@ import Stack from '@mui/material/Stack'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Switch from '@mui/material/Switch'
 import RefreshIcon from '@mui/icons-material/Refresh'
+import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
 import ToggleOnIcon from '@mui/icons-material/ToggleOn'
 import ToggleOffIcon from '@mui/icons-material/ToggleOff'
@@ -30,21 +31,35 @@ export default function ShopTokenManagePage() {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [ipInfo, setIpInfo] = useState({ allowedPublicIps: [], counterPublicIp: '', counterPublicIpUpdatedAt: null, allowAllNetworks: false })
-  const [ipText, setIpText] = useState('')
+  const [ipInfo, setIpInfo] = useState({ counterNetworkRules: [], counterPublicIp: '', counterPublicIpUpdatedAt: null })
   const [ipLoading, setIpLoading] = useState(false)
   const [ipSaving, setIpSaving] = useState(false)
 
-  const applyIpInfo = useCallback((data) => {
-    const next = {
-      allowedPublicIps: Array.isArray(data?.allowedPublicIps) ? data.allowedPublicIps : [],
-      counterPublicIp: data?.counterPublicIp || '',
-      counterPublicIpUpdatedAt: data?.counterPublicIpUpdatedAt || null,
-      allowAllNetworks: Boolean(data?.allowAllNetworks),
+  const normalizeRule = useCallback((rule) => {
+    const counterPublicIp = String(rule?.counterPublicIp || '').trim()
+    return {
+      counterPublicIp,
+      allowedPublicIps: splitIps(Array.isArray(rule?.allowedPublicIps) ? rule.allowedPublicIps.join('\n') : rule?.allowedPublicIps),
+      allowAllNetworks: Boolean(rule?.allowAllNetworks),
     }
-    setIpInfo(next)
-    setIpText(next.allowedPublicIps.join('\n'))
   }, [])
+
+  const applyIpInfo = useCallback((data) => {
+    const counterPublicIp = data?.counterPublicIp || ''
+    let rules = Array.isArray(data?.counterNetworkRules) ? data.counterNetworkRules.map(normalizeRule).filter(r => r.counterPublicIp) : []
+    if (!rules.length && counterPublicIp) {
+      rules = [{
+        counterPublicIp,
+        allowedPublicIps: Array.isArray(data?.allowedPublicIps) && data.allowedPublicIps.length ? data.allowedPublicIps : [counterPublicIp],
+        allowAllNetworks: Boolean(data?.allowAllNetworks),
+      }]
+    }
+    setIpInfo({
+      counterNetworkRules: rules,
+      counterPublicIp,
+      counterPublicIpUpdatedAt: data?.counterPublicIpUpdatedAt || null,
+    })
+  }, [normalizeRule])
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
@@ -84,22 +99,55 @@ export default function ShopTokenManagePage() {
     }
   }
 
-  const handleSaveIps = async () => {
-    setIpSaving(true); setError('')
-    try {
-      const { res, data } = await updateAllowedPublicIps(splitIps(ipText), ipInfo.allowAllNetworks)
-      if (!res.ok) throw new Error(data?.message || data?.error || 'Failed to save allowed IPs')
-      applyIpInfo(data)
-    } catch (e) {
-      setError(e.message || 'Failed to save allowed IPs')
-    } finally {
-      setIpSaving(false)
-    }
+  const currentRuleIndex = ipInfo.counterNetworkRules.findIndex(rule => rule.counterPublicIp === ipInfo.counterPublicIp)
+  const currentRule = currentRuleIndex >= 0 ? ipInfo.counterNetworkRules[currentRuleIndex] : null
+
+  const updateRule = (index, patch) => {
+    setIpInfo(prev => ({
+      ...prev,
+      counterNetworkRules: prev.counterNetworkRules.map((rule, i) => i === index ? normalizeRule({ ...rule, ...patch }) : rule),
+    }))
+  }
+
+  const removeRule = (index) => {
+    setIpInfo(prev => ({ ...prev, counterNetworkRules: prev.counterNetworkRules.filter((_, i) => i !== index) }))
+  }
+
+  const addRule = (counterPublicIp = '') => {
+    const clean = String(counterPublicIp || '').trim()
+    setIpInfo(prev => {
+      if (clean && prev.counterNetworkRules.some(rule => rule.counterPublicIp === clean)) return prev
+      return {
+        ...prev,
+        counterNetworkRules: [...prev.counterNetworkRules, {
+          counterPublicIp: clean,
+          allowedPublicIps: clean ? [clean] : [],
+          allowAllNetworks: false,
+        }],
+      }
+    })
   }
 
   const handleAddCurrentIp = () => {
     if (!ipInfo.counterPublicIp) return
-    setIpText(splitIps(`${ipText}\n${ipInfo.counterPublicIp}`).join('\n'))
+    if (currentRuleIndex < 0) addRule(ipInfo.counterPublicIp)
+    else updateRule(currentRuleIndex, {
+      allowedPublicIps: splitIps(`${currentRule.allowedPublicIps.join('\n')}\n${ipInfo.counterPublicIp}`),
+    })
+  }
+
+  const handleSaveIps = async () => {
+    setIpSaving(true); setError('')
+    try {
+      const rules = ipInfo.counterNetworkRules.map(normalizeRule).filter(rule => rule.counterPublicIp)
+      const { res, data } = await updateAllowedPublicIps(null, false, rules)
+      if (!res.ok) throw new Error(data?.message || data?.error || 'Failed to save network rules')
+      applyIpInfo(data)
+    } catch (e) {
+      setError(e.message || 'Failed to save network rules')
+    } finally {
+      setIpSaving(false)
+    }
   }
 
   const handleToggle = async (row) => {
@@ -233,9 +281,9 @@ export default function ShopTokenManagePage() {
             />
             <Chip
               size="small"
-              label={ipInfo.allowAllNetworks ? 'All networks allowed' : 'Shop network only'}
-              color={ipInfo.allowAllNetworks ? 'warning' : 'info'}
-              variant={ipInfo.allowAllNetworks ? 'filled' : 'outlined'}
+              label={currentRule?.allowAllNetworks ? 'Current: all networks' : currentRule ? `Current: ${currentRule.allowedPublicIps.length} network${currentRule.allowedPublicIps.length === 1 ? '' : 's'}` : 'No current rule'}
+              color={currentRule?.allowAllNetworks ? 'warning' : currentRule ? 'info' : 'default'}
+              variant={currentRule ? 'outlined' : 'filled'}
             />
             {ipInfo.counterPublicIpUpdatedAt && (
               <Typography variant="caption" color="text.secondary">Updated {dateFmt(ipInfo.counterPublicIpUpdatedAt)}</Typography>
@@ -245,34 +293,55 @@ export default function ShopTokenManagePage() {
               {ipLoading ? 'Refreshing...' : 'Refresh IP'}
             </Button>
           </Box>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={Boolean(ipInfo.allowAllNetworks)}
-                onChange={e => setIpInfo(prev => ({ ...prev, allowAllNetworks: e.target.checked }))}
-                disabled={ipSaving || ipLoading}
-              />
-            }
-            label="Allow all networks to order"
-          />
-          <TextField
-            label="Allowed public IPs"
-            value={ipText}
-            onChange={e => setIpText(e.target.value)}
-            size="small"
-            fullWidth
-            multiline
-            minRows={2}
-            placeholder="One public IP per line"
-            disabled={Boolean(ipInfo.allowAllNetworks)}
-            helperText={ipInfo.allowAllNetworks
-              ? 'Network restriction is disabled. Customers can order from any network.'
-              : 'Only customers from these public IPs can place QR orders. Refresh IP adds this counter public IP automatically.'}
-          />
+
+          <Stack spacing={1}>
+            {ipInfo.counterNetworkRules.map((rule, index) => (
+              <Box key={`${rule.counterPublicIp || 'new'}-${index}`} sx={{ border: '1px solid #e2e8f0', borderRadius: 1, p: 1.25, bgcolor: '#fff' }}>
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', mb: 1 }}>
+                  <TextField
+                    label="Counter IP"
+                    value={rule.counterPublicIp}
+                    onChange={e => updateRule(index, { counterPublicIp: e.target.value })}
+                    size="small"
+                    sx={{ width: 190 }}
+                  />
+                  <FormControlLabel
+                    control={<Switch checked={Boolean(rule.allowAllNetworks)} onChange={e => updateRule(index, { allowAllNetworks: e.target.checked })} />}
+                    label="Allow any network"
+                  />
+                  {rule.counterPublicIp === ipInfo.counterPublicIp && <Chip size="small" label="Current counter" color="success" variant="outlined" />}
+                  <Box sx={{ flex: 1 }} />
+                  <Tooltip title="Remove counter rule">
+                    <IconButton size="small" color="error" onClick={() => removeRule(index)}>
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+                {!rule.allowAllNetworks && (
+                  <TextField
+                    label="Networks allowed to order"
+                    value={rule.allowedPublicIps.join('\n')}
+                    onChange={e => updateRule(index, { allowedPublicIps: splitIps(e.target.value) })}
+                    size="small"
+                    fullWidth
+                    multiline
+                    minRows={2}
+                    placeholder="One public IP per line"
+                    helperText="Customers can order only from these public IPs when this counter IP is active."
+                  />
+                )}
+              </Box>
+            ))}
+            {!ipInfo.counterNetworkRules.length && (
+              <Alert severity="info">Refresh IP or add a counter rule to start controlling ordering networks.</Alert>
+            )}
+          </Stack>
+
           <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-            <Button onClick={handleAddCurrentIp} disabled={ipInfo.allowAllNetworks || !ipInfo.counterPublicIp || ipSaving} size="small" variant="outlined" sx={{ textTransform: 'none' }}>Add current IP</Button>
+            <Button startIcon={<AddIcon />} onClick={() => addRule()} disabled={ipSaving} size="small" variant="outlined" sx={{ textTransform: 'none' }}>Add counter rule</Button>
+            <Button onClick={handleAddCurrentIp} disabled={!ipInfo.counterPublicIp || ipSaving} size="small" variant="outlined" sx={{ textTransform: 'none' }}>Use current IP</Button>
             <Button onClick={handleSaveIps} disabled={ipSaving} size="small" variant="contained" sx={{ textTransform: 'none', fontWeight: 700 }}>
-              {ipSaving ? 'Saving...' : 'Save Network Access'}
+              {ipSaving ? 'Saving...' : 'Save Network Rules'}
             </Button>
           </Box>
         </Stack>
