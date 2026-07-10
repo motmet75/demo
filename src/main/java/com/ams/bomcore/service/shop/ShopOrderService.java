@@ -272,13 +272,8 @@ public class ShopOrderService {
         if (!ShopOrder.STATUS_PENDING.equals(order.getStatus()))
             throw new IllegalStateException("Order can only be updated while PENDING");
 
-        List<ShopOrderItem> existing = shopOrderItemRepository.findAllByOrder_Id(order.getId());
-        shopOrderItemRepository.deleteAll(existing.stream().filter(i -> i.getParentItem() != null).toList());
-        shopOrderItemRepository.deleteAll(existing.stream().filter(i -> i.getParentItem() == null).toList());
-
-        List<ShopOrderItem> items = new ArrayList<>();
         BigDecimal[] totals = { BigDecimal.ZERO, BigDecimal.ZERO };
-        buildItems(order, newItems, null, items, totals, tenantId, companyId);
+        List<ShopOrderItem> items = replaceOrderItems(order, newItems, totals, tenantId, companyId);
 
         BigDecimal fee = order.getDeliveryFee() != null ? order.getDeliveryFee() : BigDecimal.ZERO;
         order.setTotalAmount(totals[0].add(fee));
@@ -771,14 +766,8 @@ public class ShopOrderService {
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         requireStatus(order, ShopOrder.STATUS_PENDING);
 
-        // Delete children before parents to respect the self-referencing FK
-        List<ShopOrderItem> existing = shopOrderItemRepository.findAllByOrder_Id(orderId);
-        shopOrderItemRepository.deleteAll(existing.stream().filter(i -> i.getParentItem() != null).toList());
-        shopOrderItemRepository.deleteAll(existing.stream().filter(i -> i.getParentItem() == null).toList());
-
-        List<ShopOrderItem> items = new ArrayList<>();
         BigDecimal[] totals = { BigDecimal.ZERO, BigDecimal.ZERO };
-        buildItems(order, newItems, null, items, totals, tenantId, companyId);
+        List<ShopOrderItem> items = replaceOrderItems(order, newItems, totals, tenantId, companyId);
 
         BigDecimal fee = order.getDeliveryFee() != null ? order.getDeliveryFee() : BigDecimal.ZERO;
         order.setTotalAmount(totals[0].add(fee));
@@ -838,6 +827,25 @@ public class ShopOrderService {
 
             buildItems(order, req.sideItems(), item, accumulator, totals, tenantId, companyId);
         }
+    }
+
+    private List<ShopOrderItem> replaceOrderItems(ShopOrder order, List<ItemRequest> newItems, BigDecimal[] totals,
+                                                  UUID tenantId, UUID companyId) {
+        List<ShopBillItem> billAssignments = shopBillItemRepository.findAllByOrderItem_Order_Id(order.getId());
+        if (!billAssignments.isEmpty()) {
+            shopBillItemRepository.deleteAll(billAssignments);
+            shopBillItemRepository.flush();
+        }
+
+        // Delete children before parents to respect the self-referencing FK.
+        List<ShopOrderItem> existing = shopOrderItemRepository.findAllByOrder_Id(order.getId());
+        shopOrderItemRepository.deleteAll(existing.stream().filter(i -> i.getParentItem() != null).toList());
+        shopOrderItemRepository.deleteAll(existing.stream().filter(i -> i.getParentItem() == null).toList());
+        shopOrderItemRepository.flush();
+
+        List<ShopOrderItem> items = new ArrayList<>();
+        buildItems(order, newItems, null, items, totals, tenantId, companyId);
+        return items;
     }
 
     // ── Option add-on pricing ─────────────────────────────────────────
@@ -1759,12 +1767,8 @@ public class ShopOrderService {
             throw new IllegalStateException("Order can only be updated while PENDING");
         UUID tenantId  = order.getTenantId();
         UUID companyId = order.getCompanyId();
-        List<ShopOrderItem> existing = shopOrderItemRepository.findAllByOrder_Id(order.getId());
-        shopOrderItemRepository.deleteAll(existing.stream().filter(i -> i.getParentItem() != null).toList());
-        shopOrderItemRepository.deleteAll(existing.stream().filter(i -> i.getParentItem() == null).toList());
-        List<ShopOrderItem> items = new ArrayList<>();
         BigDecimal[] totals = { BigDecimal.ZERO, BigDecimal.ZERO };
-        buildItems(order, newItems, null, items, totals, tenantId, companyId);
+        List<ShopOrderItem> items = replaceOrderItems(order, newItems, totals, tenantId, companyId);
         BigDecimal fee = order.getDeliveryFee() != null ? order.getDeliveryFee() : BigDecimal.ZERO;
         order.setTotalAmount(totals[0].add(fee));
         order.setTotalRawCost(totals[1]);
