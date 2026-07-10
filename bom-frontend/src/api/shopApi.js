@@ -125,9 +125,14 @@ export function fetchAllowedPublicIps() {
   return apiFetchJson('/shop/staff/allowed-public-ips')
 }
 
-export function updateAllowedPublicIps(allowedPublicIps, allowAllNetworks = false, counterNetworkRules = null) {
-  const body = counterNetworkRules
-    ? { counterNetworkRules }
+export function updateAllowedPublicIps(allowedPublicIps, allowAllNetworks = false, counterNetworkRules = null, counterPublicIp = null) {
+  const body = Array.isArray(counterNetworkRules)
+    ? {
+        counterNetworkRules,
+        allowedPublicIps: allowedPublicIps || [],
+        allowAllNetworks,
+        ...(counterPublicIp ? { counterPublicIp } : {}),
+      }
     : { allowedPublicIps: allowedPublicIps || [], allowAllNetworks }
   return apiFetchJson('/shop/staff/allowed-public-ips', {
     method: 'PUT',

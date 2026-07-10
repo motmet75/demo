@@ -27,6 +27,8 @@ const splitIps = (value) => String(value || '')
   .filter(Boolean)
   .filter((ip, index, arr) => arr.findIndex(other => other.toLowerCase() === ip.toLowerCase()) === index)
 
+const normalizeIpValue = (value) => String(value || '').trim().toLowerCase()
+
 export default function ShopTokenManagePage() {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(false)
@@ -99,7 +101,10 @@ export default function ShopTokenManagePage() {
     }
   }
 
-  const currentRuleIndex = ipInfo.counterNetworkRules.findIndex(rule => rule.counterPublicIp === ipInfo.counterPublicIp)
+  const currentCounterKey = normalizeIpValue(ipInfo.counterPublicIp)
+  const currentRuleIndex = currentCounterKey
+    ? ipInfo.counterNetworkRules.findIndex(rule => normalizeIpValue(rule.counterPublicIp) === currentCounterKey)
+    : -1
   const currentRule = currentRuleIndex >= 0 ? ipInfo.counterNetworkRules[currentRuleIndex] : null
 
   const updateRule = (index, patch) => {
@@ -116,7 +121,7 @@ export default function ShopTokenManagePage() {
   const addRule = (counterPublicIp = '') => {
     const clean = String(counterPublicIp || '').trim()
     setIpInfo(prev => {
-      if (clean && prev.counterNetworkRules.some(rule => rule.counterPublicIp === clean)) return prev
+      if (clean && prev.counterNetworkRules.some(rule => normalizeIpValue(rule.counterPublicIp) === normalizeIpValue(clean))) return prev
       return {
         ...prev,
         counterNetworkRules: [...prev.counterNetworkRules, {
@@ -136,13 +141,55 @@ export default function ShopTokenManagePage() {
     })
   }
 
+  const currentRuleFrom = (rules) => {
+    if (!currentCounterKey) return null
+    return rules.find(rule => normalizeIpValue(rule.counterPublicIp) === currentCounterKey) || null
+  }
+
+  const withCurrentRule = (rulesInput) => {
+    const rules = rulesInput.map(normalizeRule).filter(rule => rule.counterPublicIp)
+    if (!ipInfo.counterPublicIp || currentRuleFrom(rules)) return rules
+    return [...rules, normalizeRule({
+      counterPublicIp: ipInfo.counterPublicIp,
+      allowedPublicIps: [ipInfo.counterPublicIp],
+      allowAllNetworks: false,
+    })]
+  }
+
+  const persistNetworkRules = async (rulesInput) => {
+    const rules = withCurrentRule(rulesInput)
+    const activeRule = currentRuleFrom(rules)
+    const { res, data } = await updateAllowedPublicIps(
+      activeRule?.allowedPublicIps || [],
+      Boolean(activeRule?.allowAllNetworks),
+      rules,
+      activeRule?.counterPublicIp || ipInfo.counterPublicIp || null,
+    )
+    if (!res.ok) throw new Error(data?.message || data?.error || 'Failed to save network rules')
+    applyIpInfo(data)
+  }
+
   const handleSaveIps = async () => {
     setIpSaving(true); setError('')
     try {
-      const rules = ipInfo.counterNetworkRules.map(normalizeRule).filter(rule => rule.counterPublicIp)
-      const { res, data } = await updateAllowedPublicIps(null, false, rules)
-      if (!res.ok) throw new Error(data?.message || data?.error || 'Failed to save network rules')
-      applyIpInfo(data)
+      await persistNetworkRules(ipInfo.counterNetworkRules)
+    } catch (e) {
+      setError(e.message || 'Failed to save network rules')
+    } finally {
+      setIpSaving(false)
+    }
+  }
+
+  const handleAllowAnyCurrentIp = async () => {
+    if (!ipInfo.counterPublicIp || ipSaving) return
+    const rules = withCurrentRule(ipInfo.counterNetworkRules).map(rule => (
+      normalizeIpValue(rule.counterPublicIp) === currentCounterKey
+        ? { ...rule, allowAllNetworks: true }
+        : rule
+    ))
+    setIpSaving(true); setError('')
+    try {
+      await persistNetworkRules(rules)
     } catch (e) {
       setError(e.message || 'Failed to save network rules')
     } finally {
@@ -309,7 +356,7 @@ export default function ShopTokenManagePage() {
                     control={<Switch checked={Boolean(rule.allowAllNetworks)} onChange={e => updateRule(index, { allowAllNetworks: e.target.checked })} />}
                     label="Allow any network"
                   />
-                  {rule.counterPublicIp === ipInfo.counterPublicIp && <Chip size="small" label="Current counter" color="success" variant="outlined" />}
+                  {normalizeIpValue(rule.counterPublicIp) === currentCounterKey && <Chip size="small" label="Current counter" color="success" variant="outlined" />}
                   <Box sx={{ flex: 1 }} />
                   <Tooltip title="Remove counter rule">
                     <IconButton size="small" color="error" onClick={() => removeRule(index)}>
@@ -340,6 +387,7 @@ export default function ShopTokenManagePage() {
           <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
             <Button startIcon={<AddIcon />} onClick={() => addRule()} disabled={ipSaving} size="small" variant="outlined" sx={{ textTransform: 'none' }}>Add counter rule</Button>
             <Button onClick={handleAddCurrentIp} disabled={!ipInfo.counterPublicIp || ipSaving} size="small" variant="outlined" sx={{ textTransform: 'none' }}>Use current IP</Button>
+            <Button onClick={handleAllowAnyCurrentIp} disabled={!ipInfo.counterPublicIp || ipSaving} size="small" variant="outlined" sx={{ textTransform: 'none' }}>Allow any for current IP</Button>
             <Button onClick={handleSaveIps} disabled={ipSaving} size="small" variant="contained" sx={{ textTransform: 'none', fontWeight: 700 }}>
               {ipSaving ? 'Saving...' : 'Save Network Rules'}
             </Button>
