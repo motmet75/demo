@@ -87,6 +87,9 @@ public class Company {
     @Column(name = "shop_allowed_public_ips", columnDefinition = "TEXT")
     private String shopAllowedPublicIps;
 
+    @Column(name = "shop_allow_all_networks")
+    private Boolean shopAllowAllNetworks = false;
+
     public Company() {}
 
     public UUID getId() { return id; }
@@ -140,6 +143,8 @@ public class Company {
     public void setShopCounterPublicIpUpdatedAt(Instant shopCounterPublicIpUpdatedAt) { this.shopCounterPublicIpUpdatedAt = shopCounterPublicIpUpdatedAt; }
     public String getShopAllowedPublicIps() { return shopAllowedPublicIps; }
     public void setShopAllowedPublicIps(String shopAllowedPublicIps) { this.shopAllowedPublicIps = shopAllowedPublicIps; }
+    public Boolean getShopAllowAllNetworks() { return Boolean.TRUE.equals(shopAllowAllNetworks); }
+    public void setShopAllowAllNetworks(Boolean shopAllowAllNetworks) { this.shopAllowAllNetworks = shopAllowAllNetworks; }
 
     @PrePersist
     private void prePersist() {

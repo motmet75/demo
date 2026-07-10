@@ -11,6 +11,7 @@ function withCounterIpMeta(result) {
     counterPublicIp: result?.res?.headers?.get('X-Counter-Public-Ip') || '',
     counterPublicIpUpdatedAt: result?.res?.headers?.get('X-Counter-Public-Ip-Updated-At') || '',
     allowedPublicIps: allowedRaw ? allowedRaw.split(',').map(ip => ip.trim()).filter(Boolean) : [],
+    allowAllNetworks: result?.res?.headers?.get('X-Shop-Allow-All-Networks') === 'true',
   }
 }
 // ── Public (no auth) ───────────────────────────────────────────────
@@ -124,11 +125,11 @@ export function fetchAllowedPublicIps() {
   return apiFetchJson('/shop/staff/allowed-public-ips')
 }
 
-export function updateAllowedPublicIps(allowedPublicIps) {
+export function updateAllowedPublicIps(allowedPublicIps, allowAllNetworks = false) {
   return apiFetchJson('/shop/staff/allowed-public-ips', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ allowedPublicIps: allowedPublicIps || [] })
+    body: JSON.stringify({ allowedPublicIps: allowedPublicIps || [], allowAllNetworks })
   })
 }
 

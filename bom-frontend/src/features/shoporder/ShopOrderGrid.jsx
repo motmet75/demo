@@ -914,9 +914,46 @@ const STATUS_SORT_ORDER = { PENDING: 0, CONFIRMED: 1, PREPARING: 2, READY: 3, PI
 function OrderCardGrid({ rows, loading, tables, actions, modelImageMap = {}, selectedIds, onToggleSelect }) {
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState('newest')
+  const [tableFilter, setTableFilter] = useState('')
+  const [slipFilter, setSlipFilter] = useState('')
+
+  const slipOptions = useMemo(() => {
+    const byToken = new Map()
+    rows.forEach(order => {
+      const token = String(order.sourceToken || '').trim()
+      if (!token) return
+      const existing = byToken.get(token) || {
+        token,
+        count: 0,
+        orderNumbers: new Set(),
+        createdAt: order.createdAt || '',
+      }
+      existing.count += 1
+      if (order.orderNumber != null) existing.orderNumbers.add(order.orderNumber)
+      if (order.createdAt && (!existing.createdAt || new Date(order.createdAt) < new Date(existing.createdAt))) {
+        existing.createdAt = order.createdAt
+      }
+      byToken.set(token, existing)
+    })
+    return Array.from(byToken.values())
+      .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+      .map(info => {
+        const nums = Array.from(info.orderNumbers).sort((a, b) => a - b)
+        const numLabel = nums.length === 1 ? `#${nums[0]}` : nums.length > 1 ? `#${nums[0]}-${nums[nums.length - 1]}` : info.token.slice(0, 8)
+        return { token: info.token, label: `${numLabel} (${info.count})` }
+      })
+  }, [rows])
 
   const filtered = useMemo(() => {
     let list = rows
+    if (tableFilter) {
+      list = tableFilter === '__NONE__'
+        ? list.filter(r => !r.tableId)
+        : list.filter(r => String(r.tableId || '') === tableFilter)
+    }
+    if (slipFilter) {
+      list = list.filter(r => String(r.sourceToken || '') === slipFilter)
+    }
     if (search.trim()) {
       const q = search.toLowerCase()
       list = list.filter(r =>
@@ -937,7 +974,7 @@ function OrderCardGrid({ rows, loading, tables, actions, modelImageMap = {}, sel
       if (sortBy === 'total')  return Number(b.totalAmount || 0) - Number(a.totalAmount || 0)
       return 0
     })
-  }, [rows, search, sortBy])
+  }, [rows, search, sortBy, tableFilter, slipFilter])
 
   if (loading) return (
     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
@@ -948,13 +985,22 @@ function OrderCardGrid({ rows, loading, tables, actions, modelImageMap = {}, sel
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ px: 1.5, py: 0.75, display: 'flex', gap: 1, alignItems: 'center', borderBottom: '1px solid #e0e0e0', flexShrink: 0 }}>
-        <TextField size="small" placeholder="Search order #, customer, item, table…"
+        <TextField size="small" placeholder="Search order #, customer, item, table..."
           value={search} onChange={e => setSearch(e.target.value)}
           sx={{ flex: 1 }} inputProps={{ style: { fontSize: 13 } }} />
+        <TextField select size="small" label="Table" value={tableFilter} onChange={e => setTableFilter(e.target.value)} sx={{ width: 150 }}>
+          <MenuItem value="">All tables</MenuItem>
+          <MenuItem value="__NONE__">No table</MenuItem>
+          {tables.map(t => <MenuItem key={t.id} value={String(t.id)}>{t.tableName}</MenuItem>)}
+        </TextField>
+        <TextField select size="small" label="Scan slip" value={slipFilter} onChange={e => setSlipFilter(e.target.value)} sx={{ width: 170 }}>
+          <MenuItem value="">All slips</MenuItem>
+          {slipOptions.map(slip => <MenuItem key={slip.token} value={slip.token}>{slip.label}</MenuItem>)}
+        </TextField>
         <TextField select size="small" label="Sort" value={sortBy} onChange={e => setSortBy(e.target.value)} sx={{ width: 140 }}>
           {SORT_OPTIONS.map(o => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
         </TextField>
-        <Typography sx={{ fontSize: 12, color: '#94a3b8', flexShrink: 0 }}>{filtered.length} orders</Typography>
+        <Typography sx={{ fontSize: 12, color: '#94a3b8', flexShrink: 0 }}>{filtered.length} / {rows.length} orders</Typography>
       </Box>
       <Box sx={{ flex: 1, overflow: 'auto', p: 1.5 }}>
         {filtered.length === 0

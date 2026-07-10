@@ -301,6 +301,7 @@ function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpda
   const isDone     = status === 'COMPLETED' || status === 'PICKED_UP'
   const isCancelled = status === 'CANCELLED'
   const displayNum = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
+  const heroNum = order.orderNumber ? `#${order.orderNumber}` : order.dailySeq ? `#${order.dailySeq}` : '—'
   const allItems   = order.items || []
   const childMap   = buildChildMap(allItems)
   const rootItems  = allItems.filter(it => !it.parentItemId)
@@ -308,8 +309,8 @@ function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpda
   return (
     <Box sx={{ position: 'fixed', inset: 0, zIndex: 2000, bgcolor: '#fff', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <Box sx={{ bgcolor: style.bg, textAlign: 'center', px: 2, pt: 5, pb: 3, flexShrink: 0 }}>
-        <Typography sx={{ fontSize: { xs: 80, md: 110 }, fontWeight: 900, lineHeight: 1, color: style.color, letterSpacing: -4 }}>
-          {order.dailySeq ?? order.orderNumber ?? '—'}
+        <Typography sx={{ fontSize: { xs: 80, md: 110 }, fontWeight: 900, lineHeight: 1, color: style.color, letterSpacing: 0 }}>
+          {heroNum}
         </Typography>
         <Typography sx={{ fontSize: 12, color: style.color, opacity: 0.55, mt: 0.75 }}>
           {order.orderNumber ? `Đơn #${order.orderNumber}` : ''}{order.orderCode ? ` · ${order.orderCode}` : ''}

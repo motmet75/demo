@@ -9,6 +9,8 @@ import IconButton from '@mui/material/IconButton'
 import Typography from '@mui/material/Typography'
 import TextField from '@mui/material/TextField'
 import Stack from '@mui/material/Stack'
+import FormControlLabel from '@mui/material/FormControlLabel'
+import Switch from '@mui/material/Switch'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import DeleteIcon from '@mui/icons-material/Delete'
 import ToggleOnIcon from '@mui/icons-material/ToggleOn'
@@ -28,7 +30,7 @@ export default function ShopTokenManagePage() {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [ipInfo, setIpInfo] = useState({ allowedPublicIps: [], counterPublicIp: '', counterPublicIpUpdatedAt: null })
+  const [ipInfo, setIpInfo] = useState({ allowedPublicIps: [], counterPublicIp: '', counterPublicIpUpdatedAt: null, allowAllNetworks: false })
   const [ipText, setIpText] = useState('')
   const [ipLoading, setIpLoading] = useState(false)
   const [ipSaving, setIpSaving] = useState(false)
@@ -38,6 +40,7 @@ export default function ShopTokenManagePage() {
       allowedPublicIps: Array.isArray(data?.allowedPublicIps) ? data.allowedPublicIps : [],
       counterPublicIp: data?.counterPublicIp || '',
       counterPublicIpUpdatedAt: data?.counterPublicIpUpdatedAt || null,
+      allowAllNetworks: Boolean(data?.allowAllNetworks),
     }
     setIpInfo(next)
     setIpText(next.allowedPublicIps.join('\n'))
@@ -84,7 +87,7 @@ export default function ShopTokenManagePage() {
   const handleSaveIps = async () => {
     setIpSaving(true); setError('')
     try {
-      const { res, data } = await updateAllowedPublicIps(splitIps(ipText))
+      const { res, data } = await updateAllowedPublicIps(splitIps(ipText), ipInfo.allowAllNetworks)
       if (!res.ok) throw new Error(data?.message || data?.error || 'Failed to save allowed IPs')
       applyIpInfo(data)
     } catch (e) {
@@ -228,6 +231,12 @@ export default function ShopTokenManagePage() {
               variant="outlined"
               sx={{ maxWidth: 240, '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' } }}
             />
+            <Chip
+              size="small"
+              label={ipInfo.allowAllNetworks ? 'All networks allowed' : 'Shop network only'}
+              color={ipInfo.allowAllNetworks ? 'warning' : 'info'}
+              variant={ipInfo.allowAllNetworks ? 'filled' : 'outlined'}
+            />
             {ipInfo.counterPublicIpUpdatedAt && (
               <Typography variant="caption" color="text.secondary">Updated {dateFmt(ipInfo.counterPublicIpUpdatedAt)}</Typography>
             )}
@@ -236,6 +245,16 @@ export default function ShopTokenManagePage() {
               {ipLoading ? 'Refreshing...' : 'Refresh IP'}
             </Button>
           </Box>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={Boolean(ipInfo.allowAllNetworks)}
+                onChange={e => setIpInfo(prev => ({ ...prev, allowAllNetworks: e.target.checked }))}
+                disabled={ipSaving || ipLoading}
+              />
+            }
+            label="Allow all networks to order"
+          />
           <TextField
             label="Allowed public IPs"
             value={ipText}
@@ -245,12 +264,15 @@ export default function ShopTokenManagePage() {
             multiline
             minRows={2}
             placeholder="One public IP per line"
-            helperText="Only customers from these public IPs can place QR orders. Refresh IP adds this counter public IP automatically."
+            disabled={Boolean(ipInfo.allowAllNetworks)}
+            helperText={ipInfo.allowAllNetworks
+              ? 'Network restriction is disabled. Customers can order from any network.'
+              : 'Only customers from these public IPs can place QR orders. Refresh IP adds this counter public IP automatically.'}
           />
           <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-            <Button onClick={handleAddCurrentIp} disabled={!ipInfo.counterPublicIp || ipSaving} size="small" variant="outlined" sx={{ textTransform: 'none' }}>Add current IP</Button>
+            <Button onClick={handleAddCurrentIp} disabled={ipInfo.allowAllNetworks || !ipInfo.counterPublicIp || ipSaving} size="small" variant="outlined" sx={{ textTransform: 'none' }}>Add current IP</Button>
             <Button onClick={handleSaveIps} disabled={ipSaving} size="small" variant="contained" sx={{ textTransform: 'none', fontWeight: 700 }}>
-              {ipSaving ? 'Saving...' : 'Save Allowed IPs'}
+              {ipSaving ? 'Saving...' : 'Save Network Access'}
             </Button>
           </Box>
         </Stack>

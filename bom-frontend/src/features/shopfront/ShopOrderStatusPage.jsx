@@ -89,12 +89,13 @@ function SingleOrderView({ order, onEdit }) {
   const bankCode   = isQrUrl ? order.paymentQr.split('/image/')[1]?.split('-')[0] : null
   const bankLogoUrl = bankCode ? `https://img.vietqr.io/img/${bankCode}.png` : null
   const displayNum = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
+  const heroNum = order.orderNumber ? `#${order.orderNumber}` : order.dailySeq ? `#${order.dailySeq}` : '—'
 
   return (
     <Box sx={{ bgcolor: '#fff', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ bgcolor: style.bg, textAlign: 'center', px: 2, pt: { xs: 5, md: 6 }, pb: { xs: 3, md: 4 } }}>
-        <Typography sx={{ fontSize: { xs: 80, md: 110 }, fontWeight: 900, lineHeight: 1, color: style.color, letterSpacing: -4 }}>
-          {order.dailySeq ?? order.orderNumber ?? '—'}
+        <Typography sx={{ fontSize: { xs: 80, md: 110 }, fontWeight: 900, lineHeight: 1, color: style.color, letterSpacing: 0 }}>
+          {heroNum}
         </Typography>
         <Typography sx={{ fontSize: 12, color: style.color, opacity: 0.55, mt: 0.75 }}>
           {order.orderNumber ? `Đơn #${order.orderNumber}` : ''}{order.orderCode ? ` · ${order.orderCode}` : ''}

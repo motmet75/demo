@@ -51,7 +51,7 @@ public class ShopOrderController {
     private final ShopPrintHistoryRepository shopPrintHistoryRepository;
     private final ShopTableRepository shopTableRepository;
 
-    private record CounterIpSnapshot(String publicIp, Instant updatedAt, List<String> allowedPublicIps) {}
+    private record CounterIpSnapshot(String publicIp, Instant updatedAt, List<String> allowedPublicIps, boolean allowAllNetworks) {}
 
     public ShopOrderController(ShopOrderService shopOrderService,
                                ShopPricingService shopPricingService,
@@ -389,14 +389,15 @@ public class ShopOrderController {
                                          @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
                                          @RequestHeader(value = "X-Company-Id", required = false) String hCompany,
                                          @RequestParam(required = false) String status,
-                                         @RequestParam(required = false) Boolean active) {
+                                         @RequestParam(required = false) Boolean active,
+                                         HttpServletRequest request) {
         UUID tId = resolve(tenantId, hTenant);
         UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
         Object orders = Boolean.TRUE.equals(active)
                 ? shopOrderService.listActiveOrders(tId, cId)
                 : shopOrderService.listOrders(tId, cId, status);
-        return ResponseEntity.ok(orders);
+        return staffOrdersResponse(orders, recordCounterPublicIp(cId, request));
     }
     @GetMapping("/shop/staff/orders/by-token")
     public ResponseEntity<?> getOrdersByToken(@RequestParam String token,
@@ -1049,6 +1050,9 @@ public class ShopOrderController {
         validateScope(tId, cId);
         Company company = companyRepository.findById(cId).orElseThrow();
         List<String> ips = allowedPublicIpsValue(body != null ? body.get("allowedPublicIps") : null);
+        if (body != null && body.containsKey("allowAllNetworks")) {
+            company.setShopAllowAllNetworks(Boolean.TRUE.equals(body.get("allowAllNetworks")));
+        }
         company.setShopAllowedPublicIps(joinAllowedPublicIps(ips));
         companyRepository.save(company);
         return ResponseEntity.ok(allowedPublicIpMap(company));
@@ -1078,6 +1082,7 @@ public class ShopOrderController {
         m.put("allowedPublicIps", parseAllowedPublicIps(company.getShopAllowedPublicIps()));
         m.put("counterPublicIp", company.getShopCounterPublicIp() != null ? company.getShopCounterPublicIp() : "");
         m.put("counterPublicIpUpdatedAt", company.getShopCounterPublicIpUpdatedAt());
+        m.put("allowAllNetworks", Boolean.TRUE.equals(company.getShopAllowAllNetworks()));
         return m;
     }
     private Map<String, Object> bankConfigMap(com.ams.bomcore.domain.company.Company company) {
@@ -1375,7 +1380,7 @@ public class ShopOrderController {
 
     private CounterIpSnapshot recordCounterPublicIp(UUID companyId, HttpServletRequest request) {
         String publicIp = clientPublicIp(request);
-        if (publicIp == null) return new CounterIpSnapshot(null, null, List.of());
+        if (publicIp == null) return new CounterIpSnapshot(null, null, List.of(), false);
 
         Instant now = Instant.now();
         Company company = companyRepository.findById(companyId)
@@ -1392,11 +1397,14 @@ public class ShopOrderController {
         company.setShopCounterPublicIpUpdatedAt(now);
         company.setShopAllowedPublicIps(joinAllowedPublicIps(allowedIps));
         companyRepository.save(company);
-        return new CounterIpSnapshot(publicIp, now, allowedIps);
+        return new CounterIpSnapshot(publicIp, now, allowedIps, Boolean.TRUE.equals(company.getShopAllowAllNetworks()));
     }
 
     private ResponseEntity<?> staffOrdersResponse(Object body, CounterIpSnapshot counterIp) {
         ResponseEntity.BodyBuilder builder = ResponseEntity.ok();
+        if (counterIp != null) {
+            builder.header("X-Shop-Allow-All-Networks", Boolean.toString(counterIp.allowAllNetworks()));
+        }
         if (counterIp != null && counterIp.publicIp() != null) {
             builder.header("X-Counter-Public-Ip", counterIp.publicIp());
             if (counterIp.updatedAt() != null) {
@@ -1457,6 +1465,7 @@ public class ShopOrderController {
         if (company.getTenant() == null || !tenantId.equals(company.getTenant().getId())) {
             throw new IllegalArgumentException("Company does not belong to tenant");
         }
+        if (Boolean.TRUE.equals(company.getShopAllowAllNetworks())) return null;
 
         List<String> allowedIps = parseAllowedPublicIps(company.getShopAllowedPublicIps());
         String lastCounterIp = cleanIp(company.getShopCounterPublicIp());

@@ -1,0 +1,2 @@
+ALTER TABLE company
+    ADD COLUMN IF NOT EXISTS shop_allow_all_networks BOOLEAN DEFAULT FALSE;
