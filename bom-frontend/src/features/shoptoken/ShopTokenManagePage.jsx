@@ -197,6 +197,21 @@ export default function ShopTokenManagePage() {
     }
   }
 
+  const handleAllowAllChange = async (index, checked) => {
+    const rules = ipInfo.counterNetworkRules.map((rule, i) => (
+      i === index ? normalizeRule({ ...rule, allowAllNetworks: checked }) : rule
+    ))
+    setIpInfo(prev => ({ ...prev, counterNetworkRules: rules }))
+    setIpSaving(true); setError('')
+    try {
+      await persistNetworkRules(rules)
+    } catch (e) {
+      setError(e.message || 'Failed to save network rules')
+    } finally {
+      setIpSaving(false)
+    }
+  }
+
   const handleToggle = async (row) => {
     try {
       if (row.enabled) await disableToken(row.id)
@@ -353,7 +368,13 @@ export default function ShopTokenManagePage() {
                     sx={{ width: 190 }}
                   />
                   <FormControlLabel
-                    control={<Switch checked={Boolean(rule.allowAllNetworks)} onChange={e => updateRule(index, { allowAllNetworks: e.target.checked })} />}
+                    control={(
+                      <Switch
+                        checked={Boolean(rule.allowAllNetworks)}
+                        disabled={ipSaving || !rule.counterPublicIp}
+                        onChange={e => handleAllowAllChange(index, e.target.checked)}
+                      />
+                    )}
                     label="Allow any network"
                   />
                   {normalizeIpValue(rule.counterPublicIp) === currentCounterKey && <Chip size="small" label="Current counter" color="success" variant="outlined" />}
