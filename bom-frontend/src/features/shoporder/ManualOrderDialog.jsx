@@ -50,6 +50,21 @@ const voucherLabel = (value) => {
   return raw.toUpperCase()
 }
 
+function extractCustomerLookup(raw) {
+  const value = String(raw || '').trim()
+  if (!value) return ''
+  const match = value.match(/(?:customerCode|customer|code)[:=]\s*([A-Za-z0-9-]+)/i)
+  if (match) return match[1].trim()
+  try {
+    const url = new URL(value)
+    return (url.searchParams.get('customerCode') || url.searchParams.get('code') || url.pathname.split('/').filter(Boolean).pop() || value).trim()
+  } catch {
+    return value
+  }
+}
+
+const normalizeCustomerLookup = (value) => String(value || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase()
+
 const parseAllowedSideIds = (model) => {
   try {
     const ids = model?.allowedSideIds ? JSON.parse(model.allowedSideIds) : []
@@ -98,6 +113,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
   const [customerId, setCustomerId]         = useState(null)
   const [custOptions, setCustOptions]       = useState([])
   const [custSearching, setCustSearching]   = useState(false)
+  const [customerScanOpen, setCustomerScanOpen] = useState(false)
   const custTimerRef = useRef(null)
 
   // new customer inline form
@@ -188,6 +204,48 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
     }, 300)
   }
 
+  const findExactCustomer = (list, q) => {
+    const lookup = normalizeCustomerLookup(q)
+    if (!lookup) return null
+    return (list || []).find(c =>
+      normalizeCustomerLookup(c.customerCode) === lookup ||
+      normalizeCustomerLookup(c.phone) === lookup
+    ) || null
+  }
+
+  const selectCustomer = (c) => {
+    if (!c) return
+    setCustomer({ name: c.name, phone: c.phone || '' })
+    setCustomerId(c.id)
+    setLinkedCustomerCode(c.customerCode || null)
+    setCustOptions([])
+    setError('')
+  }
+
+  const handleCustomerScan = async (payload) => {
+    setCustomerScanOpen(false)
+    const lookup = extractCustomerLookup(payload)
+    if (!lookup) return
+    setCustSearching(true); setError('')
+    try {
+      const { data } = await fetchCustomers(lookup)
+      const list = Array.isArray(data) ? data : []
+      const exact = findExactCustomer(list, lookup)
+      if (exact) {
+        selectCustomer(exact)
+      } else {
+        setCustomer(c => ({ ...c, name: lookup }))
+        setCustomerId(null)
+        setLinkedCustomerCode(null)
+        setCustOptions(list)
+        setError(`No customer found for code: ${lookup}`)
+      }
+    } catch (e) {
+      setError(e.message || 'Failed to scan customer QR')
+    } finally {
+      setCustSearching(false)
+    }
+  }
   const calcOptAddOn = (item) => {
     const groups = optsByModel[item.modelId] || []
     return groups.reduce((sum, grp) => {
@@ -302,6 +360,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
     setJustBroadcast(false); setCustomerCash('')
     setNewCustOpen(false); setNewCustForm({ name: '', phone: '', customerCode: '' }); setNewCustError('')
     setLinkedCustomerCode(null); setCustQrDialog(null)
+    setCustomerScanOpen(false)
     setVoucherScanOpen(false); setScannedVoucherPayload(''); setVoucherRedeeming(false)
     setVoucherResult(null); setVoucherError('')
   }
@@ -745,10 +804,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                   }}
                   onChange={(_, val) => {
                     if (val && typeof val === 'object') {
-                      setCustomer({ name: val.name, phone: val.phone || '' })
-                      setCustomerId(val.id)
-                      setLinkedCustomerCode(val.customerCode || null)
-                      setCustOptions([])
+                      selectCustomer(val)
                     }
                   }}
                   renderOption={(props, opt) => (
@@ -785,6 +841,12 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                 <TextField size="small" label="Phone" sx={{ width: 130 }} value={customer.phone}
                   onChange={e => setCustomer(c => ({ ...c, phone: e.target.value }))} />
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25, flexShrink: 0, pt: 0.5 }}>
+                  <Tooltip title="Scan customer QR">
+                    <IconButton size="small" onClick={() => setCustomerScanOpen(true)} disabled={custSearching}
+                      sx={{ bgcolor: '#f0fdf4', color: '#15803d', '&:hover': { bgcolor: '#dcfce7' }, borderRadius: 1 }}>
+                      <QrCode2Icon sx={{ fontSize: 17 }} />
+                    </IconButton>
+                  </Tooltip>
                   <Tooltip title="Register new customer">
                     <IconButton size="small" onClick={openNewCust}
                       sx={{ bgcolor: '#e3f2fd', color: '#1565c0', '&:hover': { bgcolor: '#bbdefb' }, borderRadius: 1 }}>
@@ -1328,6 +1390,15 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
           )}
         </DialogActions>
       </Dialog>
+
+      <VoucherQrScanDialog
+        open={customerScanOpen}
+        onClose={() => setCustomerScanOpen(false)}
+        onScan={handleCustomerScan}
+        title="Scan Customer QR"
+        manualLabel="Customer code, phone, or QR payload"
+        scannerLabel="Customer code scanner"
+      />
 
       <VoucherQrScanDialog
         open={voucherScanOpen}
