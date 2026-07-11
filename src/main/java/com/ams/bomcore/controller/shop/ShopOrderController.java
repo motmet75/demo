@@ -440,6 +440,21 @@ public class ShopOrderController {
         return ResponseEntity.status(HttpStatus.CREATED).body(dto);
     }
 
+    @PostMapping("/shop/staff/materials/import-orders")
+    public ResponseEntity<?> importMaterialOrders(@RequestBody ShopOrderService.BulkImportRequest req,
+                                                   @RequestParam(required = false) UUID tenantId,
+                                                   @RequestParam(required = false) UUID companyId,
+                                                   @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                                   @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        try {
+            return ResponseEntity.ok(shopOrderService.importExternalOrders(req, tId, cId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @GetMapping("/shop/staff/orders/{orderId}/tag-qr")
     public ResponseEntity<?> orderTagQr(@PathVariable UUID orderId,
                                          @RequestParam(required = false) UUID tenantId,
@@ -1938,5 +1953,4 @@ public class ShopOrderController {
         }
     }
 }
-
 

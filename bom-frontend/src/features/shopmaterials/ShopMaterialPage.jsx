@@ -18,6 +18,9 @@ import TableRow from '@mui/material/TableRow'
 import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
+import FormControlLabel from '@mui/material/FormControlLabel'
+import MenuItem from '@mui/material/MenuItem'
+import Switch from '@mui/material/Switch'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import FactCheckIcon from '@mui/icons-material/FactCheck'
 import Inventory2Icon from '@mui/icons-material/Inventory2'
@@ -25,6 +28,9 @@ import RefreshIcon from '@mui/icons-material/Refresh'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import SaveIcon from '@mui/icons-material/Save'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
+import UploadFileIcon from '@mui/icons-material/UploadFile'
+import FileDownloadIcon from '@mui/icons-material/FileDownload'
+import * as XLSX from 'xlsx'
 import {
   deductOrderMaterialAudit,
   fetchMaterialAuditOpen,
@@ -32,7 +38,74 @@ import {
   fetchMenuAvailability,
   recheckOrderMaterialAudit,
   updateMenuAvailabilityOverride,
+  importExternalMaterialOrders,
 } from '../../api/shopApi'
+
+const cleanHeader = (value) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')
+const aliases = {
+  order: ['orderid', 'ordercode', 'orderno', 'invoiceno', 'billno', 'mahoadon', 'sohoadon', 'madonhang', 'sodonhang', 'machungtu'],
+  code: ['itemcode', 'productcode', 'skucode', 'sku', 'mahhang', 'mahang', 'mahanghoa', 'mamon', 'mamathang'],
+  name: ['itemname', 'productname', 'tenhang', 'tenhanghoa', 'tenmon', 'tenmathang'],
+  qty: ['quantity', 'qty', 'soluong', 'sl'],
+  price: ['unitprice', 'price', 'dongia', 'giaban'],
+  customer: ['customername', 'customer', 'tenkhachhang', 'khachhang'],
+  phone: ['customerphone', 'phone', 'sodienthoai', 'dienthoai'],
+}
+
+const pick = (row, names) => {
+  const entries = Object.entries(row)
+  const found = entries.find(([key]) => names.includes(cleanHeader(key)))
+  return found ? found[1] : ''
+}
+
+const downloadOrderImportTemplate = () => {
+  const sampleRows = [
+    {
+      'Order ID': 'HD-0001',
+      'Item Code': 'MON001',
+      'Item Name': 'Cơm gà',
+      Quantity: 2,
+      'Unit Price': 55000,
+      'Customer Name': 'Nguyễn Văn A',
+      'Customer Phone': '0901234567',
+    },
+    {
+      'Order ID': 'HD-0001',
+      'Item Code': 'MON002',
+      'Item Name': 'Trà đào',
+      Quantity: 1,
+      'Unit Price': 30000,
+      'Customer Name': 'Nguyễn Văn A',
+      'Customer Phone': '0901234567',
+    },
+    {
+      'Order ID': 'HD-0002',
+      'Item Code': 'MON003',
+      'Item Name': 'Bún bò',
+      Quantity: 1,
+      'Unit Price': 60000,
+      'Customer Name': 'Khách tại quầy',
+      'Customer Phone': '',
+    },
+  ]
+  const instructions = [
+    { Field: 'Order ID', Required: 'Yes', Notes: 'Rows with the same Order ID are combined into one order.' },
+    { Field: 'Item Code', Required: 'Code or name', Notes: 'Must exactly match the menu/model code in this system.' },
+    { Field: 'Item Name', Required: 'Code or name', Notes: 'Used when Item Code is blank or not matched; must exactly match.' },
+    { Field: 'Quantity', Required: 'Yes', Notes: 'Positive number.' },
+    { Field: 'Unit Price', Required: 'No', Notes: 'Leave blank to use the menu selling price.' },
+    { Field: 'Customer Name', Required: 'No', Notes: 'Repeat it on rows belonging to the same order.' },
+    { Field: 'Customer Phone', Required: 'No', Notes: 'Keep as text if leading zero is important.' },
+  ]
+  const workbook = XLSX.utils.book_new()
+  const dataSheet = XLSX.utils.json_to_sheet(sampleRows)
+  dataSheet['!cols'] = [{ wch: 18 }, { wch: 16 }, { wch: 28 }, { wch: 12 }, { wch: 16 }, { wch: 24 }, { wch: 20 }]
+  const instructionSheet = XLSX.utils.json_to_sheet(instructions)
+  instructionSheet['!cols'] = [{ wch: 20 }, { wch: 16 }, { wch: 72 }]
+  XLSX.utils.book_append_sheet(workbook, dataSheet, 'Orders')
+  XLSX.utils.book_append_sheet(workbook, instructionSheet, 'Instructions')
+  XLSX.writeFile(workbook, 'shop_material_order_import_template.xlsx')
+}
 
 const todayInput = () => {
   const d = new Date()
@@ -92,6 +165,64 @@ export default function ShopMaterialPage() {
   const [busyOrderId, setBusyOrderId] = useState(null)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [importSource, setImportSource] = useState('CUKCUK')
+  const [deductNow, setDeductNow] = useState(true)
+  const [importOrders, setImportOrders] = useState([])
+  const [importIssues, setImportIssues] = useState([])
+  const [importing, setImporting] = useState(false)
+
+  const readOrderExcel = async (file) => {
+    setError(''); setSuccess(''); setImportOrders([]); setImportIssues([])
+    try {
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', raw: false })
+      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: '' })
+      const byCode = new Map(availability.map(m => [String(m.modelCode || '').trim().toLowerCase(), m]))
+      const byName = new Map(availability.map(m => [String(m.modelName || '').trim().toLowerCase(), m]))
+      const grouped = new Map()
+      const issues = []
+      rows.forEach((row, index) => {
+        const externalOrderId = String(pick(row, aliases.order)).trim()
+        const itemCode = String(pick(row, aliases.code)).trim().toLowerCase()
+        const itemName = String(pick(row, aliases.name)).trim().toLowerCase()
+        const model = (itemCode && byCode.get(itemCode)) || (itemName && byName.get(itemName))
+        const quantity = Number(String(pick(row, aliases.qty) || '1').replace(/,/g, ''))
+        if (!externalOrderId) { issues.push(`Row ${index + 2}: missing order number`); return }
+        if (!model) { issues.push(`Row ${index + 2}: menu item not found (${itemCode || itemName || 'blank'})`); return }
+        if (!Number.isFinite(quantity) || quantity <= 0) { issues.push(`Row ${index + 2}: invalid quantity`); return }
+        if (!grouped.has(externalOrderId)) grouped.set(externalOrderId, {
+          externalOrderId,
+          customerName: String(pick(row, aliases.customer)).trim() || null,
+          customerPhone: String(pick(row, aliases.phone)).trim() || null,
+          notes: `Imported from ${importSource}`,
+          items: [],
+        })
+        const rawPrice = String(pick(row, aliases.price)).replace(/,/g, '').trim()
+        grouped.get(externalOrderId).items.push({
+          modelId: model.modelId,
+          quantity,
+          unitPriceOverride: rawPrice && Number.isFinite(Number(rawPrice)) ? Number(rawPrice) : null,
+        })
+      })
+      setImportOrders([...grouped.values()])
+      setImportIssues(issues)
+      if (!grouped.size) setError('No valid order rows were found. Check the column names and menu codes/names.')
+    } catch (e) {
+      setError(e.message || 'Could not read Excel file')
+    }
+  }
+
+  const submitImport = async () => {
+    setImporting(true); setError(''); setSuccess('')
+    try {
+      const result = await apiData(importExternalMaterialOrders({ source: importSource, deductNow, orders: importOrders }), 'Order import failed')
+      const details = result.failed ? ` ${result.failed} failed: ${(result.errors || []).join('; ')}` : ''
+      setSuccess(`Imported ${result.created} orders; skipped ${result.skipped} duplicates.${details}`)
+      setImportOrders([])
+      await Promise.all([loadAvailability(), loadOpenAudit(), loadReport()])
+    } catch (e) {
+      setError(e.message || 'Order import failed')
+    } finally { setImporting(false) }
+  }
 
   const loadAvailability = useCallback(async () => {
     const rows = await apiData(fetchMenuAvailability(), 'Failed to load menu availability')
@@ -204,6 +335,28 @@ export default function ShopMaterialPage() {
       {success && <Alert severity="success" onClose={() => setSuccess('')} sx={{ m: 1.5, mb: 0, flexShrink: 0 }}>{success}</Alert>}
 
       <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', p: 1.5 }}>
+        <Paper elevation={0} sx={{ border: '1px solid #e2e8f0', mb: 1.5, p: 1.5 }}>
+          <Typography fontWeight={900}>Import external orders for BOM deduction</Typography>
+          <Typography variant="caption" color="text.secondary">Excel rows are grouped by order number and matched to cuisine/menu items by item code first, then exact item name.</Typography>
+          <Stack direction="row" spacing={1.5} sx={{ mt: 1.25, alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}>
+            <TextField select size="small" label="Source" value={importSource} onChange={e => setImportSource(e.target.value)} sx={{ width: 150 }}>
+              <MenuItem value="CUKCUK">CUKCUK</MenuItem><MenuItem value="KIOTVIET">KiotViet</MenuItem><MenuItem value="EXTERNAL">Other</MenuItem>
+            </TextField>
+            <Button component="label" variant="outlined" startIcon={<UploadFileIcon />}>
+              Choose Excel
+              <input hidden type="file" accept=".xlsx,.xls" onChange={e => e.target.files?.[0] && readOrderExcel(e.target.files[0])} />
+            </Button>
+            <Button variant="outlined" color="secondary" startIcon={<FileDownloadIcon />} onClick={downloadOrderImportTemplate}>
+              Download template
+            </Button>
+            <FormControlLabel control={<Switch checked={deductNow} onChange={e => setDeductNow(e.target.checked)} />} label={deductNow ? 'Deduct inventory now' : 'Reserve demand only'} />
+            <Button variant="contained" color="success" disabled={!importOrders.length || importing} onClick={submitImport} startIcon={importing ? <CircularProgress size={15} /> : <Inventory2Icon />}>
+              Import {importOrders.length || ''} orders
+            </Button>
+          </Stack>
+          {!!importOrders.length && <Alert severity="info" sx={{ mt: 1 }}>Ready: {importOrders.length} orders, {importOrders.reduce((n, o) => n + o.items.length, 0)} cuisine lines.</Alert>}
+          {!!importIssues.length && <Alert severity="warning" sx={{ mt: 1 }}>{importIssues.slice(0, 8).join(' | ')}{importIssues.length > 8 ? ` | +${importIssues.length - 8} more` : ''}</Alert>}
+        </Paper>
         <Paper elevation={0} sx={{ border: '1px solid #e2e8f0', mb: 1.5 }}>
           <Box sx={{ px: 1.5, py: 1.25, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
             <Box>

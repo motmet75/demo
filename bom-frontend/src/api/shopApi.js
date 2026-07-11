@@ -457,6 +457,14 @@ export function deductOrderMaterialAudit(orderId) {
   return apiFetchJson(`/shop/staff/orders/${orderId}/material-audit/deduct`, { method: 'POST' })
 }
 
+export function importExternalMaterialOrders(body) {
+  return apiFetchJson('/shop/staff/materials/import-orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
 // ── Split / Merge bills ────────────────────────────────────────────
 
 export function splitBill(orderId, rootItemIds) {

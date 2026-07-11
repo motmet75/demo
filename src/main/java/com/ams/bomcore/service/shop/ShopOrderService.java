@@ -1660,6 +1660,67 @@ public class ShopOrderService {
             String token
     ) {}
 
+    public record BulkImportOrder(
+            String externalOrderId,
+            String customerName,
+            String customerPhone,
+            String notes,
+            List<ItemRequest> items
+    ) {}
+
+    public record BulkImportRequest(String source, boolean deductNow, List<BulkImportOrder> orders) {}
+
+    public record BulkImportResult(int created, int skipped, int failed, List<String> errors) {}
+
+    @Transactional
+    public BulkImportResult importExternalOrders(BulkImportRequest request, UUID tenantId, UUID companyId) {
+        if (request == null || request.orders() == null || request.orders().isEmpty()) {
+            throw new IllegalArgumentException("No orders supplied for import");
+        }
+        String source = request.source() == null ? "EXTERNAL" : request.source().trim().toUpperCase(Locale.ROOT);
+        if (!Set.of("CUKCUK", "KIOTVIET", "EXTERNAL").contains(source)) source = "EXTERNAL";
+        int created = 0;
+        int skipped = 0;
+        int failed = 0;
+        List<String> errors = new ArrayList<>();
+
+        for (BulkImportOrder imported : request.orders()) {
+            String externalId = imported.externalOrderId() == null ? "" : imported.externalOrderId().trim();
+            if (externalId.isBlank()) {
+                failed++;
+                errors.add("An order is missing its external order ID");
+                continue;
+            }
+            String importToken = "IMPORT:" + source + ":" + companyId + ":" + externalId;
+            boolean exists = shopOrderRepository.findAllBySourceTokenOrderByCreatedAtDesc(importToken).stream()
+                    .anyMatch(o -> tenantId.equals(o.getTenantId()) && companyId.equals(o.getCompanyId()));
+            if (exists) {
+                skipped++;
+                continue;
+            }
+            try {
+                CreateOrderRequest create = new CreateOrderRequest(
+                        ShopOrder.FULFILLMENT_PICKUP, null, imported.customerName(), imported.customerPhone(),
+                        source, null, BigDecimal.ZERO, ShopOrder.PAYMENT_CASH,
+                        imported.notes(), imported.items(), null, importToken);
+                ShopOrderResponseDto dto = createOrder(create, tenantId, companyId);
+                ShopOrder order = shopOrderRepository.findById(dto.getId()).orElseThrow();
+                order.setStatus(ShopOrder.STATUS_CONFIRMED);
+                order.setConfirmedAt(Instant.now());
+                shopOrderRepository.save(order);
+                shopMaterialAuditService.recordOrderDemand(order, "IMPORT_" + source);
+                if (request.deductNow()) {
+                    shopMaterialAuditService.deductOrderMaterials(order, "IMPORT_" + source);
+                }
+                created++;
+            } catch (RuntimeException ex) {
+                failed++;
+                errors.add(externalId + ": " + (ex.getMessage() == null ? "Import failed" : ex.getMessage()));
+            }
+        }
+        return new BulkImportResult(created, skipped, failed, errors);
+    }
+
     public String generateOrderTagQr(UUID orderId, UUID tenantId, UUID companyId) {
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         String url = publicBaseUrl + "/shop/order/" + order.getOrderCode();
@@ -1807,4 +1868,3 @@ public class ShopOrderService {
         return QrCodeUtil.generateBase64Png(url, 300);
     }
 }
-
