@@ -46,6 +46,7 @@ import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber'
 import DriveFileMoveIcon from '@mui/icons-material/DriveFileMove'
 import AssessmentIcon from '@mui/icons-material/Assessment'
 import SupportAgentIcon from '@mui/icons-material/SupportAgent'
+import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive'
 import MergeTypeIcon from '@mui/icons-material/MergeType'
 import {
   fetchShopOrders, fetchActiveOrders, confirmShopOrder, prepareShopOrder, readyShopOrder,
@@ -68,6 +69,7 @@ import { fetchModels } from '../../api/modelApi'
 
 const BOARD_CHANNEL = 'shop_display_board'
 const ORDER_POLL_MS = 30000
+const STAFF_CALL_REASON_NEW_ORDER = 'new_order'
 const BOARD_VISIBLE_STATUSES = new Set(['CONFIRMED', 'PREPARING', 'READY', 'PICKED_UP'])
 function broadcastReady() {
   try { new BroadcastChannel(BOARD_CHANNEL).postMessage({ type: 'ORDER_READY' }) } catch { /* */ }
@@ -78,6 +80,11 @@ const STAFF_CALL_QUICK_REPLIES = [
   'Đã nhận yêu cầu, vui lòng chờ trong giây lát',
   'Nhân viên đang chuẩn bị thanh toán',
 ]
+function staffCallReasonLabel(reason) {
+  if (reason === STAFF_CALL_REASON_NEW_ORDER) return '\u0110\u01a1n m\u1edbi'
+  if (reason === 'payment') return 'Thanh to\u00e1n'
+  return 'H\u1ed7 tr\u1ee3 kh\u00e1c'
+}
 function playStaffCallSound() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)()
@@ -1067,6 +1074,7 @@ export default function ShopOrderGrid() {
   const [mergeOrder, setMergeOrder]       = useState(null)  // order to merge others into
   const [modelImageMap, setModelImageMap] = useState({})   // { [modelId]: imageUrl }
   const [staffCalls, setStaffCalls]       = useState([])   // pending staff calls
+  const [staffCallMobileOpen, setStaffCallMobileOpen] = useState(false)
   const [newOrderNotice, setNewOrderNotice] = useState(null)
   const seenCallIdsRef = React.useRef(new Set())
   const knownOrderIdsRef = React.useRef(new Set())
@@ -1181,19 +1189,44 @@ export default function ShopOrderGrid() {
         if (cancelled || !res.ok) return
         const calls = Array.isArray(data) ? data : []
         setStaffCalls(calls)
+
+        const unseen = []
         calls.forEach(c => {
-          if (!seenCallIdsRef.current.has(c.id)) {
+          if (c?.id && !seenCallIdsRef.current.has(c.id)) {
             seenCallIdsRef.current.add(c.id)
-            playStaffCallSound()
+            unseen.push(c)
           }
         })
+
+        const newOrderCalls = unseen.filter(c => c.reason === STAFF_CALL_REASON_NEW_ORDER)
+        const serviceCalls = unseen.filter(c => c.reason !== STAFF_CALL_REASON_NEW_ORDER)
+
+        if (newOrderCalls.length) {
+          const notifyCalls = newOrderCalls.filter(c => orderPollReadyRef.current && (!c.orderId || !knownOrderIdsRef.current.has(c.orderId)))
+          if (notifyCalls.length) {
+            playNewOrderSound()
+            const first = notifyCalls[0]
+            setNewOrderNotice({
+              count: notifyCalls.length,
+              orderNumber: first.orderNumber ?? null,
+              orderCode: first.orderCode || '',
+              at: Date.now(),
+            })
+          }
+        }
+
+        serviceCalls.forEach(() => playStaffCallSound())
+
+        const callsWithOrders = unseen.filter(c => c.orderId)
+        if (callsWithOrders.length) {
+          await Promise.all(callsWithOrders.map(c => refreshOrderCard(c.orderId).catch(() => null)))
+        }
       } catch { /* silent */ }
     }
     poll()
     const id = setInterval(poll, 10000)
     return () => { cancelled = true; clearInterval(id) }
-  }, [])
-
+  }, [refreshOrderCard])
   useEffect(() => {
     let cancelled = false
     const pollOrders = async () => {
@@ -1213,6 +1246,10 @@ export default function ShopOrderGrid() {
     const id = setTimeout(() => setNewOrderNotice(null), 12000)
     return () => clearTimeout(id)
   }, [newOrderNotice])
+
+  useEffect(() => {
+    if (!staffCalls.length) setStaffCallMobileOpen(false)
+  }, [staffCalls.length])
 
   const reload = () => { load(); loadBoard() }
 
@@ -1435,12 +1472,12 @@ export default function ShopOrderGrid() {
 
       {/* ── Staff call banner ──────────────────────────────── */}
       {staffCalls.length > 0 && (
-        <Box sx={{ flexShrink: 0, bgcolor: '#fff3e0', borderBottom: '2px solid #ff5722', px: 2, py: 0.75, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+        <Box sx={{ flexShrink: 0, bgcolor: '#fff3e0', borderBottom: '2px solid #ff5722', px: 2, py: 0.75, display: { xs: 'none', sm: 'flex' }, flexDirection: 'column', gap: 0.5 }}>
           {staffCalls.map(call => (
             <Box key={call.id} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
               <SupportAgentIcon sx={{ color: '#ff5722', fontSize: 20, flexShrink: 0 }} />
               <Typography fontWeight={800} sx={{ color: '#bf360c', fontSize: 13, flexShrink: 0 }}>
-                Gọi nhân viên
+                {call.reason === STAFF_CALL_REASON_NEW_ORDER ? staffCallReasonLabel(call.reason) : 'G\u1ecdi nh\u00e2n vi\u00ean'}
               </Typography>
               {(call.tableName || call.tableId) && (
                 <Chip label={`Bàn ${call.tableName || call.tableId}`} size="small" color="warning" sx={{ fontWeight: 700, height: 20, fontSize: 11 }} />
@@ -1457,7 +1494,7 @@ export default function ShopOrderGrid() {
                 />
               )}
               <Chip
-                label={call.reason === 'payment' ? 'Thanh toán' : 'Hỗ trợ khác'}
+                label={staffCallReasonLabel(call.reason)}
                 size="small"
                 sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: '#ff5722', color: '#fff' }}
               />
@@ -1467,6 +1504,7 @@ export default function ShopOrderGrid() {
               {call.replyMessage && (
                 <Chip label={`Đã trả lời: ${call.replyMessage}`} size="small" sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: '#e8f5e9', color: '#1b5e20' }} />
               )}
+              {call.reason !== STAFF_CALL_REASON_NEW_ORDER && (
               <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', flex: '1 1 360px', minWidth: 240 }}>
                 {STAFF_CALL_QUICK_REPLIES.map(message => (
                   <Button key={message} size="small" variant={call.replyMessage === message ? 'contained' : 'outlined'}
@@ -1475,7 +1513,9 @@ export default function ShopOrderGrid() {
                     {message}
                   </Button>
                 ))}
-              </Box>              <Typography variant="caption" color="text.disabled" sx={{ flexShrink: 0 }}>
+              </Box>
+              )}
+              <Typography variant="caption" color="text.disabled" sx={{ flexShrink: 0 }}>
                 {call.createdAt ? new Date(call.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : ''}
               </Typography>
               <Tooltip title="Đã xử lý">
@@ -1506,6 +1546,29 @@ export default function ShopOrderGrid() {
             {STATUSES.map(s => <MenuItem key={s} value={s}>{s ? (STATUS_LABEL[s] || s) : 'All'}</MenuItem>)}
           </TextField>
           <Button startIcon={<RefreshIcon />} onClick={reload} variant="outlined" size="small">Refresh</Button>
+          {staffCalls.length > 0 && (
+            <Tooltip title={`${staffCalls.length} staff notification${staffCalls.length > 1 ? 's' : ''}`}>
+              <IconButton
+                size="small"
+                color="warning"
+                onClick={() => setStaffCallMobileOpen(true)}
+                sx={{
+                  display: { xs: 'inline-flex', sm: 'none' },
+                  width: 36,
+                  height: 36,
+                  border: '1px solid #ffcc80',
+                  bgcolor: '#fff3e0',
+                  color: '#ff5722',
+                  '&:hover': { bgcolor: '#ffe0b2' },
+                }}
+              >
+                <Badge badgeContent={staffCalls.length} color="error" max={99}
+                  sx={{ '& .MuiBadge-badge': { fontSize: 10, height: 16, minWidth: 16 } }}>
+                  <NotificationsActiveIcon sx={{ fontSize: 19 }} />
+                </Badge>
+              </IconButton>
+            </Tooltip>
+          )}
           <Button startIcon={<AddCircleOutlineIcon />} onClick={() => { setManualDefaults(null); setManualOpen(true) }}
             variant="contained" size="small" color="success" sx={{ textTransform: 'none', fontWeight: 700 }}>New Order</Button>
           <Button startIcon={<QrCode2Icon />} onClick={() => setQrOrderOpen(true)}
@@ -1616,6 +1679,60 @@ export default function ShopOrderGrid() {
           onMerge={() => { setMergeOrder(null); reload() }} />
       )}
 
+      <Dialog open={Boolean(staffCallMobileOpen && staffCalls.length)} onClose={() => setStaffCallMobileOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1.25 }}>
+          <Badge badgeContent={staffCalls.length} color="error" max={99}>
+            <NotificationsActiveIcon sx={{ color: '#ff5722' }} />
+          </Badge>
+          <Typography fontWeight={800} sx={{ fontSize: 15, flex: 1 }}>Staff notifications</Typography>
+        </DialogTitle>
+        <DialogContent dividers sx={{ p: 1 }}>
+          <Stack spacing={1}>
+            {staffCalls.map(call => (
+              <Box key={call.id} sx={{ border: '1px solid #ffe0b2', borderRadius: 1, p: 1, bgcolor: '#fffaf2' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                  <SupportAgentIcon sx={{ color: '#ff5722', fontSize: 18, flexShrink: 0 }} />
+                  <Typography fontWeight={800} sx={{ color: '#bf360c', fontSize: 13, flex: 1, minWidth: 0 }}>
+                    {call.reason === STAFF_CALL_REASON_NEW_ORDER ? staffCallReasonLabel(call.reason) : 'G\u1ecdi nh\u00e2n vi\u00ean'}
+                  </Typography>
+                  <Typography variant="caption" color="text.disabled" sx={{ flexShrink: 0 }}>
+                    {call.createdAt ? new Date(call.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : ''}
+                  </Typography>
+                  <IconButton size="small" onClick={() => handleDismissCall(call.id)} sx={{ color: '#ff5722', p: 0.25 }}>
+                    <CloseIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Box>
+                <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 0.75 }}>
+                  {(call.tableName || call.tableId) && <Chip label={`Table ${call.tableName || call.tableId}`} size="small" color="warning" sx={{ fontWeight: 700, height: 20, fontSize: 11 }} />}
+                  {call.dailySeq != null && <Chip label={`STT ${call.dailySeq}`} size="small" color="info" sx={{ fontWeight: 700, height: 20, fontSize: 11 }} />}
+                  {(call.orderNumber != null || call.orderCode) && <Chip label={call.orderNumber != null ? `Order #${call.orderNumber}` : call.orderCode} size="small" color="primary" sx={{ fontWeight: 700, height: 20, fontSize: 11 }} />}
+                  <Chip label={staffCallReasonLabel(call.reason)} size="small" sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: '#ff5722', color: '#fff' }} />
+                </Box>
+                {call.note && (
+                  <Typography variant="caption" sx={{ display: 'block', color: '#555', fontStyle: 'italic', mt: 0.75 }}>{call.note}</Typography>
+                )}
+                {call.replyMessage && (
+                  <Chip label={`Replied: ${call.replyMessage}`} size="small" sx={{ mt: 0.75, height: 20, fontSize: 11, fontWeight: 700, bgcolor: '#e8f5e9', color: '#1b5e20' }} />
+                )}
+                {call.reason !== STAFF_CALL_REASON_NEW_ORDER && (
+                  <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 0.75 }}>
+                    {STAFF_CALL_QUICK_REPLIES.map(message => (
+                      <Button key={message} size="small" variant={call.replyMessage === message ? 'contained' : 'outlined'}
+                        onClick={() => handleReplyCall(call.id, message)}
+                        sx={{ textTransform: 'none', borderRadius: 1, minHeight: 24, py: 0.1, px: 1, fontSize: 11, fontWeight: 700, lineHeight: 1.2 }}>
+                        {message}
+                      </Button>
+                    ))}
+                  </Box>
+                )}
+              </Box>
+            ))}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setStaffCallMobileOpen(false)} size="small">Close</Button>
+        </DialogActions>
+      </Dialog>
       <Dialog open={boardOpen} onClose={() => setBoardOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><TvIcon color="info" /> Display Boards</DialogTitle>
         <DialogContent>

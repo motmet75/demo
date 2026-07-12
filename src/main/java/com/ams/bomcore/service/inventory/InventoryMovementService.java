@@ -283,6 +283,47 @@ public class InventoryMovementService {
         return movementRepository.save(movement);
     }
 
+    /**
+     * Record an OUT movement log entry only. Use this when the caller has already
+     * applied the on-hand quantity decrease to the inventory row.
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public InventoryMovementEntity recordOutMovementLogOnly(UUID inventoryId, UUID materialId, UUID warehouseId,
+                                                            BigDecimal quantity, String unit, String batchNo,
+                                                            String reason, String createdBy, String referenceType,
+                                                            UUID referenceId, String notes,
+                                                            UUID tenantId, UUID companyId) {
+        if (quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new InventoryException("OUT quantity must be positive");
+        }
+        if (inventoryId == null) {
+            throw new InventoryException("inventoryId is required for OUT movement log");
+        }
+
+        Material material = materialRepository.findById(materialId)
+                .orElseThrow(() -> new InventoryException("Material not found: " + materialId));
+        WarehouseEntity warehouse = warehouseRepository.findById(warehouseId)
+                .orElseThrow(() -> new InventoryException("Warehouse not found: " + warehouseId));
+
+        InventoryMovementEntity movement = new InventoryMovementEntity();
+        movement.setTenantId(tenantId);
+        movement.setCompanyId(companyId);
+        movement.setMaterial(material);
+        movement.setFromWarehouse(warehouse);
+        movement.setQuantity(quantity.negate());
+        movement.setUnit(unit != null ? unit : "pcs");
+        movement.setMovementType(MOVEMENT_OUT);
+        movement.setReason(reason);
+        movement.setReferenceType(referenceType);
+        movement.setReferenceId(referenceId);
+        movement.setInventoryId(inventoryId);
+        movement.setBatchNo(batchNo);
+        movement.setCreatedBy(resolveCreatedBy(createdBy));
+        movement.setNotes(notes);
+        movement.setStatus("COMPLETED");
+        return movementRepository.save(movement);
+    }
+
     // ─── TRANSFER ───────────────────────────────────────────────────────────────
 
     @Transactional(rollbackFor = Exception.class)

@@ -41,6 +41,7 @@ import java.util.*;
 
 @RestController
 public class ShopOrderController {
+    private static final String STAFF_CALL_REASON_NEW_ORDER = "new_order";
 
     private final ShopOrderService shopOrderService;
     private final ShopPricingService shopPricingService;
@@ -147,6 +148,7 @@ public class ShopOrderController {
         if (rejected != null) return rejected;
         try {
             ShopOrderResponseDto dto = shopOrderService.createOrder(req, tenantId, companyId);
+            createNewOrderStaffCall(dto);
             return ResponseEntity.status(HttpStatus.CREATED).body(dto);
         } catch (IllegalArgumentException e) {
             String message = e.getMessage() != null ? e.getMessage() : "Cannot create order";
@@ -1860,6 +1862,22 @@ public class ShopOrderController {
         m.put("tableName", table.getTableName());
         m.put("isActive", table.getIsActive());
         return m;
+    }
+
+    private void createNewOrderStaffCall(ShopOrderResponseDto order) {
+        if (order == null || order.getId() == null) return;
+        ShopStaffCall call = new ShopStaffCall();
+        call.setTenantId(order.getTenantId());
+        call.setCompanyId(order.getCompanyId());
+        call.setTableName(order.getTableName());
+        call.setOrderId(order.getId());
+        call.setOrderNumber(order.getOrderNumber());
+        call.setDailySeq(order.getDailySeq());
+        call.setOrderCode(order.getOrderCode());
+        call.setReason(STAFF_CALL_REASON_NEW_ORDER);
+        call.setNote("New order");
+        call.setStatus(ShopStaffCall.STATUS_OPEN);
+        shopStaffCallRepository.save(call);
     }
 
     private Map<String, Object> staffCallMap(ShopStaffCall call) {

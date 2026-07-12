@@ -52,11 +52,14 @@ public class OrderDeductionService {
 
     private final InventoryRepository inventoryRepository;
     private final BomItemRepository   bomItemRepository;
+    private final InventoryMovementService movementService;
 
     public OrderDeductionService(InventoryRepository inventoryRepository,
-                                 BomItemRepository bomItemRepository) {
+                                 BomItemRepository bomItemRepository,
+                                 InventoryMovementService movementService) {
         this.inventoryRepository = inventoryRepository;
         this.bomItemRepository   = bomItemRepository;
+        this.movementService     = movementService;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -193,6 +196,15 @@ public class OrderDeductionService {
     @Transactional(rollbackFor = Exception.class)
     public ConsumptionResult consumeForProduction(UUID bomItemId, BigDecimal orderQty,
                                                   UUID tenantId, UUID companyId) {
+        return consumeForProduction(bomItemId, orderQty, tenantId, companyId,
+                "BOM_ITEM", bomItemId, "Production material issue", null, null);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public ConsumptionResult consumeForProduction(UUID bomItemId, BigDecimal orderQty,
+                                                  UUID tenantId, UUID companyId,
+                                                  String referenceType, UUID referenceId,
+                                                  String reason, String createdBy, String notes) {
 
         BomItemEntity bomItem = bomItemRepository.findById(bomItemId)
                 .orElseThrow(() -> new InventoryException("BOM item not found: " + bomItemId));
@@ -250,6 +262,8 @@ public class OrderDeductionService {
             inventoryRepository.updateQuantityOnHand(row.getId(), newQty, now);
             row.setQuantityOnHand(newQty);
             row.setUpdatedAt(now);
+            recordOutMovement(row, materialId, physicalDeduct, tenantId, companyId,
+                    referenceType, referenceId, reason, createdBy, notes);
 
             lines.add(new ConsumptionLine(row.getId(), row.getBatchNo(),
                     row.getOrderToDeduction(), basePortion, physicalDeduct,
@@ -273,6 +287,15 @@ public class OrderDeductionService {
     @Transactional(rollbackFor = Exception.class)
     public ConsumptionResult consumeMaterial(UUID materialId, BigDecimal requiredQty,
                                              UUID tenantId, UUID companyId) {
+        return consumeMaterial(materialId, requiredQty, tenantId, companyId,
+                null, null, "Material consumption", null, null);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public ConsumptionResult consumeMaterial(UUID materialId, BigDecimal requiredQty,
+                                             UUID tenantId, UUID companyId,
+                                             String referenceType, UUID referenceId,
+                                             String reason, String createdBy, String notes) {
         BigDecimal baseQty = requiredQty != null ? requiredQty : BigDecimal.ZERO;
 
         List<InventoryEntity> rows = inventoryRepository
@@ -310,6 +333,8 @@ public class OrderDeductionService {
             inventoryRepository.updateQuantityOnHand(row.getId(), newQty, now);
             row.setQuantityOnHand(newQty);
             row.setUpdatedAt(now);
+            recordOutMovement(row, materialId, physicalDeduct, tenantId, companyId,
+                    referenceType, referenceId, reason, createdBy, notes);
 
             lines.add(new ConsumptionLine(row.getId(), row.getBatchNo(),
                     row.getOrderToDeduction(), basePortion, physicalDeduct,
@@ -320,6 +345,22 @@ public class OrderDeductionService {
         boolean fulfilled = remaining.compareTo(new BigDecimal("0.0001")) <= 0;
         return new ConsumptionResult(materialId, baseQty, remaining, fulfilled, lines);
     }
+
+    private void recordOutMovement(InventoryEntity row, UUID materialId, BigDecimal physicalDeduct,
+                                   UUID tenantId, UUID companyId,
+                                   String referenceType, UUID referenceId,
+                                   String reason, String createdBy, String notes) {
+        if (row == null || physicalDeduct == null || physicalDeduct.compareTo(BigDecimal.ZERO) <= 0) return;
+        if (row.getWarehouse() == null || row.getWarehouse().getId() == null) {
+            throw new InventoryException("Inventory row has no warehouse for movement log: " + row.getId());
+        }
+        movementService.recordOutMovementLogOnly(
+                row.getId(), materialId, row.getWarehouse().getId(), physicalDeduct,
+                row.getUnit(), row.getBatchNo(),
+                reason != null && !reason.isBlank() ? reason : "Material consumption",
+                createdBy, referenceType, referenceId, notes, tenantId, companyId);
+    }
+
     /**
      * Comparator: sort inventory by {@code orderToDeduction} label alphabetically
      * ascending (null / blank → placed last), then FEFO as tiebreaker.

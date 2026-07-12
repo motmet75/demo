@@ -37,6 +37,7 @@ import java.util.UUID;
 public class ShopMaterialAuditService {
 
     private static final BigDecimal EPSILON = new BigDecimal("0.0001");
+    private static final String REF_SHOP_ORDER = "SHOP_ORDER";
     private static final List<String> OPEN_STATUSES = List.of(
             ShopMaterialAudit.STATUS_RESERVED,
             ShopMaterialAudit.STATUS_WAITING_STOCK,
@@ -226,7 +227,9 @@ public class ShopMaterialAuditService {
 
             row.setAvailableBeforeQty(scale(availableForMaterial(row.getMaterialId(), row.getTenantId(), row.getCompanyId())));
             OrderDeductionService.ConsumptionResult result = orderDeductionService.consumeMaterial(
-                    row.getMaterialId(), remaining, row.getTenantId(), row.getCompanyId());
+                    row.getMaterialId(), remaining, row.getTenantId(), row.getCompanyId(),
+                    REF_SHOP_ORDER, order.getId(), "Shop order material deduction", null,
+                    shopMovementNotes(order, row, source));
 
             BigDecimal unfulfilled = positive(result.getUnfulfilledBaseQty());
             BigDecimal deductedNow = positive(remaining.subtract(unfulfilled));
@@ -503,6 +506,15 @@ public class ShopMaterialAuditService {
         row.setStatus(ShopMaterialAudit.STATUS_DEDUCTED);
         row.setResolvedAt(Instant.now());
         row.setRemark("Deducted from real inventory.");
+    }
+
+    private String shopMovementNotes(ShopOrder order, ShopMaterialAudit row, String source) {
+        String orderLabel = order.getOrderNumber() != null
+                ? "#" + order.getOrderNumber()
+                : safe(order.getOrderCode());
+        return "Shop order " + orderLabel
+                + "; source=" + safe(source)
+                + "; material=" + safe(row.getMaterialCode());
     }
 
     private String waitingNote(List<ShopMaterialAudit> rows) {
