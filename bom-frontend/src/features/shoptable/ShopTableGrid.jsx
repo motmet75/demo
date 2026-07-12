@@ -29,6 +29,7 @@ import {
   completeShopOrder, resetOrderSequence
 } from '../../api/shopApi'
 import ShopTableEditModal from './ShopTableEditModal'
+import ShopTableLayoutDesigner from './ShopTableLayoutDesigner'
 import ManualOrderDialog from '../shoporder/ManualOrderDialog'
 import ShopOrderDetailModal from '../shoporder/ShopOrderDetailModal'
 
@@ -330,6 +331,7 @@ export default function ShopTableGrid() {
         <Button startIcon={resettingSequence ? <CircularProgress size={14} /> : <RestartAltIcon />} onClick={resetDailyOrderNumber} variant="outlined" color="warning" size="small" disabled={resettingSequence}>Reset Order #</Button>
       </Box>
       {error && <Alert severity="error" onClose={() => setError('')}>{error}</Alert>}
+      <ShopTableLayoutDesigner tables={rows} />
       <Box sx={{ flex: 1, minHeight: 300 }}>
         <DataGrid
           rows={rows}

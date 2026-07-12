@@ -277,6 +277,30 @@ export function deleteShopTable(tableId) {
   return apiFetchJson(`/shop/staff/tables/${tableId}`, { method: 'DELETE' })
 }
 
+
+export function fetchShopTableDrawings() {
+  return apiFetchJson('/shop/staff/table-drawings')
+}
+
+export function createShopTableDrawing(payload) {
+  return apiFetchJson('/shop/staff/table-drawings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+}
+
+export function updateShopTableDrawing(drawingId, payload) {
+  return apiFetchJson(`/shop/staff/table-drawings/${drawingId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+}
+
+export function deleteShopTableDrawing(drawingId) {
+  return apiFetchJson(`/shop/staff/table-drawings/${drawingId}`, { method: 'DELETE' })
+}
 export function fetchTableQr(tableId) {
   return apiFetchJson(`/shop/staff/tables/${tableId}/qrcode`)
 }
