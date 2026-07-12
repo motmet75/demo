@@ -3,7 +3,6 @@ package com.ams.bomcore.domain.shop;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
@@ -28,8 +27,7 @@ public class ShopTableDrawing {
     @Column(name = "drawing_name", nullable = false, length = 120)
     private String drawingName;
 
-    @Lob
-    @Column(name = "layout_json", nullable = false, columnDefinition = "text")
+    @Column(name = "layout_json", nullable = false, columnDefinition = "TEXT")
     private String layoutJson;
 
     @Column(name = "created_at")

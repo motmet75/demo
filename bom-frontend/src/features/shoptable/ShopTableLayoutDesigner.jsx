@@ -17,6 +17,10 @@ import MeetingRoomIcon from '@mui/icons-material/MeetingRoom'
 import EventSeatIcon from '@mui/icons-material/EventSeat'
 import CropSquareIcon from '@mui/icons-material/CropSquare'
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked'
+import ZoomInIcon from '@mui/icons-material/ZoomIn'
+import ZoomOutIcon from '@mui/icons-material/ZoomOut'
+import PanToolIcon from '@mui/icons-material/PanTool'
+import CenterFocusStrongIcon from '@mui/icons-material/CenterFocusStrong'
 import {
   createShopTableDrawing,
   deleteShopTableDrawing,
@@ -26,6 +30,9 @@ import {
 
 const STAGE_WIDTH = 960
 const STAGE_HEIGHT = 430
+const MIN_ZOOM = 0.5
+const MAX_ZOOM = 2.5
+const ZOOM_STEP = 0.1
 
 const makeId = () => `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max)
@@ -76,6 +83,10 @@ export default function ShopTableLayoutDesigner({ tables = [] }) {
   const [selectedLayoutId, setSelectedLayoutId] = useState('')
   const [selectedItemId, setSelectedItemId] = useState('')
   const [dragging, setDragging] = useState(null)
+  const [panning, setPanning] = useState(null)
+  const [panMode, setPanMode] = useState(false)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [zoom, setZoom] = useState(1)
   const [savedText, setSavedText] = useState('')
   const [loadingDrawings, setLoadingDrawings] = useState(false)
   const [savingDrawing, setSavingDrawing] = useState(false)
@@ -113,6 +124,25 @@ export default function ShopTableLayoutDesigner({ tables = [] }) {
   const selectedLayout = layouts.find(layout => layout.id === selectedLayoutId) || layouts[0]
   const items = selectedLayout?.items || []
   const selectedItem = items.find(item => item.id === selectedItemId) || null
+
+  const screenToCanvas = (event) => {
+    const rect = stageRef.current?.getBoundingClientRect()
+    if (!rect) return null
+    return {
+      x: (event.clientX - rect.left - pan.x) / zoom,
+      y: (event.clientY - rect.top - pan.y) / zoom,
+    }
+  }
+
+  const setZoomLevel = (nextZoom) => {
+    setZoom(clamp(Math.round(nextZoom * 100) / 100, MIN_ZOOM, MAX_ZOOM))
+  }
+
+  const resetView = () => {
+    setZoom(1)
+    setPan({ x: 0, y: 0 })
+    setPanMode(false)
+  }
 
   const updateLayout = (patcher) => {
     setLayouts(prev => prev.map(layout => {
@@ -208,27 +238,55 @@ export default function ShopTableLayoutDesigner({ tables = [] }) {
     setSelectedItemId('')
   }
 
-  const beginDrag = (event, item) => {
+  const beginPan = (event) => {
     event.stopPropagation()
-    const rect = stageRef.current?.getBoundingClientRect()
-    if (!rect) return
+    event.preventDefault()
+    setSelectedItemId('')
+    setPanning({ startX: event.clientX, startY: event.clientY, x: pan.x, y: pan.y })
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+  }
+
+  const beginDrag = (event, item) => {
+    if (panMode) {
+      beginPan(event)
+      return
+    }
+    event.stopPropagation()
+    const pos = screenToCanvas(event)
+    if (!pos) return
     setSelectedItemId(item.id)
-    setDragging({ id: item.id, offsetX: event.clientX - rect.left - item.x, offsetY: event.clientY - rect.top - item.y })
+    setDragging({ id: item.id, offsetX: pos.x - item.x, offsetY: pos.y - item.y })
+    event.currentTarget.setPointerCapture?.(event.pointerId)
   }
 
   const moveDrag = (event) => {
+    if (panning) {
+      setPan({ x: panning.x + event.clientX - panning.startX, y: panning.y + event.clientY - panning.startY })
+      return
+    }
     if (!dragging) return
-    const rect = stageRef.current?.getBoundingClientRect()
+    const pos = screenToCanvas(event)
     const item = items.find(i => i.id === dragging.id)
-    if (!rect || !item) return
-    const scaleX = STAGE_WIDTH / rect.width
-    const scaleY = STAGE_HEIGHT / rect.height
-    const x = (event.clientX - rect.left) * scaleX - dragging.offsetX
-    const y = (event.clientY - rect.top) * scaleY - dragging.offsetY
+    if (!pos || !item) return
+    const x = pos.x - dragging.offsetX
+    const y = pos.y - dragging.offsetY
     updateItem(item.id, {
       x: Math.round(clamp(x, 0, STAGE_WIDTH - (item.w || 80))),
       y: Math.round(clamp(y, 0, STAGE_HEIGHT - (item.h || 60))),
     })
+  }
+
+  const endPointer = () => {
+    setDragging(null)
+    setPanning(null)
+  }
+
+  const handleCanvasPointerDown = (event) => {
+    if (panMode || event.button === 1) {
+      beginPan(event)
+      return
+    }
+    setSelectedItemId('')
   }
 
   const renderItem = (item) => {
@@ -301,6 +359,13 @@ export default function ShopTableLayoutDesigner({ tables = [] }) {
         <Button size="small" variant="contained" startIcon={savingDrawing ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />} onClick={saveDrawing} disabled={loadingDrawings || savingDrawing}>Save</Button>
         <Button size="small" color="error" variant="outlined" startIcon={<DeleteIcon />} onClick={deleteDrawing} disabled={loadingDrawings || savingDrawing}>Delete</Button>
         {savedText && <Chip label={savedText} color="success" size="small" />}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 'auto' }}>
+          <Button size="small" variant="outlined" startIcon={<ZoomOutIcon />} onClick={() => setZoomLevel(zoom - ZOOM_STEP)} disabled={zoom <= MIN_ZOOM}>Zoom</Button>
+          <Chip label={`${Math.round(zoom * 100)}%`} size="small" variant="outlined" />
+          <Button size="small" variant="outlined" startIcon={<ZoomInIcon />} onClick={() => setZoomLevel(zoom + ZOOM_STEP)} disabled={zoom >= MAX_ZOOM}>Zoom</Button>
+          <Button size="small" variant={panMode ? 'contained' : 'outlined'} startIcon={<PanToolIcon />} onClick={() => setPanMode(v => !v)}>Move</Button>
+          <Button size="small" variant="outlined" startIcon={<CenterFocusStrongIcon />} onClick={resetView}>Reset</Button>
+        </Box>
       </Box>
       {drawingError && <Alert severity="error" sx={{ mb: 1 }} onClose={() => setDrawingError('')}>{drawingError}</Alert>}
 
@@ -347,23 +412,38 @@ export default function ShopTableLayoutDesigner({ tables = [] }) {
         <Box
           ref={stageRef}
           onPointerMove={moveDrag}
-          onPointerUp={() => setDragging(null)}
-          onPointerLeave={() => setDragging(null)}
-          onPointerDown={() => setSelectedItemId('')}
+          onPointerUp={endPointer}
+          onPointerLeave={endPointer}
+          onPointerDown={handleCanvasPointerDown}
           sx={{
             position: 'relative',
-            width: STAGE_WIDTH,
-            minWidth: STAGE_WIDTH,
+            width: '100%',
+            minWidth: 0,
             height: STAGE_HEIGHT,
             overflow: 'hidden',
             border: '1px solid #cfd8dc',
             borderRadius: 1,
-            bgcolor: '#fafafa',
-            backgroundImage: 'linear-gradient(#eceff1 1px, transparent 1px), linear-gradient(90deg, #eceff1 1px, transparent 1px)',
-            backgroundSize: '24px 24px',
+            bgcolor: '#eceff1',
+            cursor: panMode ? (panning ? 'grabbing' : 'grab') : 'default',
+            touchAction: 'none',
           }}
         >
-          {loadingDrawings ? <CircularProgress sx={{ position: 'absolute', left: 24, top: 24 }} /> : items.map(renderItem)}
+          <Box
+            sx={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              width: STAGE_WIDTH,
+              height: STAGE_HEIGHT,
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+              transformOrigin: '0 0',
+              bgcolor: '#fafafa',
+              backgroundImage: 'linear-gradient(#eceff1 1px, transparent 1px), linear-gradient(90deg, #eceff1 1px, transparent 1px)',
+              backgroundSize: '24px 24px',
+            }}
+          >
+            {loadingDrawings ? <CircularProgress sx={{ position: 'absolute', left: 24, top: 24 }} /> : items.map(renderItem)}
+          </Box>
         </Box>
       </Box>
     </Paper>
