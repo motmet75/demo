@@ -3,6 +3,14 @@ import { DataGrid, GridActionsCellItem, useGridApiRef } from '@mui/x-data-grid'
 import EditIcon from '@mui/icons-material/Edit'
 import LocalHospitalIcon from '@mui/icons-material/LocalHospital'
 import CallReceivedIcon from '@mui/icons-material/CallReceived'
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
+import Dialog from '@mui/material/Dialog'
+import DialogTitle from '@mui/material/DialogTitle'
+import DialogContent from '@mui/material/DialogContent'
+import DialogActions from '@mui/material/DialogActions'
+import TextField from '@mui/material/TextField'
+import Button from '@mui/material/Button'
+import Box from '@mui/material/Box'
 import { fetchInventoryView, addStock, updateInventory, reserveInventory, releaseInventory, deleteInventory } from '../../api/inventoryApi'
 import { apiFetch, getContextHeaders } from '../../api/client'
 import InventoryEditModal from './InventoryEditModal'
@@ -40,6 +48,11 @@ export default function InventoryGrid() {
   const [selected, setSelected] = useState(null)
   const [saving, setSaving] = useState(false)
   const [modalKey, setModalKey] = useState(0)
+  const [disposeOpen, setDisposeOpen] = useState(false)
+  const [disposeRow, setDisposeRow] = useState(null)
+  const [disposeQty, setDisposeQty] = useState('')
+  const [disposeReason, setDisposeReason] = useState('')
+  const [disposeError, setDisposeError] = useState('')
 
   const [importOpen, setImportOpen] = useState(false)
   const [patchOpen, setPatchOpen]   = useState(false)
@@ -111,7 +124,7 @@ export default function InventoryGrid() {
       quantityTotal,
       quantityReserved,
       quantityLocked,
-      availableQuantity: Number(quantityOnHand) - Number(quantityLocked),
+      availableQuantity: Math.max(Number(quantityOnHand) - Number(quantityLocked), 0),
       batchNo: item.batchNo || item.batch_no || '',
       contractCode: item.contractCode || '',
       orderToDeduction: item.orderToDeduction || '',
@@ -160,6 +173,23 @@ export default function InventoryGrid() {
 
   const openEdit = (row) => { setSelected(JSON.parse(JSON.stringify(row))); setModalKey(k => k + 1); setEditOpen(true) }
   const closeEdit = () => { setEditOpen(false); setSelected(null) }
+
+  const openDispose = (row) => {
+    if (!row) return
+    setDisposeRow(JSON.parse(JSON.stringify(row)))
+    setDisposeQty('')
+    setDisposeReason('')
+    setDisposeError('')
+    setDisposeOpen(true)
+  }
+
+  const closeDispose = () => {
+    setDisposeOpen(false)
+    setDisposeRow(null)
+    setDisposeQty('')
+    setDisposeReason('')
+    setDisposeError('')
+  }
 
   const handleSave = async (payload) => {
     if (saving) return
@@ -218,6 +248,49 @@ export default function InventoryGrid() {
     } catch (e) { alert('Release failed: ' + (e?.message || e)) }
   }
 
+  const roundQty = (value) => Math.max(0, Math.round((Number(value) + Number.EPSILON) * 10000) / 10000)
+
+  const handleUseAllRestQty = () => {
+    if (!disposeRow) return
+    setDisposeQty(String(disposeRow.quantityOnHand ?? 0))
+  }
+
+  const handleDisposeSubmit = async (event) => {
+    event.preventDefault()
+    if (saving || !disposeRow) return
+
+    const inventoryId = disposeRow.inventoryId || disposeRow.id
+    const currentOnHand = Number(disposeRow.quantityOnHand ?? 0)
+    const qty = Number(disposeQty)
+    const reason = disposeReason.trim()
+
+    if (!inventoryId) { setDisposeError('Inventory row is missing an ID.'); return }
+    if (!Number.isFinite(currentOnHand) || currentOnHand <= 0) { setDisposeError('This inventory row has no on-hand quantity to dispose.'); return }
+    if (!Number.isFinite(qty) || qty <= 0) { setDisposeError('Disposal quantity must be greater than zero.'); return }
+    if (qty > currentOnHand) { setDisposeError('Disposal quantity cannot exceed Qty On Hand.'); return }
+    if (!reason) { setDisposeError('Reason is required.'); return }
+
+    const nextOnHand = roundQty(currentOnHand - qty)
+    setSaving(true)
+    try {
+      await updateInventory(inventoryId, {
+        id: inventoryId,
+        quantity: nextOnHand,
+        ...(disposeRow.batchNo ? { batchNo: disposeRow.batchNo } : {}),
+        ...(disposeRow.expirationDateTime ? { expirationDateTime: disposeRow.expirationDateTime } : {}),
+        ...(disposeRow.productionDateTime ? { productionDateTime: disposeRow.productionDateTime } : {}),
+        reason: reason.toLowerCase().startsWith('disposal') ? reason : `Disposal - ${reason}`,
+        createdBy: disposeRow.userName || 'system',
+        notes: `Disposed ${qty} ${disposeRow.unit || ''} from ${currentOnHand} to ${nextOnHand}`
+      })
+      await load()
+      closeDispose()
+    } catch (e) {
+      setDisposeError(e?.message || 'Disposal failed')
+    } finally {
+      setSaving(false)
+    }
+  }
   const handleDeleteSelected = async () => {
     if (selectedIds.length === 0) return
     if (!window.confirm(`Delete ${selectedIds.length} selected inventory record(s)? This cannot be undone.`)) return
@@ -381,7 +454,8 @@ export default function InventoryGrid() {
     { field: 'actions', type: 'actions', headerName: 'Actions', width: 220, getActions: (params) => [
       <GridActionsCellItem icon={<EditIcon/>} label="Edit" onClick={() => openEdit(params.row)} showInMenu={false} disabled={!!saving} />,
       <GridActionsCellItem icon={<LocalHospitalIcon/>} label="Reserve" onClick={() => handleReserve(params.id)} showInMenu={true} disabled={!!saving} />,
-      <GridActionsCellItem icon={<CallReceivedIcon/>} label="Release" onClick={() => handleRelease(params.id)} showInMenu={true} disabled={!!saving} />
+      <GridActionsCellItem icon={<CallReceivedIcon/>} label="Release" onClick={() => handleRelease(params.id)} showInMenu={true} disabled={!!saving} />,
+      <GridActionsCellItem icon={<DeleteSweepIcon/>} label="Dispose" onClick={() => openDispose(params.row)} showInMenu={true} disabled={!!saving || Number(params.row.quantityOnHand ?? 0) <= 0} />
     ] },
     { field: 'modifiedTime', headerName: 'Modified Time', width: 180 },
     { field: 'visible', headerName: 'Visible', width: 100, type: 'boolean' },
@@ -449,6 +523,26 @@ export default function InventoryGrid() {
     } else { setSelectionModel(model) }
   }
 
+  const openDisposeSelected = () => {
+    if (selectedIds.length !== 1) {
+      alert('Select exactly one inventory row to dispose.')
+      return
+    }
+    const row = rows.find(r => r.id === selectedIds[0] || r.inventoryId === selectedIds[0])
+    if (!row) {
+      alert('Selected inventory row was not found.')
+      return
+    }
+    openDispose(row)
+  }
+
+  const disposalCurrentOnHand = Number(disposeRow?.quantityOnHand ?? 0)
+  const disposalCurrentLocked = Number(disposeRow?.quantityLocked ?? 0)
+  const disposalQtyNumber = Number(disposeQty)
+  const disposalNextOnHand = Number.isFinite(disposalQtyNumber)
+    ? roundQty(disposalCurrentOnHand - disposalQtyNumber)
+    : disposalCurrentOnHand
+  const disposalAvailableAfter = Math.max(disposalNextOnHand - disposalCurrentLocked, 0)
   return (
     // top-level flex column so grid can flex-grow to fill available space when auto
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100%' }}>
@@ -566,6 +660,7 @@ export default function InventoryGrid() {
           <button type="button" onClick={() => exportRows(filteredRows.map(r => r.id), 'csv')}>Export Filtered CSV</button>
           <button type="button" onClick={() => exportRows(selectedIds, 'xlsx')} disabled={selectedIds.length === 0}>Export Selected XLSX</button>
           <button type="button" onClick={() => exportRows(selectedIds, 'csv')} disabled={selectedIds.length === 0}>Export Selected CSV</button>
+          <button type="button" onClick={openDisposeSelected} disabled={selectedIds.length !== 1 || saving}>Dispose Selected</button>
           <button
             type="button"
             onClick={handleDeleteSelected}
@@ -616,6 +711,55 @@ export default function InventoryGrid() {
        </div>
 
       <InventoryEditModal key={modalKey} open={editOpen} inventory={selected} onClose={closeEdit} onSave={handleSave} saving={saving} />
+      <Dialog open={disposeOpen} onClose={saving ? undefined : closeDispose} fullWidth maxWidth="sm">
+        <DialogTitle>Dispose Inventory</DialogTitle>
+        <form onSubmit={handleDisposeSubmit}>
+          <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
+            {disposeError && <Box sx={{ color: '#b00020', fontSize: 13 }}>{disposeError}</Box>}
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, fontSize: 13 }}>
+              <div><strong>Material</strong><br />{disposeRow?.materialCode || ''} {disposeRow?.materialName || ''}</div>
+              <div><strong>Warehouse</strong><br />{disposeRow?.warehouseCode || ''} {disposeRow?.warehouseName || ''}</div>
+              <div><strong>Inventory UUID</strong><br /><span style={{ fontFamily: 'monospace' }}>{disposeRow?.inventoryId || ''}</span></div>
+              <div><strong>Batch</strong><br />{disposeRow?.batchNo || ''}</div>
+              <div><strong>Qty On Hand</strong><br />{numFmt(disposalCurrentOnHand)} {disposeRow?.unit || ''}</div>
+              <div><strong>Available After</strong><br />{numFmt(disposalAvailableAfter)} {disposeRow?.unit || ''}</div>
+            </Box>
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+              <TextField
+                label="Disposal Qty"
+                type="number"
+                value={disposeQty}
+                onChange={e => setDisposeQty(e.target.value)}
+                required
+                size="small"
+                disabled={saving}
+                inputProps={{ min: 0, step: 'any' }}
+                helperText={`Max on hand: ${numFmt(disposalCurrentOnHand)} ${disposeRow?.unit || ''}`}
+                sx={{ flex: 1 }}
+              />
+              <Button variant="outlined" onClick={handleUseAllRestQty} disabled={saving || !disposeRow} sx={{ whiteSpace: 'nowrap' }}>
+                For all rest qty
+              </Button>
+            </Box>
+            <TextField
+              label="Reason"
+              value={disposeReason}
+              onChange={e => setDisposeReason(e.target.value)}
+              required
+              multiline
+              minRows={2}
+              disabled={saving}
+            />
+            <Box sx={{ fontSize: 13, color: '#555' }}>
+              After disposal: Qty On Hand {numFmt(disposalNextOnHand)} {disposeRow?.unit || ''}; available will show {numFmt(disposalAvailableAfter)}.
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={closeDispose} disabled={saving}>Cancel</Button>
+            <Button type="submit" variant="contained" color="error" disabled={saving}>Dispose</Button>
+          </DialogActions>
+        </form>
+      </Dialog>
     </div>
   )
 }

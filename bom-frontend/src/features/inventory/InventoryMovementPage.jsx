@@ -161,7 +161,9 @@ export default function InventoryMovementPage() {
       ID: r.id ?? '',
       Date: dateFmt(r.createdAt),
       Type: r.movementType ?? '',
-      Material: r.material ? `${r.material.materialCode ?? ''} — ${r.material.materialName ?? ''}` : (matMap[r.materialId] ? `${matMap[r.materialId].materialCode} — ${matMap[r.materialId].materialName ?? ''}` : r.materialId ?? ''),
+      'Material UUID': materialUuid(r),
+      'Material Code': materialCode(r),
+      'Material Name': materialName(r),
       'From Warehouse': r.fromWarehouse ? r.fromWarehouse.code : (whMap[r.fromWarehouseId] ? whMap[r.fromWarehouseId].code : r.fromWarehouseId ?? ''),
       'To Warehouse': r.toWarehouse ? r.toWarehouse.code : (whMap[r.toWarehouseId] ? whMap[r.toWarehouseId].code : r.toWarehouseId ?? ''),
       Quantity: r.quantity ?? '',
@@ -205,10 +207,24 @@ export default function InventoryMovementPage() {
   const matMap = Object.fromEntries(materials.map(m => [m.id, m]))
   const whMap = Object.fromEntries(warehouses.map(w => [w.id, w]))
 
+  function materialUuid(row) {
+    return row?.materialUuid ?? row?.materialId ?? row?.material?.id ?? row?.material?.uuid ?? ''
+  }
+
+  function materialCode(row) {
+    const id = materialUuid(row)
+    return row?.materialCode ?? row?.material?.materialCode ?? matMap[id]?.materialCode ?? ''
+  }
+
+  function materialName(row) {
+    const id = materialUuid(row)
+    return row?.materialName ?? row?.material?.materialName ?? matMap[id]?.materialName ?? ''
+  }
+
   const filteredRows = rows.filter(r => {
     if (filterType && r.movementType !== filterType) return false
     if (filterMaterial) {
-      const mat = r.material ? `${r.material.materialCode ?? ''} ${r.material.materialName ?? ''}` : (matMap[r.materialId] ? matMap[r.materialId].materialCode : '')
+      const mat = `${materialUuid(r)} ${materialCode(r)} ${materialName(r)}`
       if (!mat.toLowerCase().includes(filterMaterial.toLowerCase())) return false
     }
     if (filterInventoryId) {
@@ -246,7 +262,18 @@ export default function InventoryMovementPage() {
     },
     { field: 'createdAt', headerName: 'Date', width: 170, valueFormatter: dateFmt },
     { field: 'movementType', headerName: 'Type', width: 130, renderCell: ({ value }) => <Chip label={value} color={TYPE_COLORS[value] || 'default'} size="small" /> },
-    { field: 'materialId', headerName: 'Material', width: 180, valueGetter: (value, row) => row?.material ? `${row.material.materialCode ?? ''} — ${row.material.materialName ?? ''}` : (row && matMap[row.materialId] ? `${matMap[row.materialId].materialCode}` : value ?? '') },
+    {
+      field: 'materialUuid', headerName: 'Material UUID', flex: 1, minWidth: 280,
+      valueGetter: (_value, row) => {
+        const id = materialUuid(row)
+        return id ? String(id) : ''
+      },
+      renderCell: ({ value }) => value
+        ? <span title={value} style={{ fontFamily: 'monospace', fontSize: 12, cursor: 'pointer' }} onClick={() => navigator.clipboard?.writeText(value)}>{value}</span>
+        : ''
+    },
+    { field: 'materialCode', headerName: 'Material Code', width: 150, valueGetter: (_value, row) => materialCode(row) },
+    { field: 'materialName', headerName: 'Material Name', width: 220, valueGetter: (_value, row) => materialName(row) },
     { field: 'fromWarehouseId', headerName: 'From WH', width: 130, valueGetter: (value, row) => row?.fromWarehouse ? row.fromWarehouse.code : (row && whMap[row.fromWarehouseId] ? whMap[row.fromWarehouseId].code : '') },
     { field: 'toWarehouseId', headerName: 'To WH', width: 130, valueGetter: (value, row) => row?.toWarehouse ? row.toWarehouse.code : (row && whMap[row.toWarehouseId] ? whMap[row.toWarehouseId].code : '') },
     { field: 'quantity', headerName: 'Qty', width: 100, type: 'number', valueFormatter: numFmt },
