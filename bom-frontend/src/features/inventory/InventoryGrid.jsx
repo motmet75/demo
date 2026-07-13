@@ -545,7 +545,7 @@ export default function InventoryGrid() {
   const disposalAvailableAfter = Math.max(disposalNextOnHand - disposalCurrentLocked, 0)
   return (
     // top-level flex column so grid can flex-grow to fill available space when auto
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={() => { setSelected(null); setModalKey(k => k + 1); setEditOpen(true) }} disabled={saving}>Add Inventory</button>

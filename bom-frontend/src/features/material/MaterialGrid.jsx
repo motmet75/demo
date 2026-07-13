@@ -140,6 +140,7 @@ export default function MaterialGrid({ refreshKey }) {
         materialName: r.materialName,
         unit: r.unit,
         materialType: r.materialType,
+        thumbnailUrl: r.thumbnailUrl ?? r.thumbnail_url ?? '',
         price: r.price,
         description: r.description,
         isActive: r.isActive,
@@ -194,6 +195,7 @@ export default function MaterialGrid({ refreshKey }) {
         materialName: (res && res.materialName) ?? updatedMaterial.materialName,
         unit: (res && res.unit) ?? updatedMaterial.unit,
         materialType: (res && res.materialType) ?? updatedMaterial.materialType,
+        thumbnailUrl: (res && (res.thumbnailUrl !== undefined ? res.thumbnailUrl : undefined)) ?? updatedMaterial.thumbnailUrl,
         price: (res && (res.price !== undefined ? res.price : undefined)) ?? updatedMaterial.price,
         description: (res && (res.description !== undefined ? res.description : undefined)) ?? updatedMaterial.description
         ,
@@ -272,10 +274,20 @@ export default function MaterialGrid({ refreshKey }) {
   const columns = [
     // Hidden UUID column to carry the UUID value with each row (submitted to backend)
     { field: 'uuid', headerName: 'UUID', width: 200, hide: true, flex: 1 },
+    {
+      field: 'thumbnailUrl',
+      headerName: 'Image',
+      width: 90,
+      sortable: false,
+      filterable: false,
+      renderCell: (params) => params.value
+        ? <img src={params.value} alt="" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 4, border: '1px solid #d7dce1' }} />
+        : <span style={{ color: '#8a8f95', fontSize: 12 }}>No image</span>
+    },
     { field: 'materialCode', headerName: 'Code', width: 150, editable: false, resizable: true },
     { field: 'materialName', headerName: 'Name', flex: 1, editable: false, resizable: true, minWidth: 150 },
     { field: 'unit', headerName: 'Unit', width: 120, editable: false, resizable: true },
-    { field: 'materialType', headerName: 'Type', width: 160, editable: false, resizable: true },
+    { field: 'materialType', headerName: 'Category', width: 160, editable: false, resizable: true },
     { field: 'description', headerName: 'Description', flex: 1, editable: false, minWidth: 200, resizable: true },
     { field: 'createdAt', headerName: 'Created At', width: 180, editable: false, resizable: true,
       valueFormatter: (value) => dateFmt(value) },
@@ -383,7 +395,8 @@ export default function MaterialGrid({ refreshKey }) {
         Code: r.materialCode,
         Name: r.materialName,
         Unit: r.unit,
-        Type: r.materialType,
+        Category: r.materialType,
+        ThumbnailUrl: r.thumbnailUrl,
         Price: r.price,
         Description: r.description,
         Active: r.isActive,
@@ -494,7 +507,7 @@ export default function MaterialGrid({ refreshKey }) {
             { label: 'Code',        value: filterCode,        set: setFilterCode,        width: 120 },
             { label: 'Name',        value: filterName,        set: setFilterName,        width: 160 },
             { label: 'Unit',        value: filterUnit,        set: setFilterUnit,        width: 100 },
-            { label: 'Type',        value: filterType,        set: setFilterType,        width: 120 },
+            { label: 'Category',    value: filterType,        set: setFilterType,        width: 120 },
             { label: 'Description', value: filterDescription, set: setFilterDescription, width: 160 },
           ].map(({ label, value, set, width }) => (
             <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

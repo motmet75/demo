@@ -24,7 +24,8 @@ export default function MaterialEditModal({ open, material, onClose, onSave, sav
   const makeInitialForm = (m) => ({
     materialCode: m?.materialCode ?? '',
     materialName: m?.materialName ?? '',
-    materialType: m?.materialType ?? 'RAW',
+    materialType: m?.materialType ?? 'MATERIAL',
+    thumbnailUrl: m?.thumbnailUrl ?? '',
     unit: m?.unit ?? '',
     price: m?.price != null ? String(m.price) : '',
     description: m?.description ?? ''
@@ -57,11 +58,11 @@ export default function MaterialEditModal({ open, material, onClose, onSave, sav
       materialCode: form.materialCode,
       materialName: form.materialName,
       materialType: form.materialType,
+      thumbnailUrl: form.thumbnailUrl,
       unit: form.unit,
       price: form.price === '' ? null : Number(form.price),
-      description: form.description
-      // attach tenant & company from context when available
-      , ...(tenantId ? { tenantId } : {}),
+      description: form.description,
+      ...(tenantId ? { tenantId } : {}),
       ...(companyId ? { companyId } : {})
     }
 
@@ -87,12 +88,26 @@ export default function MaterialEditModal({ open, material, onClose, onSave, sav
 
   const styles = {
     formBox: { display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 },
+    thumbnailBox: {
+      width: 92,
+      height: 92,
+      border: '1px solid #d7dce1',
+      borderRadius: 1,
+      overflow: 'hidden',
+      bgcolor: '#f6f8fa',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      color: '#7a7f85',
+      fontSize: 12
+    },
+    thumbnailImg: { width: '100%', height: '100%', objectFit: 'cover' },
     error: { color: 'red', marginTop: 8 }
   }
 
   const isBusy = isSubmitting || !!parentSaving
 
-  const materialTypeOptions = ['RAW', 'SEMI', 'FINISHED']
+  const materialTypeOptions = ['MATERIAL', 'FURNITURE', 'MACHINE', 'OTHER', 'RAW', 'SEMI', 'FINISHED']
 
   // Use a key so the dialog (and local state) is remounted when opening for a different material or when closed
   const dialogKey = open ? (material && (material.id ?? material.materialCode) ? String(material.id ?? material.materialCode) : 'new') : 'closed'
@@ -131,12 +146,27 @@ export default function MaterialEditModal({ open, material, onClose, onSave, sav
               renderInput={(params) => (
                 <TextField
                   {...params}
-                  label="Material Type"
+                  label="Category"
                   fullWidth
                   disabled={isBusy}
                 />
               )}
             />
+
+            <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
+              <Box sx={styles.thumbnailBox}>
+                {form.thumbnailUrl ? (
+                  <Box component="img" src={form.thumbnailUrl} alt="Material thumbnail" sx={styles.thumbnailImg} />
+                ) : 'No image'}
+              </Box>
+              <TextField
+                label="Thumbnail Image URL"
+                value={form.thumbnailUrl}
+                onChange={handleChange('thumbnailUrl')}
+                fullWidth
+                disabled={isBusy}
+              />
+            </Box>
 
             <TextField
               label="Unit"

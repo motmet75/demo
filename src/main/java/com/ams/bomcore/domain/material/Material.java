@@ -47,6 +47,9 @@ public class Material {
     @Column(name = "material_type", nullable = false, length = 30)
     private String materialType;
 
+    @Column(name = "thumbnail_url", columnDefinition = "TEXT")
+    private String thumbnailUrl;
+
     @Column(name = "price")
     private BigDecimal price;
 
@@ -113,6 +116,14 @@ public class Material {
 
     public void setMaterialType(String materialType) {
         this.materialType = materialType;
+    }
+
+    public String getThumbnailUrl() {
+        return thumbnailUrl;
+    }
+
+    public void setThumbnailUrl(String thumbnailUrl) {
+        this.thumbnailUrl = thumbnailUrl;
     }
 
     public BigDecimal getPrice() {
@@ -187,6 +198,7 @@ public class Material {
                 ", materialName='" + materialName + '\'' +
                 ", unit='" + unit + '\'' +
                 ", materialType='" + materialType + '\'' +
+                ", thumbnailUrl='" + thumbnailUrl + '\'' +
                 ", price=" + price +
                 ", description='" + description + '\'' +
                 ", isActive=" + isActive +
