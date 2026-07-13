@@ -221,6 +221,8 @@ public class InventoryController {
 			}
 
             BigDecimal qty = new BigDecimal(String.valueOf(body.get("quantity")));
+            BigDecimal unitPrice = bodyDecimal(body, "unitPrice");
+            String currency = bodyString(body, "currency");
             String batchNo = body.get("batchNo") == null ? null : String.valueOf(body.get("batchNo"));
             String exp = body.get("expirationDateTime") == null ? null : String.valueOf(body.get("expirationDateTime"));
             String prod = body.get("productionDateTime") == null ? null : String.valueOf(body.get("productionDateTime"));
@@ -237,7 +239,7 @@ public class InventoryController {
             BigDecimal materialQuotaPercentage = mqp == null || mqp.trim().isEmpty() ? null : new BigDecimal(mqp);
 
             // quantityTotal is intentionally NOT accepted here — it is set only at import/initial creation
-            InventoryEntity updated = inventoryService.updateStock(id, qty, null, batchNo, expirationDateTime, productionDateTime, quantityReserved, orderToDeduction, materialQuotaPercentage, tenantId, companyId, reason, createdBy, notes);
+            InventoryEntity updated = inventoryService.updateStock(id, qty, null, batchNo, expirationDateTime, productionDateTime, quantityReserved, orderToDeduction, materialQuotaPercentage, tenantId, companyId, reason, createdBy, notes, unitPrice, currency);
             return ResponseEntity.ok(updated);
         } catch (InventoryException ex) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());

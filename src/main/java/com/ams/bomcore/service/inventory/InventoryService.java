@@ -370,15 +370,6 @@ public class InventoryService {
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public InventoryEntity updateStock(UUID inventoryId, BigDecimal newQuantityOnHand, String batchNo,
-                                        Instant expirationDateTime, Instant productionDateTime,
-                                        BigDecimal quantityReserved, UUID tenantId, UUID companyId,
-                                        String reason, String createdBy, String notes) {
-        return updateStock(inventoryId, newQuantityOnHand, null, batchNo, expirationDateTime, productionDateTime,
-                quantityReserved, null, null, tenantId, companyId, reason, createdBy, notes);
-    }
-
-    @Transactional(rollbackFor = Exception.class)
     public InventoryEntity updateStock(UUID inventoryId, BigDecimal newQuantityOnHand, BigDecimal newQuantityTotal, String batchNo,
                                         Instant expirationDateTime, Instant productionDateTime,
                                         BigDecimal quantityReserved, UUID tenantId, UUID companyId,
@@ -398,6 +389,20 @@ public class InventoryService {
                                         String orderToDeduction, BigDecimal materialQuotaPercentage,
                                         UUID tenantId, UUID companyId,
                                         String reason, String createdBy, String notes) {
+        return updateStock(inventoryId, newQuantityOnHand, newQuantityTotal, batchNo,
+                expirationDateTime, productionDateTime, quantityReserved,
+                orderToDeduction, materialQuotaPercentage, tenantId, companyId,
+                reason, createdBy, notes, null, null);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public InventoryEntity updateStock(UUID inventoryId, BigDecimal newQuantityOnHand, BigDecimal newQuantityTotal, String batchNo,
+                                        Instant expirationDateTime, Instant productionDateTime,
+                                        BigDecimal quantityReserved,
+                                        String orderToDeduction, BigDecimal materialQuotaPercentage,
+                                        UUID tenantId, UUID companyId,
+                                        String reason, String createdBy, String notes,
+                                        BigDecimal unitPrice, String currency) {
         if (newQuantityOnHand == null || newQuantityOnHand.compareTo(BigDecimal.ZERO) < 0) {
 			throw new InventoryException("Quantity must be non-negative");
 		}
@@ -474,7 +479,7 @@ public class InventoryService {
     // Keep previous signature for backward compatibility by delegating (optional)
     @Transactional(rollbackFor = Exception.class)
     public InventoryEntity updateStock(String inventoryId, BigDecimal newQuantityOnHand) {
-        return updateStock(UUID.fromString(inventoryId), newQuantityOnHand, null, null, null, null, null, null, "Manual update stock", "system", null);
+        return updateStock(UUID.fromString(inventoryId), newQuantityOnHand, null, null, null, null, null, null, null, null, null, "Manual update stock", "system", null);
     }
 
     @Transactional(rollbackFor = Exception.class)

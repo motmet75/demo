@@ -9,10 +9,13 @@ import Dialog from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
 import DialogTitle from '@mui/material/DialogTitle'
+import IconButton from '@mui/material/IconButton'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import PropTypes from 'prop-types'
+import AddIcon from '@mui/icons-material/Add'
 import CameraAltIcon from '@mui/icons-material/CameraAlt'
+import DeleteIcon from '@mui/icons-material/Delete'
 import QrCode2Icon from '@mui/icons-material/QrCode2'
 import UploadFileIcon from '@mui/icons-material/UploadFile'
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode'
@@ -35,10 +38,33 @@ const invoiceNumberSeed = () => {
   return `PINV-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`
 }
 
+const newLine = () => ({
+  id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  material: null,
+  materialInput: '',
+  warehouse: null,
+  batchNo: '',
+  warehouseImportQuantity: '',
+  warehouseImportUnit: '',
+  warehouseImportUnitPrice: '',
+  bomUnitPerWarehouseUnit: '',
+  notes: ''
+})
+
 const toNumberOrNull = value => {
   if (value === '' || value === null || value === undefined) return null
   const n = Number(value)
   return Number.isFinite(n) ? n : null
+}
+
+const lineCalc = line => {
+  const warehouseQty = toNumberOrNull(line.warehouseImportQuantity)
+  const warehouseUnitPrice = toNumberOrNull(line.warehouseImportUnitPrice)
+  const ratio = toNumberOrNull(line.bomUnitPerWarehouseUnit)
+  const bomQty = warehouseQty !== null && ratio !== null ? warehouseQty * ratio : null
+  const bomUnitPrice = warehouseUnitPrice !== null && ratio !== null && ratio > 0 ? warehouseUnitPrice / ratio : null
+  const total = warehouseQty !== null && warehouseUnitPrice !== null ? warehouseQty * warehouseUnitPrice : 0
+  return { warehouseQty, warehouseUnitPrice, ratio, bomQty, bomUnitPrice, total }
 }
 
 const normalizeMaterial = item => {
@@ -64,7 +90,7 @@ function MaterialThumb({ material, size = 40 }) {
   const src = material?.thumbnailUrl || ''
   if (!src) {
     return (
-      <Box sx={{ width: size, height: size, borderRadius: 1, bgcolor: '#eef2f7', border: '1px solid #d8dee8', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontSize: 11, fontWeight: 800 }}>
+      <Box sx={{ width: size, height: size, borderRadius: 1, bgcolor: '#eef2f7', border: '1px solid #d8dee8', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
         {String(material?.materialCode || '?').slice(0, 2).toUpperCase()}
       </Box>
     )
@@ -75,15 +101,12 @@ function MaterialThumb({ material, size = 40 }) {
       src={src}
       alt={material?.materialName || material?.materialCode || 'Material'}
       onError={e => { e.currentTarget.style.display = 'none' }}
-      sx={{ width: size, height: size, borderRadius: 1, objectFit: 'cover', border: '1px solid #d8dee8', bgcolor: '#f8fafc' }}
+      sx={{ width: size, height: size, borderRadius: 1, objectFit: 'cover', border: '1px solid #d8dee8', bgcolor: '#f8fafc', flexShrink: 0 }}
     />
   )
 }
 
-MaterialThumb.propTypes = {
-  material: PropTypes.object,
-  size: PropTypes.number
-}
+MaterialThumb.propTypes = { material: PropTypes.object, size: PropTypes.number }
 
 function extractQrCandidates(raw) {
   const value = String(raw || '').trim()
@@ -103,6 +126,7 @@ function extractQrCandidates(raw) {
 function findMaterialFromScan(raw, materials) {
   const candidates = extractQrCandidates(raw)
   const lowerCandidates = candidates.map(x => x.toLowerCase())
+  const rawLower = String(raw || '').toLowerCase()
   return materials.find(material => {
     const id = String(material.id || '').toLowerCase()
     const code = String(material.materialCode || '').toLowerCase()
@@ -112,8 +136,8 @@ function findMaterialFromScan(raw, materials) {
       candidate === code ||
       candidate === name ||
       (code && candidate.includes(code)) ||
-      (code && String(raw || '').toLowerCase().includes(code)) ||
-      (name && String(raw || '').toLowerCase().includes(name))
+      (code && rawLower.includes(code)) ||
+      (name && rawLower.includes(name))
     )
   }) || null
 }
@@ -236,63 +260,31 @@ function MaterialQrScanDialog({ open, onClose, onScan }) {
   )
 }
 
-MaterialQrScanDialog.propTypes = {
-  open: PropTypes.bool,
-  onClose: PropTypes.func,
-  onScan: PropTypes.func
-}
+MaterialQrScanDialog.propTypes = { open: PropTypes.bool, onClose: PropTypes.func, onScan: PropTypes.func }
 
 export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 'VND', onClose, onComplete }) {
   const { tenantId, companyId } = useAppContext()
   const [materials, setMaterials] = useState([])
   const [warehouses, setWarehouses] = useState([])
-  const [materialInput, setMaterialInput] = useState('')
-  const [selectedMaterial, setSelectedMaterial] = useState(null)
-  const [selectedWarehouse, setSelectedWarehouse] = useState(null)
   const [scannerOpen, setScannerOpen] = useState(false)
+  const [scanLineId, setScanLineId] = useState(null)
   const [saving, setSaving] = useState(false)
   const [loadingRefs, setLoadingRefs] = useState(false)
   const [error, setError] = useState('')
-  const [form, setForm] = useState({
-    invoiceNumber: invoiceNumberSeed(),
-    partyName: '',
-    invoiceDate: todayLocalDate(),
-    batchNo: '',
-    warehouseImportQuantity: '',
-    warehouseImportUnit: '',
-    warehouseImportUnitPrice: '',
-    bomUnitPerWarehouseUnit: '',
-    notes: ''
-  })
+  const [form, setForm] = useState({ invoiceNumber: invoiceNumberSeed(), partyName: '', invoiceDate: todayLocalDate(), notes: '' })
+  const [lines, setLines] = useState([newLine()])
 
   const currency = defaultCurrency === 'USD' ? 'USD' : 'VND'
-  const warehouseQty = toNumberOrNull(form.warehouseImportQuantity)
-  const warehouseUnitPrice = toNumberOrNull(form.warehouseImportUnitPrice)
-  const ratio = toNumberOrNull(form.bomUnitPerWarehouseUnit)
-  const bomQty = warehouseQty !== null && ratio !== null ? warehouseQty * ratio : null
-  const bomUnitPrice = warehouseUnitPrice !== null && ratio !== null && ratio > 0 ? warehouseUnitPrice / ratio : null
-  const invoiceTotal = warehouseQty !== null && warehouseUnitPrice !== null ? warehouseQty * warehouseUnitPrice : 0
-
-  const selectedMaterialCode = selectedMaterial?.materialCode || ''
-  const selectedMaterialUnit = selectedMaterial?.unit || 'unit'
+  const materialOptions = useMemo(() => materials.filter(m => m.materialCode || m.materialName), [materials])
+  const invoiceTotal = lines.reduce((sum, line) => sum + lineCalc(line).total, 0)
 
   useEffect(() => {
     if (!open) return
     setError('')
-    setSelectedMaterial(null)
-    setSelectedWarehouse(null)
-    setMaterialInput('')
-    setForm({
-      invoiceNumber: invoiceNumberSeed(),
-      partyName: '',
-      invoiceDate: todayLocalDate(),
-      batchNo: '',
-      warehouseImportQuantity: '',
-      warehouseImportUnit: '',
-      warehouseImportUnitPrice: '',
-      bomUnitPerWarehouseUnit: '',
-      notes: ''
-    })
+    setScannerOpen(false)
+    setScanLineId(null)
+    setForm({ invoiceNumber: invoiceNumberSeed(), partyName: '', invoiceDate: todayLocalDate(), notes: '' })
+    setLines([newLine()])
   }, [open])
 
   useEffect(() => {
@@ -314,17 +306,14 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
     return () => { mounted = false }
   }, [open])
 
-  const materialOptions = useMemo(() => materials.filter(m => m.materialCode || m.materialName), [materials])
+  const setFormField = field => event => setForm(prev => ({ ...prev, [field]: event.target.value }))
+  const updateLine = (id, patch) => setLines(prev => prev.map(line => line.id === id ? { ...line, ...patch } : line))
+  const addLine = () => setLines(prev => [...prev, newLine()])
+  const removeLine = id => setLines(prev => prev.length <= 1 ? prev : prev.filter(line => line.id !== id))
 
-  const setField = field => event => setForm(prev => ({ ...prev, [field]: event.target.value }))
-
-  const handleMaterialInputChange = (_, value, reason) => {
-    setMaterialInput(value)
-    if (reason === 'input') {
-      const lower = String(value || '').trim().toLowerCase()
-      const exact = materialOptions.find(m => String(m.materialCode || '').toLowerCase() === lower || String(m.materialName || '').toLowerCase() === lower)
-      if (exact) setSelectedMaterial(exact)
-    }
+  const openScannerForLine = id => {
+    setScanLineId(id)
+    setScannerOpen(true)
   }
 
   const handleScan = raw => {
@@ -334,21 +323,31 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
       setError(`No material matched QR: ${String(raw).slice(0, 120)}`)
       return
     }
-    setSelectedMaterial(material)
-    setMaterialInput(`${material.materialCode} - ${material.materialName}`)
+    const targetId = scanLineId || lines[0]?.id
+    updateLine(targetId, { material, materialInput: `${material.materialCode} - ${material.materialName}` })
     setError('')
+  }
+
+  const validateLine = (line, index) => {
+    const { warehouseQty, warehouseUnitPrice, ratio } = lineCalc(line)
+    const prefix = `Item ${index + 1}`
+    if (!line.material) return `${prefix}: select material by code, name, or QR.`
+    if (!line.warehouse) return `${prefix}: select warehouse.`
+    if (!line.batchNo.trim()) return `${prefix}: batch number is required.`
+    if (!line.warehouseImportUnit.trim()) return `${prefix}: warehouse unit is required.`
+    if (warehouseQty === null || warehouseQty <= 0) return `${prefix}: warehouse qty must be positive.`
+    if (warehouseUnitPrice === null || warehouseUnitPrice < 0) return `${prefix}: unit price cannot be negative.`
+    if (ratio === null || ratio <= 0) return `${prefix}: ratio must be positive.`
+    return ''
   }
 
   const validate = () => {
     if (!tenantId || !companyId) return 'Select tenant and company first.'
     if (!form.invoiceNumber.trim()) return 'Invoice number is required.'
-    if (!selectedMaterial) return 'Select a material by code, name, or QR.'
-    if (!selectedWarehouse) return 'Select a warehouse.'
-    if (!form.batchNo.trim()) return 'Batch number is required.'
-    if (!form.warehouseImportUnit.trim()) return 'Warehouse unit is required.'
-    if (warehouseQty === null || warehouseQty <= 0) return 'Warehouse qty must be positive.'
-    if (warehouseUnitPrice === null || warehouseUnitPrice < 0) return 'Warehouse unit price cannot be negative.'
-    if (ratio === null || ratio <= 0) return 'Ratio must be positive.'
+    for (let i = 0; i < lines.length; i++) {
+      const message = validateLine(lines[i], i)
+      if (message) return message
+    }
     return ''
   }
 
@@ -358,6 +357,7 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
     setSaving(true)
     setError('')
     let createdInvoice = null
+    let inventoryCreatedCount = 0
     try {
       createdInvoice = await createInvoice({
         invoiceType: 'PURCHASE',
@@ -368,36 +368,40 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
         subtotal: invoiceTotal,
         taxAmount: 0,
         totalAmount: invoiceTotal,
-        notes: form.notes || `Inventory receiving for ${selectedMaterialCode}`,
+        notes: form.notes || `Inventory receiving bill with ${lines.length} item(s)`,
         createdBy: 'inventory'
       }, { tenantId, companyId })
 
-      await addStock({
-        materialId: selectedMaterial.id || undefined,
-        materialCode: selectedMaterial.materialCode,
-        warehouseId: selectedWarehouse.id || undefined,
-        warehouseCode: selectedWarehouse.code,
-        batchNo: form.batchNo.trim(),
-        quantity: bomQty,
-        unitPrice: bomUnitPrice,
-        currency,
-        warehouseImportUnit: form.warehouseImportUnit.trim(),
-        warehouseImportQuantity: warehouseQty,
-        warehouseImportUnitPrice: warehouseUnitPrice,
-        bomUnitPerWarehouseUnit: ratio,
-        invoiceId: createdInvoice.id,
-        reason: `Invoice receiving ${form.invoiceNumber.trim()}`,
-        createdBy: 'inventory',
-        notes: form.notes || null
-      })
+      for (const [index, line] of lines.entries()) {
+        const { warehouseQty, warehouseUnitPrice, ratio, bomQty, bomUnitPrice } = lineCalc(line)
+        await addStock({
+          materialId: line.material.id || undefined,
+          materialCode: line.material.materialCode,
+          warehouseId: line.warehouse.id || undefined,
+          warehouseCode: line.warehouse.code,
+          batchNo: line.batchNo.trim(),
+          quantity: bomQty,
+          unitPrice: bomUnitPrice,
+          currency,
+          warehouseImportUnit: line.warehouseImportUnit.trim(),
+          warehouseImportQuantity: warehouseQty,
+          warehouseImportUnitPrice: warehouseUnitPrice,
+          bomUnitPerWarehouseUnit: ratio,
+          invoiceId: createdInvoice.id,
+          reason: `Invoice receiving ${form.invoiceNumber.trim()} item ${index + 1}`,
+          createdBy: 'inventory',
+          notes: line.notes || form.notes || null
+        })
+        inventoryCreatedCount += 1
+      }
 
       onComplete?.(createdInvoice)
       onClose?.()
     } catch (e) {
-      if (createdInvoice?.id) {
+      if (createdInvoice?.id && inventoryCreatedCount === 0) {
         try { await deleteInvoice(createdInvoice.id, { tenantId, companyId }) } catch { /* best-effort rollback */ }
       }
-      setError(e?.message || 'Failed to save invoice and inventory input')
+      setError(e?.message || 'Failed to save invoice and inventory items')
     } finally {
       setSaving(false)
     }
@@ -405,91 +409,113 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
 
   return (
     <>
-      <Dialog open={open} onClose={saving ? undefined : onClose} maxWidth="md" fullWidth>
+      <Dialog open={open} onClose={saving ? undefined : onClose} maxWidth="lg" fullWidth>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
           <span>New Invoice</span>
-          <Chip label={`Currency ${currency}`} color="primary" variant="outlined" sx={{ fontWeight: 800 }} />
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+            <Chip label={`${lines.length} item${lines.length === 1 ? '' : 's'}`} variant="outlined" sx={{ fontWeight: 800 }} />
+            <Chip label={`Currency ${currency}`} color="primary" variant="outlined" sx={{ fontWeight: 800 }} />
+          </Box>
         </DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '12px !important' }}>
           {error && <Alert severity="error">{error}</Alert>}
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 130px' }, gap: 1.5 }}>
-            <TextField label="Invoice Number" size="small" value={form.invoiceNumber} onChange={setField('invoiceNumber')} required />
-            <TextField label="Supplier / Party" size="small" value={form.partyName} onChange={setField('partyName')} />
-            <TextField label="Invoice Date" type="date" size="small" value={form.invoiceDate} onChange={setField('invoiceDate')} InputLabelProps={{ shrink: true }} />
+            <TextField label="Invoice Number" size="small" value={form.invoiceNumber} onChange={setFormField('invoiceNumber')} required />
+            <TextField label="Supplier / Party" size="small" value={form.partyName} onChange={setFormField('partyName')} />
+            <TextField label="Invoice Date" type="date" size="small" value={form.invoiceDate} onChange={setFormField('invoiceDate')} InputLabelProps={{ shrink: true }} />
           </Box>
 
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1.5fr) minmax(220px, 0.8fr)' }, gap: 1.5 }}>
-            <Autocomplete
-              options={materialOptions}
-              loading={loadingRefs}
-              value={selectedMaterial}
-              inputValue={materialInput}
-              onInputChange={handleMaterialInputChange}
-              onChange={(_, option) => {
-                setSelectedMaterial(option)
-                setMaterialInput(option ? `${option.materialCode} - ${option.materialName}` : '')
-              }}
-              filterOptions={(options, state) => {
-                const q = state.inputValue.trim().toLowerCase()
-                if (!q) return options.slice(0, 80)
-                return options.filter(m => `${m.materialCode} ${m.materialName}`.toLowerCase().includes(q)).slice(0, 80)
-              }}
-              getOptionLabel={option => option ? `${option.materialCode || ''}${option.materialName ? ' - ' + option.materialName : ''}` : ''}
-              isOptionEqualToValue={(option, value) => option.id === value.id || option.materialCode === value.materialCode}
-              renderOption={(props, option) => (
-                <Box component="li" {...props} sx={{ display: 'flex', gap: 1.25, alignItems: 'center', py: 0.75 }}>
-                  <MaterialThumb material={option} />
-                  <Box sx={{ minWidth: 0 }}>
-                    <Typography variant="body2" fontWeight={800} noWrap>{option.materialCode || '-'}</Typography>
-                    <Typography variant="caption" color="text.secondary" noWrap>{option.materialName || '-'}</Typography>
-                  </Box>
-                  <Chip label={option.unit || 'unit'} size="small" variant="outlined" sx={{ ml: 'auto' }} />
+          {lines.map((line, index) => {
+            const calc = lineCalc(line)
+            const unit = line.material?.unit || 'unit'
+            return (
+              <Box key={line.id} sx={{ border: '1px solid #d8dee8', borderRadius: 1, p: 1.25, bgcolor: '#fff', display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Typography fontWeight={900}>Item {index + 1}</Typography>
+                  {line.material && <Chip size="small" label={`BOM unit ${unit}`} variant="outlined" />}
+                  <Box sx={{ flex: 1 }} />
+                  <IconButton size="small" color="error" onClick={() => removeLine(line.id)} disabled={saving || lines.length <= 1}><DeleteIcon fontSize="small" /></IconButton>
                 </Box>
-              )}
-              renderInput={params => <TextField {...params} label="Material code or name" size="small" required />}
-            />
-            <Button variant="outlined" startIcon={<QrCode2Icon />} onClick={() => setScannerOpen(true)} sx={{ minHeight: 40, fontWeight: 800 }}>Scan Material QR</Button>
-          </Box>
 
-          {selectedMaterial && (
-            <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', p: 1, border: '1px solid #d8dee8', borderRadius: 1, bgcolor: '#f8fafc' }}>
-              <MaterialThumb material={selectedMaterial} size={64} />
-              <Box sx={{ minWidth: 0 }}>
-                <Typography fontWeight={900}>{selectedMaterial.materialCode}</Typography>
-                <Typography variant="body2" color="text.secondary">{selectedMaterial.materialName}</Typography>
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1.6fr) 150px minmax(180px, 0.8fr) 150px' }, gap: 1.25 }}>
+                  <Autocomplete
+                    options={materialOptions}
+                    loading={loadingRefs}
+                    value={line.material}
+                    inputValue={line.materialInput}
+                    onInputChange={(_, value, reason) => {
+                      updateLine(line.id, { materialInput: value })
+                      if (reason === 'input') {
+                        const lower = String(value || '').trim().toLowerCase()
+                        const exact = materialOptions.find(m => String(m.materialCode || '').toLowerCase() === lower || String(m.materialName || '').toLowerCase() === lower)
+                        if (exact) updateLine(line.id, { material: exact, materialInput: `${exact.materialCode} - ${exact.materialName}` })
+                      }
+                    }}
+                    onChange={(_, option) => updateLine(line.id, { material: option, materialInput: option ? `${option.materialCode} - ${option.materialName}` : '' })}
+                    filterOptions={(options, state) => {
+                      const q = state.inputValue.trim().toLowerCase()
+                      if (!q) return options.slice(0, 80)
+                      return options.filter(m => `${m.materialCode} ${m.materialName}`.toLowerCase().includes(q)).slice(0, 80)
+                    }}
+                    getOptionLabel={option => option ? `${option.materialCode || ''}${option.materialName ? ' - ' + option.materialName : ''}` : ''}
+                    isOptionEqualToValue={(option, value) => option.id === value.id || option.materialCode === value.materialCode}
+                    renderOption={(props, option) => (
+                      <Box component="li" {...props} sx={{ display: 'flex', gap: 1.25, alignItems: 'center', py: 0.75 }}>
+                        <MaterialThumb material={option} />
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography variant="body2" fontWeight={800} noWrap>{option.materialCode || '-'}</Typography>
+                          <Typography variant="caption" color="text.secondary" noWrap>{option.materialName || '-'}</Typography>
+                        </Box>
+                        <Chip label={option.unit || 'unit'} size="small" variant="outlined" sx={{ ml: 'auto' }} />
+                      </Box>
+                    )}
+                    renderInput={params => <TextField {...params} label="Material code or name" size="small" required />}
+                  />
+                  <Button variant="outlined" startIcon={<QrCode2Icon />} onClick={() => openScannerForLine(line.id)} sx={{ minHeight: 40, fontWeight: 800 }}>Scan QR</Button>
+                  <Autocomplete
+                    options={warehouses}
+                    loading={loadingRefs}
+                    value={line.warehouse}
+                    onChange={(_, option) => updateLine(line.id, { warehouse: option })}
+                    getOptionLabel={option => option ? `${option.code || ''}${option.name ? ' - ' + option.name : ''}` : ''}
+                    isOptionEqualToValue={(option, value) => option.id === value.id || option.code === value.code}
+                    renderInput={params => <TextField {...params} label="Warehouse" size="small" required />}
+                  />
+                  <TextField label="Batch No" size="small" value={line.batchNo} onChange={e => updateLine(line.id, { batchNo: e.target.value })} required />
+                </Box>
+
+                {line.material && (
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', p: 1, border: '1px solid #e2e8f0', borderRadius: 1, bgcolor: '#f8fafc' }}>
+                    <MaterialThumb material={line.material} size={48} />
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography variant="body2" fontWeight={900}>{line.material.materialCode}</Typography>
+                      <Typography variant="caption" color="text.secondary" noWrap>{line.material.materialName}</Typography>
+                    </Box>
+                  </Box>
+                )}
+
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr 1fr' }, gap: 1.25 }}>
+                  <TextField label="Warehouse Qty" type="number" size="small" value={line.warehouseImportQuantity} onChange={e => updateLine(line.id, { warehouseImportQuantity: e.target.value })} inputProps={{ step: 'any', min: 0 }} required />
+                  <TextField label="Warehouse Unit" size="small" value={line.warehouseImportUnit} onChange={e => updateLine(line.id, { warehouseImportUnit: e.target.value })} placeholder="box" required />
+                  <TextField label="Unit Price" type="number" size="small" value={line.warehouseImportUnitPrice} onChange={e => updateLine(line.id, { warehouseImportUnitPrice: e.target.value })} inputProps={{ step: 'any', min: 0 }} required />
+                  <TextField label="Ratio to BOM Unit" type="number" size="small" value={line.bomUnitPerWarehouseUnit} onChange={e => updateLine(line.id, { bomUnitPerWarehouseUnit: e.target.value })} inputProps={{ step: 'any', min: 0 }} required />
+                </Box>
+
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center', p: 1, borderRadius: 1, bgcolor: '#eef6ff', border: '1px solid #bfdbfe' }}>
+                  <Typography variant="caption" fontWeight={900}>Converted</Typography>
+                  <Chip label={`BOM qty ${calc.bomQty !== null ? fmtNum(calc.bomQty, 9) : '-'} ${unit}`} size="small" />
+                  <Chip label={`BOM unit price ${calc.bomUnitPrice !== null ? fmtNum(calc.bomUnitPrice, 10) : '-'} ${currency}`} size="small" />
+                  <Chip label={`Line total ${fmtNum(calc.total, 2)} ${currency}`} size="small" color="primary" variant="outlined" />
+                </Box>
               </Box>
-              <Chip label={`BOM unit ${selectedMaterialUnit}`} variant="outlined" sx={{ ml: 'auto', fontWeight: 800 }} />
-            </Box>
-          )}
+            )
+          })}
 
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
-            <Autocomplete
-              options={warehouses}
-              loading={loadingRefs}
-              value={selectedWarehouse}
-              onChange={(_, option) => setSelectedWarehouse(option)}
-              getOptionLabel={option => option ? `${option.code || ''}${option.name ? ' - ' + option.name : ''}` : ''}
-              isOptionEqualToValue={(option, value) => option.id === value.id || option.code === value.code}
-              renderInput={params => <TextField {...params} label="Warehouse" size="small" required />}
-            />
-            <TextField label="Batch No" size="small" value={form.batchNo} onChange={setField('batchNo')} required />
+          <Button variant="outlined" startIcon={<AddIcon />} onClick={addLine} disabled={saving} sx={{ alignSelf: 'flex-start', fontWeight: 800 }}>Add Item</Button>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <Chip label={`Invoice total ${fmtNum(invoiceTotal, 2)} ${currency}`} color="primary" sx={{ fontWeight: 900 }} />
           </Box>
-
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr 1fr' }, gap: 1.5 }}>
-            <TextField label="Warehouse Qty" type="number" size="small" value={form.warehouseImportQuantity} onChange={setField('warehouseImportQuantity')} inputProps={{ step: 'any', min: 0 }} required />
-            <TextField label="Warehouse Unit" size="small" value={form.warehouseImportUnit} onChange={setField('warehouseImportUnit')} placeholder="box" required />
-            <TextField label="Unit Price" type="number" size="small" value={form.warehouseImportUnitPrice} onChange={setField('warehouseImportUnitPrice')} inputProps={{ step: 'any', min: 0 }} required />
-            <TextField label="Ratio to BOM Unit" type="number" size="small" value={form.bomUnitPerWarehouseUnit} onChange={setField('bomUnitPerWarehouseUnit')} inputProps={{ step: 'any', min: 0 }} required />
-          </Box>
-
-          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center', p: 1, borderRadius: 1, bgcolor: '#eef6ff', border: '1px solid #bfdbfe' }}>
-            <Typography variant="caption" fontWeight={900}>Converted</Typography>
-            <Chip label={`BOM qty ${bomQty !== null ? fmtNum(bomQty, 9) : '-'} ${selectedMaterialUnit}`} size="small" />
-            <Chip label={`BOM unit price ${bomUnitPrice !== null ? fmtNum(bomUnitPrice, 10) : '-'} ${currency}`} size="small" />
-            <Chip label={`Invoice total ${fmtNum(invoiceTotal, 2)} ${currency}`} size="small" color="primary" variant="outlined" />
-          </Box>
-
-          <TextField label="Notes" size="small" value={form.notes} onChange={setField('notes')} multiline minRows={2} />
+          <TextField label="Bill Notes" size="small" value={form.notes} onChange={setFormField('notes')} multiline minRows={2} />
         </DialogContent>
         <DialogActions>
           <Button onClick={onClose} disabled={saving}>Cancel</Button>
