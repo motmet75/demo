@@ -425,10 +425,6 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
 
             <Divider />
 
-            {isEditing && (
-              <TextField label="Total Qty" type="number" value={form.quantityTotal} disabled
-                helperText="Total quantity ever received - set at import/creation, not editable" InputProps={{ readOnly: true }} />
-            )}
             <TextField label="Quantity Reserved (info only)" type="number" value={form.quantityReserved}
               onChange={isEditing ? undefined : handleChange('quantityReserved')}
               disabled={isSubmitting || isEditing}
@@ -441,8 +437,8 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
               helperText={isEditing ? 'Managed by Reserve/Release actions — Available = On Hand − Locked' : 'Qty blocked from use: Available = On Hand − Locked'} />
 
             <TextField label="Contract Code" value={form.contractCode} onChange={handleChange('contractCode')} disabled={isSubmitting} />
-            <TextField label="Unit" value={form.unit || 'pcs'} disabled helperText="From selected material" InputProps={{ readOnly: true }} />
             <TextField label="Unit Price" type="number" value={form.unitPrice} onChange={handleChange('unitPrice')} disabled={isSubmitting} />
+            <TextField label="Unit" value={form.unit || 'pcs'} disabled helperText="From selected material" InputProps={{ readOnly: true }} />
             <TextField label="Currency" value={form.currency} onChange={handleChange('currency')} disabled={isSubmitting} />
 
             <TextField label="HS Code" value={form.hsCode} onChange={handleChange('hsCode')} disabled={isSubmitting} />
