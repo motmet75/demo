@@ -210,6 +210,7 @@ CREATE TABLE public.material (
     material_name text NOT NULL,
     unit character varying(20) NOT NULL,
     material_type character varying(30) NOT NULL,
+    thumbnail_url text,
     is_active boolean DEFAULT true,
     created_at timestamp without time zone DEFAULT now(),
     description text,

@@ -32,10 +32,29 @@ public class MaterialService {
     /**
      * Update an existing material ensuring it is scoped to the provided company and tenant.
      */
-    public Material updateForCompany(Material material, Company company, Tenant tenant) {
-        material.setCompany(company);
-        material.setTenant(tenant);
-        return materialRepository.save(material);
+    public Material updateForCompany(UUID id, Material material, Company company, Tenant tenant) {
+        Material existing = materialRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("material not found"));
+
+        if (existing.getTenant() == null || !existing.getTenant().getId().equals(tenant.getId())) {
+            throw new IllegalArgumentException("material does not belong to tenant");
+        }
+        if (existing.getCompany() == null || !existing.getCompany().getId().equals(company.getId())) {
+            throw new IllegalArgumentException("material does not belong to company");
+        }
+
+        existing.setMaterialCode(material.getMaterialCode());
+        existing.setMaterialName(material.getMaterialName());
+        existing.setUnit(material.getUnit());
+        existing.setMaterialType(material.getMaterialType());
+        existing.setThumbnailUrl(material.getThumbnailUrl());
+        existing.setPrice(material.getPrice());
+        existing.setDescription(material.getDescription());
+        if (material.getIsActive() != null) {
+            existing.setIsActive(material.getIsActive());
+        }
+
+        return materialRepository.save(existing);
     }
 
     public List<Material> findAllByCompany(Company company) {

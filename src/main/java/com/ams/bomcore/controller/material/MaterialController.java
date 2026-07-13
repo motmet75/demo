@@ -160,7 +160,8 @@ public class MaterialController {
 			return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
 		}
 
-        if (!materialRepository.existsById(id)) {
+        Optional<Material> current = materialRepository.findById(id);
+        if (current.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
 
@@ -171,9 +172,20 @@ public class MaterialController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("company does not belong to tenant");
         }
 
-        // ensure id is set on incoming object and update scoping
-        material.setId(id);
-        Material saved = materialService.updateForCompany(material, company, tenant);
+        Material existingMaterial = current.get();
+        if (existingMaterial.getTenant() == null || !existingMaterial.getTenant().getId().equals(tenant.getId())) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+        if (existingMaterial.getCompany() == null || !existingMaterial.getCompany().getId().equals(company.getId())) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+
+        var duplicate = materialRepository.findByMaterialCodeAndCompany(material.getMaterialCode(), company);
+        if (duplicate.isPresent() && !duplicate.get().getId().equals(id)) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("material code already exists for this company");
+        }
+
+        Material saved = materialService.updateForCompany(id, material, company, tenant);
         return ResponseEntity.ok(saved);
     }
 

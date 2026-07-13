@@ -203,7 +203,16 @@ export default function MaterialGrid({ refreshKey }) {
         createdAt: (res && (res.createdAt !== undefined ? res.createdAt : undefined)) ?? updatedMaterial.createdAt
       }
 
-      setRows(prev => prev.map(r => (r.id === newRow.id ? newRow : r)))
+      setRows(prev => prev.map(r => (
+        r.id === newRow.id
+          ? {
+              ...r,
+              ...newRow,
+              isActive: newRow.isActive ?? r.isActive,
+              createdAt: newRow.createdAt ?? r.createdAt
+            }
+          : r
+      )))
       handleCloseEdit()
       return newRow
     } catch (e) {
