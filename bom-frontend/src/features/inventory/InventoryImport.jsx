@@ -3,18 +3,19 @@ import * as XLSX from 'xlsx'
 import { importInventory } from '../../api/inventoryApi'
 
 const XLSX_HEADERS = [
-  'material_code','warehouse_code','batch_no','quantity_on_hand','quantity_total',
-  'quantity_reserved','quantity_locked','contract_code','unit','unit_price','currency',
+  'material_code','warehouse_code','batch_no',
+  'warehouse_import_quantity','warehouse_import_unit','bom_unit_per_warehouse_unit','warehouse_import_unit_price','bom_import_unit',
+  'quantity_on_hand','quantity_total','quantity_reserved','quantity_locked','contract_code','unit','unit_price','currency',
   'hs_code','origin_type','origin_country','xform_no','cds_no','purchase_no',
   'order_to_deduction','material_quota','material_quota_percentage','user_name',
   'xform_date','purchase_date_time','cds_date_time','production_date_time','expiration_date_time',
   'visible','approved','locked'
 ]
-
 // Numeric columns that may contain thousand-separator commas (e.g. "5,919.51")
 const NUMERIC_COLS = new Set([
+  'warehouse_import_quantity','bom_unit_per_warehouse_unit','warehouse_import_unit_price','price',
   'quantity_on_hand','quantity_total','quantity_reserved','quantity_locked',
-  'unit_price','order_to_deduction','material_quota','material_quota_percentage'
+  'unit_price','bom_unit_price','order_to_deduction','material_quota','material_quota_percentage'
 ])
 
 function cleanNumeric(val) {
@@ -27,7 +28,12 @@ function cleanNumeric(val) {
 
 function downloadTemplate() {
   const wb = XLSX.utils.book_new()
-  const ws = XLSX.utils.aoa_to_sheet([XLSX_HEADERS])
+  const rows = [
+    XLSX_HEADERS,
+    ['MAT-MILK','WH-A','MILK-PKG-001',1,'package',720,72000,'g','','',0,0,'CTR-001','g','','USD','0402.21','domestic','VN','XFORM-001','CDS-001','PO-001','A',1050,105,'admin','2026-01-15','2026-01-15T08:00:00Z','2026-01-16T08:00:00Z','2026-01-10T00:00:00Z','2027-01-10T00:00:00Z','true','false','false'],
+    ['MAT-002','WH-B','BATCH-2026-002','','','','','',500,500,0,0,'','pcs',12,'USD','','','','','','','B','',100,'system','','','','','','true','false','false']
+  ]
+  const ws = XLSX.utils.aoa_to_sheet(rows)
 
   // Style header row width hints
   ws['!cols'] = XLSX_HEADERS.map(() => ({ wch: 20 }))
@@ -97,15 +103,15 @@ export default function InventoryImport({ onImportComplete }) {
 
   const CELL = { padding: '3px 8px', border: '1px solid #e0e0e0', fontSize: 11, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
   const TH = { ...CELL, background: '#f5f5f5', fontWeight: 600 }
-  const PREVIEW_COLS = ['material_code','warehouse_code','batch_no','quantity_on_hand','unit_price']
+  const PREVIEW_COLS = ['material_code','warehouse_code','batch_no','warehouse_import_quantity','warehouse_import_unit','bom_unit_per_warehouse_unit','warehouse_import_unit_price','bom_import_unit','quantity_on_hand','unit_price']
 
   return (
     <div style={{ marginBottom: 20 }}>
       <h3>Import Inventory (XLSX)</h3>
 
       <div style={{ marginBottom: 8, fontSize: 12, color: '#555' }}>
-        Required columns: <code>material_code, warehouse_code, batch_no, quantity_on_hand</code>.
-        Optional: <code>quantity_total</code> (defaults to quantity_on_hand if omitted).
+        Required columns: <code>material_code, warehouse_code, batch_no</code> plus either <code>quantity_on_hand</code> or <code>warehouse_import_quantity + bom_unit_per_warehouse_unit</code>.
+        Optional: <code>warehouse_import_unit_price</code> converts to BOM <code>unit_price</code> automatically.
         Numeric values may use thousand-separator commas — they are cleaned automatically.{' '}
         <button type="button" onClick={downloadTemplate} style={{ fontSize: 11, padding: '2px 8px', cursor: 'pointer' }}>
           ⬇ Download Template (.xlsx)

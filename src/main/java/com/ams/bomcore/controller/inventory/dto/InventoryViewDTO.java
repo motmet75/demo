@@ -28,6 +28,10 @@ public class InventoryViewDTO {
     private String orderToDeduction;
     private String unit;
     private BigDecimal unitPrice;
+    private String warehouseImportUnit;
+    private BigDecimal warehouseImportQuantity;
+    private BigDecimal bomUnitPerWarehouseUnit;
+    private BigDecimal warehouseImportUnitPrice;
     private String currency;
     private Instant expirationDateTime;
     private Instant productionDateTime;
@@ -43,6 +47,7 @@ public class InventoryViewDTO {
                             UUID warehouseId, String warehouseCode, String warehouseName,
                             BigDecimal quantityOnHand, BigDecimal quantityTotal, BigDecimal quantityReserved, BigDecimal quantityLocked, String batchNo,
                             String contractCode, String orderToDeduction, String unit, BigDecimal unitPrice, String currency,
+                            String warehouseImportUnit, BigDecimal warehouseImportQuantity, BigDecimal bomUnitPerWarehouseUnit, BigDecimal warehouseImportUnitPrice,
                             Instant expirationDateTime, Instant productionDateTime, Instant createdAt, Instant updatedAt,
                             Boolean visible, Boolean approved, Boolean locked,
                             BigDecimal materialQuotaPercentage, String userName) {
@@ -65,6 +70,10 @@ public class InventoryViewDTO {
         this.unit = unit;
         this.unitPrice = unitPrice;
         this.currency = currency;
+        this.warehouseImportUnit = warehouseImportUnit;
+        this.warehouseImportQuantity = warehouseImportQuantity;
+        this.bomUnitPerWarehouseUnit = bomUnitPerWarehouseUnit;
+        this.warehouseImportUnitPrice = warehouseImportUnitPrice;
         this.expirationDateTime = expirationDateTime;
         this.productionDateTime = productionDateTime;
         this.createdAt = createdAt;
@@ -95,6 +104,10 @@ public class InventoryViewDTO {
     public String getOrderToDeduction() { return orderToDeduction; }
     public String getUnit() { return unit; }
     public BigDecimal getUnitPrice() { return unitPrice; }
+    public String getWarehouseImportUnit() { return warehouseImportUnit; }
+    public BigDecimal getWarehouseImportQuantity() { return warehouseImportQuantity; }
+    public BigDecimal getBomUnitPerWarehouseUnit() { return bomUnitPerWarehouseUnit; }
+    public BigDecimal getWarehouseImportUnitPrice() { return warehouseImportUnitPrice; }
     public String getCurrency() { return currency; }
     public Instant getExpirationDateTime() { return expirationDateTime; }
     public Instant getProductionDateTime() { return productionDateTime; }

@@ -20,7 +20,11 @@ ALTER TABLE inventory ADD COLUMN IF NOT EXISTS user_name VARCHAR(100) NOT NULL D
 
 -- Add unit and pricing information
 ALTER TABLE inventory ADD COLUMN IF NOT EXISTS unit VARCHAR(20) NOT NULL DEFAULT 'pcs';
-ALTER TABLE inventory ADD COLUMN IF NOT EXISTS unit_price NUMERIC(18, 4) NOT NULL DEFAULT 0;
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS unit_price NUMERIC(18, 10) NOT NULL DEFAULT 0;
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS warehouse_import_unit VARCHAR(30);
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS warehouse_import_quantity NUMERIC(18, 6);
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS bom_unit_per_warehouse_unit NUMERIC(18, 6);
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS warehouse_import_unit_price NUMERIC(18, 6);
 ALTER TABLE inventory ADD COLUMN IF NOT EXISTS currency CHAR(3) NOT NULL DEFAULT 'USD';
 
 -- Add customs/trade information

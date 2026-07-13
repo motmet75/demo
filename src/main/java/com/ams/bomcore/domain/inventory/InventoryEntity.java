@@ -77,6 +77,17 @@ public class InventoryEntity {
     @Column(name = "unit_price", columnDefinition = "numeric")
     private BigDecimal unitPrice = BigDecimal.ZERO;
 
+    @Column(name = "warehouse_import_unit", length = 30)
+    private String warehouseImportUnit;
+
+    @Column(name = "warehouse_import_quantity", columnDefinition = "numeric")
+    private BigDecimal warehouseImportQuantity;
+
+    @Column(name = "bom_unit_per_warehouse_unit", columnDefinition = "numeric")
+    private BigDecimal bomUnitPerWarehouseUnit;
+
+    @Column(name = "warehouse_import_unit_price", columnDefinition = "numeric")
+    private BigDecimal warehouseImportUnitPrice;
     @Column(name = "currency", length = 3)
     private String currency = "USD";
 
@@ -290,6 +301,37 @@ public class InventoryEntity {
         this.unitPrice = unitPrice;
     }
 
+    public String getWarehouseImportUnit() {
+        return warehouseImportUnit;
+    }
+
+    public void setWarehouseImportUnit(String warehouseImportUnit) {
+        this.warehouseImportUnit = warehouseImportUnit;
+    }
+
+    public BigDecimal getWarehouseImportQuantity() {
+        return warehouseImportQuantity;
+    }
+
+    public void setWarehouseImportQuantity(BigDecimal warehouseImportQuantity) {
+        this.warehouseImportQuantity = warehouseImportQuantity;
+    }
+
+    public BigDecimal getBomUnitPerWarehouseUnit() {
+        return bomUnitPerWarehouseUnit;
+    }
+
+    public void setBomUnitPerWarehouseUnit(BigDecimal bomUnitPerWarehouseUnit) {
+        this.bomUnitPerWarehouseUnit = bomUnitPerWarehouseUnit;
+    }
+
+    public BigDecimal getWarehouseImportUnitPrice() {
+        return warehouseImportUnitPrice;
+    }
+
+    public void setWarehouseImportUnitPrice(BigDecimal warehouseImportUnitPrice) {
+        this.warehouseImportUnitPrice = warehouseImportUnitPrice;
+    }
     public String getCurrency() {
         return currency;
     }

@@ -161,6 +161,10 @@ CREATE TABLE public.inventory (
     tenant_id uuid DEFAULT public.uuid_v7() NOT NULL,
     quantity double precision,
     company_id uuid NOT NULL,
+    warehouse_import_unit character varying(30),
+    warehouse_import_quantity numeric(18,6),
+    bom_unit_per_warehouse_unit numeric(18,6),
+    warehouse_import_unit_price numeric(18,6),
     CONSTRAINT chk_quantity_non_negative CHECK (((quantity_on_hand >= (0)::numeric) AND (quantity_reserved >= (0)::numeric))),
     CONSTRAINT chk_reserved_not_exceed_onhand CHECK ((quantity_reserved <= quantity_on_hand))
 );

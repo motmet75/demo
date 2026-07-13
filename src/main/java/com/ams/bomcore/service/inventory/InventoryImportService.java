@@ -2,6 +2,7 @@ package com.ams.bomcore.service.inventory;
 
 import java.io.InputStream;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -163,6 +164,16 @@ public class InventoryImportService {
                 return result;
             }
 
+            for (CsvRow row : rawRows) {
+                applyWarehouseConversion(row, materialMap.get(row.materialCode), errors);
+            }
+            if (!errors.isEmpty()) {
+                result.setSuccess(false);
+                result.setMessage("Import validation failed");
+                result.setErrors(errors);
+                return result;
+            }
+
             // =========================================================
             // 6. LOAD EXISTING INVENTORY
             // =========================================================
@@ -241,6 +252,10 @@ public class InventoryImportService {
                 
                 inv.setContractCode(row.contractCode);
                 inv.setUnitPrice(row.unitPrice);
+                inv.setWarehouseImportUnit(row.warehouseImportUnit);
+                inv.setWarehouseImportQuantity(row.warehouseImportQuantity);
+                inv.setBomUnitPerWarehouseUnit(row.bomUnitPerWarehouseUnit);
+                inv.setWarehouseImportUnitPrice(row.warehouseImportUnitPrice);
                 inv.setHsCode(row.hsCode);
                 inv.setOriginType(row.originType);
                 inv.setOriginCountry(row.originCountry);
@@ -324,7 +339,7 @@ public class InventoryImportService {
         r.warehouseCode = getCellValue(row, columnMap, "warehouse_code");
         r.batchNo = getCellValue(row, columnMap, "batch_no");
 
-        r.unit = getCellValue(row, columnMap, "unit");
+        r.unit = firstCellValue(row, columnMap, "bom_import_unit", "bom_unit", "unit");
 
         r.currency = getCellValue(row, columnMap, "currency");
 
@@ -345,13 +360,26 @@ public class InventoryImportService {
         r.orderToDeduction = getCellValue(row, columnMap, "order_to_deduction");
 
         r.userName = getCellValue(row, columnMap, "user_name");
+        r.warehouseImportUnit = firstCellValue(row, columnMap, "warehouse_import_unit", "import_unit", "purchase_unit");
 
         // =========================================================
         // DECIMAL FIELDS
         // =========================================================
 
         r.unitPrice = parseBigDecimal(
-                getCellValue(row, columnMap, "unit_price")
+                firstCellValue(row, columnMap, "unit_price", "bom_unit_price")
+        );
+
+        r.warehouseImportQuantity = parseBigDecimal(
+                firstCellValue(row, columnMap, "warehouse_import_quantity", "warehouse_qty_import_unit", "import_quantity", "purchase_quantity")
+        );
+
+        r.bomUnitPerWarehouseUnit = parseBigDecimal(
+                firstCellValue(row, columnMap, "bom_unit_per_warehouse_unit", "bom_qty_per_warehouse_unit", "bom_import_quantity", "conversion_factor")
+        );
+
+        r.warehouseImportUnitPrice = parseBigDecimal(
+                firstCellValue(row, columnMap, "warehouse_import_unit_price", "warehouse_unit_price", "import_unit_price", "price")
         );
 
         r.quantityOnHand = parseBigDecimal(
@@ -440,6 +468,76 @@ public class InventoryImportService {
                 .trim();
     }
 
+    private String firstCellValue(Row row, Map<String, Integer> map, String... colNames) {
+        for (String colName : colNames) {
+            String value = getCellValue(row, map, colName);
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private void applyWarehouseConversion(CsvRow row, Material material, List<String> errors) {
+        String bomUnit = unitFor(material);
+        if (row.unit != null && !row.unit.isBlank() && !row.unit.trim().equalsIgnoreCase(bomUnit)) {
+            errors.add("Line " + row.lineNumber + ": bom_import_unit/unit '" + row.unit + "' does not match material unit '" + bomUnit + "'");
+        }
+        row.unit = bomUnit;
+
+        if (row.warehouseImportUnit != null && row.warehouseImportUnit.isBlank()) {
+            row.warehouseImportUnit = null;
+        }
+        boolean hasWarehouseImport = row.warehouseImportQuantity != null
+                || row.bomUnitPerWarehouseUnit != null
+                || row.warehouseImportUnitPrice != null
+                || row.warehouseImportUnit != null;
+
+        if (hasWarehouseImport) {
+            if (row.warehouseImportQuantity == null) {
+                errors.add("Line " + row.lineNumber + ": warehouse_import_quantity is required when warehouse import columns are used");
+            } else if (row.warehouseImportQuantity.compareTo(BigDecimal.ZERO) <= 0) {
+                errors.add("Line " + row.lineNumber + ": warehouse_import_quantity must be positive");
+            }
+
+            if (row.bomUnitPerWarehouseUnit == null) {
+                errors.add("Line " + row.lineNumber + ": bom_unit_per_warehouse_unit is required when warehouse import columns are used");
+            } else if (row.bomUnitPerWarehouseUnit.compareTo(BigDecimal.ZERO) <= 0) {
+                errors.add("Line " + row.lineNumber + ": bom_unit_per_warehouse_unit must be positive");
+            }
+
+            if (row.warehouseImportUnitPrice != null && row.warehouseImportUnitPrice.compareTo(BigDecimal.ZERO) < 0) {
+                errors.add("Line " + row.lineNumber + ": warehouse_import_unit_price cannot be negative");
+            }
+
+            if (row.warehouseImportQuantity != null
+                    && row.bomUnitPerWarehouseUnit != null
+                    && row.warehouseImportQuantity.compareTo(BigDecimal.ZERO) > 0
+                    && row.bomUnitPerWarehouseUnit.compareTo(BigDecimal.ZERO) > 0) {
+                BigDecimal bomQuantity = row.warehouseImportQuantity.multiply(row.bomUnitPerWarehouseUnit);
+                row.quantityOnHand = bomQuantity;
+                if (row.quantityTotal == null) {
+                    row.quantityTotal = bomQuantity;
+                }
+                if (row.warehouseImportUnitPrice != null) {
+                    row.unitPrice = row.warehouseImportUnitPrice.divide(row.bomUnitPerWarehouseUnit, 10, RoundingMode.HALF_UP);
+                }
+            }
+        }
+
+        if (row.quantityOnHand == null) {
+            errors.add("Line " + row.lineNumber + ": either quantity_on_hand or warehouse_import_quantity + bom_unit_per_warehouse_unit is required");
+        } else if (row.quantityOnHand.compareTo(BigDecimal.ZERO) < 0) {
+            errors.add("Line " + row.lineNumber + ": quantity_on_hand cannot be negative");
+        }
+
+        if (row.quantityTotal == null) {
+            row.quantityTotal = row.quantityOnHand;
+        }
+        if (row.unitPrice == null) {
+            row.unitPrice = BigDecimal.ZERO;
+        }
+    }
     private BigDecimal parseBigDecimal(String value) {
 
         try {
@@ -545,6 +643,14 @@ public class InventoryImportService {
         String unit;
 
         BigDecimal unitPrice;
+
+        String warehouseImportUnit;
+
+        BigDecimal warehouseImportQuantity;
+
+        BigDecimal bomUnitPerWarehouseUnit;
+
+        BigDecimal warehouseImportUnitPrice;
 
         String currency;
 

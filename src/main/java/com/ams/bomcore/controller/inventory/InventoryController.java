@@ -2,6 +2,7 @@ package com.ams.bomcore.controller.inventory;
 
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
@@ -79,6 +80,17 @@ public class InventoryController {
         return companyId;
     }
 
+    private String bodyString(Map<String, Object> body, String key) {
+        Object value = body.get(key);
+        if (value == null) return null;
+        String text = String.valueOf(value).trim();
+        return text.isEmpty() ? null : text;
+    }
+
+    private BigDecimal bodyDecimal(Map<String, Object> body, String key) {
+        String value = bodyString(body, key);
+        return value == null ? null : new BigDecimal(value);
+    }
     @GetMapping
     public List<InventoryEntity> list(@RequestParam(value = "tenantId", required = false) UUID tenantId,
                                       @RequestParam(value = "companyId", required = false) UUID companyId,
@@ -127,8 +139,32 @@ public class InventoryController {
 				return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
 			}
 
-            BigDecimal qty = new BigDecimal(String.valueOf(body.get("quantity")));
-
+            BigDecimal qty = bodyDecimal(body, "quantity");
+            BigDecimal unitPrice = bodyDecimal(body, "unitPrice");
+            BigDecimal warehouseImportQuantity = bodyDecimal(body, "warehouseImportQuantity");
+            BigDecimal bomUnitPerWarehouseUnit = bodyDecimal(body, "bomUnitPerWarehouseUnit");
+            BigDecimal warehouseImportUnitPrice = bodyDecimal(body, "warehouseImportUnitPrice");
+            String warehouseImportUnit = bodyString(body, "warehouseImportUnit");
+            String currency = bodyString(body, "currency");
+            boolean hasWarehouseConversion = warehouseImportQuantity != null
+                    || bomUnitPerWarehouseUnit != null
+                    || warehouseImportUnitPrice != null
+                    || warehouseImportUnit != null;
+            if (hasWarehouseConversion) {
+                if (warehouseImportQuantity == null || warehouseImportQuantity.compareTo(BigDecimal.ZERO) <= 0) {
+                    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("warehouseImportQuantity must be positive");
+                }
+                if (bomUnitPerWarehouseUnit == null || bomUnitPerWarehouseUnit.compareTo(BigDecimal.ZERO) <= 0) {
+                    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("bomUnitPerWarehouseUnit must be positive");
+                }
+                if (warehouseImportUnitPrice != null && warehouseImportUnitPrice.compareTo(BigDecimal.ZERO) < 0) {
+                    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("warehouseImportUnitPrice cannot be negative");
+                }
+                qty = warehouseImportQuantity.multiply(bomUnitPerWarehouseUnit);
+                if (warehouseImportUnitPrice != null) {
+                    unitPrice = warehouseImportUnitPrice.divide(bomUnitPerWarehouseUnit, 10, RoundingMode.HALF_UP);
+                }
+            }
             String batchNo = body.get("batchNo") == null ? null : String.valueOf(body.get("batchNo"));
             String exp = body.get("expirationDateTime") == null ? null : String.valueOf(body.get("expirationDateTime"));
             String prod = body.get("productionDateTime") == null ? null : String.valueOf(body.get("productionDateTime"));
@@ -154,11 +190,11 @@ public class InventoryController {
             if (mid != null && wid != null) {
                 UUID materialId = UUID.fromString(String.valueOf(mid));
                 UUID warehouseId = UUID.fromString(String.valueOf(wid));
-                saved = inventoryService.addStockByIds(materialId, warehouseId, qty, batchNo, expirationDateTime, productionDateTime, quantityReserved, quantityLocked, orderToDeduction, materialQuotaPercentage, tenantId, companyId, reason, createdBy, notes, invoiceId);
+                saved = inventoryService.addStockByIds(materialId, warehouseId, qty, batchNo, expirationDateTime, productionDateTime, quantityReserved, quantityLocked, orderToDeduction, materialQuotaPercentage, tenantId, companyId, reason, createdBy, notes, invoiceId, unitPrice, currency, warehouseImportUnit, warehouseImportQuantity, bomUnitPerWarehouseUnit, warehouseImportUnitPrice);
             } else {
                 String materialCode = (String) body.get("materialCode");
                 String warehouseCode = (String) body.get("warehouseCode");
-                saved = inventoryService.addStock(materialCode, warehouseCode, qty, batchNo, expirationDateTime, productionDateTime, quantityReserved, quantityLocked, orderToDeduction, materialQuotaPercentage, tenantId, companyId, reason, createdBy, notes, invoiceId);
+                saved = inventoryService.addStock(materialCode, warehouseCode, qty, batchNo, expirationDateTime, productionDateTime, quantityReserved, quantityLocked, orderToDeduction, materialQuotaPercentage, tenantId, companyId, reason, createdBy, notes, invoiceId, unitPrice, currency, warehouseImportUnit, warehouseImportQuantity, bomUnitPerWarehouseUnit, warehouseImportUnitPrice);
             }
             return ResponseEntity.status(HttpStatus.CREATED).body(saved);
         } catch (InventoryException ex) {
@@ -361,24 +397,27 @@ public class InventoryController {
     @GetMapping(path = "/template/import")
     public ResponseEntity<byte[]> downloadImportTemplate() {
         String[] headers = {
-            "material_code","warehouse_code","batch_no","quantity_on_hand","quantity_total",
-            "quantity_reserved","quantity_locked","contract_code","unit","unit_price","currency",
+            "material_code","warehouse_code","batch_no",
+            "warehouse_import_quantity","warehouse_import_unit","bom_unit_per_warehouse_unit","warehouse_import_unit_price","bom_import_unit",
+            "quantity_on_hand","quantity_total","quantity_reserved","quantity_locked","contract_code","unit","unit_price","currency",
             "hs_code","origin_type","origin_country","xform_no","cds_no","purchase_no",
             "order_to_deduction","material_quota","material_quota_percentage",
             "user_name","xform_date","purchase_date_time","cds_date_time",
             "production_date_time","expiration_date_time","visible","approved","locked"
         };
         Object[] example1 = {
-            "MAT-001","WH-A","BATCH-2026-001",1000,1000,
-            0,0,"CTR-001","kg",5.50,"USD",
-            "3904.10","domestic","VN","XFORM-001","CDS-001","PO-001",
+            "MAT-MILK","WH-A","MILK-PKG-001",
+            1,"package",720,72000,"g",
+            "","",0,0,"CTR-001","g","","USD",
+            "0402.21","domestic","VN","XFORM-001","CDS-001","PO-001",
             "A",1050,105.00,
             "admin","2026-01-15","2026-01-15T08:00:00Z","2026-01-16T08:00:00Z",
             "2026-01-10T00:00:00Z","2027-01-10T00:00:00Z","true","false","false"
         };
         Object[] example2 = {
-            "MAT-002","WH-B","BATCH-2026-002",500,500,
-            0,0,"","pcs",12.00,"USD",
+            "MAT-002","WH-B","BATCH-2026-002",
+            "","","","","",
+            500,500,0,0,"","pcs",12.00,"USD",
             "","","","","","",
             "B","",100.00,
             "system","","","",
