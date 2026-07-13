@@ -4,6 +4,7 @@ import EditIcon from '@mui/icons-material/Edit'
 import LocalHospitalIcon from '@mui/icons-material/LocalHospital'
 import CallReceivedIcon from '@mui/icons-material/CallReceived'
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
+import AddIcon from '@mui/icons-material/Add'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
@@ -14,6 +15,7 @@ import Box from '@mui/material/Box'
 import { fetchInventoryView, addStock, updateInventory, reserveInventory, releaseInventory, deleteInventory } from '../../api/inventoryApi'
 import { apiFetch, getContextHeaders } from '../../api/client'
 import InventoryEditModal from './InventoryEditModal'
+import InventoryInvoiceReceiveDialog from './InventoryInvoiceReceiveDialog'
 import InventoryImport from './InventoryImport'
 import InventoryPatchCsv from './InventoryPatchCsv'
 import * as XLSX from 'xlsx'
@@ -56,6 +58,24 @@ export default function InventoryGrid() {
 
   const [importOpen, setImportOpen] = useState(false)
   const [patchOpen, setPatchOpen]   = useState(false)
+  const [invoiceReceiveOpen, setInvoiceReceiveOpen] = useState(false)
+
+  const [defaultCurrency, setDefaultCurrency] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem('inventory_default_currency')
+      return stored === 'USD' || stored === 'VND' ? stored : 'VND'
+    } catch {
+      return 'VND'
+    }
+  })
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('inventory_default_currency', defaultCurrency)
+    } catch {
+      // ignore storage errors
+    }
+  }, [defaultCurrency])
 
   const apiRef = useGridApiRef()
 
@@ -559,6 +579,16 @@ export default function InventoryGrid() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={() => { setSelected(null); setModalKey(k => k + 1); setEditOpen(true) }} disabled={saving}>Add Inventory</button>
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={<AddIcon />}
+            onClick={() => setInvoiceReceiveOpen(true)}
+            disabled={saving}
+            sx={{ textTransform: 'none', fontWeight: 800 }}
+          >
+            New Invoice
+          </Button>
           <button onClick={() => { setImportOpen(o => !o); setPatchOpen(false) }} disabled={saving}>
             {importOpen ? '✕ Close Import' : 'Import Inventory'}
           </button>
@@ -567,6 +597,18 @@ export default function InventoryGrid() {
             {patchOpen ? '✕ Close Patch' : '✏ Patch Deduction / Quota'}
           </button>
           <button onClick={() => load()} disabled={loading} title="Refresh">🔄 Refresh</button>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px', border: '1px solid #cfd8dc', borderRadius: 4, background: '#f8fafc', fontSize: 12 }}>
+            <span style={{ fontWeight: 700 }}>Add default currency</span>
+            <select
+              value={defaultCurrency}
+              onChange={e => setDefaultCurrency(e.target.value === 'USD' ? 'USD' : 'VND')}
+              disabled={saving}
+              style={{ fontWeight: 700, padding: '2px 6px' }}
+            >
+              <option value="VND">VND</option>
+              <option value="USD">USD</option>
+            </select>
+          </label>
           <h2 style={{ margin: 0 }}>Inventory</h2>
         </div>
         <div />
@@ -720,7 +762,13 @@ export default function InventoryGrid() {
          </div>
        </div>
 
-      <InventoryEditModal key={modalKey} open={editOpen} inventory={selected} onClose={closeEdit} onSave={handleSave} saving={saving} />
+      <InventoryEditModal key={modalKey} open={editOpen} inventory={selected} onClose={closeEdit} onSave={handleSave} saving={saving} defaultCurrency={defaultCurrency} />
+      <InventoryInvoiceReceiveDialog
+        open={invoiceReceiveOpen}
+        defaultCurrency={defaultCurrency}
+        onClose={() => setInvoiceReceiveOpen(false)}
+        onComplete={() => { load(); setInvoiceReceiveOpen(false) }}
+      />
       <Dialog open={disposeOpen} onClose={saving ? undefined : closeDispose} fullWidth maxWidth="sm">
         <DialogTitle>Dispose Inventory</DialogTitle>
         <form onSubmit={handleDisposeSubmit}>

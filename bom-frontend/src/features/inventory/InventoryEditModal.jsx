@@ -17,7 +17,7 @@ import { fetchAllInvoices } from '../../api/invoiceApi'
 import { useAppContext } from '../../context/AppContext'
 import { fmtNum } from '../../utils/format'
 
-export default function InventoryEditModal({ open, inventory, onClose, onSave, saving }) {
+export default function InventoryEditModal({ open, inventory, onClose, onSave, saving, defaultCurrency = 'USD' }) {
   const { tenantId, companyId } = useAppContext()
   const isoToLocalDatetime = (iso) => {
     if (!iso) return ''
@@ -55,7 +55,7 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
     contractCode: i?.contractCode ?? '',
     unit: i?.unit ?? 'pcs',
     unitPrice: i?.unitPrice ?? '0',
-    currency: i?.currency ?? 'USD',
+    currency: i?.currency ?? defaultCurrency,
     warehouseImportUnit: i?.warehouseImportUnit ?? '',
     warehouseImportQuantity: i?.warehouseImportQuantity ?? '',
     bomUnitPerWarehouseUnit: i?.bomUnitPerWarehouseUnit ?? '',
@@ -338,7 +338,7 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
       contractCode: form.contractCode || null,
       unit: form.unit || 'pcs',
       unitPrice: unitPriceForPayload,
-      currency: form.currency || 'USD',
+      currency: form.currency || defaultCurrency || 'USD',
       hsCode: form.hsCode || null,
       originType: form.originType || null,
       originCountry: form.originCountry || null,
@@ -527,7 +527,7 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
             <TextField label="Contract Code" value={form.contractCode} onChange={handleChange('contractCode')} disabled={isSubmitting} />
             <TextField label="Unit Price" type="number" value={unitPriceValue} onChange={convertedUnitPrice !== null ? undefined : handleChange('unitPrice')} disabled={isSubmitting || convertedUnitPrice !== null} inputProps={{ step: 'any', min: 0 }} helperText={convertedUnitPrice !== null ? `Converted BOM unit price in ${form.currency || 'currency'}` : undefined} />
             <TextField label="Unit" value={form.unit || 'pcs'} disabled helperText="From selected material" InputProps={{ readOnly: true }} />
-            <TextField label="Currency" value={form.currency} onChange={handleChange('currency')} disabled={isSubmitting} />
+            <TextField label="Currency" value={form.currency || defaultCurrency} onChange={handleChange('currency')} disabled={isSubmitting || !isEditing} helperText={!isEditing ? 'From inventory main bar' : undefined} />
 
             <TextField label="HS Code" value={form.hsCode} onChange={handleChange('hsCode')} disabled={isSubmitting} />
             <TextField label="Origin Type" value={form.originType} onChange={handleChange('originType')} disabled={isSubmitting} />
@@ -601,5 +601,6 @@ InventoryEditModal.propTypes = {
   inventory: PropTypes.object,
   onClose: PropTypes.func,
   onSave: PropTypes.func,
-  saving: PropTypes.bool
+  saving: PropTypes.bool,
+  defaultCurrency: PropTypes.string
 }
