@@ -72,6 +72,7 @@ public class ShopOrderResponseDto {
         private UUID id;
         private UUID modelId;
         private String modelName;
+        private String imageUrl;
         private BigDecimal quantity;
         private BigDecimal unitPrice;
         private BigDecimal unitRawCost;
@@ -91,6 +92,7 @@ public class ShopOrderResponseDto {
             dto.id = item.getId();
             dto.modelId = item.getModel() != null ? item.getModel().getId() : null;
             dto.modelName = item.getModelName();
+            dto.imageUrl = item.getModel() != null ? item.getModel().getImageUrl() : null;
             dto.quantity = item.getQuantity();
             dto.unitPrice = item.getUnitPrice();
             dto.unitRawCost = item.getUnitRawCost();
@@ -110,6 +112,7 @@ public class ShopOrderResponseDto {
         public UUID getId() { return id; }
         public UUID getModelId() { return modelId; }
         public String getModelName() { return modelName; }
+        public String getImageUrl() { return imageUrl; }
         public BigDecimal getQuantity() { return quantity; }
         public BigDecimal getUnitPrice() { return unitPrice; }
         public BigDecimal getUnitRawCost() { return unitRawCost; }

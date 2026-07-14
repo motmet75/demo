@@ -60,6 +60,16 @@ const fmt    = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 const payableAmount = (order) => Math.max(0, Number(order?.totalAmount || 0) - Number(order?.discountAmount || 0))
 
 const STAFF_CALL_STORAGE_PREFIX = 'shop_customer_staff_call_v1'
+const SHOP_MENU_DISPLAY_SIZE_PREF = 'shop.menu.displaySize'
+const SHOP_MENU_CONTRAST_PREF = 'shop.menu.highContrast'
+
+function readShopMenuPref(key, fallback) {
+  try { return localStorage.getItem(key) || fallback } catch { return fallback }
+}
+
+function writeShopMenuPref(key, value) {
+  try { localStorage.setItem(key, value) } catch { /* browser storage may be blocked */ }
+}
 
 function staffCallStorageKey(token, ctx) {
   if (token) return `${STAFF_CALL_STORAGE_PREFIX}:token:${token}`
@@ -322,7 +332,7 @@ function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpda
               animation: 'blink 1.4s infinite',
               '@keyframes blink': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0.2 } } }} />
           )}
-          <Typography fontWeight={700} sx={{ color: style.color, fontSize: 15 }}>{style.label}</Typography>
+          <Typography fontWeight={700} sx={{ color: style.color, fontSize: 18 }}>{style.label}</Typography>
         </Box>
         {order.customerEditing && (
           <Box sx={{ mt: 1 }}>
@@ -366,11 +376,19 @@ function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpda
       <Box sx={{ flex: 1, overflowY: 'auto', px: { xs: 2, md: 4 }, py: 1.5 }}>
         {rootItems.map((item, idx) => {
           const children = childMap[String(item.id)] || []
+          const itemImage = item.imageUrl || item.thumbnailUrl || ''
           return (
             <Box key={item.id || idx} sx={{ mb: 1, pb: 1, borderBottom: '1px solid #f0f0f0' }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <Typography variant="body2" fontWeight={700}>{Number(item.quantity)}× {item.modelName}</Typography>
-                <Typography variant="body2" color="primary" fontWeight={700}>{fmtLocal(item.lineTotal)}</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Box onClick={() => itemImage && setImagePreview({ imageUrl: itemImage, modelName: item.modelName })}
+                  sx={{ width: 56, height: 56, flexShrink: 0, borderRadius: 1.5, bgcolor: '#eef2f7', overflow: 'hidden', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: itemImage ? 'pointer' : 'default' }}>
+                  {itemImage ? <Box component="img" src={itemImage} alt={item.modelName} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none' }} />
+                    : <Typography fontWeight={900} sx={{ color: '#94a3b8', fontSize: 20 }}>{String(item.modelName || '?').slice(0, 1)}</Typography>}
+                </Box>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography fontWeight={800} sx={{ fontSize: 17, color: '#0f172a', lineHeight: 1.2 }}>{Number(item.quantity)}Ã— {item.modelName}</Typography>
+                </Box>
+                <Typography color="primary" fontWeight={800} sx={{ fontSize: 16, flexShrink: 0 }}>{fmtLocal(item.lineTotal)}</Typography>
               </Box>
               {item.selectedOptions && (
                 <Typography variant="caption" color="text.secondary" sx={{ pl: 1.5, display: 'block' }}>
@@ -383,12 +401,12 @@ function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpda
                 </Typography>
               )}
               {children.map((child, ci) => (
-                <Box key={child.id || ci} sx={{ display: 'flex', justifyContent: 'space-between',
-                  pl: 2.5, mt: 0.25, borderLeft: '2px solid #c7d2fe', ml: 1 }}>
-                  <Typography variant="caption" sx={{ color: '#6366f1', fontWeight: 600 }}>
-                    + {Number(child.quantity)}× {child.modelName}
+                <Box key={child.id || ci} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, pl: 2.5, mt: 0.4, borderLeft: '2px solid #c7d2fe', ml: 1 }}>
+                  {(child.imageUrl || child.thumbnailUrl) && <Box component="img" src={child.imageUrl || child.thumbnailUrl} alt={child.modelName} sx={{ width: 34, height: 34, objectFit: 'cover', borderRadius: 1, border: '1px solid #c7d2fe', flexShrink: 0 }} onError={e => { e.target.style.display = 'none' }} />}
+                  <Typography sx={{ color: '#4338ca', fontWeight: 800, fontSize: 15, flex: 1, minWidth: 0 }} noWrap>
+                    + {Number(child.quantity)}Ã— {child.modelName}
                   </Typography>
-                  <Typography variant="caption" color="primary">{fmtLocal(child.lineTotal)}</Typography>
+                  <Typography color="primary" fontWeight={800} sx={{ fontSize: 14, flexShrink: 0 }}>{fmtLocal(child.lineTotal)}</Typography>
                 </Box>
               ))}
             </Box>
@@ -493,6 +511,8 @@ export default function ShopMenuPage() {
   // ── New UI state ───────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery]         = useState('')
   const [gridView, setGridView]               = useState(false)
+  const [displaySize, setDisplaySize]         = useState(() => readShopMenuPref(SHOP_MENU_DISPLAY_SIZE_PREF, 'normal'))
+  const [highContrast, setHighContrast]       = useState(() => readShopMenuPref(SHOP_MENU_CONTRAST_PREF, 'false') === 'true')
   const [activeCategory, setActiveCategory]   = useState(null)
   const [callStaffOpen, setCallStaffOpen]       = useState(false)
   const [callStaffReason, setCallStaffReason]   = useState('payment')
@@ -509,6 +529,7 @@ export default function ShopMenuPage() {
   const [cart, setCart] = useState({})
   const [sideForm, setSideForm] = useState({})
   const [optionsTarget, setOptionsTarget] = useState(null)
+  const large = displaySize === 'large'
 
   // ── Data loading ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -642,6 +663,11 @@ export default function ShopMenuPage() {
   // ── Derived values ────────────────────────────────────────────────────
   const cartEntries = Object.values(cart)
   const itemCount   = cartEntries.reduce((n, e) => n + e.qty, 0)
+  const modelImageMap = menu.reduce((map, m) => {
+    const img = m.imageUrl || m.thumbnailUrl || ''
+    if (img) map[m.id] = img
+    return map
+  }, {})
 
   const calcOptAddOn = (entry) => {
     const groups = optionsByModel[entry.modelId] || []
@@ -717,7 +743,7 @@ export default function ShopMenuPage() {
     const id = genUid()
     setCart(prev => ({
       ...prev,
-      [id]: { uid: id, modelId: model.id, qty, selectedOptions: selectedOptions || null, itemNotes: itemNotes || null, sideItems: rawSides.map(s => ({ ...s, uid: genUid() })) },
+      [id]: { uid: id, modelId: model.id, imageUrl: model.imageUrl || model.thumbnailUrl || null, qty, selectedOptions: selectedOptions || null, itemNotes: itemNotes || null, sideItems: rawSides.map(s => ({ ...s, imageUrl: s.imageUrl || s.thumbnailUrl || null, uid: genUid() })) },
     }))
   }
 
@@ -775,7 +801,7 @@ export default function ShopMenuPage() {
     setCart(prev => {
       const parent = prev[parentUid]; if (!parent) return prev
       return { ...prev, [parentUid]: { ...parent, sideItems: [...(parent.sideItems || []),
-        { uid: id, modelId: sf.model.id, modelName: sf.model.modelName, qty: sf.qty || 1 }] } }
+        { uid: id, modelId: sf.model.id, modelName: sf.model.modelName, imageUrl: sf.model.imageUrl || sf.model.thumbnailUrl || null, qty: sf.qty || 1 }] } }
     })
     setSideForm(prev => ({ ...prev, [parentUid]: {} }))
   }
@@ -837,10 +863,10 @@ export default function ShopMenuPage() {
       const uid = genUid()
       const parentQty = Number(it.quantity) || 1
       const sideItems = (children[String(it.id)] || []).map(child => ({
-        uid: genUid(), modelId: child.modelId, modelName: child.modelName,
+        uid: genUid(), modelId: child.modelId, modelName: child.modelName, imageUrl: child.imageUrl || child.thumbnailUrl || null,
         qty: Math.max(1, Math.round(Number(child.quantity) / parentQty)),
       }))
-      newCart[uid] = { uid, modelId: it.modelId, qty: Number(it.quantity) || 1,
+      newCart[uid] = { uid, modelId: it.modelId, imageUrl: it.imageUrl || it.thumbnailUrl || null, qty: Number(it.quantity) || 1,
         selectedOptions: it.selectedOptions || null, itemNotes: it.itemNotes || null, sideItems }
     })
     setCart(newCart); setSideForm({})
@@ -989,6 +1015,7 @@ export default function ShopMenuPage() {
       {cartEntries.map((entry, idx) => {
         const m      = menu.find(x => x.id === entry.modelId)
         if (!m) return null
+        const entryImage = entry.imageUrl || entry.thumbnailUrl || m.imageUrl || m.thumbnailUrl || ''
         const opts   = parseOpts(entry.selectedOptions)
         const groups = optionsByModel[entry.modelId] || []
         const sf        = sideForm[entry.uid] || {}
@@ -1003,29 +1030,41 @@ export default function ShopMenuPage() {
         const canAddSides = allowedSideOptions.length > 0
 
         return (
-          <Box key={entry.uid} sx={{ border: '1.5px solid #e2e8f0', borderRadius: 2, overflow: 'hidden' }}>
-            <Box sx={{ bgcolor: '#f8faff', px: 1.5, pt: 1, pb: 0.75 }}>
+          <Box key={entry.uid} sx={{ border: highContrast ? '2px solid #111827' : '1.5px solid #e2e8f0', borderRadius: 2, overflow: 'hidden', bgcolor: '#fff' }}>
+            <Box sx={{ bgcolor: highContrast ? '#fff' : '#f8faff', px: large ? 1.75 : 1.5, pt: large ? 1.25 : 1, pb: large ? 1 : 0.75 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
-                <Typography sx={{ color: '#94a3b8', fontWeight: 700, fontSize: 13, flexShrink: 0 }}>{idx + 1}.</Typography>
-                <Box sx={{ flex: 1, minWidth: 80, overflow: 'hidden' }}>
-                  <Typography fontWeight={700} sx={{ fontSize: 16 }} noWrap>{m.modelName}</Typography>
-                  <Typography sx={{ color: '#64748b', fontSize: 13 }}>{fmt(unitPrice)} / ly</Typography>
+                <Typography sx={{ color: '#94a3b8', fontWeight: 700, fontSize: large ? 15 : 13, flexShrink: 0 }}>{idx + 1}.</Typography>
+                <Box onClick={() => entryImage && setImagePreview({ imageUrl: entryImage, modelName: m.modelName })}
+                  sx={{ width: large ? 64 : 52, height: large ? 64 : 52, flexShrink: 0, borderRadius: 1.5, bgcolor: '#eef2f7', overflow: 'hidden', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: entryImage ? 'pointer' : 'default' }}>
+                  {entryImage ? (
+                    <Box component="img" src={entryImage} alt={m.modelName}
+                      onError={e => { e.target.style.display = 'none' }}
+                      sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <Typography fontWeight={900} sx={{ color: '#94a3b8', fontSize: large ? 22 : 18 }}>
+                      {String(m.modelName || '?').slice(0, 1)}
+                    </Typography>
+                  )}
+                </Box>
+                <Box sx={{ flex: 1, minWidth: 100, overflow: 'hidden' }}>
+                  <Typography fontWeight={800} sx={{ fontSize: large ? 19 : 16, color: '#0f172a', lineHeight: 1.2 }} noWrap>{m.modelName}</Typography>
+                  <Typography sx={{ color: '#64748b', fontSize: large ? 15 : 13, fontWeight: 700 }}>{fmt(unitPrice)} / ly</Typography>
                 </Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                   <IconButton onClick={() => decrementEntry(entry.uid)} sx={{ p: 0.75 }}>
-                    <RemoveIcon sx={{ fontSize: 20 }} />
+                    <RemoveIcon sx={{ fontSize: large ? 24 : 20 }} />
                   </IconButton>
-                  <Typography fontWeight={800} sx={{ minWidth: 30, textAlign: 'center', fontSize: 18 }}>{entry.qty}</Typography>
+                  <Typography fontWeight={800} sx={{ minWidth: large ? 36 : 30, textAlign: 'center', fontSize: large ? 22 : 18 }}>{entry.qty}</Typography>
                   <IconButton onClick={() => incrementEntry(entry.uid)}
                     sx={{ p: 0.75, bgcolor: '#ff5722', color: '#fff', borderRadius: 1, '&:hover': { bgcolor: '#e64a19' } }}>
-                    <AddIcon sx={{ fontSize: 20 }} />
+                    <AddIcon sx={{ fontSize: large ? 24 : 20 }} />
                   </IconButton>
                 </Box>
-                <Typography color="primary" fontWeight={800} sx={{ minWidth: 74, textAlign: 'right', fontSize: 15 }}>
+                <Typography color="primary" fontWeight={800} sx={{ minWidth: large ? 92 : 74, textAlign: 'right', fontSize: large ? 18 : 15 }}>
                   {fmt(mainTotal)}
                 </Typography>
                 <IconButton color="error" onClick={() => deleteEntry(entry.uid)} sx={{ p: 0.5 }}>
-                  <DeleteIcon sx={{ fontSize: 22 }} />
+                  <DeleteIcon sx={{ fontSize: large ? 26 : 22 }} />
                 </IconButton>
               </Box>
 
@@ -1038,7 +1077,7 @@ export default function ShopMenuPage() {
                 return (
                   <Box key={grp.id} sx={{ mt: 0.5 }}>
                     <Typography variant="caption" color="text.secondary"
-                      sx={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      sx={{ fontSize: large ? 14 : 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                       {grp.groupName}{grp.required ? ' *' : ''}{grp.isFree ? ' (free)' : ''}
                     </Typography>
                     {priced ? (
@@ -1054,26 +1093,26 @@ export default function ShopMenuPage() {
                               bgcolor: cQty > 0 ? '#f0f0ff' : '#f8faff', borderRadius: 1.5,
                               border: `1px solid ${cQty > 0 ? '#6366f1' : '#e2e8f0'}`,
                             }}>
-                              <Typography sx={{ flex: 1, fontSize: 13, fontWeight: cQty > 0 ? 700 : 400, color: cQty > 0 ? '#1e293b' : '#64748b' }} noWrap>
+                              <Typography sx={{ flex: 1, fontSize: large ? 16 : 13, fontWeight: cQty > 0 ? 800 : 600, color: cQty > 0 ? '#1e293b' : '#475569' }} noWrap>
                                 {c.label}{tag}
                               </Typography>
                               {cQty === 0 ? (
                                 <IconButton size="small" onClick={() => setOptionQty(entry.uid, grp.groupName, c.label, 1)}
                                   sx={{ p: 0.5, bgcolor: '#6366f1', color: '#fff', borderRadius: 1 }}>
-                                  <AddIcon sx={{ fontSize: 18 }} />
+                                  <AddIcon sx={{ fontSize: large ? 22 : 18 }} />
                                 </IconButton>
                               ) : (
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
                                   <IconButton size="small" onClick={() => setOptionQty(entry.uid, grp.groupName, c.label, -1)}
                                     sx={{ p: 0.5, bgcolor: '#f1f5f9', borderRadius: 1 }}>
-                                    <RemoveIcon sx={{ fontSize: 18 }} />
+                                    <RemoveIcon sx={{ fontSize: large ? 22 : 18 }} />
                                   </IconButton>
-                                  <Typography fontWeight={800} sx={{ minWidth: 22, textAlign: 'center', fontSize: 15, color: '#4f46e5' }}>
+                                  <Typography fontWeight={800} sx={{ minWidth: large ? 28 : 22, textAlign: 'center', fontSize: large ? 18 : 15, color: '#4f46e5' }}>
                                     {cQty}
                                   </Typography>
                                   <IconButton size="small" onClick={() => setOptionQty(entry.uid, grp.groupName, c.label, 1)}
                                     sx={{ p: 0.5, bgcolor: '#6366f1', color: '#fff', borderRadius: 1 }}>
-                                    <AddIcon sx={{ fontSize: 18 }} />
+                                    <AddIcon sx={{ fontSize: large ? 22 : 18 }} />
                                   </IconButton>
                                 </Box>
                               )}
@@ -1090,7 +1129,7 @@ export default function ShopMenuPage() {
                           return (
                             <Chip key={c.label} label={c.label} size="small"
                               onClick={() => toggleOption(entry.uid, grp.groupName, c.label, grp.multiSelect)}
-                              sx={{ height: 30, fontSize: 13, cursor: 'pointer',
+                              sx={{ height: large ? 36 : 30, fontSize: large ? 15 : 13, cursor: 'pointer',
                                 bgcolor: active ? '#ff5722' : '#fff', color: active ? '#fff' : '#555',
                                 border: `1px solid ${active ? '#ff5722' : '#ddd'}`, fontWeight: active ? 700 : 400 }} />
                           )
@@ -1117,37 +1156,39 @@ export default function ShopMenuPage() {
                 <Box sx={{ ml: 1.5, borderLeft: '2px solid #c7d2fe' }}>
                   {sides.map((si, siIdx) => {
                     const sm = menu.find(x => x.id === si.modelId)
+                    const sideImage = si.imageUrl || si.thumbnailUrl || sm?.imageUrl || sm?.thumbnailUrl || ''
                     const perCup = si.qty || 1; const effectiveQty = perCup * entry.qty
                     const effectivePrice = sm ? effectiveQty * Number(sm.sellingPrice || 0) : 0
                     return (
                       <Box key={si.uid} sx={{ px: 1, py: 1, borderBottom: '1px solid #e8eaf6' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Box sx={{ width: 52, height: 52, flexShrink: 0, borderRadius: 1.5, bgcolor: '#e8eaf6', overflow: 'hidden',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            {sm?.imageUrl ? <Box component="img" src={sm.imageUrl} alt={si.modelName}
+                          <Box onClick={() => sideImage && setImagePreview({ imageUrl: sideImage, modelName: si.modelName })}
+                            sx={{ width: large ? 64 : 52, height: large ? 64 : 52, flexShrink: 0, borderRadius: 1.5, bgcolor: '#e8eaf6', overflow: 'hidden', border: '1px solid #c7d2fe',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: sideImage ? 'pointer' : 'default' }}>
+                            {sideImage ? <Box component="img" src={sideImage} alt={si.modelName}
                               sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
                               onError={e => { e.target.style.display = 'none' }} />
-                              : <Typography sx={{ fontSize: 24 }}>🧋</Typography>}
+                              : <Typography fontWeight={900} sx={{ color: '#94a3b8', fontSize: large ? 22 : 18 }}>{String(si.modelName || '?').slice(0, 1)}</Typography>}
                           </Box>
                           <Box sx={{ flex: 1, minWidth: 0 }}>
-                            <Typography fontWeight={700} sx={{ fontSize: 14 }} noWrap>{si.modelName}</Typography>
-                            <Typography sx={{ color: '#6366f1', fontSize: 13, fontWeight: 700 }}>{sm ? fmt(effectivePrice) : ''}</Typography>
+                            <Typography fontWeight={800} sx={{ fontSize: large ? 17 : 14, color: '#1e293b' }} noWrap>{si.modelName}</Typography>
+                            <Typography sx={{ color: '#6366f1', fontSize: large ? 15 : 13, fontWeight: 800 }}>{sm ? fmt(effectivePrice) : ''}</Typography>
                           </Box>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
                             <IconButton onClick={() => changeSideQty(entry.uid, si.uid, -1)}
                               sx={{ p: 0.75, color: '#94a3b8', bgcolor: '#f1f5f9', borderRadius: 1 }}>
-                              <RemoveIcon sx={{ fontSize: 20 }} />
+                              <RemoveIcon sx={{ fontSize: large ? 24 : 20 }} />
                             </IconButton>
-                            <Typography fontWeight={800} sx={{ minWidth: 28, textAlign: 'center', fontSize: 18, color: '#4f46e5' }}>
+                            <Typography fontWeight={800} sx={{ minWidth: large ? 34 : 28, textAlign: 'center', fontSize: large ? 22 : 18, color: '#4f46e5' }}>
                               {effectiveQty}
                             </Typography>
                             <IconButton onClick={() => changeSideQty(entry.uid, si.uid, 1)}
                               sx={{ p: 0.75, bgcolor: '#6366f1', color: '#fff', borderRadius: 1 }}>
-                              <AddIcon sx={{ fontSize: 20 }} />
+                              <AddIcon sx={{ fontSize: large ? 24 : 20 }} />
                             </IconButton>
                           </Box>
                           <IconButton onClick={() => removeSide(entry.uid, si.uid)} sx={{ p: 0.5, color: '#94a3b8' }}>
-                            <CloseIcon sx={{ fontSize: 22 }} />
+                            <CloseIcon sx={{ fontSize: large ? 26 : 22 }} />
                           </IconButton>
                         </Box>
                       </Box>
@@ -1155,27 +1196,42 @@ export default function ShopMenuPage() {
                   })}
                   {sides.length > 0 && (
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', px: 1, py: 0.75, borderTop: '1px dashed #c7d2fe' }}>
-                      <Typography sx={{ color: '#64748b', fontSize: 13 }}>{fmt(mainTotal)} + {fmt(sideTotal)} topping</Typography>
-                      <Typography fontWeight={800} color="primary" sx={{ fontSize: 15 }}>= {fmt(eTotal)}</Typography>
+                      <Typography sx={{ color: '#64748b', fontSize: large ? 15 : 13 }}>{fmt(mainTotal)} + {fmt(sideTotal)} topping</Typography>
+                      <Typography fontWeight={800} color="primary" sx={{ fontSize: large ? 18 : 15 }}>= {fmt(eTotal)}</Typography>
                     </Box>
                   )}
                   {canAddSides && (
                     <Box sx={{ pt: 0.75, pb: 1, px: 1 }}>
                       <Autocomplete size="small" options={allowedSideOptions} getOptionLabel={m => m.modelName}
                         value={sf.model || null} onChange={(_, v) => setSF(entry.uid, 'model', v)}
-                        renderInput={params => <TextField {...params} label="Thêm topping…" size="small" />}
+                        renderOption={(props, option) => {
+                          const img = option.imageUrl || option.thumbnailUrl || ''
+                          return (
+                            <Box component="li" {...props} sx={{ display: 'flex', alignItems: 'center', gap: 1, minHeight: large ? 58 : 48 }}>
+                              <Box onClick={(e) => { e.stopPropagation(); img && setImagePreview({ imageUrl: img, modelName: option.modelName }) }}
+                                sx={{ width: large ? 44 : 36, height: large ? 44 : 36, flexShrink: 0, borderRadius: 1, bgcolor: '#e8eaf6', overflow: 'hidden', border: '1px solid #c7d2fe', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: img ? 'pointer' : 'default' }}>
+                                {img ? <Box component="img" src={img} alt={option.modelName} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none' }} />
+                                  : <Typography fontWeight={900} sx={{ color: '#94a3b8', fontSize: large ? 18 : 14 }}>{String(option.modelName || '?').slice(0, 1)}</Typography>}
+                              </Box>
+                              <Typography sx={{ fontWeight: 800, fontSize: large ? 16 : 14, color: '#1e293b' }} noWrap>{option.modelName}</Typography>
+                            </Box>
+                          )
+                        }}
+                        renderInput={params => <TextField {...params} label="Add topping" size="small"
+                          InputProps={{ ...params.InputProps, sx: { fontSize: large ? 16 : 14 } }}
+                          inputProps={{ ...params.inputProps, style: { ...params.inputProps.style, fontSize: large ? 16 : 14 } }} />}
                         isOptionEqualToValue={(a, b) => a.id === b.id} noOptionsText="Không có" fullWidth />
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
                         <IconButton onClick={() => setSF(entry.uid, 'qty', Math.max(1, (sf.qty || 1) - 1))}
                           sx={{ p: 0.75, bgcolor: '#f1f5f9', borderRadius: 1 }}>
-                          <RemoveIcon sx={{ fontSize: 20 }} />
+                          <RemoveIcon sx={{ fontSize: large ? 24 : 20 }} />
                         </IconButton>
-                        <Typography fontWeight={800} sx={{ minWidth: 28, textAlign: 'center', fontSize: 18, color: '#4f46e5' }}>
+                        <Typography fontWeight={800} sx={{ minWidth: large ? 34 : 28, textAlign: 'center', fontSize: large ? 22 : 18, color: '#4f46e5' }}>
                           {sf.qty || 1}
                         </Typography>
                         <IconButton onClick={() => setSF(entry.uid, 'qty', (sf.qty || 1) + 1)}
                           sx={{ p: 0.75, bgcolor: '#6366f1', color: '#fff', borderRadius: 1 }}>
-                          <AddIcon sx={{ fontSize: 20 }} />
+                          <AddIcon sx={{ fontSize: large ? 24 : 20 }} />
                         </IconButton>
                         <Box sx={{ flex: 1 }} />
                         <Button variant="contained" startIcon={<PlaylistAddIcon />}
@@ -1234,11 +1290,11 @@ export default function ShopMenuPage() {
     return (
       <Box sx={{
         display: 'flex', alignItems: 'stretch', bgcolor: '#fff', borderRadius: 2, overflow: 'hidden',
-        border: qty > 0 ? '1.5px solid #ff5722' : '1.5px solid transparent',
+        border: qty > 0 ? '2px solid #ff5722' : highContrast ? '1.5px solid #111827' : '1.5px solid transparent',
         boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
       }}>
         <Box onClick={() => m.imageUrl && setImagePreview(m)} sx={{
-          width: 96, flexShrink: 0, bgcolor: '#f5f5f5', overflow: 'hidden',
+          width: large ? 116 : 96, flexShrink: 0, bgcolor: '#f5f5f5', overflow: 'hidden',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           cursor: m.imageUrl ? 'pointer' : 'default',
         }}>
@@ -1246,25 +1302,25 @@ export default function ShopMenuPage() {
             ? <Box component="img" src={m.imageUrl} alt={m.modelName}
                 sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                 onError={e => { e.target.style.display = 'none' }} />
-            : <Typography sx={{ fontSize: 34, opacity: 0.15, userSelect: 'none' }}>🍽</Typography>}
+            : <Typography sx={{ fontSize: large ? 42 : 34, opacity: 0.15, userSelect: 'none' }}>🍽</Typography>}
         </Box>
         <Box sx={{ flex: 1, minWidth: 0, px: 1.5, py: 1.25 }}>
-          <Typography fontWeight={700} sx={{ fontSize: 15, lineHeight: 1.3, color: '#1a1a1a' }}>
+          <Typography fontWeight={700} sx={{ fontSize: large ? 18 : 15, lineHeight: 1.25, color: '#111827' }}>
             {m.modelName}
           </Typography>
           {hasOpts && !optsStr && (
-            <Typography variant="caption" sx={{ color: '#aaa', fontSize: 11 }}>Có thể tuỳ chỉnh</Typography>
+            <Typography variant="caption" sx={{ color: '#64748b', fontSize: large ? 13 : 11 }}>Có thể tuỳ chỉnh</Typography>
           )}
           {optsStr && (
-            <Typography variant="caption" sx={{ color: '#ff5722', fontSize: 11, display: 'block' }} noWrap>
+            <Typography variant="caption" sx={{ color: '#ff5722', fontSize: large ? 13 : 11, display: 'block' }} noWrap>
               {optsStr}
             </Typography>
           )}
           {variants.length > 1 && (
             <Chip label={`${variants.length} tuỳ chọn`} size="small"
-              sx={{ height: 18, fontSize: 10, bgcolor: '#fff3e0', color: '#ff5722', mt: 0.5 }} />
+              sx={{ height: large ? 22 : 18, fontSize: large ? 12 : 10, bgcolor: '#fff3e0', color: '#ff5722', mt: 0.5 }} />
           )}
-          <Typography fontWeight={800} sx={{ color: '#ff5722', fontSize: 15, mt: 0.75 }}>
+          <Typography fontWeight={800} sx={{ color: '#ff5722', fontSize: large ? 18 : 15, mt: 0.75 }}>
             {fmt(m.sellingPrice)}
           </Typography>
         </Box>
@@ -1272,18 +1328,18 @@ export default function ShopMenuPage() {
           {qty > 0 && (
             <>
               <IconButton size="small" onClick={() => handleRemoveClick(m.id)}
-                sx={{ width: 32, height: 32, bgcolor: '#f5f5f5', color: '#ff5722', borderRadius: 1.5 }}>
-                <RemoveIcon sx={{ fontSize: 18 }} />
+                sx={{ width: large ? 40 : 32, height: large ? 40 : 32, bgcolor: '#f5f5f5', color: '#ff5722', borderRadius: 1.5 }}>
+                <RemoveIcon sx={{ fontSize: large ? 22 : 18 }} />
               </IconButton>
-              <Typography fontWeight={900} sx={{ minWidth: 28, textAlign: 'center', fontSize: 17 }}>
+              <Typography fontWeight={900} sx={{ minWidth: large ? 34 : 28, textAlign: 'center', fontSize: large ? 21 : 17 }}>
                 {qty}
               </Typography>
             </>
           )}
           <IconButton size="small" onClick={() => handleAddClick(m)}
-            sx={{ width: 32, height: 32, bgcolor: '#ff5722', color: '#fff', borderRadius: 1.5,
+            sx={{ width: large ? 40 : 32, height: large ? 40 : 32, bgcolor: '#ff5722', color: '#fff', borderRadius: 1.5,
               '&:hover': { bgcolor: '#e64a19' } }}>
-            <AddIcon sx={{ fontSize: 18 }} />
+            <AddIcon sx={{ fontSize: large ? 22 : 18 }} />
           </IconButton>
         </Box>
       </Box>
@@ -1296,7 +1352,7 @@ export default function ShopMenuPage() {
     return (
       <Box sx={{
         bgcolor: '#fff', borderRadius: 2, overflow: 'hidden', display: 'flex', flexDirection: 'column',
-        border: qty > 0 ? '1.5px solid #ff5722' : '1.5px solid transparent',
+        border: qty > 0 ? '2px solid #ff5722' : highContrast ? '1.5px solid #111827' : '1.5px solid transparent',
         boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
       }}>
         <Box onClick={() => m.imageUrl && setImagePreview(m)} sx={{
@@ -1308,44 +1364,44 @@ export default function ShopMenuPage() {
                 sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
                 onError={e => { e.target.style.display = 'none' }} />
             : <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Typography sx={{ fontSize: 36, opacity: 0.15, userSelect: 'none' }}>🍽</Typography>
+                <Typography sx={{ fontSize: large ? 46 : 36, opacity: 0.15, userSelect: 'none' }}>🍽</Typography>
               </Box>}
           {qty > 0 && (
             <Box sx={{ position: 'absolute', top: 6, right: 6, bgcolor: '#ff5722', color: '#fff',
-              borderRadius: 10, minWidth: 22, height: 22, display: 'flex', alignItems: 'center',
-              justifyContent: 'center', fontWeight: 900, fontSize: 13 }}>
+              borderRadius: 10, minWidth: large ? 28 : 22, height: large ? 28 : 22, display: 'flex', alignItems: 'center',
+              justifyContent: 'center', fontWeight: 900, fontSize: large ? 15 : 13 }}>
               {qty}
             </Box>
           )}
         </Box>
         <Box sx={{ px: 1.25, pt: 1, pb: 1.25, flex: 1, display: 'flex', flexDirection: 'column' }}>
           <Typography fontWeight={700} sx={{
-            fontSize: 13, lineHeight: 1.35, color: '#1a1a1a', flex: 1, mb: 0.75,
+            fontSize: large ? 16 : 13, lineHeight: 1.32, color: '#111827', flex: 1, mb: 0.75,
             display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
           }}>
             {m.modelName}
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Typography fontWeight={800} sx={{ color: '#ff5722', fontSize: 14 }}>
+            <Typography fontWeight={800} sx={{ color: '#ff5722', fontSize: large ? 17 : 14 }}>
               {fmt(m.sellingPrice)}
             </Typography>
             {qty > 0 ? (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
                 <IconButton onClick={() => handleRemoveClick(m.id)}
-                  sx={{ p: 0.25, width: 26, height: 26, bgcolor: '#f5f5f5', color: '#ff5722', borderRadius: 1 }}>
+                  sx={{ p: 0.25, width: large ? 32 : 26, height: large ? 32 : 26, bgcolor: '#f5f5f5', color: '#ff5722', borderRadius: 1 }}>
                   <RemoveIcon sx={{ fontSize: 15 }} />
                 </IconButton>
                 <IconButton onClick={() => handleAddClick(m)}
-                  sx={{ p: 0.25, width: 26, height: 26, bgcolor: '#ff5722', color: '#fff', borderRadius: 1,
+                  sx={{ p: 0.25, width: large ? 32 : 26, height: large ? 32 : 26, bgcolor: '#ff5722', color: '#fff', borderRadius: 1,
                     '&:hover': { bgcolor: '#e64a19' } }}>
                   <AddIcon sx={{ fontSize: 15 }} />
                 </IconButton>
               </Box>
             ) : (
               <IconButton onClick={() => handleAddClick(m)}
-                sx={{ p: 0.5, width: 30, height: 30, bgcolor: '#ff5722', color: '#fff', borderRadius: 1.5,
+                sx={{ p: 0.5, width: large ? 36 : 30, height: large ? 36 : 30, bgcolor: '#ff5722', color: '#fff', borderRadius: 1.5,
                   '&:hover': { bgcolor: '#e64a19' } }}>
-                <AddIcon sx={{ fontSize: 18 }} />
+                <AddIcon sx={{ fontSize: large ? 22 : 18 }} />
               </IconButton>
             )}
           </Box>
@@ -1364,7 +1420,7 @@ export default function ShopMenuPage() {
   )
 
   return (
-    <Box sx={{ bgcolor: '#f5f5f5', minHeight: '100vh' }}>
+    <Box sx={{ bgcolor: highContrast ? '#eef2f7' : '#f5f5f5', minHeight: '100vh' }}>
 
       {/* ── Fixed header ──────────────────────────────────────── */}
       <Box ref={headerRef} sx={{
@@ -1374,7 +1430,7 @@ export default function ShopMenuPage() {
         {/* Row 1: Title + action buttons */}
         <Box sx={{ display: 'flex', alignItems: 'center', px: 1.5, pt: 1.25, pb: 0.5, gap: 0.75 }}>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography fontWeight={900} sx={{ fontSize: 18, color: '#1a1a1a', lineHeight: 1.2 }}>
+            <Typography fontWeight={900} sx={{ fontSize: large ? 22 : 18, color: '#1a1a1a', lineHeight: 1.2 }}>
               Gọi món
             </Typography>
             {ctx.tableId && (
@@ -1421,7 +1477,7 @@ export default function ShopMenuPage() {
           <Chip key="__all" label="Tất cả" size="small"
             onClick={() => { setActiveCategory(null); setSearchQuery('') }}
             sx={{
-              flexShrink: 0, cursor: 'pointer', height: 28, fontSize: 12, fontWeight: 600,
+              flexShrink: 0, cursor: 'pointer', height: large ? 34 : 28, fontSize: large ? 14 : 12, fontWeight: 700,
               bgcolor: !activeCategory && !searchQuery ? '#ff5722' : '#f0f0f0',
               color: !activeCategory && !searchQuery ? '#fff' : '#444',
               '&:hover': { bgcolor: !activeCategory && !searchQuery ? '#e64a19' : '#e0e0e0' },
@@ -1430,7 +1486,7 @@ export default function ShopMenuPage() {
             <Chip key={cat} label={cat} size="small"
               onClick={() => selectCategory(cat)}
               sx={{
-                flexShrink: 0, cursor: 'pointer', height: 28, fontSize: 12, fontWeight: 600,
+                flexShrink: 0, cursor: 'pointer', height: large ? 34 : 28, fontSize: large ? 14 : 12, fontWeight: 700,
                 bgcolor: activeCategory === cat ? '#ff5722' : '#f0f0f0',
                 color: activeCategory === cat ? '#fff' : '#444',
                 '&:hover': { bgcolor: activeCategory === cat ? '#e64a19' : '#e0e0e0' },
@@ -1445,22 +1501,30 @@ export default function ShopMenuPage() {
             value={searchQuery}
             onChange={e => { setSearchQuery(e.target.value); setActiveCategory(null) }}
             InputProps={{
-              startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 20, color: '#bbb' }} /></InputAdornment>,
+              startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: large ? 24 : 20, color: '#bbb' }} /></InputAdornment>,
               endAdornment: searchQuery ? (
                 <InputAdornment position="end">
                   <IconButton size="small" edge="end" onClick={() => setSearchQuery('')}>
-                    <CloseIcon sx={{ fontSize: 16 }} />
+                    <CloseIcon sx={{ fontSize: large ? 20 : 16 }} />
                   </IconButton>
                 </InputAdornment>
               ) : null,
-              sx: { borderRadius: 20, bgcolor: '#f5f5f5', '& fieldset': { border: 'none' }, fontSize: 14 },
+              sx: { borderRadius: 20, bgcolor: highContrast ? '#fff' : '#f5f5f5', '& fieldset': { border: 'none' }, fontSize: large ? 16 : 14 },
             }}
           />
           <IconButton onClick={() => setGridView(v => !v)}
             sx={{ bgcolor: gridView ? '#ff5722' : '#f0f0f0', color: gridView ? '#fff' : '#555',
               borderRadius: 1.5, flexShrink: 0,
               '&:hover': { bgcolor: gridView ? '#e64a19' : '#e0e0e0' } }}>
-            {gridView ? <ViewListIcon /> : <GridViewIcon />}
+            {gridView ? <ViewListIcon sx={{ fontSize: large ? 26 : 22 }} /> : <GridViewIcon sx={{ fontSize: large ? 26 : 22 }} />}
+          </IconButton>
+          <IconButton onClick={() => { const next = displaySize === 'large' ? 'normal' : 'large'; setDisplaySize(next); writeShopMenuPref(SHOP_MENU_DISPLAY_SIZE_PREF, next) }}
+            sx={{ bgcolor: large ? '#1f2937' : '#f0f0f0', color: large ? '#fff' : '#555', borderRadius: 1.5, flexShrink: 0, width: large ? 42 : 36, height: large ? 42 : 36, fontWeight: 900, fontSize: large ? 18 : 15, '&:hover': { bgcolor: large ? '#111827' : '#e0e0e0' } }}>
+            Aa
+          </IconButton>
+          <IconButton onClick={() => { const next = !highContrast; setHighContrast(next); writeShopMenuPref(SHOP_MENU_CONTRAST_PREF, String(next)) }}
+            sx={{ bgcolor: highContrast ? '#111827' : '#f0f0f0', color: highContrast ? '#fff' : '#555', borderRadius: 1.5, flexShrink: 0, width: large ? 42 : 36, height: large ? 42 : 36, '&:hover': { bgcolor: highContrast ? '#020617' : '#e0e0e0' } }}>
+            <VisibilityIcon sx={{ fontSize: large ? 24 : 20 }} />
           </IconButton>
         </Box>
       </Box>
@@ -1857,7 +1921,7 @@ export default function ShopMenuPage() {
                     {sides.length > 0 && (
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', pl: 1.5, borderTop: '1px dotted #e2e8f0', mt: 0.5, pt: 0.5 }}>
                         <Typography sx={{ color: '#64748b', fontStyle: 'italic', fontSize: 13 }}>= tổng phụ</Typography>
-                        <Typography fontWeight={900} sx={{ color: '#ff5722', fontSize: 14 }}>{fmt(mainTotal + sideTotal)}</Typography>
+                        <Typography fontWeight={900} sx={{ color: '#ff5722', fontSize: large ? 17 : 14 }}>{fmt(mainTotal + sideTotal)}</Typography>
                       </Box>
                     )}
                   </Box>

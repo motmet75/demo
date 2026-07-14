@@ -137,6 +137,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
   const [createdOrder, setCreatedOrder] = useState(null)
   const [tagQr, setTagQr]               = useState('')
   const [tagLoading, setTagLoading]     = useState(false)
+  const [imagePreview, setImagePreview]     = useState(null)
 
   // counter display broadcast highlight
   const [justBroadcast, setJustBroadcast] = useState(false)
@@ -290,6 +291,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
         uid: crypto.randomUUID(),
         modelId: i.modelId, modelName: i.modelName,
         sellingPrice: i.sellingPrice,
+        imageUrl: i.imageUrl || i.thumbnailUrl || null,
         customPriceDigits: String(Math.round(Number(i.sellingPrice) || 0)),
         qty: i.qty,
         selectedOptions: i.selectedOptions || {}, itemNotes: i.itemNotes || '',
@@ -363,6 +365,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
     setCustomerScanOpen(false)
     setVoucherScanOpen(false); setScannedVoucherPayload(''); setVoucherRedeeming(false)
     setVoucherResult(null); setVoucherError('')
+    setImagePreview(null)
   }
 
   const handleClose = () => { reset(); onClose() }
@@ -392,6 +395,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
             uid: crypto.randomUUID(),
             modelId: option.id,
             modelName: option.modelName,
+            imageUrl: option.imageUrl || option.thumbnailUrl || null,
             customPriceDigits: String(Math.round(Number(option.sellingPrice) || 0)),
             qty: delta,
           }],
@@ -439,6 +443,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
             ...si,
             modelId: newModel.id,
             modelName: newModel.modelName,
+            imageUrl: newModel.imageUrl || newModel.thumbnailUrl || null,
             customPriceDigits: String(Math.round(Number(newModel.sellingPrice) || 0)),
           } : si
         )
@@ -453,6 +458,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
       uid: crypto.randomUUID(),
       modelId: mid, modelName: model.modelName,
       sellingPrice: model.sellingPrice,
+      imageUrl: model.imageUrl || model.thumbnailUrl || null,
       customPriceDigits: String(Math.round(Number(model.sellingPrice) || 0)),
       qty: 1, selectedOptions: {}, itemNotes: '',
       sideItems: [],
@@ -648,7 +654,8 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
 
   // ── Render ───────────────────────────────────────────────────────────
   return (
-    <Dialog open={open} onClose={!submitting ? handleClose : undefined} fullWidth maxWidth="lg"
+    <>
+      <Dialog open={open} onClose={!submitting ? handleClose : undefined} fullWidth maxWidth="lg"
       PaperProps={{ sx: { borderRadius: { xs: 0, sm: 2 }, height: { xs: '100dvh', sm: 'calc(100vh - 48px)' }, maxHeight: { xs: '100dvh', sm: 'calc(100vh - 48px)' } } }}>
 
       {/* Title row — always visible */}
@@ -1002,6 +1009,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                         uid: crypto.randomUUID(),
                         modelId: item.modelId, modelName: item.modelName,
                         sellingPrice: item.sellingPrice,
+                        imageUrl: item.imageUrl || item.thumbnailUrl || null,
                         customPriceDigits: String(Math.round(Number(item.sellingPrice) || 0)),
                         qty: item.qty || 1,
                         selectedOptions: {}, itemNotes: '', sideItems: [],
@@ -1017,6 +1025,8 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                   {items.map((item, itemIdx) => {
                     const modelOpts = optsByModel[item.modelId] || []
                     const allowedSideOptions = allowedSideOptionsFor(item.modelId)
+                    const itemModel = models.find(m => String(m.id) === String(item.modelId))
+                    const itemImage = item.imageUrl || item.thumbnailUrl || itemModel?.imageUrl || itemModel?.thumbnailUrl || ''
                     const mainSubtotal = item.qty * (itemBasePrice(item) + calcOptAddOn(item))
                     const blockTotal = mainSubtotal + sidesTotal(item)
                     return (
@@ -1028,7 +1038,18 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                             <Typography variant="caption" sx={{ color: '#94a3b8', fontWeight: 700, minWidth: 18, flexShrink: 0, fontSize: 11 }}>
                               {itemIdx + 1}.
                             </Typography>
-                            <Typography variant="body2" fontWeight={700} sx={{ flex: 1, minWidth: 80 }} noWrap>
+                            <Box onClick={() => itemImage && setImagePreview({ imageUrl: itemImage, modelName: item.modelName })} sx={{ width: 48, height: 48, flexShrink: 0, borderRadius: 1.25, bgcolor: '#eef2f7', overflow: 'hidden', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: itemImage ? 'pointer' : 'default' }}>
+                              {itemImage ? (
+                                <Box component="img" src={itemImage} alt={item.modelName}
+                                  onError={e => { e.target.style.display = 'none' }}
+                                  sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              ) : (
+                                <Typography fontWeight={900} sx={{ color: '#94a3b8', fontSize: 18 }}>
+                                  {String(item.modelName || '?').slice(0, 1)}
+                                </Typography>
+                              )}
+                            </Box>
+                            <Typography variant="body2" fontWeight={800} sx={{ flex: 1, minWidth: 100, fontSize: 15 }} noWrap>
                               {item.modelName}
                             </Typography>
                             <TextField
@@ -1088,11 +1109,11 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                                           borderRadius: 1.25, bgcolor: cQty > 0 ? '#eef2ff' : '#fff',
                                         }}>
                                           <Box sx={{ flex: 1, minWidth: 0 }}>
-                                            <Typography fontWeight={800} sx={{ fontSize: 12, lineHeight: 1.2, overflowWrap: 'anywhere' }}>
+                                            <Typography fontWeight={800} sx={{ fontSize: 14, lineHeight: 1.25, overflowWrap: 'anywhere' }}>
                                               {choice.label}
                                             </Typography>
                                             {price > 0 && (
-                                              <Typography color="primary" fontWeight={900} sx={{ fontSize: 11 }}>
+                                              <Typography color="primary" fontWeight={900} sx={{ fontSize: 13 }}>
                                                 +{fmt(price)}{cQty > 0 ? ` = ${fmt(price * cQty * item.qty)}` : ''}
                                               </Typography>
                                             )}
@@ -1157,6 +1178,8 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
 
                             {/* Side item rows */}
                             {(item.sideItems || []).map(si => {
+                              const sideModel = models.find(m => String(m.id) === String(si.modelId))
+                              const sideImage = si.imageUrl || si.thumbnailUrl || sideModel?.imageUrl || sideModel?.thumbnailUrl || ''
                               const effectiveQty = sideEffectiveQty(item, si)
                               const effectiveTotal = sideLineTotal(item, si)
                               return (
@@ -1164,6 +1187,17 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                                   {/* Row 1: connector + editable name + delete */}
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                     <Box sx={{ width: 14, height: 2, bgcolor: '#c7d2fe', flexShrink: 0 }} />
+                                    <Box onClick={() => sideImage && setImagePreview({ imageUrl: sideImage, modelName: si.modelName })} sx={{ width: 38, height: 38, flexShrink: 0, borderRadius: 1, bgcolor: '#e8eaf6', overflow: 'hidden', border: '1px solid #dbe3ef', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: sideImage ? 'pointer' : 'default' }}>
+                                      {sideImage ? (
+                                        <Box component="img" src={sideImage} alt={si.modelName}
+                                          onError={e => { e.target.style.display = 'none' }}
+                                          sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                      ) : (
+                                        <Typography fontWeight={900} sx={{ color: '#94a3b8', fontSize: 15 }}>
+                                          {String(si.modelName || '?').slice(0, 1)}
+                                        </Typography>
+                                      )}
+                                    </Box>
                                     <Autocomplete
                                       size="small" disableClearable options={allowedSideOptions}
                                       getOptionLabel={m => m.modelName}
@@ -1173,8 +1207,8 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                                       renderInput={params => (
                                         <TextField {...params} variant="standard"
                                           InputProps={{ ...params.InputProps, disableUnderline: true,
-                                            sx: { fontSize: 12, fontWeight: 600, p: 0 } }}
-                                          inputProps={{ ...params.inputProps, style: { fontSize: 12, fontWeight: 600, padding: '1px 0' } }}
+                                            sx: { fontSize: 15, fontWeight: 800, p: 0 } }}
+                                          inputProps={{ ...params.inputProps, style: { fontSize: 15, fontWeight: 800, padding: '1px 0' } }}
                                         />
                                       )}
                                       sx={{ flex: 1, '& .MuiAutocomplete-endAdornment': { top: 'calc(50% - 10px)' } }}
@@ -1239,15 +1273,16 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                                       const effectiveQty = optionQty * (item.qty || 1)
                                       const unitPrice = Number(selectedSide?.customPriceDigits ?? option.sellingPrice ?? 0) || 0
                                       const optionTotal = unitPrice * effectiveQty
+                                      const optionImage = option.imageUrl || option.thumbnailUrl || ''
                                       return (
                                         <Box key={option.id} sx={{
                                           display: 'flex', alignItems: 'center', gap: 1, px: 1, py: 0.75,
                                           border: `1.5px solid ${optionQty > 0 ? '#6366f1' : '#dbe3ef'}`,
                                           borderRadius: 1.5, bgcolor: optionQty > 0 ? '#eef2ff' : '#fff',
                                         }}>
-                                          <Box sx={{ width: 52, height: 52, flexShrink: 0, borderRadius: 1.25, bgcolor: '#eef2f7', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                            {option.imageUrl ? (
-                                              <Box component="img" src={option.imageUrl} alt={option.modelName}
+                                          <Box onClick={() => optionImage && setImagePreview({ imageUrl: optionImage, modelName: option.modelName })} sx={{ width: 52, height: 52, flexShrink: 0, borderRadius: 1.25, bgcolor: '#eef2f7', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: optionImage ? 'pointer' : 'default' }}>
+                                            {optionImage ? (
+                                              <Box component="img" src={optionImage} alt={option.modelName}
                                                 onError={e => { e.target.style.display = 'none' }}
                                                 sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                             ) : (
@@ -1315,14 +1350,14 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                           <Box sx={{ minWidth: 120, textAlign: 'right' }}>
                             {Number(customerCash) >= total ? (
                               <>
-                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>Change</Typography>
+                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: 13 }}>Change</Typography>
                                 <Typography fontWeight={800} color="#2e7d32" sx={{ fontSize: 18, lineHeight: 1.1 }}>
                                   {fmt(Number(customerCash) - total)}
                                 </Typography>
                               </>
                             ) : (
                               <>
-                                <Typography variant="caption" color="error" sx={{ fontSize: 11 }}>Short</Typography>
+                                <Typography variant="caption" color="error" sx={{ fontSize: 13 }}>Short</Typography>
                                 <Typography fontWeight={800} color="error.main" sx={{ fontSize: 18, lineHeight: 1.1 }}>
                                   {fmt(total - Number(customerCash))}
                                 </Typography>
@@ -1432,5 +1467,26 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
         )}
       </DialogActions>
     </Dialog>
+
+      <Dialog open={Boolean(imagePreview)} onClose={() => setImagePreview(null)} maxWidth="xs" fullWidth
+        PaperProps={{ sx: { borderRadius: 3, overflow: 'hidden' } }}>
+        {imagePreview && (
+          <>
+            <Box sx={{ position: 'relative', bgcolor: '#f0f0f0', lineHeight: 0 }}>
+              <Box component="img" src={imagePreview.imageUrl} alt={imagePreview.modelName}
+                sx={{ width: '100%', maxHeight: 340, objectFit: 'contain', display: 'block' }}
+                onError={e => { e.target.style.display = 'none' }} />
+              <IconButton size="small" onClick={() => setImagePreview(null)}
+                sx={{ position: 'absolute', top: 8, right: 8, bgcolor: 'rgba(0,0,0,0.45)', color: '#fff', '&:hover': { bgcolor: 'rgba(0,0,0,0.65)' } }}>
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </Box>
+            <Box sx={{ px: 2.5, py: 2 }}>
+              <Typography fontWeight={800} sx={{ fontSize: 17 }}>{imagePreview.modelName}</Typography>
+            </Box>
+          </>
+        )}
+      </Dialog>
+    </>
   )
 }

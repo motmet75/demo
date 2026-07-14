@@ -399,7 +399,7 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                     }
                     {(() => {
                       const chip = materialAuditChip(order)
-                      return chip ? <Chip label={chip.label} size="small" color={chip.color} sx={{ height: 20, fontSize: 10, fontWeight: 800 }} /> : null
+                      return chip ? <Chip label={chip.label} size="small" color={chip.color} sx={{ height: large ? 24 : 20, fontSize: large ? 12 : 10, fontWeight: 800 }} /> : null
                     })()}
                   </Box>
                   {order.customerName && <Typography variant="caption" display="block" noWrap>{order.customerName}</Typography>}
@@ -467,7 +467,7 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                         {root.itemNotes && <Typography sx={{ fontSize: detailFont, pl: 2, fontStyle: 'italic', display: 'block', color: '#c62828', fontWeight: 700 }}>⚠ {root.itemNotes}</Typography>}
                         {/* Child / topping items */}
                         {children.map((child, ci) => {
-                          const img = modelImageMap[child.modelId]
+                          const img = child.imageUrl || child.thumbnailUrl || modelImageMap[child.modelId]
                           return (
                             <Box key={child.id || ci} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 3, pl: 1, mt: 0.3, borderLeft: `3px solid ${style.border}` }}>
                               <Typography sx={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, flexShrink: 0, minWidth: 20 }}>
@@ -477,13 +477,13 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                                 <Box component="img" src={img} alt={child.modelName}
                                   onClick={() => setImagePreview({ imageUrl: img, modelName: child.modelName })}
                                   onError={e => { e.target.style.display = 'none' }}
-                                  sx={{ width: 30, height: 30, objectFit: 'cover', borderRadius: 1, flexShrink: 0, cursor: 'pointer', border: '1px solid #e2e8f0' }} />
+                                  sx={{ width: large ? 38 : 30, height: large ? 38 : 30, objectFit: 'cover', borderRadius: 1, flexShrink: 0, cursor: 'pointer', border: '1px solid #e2e8f0' }} />
                               )}
                               <Typography sx={{ fontSize: childQtyFont, fontWeight: 900, color: '#111', lineHeight: 1, flexShrink: 0 }}>
                                 {Number(child.quantity)}×
                               </Typography>
                               <Typography onClick={() => img && setImagePreview({ imageUrl: img, modelName: child.modelName })}
-                                sx={{ fontSize: 14, fontWeight: 700, color: '#374151', flex: 1, ...(img ? { cursor: 'pointer', '&:hover': { color: '#1976d2', textDecoration: 'underline dotted' } } : {}) }}>
+                                sx={{ fontSize: large ? 17 : 14, fontWeight: 800, color: '#374151', flex: 1, ...(img ? { cursor: 'pointer', '&:hover': { color: '#1976d2', textDecoration: 'underline dotted' } } : {}) }}>
                                 {child.modelName}
                               </Typography>
                             </Box>
@@ -536,7 +536,7 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                 {status === 'READY' && (
                   <Stack spacing={0.5}>
                     <Button size="small" variant="outlined" color="warning" fullWidth
-                      startIcon={<QrCode2Icon sx={{ fontSize: 13 }} />}
+                      startIcon={<QrCode2Icon sx={{ fontSize: large ? 17 : 13 }} />}
                       onClick={() => onPickupQr(order)}
                       sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>
                       Pickup QR
@@ -603,12 +603,14 @@ const CARD_STYLE = {
   CANCELLED: { border: '#fca5a5', bg: '#fff5f5', num: '#ef4444' },
 }
 
-function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSelect }) {
+function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSelect, displaySize = 'normal', highContrast = false }) {
   const [editNum, setEditNum]       = useState(false)
   const [numVal, setNumVal]         = useState(String(order.orderNumber ?? ''))
   const [imagePreview, setImagePreview] = useState(null)
 
-  const s       = CARD_STYLE[order.status] || CARD_STYLE.CONFIRMED
+  const large = displaySize === 'large'
+  const baseStyle = CARD_STYLE[order.status] || CARD_STYLE.CONFIRMED
+  const s       = highContrast ? { ...baseStyle, bg: '#fff', border: baseStyle.num } : baseStyle
   const isQr    = order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT'
   const isActive = !['COMPLETED', 'PICKED_UP', 'CANCELLED'].includes(order.status)
   const roots    = (order.items || []).filter(it => !it.parentItemId)
@@ -628,7 +630,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
   return (
     <>
     <Box sx={{
-      border: `2px solid ${selected ? '#6366f1' : s.border}`,
+      border: `${highContrast ? 3 : 2}px solid ${selected ? '#6366f1' : s.border}`,
       borderRadius: 2, bgcolor: s.bg,
       display: 'flex', flexDirection: 'column',
       opacity: order.status === 'CANCELLED' ? 0.65 : 1,
@@ -639,7 +641,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
     }}>
 
       {/* ── Header ── */}
-      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75, p: 1.25, pb: 0.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: large ? 1 : 0.75, p: large ? 1.5 : 1.25, pb: large ? 0.75 : 0.5 }}>
 
         {/* Selection checkbox */}
         <Checkbox
@@ -654,15 +656,15 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
             onChange={e => setNumVal(e.target.value)}
             onBlur={commitNum}
             onKeyDown={e => { if (e.key === 'Enter') commitNum(); if (e.key === 'Escape') { setNumVal(String(order.orderNumber ?? '')); setEditNum(false) } }}
-            sx={{ width: 44, height: 44, borderRadius: '50%', border: `2px solid ${s.num}`, textAlign: 'center', fontWeight: 900, fontSize: 15, color: s.num, background: 'white', outline: 'none', p: 0, flexShrink: 0 }}
+            sx={{ width: large ? 58 : 44, height: large ? 58 : 44, borderRadius: '50%', border: `2px solid ${s.num}`, textAlign: 'center', fontWeight: 900, fontSize: large ? 18 : 15, color: s.num, background: 'white', outline: 'none', p: 0, flexShrink: 0 }}
           />
         ) : (
           <Tooltip title="Click to edit order #">
             <Box onClick={() => { setNumVal(String(order.orderNumber ?? '')); setEditNum(true) }} sx={{
-              width: 44, height: 44, borderRadius: '50%', flexShrink: 0,
+              width: large ? 58 : 44, height: large ? 58 : 44, borderRadius: '50%', flexShrink: 0,
               bgcolor: s.num, color: '#fff',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontWeight: 900, fontSize: 16, cursor: 'pointer',
+              fontWeight: 900, fontSize: large ? 21 : 16, cursor: 'pointer',
               '&:hover': { filter: 'brightness(0.85)' },
             }}>
               {order.orderNumber ?? '?'}
@@ -674,62 +676,62 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Box sx={{ display: 'flex', gap: 0.4, flexWrap: 'wrap', alignItems: 'center', mb: 0.3 }}>
             <Chip label={STATUS_LABEL[order.status] || order.status} color={STATUS_COLOR[order.status] || 'default'} size="small"
-              sx={{ height: 20, fontSize: 10, fontWeight: 800 }} />
-            {order.fulfillmentType && (() => { const m = { DINE_IN: '🪑', PICKUP: '🥡', DELIVERY: '🛵' }; return <Typography sx={{ fontSize: 13 }}>{m[order.fulfillmentType] || ''}</Typography> })()}
-            {order.tableName && <Chip icon={<TableBarIcon sx={{ fontSize: 11 }} />} label={order.tableName} size="small" color="info" variant="outlined" sx={{ height: 20, fontSize: 10 }} />}
+              sx={{ height: large ? 24 : 20, fontSize: large ? 12 : 10, fontWeight: 800 }} />
+            {order.fulfillmentType && (() => { const m = { DINE_IN: '🪑', PICKUP: '🥡', DELIVERY: '🛵' }; return <Typography sx={{ fontSize: large ? 17 : 13 }}>{m[order.fulfillmentType] || ''}</Typography> })()}
+            {order.tableName && <Chip icon={<TableBarIcon sx={{ fontSize: 11 }} />} label={order.tableName} size="small" color="info" variant="outlined" sx={{ height: large ? 24 : 20, fontSize: large ? 12 : 10 }} />}
             {order.paymentStatus === 'PAID'
-              ? <Chip icon={<PaidIcon sx={{ fontSize: 11, ml: '4px !important' }} />} label="PAID" size="small" color="success" sx={{ height: 20, fontSize: 10, fontWeight: 800 }} />
-              : <Chip label="UNPAID" size="small" color="warning" variant="outlined" sx={{ height: 20, fontSize: 10 }} />
+              ? <Chip icon={<PaidIcon sx={{ fontSize: 11, ml: '4px !important' }} />} label="PAID" size="small" color="success" sx={{ height: large ? 24 : 20, fontSize: large ? 12 : 10, fontWeight: 800 }} />
+              : <Chip label="UNPAID" size="small" color="warning" variant="outlined" sx={{ height: large ? 24 : 20, fontSize: large ? 12 : 10 }} />
             }
-            {order.paymentMethod === 'BANK_QR' && <Chip label="QR" size="small" color="info" sx={{ height: 18, fontSize: 10 }} />}
-            {order.paymentMethod === 'SPLIT' && <Chip label="Split" size="small" color="secondary" sx={{ height: 18, fontSize: 10 }} />}
+            {order.paymentMethod === 'BANK_QR' && <Chip label="QR" size="small" color="info" sx={{ height: large ? 22 : 18, fontSize: large ? 12 : 10 }} />}
+            {order.paymentMethod === 'SPLIT' && <Chip label="Split" size="small" color="secondary" sx={{ height: large ? 22 : 18, fontSize: large ? 12 : 10 }} />}
             {(() => {
               const chip = materialAuditChip(order)
-              return chip ? <Chip label={chip.label} size="small" color={chip.color} sx={{ height: 18, fontSize: 10, fontWeight: 800 }} /> : null
+              return chip ? <Chip label={chip.label} size="small" color={chip.color} sx={{ height: large ? 22 : 18, fontSize: large ? 12 : 10, fontWeight: 800 }} /> : null
             })()}
           </Box>
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-            {order.customerName && <Typography sx={{ fontSize: 12, fontWeight: 700, color: '#1e293b', flex: 1 }} noWrap>{order.customerName}</Typography>}
-            <Typography sx={{ fontSize: 10, color: '#94a3b8', flexShrink: 0 }}>{elapsed(order.confirmedAt || order.createdAt)} ago</Typography>
+            {order.customerName && <Typography sx={{ fontSize: large ? 15 : 12, fontWeight: 800, color: '#1e293b', flex: 1 }} noWrap>{order.customerName}</Typography>}
+            <Typography sx={{ fontSize: large ? 12 : 10, color: '#64748b', flexShrink: 0 }}>{elapsed(order.confirmedAt || order.createdAt)} ago</Typography>
           </Box>
-          {order.staffName && <Typography sx={{ fontSize: 10, color: '#94a3b8' }} noWrap>by {order.staffName}</Typography>}
+          {order.staffName && <Typography sx={{ fontSize: large ? 12 : 10, color: '#64748b' }} noWrap>by {order.staffName}</Typography>}
         </Box>
 
         {/* Icon cluster */}
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.1, flexShrink: 0 }}>
           <Box sx={{ display: 'flex' }}>
             <Tooltip title="View detail">
-              <IconButton size="small" onClick={() => actions.detail(order)} sx={{ p: 0.35 }}><VisibilityIcon sx={{ fontSize: 15 }} /></IconButton>
+              <IconButton size="small" onClick={() => actions.detail(order)} sx={{ p: 0.35 }}><VisibilityIcon sx={{ fontSize: large ? 19 : 15 }} /></IconButton>
             </Tooltip>
             <Tooltip title="Print Receipt">
-              <IconButton size="small" color="primary" onClick={() => printOrderReceiptTracked(order)} sx={{ p: 0.35 }}><PrintIcon sx={{ fontSize: 15 }} /></IconButton>
+              <IconButton size="small" color="primary" onClick={() => printOrderReceiptTracked(order)} sx={{ p: 0.35 }}><PrintIcon sx={{ fontSize: large ? 19 : 15 }} /></IconButton>
             </Tooltip>
             {order.sourceToken && (
               <Tooltip title="Combined Receipt">
-                <IconButton size="small" color="secondary" onClick={() => actions.combinedReceipt(order.sourceToken)} sx={{ p: 0.35 }}><PeopleAltIcon sx={{ fontSize: 15 }} /></IconButton>
+                <IconButton size="small" color="secondary" onClick={() => actions.combinedReceipt(order.sourceToken)} sx={{ p: 0.35 }}><PeopleAltIcon sx={{ fontSize: large ? 19 : 15 }} /></IconButton>
               </Tooltip>
             )}
           </Box>
           <Box sx={{ display: 'flex' }}>
             <Tooltip title="Show Tracking QR for Customer">
               <IconButton size="small" onClick={() => actions.showTrackQr(order)} sx={{ p: 0.35, color: '#0288d1' }}>
-                <QrCode2Icon sx={{ fontSize: 15 }} />
+                <QrCode2Icon sx={{ fontSize: large ? 19 : 15 }} />
               </IconButton>
             </Tooltip>
             <Tooltip title="Print Tracking Tag">
-              <IconButton size="small" color="secondary" onClick={() => actions.printTag(order)} sx={{ p: 0.35 }}><ConfirmationNumberIcon sx={{ fontSize: 15 }} /></IconButton>
+              <IconButton size="small" color="secondary" onClick={() => actions.printTag(order)} sx={{ p: 0.35 }}><ConfirmationNumberIcon sx={{ fontSize: large ? 19 : 15 }} /></IconButton>
             </Tooltip>
             <Tooltip title="Print Cup Labels">
-              <IconButton size="small" onClick={() => printCupLabelsTracked(order)} sx={{ p: 0.35 }}><LabelIcon sx={{ fontSize: 15 }} /></IconButton>
+              <IconButton size="small" onClick={() => printCupLabelsTracked(order)} sx={{ p: 0.35 }}><LabelIcon sx={{ fontSize: large ? 19 : 15 }} /></IconButton>
             </Tooltip>
             {order.paymentStatus !== 'PAID' && order.status !== 'CANCELLED' && (
               <Tooltip title="Payment QR">
-                <IconButton size="small" color="primary" onClick={() => actions.payQr(order)} sx={{ p: 0.35 }}><QrCode2Icon sx={{ fontSize: 15 }} /></IconButton>
+                <IconButton size="small" color="primary" onClick={() => actions.payQr(order)} sx={{ p: 0.35 }}><QrCode2Icon sx={{ fontSize: large ? 19 : 15 }} /></IconButton>
               </Tooltip>
             )}
             {!['COMPLETED','PICKED_UP','CANCELLED'].includes(order.status) && (
               <Tooltip title="Merge other bills into this one">
-                <IconButton size="small" onClick={() => actions.mergeBills(order)} sx={{ p: 0.35, color: '#7c3aed' }}><MergeTypeIcon sx={{ fontSize: 15 }} /></IconButton>
+                <IconButton size="small" onClick={() => actions.mergeBills(order)} sx={{ p: 0.35, color: '#7c3aed' }}><MergeTypeIcon sx={{ fontSize: large ? 19 : 15 }} /></IconButton>
               </Tooltip>
             )}
           </Box>
@@ -737,23 +739,23 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
       </Box>
 
       {/* ── Table selector + order code ── */}
-      <Box sx={{ px: 1.25, pb: 0.5, display: 'flex', alignItems: 'center', gap: 0.75 }}>
+      <Box sx={{ px: large ? 1.5 : 1.25, pb: large ? 0.75 : 0.5, display: 'flex', alignItems: 'center', gap: 0.75 }}>
         <TableBarIcon sx={{ fontSize: 13, color: '#94a3b8', flexShrink: 0 }} />
         <Box component="select"
           value={order.tableId || ''}
           onChange={e => actions.setTable(order.id, e.target.value)}
-          sx={{ fontSize: 11, height: 22, border: '1px solid #cbd5e1', borderRadius: 1, px: 0.5, flex: 1, cursor: 'pointer', bgcolor: 'white', color: '#334155' }}
+          sx={{ fontSize: large ? 13 : 11, height: large ? 28 : 22, border: '1px solid #cbd5e1', borderRadius: 1, px: 0.5, flex: 1, cursor: 'pointer', bgcolor: 'white', color: '#334155' }}
         >
           <option value="">No table</option>
           {tables.map(t => <option key={t.id} value={t.id}>{t.tableName}</option>)}
         </Box>
-        <Typography sx={{ fontSize: 10, fontFamily: 'monospace', color: '#94a3b8', flexShrink: 0 }}>{order.orderCode}</Typography>
+        <Typography sx={{ fontSize: large ? 12 : 10, fontFamily: 'monospace', color: '#94a3b8', flexShrink: 0 }}>{order.orderCode}</Typography>
       </Box>
 
       <Divider />
 
       {/* ── Items ── */}
-      <Box sx={{ px: 1.25, py: 0.75, flex: 1 }}>
+      <Box sx={{ px: large ? 1.5 : 1.25, py: large ? 1 : 0.75, flex: 1 }}>
         {roots.length === 0
           ? <Typography sx={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>No items</Typography>
           : roots.slice(0, 7).map((root, rIdx) => {
@@ -764,15 +766,15 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
               return (
                 <Box key={root.id || rIdx} sx={{ mb: 0.6 }}>
                   <Box sx={{ display: 'flex', gap: 0.4, alignItems: 'baseline' }}>
-                    <Typography sx={{ fontSize: 12, color: '#94a3b8', fontWeight: 700, flexShrink: 0 }}>{rIdx + 1}.</Typography>
-                    <Typography sx={{ fontSize: 22, fontWeight: 900, color: s.num, lineHeight: 1, flexShrink: 0 }}>{Number(root.quantity)}×</Typography>
-                    <Typography sx={{ fontSize: 15, fontWeight: 800, color: '#111', lineHeight: 1.2, flex: 1 }}>{root.modelName}</Typography>
-                    <Typography sx={{ fontSize: 12, color: '#64748b', flexShrink: 0, pl: 0.5 }}>{fmt(root.lineTotal)}</Typography>
+                    <Typography sx={{ fontSize: large ? 14 : 12, color: '#94a3b8', fontWeight: 700, flexShrink: 0 }}>{rIdx + 1}.</Typography>
+                    <Typography sx={{ fontSize: large ? 28 : 22, fontWeight: 900, color: s.num, lineHeight: 1, flexShrink: 0 }}>{Number(root.quantity)}×</Typography>
+                    <Typography sx={{ fontSize: large ? 18 : 15, fontWeight: 800, color: '#111', lineHeight: 1.2, flex: 1 }}>{root.modelName}</Typography>
+                    <Typography sx={{ fontSize: large ? 14 : 12, color: '#64748b', flexShrink: 0, pl: 0.5 }}>{fmt(root.lineTotal)}</Typography>
                   </Box>
-                  {optStr && <Typography sx={{ fontSize: 13, pl: 2.5, color: '#555', display: 'block', lineHeight: 1.4 }}>{optStr}</Typography>}
-                  {root.itemNotes && <Typography sx={{ fontSize: 13, pl: 2.5, fontStyle: 'italic', color: '#b91c1c', fontWeight: 700, display: 'block' }}>⚠ {root.itemNotes}</Typography>}
+                  {optStr && <Typography sx={{ fontSize: large ? 15 : 13, pl: 2.5, color: '#555', display: 'block', lineHeight: 1.4 }}>{optStr}</Typography>}
+                  {root.itemNotes && <Typography sx={{ fontSize: large ? 15 : 13, pl: 2.5, fontStyle: 'italic', color: '#b91c1c', fontWeight: 700, display: 'block' }}>⚠ {root.itemNotes}</Typography>}
                   {children.map((child, ci) => {
-                    const img = modelImageMap[child.modelId]
+                    const img = child.imageUrl || child.thumbnailUrl || modelImageMap[child.modelId]
                     return (
                       <Box key={child.id || ci} sx={{ display: 'flex', gap: 0.5, alignItems: 'center', ml: 2.5, pl: 0.75, mt: 0.3, borderLeft: `2px solid ${s.border}` }}>
                         <Typography sx={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, flexShrink: 0 }}>{rIdx+1}.{ci+1}</Typography>
@@ -780,11 +782,11 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
                           <Box component="img" src={img} alt={child.modelName}
                             onClick={() => setImagePreview({ imageUrl: img, modelName: child.modelName })}
                             onError={e => { e.target.style.display = 'none' }}
-                            sx={{ width: 30, height: 30, objectFit: 'cover', borderRadius: 1, flexShrink: 0, cursor: 'pointer', border: '1px solid #e2e8f0' }} />
+                            sx={{ width: large ? 38 : 30, height: large ? 38 : 30, objectFit: 'cover', borderRadius: 1, flexShrink: 0, cursor: 'pointer', border: '1px solid #e2e8f0' }} />
                         )}
-                        <Typography sx={{ fontSize: 16, fontWeight: 800, color: '#374151', lineHeight: 1, flexShrink: 0 }}>{Number(child.quantity)}×</Typography>
+                        <Typography sx={{ fontSize: large ? 20 : 16, fontWeight: 800, color: '#374151', lineHeight: 1, flexShrink: 0 }}>{Number(child.quantity)}×</Typography>
                         <Typography onClick={() => img && setImagePreview({ imageUrl: img, modelName: child.modelName })}
-                          sx={{ fontSize: 14, fontWeight: 700, color: '#374151', flex: 1, ...(img ? { cursor: 'pointer', '&:hover': { color: '#1976d2', textDecoration: 'underline dotted' } } : {}) }}>
+                          sx={{ fontSize: large ? 17 : 14, fontWeight: 800, color: '#374151', flex: 1, ...(img ? { cursor: 'pointer', '&:hover': { color: '#1976d2', textDecoration: 'underline dotted' } } : {}) }}>
                           {child.modelName}
                         </Typography>
                       </Box>
@@ -801,7 +803,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
       <Box sx={{ px: 1.25, pb: 0.75 }}>
         {order.notes && <Typography sx={{ fontSize: 11, fontStyle: 'italic', color: '#64748b', mb: 0.25 }}>📝 {order.notes}</Typography>}
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography sx={{ fontSize: 10, color: '#94a3b8' }}>{dateFmt(order.createdAt)}</Typography>
+          <Typography sx={{ fontSize: large ? 12 : 10, color: '#64748b' }}>{dateFmt(order.createdAt)}</Typography>
           <Typography sx={{ fontSize: 17, fontWeight: 900, color: s.num }}>{fmt(payableAmount(order))}</Typography>
         </Box>
       </Box>
@@ -1834,7 +1836,7 @@ export default function ShopOrderGrid() {
       <EodAuditDialog open={eodOpen} onClose={() => setEodOpen(false)} />
       <QrOrderDialog open={qrOrderOpen} onClose={() => setQrOrderOpen(false)} />
       {detailOrder && (
-        <ShopOrderDetailModal open order={detailOrder} onClose={() => setDetailOrder(null)} onRefresh={async (updatedOrder) => {
+        <ShopOrderDetailModal open order={detailOrder} displaySize={cardDisplaySize} onClose={() => setDetailOrder(null)} onRefresh={async (updatedOrder) => {
           try {
             if (updatedOrder?.id) mergeOrderIntoState(updatedOrder)
             else if (detailOrder?.id) await refreshOrderCard(detailOrder.id)
@@ -1982,7 +1984,7 @@ export default function ShopOrderGrid() {
                     </Typography>
                     <Button
                       size="small" variant="outlined"
-                      startIcon={<ContentCopyIcon sx={{ fontSize: 13 }} />}
+                      startIcon={<ContentCopyIcon sx={{ fontSize: large ? 17 : 13 }} />}
                       onClick={() => { navigator.clipboard.writeText(customerBoardUrl); setCopiedCustomer(true); setTimeout(() => setCopiedCustomer(false), 2000) }}
                       sx={{ mt: 1, borderColor: '#4ade80', color: '#4ade80', fontWeight: 700, fontSize: 11, textTransform: 'none', '&:hover': { borderColor: '#22c55e', bgcolor: '#14532d' } }}>
                       {copiedCustomer ? 'Copied!' : 'Copy link'}

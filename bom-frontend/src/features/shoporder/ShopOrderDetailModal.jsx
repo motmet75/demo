@@ -169,7 +169,8 @@ function buildItemGroups(items) {
   })
 }
 
-export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }) {
+export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, displaySize = 'normal' }) {
+  const large = displaySize === 'large'
   const [tagQr, setTagQr]           = useState(null)
   const [qrLoading, setQrLoading]   = useState(false)
   const [reverting, setReverting]   = useState(false)
@@ -441,7 +442,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
           {custHistoryLoading ? (
             <Box sx={{ p: 1.5, textAlign: 'center' }}><CircularProgress size={18} /></Box>
           ) : purchases.length ? (
-            <Table size="small">
+            <Table size={large ? "medium" : "small"}>
               <TableBody>
                 {purchases.slice(0, 5).map(p => (
                   <TableRow key={p.id}>
@@ -468,7 +469,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
           {custHistoryLoading ? (
             <Box sx={{ p: 1.5, textAlign: 'center' }}><CircularProgress size={18} /></Box>
           ) : vouchers.length || appliedOrders.length ? (
-            <Table size="small">
+            <Table size={large ? "medium" : "small"}>
               <TableBody>
                 {vouchers.slice(0, 4).map(v => (
                   <TableRow key={v.id}>
@@ -526,20 +527,20 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
 
   return (
     <>
-      <Dialog open={!!open} onClose={onClose} fullWidth maxWidth="md"
+      <Dialog open={!!open} onClose={onClose} fullWidth maxWidth={large ? "lg" : "md"}
         PaperProps={{ sx: { borderRadius: 2 } }}>
 
         {/* ── Title ─────────────────────────────────────────────────── */}
         <DialogTitle sx={{ pb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
           <Box sx={{ flex: 1 }}>
             <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1.5 }}>
-              <Typography fontWeight={800} variant="h6">
+              <Typography fontWeight={800} variant={large ? "h5" : "h6"}>
                 Order #{order.orderNumber ?? '?'}
               </Typography>
               {/* orderCode shown prominently for QR tracking */}
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, bgcolor: '#1e293b', borderRadius: 1, px: 1, py: 0.25 }}>
-                <QrCode2Icon sx={{ fontSize: 13, color: '#94a3b8' }} />
-                <Typography sx={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, letterSpacing: 1, color: '#e2e8f0' }}>
+                <QrCode2Icon sx={{ fontSize: large ? 16 : 13, color: '#94a3b8' }} />
+                <Typography sx={{ fontFamily: 'monospace', fontSize: large ? 14 : 12, fontWeight: 700, letterSpacing: 1, color: '#e2e8f0' }}>
                   {order.orderCode}
                 </Typography>
               </Box>
@@ -551,11 +552,11 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
           <Chip label={order.status} color={STATUS_COLOR[order.status] || 'default'} size="small" sx={{ fontWeight: 700 }} />
         </DialogTitle>
 
-        <DialogContent sx={{ pt: 0 }}>
+        <DialogContent sx={{ pt: 0, '& .MuiTableCell-root': { fontSize: large ? 15 : undefined }, '& .MuiTypography-body2': { fontSize: large ? 16 : undefined }, '& .MuiTypography-caption': { fontSize: large ? 13 : undefined }, '& .MuiChip-label': { fontSize: large ? 12 : undefined } }}>
           {error && <Alert severity="error" onClose={() => setError('')} sx={{ mb: 1 }}>{error}</Alert>}
 
           {/* ── Info grid ─────────────────────────────────────────── */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.75, mb: 1.5, p: 1.25, bgcolor: '#f8f9fa', borderRadius: 1.5 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: large ? 1 : 0.75, mb: 1.5, p: large ? 1.5 : 1.25, bgcolor: '#f8f9fa', borderRadius: 1.5 }}>
             <Typography variant="body2"><strong>Customer:</strong> {order.customerName || '—'}</Typography>
             <Typography variant="body2"><strong>Phone:</strong> {order.customerPhone || '—'}</Typography>
             <Typography variant="body2"><strong>Type:</strong> {order.fulfillmentType}</Typography>
@@ -591,9 +592,9 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
           )}
 
           {/* ── Items ─────────────────────────────────────────────── */}
-          <Table size="small">
+          <Table size={large ? "medium" : "small"}>
             <TableHead>
-              <TableRow sx={{ '& th': { fontWeight: 700, fontSize: 12, bgcolor: '#f0f4ff' } }}>
+              <TableRow sx={{ '& th': { fontWeight: 700, fontSize: large ? 14 : 12, bgcolor: '#f0f4ff' } }}>
                 <TableCell>Item & Options</TableCell>
                 <TableCell align="center" width={52}>Qty</TableCell>
                 <TableCell align="right" width={100}>Price</TableCell>
@@ -610,7 +611,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <Typography variant="caption" sx={{ color: '#94a3b8', fontWeight: 700, fontSize: 10, flexShrink: 0 }}>{root._label}</Typography>
                       <Box>
-                        <Typography variant="body2" fontWeight={700} fontSize={14}>{root.modelName}</Typography>
+                        <Typography variant="body2" fontWeight={700} fontSize={large ? 17 : 14}>{root.modelName}</Typography>
                         {(root.billNumber || (root.sourceOrderId && String(root.sourceOrderId) !== String(order.id))) && (
                           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.35 }}>
                             {root.billNumber && <Chip size="small" label={`Bill #${root.billNumber}`} sx={{ height: 18, fontSize: 10, fontWeight: 700 }} />}
@@ -626,11 +627,11 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
                       </Box>
                     </Box>
                   </TableCell>
-                  <TableCell align="center"><Typography fontWeight={700} fontSize={14}>{Number(root.quantity)}</Typography></TableCell>
+                  <TableCell align="center"><Typography fontWeight={700} fontSize={large ? 17 : 14}>{Number(root.quantity)}</Typography></TableCell>
                   <TableCell align="right">{fmt(root.unitPrice)}</TableCell>
                   <TableCell align="right"><Typography variant="caption" color="text.secondary">{fmt(root.unitRawCost)}</Typography></TableCell>
                   <TableCell align="right"><Typography variant="caption" color="success.main">{pct(root.unitPrice, root.unitRawCost)}</Typography></TableCell>
-                  <TableCell align="right"><Typography fontWeight={700} fontSize={14} color="primary">{fmt(root.lineTotal)}</Typography></TableCell>
+                  <TableCell align="right"><Typography fontWeight={700} fontSize={large ? 17 : 14} color="primary">{fmt(root.lineTotal)}</Typography></TableCell>
                 </TableRow>,
 
                 /* ── Child rows ── */
@@ -643,18 +644,18 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 1, pl: 1.5, borderLeft: '2px solid #c7d2fe' }}>
                           <Typography variant="caption" sx={{ color: '#94a3b8', fontWeight: 700, fontSize: 10, flexShrink: 0 }}>{child._label}</Typography>
                           <Box>
-                            <Typography variant="body2" fontWeight={600} fontSize={13} color="#4338ca">{child.modelName}</Typography>
+                            <Typography variant="body2" fontWeight={600} fontSize={large ? 16 : 13} color="#4338ca">{child.modelName}</Typography>
                             {child.itemNotes && (
                               <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', display: 'block' }}>{child.itemNotes}</Typography>
                             )}
                           </Box>
                         </Box>
                       </TableCell>
-                      <TableCell align="center"><Typography fontWeight={800} fontSize={13} color="#6366f1">{effectiveQty}</Typography></TableCell>
-                      <TableCell align="right"><Typography fontSize={13} color="text.secondary">{fmt(child.unitPrice)}</Typography></TableCell>
+                      <TableCell align="center"><Typography fontWeight={800} fontSize={large ? 16 : 13} color="#6366f1">{effectiveQty}</Typography></TableCell>
+                      <TableCell align="right"><Typography fontSize={large ? 15 : 13} color="text.secondary">{fmt(child.unitPrice)}</Typography></TableCell>
                       <TableCell align="right"><Typography variant="caption" color="text.secondary">{fmt(child.unitRawCost)}</Typography></TableCell>
                       <TableCell align="right"><Typography variant="caption" color="success.main">{pct(child.unitPrice, child.unitRawCost)}</Typography></TableCell>
-                      <TableCell align="right"><Typography fontWeight={700} fontSize={13} color="#6366f1">{fmt(effectiveTotal)}</Typography></TableCell>
+                      <TableCell align="right"><Typography fontWeight={700} fontSize={large ? 16 : 13} color="#6366f1">{fmt(effectiveTotal)}</Typography></TableCell>
                     </TableRow>
                   )
                 }),
@@ -668,7 +669,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
                       </Typography>
                     </TableCell>
                     <TableCell align="right">
-                      <Typography fontWeight={900} fontSize={14} color="primary">{fmt(subtotal)}</Typography>
+                      <Typography fontWeight={900} fontSize={large ? 17 : 14} color="primary">{fmt(subtotal)}</Typography>
                     </TableCell>
                   </TableRow>
                 ),

@@ -145,7 +145,7 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
       .filter(([, sQty]) => sQty > 0)
       .map(([modelId, sQty]) => {
         const m = allowedSideOptions.find(x => x.id === modelId)
-        return { modelId, modelName: m?.modelName || '', qty: sQty }
+        return { modelId, modelName: m?.modelName || '', imageUrl: m?.imageUrl || m?.thumbnailUrl || null, qty: sQty }
       })
     onConfirm({
       qty,
@@ -262,21 +262,21 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
                   border: sideQty > 0 ? '1.5px solid #6366f1' : '1px solid #e2e8f0',
                   transition: 'border-color 0.15s, background-color 0.15s',
                 }}>
-                  <Box onClick={() => side.imageUrl && setImagePreview(side)}
-                    sx={{ width: 52, height: 52, flexShrink: 0, borderRadius: 1.5, bgcolor: '#e8eaf6', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: side.imageUrl ? 'pointer' : 'default' }}>
-                    {side.imageUrl ? (
-                      <Box component="img" src={side.imageUrl} alt={side.modelName} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none' }} />
+                  <Box onClick={() => (side.imageUrl || side.thumbnailUrl) && setImagePreview({ ...side, imageUrl: side.imageUrl || side.thumbnailUrl })}
+                    sx={{ width: 52, height: 52, flexShrink: 0, borderRadius: 1.5, bgcolor: '#e8eaf6', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: (side.imageUrl || side.thumbnailUrl) ? 'pointer' : 'default' }}>
+                    {(side.imageUrl || side.thumbnailUrl) ? (
+                      <Box component="img" src={side.imageUrl || side.thumbnailUrl} alt={side.modelName} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none' }} />
                     ) : (
                       <Typography sx={{ fontSize: 26, lineHeight: 1 }}>🧋</Typography>
                     )}
                   </Box>
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography fontWeight={700} noWrap
-                      onClick={() => side.imageUrl && setImagePreview(side)}
-                      sx={{ fontSize: 14, color: '#1e293b', ...(side.imageUrl ? { cursor: 'pointer', '&:hover': { color: '#1976d2', textDecoration: 'underline dotted' } } : {}) }}>
+                      onClick={() => (side.imageUrl || side.thumbnailUrl) && setImagePreview({ ...side, imageUrl: side.imageUrl || side.thumbnailUrl })}
+                      sx={{ fontSize: 16, color: '#1e293b', ...((side.imageUrl || side.thumbnailUrl) ? { cursor: 'pointer', '&:hover': { color: '#1976d2', textDecoration: 'underline dotted' } } : {}) }}>
                       {side.modelName}
                     </Typography>
-                    <Typography sx={{ fontSize: 13, fontWeight: 600, color: '#6366f1' }}>+{fmt(side.sellingPrice)}</Typography>
+                    <Typography sx={{ fontSize: 14, fontWeight: 700, color: '#6366f1' }}>+{fmt(side.sellingPrice)}</Typography>
                   </Box>
                   {sideQty === 0 ? (
                     <IconButton onClick={() => changeSideQty(side.id, 1)}
