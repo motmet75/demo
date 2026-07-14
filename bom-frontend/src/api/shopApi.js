@@ -515,11 +515,11 @@ export function undoMergeBills(orderId, mergeBatchId) {
   })
 }
 
-export function patchOrderDiscount(orderId, discountAmount, voucherCode) {
+export function patchOrderDiscount(orderId, discountAmount, voucherCode, billId = null) {
   return apiFetchJson(`/shop/staff/orders/${orderId}/discount`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ discountAmount, voucherCode })
+    body: JSON.stringify({ discountAmount, voucherCode, billId })
   })
 }
 
@@ -603,11 +603,11 @@ export function cancelVoucher(id) {
   return apiFetchJson(`/shop/staff/vouchers/${id}`, { method: 'DELETE' })
 }
 
-export function redeemVoucher(code, orderId) {
+export function redeemVoucher(code, orderId, billId = null) {
   return apiFetchJson('/shop/staff/vouchers/redeem', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code, orderId })
+    body: JSON.stringify({ code, orderId, billId })
   })
 }
 
@@ -619,8 +619,8 @@ export function fetchVoucherDetail(code) {
   })
 }
 
-export function removeOrderVoucher(orderId) {
-  return apiFetchJson(`/shop/staff/orders/${orderId}/voucher`, { method: 'DELETE' })
+export function removeOrderVoucher(orderId, billId = null) {
+  return apiFetchJson(`/shop/staff/orders/${orderId}/voucher${billId ? qs({ billId }) : ''}`, { method: 'DELETE' })
 }
 
 export function rotateVoucherKey() {

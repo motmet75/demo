@@ -1,5 +1,1 @@
-﻿modelCode;modelName,materialCode,qtyPerUnit
-MD-1001,Steel Chair A,RAW-STEEL-001,2.50
-MD-1001,Steel Chair A,RAW-ALU-001,8
-MD-1001,Steel Chair A,RAW-COP-001,0.12
-MD-2002,Plastic Table B,RAW-PLS-001,3.20
+modelCode,modelName,materialCode,qtyPerUnit,modelId,tenantId,companyId,hsCode,coCriteria,warehouseQty,warehouseUnit,bomUnitPerWarehouseUnit

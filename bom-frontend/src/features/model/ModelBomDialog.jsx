@@ -27,15 +27,40 @@ import { syncBomFromModelBoms } from '../../api/bomApi'
 function BomItemForm({ initial, materials, onSave, onCancel, saving }) {
   const [materialId, setMaterialId] = useState(initial?.materialId ?? '')
   const [qtyPerUnit, setQtyPerUnit] = useState(initial?.qtyPerUnit != null ? String(initial.qtyPerUnit) : '')
+  const [warehouseQty, setWarehouseQty] = useState(initial?.warehouseQty != null ? String(initial.warehouseQty) : '')
+  const [warehouseUnit, setWarehouseUnit] = useState(initial?.warehouseUnit ?? '')
+  const [bomUnitPerWarehouseUnit, setBomUnitPerWarehouseUnit] = useState(initial?.bomUnitPerWarehouseUnit != null ? String(initial.bomUnitPerWarehouseUnit) : '')
   const [err, setErr] = useState('')
+
+  const toNumberOrNull = (value) => {
+    if (value === '' || value === null || value === undefined) return null
+    const n = Number(value)
+    return Number.isNaN(n) ? null : n
+  }
+  const warehouseQtyNumber = toNumberOrNull(warehouseQty)
+  const ratioNumber = toNumberOrNull(bomUnitPerWarehouseUnit)
+  const hasWarehouseConversion = warehouseQty !== '' || bomUnitPerWarehouseUnit !== ''
+  const convertedQty = warehouseQtyNumber !== null && ratioNumber !== null && warehouseQtyNumber > 0 && ratioNumber > 0
+    ? warehouseQtyNumber * ratioNumber
+    : null
 
   function handleSubmit(e) {
     e.preventDefault()
     if (!materialId) { setErr('Material is required'); return }
-    const qty = parseFloat(qtyPerUnit)
+    if (hasWarehouseConversion) {
+      if (warehouseQtyNumber === null || warehouseQtyNumber <= 0) { setErr('Warehouse qty must be positive'); return }
+      if (ratioNumber === null || ratioNumber <= 0) { setErr('BOM qty / warehouse unit must be positive'); return }
+    }
+    const qty = convertedQty !== null ? convertedQty : parseFloat(qtyPerUnit)
     if (isNaN(qty) || qty <= 0) { setErr('Qty per unit must be a positive number'); return }
     setErr('')
-    onSave({ materialId, qtyPerUnit: qty })
+    onSave({
+      materialId,
+      qtyPerUnit: qty,
+      warehouseQty: warehouseQtyNumber,
+      warehouseUnit: warehouseUnit.trim() || null,
+      bomUnitPerWarehouseUnit: ratioNumber
+    })
   }
 
   return (
@@ -57,12 +82,40 @@ function BomItemForm({ initial, materials, onSave, onCancel, saving }) {
           ))}
         </TextField>
         <TextField
+          label="Warehouse Qty"
+          value={warehouseQty}
+          onChange={e => setWarehouseQty(e.target.value)}
+          size="small"
+          sx={{ width: 130 }}
+          disabled={saving}
+          inputProps={{ step: 'any', min: 0 }}
+          type="number"
+        />
+        <TextField
+          label="Warehouse Unit"
+          value={warehouseUnit}
+          onChange={e => setWarehouseUnit(e.target.value)}
+          size="small"
+          sx={{ width: 130 }}
+          disabled={saving}
+        />
+        <TextField
+          label="BOM Qty / Wh Unit"
+          value={bomUnitPerWarehouseUnit}
+          onChange={e => setBomUnitPerWarehouseUnit(e.target.value)}
+          size="small"
+          sx={{ width: 150 }}
+          disabled={saving}
+          inputProps={{ step: 'any', min: 0 }}
+          type="number"
+        />
+        <TextField
           label="Qty / Unit"
-          value={qtyPerUnit}
-          onChange={e => setQtyPerUnit(e.target.value)}
+          value={convertedQty !== null ? String(convertedQty) : qtyPerUnit}
+          onChange={convertedQty !== null ? undefined : e => setQtyPerUnit(e.target.value)}
           size="small"
           sx={{ width: 120 }}
-          disabled={saving}
+          disabled={saving || convertedQty !== null}
           inputProps={{ step: 'any', min: 0 }}
           type="number"
         />
@@ -157,12 +210,15 @@ export default function ModelBomDialog({ open, onClose, model }) {
 
   function downloadCsv() {
     if (!items.length) { alert('No BOM data to download'); return }
-    const header = ['modelCode', 'modelName', 'materialCode', 'materialName', 'qtyPerUnit', 'hsCode', 'coCriteria']
+    const header = ['modelCode', 'modelName', 'materialCode', 'materialName', 'warehouseQty', 'warehouseUnit', 'bomUnitPerWarehouseUnit', 'qtyPerUnit', 'hsCode', 'coCriteria']
     const rows = items.map(it => [
       model?.modelCode ?? '',
       model?.modelName ?? '',
       it.materialCode ?? '',
       it.materialName ?? '',
+      it.warehouseQty ?? '',
+      it.warehouseUnit ?? '',
+      it.bomUnitPerWarehouseUnit ?? '',
       it.qtyPerUnit ?? '',
       model?.hsCode ?? '',
       model?.coCriteria ?? ''
@@ -214,19 +270,25 @@ export default function ModelBomDialog({ open, onClose, model }) {
                 <TableRow>
                   <TableCell>Material Code</TableCell>
                   <TableCell>Material Name</TableCell>
+                  <TableCell align="right">Warehouse Qty</TableCell>
+                  <TableCell>Warehouse Unit</TableCell>
+                  <TableCell align="right">BOM Qty / Wh Unit</TableCell>
                   <TableCell align="right">Qty / Unit</TableCell>
                   <TableCell align="center" width={100}>Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {items.length === 0 && (
-                  <TableRow><TableCell colSpan={4} align="center" sx={{ color: 'text.secondary', py: 3 }}>No BOM items. Use Add to create one.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={7} align="center" sx={{ color: 'text.secondary', py: 3 }}>No BOM items. Use Add to create one.</TableCell></TableRow>
                 )}
                 {items.map(it => (
                   <React.Fragment key={it.id}>
                     <TableRow hover>
                       <TableCell>{it.materialCode}</TableCell>
                       <TableCell>{it.materialName}</TableCell>
+                      <TableCell align="right">{it.warehouseQty ?? ''}</TableCell>
+                      <TableCell>{it.warehouseUnit ?? ''}</TableCell>
+                      <TableCell align="right">{it.bomUnitPerWarehouseUnit ?? ''}</TableCell>
                       <TableCell align="right">{it.qtyPerUnit}</TableCell>
                       <TableCell align="center">
                         <IconButton size="small" onClick={() => { setEditingId(it.id); setShowAddForm(false) }} disabled={isBusy}><EditIcon fontSize="inherit" /></IconButton>
@@ -235,7 +297,7 @@ export default function ModelBomDialog({ open, onClose, model }) {
                     </TableRow>
                     {editingId === it.id && (
                       <TableRow>
-                        <TableCell colSpan={4} sx={{ background: '#f9f9f9' }}>
+                        <TableCell colSpan={7} sx={{ background: '#f9f9f9' }}>
                           <BomItemForm
                             initial={it}
                             materials={materials}

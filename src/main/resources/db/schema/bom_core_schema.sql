@@ -296,6 +296,9 @@ CREATE TABLE public.model_bom (
     model_id uuid NOT NULL,
     material_id uuid NOT NULL,
     qty_per_unit numeric(14,4) NOT NULL,
+    warehouse_qty numeric(18,6),
+    warehouse_unit character varying(30),
+    bom_unit_per_warehouse_unit numeric(18,6),
     tenant_id uuid DEFAULT public.uuid_v7() NOT NULL,
     company_id uuid NOT NULL
 );

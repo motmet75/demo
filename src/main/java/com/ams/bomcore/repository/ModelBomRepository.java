@@ -45,4 +45,7 @@ public interface ModelBomRepository extends JpaRepository<ModelBom, UUID> {
 
     // find all by tenant and company
     List<ModelBom> findAllByTenantIdAndCompanyId(UUID tenantId, UUID companyId);
+
+    // find conversion candidates for inventory auto-conversion by material scope
+    List<ModelBom> findAllByMaterialAndTenantIdAndCompanyId(Material material, UUID tenantId, UUID companyId);
 }

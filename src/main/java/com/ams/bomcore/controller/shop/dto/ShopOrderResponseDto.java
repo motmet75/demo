@@ -8,6 +8,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -57,6 +58,15 @@ public class ShopOrderResponseDto {
     private Instant completedAt;
     private List<ItemDto> items;
     private List<BillDto> bills = Collections.emptyList();
+
+    private static BigDecimal nz(BigDecimal value) {
+        return value != null ? value : BigDecimal.ZERO;
+    }
+
+    private static BigDecimal nonNegative(BigDecimal value) {
+        BigDecimal safe = nz(value);
+        return safe.compareTo(BigDecimal.ZERO) > 0 ? safe : BigDecimal.ZERO;
+    }
 
     public static class ItemDto {
         private UUID id;
@@ -115,6 +125,39 @@ public class ShopOrderResponseDto {
         public String getSourceOrderCode() { return sourceOrderCode; }
     }
 
+    public static class OrderLinkDto {
+        private UUID orderId;
+        private Integer orderNumber;
+        private String orderCode;
+        private int itemCount;
+        private BigDecimal totalAmount = BigDecimal.ZERO;
+
+        private static List<OrderLinkDto> fromItems(List<ShopOrderItem> items) {
+            if (items == null || items.isEmpty()) return Collections.emptyList();
+            Map<UUID, OrderLinkDto> byOrder = new LinkedHashMap<>();
+            for (ShopOrderItem item : items) {
+                if (item == null || item.getOrder() == null || item.getOrder().getId() == null) continue;
+                UUID orderId = item.getOrder().getId();
+                OrderLinkDto link = byOrder.computeIfAbsent(orderId, ignored -> {
+                    OrderLinkDto dto = new OrderLinkDto();
+                    dto.orderId = orderId;
+                    dto.orderNumber = item.getOrder().getOrderNumber();
+                    dto.orderCode = item.getOrder().getOrderCode();
+                    return dto;
+                });
+                if (item.getParentItem() == null) link.itemCount++;
+                link.totalAmount = link.totalAmount.add(nz(item.getLineTotal()));
+            }
+            return List.copyOf(byOrder.values());
+        }
+
+        public UUID getOrderId() { return orderId; }
+        public Integer getOrderNumber() { return orderNumber; }
+        public String getOrderCode() { return orderCode; }
+        public int getItemCount() { return itemCount; }
+        public BigDecimal getTotalAmount() { return totalAmount; }
+    }
+
     public static class BillDto {
         private UUID id;
         private Integer billNumber;
@@ -127,9 +170,14 @@ public class ShopOrderResponseDto {
         private UUID mergeBatchId;
         private BigDecimal totalAmount;
         private BigDecimal totalRawCost;
+        private BigDecimal discountAmount;
+        private String voucherCode;
+        private BigDecimal netAmount;
+        private BigDecimal incomeAmount;
         private Instant createdAt;
         private Instant mergedAt;
         private List<UUID> itemIds;
+        private List<OrderLinkDto> linkedOrders;
 
         public static BillDto from(ShopBill bill, List<ShopOrderItem> items) {
             BillDto dto = new BillDto();
@@ -146,9 +194,14 @@ public class ShopOrderResponseDto {
             dto.mergeBatchId = bill.getMergeBatchId();
             dto.totalAmount = bill.getTotalAmount();
             dto.totalRawCost = bill.getTotalRawCost();
+            dto.discountAmount = nz(bill.getDiscountAmount());
+            dto.voucherCode = bill.getVoucherCode();
+            dto.netAmount = nonNegative(nz(dto.totalAmount).subtract(dto.discountAmount));
+            dto.incomeAmount = dto.netAmount.subtract(nz(dto.totalRawCost));
             dto.createdAt = bill.getCreatedAt();
             dto.mergedAt = bill.getMergedAt();
             dto.itemIds = items == null ? Collections.emptyList() : items.stream().map(ShopOrderItem::getId).toList();
+            dto.linkedOrders = OrderLinkDto.fromItems(items);
             return dto;
         }
 
@@ -163,9 +216,14 @@ public class ShopOrderResponseDto {
         public UUID getMergeBatchId() { return mergeBatchId; }
         public BigDecimal getTotalAmount() { return totalAmount; }
         public BigDecimal getTotalRawCost() { return totalRawCost; }
+        public BigDecimal getDiscountAmount() { return discountAmount; }
+        public String getVoucherCode() { return voucherCode; }
+        public BigDecimal getNetAmount() { return netAmount; }
+        public BigDecimal getIncomeAmount() { return incomeAmount; }
         public Instant getCreatedAt() { return createdAt; }
         public Instant getMergedAt() { return mergedAt; }
         public List<UUID> getItemIds() { return itemIds; }
+        public List<OrderLinkDto> getLinkedOrders() { return linkedOrders; }
     }
     public static ShopOrderResponseDto from(ShopOrder order, List<ShopOrderItem> items) {
         ShopOrderResponseDto dto = new ShopOrderResponseDto();

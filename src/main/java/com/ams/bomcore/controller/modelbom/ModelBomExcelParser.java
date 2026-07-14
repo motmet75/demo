@@ -37,10 +37,18 @@ public class ModelBomExcelParser {
                 dto.setModelName(getCellValue(row, columnMap, "model_name", formatter));
                 dto.setMaterialCode(getCellValue(row, columnMap, "material_code", formatter));
                 
-                String qtyStr = getCellValue(row, columnMap, "qty_per_unit", formatter);
-                if (qtyStr != null) {
-                    dto.setQtyPerUnit(new BigDecimal(qtyStr.replace(",", "")));
+                BigDecimal qtyPerUnit = parseDecimal(firstCellValue(row, columnMap, formatter, "qty_per_unit", "bom_qty", "bom_quantity"));
+                BigDecimal warehouseQty = parseDecimal(firstCellValue(row, columnMap, formatter, "warehouse_qty", "warehouse_quantity", "warehouse_import_quantity"));
+                BigDecimal bomUnitPerWarehouseUnit = parseDecimal(firstCellValue(row, columnMap, formatter, "bom_unit_per_warehouse_unit", "bom_qty_per_warehouse_unit", "conversion_factor"));
+
+                dto.setWarehouseQty(warehouseQty);
+                dto.setWarehouseUnit(firstCellValue(row, columnMap, formatter, "warehouse_unit", "warehouse_import_unit", "import_unit"));
+                dto.setBomUnitPerWarehouseUnit(bomUnitPerWarehouseUnit);
+
+                if (qtyPerUnit == null && warehouseQty != null && bomUnitPerWarehouseUnit != null) {
+                    qtyPerUnit = warehouseQty.multiply(bomUnitPerWarehouseUnit);
                 }
+                dto.setQtyPerUnit(qtyPerUnit);
 
                 result.getRows().add(dto);
             }
@@ -54,7 +62,24 @@ public class ModelBomExcelParser {
         Integer idx = map.get(colName);
         if (idx == null) return null;
         Cell cell = row.getCell(idx);
-        return formatter.formatCellValue(cell).trim();
+        if (cell == null) return null;
+        String value = formatter.formatCellValue(cell).trim();
+        return value.isBlank() ? null : value;
+    }
+
+    private static String firstCellValue(Row row, Map<String, Integer> map, DataFormatter formatter, String... colNames) {
+        for (String colName : colNames) {
+            String value = getCellValue(row, map, colName, formatter);
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private static BigDecimal parseDecimal(String value) {
+        if (value == null || value.isBlank()) return null;
+        return new BigDecimal(value.replace(",", "").trim());
     }
 
     private static boolean isRowEmpty(Row row) {

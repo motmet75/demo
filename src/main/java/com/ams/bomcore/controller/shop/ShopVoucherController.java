@@ -81,17 +81,20 @@ public class ShopVoucherController {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         String code    = String.valueOf(body.get("code"));
         UUID   orderId = UUID.fromString(String.valueOf(body.get("orderId")));
-        return ResponseEntity.ok(voucherService.redeemVoucher(code, orderId, tId, cId));
+        UUID   billId  = body.get("billId") != null && !String.valueOf(body.get("billId")).isBlank()
+            ? UUID.fromString(String.valueOf(body.get("billId"))) : null;
+        return ResponseEntity.ok(voucherService.redeemVoucher(code, orderId, billId, tId, cId));
     }
 
     @DeleteMapping("/shop/staff/orders/{orderId}/voucher")
     public ResponseEntity<?> removeFromOrder(@PathVariable UUID orderId,
+                                             @RequestParam(required = false) UUID billId,
                                              @RequestParam(required = false) UUID tenantId,
                                              @RequestParam(required = false) UUID companyId,
                                              @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
                                              @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
-        return ResponseEntity.ok(voucherService.removeVoucher(orderId, tId, cId));
+        return ResponseEntity.ok(voucherService.removeVoucher(orderId, billId, tId, cId));
     }
 
     @PostMapping("/shop/public/vouchers/redeem")

@@ -182,6 +182,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
   const [editOpen, setEditOpen]       = useState(false)
   const [confirmDlg, setConfirmDlg]   = useState(null)
   const [splitBillOpen, setSplitBillOpen]     = useState(false)
+  const [selectedBillId, setSelectedBillId]   = useState(null)
   const [discountAmt, setDiscountAmt]         = useState('')
   const [voucherCode, setVoucherCode]         = useState('')
   const [discountSaving, setDiscountSaving]   = useState(false)
@@ -215,8 +216,11 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
 
   useEffect(() => {
     if (!open || !order) return
-    setDiscountAmt(order.discountAmount ? String(order.discountAmount) : '')
-    setVoucherCode(order.voucherCode || '')
+    const active = (order.bills || []).filter(b => b.status === 'ACTIVE')
+    const targetBill = active[0] || null
+    setSelectedBillId(targetBill?.id || null)
+    setDiscountAmt(targetBill?.discountAmount ? String(targetBill.discountAmount) : (order.discountAmount ? String(order.discountAmount) : ''))
+    setVoucherCode(targetBill?.voucherCode || order.voucherCode || '')
     setLinkedCustomer(null); setCustSearch(''); setCustResults([]); setCustHistory(null); setVoucherDetail(null); setVoucherDetailOpen(false)
     if (order.customerId) {
       fetchCustomers().then(({ data }) => {
@@ -274,7 +278,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
   const handleApplyDiscount = async () => {
     setDiscountSaving(true); setError('')
     try {
-      const { res, data } = await patchOrderDiscount(order.id, discountAmt ? Number(discountAmt) : 0, voucherCode || null)
+      const { res, data } = await patchOrderDiscount(order.id, discountAmt ? Number(discountAmt) : 0, voucherCode || null, selectedBill?.id || null)
       if (!res.ok) { setError(data?.error || data?.message || 'Failed to apply discount'); setDiscountSaving(false); return }
       onRefresh?.()
     } catch (e) { setError(e.message || 'Network error') }
@@ -287,7 +291,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
     if (!clean) return
     setDiscountSaving(true); setError('')
     try {
-      const { res, data } = await redeemVoucher(clean, order.id)
+      const { res, data } = await redeemVoucher(clean, order.id, selectedBill?.id || null)
       if (!res.ok) { setError(data?.error || data?.message || 'Voucher could not be applied'); setDiscountSaving(false); return }
       const nextOrder = data?.order
       if (nextOrder) {
@@ -301,7 +305,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
   }
 
   const handleViewVoucher = async () => {
-    const code = order.voucherCode || voucherCode
+    const code = selectedBill?.voucherCode || order.voucherCode || voucherCode
     if (!code) return
     setVoucherLoading(true); setError('')
     try {
@@ -316,7 +320,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
   const handleRemoveVoucher = async () => {
     setVoucherRemoving(true); setError('')
     try {
-      const { res, data } = await removeOrderVoucher(order.id)
+      const { res, data } = await removeOrderVoucher(order.id, selectedBill?.id || null)
       if (!res.ok) { setError(data?.error || data?.message || 'Failed to remove voucher'); setVoucherRemoving(false); return }
       setVoucherCode('')
       setDiscountAmt(data?.discountAmount ? String(data.discountAmount) : '')
@@ -413,7 +417,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
     if (!percent || !amount) return
     setDiscountSaving(true); setError('')
     try {
-      const { res, data } = await patchOrderDiscount(order.id, amount, null)
+      const { res, data } = await patchOrderDiscount(order.id, amount, null, selectedBill?.id || null)
       if (!res.ok) { setError(data?.error || data?.message || 'Failed to apply customer discount'); setDiscountSaving(false); return }
       setDiscountAmt(data?.discountAmount ? String(data.discountAmount) : String(amount))
       onRefresh?.()
@@ -516,6 +520,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
 
   const bills = order.bills || []
   const activeBills = bills.filter(b => b.status === 'ACTIVE')
+  const selectedBill = activeBills.find(b => b.id === selectedBillId) || activeBills[0] || null
   const mergedBills = bills.filter(b => b.status === 'MERGED' && b.mergedIntoBillId)
   const showBillSummary = activeBills.length > 1 || mergedBills.length > 0
 
@@ -565,11 +570,17 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
             <Box sx={{ mb: 1.5, p: 1, bgcolor: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 1.5 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
                 <Typography variant="caption" fontWeight={800} color="text.secondary" sx={{ mr: 0.5 }}>Bills</Typography>
-                {activeBills.map(b => (
-                  <Chip key={b.id} size="small" color="primary" variant="outlined"
-                    label={`Bill #${b.billNumber || '?'} · ${fmt(b.totalAmount)}`}
+                {activeBills.map(b => {
+                  const billNet = b.netAmount != null ? b.netAmount : Math.max(0, Number(b.totalAmount || 0) - Number(b.discountAmount || 0))
+                  const selected = selectedBill?.id === b.id
+                  const linked = (b.linkedOrders || []).map(x => x.orderNumber ? `#${x.orderNumber}` : x.orderCode).filter(Boolean).join(', ')
+                  return (
+                  <Chip key={b.id} size="small" color={selected ? "primary" : "default"} variant={selected ? "filled" : "outlined"}
+                    onClick={() => { setSelectedBillId(b.id); setDiscountAmt(b.discountAmount ? String(b.discountAmount) : ''); setVoucherCode(b.voucherCode || '') }}
+                    label={`Bill #${b.billNumber || '?'} · ${fmt(billNet)}${linked ? ` · ${linked}` : ''}`}
                     sx={{ height: 22, fontSize: 11, fontWeight: 700 }} />
-                ))}
+                  )
+                })}
                 {mergedBills.map(b => (
                   <Chip key={b.id} size="small" color="warning"
                     label={`Merged #${b.orderNumber ?? b.orderCode}`}
@@ -693,7 +704,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
                     Discount: -{fmt(discount)}{order.voucherCode ? ` (${order.voucherCode})` : ''}
                   </Typography>
                 )}
-                {order.voucherCode && (
+                {(selectedBill?.voucherCode || order.voucherCode) && (
                   <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 0.75, mt: 0.25 }}>
                     <Chip size="small" color={voucherDetail?.expired ? 'error' : 'warning'} label={order.voucherCode} sx={{ fontWeight: 700 }} />
                     <Button size="small" variant="outlined" onClick={handleViewVoucher}
@@ -715,6 +726,19 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
                 sx={{ textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', mb: 1 }}>
                 Discount / Voucher
               </Typography>
+              {activeBills.length > 1 && (
+                <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mb: 1 }}>
+                  {activeBills.map(b => {
+                    const selected = selectedBill?.id === b.id
+                    return (
+                      <Chip key={b.id} size="small" color={selected ? "warning" : "default"} variant={selected ? "filled" : "outlined"}
+                        onClick={() => { setSelectedBillId(b.id); setDiscountAmt(b.discountAmount ? String(b.discountAmount) : ''); setVoucherCode(b.voucherCode || '') }}
+                        label={`Apply to Bill #${b.billNumber || '?'}`}
+                        sx={{ height: 22, fontSize: 11, fontWeight: 800 }} />
+                    )
+                  })}
+                </Box>
+              )}
               <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'flex-start' }}>
                 <TextField
                   label="Discount amount" size="small" type="text" inputMode="numeric"
@@ -741,14 +765,14 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
                   sx={{ textTransform: 'none', fontWeight: 700, whiteSpace: 'nowrap', alignSelf: 'center' }}>
                   Scan Voucher
                 </Button>
-                {(order.voucherCode || voucherCode) && (
+                {(selectedBill?.voucherCode || order.voucherCode || voucherCode) && (
                   <Button variant="outlined" size="small" onClick={handleViewVoucher}
                     disabled={voucherLoading || discountSaving || voucherRemoving}
                     sx={{ textTransform: 'none', fontWeight: 700, whiteSpace: 'nowrap', alignSelf: 'center' }}>
                     {voucherLoading ? 'Loading...' : 'View'}
                   </Button>
                 )}
-                {order.voucherCode && (
+                {(selectedBill?.voucherCode || order.voucherCode) && (
                   <Button variant="outlined" color="error" size="small" onClick={handleRemoveVoucher}
                     disabled={voucherRemoving || discountSaving}
                     startIcon={voucherRemoving ? <CircularProgress size={14} /> : null}
@@ -1193,7 +1217,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
         PaperProps={{ sx: { borderRadius: 2 } }}>
         <DialogTitle sx={{ pb: 0.5 }}>
           <Typography fontWeight={800}>Voucher Detail</Typography>
-          <Typography variant="caption" color="text.secondary">{voucherDetail?.code || order.voucherCode || voucherCode}</Typography>
+          <Typography variant="caption" color="text.secondary">{voucherDetail?.code || selectedBill?.voucherCode || order.voucherCode || voucherCode}</Typography>
         </DialogTitle>
         <DialogContent sx={{ pt: 1.5 }}>
           {voucherDetail ? (
@@ -1221,7 +1245,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh }
           )}
         </DialogContent>
         <DialogActions sx={{ px: 2, pb: 2 }}>
-          {order.voucherCode && !isFinal && (
+          {(selectedBill?.voucherCode || order.voucherCode) && !isFinal && (
             <Button color="error" onClick={handleRemoveVoucher} disabled={voucherRemoving}
               startIcon={voucherRemoving ? <CircularProgress size={14} /> : null}
               sx={{ textTransform: 'none' }}>

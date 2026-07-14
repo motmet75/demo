@@ -17,7 +17,7 @@ import com.ams.bomcore.controller.modelbom.dto.ModelBomCsvRow;
  * with basic validation applied. This does not perform any database writes.
  *
  * Expected CSV columns (in order):
- * modelCode,modelName,materialCode,qtyPerUnit[,modelId][,tenantId][,companyId]
+ * modelCode,modelName,materialCode,qtyPerUnit[,modelId][,tenantId][,companyId][,hsCode][,coCriteria][,warehouseQty][,warehouseUnit][,bomUnitPerWarehouseUnit]
  *
  * Header row is allowed and will be skipped when detected.
  */
@@ -85,6 +85,9 @@ public class ModelBomCsvParser {
                 String modelName = cols[1].trim();
                 String materialCode = cols[2].trim();
                 String qtyText = cols[3].trim();
+                String warehouseQtyText = cols.length >= 10 ? cols[9].trim() : "";
+                String warehouseUnitText = cols.length >= 11 ? cols[10].trim() : "";
+                String bomUnitPerWarehouseUnitText = cols.length >= 12 ? cols[11].trim() : "";
 
                 // Validate required text fields
                 if (modelCode.isEmpty()) {
@@ -95,19 +98,49 @@ public class ModelBomCsvParser {
                     result.getErrors().add("Row " + row + ": materialCode is required and cannot be empty");
                     continue;
                 }
-                if (qtyText.isEmpty()) {
-                    result.getErrors().add("Row " + row + ": qtyPerUnit is required");
-                    continue;
+                BigDecimal warehouseQty = null;
+                BigDecimal bomUnitPerWarehouseUnit = null;
+                if (!warehouseQtyText.isEmpty()) {
+                    try {
+                        warehouseQty = new BigDecimal(warehouseQtyText.trim());
+                    } catch (Exception ex) {
+                        result.getErrors().add("Row " + row + ": warehouseQty is not a valid decimal: '" + warehouseQtyText + "'");
+                        continue;
+                    }
+                    if (warehouseQty.compareTo(BigDecimal.ZERO) <= 0) {
+                        result.getErrors().add("Row " + row + ": warehouseQty must be greater than 0");
+                        continue;
+                    }
+                }
+                if (!bomUnitPerWarehouseUnitText.isEmpty()) {
+                    try {
+                        bomUnitPerWarehouseUnit = new BigDecimal(bomUnitPerWarehouseUnitText.trim());
+                    } catch (Exception ex) {
+                        result.getErrors().add("Row " + row + ": bomUnitPerWarehouseUnit is not a valid decimal: '" + bomUnitPerWarehouseUnitText + "'");
+                        continue;
+                    }
+                    if (bomUnitPerWarehouseUnit.compareTo(BigDecimal.ZERO) <= 0) {
+                        result.getErrors().add("Row " + row + ": bomUnitPerWarehouseUnit must be greater than 0");
+                        continue;
+                    }
                 }
 
-                BigDecimal qty;
-                try {
-                    qty = new BigDecimal(qtyText.trim());
-                } catch (Exception ex) {
-                    result.getErrors().add("Row " + row + ": qtyPerUnit is not a valid decimal: '" + qtyText + "'");
-                    continue;
+                BigDecimal qty = null;
+                if (!qtyText.isEmpty()) {
+                    try {
+                        qty = new BigDecimal(qtyText.trim());
+                    } catch (Exception ex) {
+                        result.getErrors().add("Row " + row + ": qtyPerUnit is not a valid decimal: '" + qtyText + "'");
+                        continue;
+                    }
+                } else if (warehouseQty != null && bomUnitPerWarehouseUnit != null) {
+                    qty = warehouseQty.multiply(bomUnitPerWarehouseUnit);
                 }
 
+                if (qty == null) {
+                    result.getErrors().add("Row " + row + ": qtyPerUnit is required unless warehouseQty and bomUnitPerWarehouseUnit are provided");
+                    continue;
+                }
                 if (qty.compareTo(BigDecimal.ZERO) <= 0) {
                     result.getErrors().add("Row " + row + ": qtyPerUnit must be greater than 0");
                     continue;
@@ -118,6 +151,9 @@ public class ModelBomCsvParser {
                 dto.setModelName(modelName);
                 dto.setMaterialCode(materialCode);
                 dto.setQtyPerUnit(qty);
+                dto.setWarehouseQty(warehouseQty);
+                dto.setWarehouseUnit(warehouseUnitText.isEmpty() ? null : warehouseUnitText);
+                dto.setBomUnitPerWarehouseUnit(bomUnitPerWarehouseUnit);
 
                 // optional: try to parse model UUID if present in 5th column
                 if (cols.length >= 5) {

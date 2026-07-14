@@ -45,6 +45,14 @@ public class ModelBom {
     @Column(name = "qty_per_unit", nullable = false, columnDefinition = "numeric")
     private BigDecimal qtyPerUnit;
 
+    @Column(name = "warehouse_qty", columnDefinition = "numeric")
+    private BigDecimal warehouseQty;
+
+    @Column(name = "warehouse_unit", length = 30)
+    private String warehouseUnit;
+
+    @Column(name = "bom_unit_per_warehouse_unit", columnDefinition = "numeric")
+    private BigDecimal bomUnitPerWarehouseUnit;
     public ModelBom() {
         // default constructor
     }
@@ -97,6 +105,29 @@ public class ModelBom {
         this.qtyPerUnit = qtyPerUnit;
     }
 
+    public BigDecimal getWarehouseQty() {
+        return warehouseQty;
+    }
+
+    public void setWarehouseQty(BigDecimal warehouseQty) {
+        this.warehouseQty = warehouseQty;
+    }
+
+    public String getWarehouseUnit() {
+        return warehouseUnit;
+    }
+
+    public void setWarehouseUnit(String warehouseUnit) {
+        this.warehouseUnit = warehouseUnit;
+    }
+
+    public BigDecimal getBomUnitPerWarehouseUnit() {
+        return bomUnitPerWarehouseUnit;
+    }
+
+    public void setBomUnitPerWarehouseUnit(BigDecimal bomUnitPerWarehouseUnit) {
+        this.bomUnitPerWarehouseUnit = bomUnitPerWarehouseUnit;
+    }
     @PrePersist
     private void prePersist() {
         if (id == null) {
@@ -130,6 +161,9 @@ public class ModelBom {
                 ", model=" + (model != null ? model.getId() : null) +
                 ", material=" + (material != null ? material.getId() : null) +
                 ", qtyPerUnit=" + qtyPerUnit +
+                ", warehouseQty=" + warehouseQty +
+                ", warehouseUnit='" + warehouseUnit + '\'' +
+                ", bomUnitPerWarehouseUnit=" + bomUnitPerWarehouseUnit +
                 '}';
     }
 }

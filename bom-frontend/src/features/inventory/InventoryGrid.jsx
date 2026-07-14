@@ -13,7 +13,6 @@ import TextField from '@mui/material/TextField'
 import Button from '@mui/material/Button'
 import Box from '@mui/material/Box'
 import { fetchInventoryView, addStock, updateInventory, reserveInventory, releaseInventory, deleteInventory } from '../../api/inventoryApi'
-import { apiFetch, getContextHeaders } from '../../api/client'
 import InventoryEditModal from './InventoryEditModal'
 import InventoryInvoiceReceiveDialog from './InventoryInvoiceReceiveDialog'
 import InventoryImport from './InventoryImport'
@@ -32,6 +31,7 @@ export default function InventoryGrid() {
   const [filterCreatedFrom, setFilterCreatedFrom] = useState('')
   const [filterCreatedTo, setFilterCreatedTo] = useState('')
   const [createdRangePreset, setCreatedRangePreset] = useState('')
+  const [exportGrouping, setExportGrouping] = useState('batch')
 
   const toDatetimeLocal = (d) => { const p = n => String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}` }
   const applyCreatedRangePreset = (preset) => {
@@ -337,120 +337,130 @@ export default function InventoryGrid() {
     }
   }
 
-  const exportRows = async (selectedIds, format = 'xlsx') => {
-    try {
-      // Build rowsToExport and payloadIds (UUIDs)
-      let rowsToExport = []
-      let payloadIds = []
+  const numberValue = (value) => {
+    const n = Number(value)
+    return Number.isFinite(n) ? n : 0
+  }
 
-      // 1) If an apiRef is available, try to resolve the selected rows from the grid API (returns a Map of selected rows)
-      try {
-        if (apiRef && apiRef.current && typeof apiRef.current.getSelectedRows === 'function') {
-          const selectedMap = apiRef.current.getSelectedRows()
-          if (selectedMap && selectedMap.size > 0) {
-            const arr = Array.from(selectedMap.values())
-            rowsToExport = arr
-            payloadIds = arr.map(r => (r && (r.inventoryId || r.id) ? String(r.inventoryId || r.id) : undefined)).filter(Boolean)
-          }
-        }
-      } catch {
-        // ignore and continue to other fallbacks
-      }
+  const buildBatchExportRow = (r) => ({
+    InventoryId: r.inventoryId,
+    MaterialUUID: r.materialUuid,
+    MaterialCode: r.materialCode,
+    MaterialName: r.materialName,
+    WarehouseUUID: r.warehouseUuid,
+    WarehouseCode: r.warehouseCode,
+    WarehouseName: r.warehouseName,
+    Batch: r.batchNo,
+    QuantityOnHand: r.quantityOnHand,
+    QuantityReserved: r.quantityReserved,
+    QuantityLocked: r.quantityLocked,
+    Available: r.availableQuantity,
+    ContractCode: r.contractCode,
+    OrderToDeduction: r.orderToDeduction,
+    UserName: r.userName,
+    Unit: r.unit,
+    UnitPrice: r.unitPrice,
+    WarehouseImportQty: r.warehouseImportQuantity,
+    WarehouseImportUnit: r.warehouseImportUnit,
+    BomUnitPerWarehouseUnit: r.bomUnitPerWarehouseUnit,
+    WarehouseImportUnitPrice: r.warehouseImportUnitPrice,
+    Currency: r.currency,
+    HSCode: r.hsCode,
+    OriginType: r.originType,
+    OriginCountry: r.originCountry,
+    XformNo: r.xformNo,
+    CDSNo: r.cdsNo,
+    PurchaseNo: r.purchaseNo,
+    MaterialQuota: r.materialQuota,
+    MaterialQuotaPercentage: r.materialQuotaPercentage,
+    XformDate: r.xformDate,
+    PurchaseDateTime: r.purchaseDateTime,
+    CDSDateTime: r.cdsDateTime,
+    Expiration: r.expirationDateTime,
+    Production: r.productionDateTime,
+    CreatedAt: r.createdAt,
+    ModifiedTime: r.modifiedTime,
+    UpdatedAt: r.updatedAt,
+    Visible: r.visible,
+    Approved: r.approved,
+    Locked: r.locked
+  })
 
-      // 2) if not resolved via apiRef, use provided selectedIds (e.g., from selectionModel) to filter
-      if ((!payloadIds || payloadIds.length === 0)) {
-        if (selectedIds && selectedIds.length > 0) {
-          console.debug('exportRows: using selectedIds fallback', selectedIds)
-          rowsToExport = rows.filter(r => selectedIds.includes(r.id) || selectedIds.includes(r.inventoryId) || selectedIds.includes(r.materialUuid) || selectedIds.includes(r.warehouseUuid))
-        } else {
-          rowsToExport = rows
-        }
-        payloadIds = rowsToExport.map(r => r.inventoryId).filter(Boolean)
-      }
-
-      // Try server-side export if backend supports it
-      try {
-        const res = await apiFetch('/bom/inventory/export', {
-          method: 'POST', headers: { 'Content-Type': 'application/json', ...getContextHeaders() }, body: JSON.stringify(payloadIds)
+  const consolidateRowsByMaterial = (sourceRows) => {
+    const map = new Map()
+    sourceRows.forEach(r => {
+      const key = r.materialCode || r.materialUuid || r.materialId || 'UNKNOWN'
+      if (!map.has(key)) {
+        map.set(key, {
+          MaterialCode: r.materialCode,
+          MaterialName: r.materialName,
+          MaterialUUID: r.materialUuid,
+          Unit: r.unit,
+          QuantityOnHand: 0,
+          QuantityReserved: 0,
+          QuantityLocked: 0,
+          Available: 0,
+          WarehouseImportQty: 0,
+          BatchCount: 0,
+          Warehouses: new Set(),
+          Batches: new Set(),
+          Currency: r.currency
         })
-        if (!res.ok) {
-          const text = await res.text()
-          throw new Error(text || 'Export failed')
-        }
-        const blob = await res.blob()
-        const cd = res.headers.get('Content-Disposition') || res.headers.get('content-disposition')
-        let filename = 'inventory_export.xlsx'
-        if (cd) {
-          const match = /filename="?([^";]+)"?/.exec(cd)
-          if (match && match[1]) filename = match[1]
-        }
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = filename
-        document.body.appendChild(a)
-        a.click()
-        a.remove()
-        URL.revokeObjectURL(url)
-        return
-      } catch {
-        // server export failed or not available -> fallback to client-side generation
-        console.warn('Server export failed, falling back to client-side generation')
       }
+      const item = map.get(key)
+      item.QuantityOnHand += numberValue(r.quantityOnHand)
+      item.QuantityReserved += numberValue(r.quantityReserved)
+      item.QuantityLocked += numberValue(r.quantityLocked)
+      item.Available += numberValue(r.availableQuantity)
+      item.WarehouseImportQty += numberValue(r.warehouseImportQuantity)
+      item.BatchCount += r.batchNo ? 1 : 0
+      if (r.warehouseCode) item.Warehouses.add(r.warehouseCode)
+      if (r.batchNo) item.Batches.add(r.batchNo)
+      if (!item.Unit && r.unit) item.Unit = r.unit
+      if (!item.Currency && r.currency) item.Currency = r.currency
+    })
 
-      // client-side generation using XLSX
-      const data = rowsToExport.map(r => ({
-        InventoryId: r.inventoryId,
-        MaterialUUID: r.materialUuid,
-        MaterialCode: r.materialCode,
-        MaterialName: r.materialName,
-        WarehouseUUID: r.warehouseUuid,
-        WarehouseCode: r.warehouseCode,
-        WarehouseName: r.warehouseName,
-        Batch: r.batchNo,
-        QuantityOnHand: r.quantityOnHand,
-        QuantityReserved: r.quantityReserved,
-        QuantityLocked: r.quantityLocked,
-        Available: r.availableQuantity,
-        ContractCode: r.contractCode,
-        OrderToDeduction: r.orderToDeduction,
-        UserName: r.userName,
-        Unit: r.unit,
-        UnitPrice: r.unitPrice,
-        WarehouseImportQty: r.warehouseImportQuantity,
-        WarehouseImportUnit: r.warehouseImportUnit,
-        BomUnitPerWarehouseUnit: r.bomUnitPerWarehouseUnit,
-        WarehouseImportUnitPrice: r.warehouseImportUnitPrice,
-        Currency: r.currency,
-        HSCode: r.hsCode,
-        OriginType: r.originType,
-        OriginCountry: r.originCountry,
-        XformNo: r.xformNo,
-        CDSNo: r.cdsNo,
-        PurchaseNo: r.purchaseNo,
-        MaterialQuota: r.materialQuota,
-        MaterialQuotaPercentage: r.materialQuotaPercentage,
-        XformDate: r.xformDate,
-        PurchaseDateTime: r.purchaseDateTime,
-        CDSDateTime: r.cdsDateTime,
-        Expiration: r.expirationDateTime,
-        Production: r.productionDateTime,
-        CreatedAt: r.createdAt,
-        ModifiedTime: r.modifiedTime,
-        UpdatedAt: r.updatedAt,
-        Visible: r.visible,
-        Approved: r.approved,
-        Locked: r.locked
-      }))
+    return Array.from(map.values()).map(item => ({
+      MaterialCode: item.MaterialCode,
+      MaterialName: item.MaterialName,
+      MaterialUUID: item.MaterialUUID,
+      Unit: item.Unit,
+      QuantityOnHand: item.QuantityOnHand,
+      QuantityReserved: item.QuantityReserved,
+      QuantityLocked: item.QuantityLocked,
+      Available: item.Available,
+      WarehouseImportQty: item.WarehouseImportQty,
+      WarehouseCount: item.Warehouses.size,
+      Warehouses: Array.from(item.Warehouses).sort().join(', '),
+      BatchCount: item.BatchCount,
+      Batches: Array.from(item.Batches).sort().join(', '),
+      Currency: item.Currency
+    }))
+  }
+
+  const getRowsForExport = (selectedIds) => {
+    if (selectedIds && selectedIds.length > 0) {
+      return rows.filter(r => selectedIds.includes(r.id) || selectedIds.includes(r.inventoryId) || selectedIds.includes(r.materialUuid) || selectedIds.includes(r.warehouseUuid))
+    }
+    return filteredRows
+  }
+
+  const exportRows = async (selectedIds, format = 'xlsx', grouping = 'batch') => {
+    try {
+      const rowsToExport = getRowsForExport(selectedIds)
+      const data = grouping === 'material'
+        ? consolidateRowsByMaterial(rowsToExport)
+        : rowsToExport.map(buildBatchExportRow)
 
       const worksheet = XLSX.utils.json_to_sheet(data)
+      const suffix = grouping === 'material' ? 'by_material' : 'by_batch'
       if (format === 'csv') {
         const csv = XLSX.utils.sheet_to_csv(worksheet)
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = 'inventory_export.csv'
+        a.download = `inventory_export_${suffix}.csv`
         document.body.appendChild(a)
         a.click()
         a.remove()
@@ -459,13 +469,13 @@ export default function InventoryGrid() {
       }
 
       const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, worksheet, 'Inventory')
-      const wbout = XLSX.write(wb, { bookType: format === 'csv' ? 'csv' : 'xlsx', type: 'array' })
+      XLSX.utils.book_append_sheet(wb, worksheet, grouping === 'material' ? 'By Material' : 'By Batch')
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
       const blob = new Blob([wbout], { type: 'application/octet-stream' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = format === 'csv' ? 'inventory_export.csv' : 'inventory_export.xlsx'
+      a.download = `inventory_export_${suffix}.xlsx`
       document.body.appendChild(a)
       a.click()
       a.remove()
@@ -708,10 +718,17 @@ export default function InventoryGrid() {
       {/* Export controls and top small toolbar */}
       <div style={{ padding: '0 8px 8px 8px' }}>
         <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
-          <button type="button" onClick={() => exportRows(filteredRows.map(r => r.id), 'xlsx')}>Export Filtered XLSX</button>
-          <button type="button" onClick={() => exportRows(filteredRows.map(r => r.id), 'csv')}>Export Filtered CSV</button>
-          <button type="button" onClick={() => exportRows(selectedIds, 'xlsx')} disabled={selectedIds.length === 0}>Export Selected XLSX</button>
-          <button type="button" onClick={() => exportRows(selectedIds, 'csv')} disabled={selectedIds.length === 0}>Export Selected CSV</button>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+            Export
+            <select value={exportGrouping} onChange={e => setExportGrouping(e.target.value)} style={{ fontSize: 12, padding: '3px 6px' }}>
+              <option value="batch">By batch</option>
+              <option value="material">Consolidate materialCode</option>
+            </select>
+          </label>
+          <button type="button" onClick={() => exportRows(filteredRows.map(r => r.id), 'xlsx', exportGrouping)}>Export Filtered XLSX</button>
+          <button type="button" onClick={() => exportRows(filteredRows.map(r => r.id), 'csv', exportGrouping)}>Export Filtered CSV</button>
+          <button type="button" onClick={() => exportRows(selectedIds, 'xlsx', exportGrouping)} disabled={selectedIds.length === 0}>Export Selected XLSX</button>
+          <button type="button" onClick={() => exportRows(selectedIds, 'csv', exportGrouping)} disabled={selectedIds.length === 0}>Export Selected CSV</button>
           <button type="button" onClick={openDisposeSelected} disabled={selectedIds.length !== 1 || saving}>Dispose Selected</button>
           <button
             type="button"

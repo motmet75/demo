@@ -20,6 +20,9 @@ const stripDigits = (s) => s.replace(/[^0-9]/g, '')
 const payableAmount = (order) => Math.max(0, Number(order?.totalAmount || 0) - Number(order?.discountAmount || 0))
 const splitCashPortion = (order) => Math.max(0, Math.min(Number(order?.splitCashAmount || 0), payableAmount(order)))
 const splitQrPortion = (order) => Math.max(0, payableAmount(order) - splitCashPortion(order))
+const billNetAmount = (bill) => Math.max(0, Number(bill?.netAmount ?? (Number(bill?.totalAmount || 0) - Number(bill?.discountAmount || 0))))
+const billGrossAmount = (bill) => Number(bill?.totalAmount || 0)
+const billRawCost = (bill) => Number(bill?.totalRawCost || 0)
 
 function localDateTimeStr(d) {
   const p = n => String(n).padStart(2, '0')
@@ -57,28 +60,52 @@ export default function EodAuditDialog({ open, onClose }) {
 
       const orders = all.filter(o => {
         if (o.status === 'CANCELLED') return false
-        const t = new Date(o.createdAt)
-        if (from && t < from) return false
-        if (to   && t > to)   return false
         if (fc && o.orderCode && o.orderCode < fc) return false
         if (tc && o.orderCode && o.orderCode > tc) return false
         return true
       })
 
-      // Totals
+      const billRows = orders.flatMap(o => {
+        const activeBills = (o.bills || []).filter(b => b.status === 'ACTIVE')
+        const sourceBills = activeBills.length ? activeBills : [{
+          id: o.id, billNumber: 1, totalAmount: o.totalAmount, totalRawCost: o.totalRawCost,
+          discountAmount: o.discountAmount, netAmount: payableAmount(o), createdAt: o.createdAt,
+        }]
+        const orderNet = payableAmount(o)
+        const orderSplitCash = splitCashPortion(o)
+        return sourceBills.map(b => {
+          const net = billNetAmount(b)
+          const share = orderNet > 0 ? net / orderNet : 0
+          return {
+            order: o, bill: b, net, gross: billGrossAmount(b), raw: billRawCost(b),
+            splitCashShare: Math.max(0, Math.min(net, orderSplitCash * share)),
+            createdAt: b.createdAt || o.createdAt,
+          }
+        })
+      }).filter(row => {
+        const t = new Date(row.createdAt)
+        if (from && t < from) return false
+        if (to   && t > to)   return false
+        return true
+      })
+
       let cashTotal = 0, qrTotal = 0, splitCash = 0, splitQr = 0
       let cashCount = 0, qrCount = 0, splitCount = 0
       let unpaidTotal = 0, unpaidCount = 0
+      let grossSales = 0, rawCost = 0
 
-      orders.forEach(o => {
-        const amt    = payableAmount(o)
-        const sCash  = splitCashPortion(o)
+      billRows.forEach(row => {
+        const o = row.order
+        const amt = row.net
+        grossSales += row.gross
+        rawCost += row.raw
         if (o.paymentMethod === 'CASH') {
           cashTotal += amt; cashCount++
         } else if (o.paymentMethod === 'BANK_QR') {
           qrTotal += amt; qrCount++
         } else if (o.paymentMethod === 'SPLIT') {
-          splitCash += sCash; splitQr += splitQrPortion(o); splitCount++
+          const sCash = row.splitCashShare
+          splitCash += sCash; splitQr += Math.max(0, amt - sCash); splitCount++
         }
         if (o.paymentStatus !== 'PAID') {
           unpaidTotal += amt; unpaidCount++
@@ -88,15 +115,16 @@ export default function EodAuditDialog({ open, onClose }) {
       const totalCashCollected = cashTotal + splitCash
       const totalQrCollected   = qrTotal + splitQr
       const grandTotal         = cashTotal + qrTotal + splitCash + splitQr
+      const income             = grandTotal - rawCost
 
-      const codes    = orders.map(o => o.orderCode).filter(Boolean).sort()
+      const codes    = billRows.map(row => row.order.orderCode ? `${row.order.orderCode}/${row.bill.billNumber || 1}` : null).filter(Boolean).sort()
       const firstCode = codes.length ? codes[0] : null
       const lastCode  = codes.length ? codes[codes.length - 1] : null
 
       setResult({
-        orders, cashTotal, cashCount, qrTotal, qrCount,
+        orders, billRows, cashTotal, cashCount, qrTotal, qrCount,
         splitCash, splitQr, splitCount, totalCashCollected, totalQrCollected,
-        grandTotal, unpaidTotal, unpaidCount, firstCode, lastCode,
+        grandTotal, unpaidTotal, unpaidCount, firstCode, lastCode, grossSales, rawCost, income,
       })
     } catch (e) {
       setError(e.message || 'Failed to load orders')
@@ -162,7 +190,7 @@ export default function EodAuditDialog({ open, onClose }) {
                   Scope
                 </Typography>
                 <Typography variant="body2" sx={{ mt: 0.25 }}>
-                  <b>{result.orders.length}</b> orders
+                  <b>{result.billRows.length}</b> bills · <b>{result.orders.length}</b> orders
                 </Typography>
                 {result.firstCode && (
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25, flexWrap: 'wrap' }}>
@@ -181,19 +209,22 @@ export default function EodAuditDialog({ open, onClose }) {
                     Revenue Breakdown
                   </Typography>
                 </Box>
-                <Row label={`Cash (${result.cashCount} orders)`} value={fmt(result.cashTotal)} />
-                <Row label={`QR / Bank transfer (${result.qrCount} orders)`} value={fmt(result.qrTotal)} />
+                <Row label={`Cash (${result.cashCount} bills)`} value={fmt(result.cashTotal)} />
+                <Row label={`QR / Bank transfer (${result.qrCount} bills)`} value={fmt(result.qrTotal)} />
                 {result.splitCount > 0 && <>
-                  <Row label={`Split — cash portion (${result.splitCount} orders)`} value={fmt(result.splitCash)} />
+                  <Row label={`Split — cash portion (${result.splitCount} bills)`} value={fmt(result.splitCash)} />
                   <Row label={`Split — QR portion`} value={fmt(result.splitQr)} />
                 </>}
                 <Divider />
                 <Row label="Total Cash Collected" value={fmt(result.totalCashCollected)} bold color="#1b5e20" bg="#f0fdf4" />
                 <Row label="Total QR Collected" value={fmt(result.totalQrCollected)} bold color="#01579b" bg="#e3f2fd" />
                 <Divider />
-                <Row label="Grand Total" value={fmt(result.grandTotal)} bold color="primary.main" bg="#f8faff" />
+                <Row label="Gross sales" value={fmt(result.grossSales)} />
+                <Row label="Net sales" value={fmt(result.grandTotal)} bold color="primary.main" bg="#f8faff" />
+                <Row label="Raw material cost" value={fmt(result.rawCost)} />
+                <Row label="Income" value={fmt(result.income)} bold color={result.income >= 0 ? "success.main" : "error.main"} />
                 {result.unpaidCount > 0 && (
-                  <Row label={`Still unpaid (${result.unpaidCount} orders)`} value={fmt(result.unpaidTotal)} color="error.main" />
+                  <Row label={`Still unpaid (${result.unpaidCount} bills)`} value={fmt(result.unpaidTotal)} color="error.main" />
                 )}
               </Box>
 

@@ -4,8 +4,8 @@ import { importModelBoms } from '../../api/modelApi'
 import { useAppContext } from '../../context/AppContext'
 
 function downloadTemplate() {
-  const headers = ['model_code', 'model_name', 'material_code', 'material_name_en', 'qty_per_unit']
-  const sample  = ['MD-BL-18V', 'Cordless Blower 18V', '2827122002', 'DC Motor (Ducted Set)', 1]
+  const headers = ['model_code', 'model_name', 'material_code', 'material_name_en', 'warehouse_qty', 'warehouse_unit', 'bom_unit_per_warehouse_unit', 'qty_per_unit']
+  const sample  = ['MD-BL-18V', 'Cordless Blower 18V', '2827122002', 'DC Motor (Ducted Set)', 2, 'box', 12, 24]
   const ws = XLSX.utils.aoa_to_sheet([headers, sample])
   ws['!cols'] = headers.map(() => ({ wch: 24 }))
   const wb = XLSX.utils.book_new()

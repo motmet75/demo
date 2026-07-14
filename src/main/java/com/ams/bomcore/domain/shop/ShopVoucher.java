@@ -46,6 +46,9 @@ public class ShopVoucher {
     @Column(name = "redeemed_order_id")
     private UUID redeemedOrderId;
 
+    @Column(name = "redeemed_bill_id")
+    private UUID redeemedBillId;
+
     @Column(name = "redeemed_customer_id")
     private UUID redeemedCustomerId;
 
@@ -91,6 +94,8 @@ public class ShopVoucher {
     public void setIssuedOrderId(UUID issuedOrderId) { this.issuedOrderId = issuedOrderId; }
     public UUID getRedeemedOrderId() { return redeemedOrderId; }
     public void setRedeemedOrderId(UUID redeemedOrderId) { this.redeemedOrderId = redeemedOrderId; }
+    public UUID getRedeemedBillId() { return redeemedBillId; }
+    public void setRedeemedBillId(UUID redeemedBillId) { this.redeemedBillId = redeemedBillId; }
     public UUID getRedeemedCustomerId() { return redeemedCustomerId; }
     public void setRedeemedCustomerId(UUID redeemedCustomerId) { this.redeemedCustomerId = redeemedCustomerId; }
     public String getRedeemedCustomerName() { return redeemedCustomerName; }

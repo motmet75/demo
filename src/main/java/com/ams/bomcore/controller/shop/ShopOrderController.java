@@ -1245,8 +1245,10 @@ public class ShopOrderController {
         BigDecimal discount = body.get("discountAmount") != null
             ? new BigDecimal(body.get("discountAmount").toString()) : null;
         String voucher = body.get("voucherCode") instanceof String s ? s : null;
+        UUID billId = body.get("billId") != null && !String.valueOf(body.get("billId")).isBlank()
+            ? UUID.fromString(String.valueOf(body.get("billId"))) : null;
         try {
-            return ResponseEntity.ok(shopOrderService.patchDiscount(orderId, discount, voucher, tId, cId));
+            return ResponseEntity.ok(shopOrderService.patchDiscount(orderId, billId, discount, voucher, tId, cId));
         } catch (IllegalArgumentException | IllegalStateException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }

@@ -1,6 +1,7 @@
 package com.ams.bomcore.service.inventory;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -13,8 +14,10 @@ import com.ams.bomcore.controller.inventory.dto.InventoryViewDTO;
 import com.ams.bomcore.domain.inventory.InventoryEntity;
 import com.ams.bomcore.domain.inventory.WarehouseEntity;
 import com.ams.bomcore.domain.material.Material;
+import com.ams.bomcore.domain.modelbom.ModelBom;
 import com.ams.bomcore.repository.InventoryRepository;
 import com.ams.bomcore.repository.MaterialRepository;
+import com.ams.bomcore.repository.ModelBomRepository;
 import com.ams.bomcore.repository.WarehouseRepository;
 
 /**
@@ -27,15 +30,18 @@ public class InventoryService {
     private final InventoryRepository inventoryRepository;
     private final MaterialRepository materialRepository;
     private final WarehouseRepository warehouseRepository;
+    private final ModelBomRepository modelBomRepository;
     private final InventoryMovementService movementService;
 
     public InventoryService(InventoryRepository inventoryRepository,
                             MaterialRepository materialRepository,
                             WarehouseRepository warehouseRepository,
+                            ModelBomRepository modelBomRepository,
                             InventoryMovementService movementService) {
         this.inventoryRepository = inventoryRepository;
         this.materialRepository = materialRepository;
         this.warehouseRepository = warehouseRepository;
+        this.modelBomRepository = modelBomRepository;
         this.movementService = movementService;
     }
 
@@ -103,9 +109,6 @@ public class InventoryService {
                                      UUID invoiceId, BigDecimal unitPrice, String currency, String warehouseImportUnit,
                                      BigDecimal warehouseImportQuantity, BigDecimal bomUnitPerWarehouseUnit,
                                      BigDecimal warehouseImportUnitPrice) {
-        if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) {
-			throw new InventoryException("Quantity to add must be positive");
-		}
         if (batchNo == null || batchNo.trim().isEmpty()) {
 			throw new InventoryException("batchNo is required");
 		}
@@ -121,6 +124,13 @@ public class InventoryService {
         if (w.getTenantId() == null || !w.getTenantId().equals(tenantId)) {
             throw new InventoryException("warehouse does not belong to tenant");
         }
+
+        ReceiptConversion receipt = resolveReceiptConversion(m, qty, unitPrice, warehouseImportUnit,
+                warehouseImportQuantity, bomUnitPerWarehouseUnit, warehouseImportUnitPrice, tenantId, companyId);
+        qty = receipt.quantityOnHand;
+        unitPrice = receipt.unitPrice;
+        warehouseImportUnit = receipt.warehouseImportUnit;
+        bomUnitPerWarehouseUnit = receipt.bomUnitPerWarehouseUnit;
 
         Optional<InventoryEntity> existing = inventoryRepository.findByMaterialAndWarehouseCodeAndBatchNo(m, warehouseCode, batchNo);
         InventoryEntity inv;
@@ -248,9 +258,6 @@ public class InventoryService {
                                           BigDecimal unitPrice, String currency, String warehouseImportUnit,
                                           BigDecimal warehouseImportQuantity, BigDecimal bomUnitPerWarehouseUnit,
                                           BigDecimal warehouseImportUnitPrice) {
-        if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) {
-			throw new InventoryException("Quantity to add must be positive");
-		}
         if (batchNo == null || batchNo.trim().isEmpty()) {
 			throw new InventoryException("batchNo is required");
 		}
@@ -266,6 +273,13 @@ public class InventoryService {
         if (w.getTenantId() == null || !w.getTenantId().equals(tenantId)) {
             throw new InventoryException("warehouse does not belong to tenant");
         }
+
+        ReceiptConversion receipt = resolveReceiptConversion(m, qty, unitPrice, warehouseImportUnit,
+                warehouseImportQuantity, bomUnitPerWarehouseUnit, warehouseImportUnitPrice, tenantId, companyId);
+        qty = receipt.quantityOnHand;
+        unitPrice = receipt.unitPrice;
+        warehouseImportUnit = receipt.warehouseImportUnit;
+        bomUnitPerWarehouseUnit = receipt.bomUnitPerWarehouseUnit;
 
         Optional<InventoryEntity> existing = inventoryRepository.findByMaterialAndWarehouseCodeAndBatchNo(m, w.getCode(), batchNo);
         InventoryEntity inv;
@@ -340,6 +354,100 @@ public class InventoryService {
         return savedById;
     }
 
+    private ReceiptConversion resolveReceiptConversion(Material material, BigDecimal qty, BigDecimal unitPrice,
+                                                       String warehouseImportUnit, BigDecimal warehouseImportQuantity,
+                                                       BigDecimal bomUnitPerWarehouseUnit, BigDecimal warehouseImportUnitPrice,
+                                                       UUID tenantId, UUID companyId) {
+        boolean hasWarehouseReceipt = (warehouseImportUnit != null && !warehouseImportUnit.isBlank())
+                || warehouseImportQuantity != null
+                || bomUnitPerWarehouseUnit != null
+                || warehouseImportUnitPrice != null;
+
+        if (!hasWarehouseReceipt) {
+            if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new InventoryException("Quantity to add must be positive");
+            }
+            return new ReceiptConversion(qty, unitPrice, warehouseImportUnit, bomUnitPerWarehouseUnit);
+        }
+
+        if (warehouseImportQuantity == null || warehouseImportQuantity.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new InventoryException("warehouseImportQuantity must be positive");
+        }
+
+        ConversionDefaults defaults = resolveModelBomConversion(material, tenantId, companyId);
+        if (bomUnitPerWarehouseUnit == null && defaults != null) {
+            bomUnitPerWarehouseUnit = defaults.bomUnitPerWarehouseUnit;
+        }
+        if ((warehouseImportUnit == null || warehouseImportUnit.isBlank()) && defaults != null) {
+            warehouseImportUnit = defaults.warehouseUnit;
+        }
+
+        if (bomUnitPerWarehouseUnit == null || bomUnitPerWarehouseUnit.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new InventoryException("bomUnitPerWarehouseUnit must be positive; provide it or define one unique model BOM conversion for material " + material.getMaterialCode());
+        }
+        if (warehouseImportUnitPrice != null && warehouseImportUnitPrice.compareTo(BigDecimal.ZERO) < 0) {
+            throw new InventoryException("warehouseImportUnitPrice cannot be negative");
+        }
+
+        BigDecimal convertedQty = warehouseImportQuantity.multiply(bomUnitPerWarehouseUnit);
+        BigDecimal convertedUnitPrice = unitPrice;
+        if (warehouseImportUnitPrice != null) {
+            convertedUnitPrice = warehouseImportUnitPrice.divide(bomUnitPerWarehouseUnit, 10, RoundingMode.HALF_UP);
+        }
+        return new ReceiptConversion(convertedQty, convertedUnitPrice, warehouseImportUnit, bomUnitPerWarehouseUnit);
+    }
+
+    private ConversionDefaults resolveModelBomConversion(Material material, UUID tenantId, UUID companyId) {
+        if (material == null || tenantId == null || companyId == null) {
+            return null;
+        }
+        List<ModelBom> candidates = modelBomRepository.findAllByMaterialAndTenantIdAndCompanyId(material, tenantId, companyId)
+                .stream()
+                .filter(mb -> mb.getBomUnitPerWarehouseUnit() != null && mb.getBomUnitPerWarehouseUnit().compareTo(BigDecimal.ZERO) > 0)
+                .toList();
+        if (candidates.isEmpty()) {
+            return null;
+        }
+
+        BigDecimal ratio = candidates.get(0).getBomUnitPerWarehouseUnit();
+        String warehouseUnit = candidates.get(0).getWarehouseUnit();
+        for (ModelBom candidate : candidates) {
+            if (candidate.getBomUnitPerWarehouseUnit().compareTo(ratio) != 0) {
+                return null;
+            }
+            String candidateUnit = candidate.getWarehouseUnit();
+            if (warehouseUnit != null && candidateUnit != null && !warehouseUnit.equalsIgnoreCase(candidateUnit)) {
+                warehouseUnit = null;
+            } else if (warehouseUnit == null && candidateUnit != null) {
+                warehouseUnit = candidateUnit;
+            }
+        }
+        return new ConversionDefaults(ratio, warehouseUnit);
+    }
+
+    private static class ReceiptConversion {
+        final BigDecimal quantityOnHand;
+        final BigDecimal unitPrice;
+        final String warehouseImportUnit;
+        final BigDecimal bomUnitPerWarehouseUnit;
+
+        ReceiptConversion(BigDecimal quantityOnHand, BigDecimal unitPrice, String warehouseImportUnit, BigDecimal bomUnitPerWarehouseUnit) {
+            this.quantityOnHand = quantityOnHand;
+            this.unitPrice = unitPrice;
+            this.warehouseImportUnit = warehouseImportUnit;
+            this.bomUnitPerWarehouseUnit = bomUnitPerWarehouseUnit;
+        }
+    }
+
+    private static class ConversionDefaults {
+        final BigDecimal bomUnitPerWarehouseUnit;
+        final String warehouseUnit;
+
+        ConversionDefaults(BigDecimal bomUnitPerWarehouseUnit, String warehouseUnit) {
+            this.bomUnitPerWarehouseUnit = bomUnitPerWarehouseUnit;
+            this.warehouseUnit = warehouseUnit;
+        }
+    }
     private void applyReceiptFields(InventoryEntity inv, BigDecimal unitPrice, String currency, String warehouseImportUnit,
                                     BigDecimal warehouseImportQuantity, BigDecimal bomUnitPerWarehouseUnit,
                                     BigDecimal warehouseImportUnitPrice) {

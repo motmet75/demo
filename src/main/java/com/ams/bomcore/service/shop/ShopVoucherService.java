@@ -2,9 +2,14 @@ package com.ams.bomcore.service.shop;
 
 import com.ams.bomcore.controller.shop.dto.ShopOrderResponseDto;
 import com.ams.bomcore.domain.company.Company;
+import com.ams.bomcore.domain.shop.ShopBill;
+import com.ams.bomcore.domain.shop.ShopBillItem;
 import com.ams.bomcore.domain.shop.ShopOrder;
+import com.ams.bomcore.domain.shop.ShopOrderItem;
 import com.ams.bomcore.domain.shop.ShopVoucher;
 import com.ams.bomcore.repository.CompanyRepository;
+import com.ams.bomcore.repository.ShopBillItemRepository;
+import com.ams.bomcore.repository.ShopBillRepository;
 import com.ams.bomcore.repository.ShopOrderItemRepository;
 import com.ams.bomcore.repository.ShopOrderRepository;
 import com.ams.bomcore.repository.ShopVoucherRepository;
@@ -31,15 +36,21 @@ public class ShopVoucherService {
     private final ShopVoucherRepository  voucherRepository;
     private final ShopOrderRepository    orderRepository;
     private final ShopOrderItemRepository orderItemRepository;
+    private final ShopBillRepository     billRepository;
+    private final ShopBillItemRepository billItemRepository;
     private final CompanyRepository      companyRepository;
 
     public ShopVoucherService(ShopVoucherRepository voucherRepository,
                               ShopOrderRepository orderRepository,
                               ShopOrderItemRepository orderItemRepository,
+                              ShopBillRepository billRepository,
+                              ShopBillItemRepository billItemRepository,
                               CompanyRepository companyRepository) {
         this.voucherRepository   = voucherRepository;
         this.orderRepository     = orderRepository;
         this.orderItemRepository = orderItemRepository;
+        this.billRepository      = billRepository;
+        this.billItemRepository  = billItemRepository;
         this.companyRepository   = companyRepository;
     }
 
@@ -123,21 +134,27 @@ public class ShopVoucherService {
         return toMap(v, company.getVoucherSecret());
     }
 
-    /** Redeem: apply voucher value as discount to an order. */
+    /** Redeem: apply voucher value as discount to a bill. */
     @Transactional
     public Map<String, Object> redeemVoucher(String codeOrPayload, UUID orderId,
+                                              UUID tenantId, UUID companyId) {
+        return redeemVoucher(codeOrPayload, orderId, null, tenantId, companyId);
+    }
+
+    @Transactional
+    public Map<String, Object> redeemVoucher(String codeOrPayload, UUID orderId, UUID billId,
                                               UUID tenantId, UUID companyId) {
         ShopOrder order = orderRepository.findById(orderId)
             .filter(o -> o.getTenantId().equals(tenantId) && o.getCompanyId().equals(companyId))
             .orElseThrow(() -> new NoSuchElementException("Order not found"));
-        return redeemVoucherForOrder(codeOrPayload, order, tenantId, companyId);
+        return redeemVoucherForOrder(codeOrPayload, order, billId, tenantId, companyId);
     }
 
     @Transactional
     public Map<String, Object> redeemVoucherForOrderCode(String codeOrPayload, String orderCode) {
         ShopOrder order = orderRepository.findByOrderCode(orderCode)
             .orElseThrow(() -> new NoSuchElementException("Order not found: " + orderCode));
-        return redeemVoucherForOrder(codeOrPayload, order, order.getTenantId(), order.getCompanyId());
+        return redeemVoucherForOrder(codeOrPayload, order, null, order.getTenantId(), order.getCompanyId());
     }
 
     @Transactional(readOnly = true)
@@ -153,22 +170,32 @@ public class ShopVoucherService {
 
     @Transactional
     public ShopOrderResponseDto removeVoucher(UUID orderId, UUID tenantId, UUID companyId) {
+        return removeVoucher(orderId, null, tenantId, companyId);
+    }
+
+    @Transactional
+    public ShopOrderResponseDto removeVoucher(UUID orderId, UUID billId, UUID tenantId, UUID companyId) {
         var company = companyRepository.findById(companyId).orElseThrow();
         ShopOrder order = orderRepository.findById(orderId)
             .filter(o -> o.getTenantId().equals(tenantId) && o.getCompanyId().equals(companyId))
             .orElseThrow(() -> new NoSuchElementException("Order not found"));
-        removeExistingVoucherFromOrder(order, tenantId, companyId);
+        ShopBill bill = resolveBill(order, billId);
+        removeExistingVoucherFromBill(bill, tenantId, companyId);
+        recalcBillTotals(bill);
+        syncOrderFromBills(order);
         refreshPaymentQr(order, company);
         orderRepository.save(order);
         return ShopOrderResponseDto.from(order, orderItemRepository.findAllByOrder_Id(order.getId()));
     }
 
-    private Map<String, Object> redeemVoucherForOrder(String codeOrPayload, ShopOrder order,
+    private Map<String, Object> redeemVoucherForOrder(String codeOrPayload, ShopOrder order, UUID billId,
                                                        UUID tenantId, UUID companyId) {
         var company = companyRepository.findById(companyId).orElseThrow();
         String secret = company.getVoucherSecret();
         if (!order.getTenantId().equals(tenantId) || !order.getCompanyId().equals(companyId))
             throw new IllegalArgumentException("Order does not belong to this company");
+
+        ShopBill bill = resolveBill(order, billId);
 
         // Accept either raw code or QR payload
         String code = normalizeVoucherCode(codeOrPayload, secret);
@@ -177,8 +204,8 @@ public class ShopVoucherService {
             .findByTenantIdAndCompanyIdAndCode(tenantId, companyId, code)
             .orElseThrow(() -> new NoSuchElementException("Voucher not found: " + code));
 
-        if (sameVoucher(order, v)) {
-            return redeemResult(v, order, secret, BigDecimal.ZERO);
+        if (sameVoucher(bill, v)) {
+            return redeemResult(v, order, bill, secret, BigDecimal.ZERO);
         }
 
         if (!ShopVoucher.STATUS_ACTIVE.equals(v.getStatus()))
@@ -186,30 +213,36 @@ public class ShopVoucherService {
         if (isExpired(v))
             throw new IllegalStateException("Voucher has expired");
 
-        removeExistingVoucherFromOrder(order, tenantId, companyId);
+        removeExistingVoucherFromBill(bill, tenantId, companyId);
 
-        // Apply as discount
-        BigDecimal current = order.getDiscountAmount() != null ? order.getDiscountAmount() : BigDecimal.ZERO;
-        order.setDiscountAmount(current.add(v.getFaceValue()));
-        order.setVoucherCode(v.getCode());
+        BigDecimal current = bill.getDiscountAmount() != null ? bill.getDiscountAmount() : BigDecimal.ZERO;
+        bill.setDiscountAmount(current.add(v.getFaceValue() != null ? v.getFaceValue() : BigDecimal.ZERO));
+        bill.setVoucherCode(v.getCode());
+        billRepository.save(bill);
+        recalcBillTotals(bill);
+        syncOrderFromBills(order);
         refreshPaymentQr(order, company);
         orderRepository.save(order);
 
         v.setStatus(ShopVoucher.STATUS_USED);
         v.setRedeemedAt(Instant.now());
         v.setRedeemedOrderId(order.getId());
+        v.setRedeemedBillId(bill.getId());
         v.setRedeemedCustomerId(order.getCustomerId());
         v.setRedeemedCustomerName(order.getCustomerName());
         voucherRepository.save(v);
 
-        return redeemResult(v, order, secret, v.getFaceValue());
+        return redeemResult(v, order, bill, secret, v.getFaceValue());
     }
 
-    private Map<String, Object> redeemResult(ShopVoucher v, ShopOrder order, String secret, BigDecimal discountApplied) {
+    private Map<String, Object> redeemResult(ShopVoucher v, ShopOrder order, ShopBill bill, String secret, BigDecimal discountApplied) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("voucher", toMap(v, secret));
         result.put("discountApplied", discountApplied);
         result.put("newDiscountTotal", order.getDiscountAmount());
+        result.put("newBillDiscountTotal", bill != null ? bill.getDiscountAmount() : null);
+        result.put("billId", bill != null ? bill.getId() : null);
+        result.put("billNumber", bill != null ? bill.getBillNumber() : null);
         result.put("redeemedCustomerId", order.getCustomerId());
         result.put("redeemedCustomerName", order.getCustomerName());
         result.put("order", ShopOrderResponseDto.from(order, orderItemRepository.findAllByOrder_Id(order.getId())));
@@ -259,32 +292,174 @@ public class ShopVoucherService {
         return v.getExpiryDate() != null && v.getExpiryDate().isBefore(LocalDate.now());
     }
 
-    private boolean sameVoucher(ShopOrder order, ShopVoucher v) {
-        return order.getVoucherCode() != null
-            && order.getVoucherCode().equalsIgnoreCase(v.getCode())
-            && order.getId().equals(v.getRedeemedOrderId());
+    private BigDecimal money(BigDecimal value) {
+        return value != null ? value : BigDecimal.ZERO;
     }
 
-    private void removeExistingVoucherFromOrder(ShopOrder order, UUID tenantId, UUID companyId) {
-        String currentCode = order.getVoucherCode();
+    private BigDecimal nonNegative(BigDecimal value) {
+        BigDecimal safe = money(value);
+        return safe.compareTo(BigDecimal.ZERO) > 0 ? safe : BigDecimal.ZERO;
+    }
+
+    private BigDecimal sumLineTotals(List<ShopOrderItem> items) {
+        return items.stream()
+                .map(item -> money(item.getLineTotal()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private BigDecimal sumRawCost(List<ShopOrderItem> items) {
+        return items.stream()
+                .map(item -> item.getUnitRawCost() != null && item.getQuantity() != null
+                        ? item.getUnitRawCost().multiply(item.getQuantity()) : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private BigDecimal billDiscountAmount(ShopBill bill) {
+        if (bill == null) return BigDecimal.ZERO;
+        BigDecimal discount = nonNegative(bill.getDiscountAmount());
+        BigDecimal total = nonNegative(bill.getTotalAmount());
+        return discount.compareTo(total) > 0 ? total : discount;
+    }
+
+    private String cleanVoucherCodes(String value) {
+        if (value == null || value.isBlank()) return null;
+        LinkedHashSet<String> codes = new LinkedHashSet<>();
+        for (String part : value.split(",")) {
+            String clean = part == null ? "" : part.trim();
+            if (!clean.isBlank()) codes.add(clean);
+        }
+        return codes.isEmpty() ? null : String.join(", ", codes);
+    }
+
+    private String combineVoucherCodes(String... values) {
+        if (values == null || values.length == 0) return null;
+        LinkedHashSet<String> codes = new LinkedHashSet<>();
+        for (String value : values) {
+            String clean = cleanVoucherCodes(value);
+            if (clean == null) continue;
+            for (String part : clean.split(",")) {
+                String code = part.trim();
+                if (!code.isBlank()) codes.add(code);
+            }
+        }
+        return codes.isEmpty() ? null : String.join(", ", codes);
+    }
+
+    private List<ShopBill> activeBills(ShopOrder order) {
+        return billRepository.findAllByOrder_IdAndStatusOrderByCreatedAtAsc(order.getId(), ShopBill.STATUS_ACTIVE);
+    }
+
+    private ShopBill resolveBill(ShopOrder order, UUID billId) {
+        ensureOrderBills(order);
+        List<ShopBill> bills = activeBills(order);
+        if (billId != null) {
+            return bills.stream()
+                    .filter(bill -> billId.equals(bill.getId()))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("Bill not found for this order"));
+        }
+        if (bills.size() == 1) return bills.get(0);
+        if (bills.isEmpty()) throw new IllegalArgumentException("This order has no active bill");
+        throw new IllegalArgumentException("Select which bill receives the voucher");
+    }
+
+    private void ensureOrderBills(ShopOrder order) {
+        List<ShopBill> active = activeBills(order);
+        ShopBill bill = active.stream().findFirst().orElse(null);
+        if (bill == null) {
+            bill = new ShopBill();
+            bill.setTenantId(order.getTenantId());
+            bill.setCompanyId(order.getCompanyId());
+            bill.setOrder(order);
+            bill.setBillNumber((int) billRepository.countByOrder_Id(order.getId()) + 1);
+            bill.setStatus(ShopBill.STATUS_ACTIVE);
+            bill.setTotalAmount(BigDecimal.ZERO);
+            bill.setTotalRawCost(BigDecimal.ZERO);
+            bill.setDiscountAmount(nonNegative(order.getDiscountAmount()));
+            bill.setVoucherCode(cleanVoucherCodes(order.getVoucherCode()));
+            bill = billRepository.save(bill);
+        }
+
+        Map<UUID, ShopBillItem> byItemId = new HashMap<>();
+        for (ShopBillItem assignment : billItemRepository.findAllByOrderItem_Order_Id(order.getId())) {
+            if (assignment.getOrderItem() != null) byItemId.put(assignment.getOrderItem().getId(), assignment);
+        }
+        List<ShopBillItem> missing = new ArrayList<>();
+        for (ShopOrderItem item : orderItemRepository.findAllByOrder_Id(order.getId())) {
+            if (byItemId.containsKey(item.getId())) continue;
+            ShopBillItem assignment = new ShopBillItem();
+            assignment.setBill(bill);
+            assignment.setOriginalBill(bill);
+            assignment.setOrderItem(item);
+            missing.add(assignment);
+        }
+        if (!missing.isEmpty()) billItemRepository.saveAll(missing);
+        for (ShopBill activeBill : activeBills(order)) recalcBillTotals(activeBill);
+        syncOrderFromBills(order);
+    }
+
+    private void recalcBillTotals(ShopBill bill) {
+        List<ShopOrderItem> items = billItemRepository.findAllByBill_Id(bill.getId()).stream()
+                .map(ShopBillItem::getOrderItem)
+                .filter(Objects::nonNull)
+                .toList();
+        BigDecimal total = sumLineTotals(items);
+        bill.setTotalAmount(total);
+        bill.setTotalRawCost(sumRawCost(items));
+        BigDecimal discount = nonNegative(bill.getDiscountAmount());
+        if (discount.compareTo(total) > 0) discount = total;
+        bill.setDiscountAmount(discount);
+        bill.setVoucherCode(cleanVoucherCodes(bill.getVoucherCode()));
+        billRepository.save(bill);
+    }
+
+    private void syncOrderFromBills(ShopOrder order) {
+        List<ShopBill> bills = activeBills(order);
+        BigDecimal itemTotal = bills.stream()
+                .map(bill -> money(bill.getTotalAmount()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal rawTotal = bills.stream()
+                .map(bill -> money(bill.getTotalRawCost()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal discountTotal = bills.stream()
+                .map(this::billDiscountAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal fee = money(order.getDeliveryFee());
+        order.setTotalAmount(itemTotal.add(fee));
+        order.setTotalRawCost(rawTotal);
+        order.setDiscountAmount(discountTotal);
+        order.setVoucherCode(combineVoucherCodes(bills.stream().map(ShopBill::getVoucherCode).toArray(String[]::new)));
+    }
+
+    private boolean sameVoucher(ShopBill bill, ShopVoucher v) {
+        return bill != null
+            && bill.getVoucherCode() != null
+            && bill.getVoucherCode().equalsIgnoreCase(v.getCode())
+            && bill.getId().equals(v.getRedeemedBillId());
+    }
+
+    private void removeExistingVoucherFromBill(ShopBill bill, UUID tenantId, UUID companyId) {
+        String currentCode = bill.getVoucherCode();
         if (currentCode == null || currentCode.isBlank()) return;
 
         voucherRepository
             .findByTenantIdAndCompanyIdAndCode(tenantId, companyId, currentCode.trim().toUpperCase())
-            .filter(v -> order.getId().equals(v.getRedeemedOrderId()))
+            .filter(v -> bill.getId().equals(v.getRedeemedBillId()))
             .ifPresent(v -> {
-                BigDecimal discount = order.getDiscountAmount() != null ? order.getDiscountAmount() : BigDecimal.ZERO;
+                BigDecimal discount = bill.getDiscountAmount() != null ? bill.getDiscountAmount() : BigDecimal.ZERO;
                 BigDecimal face = v.getFaceValue() != null ? v.getFaceValue() : BigDecimal.ZERO;
                 BigDecimal next = discount.subtract(face);
-                order.setDiscountAmount(next.compareTo(BigDecimal.ZERO) > 0 ? next : BigDecimal.ZERO);
+                bill.setDiscountAmount(next.compareTo(BigDecimal.ZERO) > 0 ? next : BigDecimal.ZERO);
                 v.setStatus(ShopVoucher.STATUS_ACTIVE);
                 v.setRedeemedAt(null);
                 v.setRedeemedOrderId(null);
+                v.setRedeemedBillId(null);
                 v.setRedeemedCustomerId(null);
                 v.setRedeemedCustomerName(null);
                 voucherRepository.save(v);
             });
-        order.setVoucherCode(null);
+        bill.setVoucherCode(null);
+        billRepository.save(bill);
     }
 
     private BigDecimal splitCashPortion(ShopOrder order) {

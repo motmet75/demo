@@ -32,6 +32,9 @@ public class ModelBomCsvRow {
     @NotNull
     private BigDecimal qtyPerUnit;
 
+    private BigDecimal warehouseQty;
+    private String warehouseUnit;
+    private BigDecimal bomUnitPerWarehouseUnit;
     // Optional: if CSV provides UUID for model (preserve when provided)
     private UUID modelId;
 
@@ -78,6 +81,29 @@ public class ModelBomCsvRow {
         this.qtyPerUnit = qtyPerUnit;
     }
 
+    public BigDecimal getWarehouseQty() {
+        return warehouseQty;
+    }
+
+    public void setWarehouseQty(BigDecimal warehouseQty) {
+        this.warehouseQty = warehouseQty;
+    }
+
+    public String getWarehouseUnit() {
+        return warehouseUnit;
+    }
+
+    public void setWarehouseUnit(String warehouseUnit) {
+        this.warehouseUnit = warehouseUnit;
+    }
+
+    public BigDecimal getBomUnitPerWarehouseUnit() {
+        return bomUnitPerWarehouseUnit;
+    }
+
+    public void setBomUnitPerWarehouseUnit(BigDecimal bomUnitPerWarehouseUnit) {
+        this.bomUnitPerWarehouseUnit = bomUnitPerWarehouseUnit;
+    }
     public UUID getModelId() {
         return modelId;
     }
@@ -125,6 +151,9 @@ public class ModelBomCsvRow {
                 ", modelName='" + modelName + '\'' +
                 ", materialCode='" + materialCode + '\'' +
                 ", qtyPerUnit=" + qtyPerUnit +
+                ", warehouseQty=" + warehouseQty +
+                ", warehouseUnit='" + warehouseUnit + '\'' +
+                ", bomUnitPerWarehouseUnit=" + bomUnitPerWarehouseUnit +
                 ", modelId=" + modelId +
                 ", tenantId=" + tenantId +
                 ", companyId=" + companyId +

@@ -146,25 +146,7 @@ public class InventoryController {
             BigDecimal warehouseImportUnitPrice = bodyDecimal(body, "warehouseImportUnitPrice");
             String warehouseImportUnit = bodyString(body, "warehouseImportUnit");
             String currency = bodyString(body, "currency");
-            boolean hasWarehouseConversion = warehouseImportQuantity != null
-                    || bomUnitPerWarehouseUnit != null
-                    || warehouseImportUnitPrice != null
-                    || warehouseImportUnit != null;
-            if (hasWarehouseConversion) {
-                if (warehouseImportQuantity == null || warehouseImportQuantity.compareTo(BigDecimal.ZERO) <= 0) {
-                    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("warehouseImportQuantity must be positive");
-                }
-                if (bomUnitPerWarehouseUnit == null || bomUnitPerWarehouseUnit.compareTo(BigDecimal.ZERO) <= 0) {
-                    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("bomUnitPerWarehouseUnit must be positive");
-                }
-                if (warehouseImportUnitPrice != null && warehouseImportUnitPrice.compareTo(BigDecimal.ZERO) < 0) {
-                    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("warehouseImportUnitPrice cannot be negative");
-                }
-                qty = warehouseImportQuantity.multiply(bomUnitPerWarehouseUnit);
-                if (warehouseImportUnitPrice != null) {
-                    unitPrice = warehouseImportUnitPrice.divide(bomUnitPerWarehouseUnit, 10, RoundingMode.HALF_UP);
-                }
-            }
+
             String batchNo = body.get("batchNo") == null ? null : String.valueOf(body.get("batchNo"));
             String exp = body.get("expirationDateTime") == null ? null : String.valueOf(body.get("expirationDateTime"));
             String prod = body.get("productionDateTime") == null ? null : String.valueOf(body.get("productionDateTime"));

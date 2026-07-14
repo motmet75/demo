@@ -56,6 +56,12 @@ public class ShopBill {
     @Column(name = "total_raw_cost", columnDefinition = "numeric")
     private BigDecimal totalRawCost = BigDecimal.ZERO;
 
+    @Column(name = "discount_amount", columnDefinition = "numeric")
+    private BigDecimal discountAmount = BigDecimal.ZERO;
+
+    @Column(name = "voucher_code", length = 50)
+    private String voucherCode;
+
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
 
@@ -107,6 +113,10 @@ public class ShopBill {
     public void setTotalAmount(BigDecimal totalAmount) { this.totalAmount = totalAmount; }
     public BigDecimal getTotalRawCost() { return totalRawCost; }
     public void setTotalRawCost(BigDecimal totalRawCost) { this.totalRawCost = totalRawCost; }
+    public BigDecimal getDiscountAmount() { return discountAmount; }
+    public void setDiscountAmount(BigDecimal discountAmount) { this.discountAmount = discountAmount; }
+    public String getVoucherCode() { return voucherCode; }
+    public void setVoucherCode(String voucherCode) { this.voucherCode = voucherCode; }
     public String getNotes() { return notes; }
     public void setNotes(String notes) { this.notes = notes; }
     public Instant getCreatedAt() { return createdAt; }

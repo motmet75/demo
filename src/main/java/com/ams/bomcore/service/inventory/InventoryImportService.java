@@ -20,9 +20,11 @@ import com.ams.bomcore.domain.inventory.InventoryEntity;
 import com.ams.bomcore.domain.inventory.InventoryMovementEntity;
 import com.ams.bomcore.domain.inventory.WarehouseEntity;
 import com.ams.bomcore.domain.material.Material;
+import com.ams.bomcore.domain.modelbom.ModelBom;
 import com.ams.bomcore.repository.InventoryMovementRepository;
 import com.ams.bomcore.repository.InventoryRepository;
 import com.ams.bomcore.repository.MaterialRepository;
+import com.ams.bomcore.repository.ModelBomRepository;
 import com.ams.bomcore.repository.WarehouseRepository;
 
 @Service
@@ -32,16 +34,19 @@ public class InventoryImportService {
     private final MaterialRepository materialRepository;
     private final WarehouseRepository warehouseRepository;
     private final InventoryMovementRepository movementRepository;
+    private final ModelBomRepository modelBomRepository;
 
     public InventoryImportService(
             InventoryRepository inventoryRepository,
             MaterialRepository materialRepository,
             WarehouseRepository warehouseRepository,
-            InventoryMovementRepository movementRepository) {
+            InventoryMovementRepository movementRepository,
+            ModelBomRepository modelBomRepository) {
         this.inventoryRepository = inventoryRepository;
         this.materialRepository = materialRepository;
         this.warehouseRepository = warehouseRepository;
         this.movementRepository = movementRepository;
+        this.modelBomRepository = modelBomRepository;
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -165,7 +170,7 @@ public class InventoryImportService {
             }
 
             for (CsvRow row : rawRows) {
-                applyWarehouseConversion(row, materialMap.get(row.materialCode), errors);
+                applyWarehouseConversion(row, materialMap.get(row.materialCode), tenantId, companyId, errors);
             }
             if (!errors.isEmpty()) {
                 result.setSuccess(false);
@@ -478,7 +483,7 @@ public class InventoryImportService {
         return null;
     }
 
-    private void applyWarehouseConversion(CsvRow row, Material material, List<String> errors) {
+    private void applyWarehouseConversion(CsvRow row, Material material, UUID tenantId, UUID companyId, List<String> errors) {
         String bomUnit = unitFor(material);
         if (row.unit != null && !row.unit.isBlank() && !row.unit.trim().equalsIgnoreCase(bomUnit)) {
             errors.add("Line " + row.lineNumber + ": bom_import_unit/unit '" + row.unit + "' does not match material unit '" + bomUnit + "'");
@@ -501,11 +506,19 @@ public class InventoryImportService {
             }
 
             if (row.bomUnitPerWarehouseUnit == null) {
-                errors.add("Line " + row.lineNumber + ": bom_unit_per_warehouse_unit is required when warehouse import columns are used");
+                ConversionDefaults defaults = resolveModelBomConversion(material, tenantId, companyId);
+                if (defaults != null) {
+                    row.bomUnitPerWarehouseUnit = defaults.bomUnitPerWarehouseUnit;
+                    if (row.warehouseImportUnit == null || row.warehouseImportUnit.isBlank()) {
+                        row.warehouseImportUnit = defaults.warehouseUnit;
+                    }
+                }
+            }
+            if (row.bomUnitPerWarehouseUnit == null) {
+                errors.add("Line " + row.lineNumber + ": bom_unit_per_warehouse_unit is required when warehouse import columns are used, unless one unique model BOM conversion exists for material " + row.materialCode);
             } else if (row.bomUnitPerWarehouseUnit.compareTo(BigDecimal.ZERO) <= 0) {
                 errors.add("Line " + row.lineNumber + ": bom_unit_per_warehouse_unit must be positive");
             }
-
             if (row.warehouseImportUnitPrice != null && row.warehouseImportUnitPrice.compareTo(BigDecimal.ZERO) < 0) {
                 errors.add("Line " + row.lineNumber + ": warehouse_import_unit_price cannot be negative");
             }
@@ -536,6 +549,43 @@ public class InventoryImportService {
         }
         if (row.unitPrice == null) {
             row.unitPrice = BigDecimal.ZERO;
+        }
+    }
+    private ConversionDefaults resolveModelBomConversion(Material material, UUID tenantId, UUID companyId) {
+        if (material == null || tenantId == null || companyId == null) {
+            return null;
+        }
+        List<ModelBom> candidates = modelBomRepository.findAllByMaterialAndTenantIdAndCompanyId(material, tenantId, companyId)
+                .stream()
+                .filter(mb -> mb.getBomUnitPerWarehouseUnit() != null && mb.getBomUnitPerWarehouseUnit().compareTo(BigDecimal.ZERO) > 0)
+                .toList();
+        if (candidates.isEmpty()) {
+            return null;
+        }
+
+        BigDecimal ratio = candidates.get(0).getBomUnitPerWarehouseUnit();
+        String warehouseUnit = candidates.get(0).getWarehouseUnit();
+        for (ModelBom candidate : candidates) {
+            if (candidate.getBomUnitPerWarehouseUnit().compareTo(ratio) != 0) {
+                return null;
+            }
+            String candidateUnit = candidate.getWarehouseUnit();
+            if (warehouseUnit != null && candidateUnit != null && !warehouseUnit.equalsIgnoreCase(candidateUnit)) {
+                warehouseUnit = null;
+            } else if (warehouseUnit == null && candidateUnit != null) {
+                warehouseUnit = candidateUnit;
+            }
+        }
+        return new ConversionDefaults(ratio, warehouseUnit);
+    }
+
+    private static class ConversionDefaults {
+        final BigDecimal bomUnitPerWarehouseUnit;
+        final String warehouseUnit;
+
+        ConversionDefaults(BigDecimal bomUnitPerWarehouseUnit, String warehouseUnit) {
+            this.bomUnitPerWarehouseUnit = bomUnitPerWarehouseUnit;
+            this.warehouseUnit = warehouseUnit;
         }
     }
     private BigDecimal parseBigDecimal(String value) {

@@ -153,6 +153,9 @@ ALTER TABLE model ALTER COLUMN tenant_id SET NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_model_tenant_id ON model(tenant_id);
 
 -- MODEL_BOM
+ALTER TABLE model_bom ADD COLUMN IF NOT EXISTS warehouse_qty NUMERIC(18, 6);
+ALTER TABLE model_bom ADD COLUMN IF NOT EXISTS warehouse_unit VARCHAR(30);
+ALTER TABLE model_bom ADD COLUMN IF NOT EXISTS bom_unit_per_warehouse_unit NUMERIC(18, 6);
 ALTER TABLE model_bom ADD COLUMN IF NOT EXISTS tenant_id varchar(100);
 UPDATE model_bom SET tenant_id = 'anhmedia.vn' WHERE tenant_id IS NULL;
 ALTER TABLE model_bom ALTER COLUMN tenant_id SET NOT NULL;

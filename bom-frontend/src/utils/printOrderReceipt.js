@@ -576,8 +576,143 @@ export function printCombinedReceipt(orders, opts = {}) {
   win.onload = () => { win.focus(); win.print(); setTimeout(() => win.close(), 1000) }
 }
 
+function billItemsForReceipt(order, bill) {
+  const ids = new Set(bill?.itemIds || [])
+  if (!ids.size) return []
+  return (order?.items || []).filter(item => ids.has(item.id))
+}
+
+function billOrderLabel(order) {
+  return order?.orderNumber ? `#${order.orderNumber}` : order?.orderCode || ''
+}
+
+function billSectionHtml(order, bill, idx, count) {
+  const items = billItemsForReceipt(order, bill)
+  const childMap = buildChildMap(items)
+  const roots = items.filter(item => !item.parentItemId)
+  const gross = Number(bill?.totalAmount || 0)
+  const raw = Number(bill?.totalRawCost || 0)
+  const discount = Number(bill?.discountAmount || 0)
+  const net = bill?.netAmount != null ? Number(bill.netAmount) : Math.max(0, gross - discount)
+  const income = bill?.incomeAmount != null ? Number(bill.incomeAmount) : net - raw
+  const linked = (bill?.linkedOrders || [])
+    .map(link => link.orderNumber ? `#${link.orderNumber}` : link.orderCode)
+    .filter(Boolean)
+    .join(', ')
+
+  const itemsHtml = roots.map((item, itemIdx) => {
+    const children = childMap[String(item.id)] || []
+    const opts = parseOptsObj(item.selectedOptions)
+    const optsInline = Object.entries(opts).map(([k, v]) => `${k}: ${formatOptValue(v)}`).join(' · ')
+    const childrenHtml = children.map((child, childIdx) => {
+      const childOpts = parseOptsObj(child.selectedOptions)
+      const childOptsInline = Object.entries(childOpts).map(([k, v]) => `${k}: ${formatOptValue(v)}`).join(' · ')
+      return `
+        <div class="row side-row">
+          <span class="side-num">${itemIdx + 1}.${childIdx + 1}</span>
+          <span class="side-qty">${Number(child.quantity || 1)}&#215;</span>
+          <span class="side-name">${child.modelName}</span>
+          <span class="item-price">${fmt(child.lineTotal)}</span>
+        </div>
+        ${childOptsInline ? `<div class="child-opts grey">${childOptsInline}</div>` : ''}
+      `
+    }).join('')
+    return `
+      <div class="row item-row">
+        <span class="row-num">${itemIdx + 1}.</span>
+        <span class="item-qty">${item.quantity}&#215;</span>
+        <span class="item-name">${item.modelName}</span>
+        <span class="item-price">${fmt(item.lineTotal)}</span>
+      </div>
+      ${optsInline ? `<div class="opts-inline grey">${optsInline}</div>` : ''}
+      ${childrenHtml}
+    `
+  }).join('')
+
+  const discountHtml = discount > 0
+    ? `<div class="row" style="color:#c62828"><span>Discount${bill?.voucherCode ? ` (${bill.voucherCode})` : ''}</span><span>-${fmt(discount)}</span></div>`
+    : ''
+
+  return `
+    <section class="bill-section">
+      <div class="center title">BILL RECEIPT</div>
+      <div class="divider"></div>
+      <div class="big-num">${billOrderLabel(order)}</div>
+      <div class="center bold">Bill #${bill?.billNumber || idx + 1} / ${count}</div>
+      <div class="center grey" style="font-size:12px">${order?.orderCode || ''}</div>
+      ${linked ? `<div class="center grey" style="font-size:11px;margin-top:2px">Orders: ${linked}</div>` : ''}
+      <div class="divider"></div>
+      ${itemsHtml || '<div class="center grey">No items</div>'}
+      <div class="divider"></div>
+      <div class="row"><span>Gross sales</span><span>${fmt(gross)}</span></div>
+      ${discountHtml}
+      <div class="row total-row"><span>PAYABLE</span><span>${fmt(net)}</span></div>
+      <div class="row audit-row"><span>Raw cost</span><span>${fmt(raw)}</span></div>
+      <div class="row audit-row"><span>Income</span><span>${fmt(income)}</span></div>
+      <div class="divider"></div>
+      <div class="center bold">Payment: settle this bill amount</div>
+      <div class="divider"></div>
+      <div class="footer">&#9733; Thank you! &#9733;</div>
+    </section>
+  `
+}
+
+function printSplitBillReceipts(order, trackingQrBase64 = null, printMeta = null) {
+  const bills = (order?.bills || []).filter(bill => bill.status === 'ACTIVE')
+  if (bills.length <= 1) return false
+  const time = new Date().toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
+  const html = `<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Split Bill Receipts ${billOrderLabel(order)}</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Courier New', Courier, monospace; font-size: 13px; width: 300px; margin: 0 auto; padding: 8px 6px; color: #111; }
+  .bill-section { page-break-after: always; padding: 6px 0 10px; }
+  .bill-section:last-child { page-break-after: auto; }
+  .center { text-align: center; }
+  .bold { font-weight: bold; }
+  .grey { color: #555; }
+  .title { font-size: 16px; font-weight: 900; letter-spacing: 2px; }
+  .big-num { font-size: 42px; font-weight: 900; text-align: center; line-height: 1.1; }
+  .divider { border-top: 1px dashed #666; margin: 7px 0; }
+  .row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 2px; }
+  .item-row { margin-top: 5px; gap: 3px; }
+  .row-num { font-size: 11px; color: #999; flex-shrink: 0; min-width: 16px; }
+  .item-qty { font-weight: 900; flex-shrink: 0; margin-right: 3px; }
+  .item-name { flex: 1; padding-right: 6px; font-weight: 700; }
+  .item-price { text-align: right; white-space: nowrap; flex-shrink: 0; }
+  .opts-inline { padding-left: 20px; font-size: 11px; color: #666; margin-bottom: 1px; }
+  .side-row { margin-top: 2px; gap: 3px; margin-left: 14px; border-left: 2px solid #c7d2fe; padding-left: 6px; }
+  .side-num { font-size: 10px; color: #aaa; flex-shrink: 0; min-width: 22px; }
+  .side-qty { font-weight: 900; font-size: 11px; color: #6366f1; flex-shrink: 0; margin-right: 3px; }
+  .side-name { flex: 1; padding-right: 6px; font-size: 12px; color: #444; }
+  .child-opts { margin-left: 14px; padding-left: 28px; font-size: 10px; color: #777; margin-bottom: 1px; }
+  .total-row { font-weight: 900; font-size: 15px; margin-top: 8px; margin-bottom: 8px; }
+  .audit-row { font-size: 11px; color: #555; }
+  .footer { text-align: center; font-style: italic; color: #555; margin-top: 6px; font-size: 12px; }
+  @media print { @page { margin: 0; } body { padding: 8px 6px; } }
+</style>
+</head>
+<body>
+  <div class="center grey" style="font-size:12px">${time}</div>
+  ${printMetaHtml(printMeta)}
+  ${bills.map((bill, idx) => billSectionHtml(order, bill, idx, bills.length)).join('')}
+</body>
+</html>`
+
+  const pw = Math.max(Math.round(screen.width * 0.5), 600)
+  const ph = Math.min(Math.round(screen.height * 0.9), 960)
+  const win = window.open('', '_blank', `width=${pw},height=${ph},left=${Math.round((screen.width-pw)/2)},top=40`)
+  win.document.write(html)
+  win.document.close()
+  win.onload = () => { win.focus(); win.print(); setTimeout(() => win.close(), 1000) }
+  return true
+}
 export function printOrderReceipt(order, trackingQrBase64 = null, printMeta = null) {
   if (!order) return
+  if (printSplitBillReceipts(order, trackingQrBase64, printMeta)) return
 
   const num     = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
   const time    = order.createdAt

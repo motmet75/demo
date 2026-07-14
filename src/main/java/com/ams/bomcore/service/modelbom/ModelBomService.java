@@ -90,12 +90,18 @@ public class ModelBomService {
      */
     @Transactional(rollbackFor = Exception.class)
     public ModelBom createModelBom(UUID modelId, UUID materialId, java.math.BigDecimal qtyPerUnit, UUID tenantId, UUID companyId) {
+        return createModelBom(modelId, materialId, qtyPerUnit, null, null, null, tenantId, companyId);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public ModelBom createModelBom(UUID modelId, UUID materialId, java.math.BigDecimal qtyPerUnit,
+                                   BigDecimal warehouseQty, String warehouseUnit, BigDecimal bomUnitPerWarehouseUnit,
+                                   UUID tenantId, UUID companyId) {
         Model model = modelRepository.findById(modelId)
                 .orElseThrow(() -> new IllegalArgumentException("Model not found: " + modelId));
         Material material = materialRepository.findById(materialId)
                 .orElseThrow(() -> new IllegalArgumentException("Material not found: " + materialId));
 
-        // Check if already exists
         java.util.Optional<ModelBom> existing = modelBomRepository.findByModelAndMaterialAndTenantIdAndCompanyId(model, material, tenantId, companyId);
         if (existing.isPresent()) {
             throw new IllegalArgumentException("ModelBom already exists for this model and material");
@@ -104,7 +110,7 @@ public class ModelBomService {
         ModelBom modelBom = new ModelBom();
         modelBom.setModel(model);
         modelBom.setMaterial(material);
-        modelBom.setQtyPerUnit(qtyPerUnit);
+        applyModelBomQuantities(modelBom, qtyPerUnit, warehouseQty, warehouseUnit, bomUnitPerWarehouseUnit);
         modelBom.setTenantId(tenantId);
         modelBom.setCompanyId(companyId);
 
@@ -116,6 +122,13 @@ public class ModelBomService {
      */
     @Transactional(rollbackFor = Exception.class)
     public ModelBom updateModelBom(UUID id, UUID materialId, java.math.BigDecimal qtyPerUnit, UUID tenantId, UUID companyId) {
+        return updateModelBom(id, materialId, qtyPerUnit, null, null, null, false, tenantId, companyId);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public ModelBom updateModelBom(UUID id, UUID materialId, java.math.BigDecimal qtyPerUnit,
+                                   BigDecimal warehouseQty, String warehouseUnit, BigDecimal bomUnitPerWarehouseUnit,
+                                   boolean conversionProvided, UUID tenantId, UUID companyId) {
         ModelBom modelBom = modelBomRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("ModelBom not found: " + id));
 
@@ -125,8 +138,11 @@ public class ModelBomService {
             modelBom.setMaterial(material);
         }
 
-        if (qtyPerUnit != null) {
-            modelBom.setQtyPerUnit(qtyPerUnit);
+        if (conversionProvided) {
+            applyModelBomQuantities(modelBom, qtyPerUnit != null ? qtyPerUnit : modelBom.getQtyPerUnit(),
+                    warehouseQty, warehouseUnit, bomUnitPerWarehouseUnit);
+        } else if (qtyPerUnit != null) {
+            modelBom.setQtyPerUnit(normalizeQtyPerUnit(qtyPerUnit, null, null));
         }
 
         modelBom.setTenantId(tenantId);
@@ -134,7 +150,6 @@ public class ModelBomService {
 
         return modelBomRepository.save(modelBom);
     }
-
     /**
      * Delete all model BOMs for a model.
      */
@@ -146,6 +161,55 @@ public class ModelBomService {
         }
     }
 
+    private BigDecimal normalizeQtyPerUnit(BigDecimal qtyPerUnit, BigDecimal warehouseQty, BigDecimal bomUnitPerWarehouseUnit) {
+        boolean hasWarehouseQty = warehouseQty != null;
+        boolean hasRatio = bomUnitPerWarehouseUnit != null;
+        if (hasWarehouseQty || hasRatio) {
+            if (!hasWarehouseQty || !hasRatio) {
+                throw new IllegalArgumentException("warehouseQty and bomUnitPerWarehouseUnit must be provided together");
+            }
+            if (warehouseQty.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new IllegalArgumentException("warehouseQty must be greater than 0");
+            }
+            if (bomUnitPerWarehouseUnit.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new IllegalArgumentException("bomUnitPerWarehouseUnit must be greater than 0");
+            }
+            return warehouseQty.multiply(bomUnitPerWarehouseUnit).setScale(4, RoundingMode.HALF_UP);
+        }
+        if (qtyPerUnit == null) {
+            throw new IllegalArgumentException("qtyPerUnit is required unless warehouseQty and bomUnitPerWarehouseUnit are provided");
+        }
+        if (qtyPerUnit.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("qtyPerUnit must be greater than 0");
+        }
+        return qtyPerUnit.setScale(4, RoundingMode.HALF_UP);
+    }
+
+    private void applyModelBomQuantities(ModelBom modelBom, BigDecimal qtyPerUnit,
+                                         BigDecimal warehouseQty, String warehouseUnit,
+                                         BigDecimal bomUnitPerWarehouseUnit) {
+        modelBom.setQtyPerUnit(normalizeQtyPerUnit(qtyPerUnit, warehouseQty, bomUnitPerWarehouseUnit));
+        modelBom.setWarehouseQty(warehouseQty);
+        modelBom.setWarehouseUnit(warehouseUnit == null || warehouseUnit.isBlank() ? null : warehouseUnit.trim());
+        modelBom.setBomUnitPerWarehouseUnit(bomUnitPerWarehouseUnit);
+    }
+
+    private boolean modelBomValuesChanged(ModelBom modelBom, BigDecimal qtyPerUnit,
+                                          BigDecimal warehouseQty, String warehouseUnit,
+                                          BigDecimal bomUnitPerWarehouseUnit) {
+        String normalizedWarehouseUnit = warehouseUnit == null || warehouseUnit.isBlank() ? null : warehouseUnit.trim();
+        return !decimalEquals(modelBom.getQtyPerUnit(), qtyPerUnit)
+                || !decimalEquals(modelBom.getWarehouseQty(), warehouseQty)
+                || !java.util.Objects.equals(modelBom.getWarehouseUnit(), normalizedWarehouseUnit)
+                || !decimalEquals(modelBom.getBomUnitPerWarehouseUnit(), bomUnitPerWarehouseUnit);
+    }
+
+    private boolean decimalEquals(BigDecimal left, BigDecimal right) {
+        if (left == null || right == null) {
+            return left == null && right == null;
+        }
+        return left.compareTo(right) == 0;
+    }
     public static class ImportResult {
         private int modelsCreated = 0;
         private int modelBomsCreated = 0;
@@ -296,20 +360,18 @@ public class ModelBomService {
                 String mcode = row.getMaterialCode().trim();
                 Material material = materialByCode.get(mcode);
 
-                // normalize qtyPerUnit to DB scale and rounding
-                BigDecimal normalizedQty = row.getQtyPerUnit() == null ? null : row.getQtyPerUnit().setScale(4, RoundingMode.HALF_UP);
+                BigDecimal normalizedQty = normalizeQtyPerUnit(row.getQtyPerUnit(), row.getWarehouseQty(), row.getBomUnitPerWarehouseUnit());
+                String warehouseUnit = row.getWarehouseUnit() == null || row.getWarehouseUnit().isBlank() ? null : row.getWarehouseUnit().trim();
 
                 // find existing ModelBom by model+material
                 List<ModelBom> existingList = modelBomRepository.findAllByModelAndMaterial(model, material);
                 ModelBom existing = (existingList != null && !existingList.isEmpty()) ? existingList.get(0) : null;
                 if (existing != null) {
-                    // update qtyPerUnit if changed
-                    BigDecimal oldQty = existing.getQtyPerUnit();
-                    BigDecimal oldNormalized = oldQty == null ? null : oldQty.setScale(4, RoundingMode.HALF_UP);
-                    if (oldNormalized == null || (normalizedQty != null && oldNormalized.compareTo(normalizedQty) != 0)) {
-                        existing.setQtyPerUnit(normalizedQty);
-                        // ensure tenantId on existing record
+                    if (modelBomValuesChanged(existing, normalizedQty, row.getWarehouseQty(), warehouseUnit, row.getBomUnitPerWarehouseUnit())) {
+                        applyModelBomQuantities(existing, normalizedQty, row.getWarehouseQty(), warehouseUnit, row.getBomUnitPerWarehouseUnit());
+                        // ensure tenant/company on existing record
                         existing.setTenantId(tenantId);
+                        existing.setCompanyId(companyId);
                         modelBomRepository.save(existing);
                         result.setModelBomsUpdated(result.getModelBomsUpdated() + 1);
                     }
@@ -317,7 +379,7 @@ public class ModelBomService {
                     ModelBom mb = new ModelBom();
                     mb.setModel(model);
                     mb.setMaterial(material);
-                    mb.setQtyPerUnit(normalizedQty);
+                    applyModelBomQuantities(mb, normalizedQty, row.getWarehouseQty(), warehouseUnit, row.getBomUnitPerWarehouseUnit());
                     mb.setTenantId(tenantId);
                     mb.setCompanyId(companyId);
                     modelBomRepository.save(mb);
@@ -411,16 +473,16 @@ public class ModelBomService {
         for (ModelBomCsvRow row : rows) {
             String mcode = row.getMaterialCode().trim();
             Material material = materialByCode.get(mcode);
-            BigDecimal normalizedQty = row.getQtyPerUnit() == null ? null : row.getQtyPerUnit().setScale(4, RoundingMode.HALF_UP);
+            BigDecimal normalizedQty = normalizeQtyPerUnit(row.getQtyPerUnit(), row.getWarehouseQty(), row.getBomUnitPerWarehouseUnit());
+            String warehouseUnit = row.getWarehouseUnit() == null || row.getWarehouseUnit().isBlank() ? null : row.getWarehouseUnit().trim();
 
             List<ModelBom> existingList = modelBomRepository.findAllByModelAndMaterial(model, material);
             ModelBom existing = (existingList != null && !existingList.isEmpty()) ? existingList.get(0) : null;
             if (existing != null) {
-                BigDecimal oldQty = existing.getQtyPerUnit();
-                BigDecimal oldNormalized = oldQty == null ? null : oldQty.setScale(4, RoundingMode.HALF_UP);
-                if (oldNormalized == null || (normalizedQty != null && oldNormalized.compareTo(normalizedQty) != 0)) {
-                    existing.setQtyPerUnit(normalizedQty);
+                if (modelBomValuesChanged(existing, normalizedQty, row.getWarehouseQty(), warehouseUnit, row.getBomUnitPerWarehouseUnit())) {
+                    applyModelBomQuantities(existing, normalizedQty, row.getWarehouseQty(), warehouseUnit, row.getBomUnitPerWarehouseUnit());
                     existing.setTenantId(tenantId);
+                    existing.setCompanyId(companyId);
                     modelBomRepository.save(existing);
                     result.setModelBomsUpdated(result.getModelBomsUpdated() + 1);
                 }
@@ -428,7 +490,7 @@ public class ModelBomService {
                 ModelBom mb = new ModelBom();
                 mb.setModel(model);
                 mb.setMaterial(material);
-                mb.setQtyPerUnit(normalizedQty);
+                applyModelBomQuantities(mb, normalizedQty, row.getWarehouseQty(), warehouseUnit, row.getBomUnitPerWarehouseUnit());
                 mb.setTenantId(tenantId);
                 mb.setCompanyId(companyId);
                 modelBomRepository.save(mb);

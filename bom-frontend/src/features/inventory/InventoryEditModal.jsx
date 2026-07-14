@@ -267,9 +267,8 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
     setErrorMessage('')
     // validate numeric
     if (hasWarehouseConversion) {
-      if (String(form.warehouseImportUnit || '').trim() === '') { setErrorMessage('Warehouse Unit is required'); return }
       if (warehouseImportQuantityNumber === null || warehouseImportQuantityNumber <= 0) { setErrorMessage('Warehouse Qty must be positive'); return }
-      if (bomUnitPerWarehouseUnitNumber === null || bomUnitPerWarehouseUnitNumber <= 0) { setErrorMessage('BOM Qty / Warehouse Unit must be positive'); return }
+      if (form.bomUnitPerWarehouseUnit !== '' && (bomUnitPerWarehouseUnitNumber === null || bomUnitPerWarehouseUnitNumber <= 0)) { setErrorMessage('BOM Qty / Warehouse Unit must be positive'); return }
       if (form.warehouseImportUnitPrice !== '' && (warehouseImportUnitPriceNumber === null || warehouseImportUnitPriceNumber < 0)) { setErrorMessage('Warehouse Unit Price cannot be negative'); return }
     } else {
       if (form.quantityOnHand === '' || form.quantityOnHand === null || form.quantityOnHand === undefined) { setErrorMessage('Quantity On Hand is required'); return }
@@ -432,6 +431,7 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
                 />
                 <TextField
                   label="BOM Qty / Warehouse Unit"
+                  helperText="Optional if one unique model BOM conversion exists"
                   type="number"
                   value={form.bomUnitPerWarehouseUnit}
                   onChange={handleChange('bomUnitPerWarehouseUnit')}
@@ -470,11 +470,11 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
               label="Quantity On Hand"
               type="number"
               value={quantityOnHandValue}
-              onChange={convertedQuantityOnHand !== null ? undefined : handleChange('quantityOnHand')}
-              disabled={isSubmitting || convertedQuantityOnHand !== null}
-              required
+              onChange={hasWarehouseConversion ? undefined : handleChange('quantityOnHand')}
+              disabled={isSubmitting || hasWarehouseConversion}
+              required={!hasWarehouseConversion}
               inputProps={{ step: 'any' }}
-              helperText={isEditing ? 'Enter the new stock quantity - adjustment will be recorded automatically' : convertedQuantityOnHand !== null ? `Converted BOM qty in ${form.unit || 'unit'}` : 'Current stock on hand'}
+              helperText={isEditing ? 'Enter the new stock quantity - adjustment will be recorded automatically' : convertedQuantityOnHand !== null ? `Converted BOM qty in ${form.unit || 'unit'}` : hasWarehouseConversion ? 'Backend will convert using the model BOM ratio when available' : 'Current stock on hand'}
             />
 
 

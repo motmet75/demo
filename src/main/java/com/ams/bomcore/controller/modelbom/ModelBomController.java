@@ -111,6 +111,9 @@ public class ModelBomController {
                 v.setMaterialName(mb.getMaterial().getMaterialName());
             }
             v.setQtyPerUnit(mb.getQtyPerUnit());
+            v.setWarehouseQty(mb.getWarehouseQty());
+            v.setWarehouseUnit(mb.getWarehouseUnit());
+            v.setBomUnitPerWarehouseUnit(mb.getBomUnitPerWarehouseUnit());
             return v;
         }).collect(Collectors.toList());
 
@@ -122,6 +125,18 @@ public class ModelBomController {
             try { return UUID.fromString(headerCompanyId); } catch (Exception e) { }
         }
         return companyId;
+    }
+
+    private String bodyString(java.util.Map<String, Object> body, String key) {
+        Object value = body.get(key);
+        if (value == null) return null;
+        String text = String.valueOf(value).trim();
+        return text.isEmpty() ? null : text;
+    }
+
+    private java.math.BigDecimal bodyDecimal(java.util.Map<String, Object> body, String key) {
+        String value = bodyString(body, key);
+        return value == null ? null : new java.math.BigDecimal(value);
     }
 
     /**
@@ -143,9 +158,13 @@ public class ModelBomController {
 
             UUID modelId = UUID.fromString(String.valueOf(body.get("modelId")));
             UUID materialId = UUID.fromString(String.valueOf(body.get("materialId")));
-            java.math.BigDecimal qtyPerUnit = new java.math.BigDecimal(String.valueOf(body.get("qtyPerUnit")));
+            java.math.BigDecimal qtyPerUnit = bodyDecimal(body, "qtyPerUnit");
+            java.math.BigDecimal warehouseQty = bodyDecimal(body, "warehouseQty");
+            String warehouseUnit = bodyString(body, "warehouseUnit");
+            java.math.BigDecimal bomUnitPerWarehouseUnit = bodyDecimal(body, "bomUnitPerWarehouseUnit");
 
-            ModelBom saved = modelBomService.createModelBom(modelId, materialId, qtyPerUnit, tenantId, companyId);
+            ModelBom saved = modelBomService.createModelBom(modelId, materialId, qtyPerUnit,
+                    warehouseQty, warehouseUnit, bomUnitPerWarehouseUnit, tenantId, companyId);
 
             ModelBomView view = new ModelBomView();
             view.setId(saved.getId());
@@ -162,6 +181,9 @@ public class ModelBomController {
                 view.setMaterialName(saved.getMaterial().getMaterialName());
             }
             view.setQtyPerUnit(saved.getQtyPerUnit());
+            view.setWarehouseQty(saved.getWarehouseQty());
+            view.setWarehouseUnit(saved.getWarehouseUnit());
+            view.setBomUnitPerWarehouseUnit(saved.getBomUnitPerWarehouseUnit());
 
             return ResponseEntity.status(HttpStatus.CREATED).body(view);
         } catch (IllegalArgumentException ex) {
@@ -194,9 +216,14 @@ public class ModelBomController {
             }
 
             UUID materialId = body.get("materialId") != null ? UUID.fromString(String.valueOf(body.get("materialId"))) : null;
-            java.math.BigDecimal qtyPerUnit = body.get("qtyPerUnit") != null ? new java.math.BigDecimal(String.valueOf(body.get("qtyPerUnit"))) : null;
+            java.math.BigDecimal qtyPerUnit = body.containsKey("qtyPerUnit") ? bodyDecimal(body, "qtyPerUnit") : null;
+            java.math.BigDecimal warehouseQty = body.containsKey("warehouseQty") ? bodyDecimal(body, "warehouseQty") : null;
+            String warehouseUnit = body.containsKey("warehouseUnit") ? bodyString(body, "warehouseUnit") : null;
+            java.math.BigDecimal bomUnitPerWarehouseUnit = body.containsKey("bomUnitPerWarehouseUnit") ? bodyDecimal(body, "bomUnitPerWarehouseUnit") : null;
+            boolean conversionProvided = body.containsKey("warehouseQty") || body.containsKey("warehouseUnit") || body.containsKey("bomUnitPerWarehouseUnit");
 
-            ModelBom saved = modelBomService.updateModelBom(id, materialId, qtyPerUnit, tenantId, companyId);
+            ModelBom saved = modelBomService.updateModelBom(id, materialId, qtyPerUnit,
+                    warehouseQty, warehouseUnit, bomUnitPerWarehouseUnit, conversionProvided, tenantId, companyId);
 
             ModelBomView view = new ModelBomView();
             view.setId(saved.getId());
@@ -213,6 +240,9 @@ public class ModelBomController {
                 view.setMaterialName(saved.getMaterial().getMaterialName());
             }
             view.setQtyPerUnit(saved.getQtyPerUnit());
+            view.setWarehouseQty(saved.getWarehouseQty());
+            view.setWarehouseUnit(saved.getWarehouseUnit());
+            view.setBomUnitPerWarehouseUnit(saved.getBomUnitPerWarehouseUnit());
 
             return ResponseEntity.ok(view);
         } catch (IllegalArgumentException ex) {

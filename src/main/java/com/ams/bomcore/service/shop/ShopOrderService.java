@@ -1077,6 +1077,7 @@ public class ShopOrderService {
                     assignment.setOriginalBill(sourceBill);
                 }
                 shopBillItemRepository.saveAll(assignments);
+                addBillAdjustment(primaryBill, sourceBill);
 
                 sourceBill.setStatus(ShopBill.STATUS_MERGED);
                 sourceBill.setMergedIntoBill(primaryBill);
@@ -1137,6 +1138,7 @@ public class ShopOrderService {
                 assignment.setOriginalBill(sourceBill);
             }
             shopBillItemRepository.saveAll(assignments);
+            subtractBillAdjustment(sourceBill.getMergedIntoBill(), sourceBill);
 
             sourceBill.setStatus(ShopBill.STATUS_ACTIVE);
             sourceBill.setMergedIntoBill(null);
@@ -1163,29 +1165,41 @@ public class ShopOrderService {
 
     @Transactional
     public ShopOrderResponseDto patchDiscount(UUID orderId, BigDecimal discountAmount, String voucherCode, UUID tenantId, UUID companyId) {
+        return patchDiscount(orderId, null, discountAmount, voucherCode, tenantId, companyId);
+    }
+
+    @Transactional
+    public ShopOrderResponseDto patchDiscount(UUID orderId, UUID billId, BigDecimal discountAmount, String voucherCode, UUID tenantId, UUID companyId) {
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
-        if (discountAmount != null) order.setDiscountAmount(discountAmount.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : discountAmount);
+        ensureOrderBills(order);
+        ShopBill bill = resolveDiscountBill(order, billId);
+        if (discountAmount != null) bill.setDiscountAmount(nonNegative(discountAmount));
         if (voucherCode != null) {
             String clean = voucherCode.trim();
             if (clean.isBlank()) {
-                order.setVoucherCode(null);
+                bill.setVoucherCode(null);
             } else {
                 shopVoucherRepository.findByTenantIdAndCompanyIdAndCode(tenantId, companyId, clean.toUpperCase())
-                    .ifPresent(v -> validateManualVoucherCode(v, orderId));
-                order.setVoucherCode(clean);
+                    .ifPresent(v -> validateManualVoucherCode(v, orderId, bill.getId()));
+                bill.setVoucherCode(clean);
             }
         }
+        shopBillRepository.save(bill);
+        recalcBillTotals(bill);
+        recalcOrderFromBills(order);
         refreshPaymentQr(order, companyRepository.findById(companyId).orElse(null));
         shopOrderRepository.save(order);
         return dto(order);
     }
 
-    private void validateManualVoucherCode(ShopVoucher voucher, UUID orderId) {
+    private void validateManualVoucherCode(ShopVoucher voucher, UUID orderId, UUID billId) {
         if (voucher.getExpiryDate() != null && voucher.getExpiryDate().isBefore(LocalDate.now()))
             throw new IllegalStateException("Voucher has expired");
         if (ShopVoucher.STATUS_CANCELLED.equals(voucher.getStatus()))
             throw new IllegalStateException("Voucher is cancelled");
-        if (ShopVoucher.STATUS_USED.equals(voucher.getStatus()) && !orderId.equals(voucher.getRedeemedOrderId()))
+        boolean sameOrder = orderId != null && orderId.equals(voucher.getRedeemedOrderId());
+        boolean sameBill = billId != null && billId.equals(voucher.getRedeemedBillId());
+        if (ShopVoucher.STATUS_USED.equals(voucher.getStatus()) && !sameOrder && !sameBill)
             throw new IllegalStateException("Voucher is already used");
     }
 
@@ -1444,6 +1458,8 @@ public class ShopOrderService {
         bill.setSplitFromBill(splitFromBill);
         bill.setTotalAmount(BigDecimal.ZERO);
         bill.setTotalRawCost(BigDecimal.ZERO);
+        bill.setDiscountAmount(BigDecimal.ZERO);
+        bill.setVoucherCode(null);
         return shopBillRepository.save(bill);
     }
 
@@ -1460,6 +1476,111 @@ public class ShopOrderService {
         return activeBills(order).stream().findFirst();
     }
 
+    private BigDecimal money(BigDecimal value) {
+        return value != null ? value : BigDecimal.ZERO;
+    }
+
+    private BigDecimal nonNegative(BigDecimal value) {
+        BigDecimal safe = money(value);
+        return safe.compareTo(BigDecimal.ZERO) > 0 ? safe : BigDecimal.ZERO;
+    }
+
+    private BigDecimal billDiscountAmount(ShopBill bill) {
+        if (bill == null) return BigDecimal.ZERO;
+        BigDecimal discount = nonNegative(bill.getDiscountAmount());
+        BigDecimal total = nonNegative(bill.getTotalAmount());
+        return discount.compareTo(total) > 0 ? total : discount;
+    }
+
+    private String cleanVoucherCodes(String value) {
+        if (value == null || value.isBlank()) return null;
+        LinkedHashSet<String> codes = new LinkedHashSet<>();
+        for (String part : value.split(",")) {
+            String clean = part == null ? "" : part.trim();
+            if (!clean.isBlank()) codes.add(clean);
+        }
+        return codes.isEmpty() ? null : String.join(", ", codes);
+    }
+
+    private String combineVoucherCodes(String... values) {
+        if (values == null || values.length == 0) return null;
+        LinkedHashSet<String> codes = new LinkedHashSet<>();
+        for (String value : values) {
+            String clean = cleanVoucherCodes(value);
+            if (clean == null) continue;
+            for (String part : clean.split(",")) {
+                String code = part.trim();
+                if (!code.isBlank()) codes.add(code);
+            }
+        }
+        return codes.isEmpty() ? null : String.join(", ", codes);
+    }
+
+    private String removeVoucherCodes(String current, String toRemove) {
+        String cleanCurrent = cleanVoucherCodes(current);
+        if (cleanCurrent == null) return null;
+        Set<String> remove = new HashSet<>();
+        String cleanRemove = cleanVoucherCodes(toRemove);
+        if (cleanRemove != null) {
+            for (String part : cleanRemove.split(",")) {
+                String code = part.trim();
+                if (!code.isBlank()) remove.add(code);
+            }
+        }
+        LinkedHashSet<String> keep = new LinkedHashSet<>();
+        for (String part : cleanCurrent.split(",")) {
+            String code = part.trim();
+            if (!code.isBlank() && !remove.contains(code)) keep.add(code);
+        }
+        return keep.isEmpty() ? null : String.join(", ", keep);
+    }
+
+    private ShopBill resolveDiscountBill(ShopOrder order, UUID billId) {
+        List<ShopBill> bills = activeBills(order);
+        if (billId != null) {
+            return bills.stream()
+                    .filter(bill -> billId.equals(bill.getId()))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("Bill not found for this order"));
+        }
+        if (bills.size() == 1) return bills.get(0);
+        if (bills.isEmpty()) throw new IllegalArgumentException("This order has no active bill");
+        throw new IllegalArgumentException("Select which bill receives the discount or voucher");
+    }
+
+    private void migrateLegacyOrderDiscountToBill(ShopOrder order, List<ShopBill> bills) {
+        if (order == null || bills == null || bills.isEmpty()) return;
+        boolean anyBillDiscount = bills.stream().anyMatch(bill ->
+                nonNegative(bill.getDiscountAmount()).compareTo(BigDecimal.ZERO) > 0
+                        || cleanVoucherCodes(bill.getVoucherCode()) != null);
+        if (anyBillDiscount) return;
+        BigDecimal orderDiscount = nonNegative(order.getDiscountAmount());
+        String orderVoucher = cleanVoucherCodes(order.getVoucherCode());
+        if (orderDiscount.compareTo(BigDecimal.ZERO) <= 0 && orderVoucher == null) return;
+        ShopBill target = bills.stream()
+                .filter(bill -> bill.getBillNumber() != null && bill.getBillNumber() == 1)
+                .findFirst()
+                .orElse(bills.get(0));
+        target.setDiscountAmount(orderDiscount);
+        target.setVoucherCode(orderVoucher);
+        shopBillRepository.save(target);
+    }
+
+    private void addBillAdjustment(ShopBill target, ShopBill source) {
+        if (target == null || source == null) return;
+        target.setDiscountAmount(nonNegative(target.getDiscountAmount()).add(nonNegative(source.getDiscountAmount())));
+        target.setVoucherCode(combineVoucherCodes(target.getVoucherCode(), source.getVoucherCode()));
+        shopBillRepository.save(target);
+    }
+
+    private void subtractBillAdjustment(ShopBill target, ShopBill source) {
+        if (target == null || source == null) return;
+        BigDecimal next = nonNegative(target.getDiscountAmount()).subtract(nonNegative(source.getDiscountAmount()));
+        target.setDiscountAmount(next.compareTo(BigDecimal.ZERO) > 0 ? next : BigDecimal.ZERO);
+        target.setVoucherCode(removeVoucherCodes(target.getVoucherCode(), source.getVoucherCode()));
+        shopBillRepository.save(target);
+    }
+
     private List<ShopBillItem> activeAssignmentsForOrder(ShopOrder order) {
         return shopBillItemRepository.findAllByBill_Order_Id(order.getId()).stream()
                 .filter(assignment -> assignment.getBill() != null
@@ -1470,6 +1591,9 @@ public class ShopOrderService {
     private void resetOrderBills(ShopOrder order, List<ShopOrderItem> items) {
         shopBillRepository.deleteAllByOrder_Id(order.getId());
         ShopBill bill = createBill(order, 1, null);
+        bill.setDiscountAmount(nonNegative(order.getDiscountAmount()));
+        bill.setVoucherCode(cleanVoucherCodes(order.getVoucherCode()));
+        shopBillRepository.save(bill);
         List<ShopBillItem> assignments = new ArrayList<>();
         for (ShopOrderItem item : items) {
             ShopBillItem assignment = new ShopBillItem();
@@ -1518,22 +1642,33 @@ public class ShopOrderService {
                 .map(ShopBillItem::getOrderItem)
                 .filter(Objects::nonNull)
                 .toList();
-        bill.setTotalAmount(sumLineTotals(items));
+        BigDecimal total = sumLineTotals(items);
+        bill.setTotalAmount(total);
         bill.setTotalRawCost(sumRawCost(items));
+        BigDecimal discount = nonNegative(bill.getDiscountAmount());
+        if (discount.compareTo(total) > 0) discount = total;
+        bill.setDiscountAmount(discount);
+        bill.setVoucherCode(cleanVoucherCodes(bill.getVoucherCode()));
         shopBillRepository.save(bill);
     }
 
     private void recalcOrderFromBills(ShopOrder order) {
         List<ShopBill> bills = activeBills(order);
+        migrateLegacyOrderDiscountToBill(order, bills);
         BigDecimal itemTotal = bills.stream()
                 .map(bill -> bill.getTotalAmount() != null ? bill.getTotalAmount() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal rawTotal = bills.stream()
                 .map(bill -> bill.getTotalRawCost() != null ? bill.getTotalRawCost() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal discountTotal = bills.stream()
+                .map(this::billDiscountAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal fee = order.getDeliveryFee() != null ? order.getDeliveryFee() : BigDecimal.ZERO;
         order.setTotalAmount(itemTotal.add(fee));
         order.setTotalRawCost(rawTotal);
+        order.setDiscountAmount(discountTotal);
+        order.setVoucherCode(combineVoucherCodes(bills.stream().map(ShopBill::getVoucherCode).toArray(String[]::new)));
         shopOrderRepository.save(order);
     }
 

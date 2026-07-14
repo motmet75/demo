@@ -18,7 +18,9 @@ public class ModelBomView {
     private String materialCode;
     private String materialName;
     private BigDecimal qtyPerUnit;
-
+    private BigDecimal warehouseQty;
+    private String warehouseUnit;
+    private BigDecimal bomUnitPerWarehouseUnit;
     public ModelBomView() { }
 
     public UUID getId() { return id; }
@@ -50,4 +52,12 @@ public class ModelBomView {
 
     public BigDecimal getQtyPerUnit() { return qtyPerUnit; }
     public void setQtyPerUnit(BigDecimal qtyPerUnit) { this.qtyPerUnit = qtyPerUnit; }
-}
+
+    public BigDecimal getWarehouseQty() { return warehouseQty; }
+    public void setWarehouseQty(BigDecimal warehouseQty) { this.warehouseQty = warehouseQty; }
+
+    public String getWarehouseUnit() { return warehouseUnit; }
+    public void setWarehouseUnit(String warehouseUnit) { this.warehouseUnit = warehouseUnit; }
+
+    public BigDecimal getBomUnitPerWarehouseUnit() { return bomUnitPerWarehouseUnit; }
+    public void setBomUnitPerWarehouseUnit(BigDecimal bomUnitPerWarehouseUnit) { this.bomUnitPerWarehouseUnit = bomUnitPerWarehouseUnit; }}
