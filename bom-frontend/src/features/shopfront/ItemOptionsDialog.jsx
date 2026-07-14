@@ -156,13 +156,28 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
   }
 
   if (!model) return null
+  const modelImage = model.imageUrl || model.thumbnailUrl || ''
 
   return (
     <>
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
       <DialogTitle sx={{ pb: 1 }}>
-        <Typography fontWeight={800} variant="h6">{model.modelName}</Typography>
-        <Typography variant="body2" color="primary" fontWeight={600}>{fmt(model.sellingPrice)}</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+          <Box onClick={() => modelImage && setImagePreview({ imageUrl: modelImage, modelName: model.modelName, sellingPrice: model.sellingPrice })}
+            sx={{ width: 82, height: 82, flexShrink: 0, borderRadius: 1.5, bgcolor: '#eef2f7', overflow: 'hidden', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: modelImage ? 'pointer' : 'default' }}>
+            {modelImage ? (
+              <Box component="img" src={modelImage} alt={model.modelName}
+                sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                onError={e => { e.target.style.display = 'none' }} />
+            ) : (
+              <Typography fontWeight={900} sx={{ color: '#94a3b8', fontSize: 30 }}>{String(model.modelName || '?').slice(0, 1)}</Typography>
+            )}
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography fontWeight={900} sx={{ fontSize: 22, lineHeight: 1.15, color: '#0f172a' }}>{model.modelName}</Typography>
+            <Typography color="primary" fontWeight={800} sx={{ fontSize: 17, mt: 0.5 }}>{fmt(model.sellingPrice)}</Typography>
+          </Box>
+        </Box>
       </DialogTitle>
       <DialogContent sx={{ pt: 0 }}>
 
@@ -341,7 +356,7 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
         <>
           <Box sx={{ position: 'relative', bgcolor: '#f0f0f0', lineHeight: 0 }}>
             <Box component="img" src={imagePreview.imageUrl} alt={imagePreview.modelName}
-              sx={{ width: '100%', maxHeight: 300, objectFit: 'contain', display: 'block' }}
+              sx={{ width: '100%', maxHeight: 430, objectFit: 'contain', display: 'block' }}
               onError={e => { e.target.style.display = 'none' }} />
             <IconButton size="small" onClick={() => setImagePreview(null)}
               sx={{ position: 'absolute', top: 8, right: 8, bgcolor: 'rgba(0,0,0,0.45)', color: '#fff', '&:hover': { bgcolor: 'rgba(0,0,0,0.65)' } }}>
@@ -349,7 +364,7 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
             </IconButton>
           </Box>
           <Box sx={{ px: 2.5, py: 2 }}>
-            <Typography fontWeight={800} sx={{ fontSize: 17 }}>{imagePreview.modelName}</Typography>
+            <Typography fontWeight={800} sx={{ fontSize: 22 }}>{imagePreview.modelName}</Typography>
             <Typography color="primary" fontWeight={700} sx={{ fontSize: 15, mt: 0.5 }}>+{fmt(imagePreview.sellingPrice)}</Typography>
           </Box>
         </>

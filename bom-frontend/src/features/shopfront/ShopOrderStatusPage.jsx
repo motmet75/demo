@@ -247,21 +247,49 @@ function OrderCard({ order, highlighted, token }) {
           {/* Items */}
           {roots.map((item, i) => {
             const itemChildren = children.filter(c => c.parentItemId === item.id)
+            const itemImage = item.imageUrl || item.thumbnailUrl || ''
             return (
-              <Box key={item.id} sx={{ mb: 0.75 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography variant="body2" fontWeight={600}>
-                    {i + 1}. {item.quantity}× {item.modelName}
-                    {item.selectedOptions && <Typography component="span" variant="caption" color="text.secondary"> ({item.selectedOptions})</Typography>}
-                  </Typography>
-                  <Typography variant="body2" fontWeight={700} color="primary">{fmt(item.lineTotal)}</Typography>
-                </Box>
-                {itemChildren.map((child, ci) => (
-                  <Box key={child.id} sx={{ display: 'flex', justifyContent: 'space-between', pl: 2 }}>
-                    <Typography variant="caption" color="text.secondary">{i + 1}.{ci + 1} {child.quantity}× {child.modelName}</Typography>
-                    <Typography variant="caption" color="primary" fontWeight={600}>{fmt(child.lineTotal)}</Typography>
+              <Box key={item.id} sx={{ mb: 1.25, p: 1, border: '1px solid #e2e8f0', borderRadius: 2, bgcolor: '#ffffff' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Box sx={{ width: 64, height: 64, flexShrink: 0, borderRadius: 1.5, bgcolor: '#eef2f7', overflow: 'hidden', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {itemImage ? (
+                      <Box component="img" src={itemImage} alt={item.modelName}
+                        sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        onError={e => { e.target.style.display = 'none' }} />
+                    ) : (
+                      <Typography fontWeight={900} sx={{ color: '#94a3b8', fontSize: 24 }}>{String(item.modelName || '?').slice(0, 1)}</Typography>
+                    )}
                   </Box>
-                ))}
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography fontWeight={900} sx={{ fontSize: 18, lineHeight: 1.2, color: '#0f172a' }}>
+                      {i + 1}. {item.quantity}x {item.modelName}
+                    </Typography>
+                    {item.selectedOptions && (
+                      <Typography sx={{ color: '#64748b', fontSize: 14, lineHeight: 1.25 }}>{item.selectedOptions}</Typography>
+                    )}
+                  </Box>
+                  <Typography color="primary" fontWeight={900} sx={{ fontSize: 17, flexShrink: 0 }}>{fmt(item.lineTotal)}</Typography>
+                </Box>
+                {itemChildren.map((child, ci) => {
+                  const childImage = child.imageUrl || child.thumbnailUrl || ''
+                  return (
+                    <Box key={child.id} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, pl: 2, mt: 0.75 }}>
+                      <Box sx={{ width: 42, height: 42, flexShrink: 0, borderRadius: 1.25, bgcolor: '#e8eaf6', overflow: 'hidden', border: '1px solid #c7d2fe', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {childImage ? (
+                          <Box component="img" src={childImage} alt={child.modelName}
+                            sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            onError={e => { e.target.style.display = 'none' }} />
+                        ) : (
+                          <Typography fontWeight={900} sx={{ color: '#818cf8', fontSize: 16 }}>{String(child.modelName || '?').slice(0, 1)}</Typography>
+                        )}
+                      </Box>
+                      <Typography sx={{ color: '#4338ca', fontWeight: 800, fontSize: 15, flex: 1, minWidth: 0 }} noWrap>
+                        {i + 1}.{ci + 1} {child.quantity}x {child.modelName}
+                      </Typography>
+                      <Typography color="primary" fontWeight={900} sx={{ fontSize: 15, flexShrink: 0 }}>{fmt(child.lineTotal)}</Typography>
+                    </Box>
+                  )
+                })}
               </Box>
             )
           })}

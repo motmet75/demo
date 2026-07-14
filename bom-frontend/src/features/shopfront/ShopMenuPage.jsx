@@ -215,7 +215,7 @@ function SessionOrderList({ session, token, onEdit, onView }) {
                 {roots.slice(0, 4).map((item) => (
                   <Box key={item.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
                     <Typography variant="caption" sx={{ color: '#ff5722', fontWeight: 700, flexShrink: 0 }}>
-                      ×{item.quantity}
+                      x{item.quantity}
                     </Typography>
                     <Typography variant="caption" sx={{ flex: 1, color: '#333' }} noWrap>
                       {item.modelName}
@@ -381,14 +381,14 @@ function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpda
             <Box key={item.id || idx} sx={{ mb: 1, pb: 1, borderBottom: '1px solid #f0f0f0' }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Box onClick={() => itemImage && setImagePreview({ imageUrl: itemImage, modelName: item.modelName })}
-                  sx={{ width: 56, height: 56, flexShrink: 0, borderRadius: 1.5, bgcolor: '#eef2f7', overflow: 'hidden', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: itemImage ? 'pointer' : 'default' }}>
+                  sx={{ width: 76, height: 76, flexShrink: 0, borderRadius: 1.5, bgcolor: '#eef2f7', overflow: 'hidden', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: itemImage ? 'pointer' : 'default' }}>
                   {itemImage ? <Box component="img" src={itemImage} alt={item.modelName} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none' }} />
-                    : <Typography fontWeight={900} sx={{ color: '#94a3b8', fontSize: 20 }}>{String(item.modelName || '?').slice(0, 1)}</Typography>}
+                    : <Typography fontWeight={900} sx={{ color: '#94a3b8', fontSize: 28 }}>{String(item.modelName || '?').slice(0, 1)}</Typography>}
                 </Box>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography fontWeight={800} sx={{ fontSize: 17, color: '#0f172a', lineHeight: 1.2 }}>{Number(item.quantity)}Ã— {item.modelName}</Typography>
+                  <Typography fontWeight={800} sx={{ fontSize: 22, color: '#0f172a', lineHeight: 1.18 }}>{Number(item.quantity)}x {item.modelName}</Typography>
                 </Box>
-                <Typography color="primary" fontWeight={800} sx={{ fontSize: 16, flexShrink: 0 }}>{fmtLocal(item.lineTotal)}</Typography>
+                <Typography color="primary" fontWeight={900} sx={{ fontSize: 20, flexShrink: 0 }}>{fmtLocal(item.lineTotal)}</Typography>
               </Box>
               {item.selectedOptions && (
                 <Typography variant="caption" color="text.secondary" sx={{ pl: 1.5, display: 'block' }}>
@@ -402,11 +402,11 @@ function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpda
               )}
               {children.map((child, ci) => (
                 <Box key={child.id || ci} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, pl: 2.5, mt: 0.4, borderLeft: '2px solid #c7d2fe', ml: 1 }}>
-                  {(child.imageUrl || child.thumbnailUrl) && <Box component="img" src={child.imageUrl || child.thumbnailUrl} alt={child.modelName} sx={{ width: 34, height: 34, objectFit: 'cover', borderRadius: 1, border: '1px solid #c7d2fe', flexShrink: 0 }} onError={e => { e.target.style.display = 'none' }} />}
-                  <Typography sx={{ color: '#4338ca', fontWeight: 800, fontSize: 15, flex: 1, minWidth: 0 }} noWrap>
-                    + {Number(child.quantity)}Ã— {child.modelName}
+                  {(child.imageUrl || child.thumbnailUrl) && <Box component="img" src={child.imageUrl || child.thumbnailUrl} alt={child.modelName} sx={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 1, border: '1px solid #c7d2fe', flexShrink: 0 }} onError={e => { e.target.style.display = 'none' }} />}
+                  <Typography sx={{ color: '#4338ca', fontWeight: 900, fontSize: 18, flex: 1, minWidth: 0 }} noWrap>
+                    + {Number(child.quantity)}x {child.modelName}
                   </Typography>
-                  <Typography color="primary" fontWeight={800} sx={{ fontSize: 14, flexShrink: 0 }}>{fmtLocal(child.lineTotal)}</Typography>
+                  <Typography color="primary" fontWeight={900} sx={{ fontSize: 16, flexShrink: 0 }}>{fmtLocal(child.lineTotal)}</Typography>
                 </Box>
               ))}
             </Box>
@@ -452,7 +452,7 @@ function fmtOpts(selectedOptions) {
     return Object.entries(obj).map(([k, v]) => {
       if (Array.isArray(v)) return `${k}: ${v.join(', ')}`
       if (v && typeof v === 'object') {
-        const parts = Object.entries(v).filter(([, q]) => q > 0).map(([label, q]) => q > 1 ? `${label}×${q}` : label)
+        const parts = Object.entries(v).filter(([, q]) => q > 0).map(([label, q]) => q > 1 ? `${label}x${q}` : label)
         return parts.length ? `${k}: ${parts.join(', ')}` : null
       }
       return `${k}: ${v}`
@@ -1896,6 +1896,7 @@ export default function ShopMenuPage() {
               {cartEntries.map((entry, idx) => {
                 const m = menu.find(x => x.id === entry.modelId)
                 if (!m) return null
+                const entryImage = entry.imageUrl || entry.thumbnailUrl || m.imageUrl || m.thumbnailUrl || ''
                 const optsStr   = fmtOpts(entry.selectedOptions)
                 const sides     = entry.sideItems || []
                 const unitPrice = Number(m.sellingPrice || 0) + calcOptAddOn(entry)
@@ -1905,23 +1906,43 @@ export default function ShopMenuPage() {
                   return s + (si.qty || 1) * Number(sm?.sellingPrice || 0) * entry.qty
                 }, 0)
                 return (
-                  <Box key={entry.uid} sx={{ mb: 0.75 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" fontWeight={700}>{idx + 1}. {entry.qty}× {m.modelName}</Typography>
-                      <Typography variant="body2" sx={{ color: '#ff5722' }} fontWeight={700}>{fmt(mainTotal)}</Typography>
+                  <Box key={entry.uid} sx={{ mb: 1.25, p: 1, border: '1.5px solid #e2e8f0', borderRadius: 2, bgcolor: '#fff' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Box onClick={() => entryImage && setImagePreview({ imageUrl: entryImage, modelName: m.modelName })}
+                        sx={{ width: 72, height: 72, flexShrink: 0, borderRadius: 1.5, bgcolor: '#eef2f7', overflow: 'hidden', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: entryImage ? 'pointer' : 'default' }}>
+                        {entryImage ? <Box component='img' src={entryImage} alt={m.modelName} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none' }} />
+                          : <Typography fontWeight={900} sx={{ color: '#94a3b8', fontSize: 28 }}>{String(m.modelName || '?').slice(0, 1)}</Typography>}
+                      </Box>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography fontWeight={900} sx={{ fontSize: 20, color: '#0f172a', lineHeight: 1.18 }}>{idx + 1}. {entry.qty}x {m.modelName}</Typography>
+                        {optsStr && <Typography sx={{ color: '#64748b', fontSize: 15, lineHeight: 1.25 }}>{optsStr}</Typography>}
+                        {entry.itemNotes && <Typography sx={{ color: '#64748b', fontSize: 14, fontStyle: 'italic' }}>Note: {entry.itemNotes}</Typography>}
+                      </Box>
+                      <Typography sx={{ color: '#ff5722', fontSize: 18, fontWeight: 900, flexShrink: 0 }}>{fmt(mainTotal)}</Typography>
                     </Box>
-                    {optsStr && (
-                      <Typography variant="caption" color="text.secondary" sx={{ pl: 1.5, display: 'block' }}>{optsStr}</Typography>
-                    )}
-                    {entry.itemNotes && (
-                      <Typography variant="caption" color="text.secondary" sx={{ pl: 1.5, display: 'block', fontStyle: 'italic' }}>
-                        Ghi chú: {entry.itemNotes}
-                      </Typography>
-                    )}
                     {sides.length > 0 && (
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', pl: 1.5, borderTop: '1px dotted #e2e8f0', mt: 0.5, pt: 0.5 }}>
-                        <Typography sx={{ color: '#64748b', fontStyle: 'italic', fontSize: 13 }}>= tổng phụ</Typography>
-                        <Typography fontWeight={900} sx={{ color: '#ff5722', fontSize: large ? 17 : 14 }}>{fmt(mainTotal + sideTotal)}</Typography>
+                      <Box sx={{ mt: 1, ml: 2, pl: 1, borderLeft: '2px solid #c7d2fe', display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                        {sides.map(si => {
+                          const sm = menu.find(x => x.id === si.modelId)
+                          const sideImage = si.imageUrl || si.thumbnailUrl || sm?.imageUrl || sm?.thumbnailUrl || ''
+                          const sideQty = (si.qty || 1) * entry.qty
+                          const sideLine = sideQty * Number(sm?.sellingPrice || 0)
+                          return (
+                            <Box key={si.uid || si.modelId} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                              <Box onClick={() => sideImage && setImagePreview({ imageUrl: sideImage, modelName: si.modelName })}
+                                sx={{ width: 44, height: 44, flexShrink: 0, borderRadius: 1, bgcolor: '#e8eaf6', overflow: 'hidden', border: '1px solid #c7d2fe', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: sideImage ? 'pointer' : 'default' }}>
+                                {sideImage ? <Box component='img' src={sideImage} alt={si.modelName} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none' }} />
+                                  : <Typography fontWeight={900} sx={{ color: '#94a3b8', fontSize: 16 }}>{String(si.modelName || '?').slice(0, 1)}</Typography>}
+                              </Box>
+                              <Typography sx={{ flex: 1, minWidth: 0, color: '#4338ca', fontSize: 16, fontWeight: 800 }} noWrap>+ {sideQty}x {si.modelName}</Typography>
+                              <Typography sx={{ color: '#ff5722', fontSize: 15, fontWeight: 900, flexShrink: 0 }}>{fmt(sideLine)}</Typography>
+                            </Box>
+                          )
+                        })}
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 0.5, borderTop: '1px dotted #c7d2fe' }}>
+                          <Typography sx={{ color: '#64748b', fontSize: 15, fontWeight: 800 }}>With topping</Typography>
+                          <Typography fontWeight={900} sx={{ color: '#ff5722', fontSize: 18 }}>{fmt(mainTotal + sideTotal)}</Typography>
+                        </Box>
                       </Box>
                     )}
                   </Box>

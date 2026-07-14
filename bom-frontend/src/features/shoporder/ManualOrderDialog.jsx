@@ -1038,7 +1038,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                             <Typography variant="caption" sx={{ color: '#94a3b8', fontWeight: 700, minWidth: 18, flexShrink: 0, fontSize: 11 }}>
                               {itemIdx + 1}.
                             </Typography>
-                            <Box onClick={() => itemImage && setImagePreview({ imageUrl: itemImage, modelName: item.modelName })} sx={{ width: 48, height: 48, flexShrink: 0, borderRadius: 1.25, bgcolor: '#eef2f7', overflow: 'hidden', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: itemImage ? 'pointer' : 'default' }}>
+                            <Box onClick={() => itemImage && setImagePreview({ imageUrl: itemImage, modelName: item.modelName })} sx={{ width: 64, height: 64, flexShrink: 0, borderRadius: 1.25, bgcolor: '#eef2f7', overflow: 'hidden', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: itemImage ? 'pointer' : 'default' }}>
                               {itemImage ? (
                                 <Box component="img" src={itemImage} alt={item.modelName}
                                   onError={e => { e.target.style.display = 'none' }}
@@ -1187,7 +1187,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                                   {/* Row 1: connector + editable name + delete */}
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                     <Box sx={{ width: 14, height: 2, bgcolor: '#c7d2fe', flexShrink: 0 }} />
-                                    <Box onClick={() => sideImage && setImagePreview({ imageUrl: sideImage, modelName: si.modelName })} sx={{ width: 38, height: 38, flexShrink: 0, borderRadius: 1, bgcolor: '#e8eaf6', overflow: 'hidden', border: '1px solid #dbe3ef', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: sideImage ? 'pointer' : 'default' }}>
+                                    <Box onClick={() => sideImage && setImagePreview({ imageUrl: sideImage, modelName: si.modelName })} sx={{ width: 50, height: 50, flexShrink: 0, borderRadius: 1, bgcolor: '#e8eaf6', overflow: 'hidden', border: '1px solid #dbe3ef', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: sideImage ? 'pointer' : 'default' }}>
                                       {sideImage ? (
                                         <Box component="img" src={sideImage} alt={si.modelName}
                                           onError={e => { e.target.style.display = 'none' }}
@@ -1280,7 +1280,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                                           border: `1.5px solid ${optionQty > 0 ? '#6366f1' : '#dbe3ef'}`,
                                           borderRadius: 1.5, bgcolor: optionQty > 0 ? '#eef2ff' : '#fff',
                                         }}>
-                                          <Box onClick={() => optionImage && setImagePreview({ imageUrl: optionImage, modelName: option.modelName })} sx={{ width: 52, height: 52, flexShrink: 0, borderRadius: 1.25, bgcolor: '#eef2f7', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: optionImage ? 'pointer' : 'default' }}>
+                                          <Box onClick={() => optionImage && setImagePreview({ imageUrl: optionImage, modelName: option.modelName })} sx={{ width: 64, height: 64, flexShrink: 0, borderRadius: 1.25, bgcolor: '#eef2f7', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: optionImage ? 'pointer' : 'default' }}>
                                             {optionImage ? (
                                               <Box component="img" src={optionImage} alt={option.modelName}
                                                 onError={e => { e.target.style.display = 'none' }}
@@ -1474,7 +1474,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
           <>
             <Box sx={{ position: 'relative', bgcolor: '#f0f0f0', lineHeight: 0 }}>
               <Box component="img" src={imagePreview.imageUrl} alt={imagePreview.modelName}
-                sx={{ width: '100%', maxHeight: 340, objectFit: 'contain', display: 'block' }}
+                sx={{ width: '100%', maxHeight: 460, objectFit: 'contain', display: 'block' }}
                 onError={e => { e.target.style.display = 'none' }} />
               <IconButton size="small" onClick={() => setImagePreview(null)}
                 sx={{ position: 'absolute', top: 8, right: 8, bgcolor: 'rgba(0,0,0,0.45)', color: '#fff', '&:hover': { bgcolor: 'rgba(0,0,0,0.65)' } }}>
@@ -1482,7 +1482,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
               </IconButton>
             </Box>
             <Box sx={{ px: 2.5, py: 2 }}>
-              <Typography fontWeight={800} sx={{ fontSize: 17 }}>{imagePreview.modelName}</Typography>
+              <Typography fontWeight={800} sx={{ fontSize: 22 }}>{imagePreview.modelName}</Typography>
             </Box>
           </>
         )}
