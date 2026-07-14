@@ -71,6 +71,15 @@ const BOARD_CHANNEL = 'shop_display_board'
 const ORDER_POLL_MS = 30000
 const STAFF_CALL_REASON_NEW_ORDER = 'new_order'
 const BOARD_VISIBLE_STATUSES = new Set(['CONFIRMED', 'PREPARING', 'READY', 'PICKED_UP'])
+const SHOP_ORDER_VIEW_PREF = 'shop.orders.viewMode'
+const SHOP_ORDER_CARD_SIZE_PREF = 'shop.orders.cardSize'
+const SHOP_ORDER_CONTRAST_PREF = 'shop.orders.highContrast'
+function readShopOrderPref(key, fallback) {
+  try { return localStorage.getItem(key) || fallback } catch { return fallback }
+}
+function writeShopOrderPref(key, value) {
+  try { localStorage.setItem(key, value) } catch { /* browser storage may be blocked */ }
+}
 function broadcastReady() {
   try { new BroadcastChannel(BOARD_CHANNEL).postMessage({ type: 'ORDER_READY' }) } catch { /* */ }
 }
@@ -330,10 +339,28 @@ const BOARD_STYLE = {
   READY:      { headerBg: '#e8f5e9', border: '#4caf50',  cardBg: '#f0fdf4',  color: '#2e7d32',  numColor: '#388e3c', animate: true },
   PICKED_UP:  { headerBg: '#e3f2fd', border: '#0288d1',  cardBg: '#f0f9ff',  color: '#01579b',  numColor: '#0288d1' },
 }
+const BOARD_HIGH_CONTRAST_STYLE = {
+  CONFIRMED:  { headerBg: '#dbeafe', border: '#1d4ed8',  cardBg: '#ffffff',  color: '#0f172a',  numColor: '#1d4ed8' },
+  PREPARING:  { headerBg: '#ffedd5', border: '#c2410c',  cardBg: '#ffffff',  color: '#0f172a',  numColor: '#c2410c' },
+  READY:      { headerBg: '#dcfce7', border: '#15803d',  cardBg: '#ffffff',  color: '#0f172a',  numColor: '#15803d', animate: true },
+  PICKED_UP:  { headerBg: '#e0f2fe', border: '#0369a1',  cardBg: '#ffffff',  color: '#0f172a',  numColor: '#0369a1' },
+}
 
-function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, onPayQr, onPickupQr, onSwitchQr, onRevertCash }) {
+function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, onPayQr, onPickupQr, onSwitchQr, onRevertCash, displaySize = 'normal', highContrast = false }) {
   // onAction(type, orderId, orderNumber)
-  const style = BOARD_STYLE[status] || BOARD_STYLE.CONFIRMED
+  const large = displaySize === 'large'
+  const style = highContrast
+    ? (BOARD_HIGH_CONTRAST_STYLE[status] || BOARD_HIGH_CONTRAST_STYLE.CONFIRMED)
+    : (BOARD_STYLE[status] || BOARD_STYLE.CONFIRMED)
+  const cardMinWidth = large ? 340 : 260
+  const numberSize = large ? 60 : 46
+  const numberFont = large ? 24 : 18
+  const metaFont = large ? 13 : 10
+  const badgeFont = large ? 14 : 11
+  const rootQtyFont = large ? 30 : 22
+  const rootNameFont = large ? 21 : 16
+  const detailFont = large ? 15 : 13
+  const childQtyFont = large ? 21 : 17
   const [imagePreview, setImagePreview] = useState(null)
 
   if (!orders.length) {
@@ -348,7 +375,7 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
 
   return (
     <>
-    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 1.5, p: 1.5 }}>
+    <Box sx={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${cardMinWidth}px, 1fr))`, gap: large ? 2 : 1.5, p: large ? 2 : 1.5 }}>
       {orders.map(order => {
         const since = elapsed(order.confirmedAt || order.createdAt)
         return (
@@ -360,7 +387,7 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
             <CardContent sx={{ pb: '8px !important', pt: 1.5, px: 1.5 }}>
               {/* Header */}
               <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 0.75 }}>
-                <Box sx={{ width: 46, height: 46, borderRadius: '50%', bgcolor: style.numColor, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 18, flexShrink: 0, mr: 1 }}>
+                <Box sx={{ width: numberSize, height: numberSize, borderRadius: '50%', bgcolor: style.numColor, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: numberFont, flexShrink: 0, mr: 1 }}>
                   {order.orderNumber ?? '?'}
                 </Box>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -377,12 +404,12 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                   </Box>
                   {order.customerName && <Typography variant="caption" display="block" noWrap>{order.customerName}</Typography>}
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>{since} ago</Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: metaFont }}>{since} ago</Typography>
                     {(() => {
                       const roots = (order.items || []).filter(it => !it.parentItemId)
                       const totalQty = roots.reduce((s, it) => s + Number(it.quantity || 1), 0)
                       return totalQty > 0 ? (
-                        <Box sx={{ bgcolor: style.numColor, color: '#fff', fontWeight: 900, fontSize: 11, borderRadius: 99, px: 0.75, py: 0.1, lineHeight: 1.6 }}>
+                        <Box sx={{ bgcolor: style.numColor, color: '#fff', fontWeight: 900, fontSize: badgeFont, borderRadius: 99, px: large ? 1 : 0.75, py: 0.1, lineHeight: 1.6 }}>
                           {totalQty} item{totalQty > 1 ? 's' : ''}
                         </Box>
                       ) : null
@@ -429,15 +456,15 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                           <Typography sx={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', flexShrink: 0 }}>
                             {rIdx + 1}.
                           </Typography>
-                          <Typography sx={{ fontSize: 22, fontWeight: 900, color: style.color, lineHeight: 1, flexShrink: 0 }}>
+                          <Typography sx={{ fontSize: rootQtyFont, fontWeight: 900, color: style.color, lineHeight: 1, flexShrink: 0 }}>
                             {Number(root.quantity)}×
                           </Typography>
-                          <Typography sx={{ fontSize: 16, fontWeight: 800, color: '#111', lineHeight: 1.2 }}>
+                          <Typography sx={{ fontSize: rootNameFont, fontWeight: 800, color: '#111', lineHeight: 1.2 }}>
                             {root.modelName}
                           </Typography>
                         </Box>
-                        {optStr && <Typography sx={{ fontSize: 13, pl: 2, display: 'block', color: '#555', lineHeight: 1.4 }}>{optStr}</Typography>}
-                        {root.itemNotes && <Typography sx={{ fontSize: 13, pl: 2, fontStyle: 'italic', display: 'block', color: '#c62828', fontWeight: 700 }}>⚠ {root.itemNotes}</Typography>}
+                        {optStr && <Typography sx={{ fontSize: detailFont, pl: 2, display: 'block', color: '#555', lineHeight: 1.4 }}>{optStr}</Typography>}
+                        {root.itemNotes && <Typography sx={{ fontSize: detailFont, pl: 2, fontStyle: 'italic', display: 'block', color: '#c62828', fontWeight: 700 }}>⚠ {root.itemNotes}</Typography>}
                         {/* Child / topping items */}
                         {children.map((child, ci) => {
                           const img = modelImageMap[child.modelId]
@@ -452,7 +479,7 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                                   onError={e => { e.target.style.display = 'none' }}
                                   sx={{ width: 30, height: 30, objectFit: 'cover', borderRadius: 1, flexShrink: 0, cursor: 'pointer', border: '1px solid #e2e8f0' }} />
                               )}
-                              <Typography sx={{ fontSize: 17, fontWeight: 900, color: '#111', lineHeight: 1, flexShrink: 0 }}>
+                              <Typography sx={{ fontSize: childQtyFont, fontWeight: 900, color: '#111', lineHeight: 1, flexShrink: 0 }}>
                                 {Number(child.quantity)}×
                               </Typography>
                               <Typography onClick={() => img && setImagePreview({ imageUrl: img, modelName: child.modelName })}
@@ -909,6 +936,122 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
 
 // ── OrderCardGrid ────────────────────────────────────────────────────
 
+function summarizeOrderItems(order) {
+  const roots = (order.items || []).filter(it => !it.parentItemId)
+  const totalQty = roots.reduce((sum, item) => sum + Number(item.quantity || 1), 0)
+  const label = roots.slice(0, 3).map(item => `${Number(item.quantity || 1)}x ${item.modelName || 'Item'}`).join(', ')
+  return { totalQty, label: roots.length > 3 ? `${label} +${roots.length - 3}` : label }
+}
+
+function OrderRowsGrid({ rows, tables, actions, selectedIds, onToggleSelect, displaySize = 'normal', highContrast = false }) {
+  const large = displaySize === 'large'
+  const fontSize = large ? 15 : 13
+  const headerSx = {
+    position: 'sticky', top: 0, zIndex: 1,
+    bgcolor: highContrast ? '#0f172a' : '#f8fafc',
+    color: highContrast ? '#fff' : '#334155',
+    fontSize: large ? 13 : 12,
+    fontWeight: 800,
+    textAlign: 'left',
+    px: 1,
+    py: large ? 1.1 : 0.8,
+    borderBottom: highContrast ? '2px solid #0f172a' : '1px solid #cbd5e1',
+    whiteSpace: 'nowrap',
+  }
+  const cellSx = {
+    px: 1,
+    py: large ? 1 : 0.75,
+    fontSize,
+    borderBottom: '1px solid #e2e8f0',
+    verticalAlign: 'top',
+    bgcolor: highContrast ? '#fff' : 'inherit',
+  }
+  const renderPrimaryAction = (order) => {
+    if (order.status === 'PENDING') return <Button size="small" variant="contained" disabled={Boolean(order.customerEditing)} onClick={() => actions.confirm(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 13 : 11 }}>Confirm</Button>
+    if (order.status === 'CONFIRMED') return <Button size="small" variant="contained" color="warning" onClick={() => actions.prepare(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 13 : 11 }}>Prepare</Button>
+    if (order.status === 'PREPARING') return <Button size="small" variant="contained" color="success" onClick={() => actions.ready(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 13 : 11 }}>Ready</Button>
+    if (order.status === 'READY') return <Button size="small" variant="contained" color={order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT' ? 'info' : 'success'} onClick={() => (order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT') ? actions.pickup(order) : actions.complete(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 13 : 11 }}>{order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT' ? 'Picked Up' : 'Complete'}</Button>
+    return <Typography sx={{ fontSize: large ? 13 : 11, color: '#64748b', fontWeight: 700 }}>{STATUS_LABEL[order.status] || order.status}</Typography>
+  }
+
+  return (
+    <Box sx={{ height: '100%', overflow: 'auto', borderTop: '1px solid #e2e8f0' }}>
+      <Box component="table" sx={{ width: '100%', minWidth: large ? 1220 : 1080, borderCollapse: 'separate', borderSpacing: 0 }}>
+        <Box component="thead">
+          <Box component="tr">
+            <Box component="th" sx={{ ...headerSx, width: 44 }} />
+            <Box component="th" sx={{ ...headerSx, width: 110 }}>Order</Box>
+            <Box component="th" sx={{ ...headerSx, width: 130 }}>Status</Box>
+            <Box component="th" sx={{ ...headerSx, width: 150 }}>Table</Box>
+            <Box component="th" sx={{ ...headerSx, minWidth: 260 }}>Items</Box>
+            <Box component="th" sx={{ ...headerSx, width: 150 }}>Customer</Box>
+            <Box component="th" sx={{ ...headerSx, width: 130 }}>Payment</Box>
+            <Box component="th" sx={{ ...headerSx, width: 130, textAlign: 'right' }}>Total</Box>
+            <Box component="th" sx={{ ...headerSx, width: 130 }}>Time</Box>
+            <Box component="th" sx={{ ...headerSx, width: 260 }}>Actions</Box>
+          </Box>
+        </Box>
+        <Box component="tbody">
+          {rows.map(order => {
+            const items = summarizeOrderItems(order)
+            const isActive = !['COMPLETED', 'PICKED_UP', 'CANCELLED'].includes(order.status)
+            return (
+              <Box component="tr" key={order.id} sx={{ bgcolor: selectedIds.has(order.id) ? '#eef2ff' : (highContrast ? '#fff' : 'transparent'), '&:hover td': { bgcolor: highContrast ? '#f8fafc' : '#f1f5f9' } }}>
+                <Box component="td" sx={cellSx}>
+                  <Checkbox size="small" checked={selectedIds.has(order.id)} onChange={() => onToggleSelect(order.id)} />
+                </Box>
+                <Box component="td" sx={cellSx}>
+                  <Typography sx={{ fontSize: large ? 20 : 16, fontWeight: 900, color: '#0f172a' }}>#{order.orderNumber ?? '?'}</Typography>
+                  <Typography sx={{ fontSize: large ? 12 : 10, fontFamily: 'monospace', color: '#64748b' }}>{order.orderCode}</Typography>
+                </Box>
+                <Box component="td" sx={cellSx}>
+                  <Chip label={STATUS_LABEL[order.status] || order.status} color={STATUS_COLOR[order.status] || 'default'} size="small" sx={{ fontWeight: 800, fontSize: large ? 12 : 10 }} />
+                  {order.customerEditing && <Chip label="Editing" color="warning" size="small" sx={{ ml: 0.5, fontWeight: 800, fontSize: large ? 12 : 10 }} />}
+                </Box>
+                <Box component="td" sx={cellSx}>
+                  <Box component="select" value={order.tableId || ''} onChange={e => actions.setTable(order.id, e.target.value)} sx={{ width: '100%', height: large ? 34 : 28, fontSize, border: '1px solid #cbd5e1', borderRadius: 1, px: 0.75, bgcolor: '#fff' }}>
+                    <option value="">No table</option>
+                    {tables.map(t => <option key={t.id} value={t.id}>{t.tableName}</option>)}
+                  </Box>
+                </Box>
+                <Box component="td" sx={cellSx}>
+                  <Typography sx={{ fontSize, fontWeight: 800, color: '#111827' }}>{items.totalQty} items</Typography>
+                  <Typography sx={{ fontSize: large ? 13 : 11, color: '#475569', lineHeight: 1.35 }}>{items.label || 'No items'}</Typography>
+                  {order.notes && <Typography sx={{ fontSize: large ? 13 : 11, color: '#b91c1c', fontWeight: 700, lineHeight: 1.35 }}>{order.notes}</Typography>}
+                </Box>
+                <Box component="td" sx={cellSx}>
+                  <Typography sx={{ fontSize, fontWeight: 700 }} noWrap>{order.customerName || '-'}</Typography>
+                  {order.staffName && <Typography sx={{ fontSize: large ? 12 : 10, color: '#64748b' }} noWrap>by {order.staffName}</Typography>}
+                </Box>
+                <Box component="td" sx={cellSx}>
+                  <Chip label={order.paymentStatus === 'PAID' ? 'PAID' : 'UNPAID'} color={order.paymentStatus === 'PAID' ? 'success' : 'warning'} size="small" sx={{ fontWeight: 800, fontSize: large ? 12 : 10 }} />
+                  <Typography sx={{ fontSize: large ? 12 : 10, color: '#64748b', mt: 0.25 }}>{order.paymentMethod === 'BANK_QR' ? 'QR / Bank' : order.paymentMethod || 'Cash'}</Typography>
+                </Box>
+                <Box component="td" sx={{ ...cellSx, textAlign: 'right' }}>
+                  <Typography sx={{ fontSize: large ? 17 : 14, fontWeight: 900 }}>{fmt(payableAmount(order))}</Typography>
+                </Box>
+                <Box component="td" sx={cellSx}>
+                  <Typography sx={{ fontSize: large ? 12 : 10, color: '#64748b' }}>{dateFmt(order.createdAt)}</Typography>
+                  <Typography sx={{ fontSize: large ? 12 : 10, color: '#64748b' }}>{elapsed(order.confirmedAt || order.createdAt)} ago</Typography>
+                </Box>
+                <Box component="td" sx={cellSx}>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                    {renderPrimaryAction(order)}
+                    <Tooltip title="View detail"><IconButton size="small" onClick={() => actions.detail(order)}><VisibilityIcon sx={{ fontSize: large ? 20 : 17 }} /></IconButton></Tooltip>
+                    <Tooltip title="Print receipt"><IconButton size="small" color="primary" onClick={() => printOrderReceiptTracked(order)}><PrintIcon sx={{ fontSize: large ? 20 : 17 }} /></IconButton></Tooltip>
+                    {order.paymentStatus !== 'PAID' && isActive && <Button size="small" variant="outlined" color="success" onClick={() => actions.markPaid(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 12 : 10 }}>Paid</Button>}
+                    {order.paymentStatus !== 'PAID' && order.status !== 'CANCELLED' && <Tooltip title="Payment QR"><IconButton size="small" color="primary" onClick={() => actions.payQr(order)}><QrCode2Icon sx={{ fontSize: large ? 20 : 17 }} /></IconButton></Tooltip>}
+                    {isActive && <Button size="small" color="error" onClick={() => actions.cancel(order)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: large ? 12 : 10 }}>Cancel</Button>}
+                  </Box>
+                </Box>
+              </Box>
+            )
+          })}
+        </Box>
+      </Box>
+    </Box>
+  )
+}
 const SORT_OPTIONS = [
   { value: 'newest', label: 'Newest first' },
   { value: 'oldest', label: 'Oldest first' },
@@ -918,7 +1061,7 @@ const SORT_OPTIONS = [
 ]
 const STATUS_SORT_ORDER = { PENDING: 0, CONFIRMED: 1, PREPARING: 2, READY: 3, PICKED_UP: 4, COMPLETED: 5, CANCELLED: 6 }
 
-function OrderCardGrid({ rows, loading, tables, actions, modelImageMap = {}, selectedIds, onToggleSelect }) {
+function OrderCardGrid({ rows, loading, tables, actions, modelImageMap = {}, selectedIds, onToggleSelect, viewMode = 'cards', displaySize = 'normal', highContrast = false }) {
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState('newest')
   const [tableFilter, setTableFilter] = useState('')
@@ -991,7 +1134,7 @@ function OrderCardGrid({ rows, loading, tables, actions, modelImageMap = {}, sel
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{ px: 1.5, py: 0.75, display: 'flex', gap: 1, alignItems: 'center', borderBottom: '1px solid #e0e0e0', flexShrink: 0 }}>
+      <Box sx={{ px: 1.5, py: 0.75, display: 'flex', gap: 1, alignItems: 'center', borderBottom: '1px solid #e0e0e0', flexShrink: 0, flexWrap: 'wrap' }}>
         <TextField size="small" placeholder="Search order #, customer, item, table..."
           value={search} onChange={e => setSearch(e.target.value)}
           sx={{ flex: 1 }} inputProps={{ style: { fontSize: 13 } }} />
@@ -1009,11 +1152,21 @@ function OrderCardGrid({ rows, loading, tables, actions, modelImageMap = {}, sel
         </TextField>
         <Typography sx={{ fontSize: 12, color: '#94a3b8', flexShrink: 0 }}>{filtered.length} / {rows.length} orders</Typography>
       </Box>
-      <Box sx={{ flex: 1, overflow: 'auto', p: 1.5 }}>
+      <Box sx={{ flex: 1, overflow: 'auto', p: viewMode === 'grid' ? 0 : (displaySize === 'large' ? 2 : 1.5) }}>
         {filtered.length === 0
           ? <Box sx={{ textAlign: 'center', py: 8 }}><Typography color="text.secondary">No orders found</Typography></Box>
-          : (
-            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 1.5 }}>
+          : viewMode === 'grid' ? (
+            <OrderRowsGrid
+              rows={filtered}
+              tables={tables}
+              actions={actions}
+              selectedIds={selectedIds}
+              onToggleSelect={onToggleSelect}
+              displaySize={displaySize}
+              highContrast={highContrast}
+            />
+          ) : (
+            <Box sx={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${displaySize === 'large' ? 360 : 300}px, 1fr))`, gap: displaySize === 'large' ? 2 : 1.5 }}>
               {filtered.map(order => (
                 <OrderCard
                   key={order.id}
@@ -1023,6 +1176,8 @@ function OrderCardGrid({ rows, loading, tables, actions, modelImageMap = {}, sel
                   modelImageMap={modelImageMap}
                   selected={selectedIds.has(order.id)}
                   onSelect={() => onToggleSelect(order.id)}
+                  displaySize={displaySize}
+                  highContrast={highContrast}
                 />
               ))}
             </Box>
@@ -1066,6 +1221,9 @@ export default function ShopOrderGrid() {
   const [moveTableTarget, setMoveTableTarget] = useState('')
   const [moving, setMoving]             = useState(false)
   const [eodOpen, setEodOpen]           = useState(false)
+  const [orderViewMode, setOrderViewMode] = useState(() => readShopOrderPref(SHOP_ORDER_VIEW_PREF, 'cards'))
+  const [cardDisplaySize, setCardDisplaySize] = useState(() => readShopOrderPref(SHOP_ORDER_CARD_SIZE_PREF, 'normal'))
+  const [highContrastCards, setHighContrastCards] = useState(() => readShopOrderPref(SHOP_ORDER_CONTRAST_PREF, 'false') === 'true')
   const [confirmDlg, setConfirmDlg]     = useState(null)
   // confirmDlg shape: { title, message, confirmLabel, confirmColor, requireReason, onConfirm }
   const [pickupQrOrder, setPickupQrOrder] = useState(null)  // { id, orderNumber, orderCode, qrBase64 }
@@ -1546,6 +1704,15 @@ export default function ShopOrderGrid() {
             {STATUSES.map(s => <MenuItem key={s} value={s}>{s ? (STATUS_LABEL[s] || s) : 'All'}</MenuItem>)}
           </TextField>
           <Button startIcon={<RefreshIcon />} onClick={reload} variant="outlined" size="small">Refresh</Button>
+          <Box sx={{ display: 'flex', border: '1px solid #cbd5e1', borderRadius: 1, overflow: 'hidden', bgcolor: '#fff' }}>
+            <Button startIcon={<TvIcon />} size="small" variant={orderViewMode === 'cards' ? 'contained' : 'text'} onClick={() => { setOrderViewMode('cards'); writeShopOrderPref(SHOP_ORDER_VIEW_PREF, 'cards') }} sx={{ borderRadius: 0, textTransform: 'none', fontWeight: 800 }}>Cards</Button>
+            <Button startIcon={<TableBarIcon />} size="small" variant={orderViewMode === 'grid' ? 'contained' : 'text'} onClick={() => { setOrderViewMode('grid'); writeShopOrderPref(SHOP_ORDER_VIEW_PREF, 'grid') }} sx={{ borderRadius: 0, textTransform: 'none', fontWeight: 800 }}>Grid</Button>
+          </Box>
+          <TextField select label="Card size" value={cardDisplaySize} onChange={e => { setCardDisplaySize(e.target.value); writeShopOrderPref(SHOP_ORDER_CARD_SIZE_PREF, e.target.value) }} size="small" sx={{ width: 132 }}>
+            <MenuItem value="normal">Normal</MenuItem>
+            <MenuItem value="large">Large</MenuItem>
+          </TextField>
+          <Button startIcon={<MonitorIcon />} onClick={() => { const next = !highContrastCards; setHighContrastCards(next); writeShopOrderPref(SHOP_ORDER_CONTRAST_PREF, String(next)) }} variant={highContrastCards ? 'contained' : 'outlined'} size="small" color="secondary" sx={{ textTransform: 'none', fontWeight: 800 }}>Contrast</Button>
           {staffCalls.length > 0 && (
             <Tooltip title={`${staffCalls.length} staff notification${staffCalls.length > 1 ? 's' : ''}`}>
               <IconButton
@@ -1595,7 +1762,7 @@ export default function ShopOrderGrid() {
               Counter
             </Button>
           </Tooltip>
-          <Button startIcon={<AssessmentIcon />} onClick={() => setEodOpen(true)} variant="outlined" size="small" color="secondary" sx={{ textTransform: 'none', fontWeight: 700 }}>EOD Audit</Button>
+          <Button startIcon={<AssessmentIcon />} onClick={() => setEodOpen(true)} variant="outlined" size="small" color="secondary" sx={{ textTransform: 'none', fontWeight: 700 }}>Shift Audit</Button>
           <Button startIcon={<RestartAltIcon />} onClick={() => setResetOpen(true)} variant="outlined" size="small" color="warning">Reset Counter</Button>
         </Box>
 
@@ -1629,6 +1796,9 @@ export default function ShopOrderGrid() {
               actions={cardActions}
               modelImageMap={modelImageMap}
               selectedIds={selectedRows}
+              viewMode={orderViewMode}
+              displaySize={cardDisplaySize}
+              highContrast={highContrastCards}
               onToggleSelect={id => setSelectedRows(prev => {
                 const next = new Set(prev)
                 next.has(id) ? next.delete(id) : next.add(id)
@@ -1636,10 +1806,10 @@ export default function ShopOrderGrid() {
               })}
             />
           )}
-          {tab === 1 && <StatusBoard status="CONFIRMED"  orders={confirmedOrders} modelImageMap={modelImageMap} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} />}
-          {tab === 2 && <StatusBoard status="PREPARING"  orders={preparingOrders} modelImageMap={modelImageMap} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} />}
-          {tab === 3 && <StatusBoard status="READY"      orders={readyOrders}     modelImageMap={modelImageMap} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} />}
-          {tab === 4 && <StatusBoard status="PICKED_UP"  orders={pickedUpOrders}  modelImageMap={modelImageMap} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} />}
+          {tab === 1 && <StatusBoard status="CONFIRMED"  orders={confirmedOrders} modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} />}
+          {tab === 2 && <StatusBoard status="PREPARING"  orders={preparingOrders} modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} />}
+          {tab === 3 && <StatusBoard status="READY"      orders={readyOrders}     modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} />}
+          {tab === 4 && <StatusBoard status="PICKED_UP"  orders={pickedUpOrders}  modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} />}
         </Box>
       </Box>
 
