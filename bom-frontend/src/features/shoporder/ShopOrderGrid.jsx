@@ -359,8 +359,13 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
   const badgeFont = large ? 14 : 11
   const rootQtyFont = large ? 30 : 22
   const rootNameFont = large ? 21 : 16
-  const detailFont = large ? 15 : 13
-  const childQtyFont = large ? 21 : 17
+  const detailFont = large ? 16 : 14
+  const childQtyFont = large ? 25 : 21
+  const childNameFont = large ? 21 : 17
+  const primaryTextColor = highContrast ? '#000' : '#111'
+  const detailTextColor = highContrast ? '#111827' : '#555'
+  const childTextColor = highContrast ? '#111827' : '#374151'
+  const mutedTextColor = highContrast ? '#334155' : '#94a3b8'
   const [imagePreview, setImagePreview] = useState(null)
 
   if (!orders.length) {
@@ -453,24 +458,24 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                       <Box key={root.id || rIdx} sx={{ mb: 0.5 }}>
                         {/* Root item */}
                         <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
-                          <Typography sx={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', flexShrink: 0 }}>
+                          <Typography sx={{ fontSize: 11, fontWeight: 700, color: mutedTextColor, flexShrink: 0 }}>
                             {rIdx + 1}.
                           </Typography>
                           <Typography sx={{ fontSize: rootQtyFont, fontWeight: 900, color: style.color, lineHeight: 1, flexShrink: 0 }}>
                             {Number(root.quantity)}×
                           </Typography>
-                          <Typography sx={{ fontSize: rootNameFont, fontWeight: 800, color: '#111', lineHeight: 1.2 }}>
+                          <Typography sx={{ fontSize: rootNameFont, fontWeight: 800, color: primaryTextColor, lineHeight: 1.2 }}>
                             {root.modelName}
                           </Typography>
                         </Box>
-                        {optStr && <Typography sx={{ fontSize: detailFont, pl: 2, display: 'block', color: '#555', lineHeight: 1.4 }}>{optStr}</Typography>}
+                        {optStr && <Typography sx={{ fontSize: detailFont, pl: 2, display: 'block', color: detailTextColor, lineHeight: 1.4, fontWeight: highContrast ? 700 : 500 }}>{optStr}</Typography>}
                         {root.itemNotes && <Typography sx={{ fontSize: detailFont, pl: 2, fontStyle: 'italic', display: 'block', color: '#c62828', fontWeight: 700 }}>⚠ {root.itemNotes}</Typography>}
                         {/* Child / topping items */}
                         {children.map((child, ci) => {
                           const img = child.imageUrl || child.thumbnailUrl || modelImageMap[child.modelId]
                           return (
                             <Box key={child.id || ci} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 3, pl: 1, mt: 0.3, borderLeft: `3px solid ${style.border}` }}>
-                              <Typography sx={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, flexShrink: 0, minWidth: 20 }}>
+                              <Typography sx={{ fontSize: 12, color: mutedTextColor, fontWeight: 800, flexShrink: 0, minWidth: 24 }}>
                                 {rIdx + 1}.{ci + 1}
                               </Typography>
                               {img && (
@@ -479,11 +484,11 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                                   onError={e => { e.target.style.display = 'none' }}
                                   sx={{ width: large ? 38 : 30, height: large ? 38 : 30, objectFit: 'cover', borderRadius: 1, flexShrink: 0, cursor: 'pointer', border: '1px solid #e2e8f0' }} />
                               )}
-                              <Typography sx={{ fontSize: childQtyFont, fontWeight: 900, color: '#111', lineHeight: 1, flexShrink: 0 }}>
+                              <Typography sx={{ fontSize: childQtyFont, fontWeight: 900, color: primaryTextColor, lineHeight: 1, flexShrink: 0 }}>
                                 {Number(child.quantity)}×
                               </Typography>
                               <Typography onClick={() => img && setImagePreview({ imageUrl: img, modelName: child.modelName })}
-                                sx={{ fontSize: large ? 17 : 14, fontWeight: 800, color: '#374151', flex: 1, ...(img ? { cursor: 'pointer', '&:hover': { color: '#1976d2', textDecoration: 'underline dotted' } } : {}) }}>
+                                sx={{ fontSize: childNameFont, fontWeight: 900, color: childTextColor, lineHeight: 1.15, flex: 1, ...(img ? { cursor: 'pointer', '&:hover': { color: '#1976d2', textDecoration: 'underline dotted' } } : {}) }}>
                                 {child.modelName}
                               </Typography>
                             </Box>
@@ -611,6 +616,14 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
   const large = displaySize === 'large'
   const baseStyle = CARD_STYLE[order.status] || CARD_STYLE.CONFIRMED
   const s       = highContrast ? { ...baseStyle, bg: '#fff', border: baseStyle.num } : baseStyle
+  const primaryTextColor = highContrast ? '#000' : '#111'
+  const detailTextColor = highContrast ? '#111827' : '#555'
+  const childTextColor = highContrast ? '#111827' : '#374151'
+  const mutedTextColor = highContrast ? '#334155' : '#94a3b8'
+  const secondaryTextColor = highContrast ? '#1f2937' : '#64748b'
+  const optionFont = large ? 16 : 14
+  const childQtyFont = large ? 24 : 20
+  const childNameFont = large ? 21 : 17
   const isQr    = order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT'
   const isActive = !['COMPLETED', 'PICKED_UP', 'CANCELLED'].includes(order.status)
   const roots    = (order.items || []).filter(it => !it.parentItemId)
@@ -766,27 +779,27 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
               return (
                 <Box key={root.id || rIdx} sx={{ mb: 0.6 }}>
                   <Box sx={{ display: 'flex', gap: 0.4, alignItems: 'baseline' }}>
-                    <Typography sx={{ fontSize: large ? 14 : 12, color: '#94a3b8', fontWeight: 700, flexShrink: 0 }}>{rIdx + 1}.</Typography>
+                    <Typography sx={{ fontSize: large ? 14 : 12, color: mutedTextColor, fontWeight: 800, flexShrink: 0 }}>{rIdx + 1}.</Typography>
                     <Typography sx={{ fontSize: large ? 28 : 22, fontWeight: 900, color: s.num, lineHeight: 1, flexShrink: 0 }}>{Number(root.quantity)}×</Typography>
-                    <Typography sx={{ fontSize: large ? 18 : 15, fontWeight: 800, color: '#111', lineHeight: 1.2, flex: 1 }}>{root.modelName}</Typography>
-                    <Typography sx={{ fontSize: large ? 14 : 12, color: '#64748b', flexShrink: 0, pl: 0.5 }}>{fmt(root.lineTotal)}</Typography>
+                    <Typography sx={{ fontSize: large ? 18 : 15, fontWeight: 800, color: primaryTextColor, lineHeight: 1.2, flex: 1 }}>{root.modelName}</Typography>
+                    <Typography sx={{ fontSize: large ? 14 : 12, color: secondaryTextColor, flexShrink: 0, pl: 0.5 }}>{fmt(root.lineTotal)}</Typography>
                   </Box>
-                  {optStr && <Typography sx={{ fontSize: large ? 15 : 13, pl: 2.5, color: '#555', display: 'block', lineHeight: 1.4 }}>{optStr}</Typography>}
+                  {optStr && <Typography sx={{ fontSize: optionFont, pl: 2.5, color: detailTextColor, display: 'block', lineHeight: 1.4, fontWeight: highContrast ? 700 : 500 }}>{optStr}</Typography>}
                   {root.itemNotes && <Typography sx={{ fontSize: large ? 15 : 13, pl: 2.5, fontStyle: 'italic', color: '#b91c1c', fontWeight: 700, display: 'block' }}>⚠ {root.itemNotes}</Typography>}
                   {children.map((child, ci) => {
                     const img = child.imageUrl || child.thumbnailUrl || modelImageMap[child.modelId]
                     return (
                       <Box key={child.id || ci} sx={{ display: 'flex', gap: 0.5, alignItems: 'center', ml: 2.5, pl: 0.75, mt: 0.3, borderLeft: `2px solid ${s.border}` }}>
-                        <Typography sx={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, flexShrink: 0 }}>{rIdx+1}.{ci+1}</Typography>
+                        <Typography sx={{ fontSize: 12, color: mutedTextColor, fontWeight: 800, flexShrink: 0, minWidth: 24 }}>{rIdx+1}.{ci+1}</Typography>
                         {img && (
                           <Box component="img" src={img} alt={child.modelName}
                             onClick={() => setImagePreview({ imageUrl: img, modelName: child.modelName })}
                             onError={e => { e.target.style.display = 'none' }}
                             sx={{ width: large ? 38 : 30, height: large ? 38 : 30, objectFit: 'cover', borderRadius: 1, flexShrink: 0, cursor: 'pointer', border: '1px solid #e2e8f0' }} />
                         )}
-                        <Typography sx={{ fontSize: large ? 20 : 16, fontWeight: 800, color: '#374151', lineHeight: 1, flexShrink: 0 }}>{Number(child.quantity)}×</Typography>
+                        <Typography sx={{ fontSize: childQtyFont, fontWeight: 900, color: primaryTextColor, lineHeight: 1, flexShrink: 0 }}>{Number(child.quantity)}×</Typography>
                         <Typography onClick={() => img && setImagePreview({ imageUrl: img, modelName: child.modelName })}
-                          sx={{ fontSize: large ? 17 : 14, fontWeight: 800, color: '#374151', flex: 1, ...(img ? { cursor: 'pointer', '&:hover': { color: '#1976d2', textDecoration: 'underline dotted' } } : {}) }}>
+                          sx={{ fontSize: childNameFont, fontWeight: 900, color: childTextColor, lineHeight: 1.15, flex: 1, ...(img ? { cursor: 'pointer', '&:hover': { color: '#1976d2', textDecoration: 'underline dotted' } } : {}) }}>
                           {child.modelName}
                         </Typography>
                       </Box>
@@ -1714,7 +1727,7 @@ export default function ShopOrderGrid() {
             <MenuItem value="normal">Normal</MenuItem>
             <MenuItem value="large">Large</MenuItem>
           </TextField>
-          <Button startIcon={<MonitorIcon />} onClick={() => { const next = !highContrastCards; setHighContrastCards(next); writeShopOrderPref(SHOP_ORDER_CONTRAST_PREF, String(next)) }} variant={highContrastCards ? 'contained' : 'outlined'} size="small" color="secondary" sx={{ textTransform: 'none', fontWeight: 800 }}>Contrast</Button>
+          <Button startIcon={<MonitorIcon />} aria-pressed={highContrastCards} onClick={() => { const next = !highContrastCards; setHighContrastCards(next); writeShopOrderPref(SHOP_ORDER_CONTRAST_PREF, String(next)) }} variant={highContrastCards ? 'contained' : 'outlined'} size="small" color="secondary" sx={{ textTransform: 'none', fontWeight: 900, borderWidth: highContrastCards ? 2 : 1, '&:hover': { borderWidth: highContrastCards ? 2 : 1 } }}>Contrast</Button>
           {staffCalls.length > 0 && (
             <Tooltip title={`${staffCalls.length} staff notification${staffCalls.length > 1 ? 's' : ''}`}>
               <IconButton
@@ -1752,7 +1765,7 @@ export default function ShopOrderGrid() {
             </Button>
           )}
           <Box sx={{ flex: 1 }} />
-          <Button startIcon={<TvIcon />} onClick={handleOpenBoard} variant="outlined" size="small" color="info">Display Board</Button>
+          <Button startIcon={<TvIcon />} onClick={handleOpenBoard} variant="outlined" size="small" color="info" sx={{ display: { xs: 'none', sm: 'inline-flex' } }}>Display Board</Button>
           <Tooltip title="Open the counter customer-facing display in a new tab">
             <Button startIcon={<MonitorIcon />}
               onClick={() => {
