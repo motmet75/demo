@@ -1,7 +1,27 @@
 import React, { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Alert, Box, Button, Divider, Paper, TextField, Typography } from '@mui/material'
+import { consumeSessionExpiredReturnTo } from '../api/client'
 import { useAuth } from '../context/useAuth'
+
+const APP_BASE = '/bom-inventory'
+
+function locationPath(value) {
+  if (!value?.pathname) return ''
+  return `${value.pathname}${value.search || ''}${value.hash || ''}`
+}
+
+function normalizeAppPath(value) {
+  if (typeof value !== 'string') return ''
+  const path = value.trim()
+  if (!path.startsWith('/') || path.startsWith('//') || path.startsWith('/login')) return ''
+  return path
+}
+
+function fullAppUrl(path) {
+  const route = normalizeAppPath(path) || '/materials'
+  return `${APP_BASE}${route === '/' ? '/' : route}`
+}
 
 export default function LoginForm() {
   const { login } = useAuth()
@@ -12,7 +32,8 @@ export default function LoginForm() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const from = location.state?.from?.pathname || '/materials'
+  const sessionExpired = new URLSearchParams(location.search).get('expired') === '1'
+  const from = normalizeAppPath(locationPath(location.state?.from)) || '/materials'
 
   // Show oauth2 error if redirected back from Google with ?error=oauth2
   useEffect(() => {
@@ -28,7 +49,13 @@ export default function LoginForm() {
     setLoading(true)
     try {
       await login({ username, password })
-      navigate(from, { replace: true })
+      const savedReturnTo = sessionExpired ? consumeSessionExpiredReturnTo() : ''
+      const destination = normalizeAppPath(savedReturnTo) || from
+      if (sessionExpired) {
+        window.location.assign(fullAppUrl(destination))
+        return
+      }
+      navigate(destination, { replace: true })
     } catch (err) {
       setError(err?.message || 'Login failed')
     } finally {
@@ -46,6 +73,7 @@ export default function LoginForm() {
       <Paper elevation={3} sx={{ p: 4, width: '100%', maxWidth: 420 }}>
         <Typography variant="h5" sx={{ mb: 2 }}>Sign in</Typography>
 
+        {sessionExpired ? <Alert severity="warning" sx={{ mb: 2 }}>Your login session expired. Sign in again to reload the page you were using.</Alert> : null}
         {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
 
         {/* Google login */}

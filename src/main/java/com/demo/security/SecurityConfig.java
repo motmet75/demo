@@ -58,6 +58,11 @@ public class SecurityConfig {
             .securityContext(ctx -> ctx
                 .securityContextRepository(securityContextRepository())
             )
+            .exceptionHandling(exception -> exception.authenticationEntryPoint((req, res, authException) -> {
+                res.setStatus(401);
+                res.setContentType("application/json");
+                res.getWriter().write("{\"authenticated\":false,\"message\":\"Not authenticated\"}");
+            }))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers("/oauth2/**").permitAll()

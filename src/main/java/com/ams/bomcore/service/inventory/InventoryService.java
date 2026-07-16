@@ -549,6 +549,12 @@ public class InventoryService {
         if (materialQuotaPercentage != null) {
             inv.setMaterialQuotaPercentage(materialQuotaPercentage);
         }
+        if (unitPrice != null) {
+            inv.setUnitPrice(unitPrice);
+        }
+        if (currency != null && !currency.isBlank()) {
+            inv.setCurrency(currency.trim());
+        }
         // quantityReserved param is ignored on edit - reserved/locked managed by reserve/release only
         InventoryEntity updated = inventoryRepository.save(inv);
 
