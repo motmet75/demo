@@ -219,6 +219,9 @@ CREATE TABLE public.material (
     created_at timestamp without time zone DEFAULT now(),
     description text,
     price numeric(38,2),
+    inventory_alert_enabled boolean DEFAULT true NOT NULL,
+    inventory_alert_quantity numeric(18,4),
+    inventory_alert_percentage numeric(8,4),
     tenant_id uuid DEFAULT public.uuid_v7() NOT NULL,
     company_id uuid NOT NULL
 );

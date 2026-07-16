@@ -198,3 +198,19 @@ export async function downloadPatchTemplate(tenantId, companyId) {
 
   return res.blob()
 }
+export async function fetchInventoryAlertReport(params = {}) {
+  const query = new URLSearchParams()
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') query.set(key, value)
+  })
+  const qs = query.toString()
+  const { res, data } = await apiFetchJson(`/bom/inventory/alerts${qs ? '?' + qs : ''}`)
+  if (!res.ok) {
+    const message =
+      (data && (data.message || data.error)) ||
+      (typeof data === 'string' ? data : null) ||
+      `Inventory alert report failed (${res.status})`
+    throw new Error(message)
+  }
+  return data || { materialRows: [], expirationRows: [], summary: {} }
+}

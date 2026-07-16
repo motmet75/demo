@@ -22,6 +22,8 @@ public interface MaterialRepository extends JpaRepository<Material, UUID> {
     // Find all materials belonging to a company
     List<Material> findAllByCompany(Company company);
 
+    List<Material> findAllByTenantIdAndCompanyId(UUID tenantId, UUID companyId);
+
     // Find by code within a company to enforce uniqueness per company
     Optional<Material> findByMaterialCodeAndCompany(String materialCode, Company company);
 

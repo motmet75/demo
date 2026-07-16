@@ -1,5 +1,6 @@
 package com.ams.bomcore.repository;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -19,6 +20,12 @@ public interface OrderConsumptionLogRepository extends JpaRepository<OrderConsum
     List<OrderConsumptionLogEntity> findByBomCalculationId(UUID bomCalculationId);
 
     List<OrderConsumptionLogEntity> findByTenantIdAndCompanyId(UUID tenantId, UUID companyId);
+
+    @Query("SELECT l FROM OrderConsumptionLogEntity l JOIN FETCH l.material WHERE l.tenantId = :tenantId AND l.companyId = :companyId AND l.createdAt >= :from AND l.createdAt < :to")
+    List<OrderConsumptionLogEntity> findForecastUsageRows(@Param("tenantId") UUID tenantId,
+                                                           @Param("companyId") UUID companyId,
+                                                           @Param("from") Instant from,
+                                                           @Param("to") Instant to);
 
     @Query("SELECT l FROM OrderConsumptionLogEntity l WHERE l.tenantId = :tenantId AND l.companyId = :companyId AND l.material.id = :materialId")
     List<OrderConsumptionLogEntity> findByTenantIdAndCompanyIdAndMaterialId(@Param("tenantId") UUID tenantId, @Param("companyId") UUID companyId, @Param("materialId") UUID materialId);

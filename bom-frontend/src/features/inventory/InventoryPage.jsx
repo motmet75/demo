@@ -4,6 +4,7 @@ import Tab from '@mui/material/Tab'
 import Tabs from '@mui/material/Tabs'
 import InventoryGrid from './InventoryGrid'
 import InventoryShiftReport from './InventoryShiftReport'
+import InventoryAlertReport from './InventoryAlertReport'
 
 export default function InventoryPage() {
   const [tab, setTab] = useState(0)
@@ -18,10 +19,13 @@ export default function InventoryPage() {
         <Tabs value={tab} onChange={handleTabChange}>
           <Tab label="Inventory" />
           <Tab label="Shift Report" />
+          <Tab label="Alerts" />
         </Tabs>
       </Box>
       <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-        {tab === 0 ? <InventoryGrid /> : <InventoryShiftReport />}
+        {tab === 0 && <InventoryGrid />}
+        {tab === 1 && <InventoryShiftReport />}
+        {tab === 2 && <InventoryAlertReport />}
       </Box>
     </Box>
   )

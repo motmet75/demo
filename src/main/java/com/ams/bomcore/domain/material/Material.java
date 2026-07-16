@@ -53,6 +53,15 @@ public class Material {
     @Column(name = "price")
     private BigDecimal price;
 
+    @Column(name = "inventory_alert_enabled", nullable = false)
+    private Boolean inventoryAlertEnabled = Boolean.TRUE;
+
+    @Column(name = "inventory_alert_quantity", columnDefinition = "numeric")
+    private BigDecimal inventoryAlertQuantity;
+
+    @Column(name = "inventory_alert_percentage", columnDefinition = "numeric")
+    private BigDecimal inventoryAlertPercentage;
+
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
@@ -134,6 +143,30 @@ public class Material {
         this.price = price;
     }
 
+    public Boolean getInventoryAlertEnabled() {
+        return inventoryAlertEnabled;
+    }
+
+    public void setInventoryAlertEnabled(Boolean inventoryAlertEnabled) {
+        this.inventoryAlertEnabled = inventoryAlertEnabled;
+    }
+
+    public BigDecimal getInventoryAlertQuantity() {
+        return inventoryAlertQuantity;
+    }
+
+    public void setInventoryAlertQuantity(BigDecimal inventoryAlertQuantity) {
+        this.inventoryAlertQuantity = inventoryAlertQuantity;
+    }
+
+    public BigDecimal getInventoryAlertPercentage() {
+        return inventoryAlertPercentage;
+    }
+
+    public void setInventoryAlertPercentage(BigDecimal inventoryAlertPercentage) {
+        this.inventoryAlertPercentage = inventoryAlertPercentage;
+    }
+
     public String getDescription() {
         return description;
     }
@@ -168,6 +201,9 @@ public class Material {
         }
         if (isActive == null) {
             isActive = Boolean.TRUE;
+        }
+        if (inventoryAlertEnabled == null) {
+            inventoryAlertEnabled = Boolean.TRUE;
         }
     }
 

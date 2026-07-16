@@ -6,6 +6,8 @@ import DialogActions from '@mui/material/DialogActions'
 import TextField from '@mui/material/TextField'
 import Button from '@mui/material/Button'
 import Box from '@mui/material/Box'
+import Checkbox from '@mui/material/Checkbox'
+import FormControlLabel from '@mui/material/FormControlLabel'
 import PropTypes from 'prop-types'
 import Autocomplete from '@mui/material/Autocomplete'
 import { useAppContext } from '../../context/AppContext'
@@ -28,6 +30,9 @@ export default function MaterialEditModal({ open, material, onClose, onSave, sav
     thumbnailUrl: m?.thumbnailUrl ?? '',
     unit: m?.unit ?? '',
     price: m?.price != null ? String(m.price) : '',
+    inventoryAlertEnabled: m?.inventoryAlertEnabled ?? true,
+    inventoryAlertQuantity: m?.inventoryAlertQuantity != null ? String(m.inventoryAlertQuantity) : '',
+    inventoryAlertPercentage: m?.inventoryAlertPercentage != null ? String(m.inventoryAlertPercentage) : '',
     description: m?.description ?? ''
   })
 
@@ -61,6 +66,9 @@ export default function MaterialEditModal({ open, material, onClose, onSave, sav
       thumbnailUrl: form.thumbnailUrl,
       unit: form.unit,
       price: form.price === '' ? null : Number(form.price),
+      inventoryAlertEnabled: !!form.inventoryAlertEnabled,
+      inventoryAlertQuantity: form.inventoryAlertQuantity === '' ? null : Number(form.inventoryAlertQuantity),
+      inventoryAlertPercentage: form.inventoryAlertPercentage === '' ? null : Number(form.inventoryAlertPercentage),
       description: form.description,
       ...(tenantId ? { tenantId } : {}),
       ...(companyId ? { companyId } : {})
@@ -185,6 +193,35 @@ export default function MaterialEditModal({ open, material, onClose, onSave, sav
               inputProps={{ step: 'any' }}
               disabled={isBusy}
             />
+
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '0.9fr 1fr 1fr' }, gap: 1.5, alignItems: 'center' }}>
+              <FormControlLabel
+                control={(
+                  <Checkbox
+                    checked={!!form.inventoryAlertEnabled}
+                    onChange={e => setForm(prev => ({ ...prev, inventoryAlertEnabled: e.target.checked }))}
+                    disabled={isBusy}
+                  />
+                )}
+                label="Inventory Alert"
+              />
+              <TextField
+                label="Alert Qty"
+                type="number"
+                value={form.inventoryAlertQuantity}
+                onChange={handleChange('inventoryAlertQuantity')}
+                inputProps={{ step: 'any', min: 0 }}
+                disabled={isBusy || !form.inventoryAlertEnabled}
+              />
+              <TextField
+                label="Alert %"
+                type="number"
+                value={form.inventoryAlertPercentage}
+                onChange={handleChange('inventoryAlertPercentage')}
+                inputProps={{ step: 'any', min: 0, max: 100 }}
+                disabled={isBusy || !form.inventoryAlertEnabled}
+              />
+            </Box>
 
             <TextField
               label="Description"

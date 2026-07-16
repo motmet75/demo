@@ -6,7 +6,7 @@ import { fetchMaterials, updateMaterial, deleteMaterial } from '../../api/materi
 import { apiFetch } from '../../api/client'
 import MaterialEditModal from './MaterialEditModal'
 import * as XLSX from 'xlsx'
-import { dateFmt } from '../../utils/format'
+import { dateFmt, numFmt } from '../../utils/format'
 
 export default function MaterialGrid({ refreshKey }) {
   const [rows, setRows] = useState([])
@@ -142,6 +142,9 @@ export default function MaterialGrid({ refreshKey }) {
         materialType: r.materialType,
         thumbnailUrl: r.thumbnailUrl ?? r.thumbnail_url ?? '',
         price: r.price,
+        inventoryAlertEnabled: r.inventoryAlertEnabled ?? true,
+        inventoryAlertQuantity: r.inventoryAlertQuantity ?? null,
+        inventoryAlertPercentage: r.inventoryAlertPercentage ?? null,
         description: r.description,
         isActive: r.isActive,
         createdAt: r.createdAt
@@ -197,8 +200,10 @@ export default function MaterialGrid({ refreshKey }) {
         materialType: (res && res.materialType) ?? updatedMaterial.materialType,
         thumbnailUrl: (res && (res.thumbnailUrl !== undefined ? res.thumbnailUrl : undefined)) ?? updatedMaterial.thumbnailUrl,
         price: (res && (res.price !== undefined ? res.price : undefined)) ?? updatedMaterial.price,
-        description: (res && (res.description !== undefined ? res.description : undefined)) ?? updatedMaterial.description
-        ,
+        inventoryAlertEnabled: (res && (res.inventoryAlertEnabled !== undefined ? res.inventoryAlertEnabled : undefined)) ?? updatedMaterial.inventoryAlertEnabled,
+        inventoryAlertQuantity: (res && (res.inventoryAlertQuantity !== undefined ? res.inventoryAlertQuantity : undefined)) ?? updatedMaterial.inventoryAlertQuantity,
+        inventoryAlertPercentage: (res && (res.inventoryAlertPercentage !== undefined ? res.inventoryAlertPercentage : undefined)) ?? updatedMaterial.inventoryAlertPercentage,
+        description: (res && (res.description !== undefined ? res.description : undefined)) ?? updatedMaterial.description,
         isActive: (res && (res.isActive !== undefined ? res.isActive : undefined)) ?? updatedMaterial.isActive,
         createdAt: (res && (res.createdAt !== undefined ? res.createdAt : undefined)) ?? updatedMaterial.createdAt
       }
@@ -297,6 +302,9 @@ export default function MaterialGrid({ refreshKey }) {
     { field: 'materialName', headerName: 'Name', flex: 1, editable: false, resizable: true, minWidth: 150 },
     { field: 'unit', headerName: 'Unit', width: 120, editable: false, resizable: true },
     { field: 'materialType', headerName: 'Category', width: 160, editable: false, resizable: true },
+    { field: 'inventoryAlertEnabled', headerName: 'Alert On', width: 105, type: 'boolean', editable: false, resizable: true },
+    { field: 'inventoryAlertQuantity', headerName: 'Alert Qty', width: 120, type: 'number', valueFormatter: numFmt, editable: false, resizable: true },
+    { field: 'inventoryAlertPercentage', headerName: 'Alert %', width: 110, type: 'number', valueFormatter: numFmt, editable: false, resizable: true },
     { field: 'description', headerName: 'Description', flex: 1, editable: false, minWidth: 200, resizable: true },
     { field: 'createdAt', headerName: 'Created At', width: 180, editable: false, resizable: true,
       valueFormatter: (value) => dateFmt(value) },
@@ -407,6 +415,9 @@ export default function MaterialGrid({ refreshKey }) {
         Category: r.materialType,
         ThumbnailUrl: r.thumbnailUrl,
         Price: r.price,
+        InventoryAlertEnabled: r.inventoryAlertEnabled,
+        InventoryAlertQuantity: r.inventoryAlertQuantity,
+        InventoryAlertPercentage: r.inventoryAlertPercentage,
         Description: r.description,
         Active: r.isActive,
         CreatedAt: r.createdAt

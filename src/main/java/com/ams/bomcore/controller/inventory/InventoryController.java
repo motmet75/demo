@@ -5,6 +5,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -38,6 +39,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.ams.bomcore.controller.inventory.dto.InventoryViewDTO;
 import com.ams.bomcore.domain.inventory.InventoryEntity;
+import com.ams.bomcore.service.inventory.InventoryAlertReportService;
 import com.ams.bomcore.service.inventory.InventoryException;
 import com.ams.bomcore.service.inventory.InventoryImportService;
 import com.ams.bomcore.service.inventory.InventoryPatchXlsxService;
@@ -53,15 +55,18 @@ public class InventoryController {
 
     private final InventoryService inventoryService;
     private final InventoryImportService inventoryImportService;
+    private final InventoryAlertReportService inventoryAlertReportService;
     private final InventoryPatchXlsxService inventoryPatchXlsxService;
     private final OrderDeductionService orderDeductionService;
 
     public InventoryController(InventoryService inventoryService,
                                InventoryImportService inventoryImportService,
+                               InventoryAlertReportService inventoryAlertReportService,
                                InventoryPatchXlsxService inventoryPatchXlsxService,
                                OrderDeductionService orderDeductionService) {
         this.inventoryService         = inventoryService;
         this.inventoryImportService   = inventoryImportService;
+        this.inventoryAlertReportService = inventoryAlertReportService;
         this.inventoryPatchXlsxService = inventoryPatchXlsxService;
         this.orderDeductionService    = orderDeductionService;
     }
@@ -104,6 +109,28 @@ public class InventoryController {
         }
 
         return inventoryService.listAllByTenantAndCompany(tenantId, companyId);
+    }
+
+    @GetMapping(path = "/alerts", produces = MediaType.APPLICATION_JSON_VALUE)
+    public InventoryAlertReportService.InventoryAlertReport alertReport(
+            @RequestParam(value = "tenantId", required = false) UUID tenantId,
+            @RequestParam(value = "companyId", required = false) UUID companyId,
+            @RequestParam(value = "targetDate", required = false) LocalDate targetDate,
+            @RequestParam(value = "lookbackDays", required = false) Integer lookbackDays,
+            @RequestParam(value = "forecastDays", required = false) Integer forecastDays,
+            @RequestParam(value = "forecastMode", required = false) String forecastMode,
+            @RequestParam(value = "expirationDays", required = false) Integer expirationDays,
+            @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId,
+            @RequestHeader(value = "X-Company-Id", required = false) String headerCompanyId) {
+        tenantId = resolveTenant(tenantId, headerTenantId);
+        companyId = resolveCompany(companyId, headerCompanyId);
+
+        if (tenantId == null || companyId == null) {
+            throw new IllegalArgumentException("tenantId and companyId are required");
+        }
+
+        return inventoryAlertReportService.buildReport(
+                tenantId, companyId, targetDate, lookbackDays, forecastDays, forecastMode, expirationDays);
     }
 
     // New view endpoint for grid display — returns DTO projection to avoid N+1 and lazy issues
