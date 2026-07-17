@@ -22,6 +22,13 @@ public interface ShopMaterialAuditRepository extends JpaRepository<ShopMaterialA
 
     @Query("SELECT a FROM ShopMaterialAudit a " +
             "WHERE a.tenantId = :tenantId AND a.companyId = :companyId " +
+            "AND a.orderId IN :orderIds ORDER BY a.createdAt DESC")
+    List<ShopMaterialAudit> findAllByTenantCompanyAndOrderIds(@Param("tenantId") UUID tenantId,
+                                                               @Param("companyId") UUID companyId,
+                                                               @Param("orderIds") List<UUID> orderIds);
+
+    @Query("SELECT a FROM ShopMaterialAudit a " +
+            "WHERE a.tenantId = :tenantId AND a.companyId = :companyId " +
             "AND a.status IN :statuses " +
             "AND (:excludeOrderId IS NULL OR a.orderId <> :excludeOrderId)")
     List<ShopMaterialAudit> findOpenDemand(@Param("tenantId") UUID tenantId,

@@ -13,6 +13,8 @@ import java.util.UUID;
 public interface ShopOrderRepository extends JpaRepository<ShopOrder, UUID> {
     List<ShopOrder> findAllByTenantIdAndCompanyIdOrderByCreatedAtDesc(UUID tenantId, UUID companyId);
     List<ShopOrder> findAllByTenantIdAndCompanyIdAndStatusOrderByCreatedAtDesc(UUID tenantId, UUID companyId, String status);
+    List<ShopOrder> findAllByTenantIdAndCompanyIdAndCreatedAtGreaterThanEqualAndCreatedAtLessThanOrderByCreatedAtDesc(
+            UUID tenantId, UUID companyId, Instant from, Instant to);
     Optional<ShopOrder> findByOrderCodeAndTenantIdAndCompanyId(String orderCode, UUID tenantId, UUID companyId);
     Optional<ShopOrder> findByOrderCode(String orderCode);
     List<ShopOrder> findAllBySourceTokenOrderByCreatedAtDesc(String sourceToken);

@@ -17,6 +17,7 @@ import com.ams.bomcore.repository.TenantRepository;
 import com.ams.bomcore.service.shop.ShopOrderService;
 import com.ams.bomcore.service.shop.ShopMaterialAuditService;
 import com.ams.bomcore.service.shop.ShopPricingService;
+import com.ams.bomcore.service.shop.ShopSalesReportService;
 import com.ams.bomcore.util.RequestTimeZone;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -47,6 +48,7 @@ public class ShopOrderController {
     private final ShopOrderService shopOrderService;
     private final ShopPricingService shopPricingService;
     private final ShopMaterialAuditService shopMaterialAuditService;
+    private final ShopSalesReportService shopSalesReportService;
     private final TenantRepository tenantRepository;
     private final CompanyRepository companyRepository;
     private final ShopAccessTokenRepository shopAccessTokenRepository;
@@ -63,6 +65,7 @@ public class ShopOrderController {
     public ShopOrderController(ShopOrderService shopOrderService,
                                ShopPricingService shopPricingService,
                                ShopMaterialAuditService shopMaterialAuditService,
+                               ShopSalesReportService shopSalesReportService,
                                TenantRepository tenantRepository,
                                CompanyRepository companyRepository,
                                ShopAccessTokenRepository shopAccessTokenRepository,
@@ -73,6 +76,7 @@ public class ShopOrderController {
         this.shopOrderService = shopOrderService;
         this.shopPricingService = shopPricingService;
         this.shopMaterialAuditService = shopMaterialAuditService;
+        this.shopSalesReportService = shopSalesReportService;
         this.tenantRepository = tenantRepository;
         this.companyRepository = companyRepository;
         this.shopAccessTokenRepository = shopAccessTokenRepository;
@@ -1299,6 +1303,23 @@ public class ShopOrderController {
         java.time.LocalDate toDate = to != null ? to.plusDays(1) : fromDate.plusDays(1);
         return ResponseEntity.ok(shopMaterialAuditService.report(
                 tId, cId, fromDate.atStartOfDay(zone).toInstant(), toDate.atStartOfDay(zone).toInstant()));
+    }
+
+    @GetMapping("/shop/staff/sales-report")
+    public ResponseEntity<?> salesIncomeReport(@RequestParam(required = false) java.time.LocalDate from,
+                                               @RequestParam(required = false) java.time.LocalDate to,
+                                               @RequestParam(required = false, defaultValue = "DAY") String period,
+                                               @RequestParam(required = false) UUID tenantId,
+                                               @RequestParam(required = false) UUID companyId,
+                                               @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                               @RequestHeader(value = "X-Company-Id", required = false) String hCompany,
+                                               @RequestHeader(value = "X-Time-Zone", required = false) String timeZone) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        java.time.ZoneId zone = RequestTimeZone.resolve(timeZone);
+        java.time.LocalDate toDate = to != null ? to : java.time.LocalDate.now(zone);
+        java.time.LocalDate fromDate = from != null ? from : toDate;
+        return ResponseEntity.ok(shopSalesReportService.report(tId, cId, fromDate, toDate, period, zone));
     }
 
     @GetMapping("/shop/staff/materials/menu-availability")

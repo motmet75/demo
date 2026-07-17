@@ -26,6 +26,15 @@ public interface InventoryMovementRepository extends JpaRepository<InventoryMove
 
     List<InventoryMovementEntity> findByReferenceTypeAndReferenceId(String referenceType, UUID referenceId);
 
+    @Query("SELECT m FROM InventoryMovementEntity m JOIN FETCH m.material " +
+            "WHERE m.tenantId = :tenantId AND m.companyId = :companyId " +
+            "AND m.referenceType = :referenceType AND m.referenceId IN :referenceIds " +
+            "ORDER BY m.createdAt DESC")
+    List<InventoryMovementEntity> findAllByTenantCompanyReferenceIds(@Param("tenantId") UUID tenantId,
+                                                                    @Param("companyId") UUID companyId,
+                                                                    @Param("referenceType") String referenceType,
+                                                                    @Param("referenceIds") List<UUID> referenceIds);
+
     @Query("SELECT m FROM InventoryMovementEntity m WHERE m.tenantId = :tenantId AND m.companyId = :companyId ORDER BY m.createdAt DESC")
     List<InventoryMovementEntity> findAllByTenantAndCompanyOrderByCreatedAtDesc(@Param("tenantId") UUID tenantId, @Param("companyId") UUID companyId);
 }

@@ -457,6 +457,10 @@ export function fetchMaterialAuditReport(params = {}) {
   return apiFetchJson('/shop/staff/material-audit/report' + qs(params))
 }
 
+export function fetchSalesIncomeReport(params = {}) {
+  return apiFetchJson('/shop/staff/sales-report' + qs(params))
+}
+
 export function fetchMenuAvailability() {
   return apiFetchJson('/shop/staff/materials/menu-availability')
 }
