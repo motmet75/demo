@@ -1854,7 +1854,7 @@ export default function ShopMenuPage() {
             session={tokenSession}
             t={t}
             formatAmount={fmt}
-            itemName={itemName}
+            itemName={modelName}
             token={tokenParam}
             onEdit={(order) => { setSessionOpen(false); handleEditOrder(order) }}
             onView={(order) => { setSessionOpen(false); setTrackingOrder(order) }}
