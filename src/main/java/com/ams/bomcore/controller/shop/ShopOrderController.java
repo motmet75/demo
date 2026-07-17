@@ -17,6 +17,7 @@ import com.ams.bomcore.repository.TenantRepository;
 import com.ams.bomcore.service.shop.ShopOrderService;
 import com.ams.bomcore.service.shop.ShopMaterialAuditService;
 import com.ams.bomcore.service.shop.ShopPricingService;
+import com.ams.bomcore.util.RequestTimeZone;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpStatus;
@@ -140,6 +141,7 @@ public class ShopOrderController {
     @PostMapping("/shop/public/orders")
     public ResponseEntity<?> createOrder(@RequestBody ShopOrderService.CreateOrderRequest req,
                                           @RequestParam UUID tenantId, @RequestParam UUID companyId,
+                                          @RequestHeader(value = "X-Time-Zone", required = false) String timeZone,
                                           HttpServletRequest request) {
         validateScope(tenantId, companyId);
         ResponseEntity<?> rejected = rejectPublicOrderingIfIpMismatch(tenantId, companyId, clientPublicIp(request));
@@ -147,7 +149,7 @@ public class ShopOrderController {
         rejected = rejectPublicTokenOrder(req != null ? req.token() : null, tenantId, companyId);
         if (rejected != null) return rejected;
         try {
-            ShopOrderResponseDto dto = shopOrderService.createOrder(req, tenantId, companyId);
+            ShopOrderResponseDto dto = shopOrderService.createOrder(req, tenantId, companyId, RequestTimeZone.resolve(timeZone));
             createNewOrderStaffCall(dto);
             return ResponseEntity.status(HttpStatus.CREATED).body(dto);
         } catch (IllegalArgumentException e) {
@@ -435,10 +437,11 @@ public class ShopOrderController {
                                                @RequestParam(required = false) UUID tenantId,
                                                @RequestParam(required = false) UUID companyId,
                                                @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
-                                               @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+                                               @RequestHeader(value = "X-Company-Id", required = false) String hCompany,
+                                               @RequestHeader(value = "X-Time-Zone", required = false) String timeZone) {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
-        ShopOrderResponseDto dto = shopOrderService.createOrder(req, tId, cId);
+        ShopOrderResponseDto dto = shopOrderService.createOrder(req, tId, cId, RequestTimeZone.resolve(timeZone));
         return ResponseEntity.status(HttpStatus.CREATED).body(dto);
     }
 
@@ -1287,10 +1290,11 @@ public class ShopOrderController {
                                                  @RequestParam(required = false) UUID tenantId,
                                                  @RequestParam(required = false) UUID companyId,
                                                  @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
-                                                 @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+                                                 @RequestHeader(value = "X-Company-Id", required = false) String hCompany,
+                                                 @RequestHeader(value = "X-Time-Zone", required = false) String timeZone) {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
-        java.time.ZoneId zone = java.time.ZoneId.of("Asia/Ho_Chi_Minh");
+        java.time.ZoneId zone = RequestTimeZone.resolve(timeZone);
         java.time.LocalDate fromDate = from != null ? from : java.time.LocalDate.now(zone);
         java.time.LocalDate toDate = to != null ? to.plusDays(1) : fromDate.plusDays(1);
         return ResponseEntity.ok(shopMaterialAuditService.report(

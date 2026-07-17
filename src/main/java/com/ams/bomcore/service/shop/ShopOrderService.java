@@ -140,6 +140,11 @@ public class ShopOrderService {
 
     @Transactional
     public ShopOrderResponseDto createOrder(CreateOrderRequest req, UUID tenantId, UUID companyId) {
+        return createOrder(req, tenantId, companyId, ZoneId.systemDefault());
+    }
+
+    @Transactional
+    public ShopOrderResponseDto createOrder(CreateOrderRequest req, UUID tenantId, UUID companyId, ZoneId orderZone) {
         ShopOrder order = new ShopOrder();
         order.setTenantId(tenantId);
         order.setCompanyId(companyId);
@@ -156,11 +161,11 @@ public class ShopOrderService {
             order.setOrderNumber(nextNum);
         }
 
-        // Daily sequence: count orders placed today (resets to 1 each day, Vietnam timezone)
-        ZoneId vn = ZoneId.of("Asia/Ho_Chi_Minh");
-        LocalDate today = LocalDate.now(vn);
-        Instant dayStart = today.atStartOfDay(vn).toInstant();
-        Instant dayEnd   = today.plusDays(1).atStartOfDay(vn).toInstant();
+        // Daily sequence: count orders placed today in the caller local timezone.
+        ZoneId zone = orderZone != null ? orderZone : ZoneId.systemDefault();
+        LocalDate today = LocalDate.now(zone);
+        Instant dayStart = today.atStartOfDay(zone).toInstant();
+        Instant dayEnd   = today.plusDays(1).atStartOfDay(zone).toInstant();
         long todayCount  = shopOrderRepository.countOrdersInDay(companyId, dayStart, dayEnd);
         order.setDailySeq((int) todayCount + 1);
 

@@ -33,6 +33,8 @@ import Autocomplete from '@mui/material/Autocomplete'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import { fetchModels, updateModel, createModel } from '../../api/modelApi'
 import { fetchMenuOptions, createMenuOption, updateMenuOption, deleteMenuOption } from '../../api/shopApi'
+import { MENU_TRANSLATION_LANGUAGES, compactTranslations, parseJsonObject, stringifyTranslations } from '../../i18n/menuLocalization'
+import { getLanguageMeta } from '../../i18n/translations'
 
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 
@@ -269,9 +271,9 @@ function CloneDialog({ open, source, onClose, onCreated }) {
 
 // ── Edit dialog ─────────────────────────────────────────────────────────────
 
-const EMPTY_FORM   = { sellingPrice: '', category: '', imageUrl: '', allowedSideIds: [] }
-const EMPTY_CHOICE = { label: '', price: '', modelId: null }
-const EMPTY_OPT    = { groupName: '', choiceRows: [{ ...EMPTY_CHOICE }], required: false, multiSelect: false, isFree: false, defaultValue: '' }
+const EMPTY_FORM   = { sellingPrice: '', category: '', imageUrl: '', allowedSideIds: [], modelNameTranslations: {}, categoryTranslations: {} }
+const EMPTY_CHOICE = { label: '', price: '', modelId: null, labelTranslations: {} }
+const EMPTY_OPT    = { groupName: '', groupNameTranslations: {}, choiceRows: [{ ...EMPTY_CHOICE }], required: false, multiSelect: false, isFree: false, defaultValue: '' }
 
 function parseChoices(str) {
   if (!str) return []
@@ -284,6 +286,32 @@ function parseChoices(str) {
   } catch { return str.split(',').map(s => ({ label: s.trim(), price: 0 })).filter(c => c.label) }
 }
 
+
+function translationLabel(language) {
+  const meta = getLanguageMeta(language)
+  return `${meta.nativeLabel} (${language.toUpperCase()})`
+}
+
+function TranslationFields({ label, values, onChange }) {
+  return (
+    <Box sx={{ border: '1px solid #e5e7eb', borderRadius: 1.5, p: 1, bgcolor: '#fafafa' }}>
+      <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ display: 'block', mb: 0.75 }}>
+        {label}
+      </Typography>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1 }}>
+        {MENU_TRANSLATION_LANGUAGES.map(language => (
+          <TextField
+            key={language}
+            size="small"
+            label={translationLabel(language)}
+            value={values?.[language] || ''}
+            onChange={event => onChange(language, event.target.value)}
+          />
+        ))}
+      </Box>
+    </Box>
+  )
+}
 function fmtChoicePrice(price, isFree) {
   if (isFree || !price) return ''
   return ` +${Number(price).toLocaleString('vi-VN')}đ`
@@ -309,7 +337,14 @@ function EditDialog({ open, model, models, onClose, onSave }) {
     if (!open || !model) return
     let parsedSideIds = []
     try { parsedSideIds = model.allowedSideIds ? JSON.parse(model.allowedSideIds) : [] } catch { parsedSideIds = [] }
-    setForm({ sellingPrice: model.sellingPrice ?? '', category: model.category ?? '', imageUrl: model.imageUrl ?? '', allowedSideIds: parsedSideIds })
+    setForm({
+      sellingPrice: model.sellingPrice ?? '',
+      category: model.category ?? '',
+      imageUrl: model.imageUrl ?? '',
+      allowedSideIds: parsedSideIds,
+      modelNameTranslations: parseJsonObject(model.modelNameTranslations),
+      categoryTranslations: parseJsonObject(model.categoryTranslations),
+    })
     setError(''); setOptions([]); setShowAddOpt(false); setNewOpt(EMPTY_OPT)
     setOptLoading(true)
     fetchMenuOptions(model.id)
@@ -319,7 +354,15 @@ function EditDialog({ open, model, models, onClose, onSave }) {
   }, [open, model?.id])
 
   const set = (field) => (e) => setForm(f => ({ ...f, [field]: e.target.value }))
+  const setTranslation = (field) => (language, value) => setForm(f => ({
+    ...f,
+    [field]: { ...(f[field] || {}), [language]: value },
+  }))
   const setOpt = (field) => (e) => setNewOpt(f => ({ ...f, [field]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
+  const setNewOptTranslation = (language, value) => setNewOpt(f => ({
+    ...f,
+    groupNameTranslations: { ...(f.groupNameTranslations || {}), [language]: value },
+  }))
 
   const handleSave = async () => {
     setSaving(true); setError('')
@@ -330,6 +373,8 @@ function EditDialog({ open, model, models, onClose, onSave }) {
         category: form.category || null,
         imageUrl: form.imageUrl || null,
         allowedSideIds: form.allowedSideIds.length ? JSON.stringify(form.allowedSideIds) : null,
+        modelNameTranslations: stringifyTranslations(form.modelNameTranslations),
+        categoryTranslations: stringifyTranslations(form.categoryTranslations),
       })
       onClose()
     } catch (e) {
@@ -347,9 +392,12 @@ function EditDialog({ open, model, models, onClose, onSave }) {
       const body = {
         modelId: model.id,
         groupName: newOpt.groupName.trim(),
+        groupNameTranslations: stringifyTranslations(newOpt.groupNameTranslations),
         choices: JSON.stringify(validRows.map(r => {
           const c = { label: r.label.trim(), price: Number(r.price) || 0 }
           if (r.modelId) c.modelId = r.modelId
+          const labelTranslations = compactTranslations(r.labelTranslations)
+          if (Object.keys(labelTranslations).length) c.labelTranslations = labelTranslations
           return c
         })),
         required: newOpt.required,
@@ -387,6 +435,47 @@ function EditDialog({ open, model, models, onClose, onSave }) {
     }
   }
 
+  const updateOptionGroupTranslation = (optId, language, value) => {
+    setOptions(prev => prev.map(opt => {
+      if (opt.id !== optId) return opt
+      const translations = { ...parseJsonObject(opt.groupNameTranslations), [language]: value }
+      return { ...opt, groupNameTranslations: stringifyTranslations(translations) }
+    }))
+  }
+
+  const updateOptionChoiceTranslation = (optId, choiceIndex, language, value) => {
+    setOptions(prev => prev.map(opt => {
+      if (opt.id !== optId) return opt
+      const choices = parseChoices(opt.choices).map((choice, index) => {
+        if (index !== choiceIndex) return choice
+        const translations = { ...parseJsonObject(choice.labelTranslations), [language]: value }
+        return { ...choice, labelTranslations: compactTranslations(translations) }
+      })
+      return { ...opt, choices: JSON.stringify(choices) }
+    }))
+  }
+
+  const handleSaveOptionTranslations = async (opt) => {
+    try {
+      const normalizedChoices = parseChoices(opt.choices).map(choice => {
+        const labelTranslations = compactTranslations(choice.labelTranslations)
+        const next = { ...choice }
+        if (Object.keys(labelTranslations).length) next.labelTranslations = labelTranslations
+        else delete next.labelTranslations
+        return next
+      })
+      const updated = {
+        ...opt,
+        groupNameTranslations: stringifyTranslations(parseJsonObject(opt.groupNameTranslations)),
+        choices: JSON.stringify(normalizedChoices),
+      }
+      const { data } = await updateMenuOption(opt.id, updated)
+      setOptions(prev => prev.map(o => o.id === opt.id ? data : o))
+    } catch (e) {
+      setError(e.message || 'Failed to save option translations')
+    }
+  }
+
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle sx={{ pb: 1 }}>
@@ -402,6 +491,16 @@ function EditDialog({ open, model, models, onClose, onSave }) {
             helperText="Leave empty to hide from menu" />
           <TextField label="Category" size="small" fullWidth
             value={form.category} onChange={set('category')} placeholder="e.g. Coffee, Tea, Food" />
+          <TranslationFields
+            label="Customer item name translations"
+            values={form.modelNameTranslations}
+            onChange={setTranslation('modelNameTranslations')}
+          />
+          <TranslationFields
+            label="Customer category translations"
+            values={form.categoryTranslations}
+            onChange={setTranslation('categoryTranslations')}
+          />
           <TextField label="Image URL" size="small" fullWidth
             value={form.imageUrl} onChange={set('imageUrl')} placeholder="https://..." />
           {form.imageUrl && (
@@ -443,7 +542,7 @@ function EditDialog({ open, model, models, onClose, onSave }) {
                 const choices = parseChoices(opt.choices)
                 return (
                   <Box key={opt.id} sx={{
-                    display: 'flex', alignItems: 'center', bgcolor: '#f9f9f9',
+                    display: 'flex', alignItems: 'flex-start', gap: 1, bgcolor: '#f9f9f9',
                     borderRadius: 1.5, px: 1.5, py: 0.75, border: '1px solid #eeeeee',
                   }}>
                     <Box sx={{ flex: 1 }}>
@@ -471,6 +570,24 @@ function EditDialog({ open, model, models, onClose, onSave }) {
                           🔗 = linked BOM model
                         </Typography>
                       )}
+                      <Box sx={{ mt: 1, display: 'grid', gap: 1 }}>
+                        <TranslationFields
+                          label="Customer option group translations"
+                          values={parseJsonObject(opt.groupNameTranslations)}
+                          onChange={(language, value) => updateOptionGroupTranslation(opt.id, language, value)}
+                        />
+                        {choices.map((choice, choiceIndex) => (
+                          <TranslationFields
+                            key={`${opt.id}-${choice.label}-${choiceIndex}`}
+                            label={`Choice translations: ${choice.label}`}
+                            values={parseJsonObject(choice.labelTranslations)}
+                            onChange={(language, value) => updateOptionChoiceTranslation(opt.id, choiceIndex, language, value)}
+                          />
+                        ))}
+                        <Button size="small" variant="outlined" onClick={() => handleSaveOptionTranslations(opt)} sx={{ justifySelf: 'flex-start' }}>
+                          Save option translations
+                        </Button>
+                      </Box>
                     </Box>
                     <IconButton size="small" color="error" onClick={() => handleDeleteOption(opt.id)}>
                       <DeleteIcon fontSize="small" />
@@ -487,6 +604,11 @@ function EditDialog({ open, model, models, onClose, onSave }) {
                 <TextField label="Group name" size="small" fullWidth
                   value={newOpt.groupName} onChange={setOpt('groupName')}
                   placeholder="e.g. Toppings, Sugar, Ice" autoFocus />
+                <TranslationFields
+                  label="Customer option group translations"
+                  values={newOpt.groupNameTranslations}
+                  onChange={setNewOptTranslation}
+                />
 
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
                   <Typography variant="caption" color="text.secondary" fontWeight={600}>Choices</Typography>
@@ -514,6 +636,11 @@ function EditDialog({ open, model, models, onClose, onSave }) {
                           <DeleteIcon fontSize="small" />
                         </IconButton>
                       </Box>
+                      <TranslationFields
+                        label="Customer choice translations"
+                        values={row.labelTranslations}
+                        onChange={(language, value) => setRow({ labelTranslations: { ...(row.labelTranslations || {}), [language]: value } })}
+                      />
                       <Autocomplete
                         size="small"
                         options={models || []}

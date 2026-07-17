@@ -15,6 +15,8 @@ import RemoveIcon from '@mui/icons-material/Remove'
 import AddIcon from '@mui/icons-material/Add'
 import IconButton from '@mui/material/IconButton'
 import CloseIcon from '@mui/icons-material/Close'
+import { useI18n } from '../../i18n/I18nContext'
+import { localizedChoiceLabel, localizedGroupName, localizedModelName } from '../../i18n/menuLocalization'
 
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 
@@ -42,6 +44,11 @@ function getChoiceQty(val, label) {
 }
 
 export default function ItemOptionsDialog({ open, model, options = [], allowedSideOptions = [], initialCart, onConfirm, onClose }) {
+  const { language, formatMoney, t } = useI18n()
+  const fmtLocal = (n) => n != null ? formatMoney(n, 'VND') : ''
+  const modelLabel = (item) => localizedModelName(item, language)
+  const groupLabel = (group) => localizedGroupName(group, language)
+  const choiceLabel = (choice) => localizedChoiceLabel(choice, language)
   const [qty, setQty]           = useState(1)
   const [selected, setSelected] = useState({})
   const [note, setNote]         = useState('')
@@ -163,19 +170,19 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
       <DialogTitle sx={{ pb: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
-          <Box onClick={() => modelImage && setImagePreview({ imageUrl: modelImage, modelName: model.modelName, sellingPrice: model.sellingPrice })}
+          <Box onClick={() => modelImage && setImagePreview({ imageUrl: modelImage, modelName: modelLabel(model), sellingPrice: model.sellingPrice })}
             sx={{ width: 82, height: 82, flexShrink: 0, borderRadius: 1.5, bgcolor: '#eef2f7', overflow: 'hidden', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: modelImage ? 'pointer' : 'default' }}>
             {modelImage ? (
-              <Box component="img" src={modelImage} alt={model.modelName}
+              <Box component="img" src={modelImage} alt={modelLabel(model)}
                 sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 onError={e => { e.target.style.display = 'none' }} />
             ) : (
-              <Typography fontWeight={900} sx={{ color: '#94a3b8', fontSize: 30 }}>{String(model.modelName || '?').slice(0, 1)}</Typography>
+              <Typography fontWeight={900} sx={{ color: '#94a3b8', fontSize: 30 }}>{String(modelLabel(model) || '?').slice(0, 1)}</Typography>
             )}
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography fontWeight={900} sx={{ fontSize: 22, lineHeight: 1.15, color: '#0f172a' }}>{model.modelName}</Typography>
-            <Typography color="primary" fontWeight={800} sx={{ fontSize: 17, mt: 0.5 }}>{fmt(model.sellingPrice)}</Typography>
+            <Typography fontWeight={900} sx={{ fontSize: 22, lineHeight: 1.15, color: '#0f172a' }}>{modelLabel(model)}</Typography>
+            <Typography color="primary" fontWeight={800} sx={{ fontSize: 17, mt: 0.5 }}>{fmtLocal(model.sellingPrice)}</Typography>
           </Box>
         </Box>
       </DialogTitle>
@@ -189,7 +196,7 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
           return (
             <Box key={group.id || gi} sx={{ mb: 2 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1 }}>
-                <Typography variant="subtitle2" fontWeight={700}>{group.groupName}</Typography>
+                <Typography variant="subtitle2" fontWeight={700}>{groupLabel(group)}</Typography>
                 {group.required && <Chip label="required" size="small" color="error" sx={{ fontSize: 10, height: 18 }} />}
                 {group.multiSelect && !priced && <Chip label="multi" size="small" variant="outlined" sx={{ fontSize: 10, height: 18 }} />}
               </Box>
@@ -211,9 +218,9 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
                         transition: 'border-color 0.15s, background-color 0.15s',
                       }}>
                         <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Typography fontWeight={700} sx={{ fontSize: 14, color: '#1e293b' }} noWrap>{label}</Typography>
+                          <Typography fontWeight={700} sx={{ fontSize: 14, color: '#1e293b' }} noWrap>{choiceLabel(choice)}</Typography>
                           {price > 0 && (
-                            <Typography sx={{ fontSize: 13, fontWeight: 600, color: '#6366f1' }}>+{fmt(price)}</Typography>
+                            <Typography sx={{ fontSize: 13, fontWeight: 600, color: '#6366f1' }}>+{fmtLocal(price)}</Typography>
                           )}
                         </Box>
                         {cQty === 0 ? (
@@ -247,7 +254,7 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
                     const label    = typeof choice === 'object' && choice !== null ? String(choice.label ?? '') : String(choice)
                     const sel      = isSelected(group.groupName, label, group.multiSelect)
                     return (
-                      <Chip key={label || ci} label={label}
+                      <Chip key={label || ci} label={choiceLabel(choice)}
                         onClick={() => handleSelect(group.groupName, label, group.multiSelect)}
                         color={sel ? 'primary' : 'default'}
                         variant={sel ? 'filled' : 'outlined'}
@@ -265,7 +272,7 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
         {allowedSideOptions.length > 0 && (
           <>
             {options.length > 0 && <Divider sx={{ mb: 1.5 }} />}
-            <Typography fontWeight={700} sx={{ fontSize: 15, mb: 1, color: '#334155' }}>Topping / Side</Typography>
+            <Typography fontWeight={700} sx={{ fontSize: 15, mb: 1, color: '#334155' }}>Toppings / sides</Typography>
             {allowedSideOptions.map(side => {
               const sideQty = sides[side.id] || 0
               return (
@@ -280,7 +287,7 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
                   <Box onClick={() => (side.imageUrl || side.thumbnailUrl) && setImagePreview({ ...side, imageUrl: side.imageUrl || side.thumbnailUrl })}
                     sx={{ width: 52, height: 52, flexShrink: 0, borderRadius: 1.5, bgcolor: '#e8eaf6', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: (side.imageUrl || side.thumbnailUrl) ? 'pointer' : 'default' }}>
                     {(side.imageUrl || side.thumbnailUrl) ? (
-                      <Box component="img" src={side.imageUrl || side.thumbnailUrl} alt={side.modelName} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none' }} />
+                      <Box component="img" src={side.imageUrl || side.thumbnailUrl} alt={modelLabel(side)} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none' }} />
                     ) : (
                       <Typography sx={{ fontSize: 26, lineHeight: 1 }}>🧋</Typography>
                     )}
@@ -289,9 +296,9 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
                     <Typography fontWeight={700} noWrap
                       onClick={() => (side.imageUrl || side.thumbnailUrl) && setImagePreview({ ...side, imageUrl: side.imageUrl || side.thumbnailUrl })}
                       sx={{ fontSize: 16, color: '#1e293b', ...((side.imageUrl || side.thumbnailUrl) ? { cursor: 'pointer', '&:hover': { color: '#1976d2', textDecoration: 'underline dotted' } } : {}) }}>
-                      {side.modelName}
+                      {modelLabel(side)}
                     </Typography>
-                    <Typography sx={{ fontSize: 14, fontWeight: 700, color: '#6366f1' }}>+{fmt(side.sellingPrice)}</Typography>
+                    <Typography sx={{ fontSize: 14, fontWeight: 700, color: '#6366f1' }}>+{fmtLocal(side.sellingPrice)}</Typography>
                   </Box>
                   {sideQty === 0 ? (
                     <IconButton onClick={() => changeSideQty(side.id, 1)}
@@ -344,7 +351,7 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
         <Button onClick={onClose}>Cancel</Button>
         <Button variant="contained" fullWidth onClick={handleConfirm} disabled={!canConfirm}
           sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none' }}>
-          Add {qty} · {fmt(buttonTotal)}
+          {t('shop.add')} {qty} · {fmtLocal(buttonTotal)}
         </Button>
       </DialogActions>
     </Dialog>
@@ -365,7 +372,7 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
           </Box>
           <Box sx={{ px: 2.5, py: 2 }}>
             <Typography fontWeight={800} sx={{ fontSize: 22 }}>{imagePreview.modelName}</Typography>
-            <Typography color="primary" fontWeight={700} sx={{ fontSize: 15, mt: 0.5 }}>+{fmt(imagePreview.sellingPrice)}</Typography>
+            <Typography color="primary" fontWeight={700} sx={{ fontSize: 15, mt: 0.5 }}>+{fmtLocal(imagePreview.sellingPrice)}</Typography>
           </Box>
         </>
       )}

@@ -35,6 +35,10 @@ public class Model {
     @Column(name = "model_name", nullable = false, columnDefinition = "TEXT")
     private String modelName;
 
+    /** JSON object keyed by language code, e.g. {"cn":"...","vi":"..."}. */
+    @Column(name = "model_name_translations", columnDefinition = "TEXT")
+    private String modelNameTranslations;
+
     @Column(name = "is_active")
     private Boolean isActive;
 
@@ -52,6 +56,9 @@ public class Model {
 
     @Column(name = "category", length = 50)
     private String category;
+
+    @Column(name = "category_translations", columnDefinition = "TEXT")
+    private String categoryTranslations;
 
     @Column(name = "image_url", columnDefinition = "TEXT")
     private String imageUrl;
@@ -107,6 +114,9 @@ public class Model {
         this.modelName = modelName;
     }
 
+    public String getModelNameTranslations() { return modelNameTranslations; }
+    public void setModelNameTranslations(String modelNameTranslations) { this.modelNameTranslations = modelNameTranslations; }
+
     public Boolean getIsActive() {
         return isActive;
     }
@@ -144,6 +154,8 @@ public class Model {
 
     public String getCategory() { return category; }
     public void setCategory(String category) { this.category = category; }
+    public String getCategoryTranslations() { return categoryTranslations; }
+    public void setCategoryTranslations(String categoryTranslations) { this.categoryTranslations = categoryTranslations; }
 
     public String getImageUrl() { return imageUrl; }
     public void setImageUrl(String imageUrl) { this.imageUrl = imageUrl; }

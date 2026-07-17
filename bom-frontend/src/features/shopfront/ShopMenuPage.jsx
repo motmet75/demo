@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react'
+﻿import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
@@ -54,6 +54,9 @@ import { resolveToken, fetchMenu, createOrder, fetchPublicMenuOptions,
 import ItemOptionsDialog from './ItemOptionsDialog'
 import OrderReceiptDialog from './OrderReceiptDialog'
 import VoucherQrScanDialog from '../shoporder/VoucherQrScanDialog'
+import LanguageSelector from '../../components/LanguageSelector'
+import { useI18n } from '../../i18n/I18nContext'
+import { localizedCategory, localizedChoiceLabel, localizedGroupName, localizedModelName, normalizeChoice, parseChoices as parseMenuChoices } from '../../i18n/menuLocalization'
 
 const genUid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
 const fmt    = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
@@ -91,20 +94,6 @@ function readStoredStaffCall(key) {
   return null
 }
 
-function formatStaffCallAge(value, now) {
-  const ts = Number(new Date(value || 0))
-  if (!Number.isFinite(ts) || ts <= 0) return ''
-  const mins = Math.max(0, Math.floor((now - ts) / 60000))
-  if (mins < 1) return 'vừa xong'
-  if (mins < 60) return `${mins} phút trước`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours} giờ trước`
-  return `${Math.floor(hours / 24)} ngày trước`
-}
-
-function staffCallReasonLabel(reason) {
-  return reason === 'payment' ? 'Thanh toán' : 'Hỗ trợ'
-}
 const FULFILLMENT_OPTIONS = [
   { value: 'PICKUP',   label: 'Pickup',   icon: <TakeoutDiningIcon fontSize="small" /> },
   { value: 'DINE_IN',  label: 'Dine In',  icon: <TableBarIcon fontSize="small" /> },
@@ -151,11 +140,15 @@ const STATUS_CHIP_MAP = {
   CANCELLED: { label: 'Đã huỷ',       color: 'error'   },
 }
 
-function SessionOrderList({ session, token, onEdit, onView }) {
+function SessionOrderList({ session, token, onEdit, onView, t, formatAmount, itemName }) {
   const [cancelTarget, setCancelTarget] = useState(null)
   const [cancelNote, setCancelNote]     = useState('')
   const [cancelling, setCancelling]     = useState(false)
   const [cancelError, setCancelError]   = useState('')
+  const translate = t || ((key, vars = {}) => String(key).replace(/\{(\w+)\}/g, (_, name) => vars[name] ?? ''))
+  const money = formatAmount || fmt
+  const displayItemName = itemName || ((item) => item?.modelName || '')
+  const statusLabel = (status) => translate(STATUS_TRANSLATION_KEYS[status] || status)
 
   const orders = (session?.orders || []).filter(o => o.status !== 'CANCELLED')
 
@@ -164,16 +157,16 @@ function SessionOrderList({ session, token, onEdit, onView }) {
     setCancelling(true); setCancelError('')
     try {
       const { res, data } = await cancelPublicOrder(cancelTarget.orderCode, cancelNote)
-      if (!res.ok) { setCancelError(data?.error || 'Không thể huỷ'); setCancelling(false); return }
+      if (!res.ok) { setCancelError(data?.error || translate('shop.cancelOrder')); setCancelling(false); return }
       setCancelTarget(null); setCancelNote('')
-    } catch { setCancelError('Lỗi mạng') }
+    } catch { setCancelError(translate('common.networkError')) }
     setCancelling(false)
   }
 
   if (!orders.length) return (
     <Box sx={{ textAlign: 'center', py: 6, color: 'text.secondary' }}>
       <ReceiptLongIcon sx={{ fontSize: 48, opacity: 0.2, mb: 1 }} />
-      <Typography>Chưa có đơn hàng nào</Typography>
+      <Typography>{translate('shop.noOrders')}</Typography>
     </Box>
   )
 
@@ -200,14 +193,14 @@ function SessionOrderList({ session, token, onEdit, onView }) {
                 <Typography fontWeight={900} sx={{ fontSize: 18, color: editing ? '#b45309' : '#1a1a1a' }}>
                   {displayNum}
                 </Typography>
-                <Chip label={chip.label} color={chip.color} size="small" sx={{ fontWeight: 700, fontSize: 11 }} />
+                <Chip label={statusLabel(status)} color={chip.color} size="small" sx={{ fontWeight: 700, fontSize: 11 }} />
                 {editing && (
-                  <Chip label="Đang sửa" size="small"
+                  <Chip label={translate('status.editing')} size="small"
                     sx={{ bgcolor: '#f59e0b', color: '#fff', fontWeight: 700, fontSize: 10 }} />
                 )}
                 <Box sx={{ flex: 1 }} />
                 <Typography fontWeight={800} color="primary" sx={{ fontSize: 14 }}>
-                  {fmt(payableAmount(order))}
+                  {money(payableAmount(order))}
                 </Typography>
               </Box>
 
@@ -218,14 +211,14 @@ function SessionOrderList({ session, token, onEdit, onView }) {
                       x{item.quantity}
                     </Typography>
                     <Typography variant="caption" sx={{ flex: 1, color: '#333' }} noWrap>
-                      {item.modelName}
+                      {displayItemName(item)}
                     </Typography>
-                    <Chip label={chip.label} color={chip.color} size="small"
+                    <Chip label={statusLabel(status)} color={chip.color} size="small"
                       sx={{ height: 16, fontSize: 10, fontWeight: 600 }} />
                   </Box>
                 ))}
                 {roots.length > 4 && (
-                  <Typography variant="caption" color="text.secondary">+{roots.length - 4} món khác…</Typography>
+                  <Typography variant="caption" color="text.secondary">+{roots.length - 4} {translate('shop.otherItems')}...</Typography>
                 )}
               </Box>
 
@@ -235,22 +228,22 @@ function SessionOrderList({ session, token, onEdit, onView }) {
                     color={editing ? 'warning' : 'primary'}
                     onClick={() => onEdit(order)}
                     sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 20, flex: 1 }}>
-                    {editing ? '✏ Tiếp tục sửa' : 'Sửa đơn'}
+                    {editing ? translate('shop.continueEditing') : translate('shop.editOrder')}
                   </Button>
                 )}
                 <Button variant="outlined" size="small" onClick={() => onView && onView(order)}
                   sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 20, flexShrink: 0 }}>
-                  Xem
+                  {translate('common.view')}
                 </Button>
                 {isPending && !isPaid && (
                   <Button variant="outlined" size="small" color="error"
                     onClick={() => { setCancelTarget(order); setCancelNote(''); setCancelError('') }}
                     sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 20, flexShrink: 0 }}>
-                    Huỷ
+                    {translate('common.cancel')}
                   </Button>
                 )}
                 {isPaid && (
-                  <Chip label="Đã thanh toán ✓" color="success" size="small"
+                  <Chip label={translate('common.paid')} color="success" size="small"
                     sx={{ fontWeight: 700, fontSize: 11, alignSelf: 'center' }} />
                 )}
               </Box>
@@ -261,26 +254,26 @@ function SessionOrderList({ session, token, onEdit, onView }) {
 
       {orders.length > 1 && (
         <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 1.5, borderTop: '1.5px solid #e0e0e0', mx: -2, px: 2 }}>
-          <Typography fontWeight={700} sx={{ color: '#555' }}>Cần thanh toán ({orders.length} đơn)</Typography>
-          <Typography fontWeight={900} color="primary" sx={{ fontSize: 17 }}>{fmt(grandTotal)}</Typography>
+          <Typography fontWeight={700} sx={{ color: '#555' }}>{translate('shop.needPayment', { count: orders.length })}</Typography>
+          <Typography fontWeight={900} color="primary" sx={{ fontSize: 17 }}>{money(grandTotal)}</Typography>
         </Box>
       )}
 
       <Dialog open={Boolean(cancelTarget)} onClose={() => !cancelling && setCancelTarget(null)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ pb: 1 }}>Huỷ đơn này?</DialogTitle>
+        <DialogTitle sx={{ pb: 1 }}>{translate('shop.cancelThisOrder')}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Đơn <strong>{cancelTarget?.orderNumber ? `#${cancelTarget.orderNumber}` : cancelTarget?.orderCode}</strong> sẽ bị huỷ và không thể khôi phục.
+            {translate('shop.cancelWarning', { value: cancelTarget?.orderNumber ? `#${cancelTarget.orderNumber}` : cancelTarget?.orderCode })}
           </Typography>
-          <TextField fullWidth size="small" multiline rows={2} label="Lý do (tuỳ chọn)"
+          <TextField fullWidth size="small" multiline rows={2} label={translate('shop.optionalReason')}
             value={cancelNote} onChange={e => setCancelNote(e.target.value)} disabled={cancelling} />
           {cancelError && <Alert severity="error" sx={{ mt: 1.5 }}>{cancelError}</Alert>}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setCancelTarget(null)} disabled={cancelling}>Giữ đơn</Button>
+          <Button onClick={() => setCancelTarget(null)} disabled={cancelling}>{translate('shop.keepOrder')}</Button>
           <Button variant="contained" color="error" onClick={doCancel} disabled={cancelling}
             sx={{ fontWeight: 700, minWidth: 120, borderRadius: 20 }}>
-            {cancelling ? <CircularProgress size={18} color="inherit" /> : 'Xác nhận huỷ'}
+            {cancelling ? <CircularProgress size={18} color="inherit" /> : translate('common.confirm')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -290,7 +283,9 @@ function SessionOrderList({ session, token, onEdit, onView }) {
 
 function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpdated }) {
   const [order, setOrder] = React.useState(initialOrder)
-  const fmtLocal = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
+  const { language, t, formatMoney } = useI18n()
+  const fmtLocal = React.useCallback((n) => n != null ? formatMoney(n, 'VND') : '', [formatMoney])
+  const displayItemName = React.useCallback((item) => localizedModelName(item, language), [language])
 
   React.useEffect(() => { setOrder(initialOrder) }, [initialOrder])
 
@@ -310,6 +305,7 @@ function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpda
   const isPending  = status === 'PENDING'
   const isDone     = status === 'COMPLETED' || status === 'PICKED_UP'
   const isCancelled = status === 'CANCELLED'
+  const statusLabel = t(STATUS_TRANSLATION_KEYS[status] || status)
   const displayNum = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
   const heroNum = order.orderNumber ? `#${order.orderNumber}` : order.dailySeq ? `#${order.dailySeq}` : '—'
   const allItems   = order.items || []
@@ -323,7 +319,7 @@ function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpda
           {heroNum}
         </Typography>
         <Typography sx={{ fontSize: 12, color: style.color, opacity: 0.55, mt: 0.75 }}>
-          {order.orderNumber ? `Đơn #${order.orderNumber}` : ''}{order.orderCode ? ` · ${order.orderCode}` : ''}
+          {order.orderNumber ? `${t('shop.order')} #${order.orderNumber}` : ''}{order.orderCode ? ` - ${order.orderCode}` : ''}
         </Typography>
         <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, mt: 1.5, px: 2.5, py: 0.75,
           bgcolor: '#fff', borderRadius: 99, border: `1.5px solid ${style.color}22` }}>
@@ -332,11 +328,11 @@ function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpda
               animation: 'blink 1.4s infinite',
               '@keyframes blink': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0.2 } } }} />
           )}
-          <Typography fontWeight={700} sx={{ color: style.color, fontSize: 18 }}>{style.label}</Typography>
+          <Typography fontWeight={700} sx={{ color: style.color, fontSize: 18 }}>{statusLabel}</Typography>
         </Box>
         {order.customerEditing && (
           <Box sx={{ mt: 1 }}>
-            <Chip label="✏ Đang sửa đơn…" size="small" color="warning" sx={{ fontWeight: 700 }} />
+            <Chip label={t('status.editing')} size="small" color="warning" sx={{ fontWeight: 700 }} />
           </Box>
         )}
       </Box>
@@ -360,7 +356,7 @@ function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpda
                     <Typography variant="caption" sx={{ fontWeight: active ? 700 : 400,
                       color: active ? '#0277bd' : done ? '#43a047' : '#bdbdbd',
                       fontSize: 10, textAlign: 'center', lineHeight: 1.2 }}>
-                      {step.label}
+                      {t(STATUS_TRANSLATION_KEYS[step.key] || step.label)}
                     </Typography>
                   </Box>
                   {idx < TRACKING_STEPS.length - 1 && (
@@ -382,11 +378,11 @@ function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpda
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Box onClick={() => itemImage && setImagePreview({ imageUrl: itemImage, modelName: item.modelName })}
                   sx={{ width: 76, height: 76, flexShrink: 0, borderRadius: 1.5, bgcolor: '#eef2f7', overflow: 'hidden', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: itemImage ? 'pointer' : 'default' }}>
-                  {itemImage ? <Box component="img" src={itemImage} alt={item.modelName} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none' }} />
-                    : <Typography fontWeight={900} sx={{ color: '#94a3b8', fontSize: 28 }}>{String(item.modelName || '?').slice(0, 1)}</Typography>}
+                  {itemImage ? <Box component="img" src={itemImage} alt={displayItemName(item)} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none' }} />
+                    : <Typography fontWeight={900} sx={{ color: '#94a3b8', fontSize: 28 }}>{String(displayItemName(item) || '?').slice(0, 1)}</Typography>}
                 </Box>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography fontWeight={800} sx={{ fontSize: 22, color: '#0f172a', lineHeight: 1.18 }}>{Number(item.quantity)}x {item.modelName}</Typography>
+                  <Typography fontWeight={800} sx={{ fontSize: 22, color: '#0f172a', lineHeight: 1.18 }}>{Number(item.quantity)}x {displayItemName(item)}</Typography>
                 </Box>
                 <Typography color="primary" fontWeight={900} sx={{ fontSize: 20, flexShrink: 0 }}>{fmtLocal(item.lineTotal)}</Typography>
               </Box>
@@ -402,9 +398,9 @@ function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpda
               )}
               {children.map((child, ci) => (
                 <Box key={child.id || ci} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, pl: 2.5, mt: 0.4, borderLeft: '2px solid #c7d2fe', ml: 1 }}>
-                  {(child.imageUrl || child.thumbnailUrl) && <Box component="img" src={child.imageUrl || child.thumbnailUrl} alt={child.modelName} sx={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 1, border: '1px solid #c7d2fe', flexShrink: 0 }} onError={e => { e.target.style.display = 'none' }} />}
+                  {(child.imageUrl || child.thumbnailUrl) && <Box component="img" src={child.imageUrl || child.thumbnailUrl} alt={displayItemName(child)} sx={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 1, border: '1px solid #c7d2fe', flexShrink: 0 }} onError={e => { e.target.style.display = 'none' }} />}
                   <Typography sx={{ color: '#4338ca', fontWeight: 900, fontSize: 18, flex: 1, minWidth: 0 }} noWrap>
-                    + {Number(child.quantity)}x {child.modelName}
+                    + {Number(child.quantity)}x {displayItemName(child)}
                   </Typography>
                   <Typography color="primary" fontWeight={900} sx={{ fontSize: 16, flexShrink: 0 }}>{fmtLocal(child.lineTotal)}</Typography>
                 </Box>
@@ -413,7 +409,7 @@ function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpda
           )
         })}
         <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 0.5 }}>
-          <Typography fontWeight={700}>Tổng cộng</Typography>
+          <Typography fontWeight={700}>{t('common.total')}</Typography>
           <Typography fontWeight={900} color="primary">{fmtLocal(payableAmount(order))}</Typography>
         </Box>
       </Box>
@@ -422,23 +418,23 @@ function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpda
         {isPending && !order.customerEditing && (
           <Button variant="outlined" fullWidth startIcon={<EditNoteIcon />} onClick={() => onEdit(order)}
             sx={{ borderRadius: 20, fontWeight: 700, textTransform: 'none', borderColor: '#f59e0b', color: '#b45309' }}>
-            Sửa đơn
+            {t('shop.editOrder')}
           </Button>
         )}
         {!isDone && !isCancelled && (
           <Button variant="outlined" fullWidth startIcon={<AddShoppingCartIcon />} onClick={onOrderMore}
             sx={{ borderRadius: 20, fontWeight: 700, textTransform: 'none' }}>
-            {ctx?.tableId ? 'Gọi thêm cho bàn này' : 'Đặt thêm'}
+            {t('shop.placeOrder')}
           </Button>
         )}
         {(isDone || isCancelled) && (
           <Button variant="contained" fullWidth onClick={onOrderMore}
             sx={{ borderRadius: 20, fontWeight: 700, textTransform: 'none', bgcolor: '#ff5722', '&:hover': { bgcolor: '#e64a19' } }}>
-            Đặt đơn mới
+            {t('shop.placeOrder')}
           </Button>
         )}
         <Typography variant="caption" color="text.disabled" textAlign="center">
-          {order.orderCode} · tự động cập nhật mỗi 5 giây
+          {order.orderCode}
         </Typography>
       </Box>
     </Box>
@@ -471,6 +467,12 @@ function parseOpts(selectedOptions) {
 export default function ShopMenuPage() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
+  const { language, t, formatMoney } = useI18n()
+  const fmt = useCallback((n) => n != null ? formatMoney(n, 'VND') : '', [formatMoney])
+  const modelName = useCallback((model) => localizedModelName(model, language), [language])
+  const modelCategory = useCallback((model) => localizedCategory(model, language), [language])
+  const optionGroupName = useCallback((group) => localizedGroupName(group, language), [language])
+  const choiceName = useCallback((choice) => localizedChoiceLabel(choice, language), [language])
 
   const tokenParam    = params.get('t')
   const rawTenantId   = params.get('tenantId')
@@ -531,6 +533,25 @@ export default function ShopMenuPage() {
   const [optionsTarget, setOptionsTarget] = useState(null)
   const large = displaySize === 'large'
 
+  const formatSelectedOptions = useCallback((modelId, selectedOptions) => {
+    if (!selectedOptions) return null
+    const selected = parseOpts(selectedOptions)
+    const groups = optionsByModel[modelId] || []
+    return Object.entries(selected).map(([groupKey, value]) => {
+      const group = groups.find(item => item.groupName === groupKey)
+      const choices = group ? parseMenuChoices(group.choices) : []
+      const displayGroup = group ? optionGroupName(group) : groupKey
+      const displayChoice = (label) => {
+        const choice = choices.map(normalizeChoice).find(item => item.label === label)
+        return choice ? choiceName(choice) : label
+      }
+      if (Array.isArray(value)) return `${displayGroup}: ${value.map(displayChoice).join(', ')}`
+      if (value && typeof value === 'object') {
+        return `${displayGroup}: ${Object.entries(value).map(([label, qty]) => `${displayChoice(label)} x${qty}`).join(', ')}`
+      }
+      return `${displayGroup}: ${displayChoice(String(value))}`
+    }).join(' � ')
+  }, [choiceName, optionGroupName, optionsByModel])
   // ── Data loading ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!tokenParam) return
@@ -709,7 +730,7 @@ export default function ShopMenuPage() {
     cartEntries.reduce((n, e) => n + (e.modelId === modelId ? e.qty : 0), 0)
 
   const grouped = menu.reduce((g, m) => {
-    const cat = m.category || 'Menu'
+    const cat = modelCategory(m) || t('shop.menu')
     if (!g[cat]) g[cat] = []
     g[cat].push(m)
     return g
@@ -718,26 +739,37 @@ export default function ShopMenuPage() {
   const categories = Object.keys(grouped)
 
   const filteredItems = searchQuery.trim()
-    ? menu.filter(m => m.modelName.toLowerCase().includes(searchQuery.toLowerCase()))
+    ? menu.filter(m => modelName(m).toLowerCase().includes(searchQuery.toLowerCase()))
     : []
 
   // Items shown when a category chip is active (no search)
   const categoryItems = !searchQuery.trim() && activeCategory ? (grouped[activeCategory] || []) : []
 
+  const relativeStaffCallAge = useCallback((value, now) => {
+    const ts = Number(new Date(value || 0))
+    if (!Number.isFinite(ts) || ts <= 0) return ''
+    const mins = Math.max(0, Math.floor((now - ts) / 60000))
+    if (mins < 1) return t('shop.justNow')
+    if (mins < 60) return t('shop.minutesAgo', { count: mins })
+    const hours = Math.floor(mins / 60)
+    if (hours < 24) return t('shop.hoursAgo', { count: hours })
+    return t('shop.daysAgo', { count: Math.floor(hours / 24) })
+  }, [t])
+
   const staffCallAge = activeStaffCall
-    ? formatStaffCallAge(activeStaffCall.repliedAt || activeStaffCall.createdAt, staffCallNow)
+    ? relativeStaffCallAge(activeStaffCall.repliedAt || activeStaffCall.createdAt, staffCallNow)
     : ''
   const staffCallHasReply = Boolean(activeStaffCall?.replyMessage)
   const staffCallTitle = staffCallHasReply
-    ? 'Quầy đã phản hồi'
+    ? t('shop.counterReplied')
     : activeStaffCall?.status === 'DISMISSED'
-      ? 'Nhân viên đã xử lý'
-      : 'Đã gọi nhân viên'
+      ? t('shop.staffHandled')
+      : t('shop.staffCalled')
   const staffCallMessage = staffCallHasReply
     ? activeStaffCall.replyMessage
     : activeStaffCall?.status === 'DISMISSED'
-      ? 'Yêu cầu đã được xử lý.'
-      : 'Đang chờ nhân viên phản hồi.'
+      ? t('shop.requestHandled')
+      : t('shop.waitingStaffReply')
   // ── Cart mutations ────────────────────────────────────────────────────
   const createEntry = (model, qty, selectedOptions, itemNotes, rawSides = []) => {
     const id = genUid()
@@ -1034,20 +1066,20 @@ export default function ShopMenuPage() {
             <Box sx={{ bgcolor: highContrast ? '#fff' : '#f8faff', px: large ? 1.75 : 1.5, pt: large ? 1.25 : 1, pb: large ? 1 : 0.75 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
                 <Typography sx={{ color: '#94a3b8', fontWeight: 700, fontSize: large ? 15 : 13, flexShrink: 0 }}>{idx + 1}.</Typography>
-                <Box onClick={() => entryImage && setImagePreview({ imageUrl: entryImage, modelName: m.modelName })}
+                <Box onClick={() => entryImage && setImagePreview({ imageUrl: entryImage, modelName: modelName(m) })}
                   sx={{ width: large ? 64 : 52, height: large ? 64 : 52, flexShrink: 0, borderRadius: 1.5, bgcolor: '#eef2f7', overflow: 'hidden', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: entryImage ? 'pointer' : 'default' }}>
                   {entryImage ? (
-                    <Box component="img" src={entryImage} alt={m.modelName}
+                    <Box component="img" src={entryImage} alt={modelName(m)}
                       onError={e => { e.target.style.display = 'none' }}
                       sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : (
                     <Typography fontWeight={900} sx={{ color: '#94a3b8', fontSize: large ? 22 : 18 }}>
-                      {String(m.modelName || '?').slice(0, 1)}
+                      {String(modelName(m) || '?').slice(0, 1)}
                     </Typography>
                   )}
                 </Box>
                 <Box sx={{ flex: 1, minWidth: 100, overflow: 'hidden' }}>
-                  <Typography fontWeight={800} sx={{ fontSize: large ? 19 : 16, color: '#0f172a', lineHeight: 1.2 }} noWrap>{m.modelName}</Typography>
+                  <Typography fontWeight={800} sx={{ fontSize: large ? 19 : 16, color: '#0f172a', lineHeight: 1.2 }} noWrap>{modelName(m)}</Typography>
                   <Typography sx={{ color: '#64748b', fontSize: large ? 15 : 13, fontWeight: 700 }}>{fmt(unitPrice)} / ly</Typography>
                 </Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -1078,7 +1110,7 @@ export default function ShopMenuPage() {
                   <Box key={grp.id} sx={{ mt: 0.5 }}>
                     <Typography variant="caption" color="text.secondary"
                       sx={{ fontSize: large ? 14 : 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                      {grp.groupName}{grp.required ? ' *' : ''}{grp.isFree ? ' (free)' : ''}
+                      {optionGroupName(grp)}{grp.required ? ' *' : ''}{grp.isFree ? ' (free)' : ''}
                     </Typography>
                     {priced ? (
                       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, mt: 0.5 }}>
@@ -1094,7 +1126,7 @@ export default function ShopMenuPage() {
                               border: `1px solid ${cQty > 0 ? '#6366f1' : '#e2e8f0'}`,
                             }}>
                               <Typography sx={{ flex: 1, fontSize: large ? 16 : 13, fontWeight: cQty > 0 ? 800 : 600, color: cQty > 0 ? '#1e293b' : '#475569' }} noWrap>
-                                {c.label}{tag}
+                                {choiceName(c)}{tag}
                               </Typography>
                               {cQty === 0 ? (
                                 <IconButton size="small" onClick={() => setOptionQty(entry.uid, grp.groupName, c.label, 1)}
@@ -1127,7 +1159,7 @@ export default function ShopMenuPage() {
                           const selArr = Array.isArray(cur) ? cur : (cur ? [cur] : [])
                           const active = selArr.includes(c.label)
                           return (
-                            <Chip key={c.label} label={c.label} size="small"
+                            <Chip key={c.label} label={choiceName(c)} size="small"
                               onClick={() => toggleOption(entry.uid, grp.groupName, c.label, grp.multiSelect)}
                               sx={{ height: large ? 36 : 30, fontSize: large ? 15 : 13, cursor: 'pointer',
                                 bgcolor: active ? '#ff5722' : '#fff', color: active ? '#fff' : '#555',
@@ -1162,16 +1194,16 @@ export default function ShopMenuPage() {
                     return (
                       <Box key={si.uid} sx={{ px: 1, py: 1, borderBottom: '1px solid #e8eaf6' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Box onClick={() => sideImage && setImagePreview({ imageUrl: sideImage, modelName: si.modelName })}
+                          <Box onClick={() => sideImage && setImagePreview({ imageUrl: sideImage, modelName: modelName(si) })}
                             sx={{ width: large ? 64 : 52, height: large ? 64 : 52, flexShrink: 0, borderRadius: 1.5, bgcolor: '#e8eaf6', overflow: 'hidden', border: '1px solid #c7d2fe',
                               display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: sideImage ? 'pointer' : 'default' }}>
-                            {sideImage ? <Box component="img" src={sideImage} alt={si.modelName}
+                            {sideImage ? <Box component="img" src={sideImage} alt={modelName(si)}
                               sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
                               onError={e => { e.target.style.display = 'none' }} />
-                              : <Typography fontWeight={900} sx={{ color: '#94a3b8', fontSize: large ? 22 : 18 }}>{String(si.modelName || '?').slice(0, 1)}</Typography>}
+                              : <Typography fontWeight={900} sx={{ color: '#94a3b8', fontSize: large ? 22 : 18 }}>{String(modelName(si) || '?').slice(0, 1)}</Typography>}
                           </Box>
                           <Box sx={{ flex: 1, minWidth: 0 }}>
-                            <Typography fontWeight={800} sx={{ fontSize: large ? 17 : 14, color: '#1e293b' }} noWrap>{si.modelName}</Typography>
+                            <Typography fontWeight={800} sx={{ fontSize: large ? 17 : 14, color: '#1e293b' }} noWrap>{modelName(si)}</Typography>
                             <Typography sx={{ color: '#6366f1', fontSize: large ? 15 : 13, fontWeight: 800 }}>{sm ? fmt(effectivePrice) : ''}</Typography>
                           </Box>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
@@ -1202,18 +1234,18 @@ export default function ShopMenuPage() {
                   )}
                   {canAddSides && (
                     <Box sx={{ pt: 0.75, pb: 1, px: 1 }}>
-                      <Autocomplete size="small" options={allowedSideOptions} getOptionLabel={m => m.modelName}
+                      <Autocomplete size="small" options={allowedSideOptions} getOptionLabel={m => modelName(m)}
                         value={sf.model || null} onChange={(_, v) => setSF(entry.uid, 'model', v)}
                         renderOption={(props, option) => {
                           const img = option.imageUrl || option.thumbnailUrl || ''
                           return (
                             <Box component="li" {...props} sx={{ display: 'flex', alignItems: 'center', gap: 1, minHeight: large ? 58 : 48 }}>
-                              <Box onClick={(e) => { e.stopPropagation(); img && setImagePreview({ imageUrl: img, modelName: option.modelName }) }}
+                              <Box onClick={(e) => { e.stopPropagation(); img && setImagePreview({ imageUrl: img, modelName: modelName(option) }) }}
                                 sx={{ width: large ? 44 : 36, height: large ? 44 : 36, flexShrink: 0, borderRadius: 1, bgcolor: '#e8eaf6', overflow: 'hidden', border: '1px solid #c7d2fe', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: img ? 'pointer' : 'default' }}>
-                                {img ? <Box component="img" src={img} alt={option.modelName} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none' }} />
-                                  : <Typography fontWeight={900} sx={{ color: '#94a3b8', fontSize: large ? 18 : 14 }}>{String(option.modelName || '?').slice(0, 1)}</Typography>}
+                                {img ? <Box component="img" src={img} alt={modelName(option)} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none' }} />
+                                  : <Typography fontWeight={900} sx={{ color: '#94a3b8', fontSize: large ? 18 : 14 }}>{String(modelName(option) || '?').slice(0, 1)}</Typography>}
                               </Box>
-                              <Typography sx={{ fontWeight: 800, fontSize: large ? 16 : 14, color: '#1e293b' }} noWrap>{option.modelName}</Typography>
+                              <Typography sx={{ fontWeight: 800, fontSize: large ? 16 : 14, color: '#1e293b' }} noWrap>{modelName(option)}</Typography>
                             </Box>
                           )
                         }}
@@ -1254,7 +1286,7 @@ export default function ShopMenuPage() {
 
   const renderCartPanel = (onCheckout) => (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-      <Typography variant="h6" fontWeight={800}>Giỏ hàng</Typography>
+      <Typography variant="h6" fontWeight={800}>{t('shop.cart')}</Typography>
       {itemCount === 0 ? (
         <Box sx={{ textAlign: 'center', py: 4, color: 'text.disabled' }}>
           <ShoppingCartIcon sx={{ fontSize: 36, mb: 0.5, opacity: 0.3 }} />
@@ -1265,16 +1297,16 @@ export default function ShopMenuPage() {
           {renderCartEntryList()}
           <Divider />
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Typography fontWeight={700} sx={{ fontSize: 17 }}>Tổng cộng</Typography>
+            <Typography fontWeight={700} sx={{ fontSize: 17 }}>{t('common.total')}</Typography>
             <Typography fontWeight={900} color="primary" sx={{ fontSize: 18 }}>{fmt(totalAmount)}</Typography>
           </Box>
-          <TextField size="small" fullWidth multiline rows={2} label="Ghi chú đơn hàng"
-            placeholder="Yêu cầu đặc biệt…" value={notes} onChange={e => setNotes(e.target.value)}
+          <TextField size="small" fullWidth multiline rows={2} label={t('shop.orderNote')}
+            placeholder={t('shop.specialRequest')} value={notes} onChange={e => setNotes(e.target.value)}
             InputProps={{ startAdornment: <InputAdornment position="start"><NoteAltIcon fontSize="small" color="action" /></InputAdornment> }} />
           <Button variant="contained" fullWidth size="large" onClick={onCheckout}
             sx={{ borderRadius: 20, fontWeight: 800, textTransform: 'none', fontSize: 15,
               bgcolor: '#ff5722', '&:hover': { bgcolor: '#e64a19' } }}>
-            Gọi món · {fmt(totalAmount)}
+            {t('shop.placeOrder')} - {fmt(totalAmount)}
           </Button>
         </>
       )}
@@ -1286,7 +1318,7 @@ export default function ShopMenuPage() {
     const qty      = getModelQty(m.id)
     const hasOpts  = (optionsByModel[m.id] || []).length > 0
     const variants = cartEntries.filter(e => e.modelId === m.id)
-    const optsStr  = variants.length === 1 ? fmtOpts(variants[0]?.selectedOptions) : null
+    const optsStr  = variants.length === 1 ? formatSelectedOptions(m.id, variants[0]?.selectedOptions) : null
     return (
       <Box sx={{
         display: 'flex', alignItems: 'stretch', bgcolor: '#fff', borderRadius: 2, overflow: 'hidden',
@@ -1299,17 +1331,17 @@ export default function ShopMenuPage() {
           cursor: m.imageUrl ? 'pointer' : 'default',
         }}>
           {m.imageUrl
-            ? <Box component="img" src={m.imageUrl} alt={m.modelName}
+            ? <Box component="img" src={m.imageUrl} alt={modelName(m)}
                 sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                 onError={e => { e.target.style.display = 'none' }} />
             : <Typography sx={{ fontSize: large ? 42 : 34, opacity: 0.15, userSelect: 'none' }}>🍽</Typography>}
         </Box>
         <Box sx={{ flex: 1, minWidth: 0, px: 1.5, py: 1.25 }}>
           <Typography fontWeight={700} sx={{ fontSize: large ? 18 : 15, lineHeight: 1.25, color: '#111827' }}>
-            {m.modelName}
+            {modelName(m)}
           </Typography>
           {hasOpts && !optsStr && (
-            <Typography variant="caption" sx={{ color: '#64748b', fontSize: large ? 13 : 11 }}>Có thể tuỳ chỉnh</Typography>
+            <Typography variant="caption" sx={{ color: '#64748b', fontSize: large ? 13 : 11 }}>{t('shop.customizable')}</Typography>
           )}
           {optsStr && (
             <Typography variant="caption" sx={{ color: '#ff5722', fontSize: large ? 13 : 11, display: 'block' }} noWrap>
@@ -1317,7 +1349,7 @@ export default function ShopMenuPage() {
             </Typography>
           )}
           {variants.length > 1 && (
-            <Chip label={`${variants.length} tuỳ chọn`} size="small"
+            <Chip label={t('shop.optionVariants', { count: variants.length })} size="small"
               sx={{ height: large ? 22 : 18, fontSize: large ? 12 : 10, bgcolor: '#fff3e0', color: '#ff5722', mt: 0.5 }} />
           )}
           <Typography fontWeight={800} sx={{ color: '#ff5722', fontSize: large ? 18 : 15, mt: 0.75 }}>
@@ -1360,7 +1392,7 @@ export default function ShopMenuPage() {
           bgcolor: '#f5f5f5', overflow: 'hidden', cursor: m.imageUrl ? 'pointer' : 'default',
         }}>
           {m.imageUrl
-            ? <Box component="img" src={m.imageUrl} alt={m.modelName}
+            ? <Box component="img" src={m.imageUrl} alt={modelName(m)}
                 sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
                 onError={e => { e.target.style.display = 'none' }} />
             : <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1379,7 +1411,7 @@ export default function ShopMenuPage() {
             fontSize: large ? 16 : 13, lineHeight: 1.32, color: '#111827', flex: 1, mb: 0.75,
             display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
           }}>
-            {m.modelName}
+            {modelName(m)}
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <Typography fontWeight={800} sx={{ color: '#ff5722', fontSize: large ? 17 : 14 }}>
@@ -1431,14 +1463,16 @@ export default function ShopMenuPage() {
         <Box sx={{ display: 'flex', alignItems: 'center', px: 1.5, pt: 1.25, pb: 0.5, gap: 0.75 }}>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography fontWeight={900} sx={{ fontSize: large ? 22 : 18, color: '#1a1a1a', lineHeight: 1.2 }}>
-              Gọi món
+              {t('shop.placeOrder')}
             </Typography>
             {ctx.tableId && (
               <Chip icon={<TableBarIcon sx={{ fontSize: '12px !important', color: '#1976d2 !important' }} />}
-                label="Tại bàn" size="small"
+                label={t('shop.dineIn')} size="small"
                 sx={{ height: 18, fontSize: 11, bgcolor: '#e3f2fd', color: '#1565c0', fontWeight: 600 }} />
             )}
           </Box>
+
+          <LanguageSelector compact />
 
           {/* Gọi nhân viên */}
           <Button size="small" variant="outlined" onClick={() => setCallStaffOpen(true)}
@@ -1447,7 +1481,7 @@ export default function ShopMenuPage() {
               px: 1.25, py: 0.4, flexShrink: 0,
               borderColor: '#ff5722', color: '#ff5722',
               '&:hover': { bgcolor: '#fff3e0', borderColor: '#ff5722' } }}>
-            Gọi NV
+            {t('shop.callStaff')}
           </Button>
 
           {/* Món đã gọi */}
@@ -1464,7 +1498,7 @@ export default function ShopMenuPage() {
                 ...(tokenSession?.orders?.length > 0
                   ? { bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' } }
                   : {}) }}>
-              Đã gọi
+              {t('shop.orders')}
             </Button>
           </Badge>
         </Box>
@@ -1474,7 +1508,7 @@ export default function ShopMenuPage() {
           display: 'flex', overflowX: 'auto', px: 1.5, pb: 0.75, gap: 0.5,
           '&::-webkit-scrollbar': { display: 'none' }, scrollbarWidth: 'none',
         }}>
-          <Chip key="__all" label="Tất cả" size="small"
+          <Chip key="__all" label={t('common.all') || 'All'} size="small"
             onClick={() => { setActiveCategory(null); setSearchQuery('') }}
             sx={{
               flexShrink: 0, cursor: 'pointer', height: large ? 34 : 28, fontSize: large ? 14 : 12, fontWeight: 700,
@@ -1497,7 +1531,7 @@ export default function ShopMenuPage() {
         {/* Row 3: Search + view toggle */}
         <Box sx={{ display: 'flex', alignItems: 'center', px: 1.5, pb: 1.25, gap: 1 }}>
           <TextField size="small" fullWidth variant="outlined"
-            placeholder="Tìm món..."
+            placeholder={t('shop.searchMenu')}
             value={searchQuery}
             onChange={e => { setSearchQuery(e.target.value); setActiveCategory(null) }}
             InputProps={{
@@ -1619,7 +1653,7 @@ export default function ShopMenuPage() {
               <Typography fontWeight={900} sx={{ fontSize: 12.5, color: staffCallHasReply ? '#1b5e20' : '#bf360c', lineHeight: 1.2, flexShrink: 0 }}>
                 {staffCallTitle}
               </Typography>
-              <Chip label={staffCallReasonLabel(activeStaffCall.reason)} size="small"
+              <Chip label={activeStaffCall.reason === 'payment' ? t('shop.paymentHelp') : t('shop.support')} size="small"
                 sx={{ height: 17, fontSize: 10, fontWeight: 800, bgcolor: '#fff', color: staffCallHasReply ? '#2e7d32' : '#ff5722' }} />
               {staffCallAge && (
                 <Typography variant="caption" noWrap sx={{ color: staffCallHasReply ? '#2e7d32' : '#8a4b00', fontSize: 10.5, minWidth: 0 }}>
@@ -1660,14 +1694,14 @@ export default function ShopMenuPage() {
                 textTransform: 'none', boxShadow: '0 4px 16px rgba(255,87,34,0.3)',
               }}>
               {editingOrderCode
-                ? `Cập nhật đơn · ${fmt(totalAmount)}`
-                : `Xác nhận gọi món · ${itemCount} món · ${fmt(totalAmount)}`}
+                ? `${t('common.update')} ${t('shop.order')} - ${fmt(totalAmount)}`
+                : `${t('common.confirm')} ${t('shop.placeOrder')} - ${itemCount} ${t('shop.items')} - ${fmt(totalAmount)}`}
             </Button>
 
             {editingOrderCode && (
               <Button variant="text" size="small" onClick={handleCancelEdit}
                 sx={{ textTransform: 'none', color: '#888', flexShrink: 0, fontSize: 12, px: 0.5 }}>
-                Huỷ
+                {t('common.cancel')}
               </Button>
             )}
           </Box>
@@ -1680,13 +1714,13 @@ export default function ShopMenuPage() {
           borderRadius: '20px 20px 0 0', maxWidth: '100%', width: '100%' } }}>
         <Box sx={{ width: 40, height: 4, bgcolor: '#e0e0e0', borderRadius: 2, mx: 'auto', mt: 1.5 }} />
         <DialogTitle sx={{ textAlign: 'center', pt: 1.5, pb: 1, fontWeight: 900, fontSize: 18 }}>
-          Gọi nhân viên
+          {t('shop.callStaff')}
         </DialogTitle>
         <DialogContent sx={{ px: 2.5, pb: 1 }}>
           <RadioGroup value={callStaffReason} onChange={e => setCallStaffReason(e.target.value)}>
             {[
-              { value: 'payment', label: 'Yêu cầu thanh toán' },
-              { value: 'other',   label: 'Hỗ trợ khác' },
+              { value: 'payment', label: t('shop.paymentHelp') },
+              { value: 'other',   label: t('shop.support') },
             ].map(opt => (
               <FormControlLabel key={opt.value} value={opt.value}
                 control={<Radio sx={{ color: '#ff5722', '&.Mui-checked': { color: '#ff5722' } }} />}
@@ -1700,7 +1734,7 @@ export default function ShopMenuPage() {
             ))}
           </RadioGroup>
           <TextField fullWidth multiline rows={3} size="small"
-            placeholder="Bạn cần hỗ trợ gì?"
+            placeholder={t('shop.specialRequest')}
             value={callStaffNote}
             onChange={e => setCallStaffNote(e.target.value)}
             disabled={callStaffLoading}
@@ -1712,12 +1746,12 @@ export default function ShopMenuPage() {
             startIcon={callStaffLoading ? <CircularProgress size={18} color="inherit" /> : null}
             sx={{ bgcolor: '#ff5722', '&:hover': { bgcolor: '#e64a19' },
               borderRadius: 20, fontWeight: 700, textTransform: 'none', fontSize: 15 }}>
-            {callStaffLoading ? 'Đang gửi…' : 'Gọi nhân viên'}
+            {callStaffLoading ? t('common.loading') : t('shop.callStaff')}
           </Button>
           <Button fullWidth onClick={() => setCallStaffOpen(false)}
             disabled={callStaffLoading}
             sx={{ textTransform: 'none', color: 'text.secondary', borderRadius: 20 }}>
-            Huỷ
+            {t('common.cancel')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1726,7 +1760,7 @@ export default function ShopMenuPage() {
       <Snackbar open={callStaffDone} autoHideDuration={activeStaffCall?.replyMessage ? 8000 : 4000} onClose={() => setCallStaffDone(false)}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
         <Alert severity={activeStaffCall?.replyMessage ? 'info' : 'success'} onClose={() => setCallStaffDone(false)} sx={{ fontWeight: 700 }}>
-          {activeStaffCall?.replyMessage || 'Nhân viên sẽ đến hỗ trợ bạn trong giây lát!'}
+          {activeStaffCall?.replyMessage || t('shop.staffComing')}
         </Alert>
       </Snackbar>
 
@@ -1744,7 +1778,7 @@ export default function ShopMenuPage() {
         PaperProps={{ sx: { position: 'fixed', bottom: 0, left: 0, right: 0, m: 0,
           borderRadius: '16px 16px 0 0', maxHeight: '90vh' } }}>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', pb: 1 }}>
-          <Typography fontWeight={800} variant="h6" sx={{ flex: 1 }}>Giỏ hàng</Typography>
+          <Typography fontWeight={800} variant="h6" sx={{ flex: 1 }}>{t('shop.cart')}</Typography>
           <IconButton size="small" onClick={() => setCartOpen(false)}><CloseIcon /></IconButton>
         </DialogTitle>
         <DialogContent sx={{ overflowY: 'auto' }}>
@@ -1764,11 +1798,11 @@ export default function ShopMenuPage() {
         return (
           <Dialog open fullWidth maxWidth="xs" PaperProps={{ sx: { borderRadius: 3 } }}>
             <DialogTitle sx={{ textAlign: 'center', pb: 0.5, pt: 2.5, fontWeight: 900, fontSize: 20 }}>
-              Thanh toán đơn {orderNum}
+              {t('shop.paymentOrder', { value: orderNum })}
             </DialogTitle>
             <DialogContent sx={{ textAlign: 'center', pt: 1 }}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Quét mã QR để thanh toán. Đơn hàng sẽ được xác nhận sau khi thanh toán.
+                {t('shop.scanQrToPay')}
               </Typography>
               {qrUrl ? (
                 <Box sx={{ display: 'inline-block', p: 1.5, bgcolor: '#fff', borderRadius: 2,
@@ -1776,11 +1810,11 @@ export default function ShopMenuPage() {
                   <img src={qrUrl} alt="Payment QR" style={{ width: 220, height: 220, display: 'block', borderRadius: 6 }} />
                 </Box>
               ) : (
-                <Alert severity="warning" sx={{ mb: 1.5 }}>Chưa cấu hình tài khoản ngân hàng — vui lòng thanh toán tại quầy.</Alert>
+                <Alert severity="warning" sx={{ mb: 1.5 }}>{t('shop.bankNotConfigured')}</Alert>
               )}
               <Typography variant="h5" fontWeight={900} color="primary">{fmt(payableAmount(prepaidQrOrder))}</Typography>
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                Mã: <strong>{prepaidQrOrder.orderCode}</strong>
+                {t('shop.code')}: <strong>{prepaidQrOrder.orderCode}</strong>
                 {shopConfig.bankAccountName ? ` · ${shopConfig.bankAccountName}` : ''}
               </Typography>
             </DialogContent>
@@ -1788,12 +1822,12 @@ export default function ShopMenuPage() {
               <Button variant="contained" fullWidth size="large"
                 onClick={() => { setPrepaidQrOrder(null); setTrackingOrder(prepaidQrOrder) }}
                 sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 20 }}>
-                Đã thanh toán — Theo dõi đơn
+                {t('shop.paidTrackOrder')}
               </Button>
               <Button fullWidth size="small" color="inherit"
                 onClick={() => { setPrepaidQrOrder(null); setTrackingOrder(prepaidQrOrder) }}
                 sx={{ textTransform: 'none', color: 'text.secondary' }}>
-                Thanh toán sau / Đóng
+                {t('shop.payLaterClose')}
               </Button>
             </DialogActions>
           </Dialog>
@@ -1808,9 +1842,9 @@ export default function ShopMenuPage() {
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', pb: 1, pt: 1 }}>
           <ReceiptLongIcon sx={{ mr: 1, color: '#1976d2' }} />
           <Box sx={{ flex: 1 }}>
-            <Typography fontWeight={900} variant="h6">Món đã gọi</Typography>
+            <Typography fontWeight={900} variant="h6">{t('shop.orders')}</Typography>
             <Typography variant="caption" color="text.secondary">
-              {tokenSession?.orders?.filter(o => o.status !== 'CANCELLED').length ?? 0} đơn hàng
+              {t('shop.needPayment', { count: tokenSession?.orders?.filter(o => o.status !== 'CANCELLED').length ?? 0 })}
             </Typography>
           </Box>
           <IconButton size="small" onClick={() => setSessionOpen(false)}><CloseIcon /></IconButton>
@@ -1818,6 +1852,9 @@ export default function ShopMenuPage() {
         <DialogContent sx={{ overflowY: 'auto', px: 2, pb: 3 }}>
           <SessionOrderList
             session={tokenSession}
+            t={t}
+            formatAmount={fmt}
+            itemName={itemName}
             token={tokenParam}
             onEdit={(order) => { setSessionOpen(false); handleEditOrder(order) }}
             onView={(order) => { setSessionOpen(false); setTrackingOrder(order) }}
@@ -1849,37 +1886,37 @@ export default function ShopMenuPage() {
                   }}>
                     <Box sx={{ color: form.fulfillmentType === opt.value ? '#ff5722' : 'text.secondary' }}>{opt.icon}</Box>
                     <Typography variant="caption" fontWeight={600}
-                      color={form.fulfillmentType === opt.value ? '#ff5722' : 'text.secondary'}>{opt.label}</Typography>
+                      color={form.fulfillmentType === opt.value ? '#ff5722' : 'text.secondary'}>{t(opt.value === 'DINE_IN' ? 'shop.dineIn' : opt.value === 'DELIVERY' ? 'shop.delivery' : 'shop.pickup')}</Typography>
                   </Box>
                 ))}
               </Box>
             </Box>
 
-            <TextField label="Tên khách" size="small" fullWidth value={form.customerName}
+            <TextField label={t('shop.customerName')} size="small" fullWidth value={form.customerName}
               onChange={e => setForm(f => ({ ...f, customerName: e.target.value }))} />
-            <TextField label="Số điện thoại" size="small" fullWidth type="tel" value={form.customerPhone}
+            <TextField label={t('shop.customerPhone')} size="small" fullWidth type="tel" value={form.customerPhone}
               onChange={e => setForm(f => ({ ...f, customerPhone: e.target.value }))} />
             {form.fulfillmentType === 'DELIVERY' && (
-              <TextField label="Địa chỉ giao hàng" size="small" fullWidth multiline rows={2}
+              <TextField label={t('shop.deliveryAddress')} size="small" fullWidth multiline rows={2}
                 value={form.deliveryAddress} onChange={e => setForm(f => ({ ...f, deliveryAddress: e.target.value }))} />
             )}
-            <TextField label="Ghi chú đơn" size="small" fullWidth multiline rows={2}
-              placeholder="Yêu cầu đặc biệt…"
+            <TextField label={t('shop.orderNote')} size="small" fullWidth multiline rows={2}
+              placeholder={t('shop.specialRequest')}
               value={notes} onChange={e => setNotes(e.target.value)}
               InputProps={{ startAdornment: <InputAdornment position="start"><NoteAltIcon fontSize="small" color="action" /></InputAdornment> }} />
             <FormControl size="small" fullWidth>
-              <InputLabel>Thanh toán</InputLabel>
-              <Select value={form.paymentMethod} label="Thanh toán"
+              <InputLabel>{t('common.payment')}</InputLabel>
+              <Select value={form.paymentMethod} label={t('common.payment')}
                 onChange={e => setForm(f => ({ ...f, paymentMethod: e.target.value }))}>
-                <MenuItem value="CASH">Tiền mặt</MenuItem>
-                <MenuItem value="BANK_QR">Chuyển khoản QR</MenuItem>
+                <MenuItem value="CASH">{t('common.cash')}</MenuItem>
+                <MenuItem value="BANK_QR">{t('common.bankTransfer')} QR</MenuItem>
               </Select>
             </FormControl>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
               <Button variant="outlined" size="small" startIcon={<QrCode2Icon />}
                 onClick={() => setVoucherScanOpen(true)}
                 sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 20 }}>
-                {voucherPayload ? 'Đổi voucher' : 'Quét / nhập voucher'}
+                {voucherPayload ? t('shop.applyVoucher') : t('shop.scanVoucher')}
               </Button>
               {voucherPayload && (
                 <Chip size="small" color="warning" label={voucherDisplayCode}
@@ -1897,7 +1934,7 @@ export default function ShopMenuPage() {
                 const m = menu.find(x => x.id === entry.modelId)
                 if (!m) return null
                 const entryImage = entry.imageUrl || entry.thumbnailUrl || m.imageUrl || m.thumbnailUrl || ''
-                const optsStr   = fmtOpts(entry.selectedOptions)
+                const optsStr   = formatSelectedOptions(entry.modelId, entry.selectedOptions)
                 const sides     = entry.sideItems || []
                 const unitPrice = Number(m.sellingPrice || 0) + calcOptAddOn(entry)
                 const mainTotal = entry.qty * unitPrice
@@ -1908,13 +1945,13 @@ export default function ShopMenuPage() {
                 return (
                   <Box key={entry.uid} sx={{ mb: 1.25, p: 1, border: '1.5px solid #e2e8f0', borderRadius: 2, bgcolor: '#fff' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Box onClick={() => entryImage && setImagePreview({ imageUrl: entryImage, modelName: m.modelName })}
+                      <Box onClick={() => entryImage && setImagePreview({ imageUrl: entryImage, modelName: modelName(m) })}
                         sx={{ width: 72, height: 72, flexShrink: 0, borderRadius: 1.5, bgcolor: '#eef2f7', overflow: 'hidden', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: entryImage ? 'pointer' : 'default' }}>
-                        {entryImage ? <Box component='img' src={entryImage} alt={m.modelName} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none' }} />
-                          : <Typography fontWeight={900} sx={{ color: '#94a3b8', fontSize: 28 }}>{String(m.modelName || '?').slice(0, 1)}</Typography>}
+                        {entryImage ? <Box component='img' src={entryImage} alt={modelName(m)} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none' }} />
+                          : <Typography fontWeight={900} sx={{ color: '#94a3b8', fontSize: 28 }}>{String(modelName(m) || '?').slice(0, 1)}</Typography>}
                       </Box>
                       <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography fontWeight={900} sx={{ fontSize: 20, color: '#0f172a', lineHeight: 1.18 }}>{idx + 1}. {entry.qty}x {m.modelName}</Typography>
+                        <Typography fontWeight={900} sx={{ fontSize: 20, color: '#0f172a', lineHeight: 1.18 }}>{idx + 1}. {entry.qty}x {modelName(m)}</Typography>
                         {optsStr && <Typography sx={{ color: '#64748b', fontSize: 15, lineHeight: 1.25 }}>{optsStr}</Typography>}
                         {entry.itemNotes && <Typography sx={{ color: '#64748b', fontSize: 14, fontStyle: 'italic' }}>Note: {entry.itemNotes}</Typography>}
                       </Box>
@@ -1929,12 +1966,12 @@ export default function ShopMenuPage() {
                           const sideLine = sideQty * Number(sm?.sellingPrice || 0)
                           return (
                             <Box key={si.uid || si.modelId} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                              <Box onClick={() => sideImage && setImagePreview({ imageUrl: sideImage, modelName: si.modelName })}
+                              <Box onClick={() => sideImage && setImagePreview({ imageUrl: sideImage, modelName: modelName(si) })}
                                 sx={{ width: 44, height: 44, flexShrink: 0, borderRadius: 1, bgcolor: '#e8eaf6', overflow: 'hidden', border: '1px solid #c7d2fe', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: sideImage ? 'pointer' : 'default' }}>
-                                {sideImage ? <Box component='img' src={sideImage} alt={si.modelName} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none' }} />
-                                  : <Typography fontWeight={900} sx={{ color: '#94a3b8', fontSize: 16 }}>{String(si.modelName || '?').slice(0, 1)}</Typography>}
+                                {sideImage ? <Box component='img' src={sideImage} alt={modelName(si)} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none' }} />
+                                  : <Typography fontWeight={900} sx={{ color: '#94a3b8', fontSize: 16 }}>{String(modelName(si) || '?').slice(0, 1)}</Typography>}
                               </Box>
-                              <Typography sx={{ flex: 1, minWidth: 0, color: '#4338ca', fontSize: 16, fontWeight: 800 }} noWrap>+ {sideQty}x {si.modelName}</Typography>
+                              <Typography sx={{ flex: 1, minWidth: 0, color: '#4338ca', fontSize: 16, fontWeight: 800 }} noWrap>+ {sideQty}x {modelName(si)}</Typography>
                               <Typography sx={{ color: '#ff5722', fontSize: 15, fontWeight: 900, flexShrink: 0 }}>{fmt(sideLine)}</Typography>
                             </Box>
                           )
@@ -1950,7 +1987,7 @@ export default function ShopMenuPage() {
               })}
               <Divider sx={{ my: 0.75 }} />
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Typography fontWeight={700}>Tổng cộng</Typography>
+                <Typography fontWeight={700}>{t('common.total')}</Typography>
                 <Typography fontWeight={700} sx={{ color: '#ff5722' }}>{fmt(totalAmount)}</Typography>
               </Box>
             </Box>
@@ -1990,12 +2027,12 @@ export default function ShopMenuPage() {
         <DialogTitle sx={{ pb: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <TableRestaurantIcon color="warning" />
-            <Typography fontWeight={700}>Bàn đang có đơn hàng</Typography>
+            <Typography fontWeight={700}>{t('shop.tableOccupied')}</Typography>
           </Box>
         </DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-            Bàn này đang có {tableOrders?.length} đơn hàng. Bạn có muốn đặt thêm không?
+            {t('shop.tableOccupiedMessage', { count: tableOrders?.length || 0 })}
           </Typography>
           {(tableOrders || []).slice(0, 3).map(o => (
             <Box key={o.id} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -2003,7 +2040,7 @@ export default function ShopMenuPage() {
               <Typography variant="body2" fontWeight={700}>
                 {o.orderNumber ? `#${o.orderNumber}` : o.orderCode}
               </Typography>
-              <Chip label={STATUS_CHIP_MAP[o.status]?.label || o.status} size="small"
+              <Chip label={t(STATUS_TRANSLATION_KEYS[o.status] || o.status)} size="small"
                 color={o.status === 'READY' ? 'success' : o.status === 'PREPARING' ? 'warning' : 'default'} />
             </Box>
           ))}
@@ -2011,7 +2048,7 @@ export default function ShopMenuPage() {
         <DialogActions sx={{ px: 2, pb: 2, gap: 1 }}>
           <Button onClick={() => setTableOrders(null)} variant="outlined"
             sx={{ flex: 1, textTransform: 'none', borderRadius: 20 }}>
-            Đặt thêm
+            {t('shop.placeOrder')}
           </Button>
           <Button variant="contained" color="warning"
             onClick={() => {
@@ -2020,7 +2057,7 @@ export default function ShopMenuPage() {
               setTableOrders(null)
             }}
             sx={{ flex: 1, textTransform: 'none', borderRadius: 20 }}>
-            Xem đơn
+            {t('shop.viewOrder')}
           </Button>
         </DialogActions>
       </Dialog>

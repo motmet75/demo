@@ -57,6 +57,8 @@ import ShopCustomerPage from './features/shopcustomer/ShopCustomerPage'
 import ShopVoucherPage from './features/shopvoucher/ShopVoucherPage'
 import ShopPrintingCenterPage from './features/shopprinting/ShopPrintingCenterPage'
 import ProfilePage from './features/profile/ProfilePage'
+import { I18nProvider, useI18n } from './i18n/I18nContext'
+import LanguageSelector from './components/LanguageSelector'
 
 const SIDEBAR_FULL = 210
 const SIDEBAR_MINI = 52
@@ -103,10 +105,13 @@ const PATH_TITLES = {
 
 function PageTitleUpdater() {
   const { pathname } = useLocation()
+  const { t, tx } = useI18n()
   useEffect(() => {
     const label = PATH_TITLES[pathname] ?? 'BOM System'
-    document.title = label === 'BOM System' ? 'BOM System' : `${label} | BOM System`
-  }, [pathname])
+    const translatedLabel = tx(label)
+    const appName = t('app.name')
+    document.title = label === 'BOM System' ? appName : `${translatedLabel} | ${appName}`
+  }, [pathname, tx, t])
   return null
 }
 
@@ -198,9 +203,11 @@ function isActive(path, pathname) {
 
 function NavItem({ item, collapsed, indent = false }) {
   const { pathname } = useLocation()
+  const { tx } = useI18n()
+  const label = tx(item.label)
   const active = isActive(item.path, pathname)
   return (
-    <Tooltip title={collapsed ? item.label : ''} placement="right">
+    <Tooltip title={collapsed ? label : ''} placement="right">
       <Link
         to={item.path}
         style={{
@@ -220,7 +227,7 @@ function NavItem({ item, collapsed, indent = false }) {
         }}
       >
         <span style={{ fontSize: 15, lineHeight: 1, flexShrink: 0 }}>{item.icon}</span>
-        {!collapsed && <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>}
+        {!collapsed && <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>}
       </Link>
     </Tooltip>
   )
@@ -228,6 +235,7 @@ function NavItem({ item, collapsed, indent = false }) {
 
 function NavGroup({ group, collapsed }) {
   const { pathname } = useLocation()
+  const { tx } = useI18n()
 
   const storageKey = `nav-group-${group.key}`
   const hasActiveChild = group.items.some(item => isActive(item.path, pathname))
@@ -272,7 +280,7 @@ function NavGroup({ group, collapsed }) {
           letterSpacing: 0.6, textTransform: 'uppercase',
           color: 'inherit',
         }}>
-          {group.label}
+          {tx(group.label)}
         </Typography>
         {expanded
           ? <ExpandLessIcon sx={{ fontSize: 14, color: 'inherit' }} />
@@ -288,6 +296,7 @@ function NavGroup({ group, collapsed }) {
 }
 
 function Sidebar({ collapsed, onToggle, isAdmin }) {
+  const { t } = useI18n()
   return (
     <Box sx={{
       width: collapsed ? SIDEBAR_MINI : SIDEBAR_FULL,
@@ -349,10 +358,11 @@ const ADMIN_ONLY_PATHS = ['/admin', '/tenants', '/etl']
 
 function HeaderBar({ user, logout }) {
   const location = useLocation()
+  const { t } = useI18n()
   const hideContext = ADMIN_ONLY_PATHS.some(p => location.pathname === p || location.pathname.startsWith(p + '/'))
 
   if (!user) {
-    return <Link to="/login" style={{ fontSize: 14 }}>Login</Link>
+    return <><LanguageSelector compact /><Link to="/login" style={{ fontSize: 14 }}>{t('common.login')}</Link></>
   }
 
   return (
@@ -364,7 +374,7 @@ function HeaderBar({ user, logout }) {
       <Typography variant="body2" color="text.secondary">
         <strong>{user.username}</strong>
       </Typography>
-      <Tooltip title="Logout">
+      <Tooltip title={t('common.logout')}>
         <IconButton size="small" onClick={logout}><LogoutIcon fontSize="small" /></IconButton>
       </Tooltip>
     </>
@@ -446,12 +456,14 @@ function AppShell() {
 
 export default function App() {
   return (
-    <AppProvider>
-      <AuthProvider>
-        <TenantListProvider>
-          <AppShell />
-        </TenantListProvider>
-      </AuthProvider>
-    </AppProvider>
+    <I18nProvider>
+      <AppProvider>
+        <AuthProvider>
+          <TenantListProvider>
+            <AppShell />
+          </TenantListProvider>
+        </AuthProvider>
+      </AppProvider>
+    </I18nProvider>
   )
 }

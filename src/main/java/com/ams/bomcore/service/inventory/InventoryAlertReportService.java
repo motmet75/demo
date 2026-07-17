@@ -29,7 +29,7 @@ import java.util.UUID;
 @Service
 public class InventoryAlertReportService {
 
-    private static final ZoneId REPORT_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+    private static final ZoneId REPORT_ZONE = ZoneId.systemDefault();
     private static final BigDecimal ONE_HUNDRED = new BigDecimal("100");
     private static final List<String> OPEN_AUDIT_STATUSES = List.of(
             ShopMaterialAudit.STATUS_RESERVED,

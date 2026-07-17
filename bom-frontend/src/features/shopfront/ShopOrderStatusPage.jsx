@@ -15,6 +15,8 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import { fetchPublicOrder, fetchTokenSession } from '../../api/shopApi'
 import { printOrderReceipt } from '../../utils/printOrderReceipt'
+import { useI18n } from '../../i18n/I18nContext'
+import { localizedModelName } from '../../i18n/menuLocalization'
 
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 const payableAmount = (order) => Math.max(0, Number(order?.totalAmount || 0) - Number(order?.discountAmount || 0))
@@ -129,7 +131,7 @@ function SingleOrderView({ order, onEdit }) {
           <Typography variant="subtitle2" fontWeight={700} color="#0277bd" sx={{ mb: 1.5 }}>Scan to Pay</Typography>
           <img src={isQrUrl ? order.paymentQr : `data:image/png;base64,${order.paymentQr}`} alt="Payment QR"
             style={{ width: 200, height: 200, display: 'block', margin: '0 auto', borderRadius: 8 }} />
-          <Typography variant="h6" fontWeight={800} color="primary" sx={{ mt: 1.25 }}>{fmt(payableAmount(order))}</Typography>
+          <Typography variant="h6" fontWeight={800} color="primary" sx={{ mt: 1.25 }}>{fmtLocal(payableAmount(order))}</Typography>
           <Typography variant="caption" color="text.secondary">ref: {order.orderCode}</Typography>
         </Box>
       )}
@@ -220,7 +222,7 @@ function OrderCard({ order, highlighted, token }) {
               animation: 'blink2 1.4s infinite', '@keyframes blink2': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0.2 } } }} />
           )}
         </Box>
-        <Typography fontWeight={800} color="primary" sx={{ fontSize: 15 }}>{fmt(payableAmount(order))}</Typography>
+        <Typography fontWeight={800} color="primary" sx={{ fontSize: 15 }}>{fmtLocal(payableAmount(order))}</Typography>
         <Box sx={{ color: '#94a3b8' }}>{expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}</Box>
       </Box>
 
@@ -253,22 +255,22 @@ function OrderCard({ order, highlighted, token }) {
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <Box sx={{ width: 64, height: 64, flexShrink: 0, borderRadius: 1.5, bgcolor: '#eef2f7', overflow: 'hidden', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     {itemImage ? (
-                      <Box component="img" src={itemImage} alt={item.modelName}
+                      <Box component="img" src={itemImage} alt={itemName(item)}
                         sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
                         onError={e => { e.target.style.display = 'none' }} />
                     ) : (
-                      <Typography fontWeight={900} sx={{ color: '#94a3b8', fontSize: 24 }}>{String(item.modelName || '?').slice(0, 1)}</Typography>
+                      <Typography fontWeight={900} sx={{ color: '#94a3b8', fontSize: 24 }}>{String(itemName(item) || '?').slice(0, 1)}</Typography>
                     )}
                   </Box>
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography fontWeight={900} sx={{ fontSize: 18, lineHeight: 1.2, color: '#0f172a' }}>
-                      {i + 1}. {item.quantity}x {item.modelName}
+                      {i + 1}. {item.quantity}x {itemName(item)}
                     </Typography>
                     {item.selectedOptions && (
                       <Typography sx={{ color: '#64748b', fontSize: 14, lineHeight: 1.25 }}>{item.selectedOptions}</Typography>
                     )}
                   </Box>
-                  <Typography color="primary" fontWeight={900} sx={{ fontSize: 17, flexShrink: 0 }}>{fmt(item.lineTotal)}</Typography>
+                  <Typography color="primary" fontWeight={900} sx={{ fontSize: 17, flexShrink: 0 }}>{fmtLocal(item.lineTotal)}</Typography>
                 </Box>
                 {itemChildren.map((child, ci) => {
                   const childImage = child.imageUrl || child.thumbnailUrl || ''
@@ -276,17 +278,17 @@ function OrderCard({ order, highlighted, token }) {
                     <Box key={child.id} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, pl: 2, mt: 0.75 }}>
                       <Box sx={{ width: 42, height: 42, flexShrink: 0, borderRadius: 1.25, bgcolor: '#e8eaf6', overflow: 'hidden', border: '1px solid #c7d2fe', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         {childImage ? (
-                          <Box component="img" src={childImage} alt={child.modelName}
+                          <Box component="img" src={childImage} alt={itemName(child)}
                             sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
                             onError={e => { e.target.style.display = 'none' }} />
                         ) : (
-                          <Typography fontWeight={900} sx={{ color: '#818cf8', fontSize: 16 }}>{String(child.modelName || '?').slice(0, 1)}</Typography>
+                          <Typography fontWeight={900} sx={{ color: '#818cf8', fontSize: 16 }}>{String(itemName(child) || '?').slice(0, 1)}</Typography>
                         )}
                       </Box>
                       <Typography sx={{ color: '#4338ca', fontWeight: 800, fontSize: 15, flex: 1, minWidth: 0 }} noWrap>
-                        {i + 1}.{ci + 1} {child.quantity}x {child.modelName}
+                        {i + 1}.{ci + 1} {child.quantity}x {itemName(child)}
                       </Typography>
-                      <Typography color="primary" fontWeight={900} sx={{ fontSize: 15, flexShrink: 0 }}>{fmt(child.lineTotal)}</Typography>
+                      <Typography color="primary" fontWeight={900} sx={{ fontSize: 15, flexShrink: 0 }}>{fmtLocal(child.lineTotal)}</Typography>
                     </Box>
                   )
                 })}
@@ -452,6 +454,9 @@ function TokenSessionView({ token, highlightCode }) {
 // ── Root component ────────────────────────────────────────────────────────────
 
 export default function ShopOrderStatusPage() {
+  const { language, formatMoney } = useI18n()
+  const fmtLocal = (n) => n != null ? formatMoney(n, 'VND') : ''
+  const itemName = (item) => localizedModelName(item, language)
   const { orderCode } = useParams()
   const [searchParams] = useSearchParams()
   const token = searchParams.get('t')

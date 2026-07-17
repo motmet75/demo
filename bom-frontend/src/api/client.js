@@ -1,4 +1,6 @@
 // Lightweight fetch wrapper that attaches tenant/company headers from localStorage
+import { getBrowserTimeZone, getCurrentLanguage, getLanguageMeta } from '../i18n/translations'
+
 const STORAGE_KEY = 'bom_app_context_v1'
 
 export const SESSION_EXPIRED_EVENT = 'bom:session-expired'
@@ -46,6 +48,16 @@ export function rememberSessionExpiredReturnTo(returnTo = currentRouteForReturn(
     // ignore storage errors
   }
   return returnTo
+}
+function getLocaleHeaders() {
+  const headers = {}
+  const language = getCurrentLanguage()
+  const locale = getLanguageMeta(language).locale
+  const timeZone = getBrowserTimeZone()
+  if (locale) headers['Accept-Language'] = locale
+  if (language) headers['X-App-Language'] = language
+  if (timeZone) headers['X-Time-Zone'] = timeZone
+  return headers
 }
 export function getContextHeaders() {
   // Once React state is initialised (_contextReady), always use the live values -
@@ -141,7 +153,7 @@ function handleSessionResponse(url, res, skipSessionExpiredHandler) {
 
 export async function apiFetch(url, opts = {}) {
   const { skipSessionExpiredHandler = false, ...fetchOpts } = opts
-  const headers = Object.assign({}, fetchOpts.headers || {}, getContextHeaders())
+  const headers = Object.assign({}, getLocaleHeaders(), fetchOpts.headers || {}, getContextHeaders())
   const final = Object.assign({}, fetchOpts, { headers })
   const res = await fetch(withApiPrefix(url), final)
   handleSessionResponse(url, res, skipSessionExpiredHandler)
@@ -155,7 +167,7 @@ export async function apiFetch(url, opts = {}) {
  */
 export async function apiFetchNoContext(url, opts = {}) {
   const { skipSessionExpiredHandler = false, ...fetchOpts } = opts
-  const headers = Object.assign({}, fetchOpts.headers || {})
+  const headers = Object.assign({}, getLocaleHeaders(), fetchOpts.headers || {})
   if (_liveUsername) headers['X-Username'] = _liveUsername
   const final = Object.assign({}, fetchOpts, { headers })
   const res = await fetch(withApiPrefix(url), final)

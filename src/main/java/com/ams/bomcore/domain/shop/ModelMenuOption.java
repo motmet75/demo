@@ -25,6 +25,10 @@ public class ModelMenuOption {
     @Column(name = "group_name", nullable = false, length = 100)
     private String groupName;
 
+    /** JSON object keyed by language code for customer-facing group labels. */
+    @Column(name = "group_name_translations", columnDefinition = "TEXT")
+    private String groupNameTranslations;
+
     /** JSON array of choice strings, e.g. ["30%","50%","70%","100%"] */
     @Column(name = "choices", columnDefinition = "TEXT", nullable = false)
     private String choices;
@@ -66,6 +70,8 @@ public class ModelMenuOption {
     public void setModelId(UUID modelId) { this.modelId = modelId; }
     public String getGroupName() { return groupName; }
     public void setGroupName(String groupName) { this.groupName = groupName; }
+    public String getGroupNameTranslations() { return groupNameTranslations; }
+    public void setGroupNameTranslations(String groupNameTranslations) { this.groupNameTranslations = groupNameTranslations; }
     public String getChoices() { return choices; }
     public void setChoices(String choices) { this.choices = choices; }
     public Boolean getRequired() { return required; }
