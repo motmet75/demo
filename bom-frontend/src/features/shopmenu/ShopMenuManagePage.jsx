@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react'
+﻿import React, { useEffect, useState, useMemo } from 'react'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import Card from '@mui/material/Card'
@@ -27,6 +27,7 @@ import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
 import RestaurantMenuIcon from '@mui/icons-material/RestaurantMenu'
 import SearchIcon from '@mui/icons-material/Search'
+import TranslateIcon from '@mui/icons-material/Translate'
 import Checkbox from '@mui/material/Checkbox'
 import IconButton from '@mui/material/IconButton'
 import Autocomplete from '@mui/material/Autocomplete'
@@ -293,22 +294,70 @@ function translationLabel(language) {
 }
 
 function TranslationFields({ label, values, onChange }) {
+  const [open, setOpen] = useState(false)
+  const normalizedValues = values || {}
+  const configuredLanguages = MENU_TRANSLATION_LANGUAGES.filter(language => String(normalizedValues?.[language] || '').trim())
+  const previewLanguages = configuredLanguages.slice(0, 3)
+  const hiddenCount = Math.max(0, configuredLanguages.length - previewLanguages.length)
+
   return (
     <Box sx={{ border: '1px solid #e5e7eb', borderRadius: 1.5, p: 1, bgcolor: '#fafafa' }}>
-      <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ display: 'block', mb: 0.75 }}>
-        {label}
-      </Typography>
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1 }}>
-        {MENU_TRANSLATION_LANGUAGES.map(language => (
-          <TextField
-            key={language}
-            size="small"
-            label={translationLabel(language)}
-            value={values?.[language] || ''}
-            onChange={event => onChange(language, event.target.value)}
-          />
-        ))}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'space-between', flexWrap: 'wrap' }}>
+        <Box sx={{ minWidth: 0, flex: 1 }}>
+          <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ display: 'block' }}>
+            {label}
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 0.5 }}>
+            {previewLanguages.length ? previewLanguages.map(language => (
+              <Chip
+                key={language}
+                label={translationLabel(language)}
+                size="small"
+                variant="outlined"
+                sx={{ height: 20, fontSize: 10, maxWidth: 160 }}
+              />
+            )) : (
+              <Typography variant="caption" color="text.disabled">No translations configured</Typography>
+            )}
+            {hiddenCount > 0 && <Chip label={`+${hiddenCount}`} size="small" sx={{ height: 20, fontSize: 10 }} />}
+          </Box>
+        </Box>
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={<TranslateIcon />}
+          onClick={() => setOpen(true)}
+          sx={{ textTransform: 'none', flexShrink: 0 }}
+        >
+          Translations{configuredLanguages.length ? ` (${configuredLanguages.length})` : ''}
+        </Button>
       </Box>
+
+      <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle sx={{ pb: 1 }}>
+          <Typography fontWeight={800}>{label}</Typography>
+          <Typography variant="caption" color="text.secondary">
+            Fill only the languages this menu item needs. Empty values fall back to the original text.
+          </Typography>
+        </DialogTitle>
+        <DialogContent>
+          <Stack spacing={1.25} sx={{ mt: 1 }}>
+            {MENU_TRANSLATION_LANGUAGES.map(language => (
+              <TextField
+                key={language}
+                size="small"
+                label={translationLabel(language)}
+                value={normalizedValues?.[language] || ''}
+                onChange={event => onChange(language, event.target.value)}
+                fullWidth
+              />
+            ))}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpen(false)}>Done</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }
