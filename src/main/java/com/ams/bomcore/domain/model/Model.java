@@ -35,7 +35,7 @@ public class Model {
     @Column(name = "model_name", nullable = false, columnDefinition = "TEXT")
     private String modelName;
 
-    /** JSON object keyed by language code, e.g. {"cn":"...","vi":"..."}. */
+    /** JSON object keyed by language code, e.g. {"cn":"...","tw":"...","vi":"..."}. */
     @Column(name = "model_name_translations", columnDefinition = "TEXT")
     private String modelNameTranslations;
 

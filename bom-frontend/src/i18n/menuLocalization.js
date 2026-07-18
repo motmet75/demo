@@ -1,6 +1,6 @@
 import { normalizeLanguage } from './translations'
 
-export const MENU_TRANSLATION_LANGUAGES = ['cn', 'ja', 'ko', 'es', 'dv', 'ms', 'id', 'vi']
+export const MENU_TRANSLATION_LANGUAGES = ['cn', 'tw', 'ja', 'ko', 'es', 'dv', 'ms', 'id', 'vi']
 
 export function parseJsonObject(value) {
   if (!value) return {}
