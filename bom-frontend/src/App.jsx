@@ -370,11 +370,11 @@ function HeaderBar({ user, logout }) {
 
   return (
     <>
-      {!hideContext && <TenantSelector />}
-      {!hideContext && <CompanySelector />}
-      {!hideContext && <BomSelector />}
+      {!hideContext && <Box sx={{ display: { xs: 'none', sm: 'block' } }}><TenantSelector /></Box>}
+      {!hideContext && <Box sx={{ flex: { xs: 1, sm: '0 1 auto' }, minWidth: 0 }}><CompanySelector /></Box>}
+      {!hideContext && <Box sx={{ display: { xs: 'none', sm: 'block' } }}><BomSelector /></Box>}
       <Box sx={{ flex: 1 }} />
-      <Typography variant="body2" color="text.secondary">
+      <Typography variant="body2" color="text.secondary" sx={{ display: { xs: 'none', sm: 'block' } }}>
         <strong>{user.username}</strong>
       </Typography>
       <Tooltip title={t('common.logout')}>
@@ -392,7 +392,7 @@ function MainShell({ user, logout, isAdmin }) {
     <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       {user && <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} isAdmin={isAdmin} />}
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
-        <Box sx={{ flexShrink: 0, borderBottom: '1px solid #e0e0e0', px: 2, py: 0.75, display: 'flex', alignItems: 'center', gap: 1.5, background: '#fff', flexWrap: 'wrap' }}>
+        <Box sx={{ flexShrink: 0, borderBottom: '1px solid #e0e0e0', px: { xs: 0.75, sm: 2 }, py: { xs: 0.5, sm: 0.75 }, display: 'flex', alignItems: 'center', gap: { xs: 0.5, sm: 1.5 }, background: '#fff', flexWrap: { xs: 'nowrap', sm: 'wrap' }, minHeight: { xs: 42, sm: 'auto' } }}>
           <HeaderBar user={user} logout={logout} />
         </Box>
         <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>

@@ -1149,20 +1149,20 @@ function OrderCardGrid({ rows, loading, tables, actions, modelImageMap = {}, sel
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{ px: 1.5, py: 0.75, display: 'flex', gap: 1, alignItems: 'center', borderBottom: '1px solid #e0e0e0', flexShrink: 0, flexWrap: 'wrap' }}>
+      <Box sx={{ px: { xs: 1, sm: 1.5 }, py: { xs: 0.5, sm: 0.75 }, display: 'flex', gap: { xs: 0.75, sm: 1 }, alignItems: 'center', borderBottom: '1px solid #e0e0e0', flexShrink: 0, flexWrap: 'wrap' }}>
         <TextField size="small" placeholder="Search order #, customer, item, table..."
           value={search} onChange={e => setSearch(e.target.value)}
-          sx={{ flex: 1 }} inputProps={{ style: { fontSize: 13 } }} />
-        <TextField select size="small" label="Table" value={tableFilter} onChange={e => setTableFilter(e.target.value)} sx={{ width: 150 }}>
+          sx={{ flex: 1, display: { xs: 'none', sm: 'inline-flex' } }} inputProps={{ style: { fontSize: 13 } }} />
+        <TextField select size="small" label="Table" value={tableFilter} onChange={e => setTableFilter(e.target.value)} sx={{ width: { xs: 150, sm: 150 }, flex: { xs: 1, sm: '0 0 auto' } }}>
           <MenuItem value="">All tables</MenuItem>
           <MenuItem value="__NONE__">No table</MenuItem>
           {tables.map(t => <MenuItem key={t.id} value={String(t.id)}>{t.tableName}</MenuItem>)}
         </TextField>
-        <TextField select size="small" label="Scan slip" value={slipFilter} onChange={e => setSlipFilter(e.target.value)} sx={{ width: 170 }}>
+        <TextField select size="small" label="Scan slip" value={slipFilter} onChange={e => setSlipFilter(e.target.value)} sx={{ width: 170, display: { xs: 'none', sm: 'inline-flex' } }}>
           <MenuItem value="">All slips</MenuItem>
           {slipOptions.map(slip => <MenuItem key={slip.token} value={slip.token}>{slip.label}</MenuItem>)}
         </TextField>
-        <TextField select size="small" label="Sort" value={sortBy} onChange={e => setSortBy(e.target.value)} sx={{ width: 140 }}>
+        <TextField select size="small" label="Sort" value={sortBy} onChange={e => setSortBy(e.target.value)} sx={{ width: 140, display: { xs: 'none', sm: 'inline-flex' } }}>
           {SORT_OPTIONS.map(o => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
         </TextField>
         <Typography sx={{ fontSize: 12, color: '#94a3b8', flexShrink: 0 }}>{filtered.length} / {rows.length} orders</Typography>
@@ -1714,20 +1714,23 @@ export default function ShopOrderGrid() {
 
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {/* Toolbar */}
-        <Box sx={{ px: 1.5, py: 1, display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', borderBottom: '1px solid #e0e0e0', flexShrink: 0 }}>
-          <TextField select label="Status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} size="small" sx={{ width: 148 }}>
+        <Box sx={{ px: { xs: 1, sm: 1.5 }, py: { xs: 0.5, sm: 1 }, display: 'flex', gap: { xs: 0.75, sm: 1 }, alignItems: 'center', flexWrap: { xs: 'nowrap', sm: 'wrap' }, borderBottom: '1px solid #e0e0e0', flexShrink: 0 }}>
+          <TextField select label="Status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} size="small" sx={{ width: { xs: 112, sm: 148 }, flexShrink: 1 }}>
             {STATUSES.map(s => <MenuItem key={s} value={s}>{s ? (STATUS_LABEL[s] || s) : 'All'}</MenuItem>)}
           </TextField>
-          <Button startIcon={<RefreshIcon />} onClick={reload} variant="outlined" size="small">Refresh</Button>
-          <Box sx={{ display: 'flex', border: '1px solid #cbd5e1', borderRadius: 1, overflow: 'hidden', bgcolor: '#fff' }}>
+          <Button startIcon={<RefreshIcon />} onClick={reload} variant="outlined" size="small"
+            sx={{ minWidth: { xs: 40, sm: 64 }, px: { xs: 1, sm: 1.25 }, '& .MuiButton-startIcon': { mr: { xs: 0, sm: 1 } } }}>
+            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Refresh</Box>
+          </Button>
+          <Box sx={{ display: { xs: 'none', sm: 'flex' }, border: '1px solid #cbd5e1', borderRadius: 1, overflow: 'hidden', bgcolor: '#fff' }}>
             <Button startIcon={<TvIcon />} size="small" variant={orderViewMode === 'cards' ? 'contained' : 'text'} onClick={() => { setOrderViewMode('cards'); writeShopOrderPref(SHOP_ORDER_VIEW_PREF, 'cards') }} sx={{ borderRadius: 0, textTransform: 'none', fontWeight: 800 }}>Cards</Button>
             <Button startIcon={<TableBarIcon />} size="small" variant={orderViewMode === 'grid' ? 'contained' : 'text'} onClick={() => { setOrderViewMode('grid'); writeShopOrderPref(SHOP_ORDER_VIEW_PREF, 'grid') }} sx={{ borderRadius: 0, textTransform: 'none', fontWeight: 800 }}>Grid</Button>
           </Box>
-          <TextField select label="Card size" value={cardDisplaySize} onChange={e => { setCardDisplaySize(e.target.value); writeShopOrderPref(SHOP_ORDER_CARD_SIZE_PREF, e.target.value) }} size="small" sx={{ width: 132 }}>
+          <TextField select label="Card size" value={cardDisplaySize} onChange={e => { setCardDisplaySize(e.target.value); writeShopOrderPref(SHOP_ORDER_CARD_SIZE_PREF, e.target.value) }} size="small" sx={{ width: 132, display: { xs: 'none', sm: 'inline-flex' } }}>
             <MenuItem value="normal">Normal</MenuItem>
             <MenuItem value="large">Large</MenuItem>
           </TextField>
-          <Button startIcon={<MonitorIcon />} aria-pressed={highContrastCards} onClick={() => { const next = !highContrastCards; setHighContrastCards(next); writeShopOrderPref(SHOP_ORDER_CONTRAST_PREF, String(next)) }} variant={highContrastCards ? 'contained' : 'outlined'} size="small" color="secondary" sx={{ textTransform: 'none', fontWeight: 900, borderWidth: highContrastCards ? 2 : 1, '&:hover': { borderWidth: highContrastCards ? 2 : 1 } }}>Contrast</Button>
+          <Button startIcon={<MonitorIcon />} aria-pressed={highContrastCards} onClick={() => { const next = !highContrastCards; setHighContrastCards(next); writeShopOrderPref(SHOP_ORDER_CONTRAST_PREF, String(next)) }} variant={highContrastCards ? 'contained' : 'outlined'} size="small" color="secondary" sx={{ display: { xs: 'none', sm: 'inline-flex' }, textTransform: 'none', fontWeight: 900, borderWidth: highContrastCards ? 2 : 1, '&:hover': { borderWidth: highContrastCards ? 2 : 1 } }}>Contrast</Button>
           {staffCalls.length > 0 && (
             <Tooltip title={`${staffCalls.length} staff notification${staffCalls.length > 1 ? 's' : ''}`}>
               <IconButton
@@ -1752,9 +1755,9 @@ export default function ShopOrderGrid() {
             </Tooltip>
           )}
           <Button startIcon={<AddCircleOutlineIcon />} onClick={() => { setManualDefaults(null); setManualOpen(true) }}
-            variant="contained" size="small" color="success" sx={{ textTransform: 'none', fontWeight: 700 }}>New Order</Button>
+            variant="contained" size="small" color="success" sx={{ textTransform: 'none', fontWeight: 700, whiteSpace: 'nowrap', px: { xs: 1, sm: 1.25 }, '& .MuiButton-startIcon': { mr: { xs: 0.5, sm: 1 } } }}>New Order</Button>
           <Button startIcon={<QrCode2Icon />} onClick={() => setQrOrderOpen(true)}
-            variant="outlined" size="small" color="primary" sx={{ textTransform: 'none', fontWeight: 700 }}>QR Order</Button>
+            variant="outlined" size="small" color="primary" sx={{ display: { xs: 'none', sm: 'inline-flex' }, textTransform: 'none', fontWeight: 700 }}>QR Order</Button>
           {selectedRows.size > 0 && (
             <Button
               startIcon={<DriveFileMoveIcon />}
@@ -1764,7 +1767,7 @@ export default function ShopOrderGrid() {
               Move {selectedRows.size} order{selectedRows.size > 1 ? 's' : ''} → Table
             </Button>
           )}
-          <Box sx={{ flex: 1 }} />
+          <Box sx={{ flex: 1, display: { xs: 'none', sm: 'block' } }} />
           <Button startIcon={<TvIcon />} onClick={handleOpenBoard} variant="outlined" size="small" color="info" sx={{ display: { xs: 'none', sm: 'inline-flex' } }}>Display Board</Button>
           <Tooltip title="Open the counter customer-facing display in a new tab">
             <Button startIcon={<MonitorIcon />}
@@ -1773,12 +1776,12 @@ export default function ShopOrderGrid() {
                 const q = ctxTenantId && ctxCompanyId ? `?tenantId=${ctxTenantId}&companyId=${ctxCompanyId}` : ''
                 window.open(base + q, '_blank')
               }}
-              variant="outlined" size="small" color="secondary" sx={{ textTransform: 'none' }}>
+              variant="outlined" size="small" color="secondary" sx={{ display: { xs: 'none', sm: 'inline-flex' }, textTransform: 'none' }}>
               Counter
             </Button>
           </Tooltip>
-          <Button startIcon={<AssessmentIcon />} onClick={() => setEodOpen(true)} variant="outlined" size="small" color="secondary" sx={{ textTransform: 'none', fontWeight: 700 }}>Shift Audit</Button>
-          <Button startIcon={<RestartAltIcon />} onClick={() => setResetOpen(true)} variant="outlined" size="small" color="warning">Reset Counter</Button>
+          <Button startIcon={<AssessmentIcon />} onClick={() => setEodOpen(true)} variant="outlined" size="small" color="secondary" sx={{ display: { xs: 'none', sm: 'inline-flex' }, textTransform: 'none', fontWeight: 700 }}>Shift Audit</Button>
+          <Button startIcon={<RestartAltIcon />} onClick={() => setResetOpen(true)} variant="outlined" size="small" color="warning" sx={{ display: { xs: 'none', sm: 'inline-flex' } }}>Reset Counter</Button>
         </Box>
 
         {error && <Alert severity="error" onClose={() => setError('')} sx={{ mx: 1.5, mt: 0.5 }}>{error}</Alert>}
@@ -1791,8 +1794,8 @@ export default function ShopOrderGrid() {
         )}
 
         {/* Tabs */}
-        <Box sx={{ borderBottom: '1px solid #e0e0e0', px: 1.5, flexShrink: 0 }}>
-          <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ minHeight: 40 }}>
+        <Box sx={{ borderBottom: '1px solid #e0e0e0', px: { xs: 0.5, sm: 1.5 }, flexShrink: 0 }}>
+          <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons={false} sx={{ minHeight: { xs: 36, sm: 40 } }}>
             <Tab label="Orders"                                                                           sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
             <Tab label={tabBadge('Production',  confirmedOrders.length, 'primary')}                      sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
             <Tab label={tabBadge('Processing',  preparingOrders.length, 'warning')}                      sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />

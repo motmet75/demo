@@ -37,8 +37,8 @@ export default function CompanySelector() {
 
   // Always allow company selection if tenant is selected
   return (
-    <div style={{ display: 'inline-block', marginRight: 12 }}>
-      <label>Company: </label>
+    <div className="company-selector">
+      <label className="company-selector__label">Company: </label>
       <select value={companyId || ''} onChange={handleChange} disabled={!tenantId}>
         <option value="">-- Select company --</option>
         {companies.map((c) => (
