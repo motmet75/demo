@@ -72,6 +72,8 @@ public class ChatGptTranslationSettingsService {
 
     private String tokenValue(String tokenId) {
         String byType = firstTokenQuery(tokenId, List.of(
+                "select token from tokentb where coalesce(isvisible, true) = true and tokentype = ? order by createdtime desc limit 1",
+                "select token from tokentb where tokentype = ? order by createdtime desc limit 1",
                 "select token from tokentb where coalesce(visible, true) = true and tokentype = ? order by createdtime desc limit 1",
                 "select token from token_tb where coalesce(visible, true) = true and token_type = ? order by created_time desc limit 1",
                 "select \"token\" from \"TokenTb\" where coalesce(\"visible\", true) = true and \"tokenType\" = ? order by \"createdTime\" desc limit 1"
@@ -80,6 +82,8 @@ public class ChatGptTranslationSettingsService {
             return byType;
         }
         return firstTokenQuery(tokenId, List.of(
+                "select token from tokentb where coalesce(isvisible, true) = true and userstringid = ? order by createdtime desc limit 1",
+                "select token from tokentb where userstringid = ? order by createdtime desc limit 1",
                 "select token from tokentb where coalesce(visible, true) = true and userstringid = ? order by createdtime desc limit 1",
                 "select token from token_tb where coalesce(visible, true) = true and user_string_id = ? order by created_time desc limit 1",
                 "select \"token\" from \"TokenTb\" where coalesce(\"visible\", true) = true and \"userStringId\" = ? order by \"createdTime\" desc limit 1"
