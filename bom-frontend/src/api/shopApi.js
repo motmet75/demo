@@ -338,6 +338,12 @@ export function deleteMenuOption(id) {
   return apiFetchJson(`/shop/staff/menu-options/${id}`, { method: 'DELETE' })
 }
 
+export function translateMenuItem(modelId, body) {
+  return apiFetchJson(`/shop/staff/menu-items/${encodeURIComponent(modelId)}/translate`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {})
+  })
+}
+
 // ── Pickup flow ────────────────────────────────────────────────────
 
 export function fetchTokenSession(token) {

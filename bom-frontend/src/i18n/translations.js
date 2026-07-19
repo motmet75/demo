@@ -11,6 +11,7 @@ export const SUPPORTED_LANGUAGES = [
   { code: 'ms', label: 'Malay', nativeLabel: 'Bahasa Melayu', locale: 'ms-MY', dir: 'ltr' },
   { code: 'id', label: 'Indonesian', nativeLabel: 'Bahasa Indonesia', locale: 'id-ID', dir: 'ltr' },
   { code: 'vi', label: 'Vietnamese', nativeLabel: 'Tiếng Việt', locale: 'vi-VN', dir: 'ltr' },
+  { code: 'th', label: 'Thai', nativeLabel: 'ไทย', locale: 'th-TH', dir: 'ltr' },
 ]
 
 export const DEFAULT_LANGUAGE = 'en'
@@ -23,6 +24,7 @@ export function normalizeLanguage(value) {
   if (languageByCode[code]) return code
   if (code === 'zh' || code === 'zh-cn' || code === 'zh-hans' || code === 'cn-cn' || code.startsWith('zh-hans-')) return 'cn'
   if (code === 'zh-tw' || code === 'zh-hant' || code === 'tw-tw' || code === 'taiwan' || code === 'taiwanese' || code.startsWith('zh-hant-')) return 'tw'
+  if (code === 'thai' || code === 'thailand') return 'th'
   const primary = code.split('-')[0]
   return languageByCode[primary] ? primary : ''
 }
@@ -115,6 +117,7 @@ const EN = {
   'language.ms': 'Malay',
   'language.id': 'Indonesian',
   'language.vi': 'Vietnamese',
+  'language.th': 'Thai',
 
   'nav.bom': 'BOM',
   'nav.inventoryGroup': 'Inventory',
@@ -324,6 +327,7 @@ const CN = {
   'language.ms': '马来语',
   'language.id': '印尼语',
   'language.vi': '越南语',
+  'language.th': '泰语',
   'nav.bom': 'BOM',
   'nav.inventoryGroup': '库存',
   'nav.procurement': '采购',
@@ -528,6 +532,7 @@ const TW = {
   'language.ms': '馬來文',
   'language.id': '印尼文',
   'language.vi': '越南文',
+  'language.th': '泰文',
   'nav.bom': 'BOM',
   'nav.inventoryGroup': '庫存',
   'nav.procurement': '採購',
@@ -733,6 +738,7 @@ const JA = {
   'language.ms': 'マレー語',
   'language.id': 'インドネシア語',
   'language.vi': 'ベトナム語',
+  'language.th': 'タイ語',
   'nav.inventoryGroup': '在庫',
   'nav.procurement': '調達',
   'nav.ordersGroup': '注文',
@@ -880,6 +886,7 @@ const KO = {
   'language.ms': '말레이어',
   'language.id': '인도네시아어',
   'language.vi': '베트남어',
+  'language.th': '태국어',
   'nav.inventoryGroup': '재고',
   'nav.procurement': '구매',
   'nav.ordersGroup': '주문',
@@ -1005,6 +1012,7 @@ const ES = {
   'language.ms': 'Malayo',
   'language.id': 'Indonesio',
   'language.vi': 'Vietnamita',
+  'language.th': 'Tailandés',
   'nav.bom': 'BOM',
   'nav.inventoryGroup': 'Inventario',
   'nav.procurement': 'Compras',
@@ -1419,6 +1427,7 @@ const VI = {
   'language.ms': 'Tiếng Mã Lai',
   'language.id': 'Tiếng Indonesia',
   'language.vi': 'Tiếng Việt',
+  'language.th': 'Tiếng Thái',
   'nav.bom': 'BOM',
   'nav.inventoryGroup': 'Tồn kho',
   'nav.procurement': 'Mua hàng',
@@ -1610,6 +1619,34 @@ const VI = {
   'status.editing': 'Đang sửa',
 }
 
+const TH = {
+  'app.name': 'ระบบ BOM',
+  'language.label': 'ภาษา',
+  'language.en': 'อังกฤษ',
+  'language.cn': 'จีน',
+  'language.tw': 'จีนตัวเต็ม (ไต้หวัน)',
+  'language.ja': 'ญี่ปุ่น',
+  'language.ko': 'เกาหลี',
+  'language.es': 'สเปน',
+  'language.dv': 'ดิเวฮี',
+  'language.ms': 'มาเลย์',
+  'language.id': 'อินโดนีเซีย',
+  'language.vi': 'เวียดนาม',
+  'language.th': 'ไทย',
+  'common.loading': 'กำลังโหลด...',
+  'common.save': 'บันทึก',
+  'common.cancel': 'ยกเลิก',
+  'common.login': 'เข้าสู่ระบบ',
+  'common.logout': 'ออกจากระบบ',
+  'shop.menu': 'เมนู',
+  'shop.cart': 'ตะกร้า',
+  'shop.checkout': 'ชำระเงิน',
+  'shop.placeOrder': 'สั่งอาหาร',
+  'shop.requestStaff': 'เรียกพนักงาน',
+  'status.placed': 'รับออเดอร์แล้ว',
+  'status.making': 'กำลังทำ',
+  'status.done': 'เสร็จแล้ว',
+}
 export const TRANSLATIONS = {
   en: EN,
   cn: { ...EN, ...CN },
@@ -1621,6 +1658,7 @@ export const TRANSLATIONS = {
   ms: { ...EN, ...MS },
   id: { ...EN, ...ID },
   vi: { ...EN, ...VI },
+  th: { ...EN, ...TH },
 }
 
 const SOURCE_KEYS = {
@@ -1638,6 +1676,8 @@ const SOURCE_KEYS = {
   Malay: 'language.ms',
   Indonesian: 'language.id',
   Vietnamese: 'language.vi',
+  Thai: 'language.th',
+  Thailand: 'language.th',
 
   BOM: 'nav.bom',
   Materials: 'nav.materials',

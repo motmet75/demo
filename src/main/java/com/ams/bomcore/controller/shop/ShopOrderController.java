@@ -16,6 +16,7 @@ import com.ams.bomcore.repository.ShopTableRepository;
 import com.ams.bomcore.repository.TenantRepository;
 import com.ams.bomcore.service.shop.ShopOrderService;
 import com.ams.bomcore.service.shop.ShopMaterialAuditService;
+import com.ams.bomcore.service.shop.ShopMenuTranslationService;
 import com.ams.bomcore.service.shop.ShopPricingService;
 import com.ams.bomcore.service.shop.ShopSalesReportService;
 import com.ams.bomcore.util.RequestTimeZone;
@@ -48,6 +49,7 @@ public class ShopOrderController {
     private final ShopOrderService shopOrderService;
     private final ShopPricingService shopPricingService;
     private final ShopMaterialAuditService shopMaterialAuditService;
+    private final ShopMenuTranslationService shopMenuTranslationService;
     private final ShopSalesReportService shopSalesReportService;
     private final TenantRepository tenantRepository;
     private final CompanyRepository companyRepository;
@@ -65,6 +67,7 @@ public class ShopOrderController {
     public ShopOrderController(ShopOrderService shopOrderService,
                                ShopPricingService shopPricingService,
                                ShopMaterialAuditService shopMaterialAuditService,
+                               ShopMenuTranslationService shopMenuTranslationService,
                                ShopSalesReportService shopSalesReportService,
                                TenantRepository tenantRepository,
                                CompanyRepository companyRepository,
@@ -76,6 +79,7 @@ public class ShopOrderController {
         this.shopOrderService = shopOrderService;
         this.shopPricingService = shopPricingService;
         this.shopMaterialAuditService = shopMaterialAuditService;
+        this.shopMenuTranslationService = shopMenuTranslationService;
         this.shopSalesReportService = shopSalesReportService;
         this.tenantRepository = tenantRepository;
         this.companyRepository = companyRepository;
@@ -911,6 +915,29 @@ public class ShopOrderController {
         return ResponseEntity.noContent().build();
     }
 
+
+    @PostMapping("/shop/staff/menu-items/{modelId}/translate")
+    public ResponseEntity<?> translateMenuItem(@PathVariable UUID modelId,
+                                               @RequestBody(required = false) ShopMenuTranslationService.MenuTranslationRequest body,
+                                               @RequestParam(required = false) UUID tenantId,
+                                               @RequestParam(required = false) UUID companyId,
+                                               @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                               @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        try {
+            UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+            validateScope(tId, cId);
+            return ResponseEntity.ok(shopMenuTranslationService.translateMenuItem(modelId, tId, cId, body));
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage(), "message", e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "message", e.getMessage()));
+        } catch (IllegalStateException e) {
+            HttpStatus status = e.getMessage() != null && e.getMessage().contains("OpenAI token is required")
+                    ? HttpStatus.PRECONDITION_REQUIRED
+                    : HttpStatus.BAD_GATEWAY;
+            return ResponseEntity.status(status).body(Map.of("error", e.getMessage(), "message", e.getMessage()));
+        }
+    }
     // ── Display board ─────────────────────────────────────────────────
 
     @Transactional
