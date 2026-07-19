@@ -42,16 +42,14 @@ public class ShopMenuTranslationService {
     private final ModelRepository modelRepository;
     private final ModelMenuOptionRepository menuOptionRepository;
     private final ChatGptTranslationSettingsService settingsService;
-    private final ObjectMapper objectMapper;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public ShopMenuTranslationService(ModelRepository modelRepository,
                                       ModelMenuOptionRepository menuOptionRepository,
-                                      ChatGptTranslationSettingsService settingsService,
-                                      ObjectMapper objectMapper) {
+                                      ChatGptTranslationSettingsService settingsService) {
         this.modelRepository = modelRepository;
         this.menuOptionRepository = menuOptionRepository;
         this.settingsService = settingsService;
-        this.objectMapper = objectMapper;
     }
 
     public MenuTranslationResult translateMenuItem(UUID modelId, UUID tenantId, UUID companyId, MenuTranslationRequest request) {
