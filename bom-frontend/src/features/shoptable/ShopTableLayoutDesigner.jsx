@@ -9,6 +9,8 @@ import Paper from '@mui/material/Paper'
 import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
+import ButtonGroup from '@mui/material/ButtonGroup'
+import IconButton from '@mui/material/IconButton'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
 import SaveIcon from '@mui/icons-material/Save'
@@ -21,6 +23,8 @@ import ZoomInIcon from '@mui/icons-material/ZoomIn'
 import ZoomOutIcon from '@mui/icons-material/ZoomOut'
 import PanToolIcon from '@mui/icons-material/PanTool'
 import CenterFocusStrongIcon from '@mui/icons-material/CenterFocusStrong'
+import RotateLeftIcon from '@mui/icons-material/RotateLeft'
+import RotateRightIcon from '@mui/icons-material/RotateRight'
 import {
   createShopTableDrawing,
   deleteShopTableDrawing,
@@ -33,11 +37,120 @@ const STAGE_HEIGHT = 430
 const MIN_ZOOM = 0.5
 const MAX_ZOOM = 2.5
 const ZOOM_STEP = 0.1
-
+const TABLE_MIN_SIZE = 40
+const TABLE_MAX_WIDTH = 320
+const TABLE_MAX_HEIGHT = 240
+const MAX_CHAIRS = 24
+const CHAIR_WIDTH = 18
+const CHAIR_HEIGHT = 14
+const CHAIR_GAP = 14
+const TABLE_SHAPES = [
+  { value: 'rectangle', label: 'Rectangle' },
+  { value: 'circle', label: 'Circle' },
+  { value: 'ellipse', label: 'Ellipse' },
+  { value: 'half-round', label: 'Half circle + rectangle' },
+]
 const makeId = () => `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max)
 const activeOrders = (table) => Array.isArray(table?.activeOrders) ? table.activeOrders : []
 const orderNumberText = (orders) => orders.map(order => order.orderNumber != null ? `#${order.orderNumber}` : order.orderCode).filter(Boolean).join(', ')
+const numberValue = (value, fallback = 0) => {
+  const num = Number(value)
+  return Number.isFinite(num) ? num : fallback
+}
+const dimensionValue = (value, fallback, max) => Math.round(clamp(numberValue(value, fallback), TABLE_MIN_SIZE, max))
+const normalizeRotation = (value) => {
+  const rounded = Math.round(numberValue(value, 0))
+  return ((rounded % 360) + 360) % 360
+}
+const normalizeChairCount = (value, fallback = 4) => Math.round(clamp(numberValue(value, fallback), 0, MAX_CHAIRS))
+const normalizeTableShape = (shape) => {
+  if (shape === 'round') return 'circle'
+  if (shape === 'square') return 'rectangle'
+  if (shape === 'oval') return 'ellipse'
+  if (shape === 'halfCircleRectangle' || shape === 'half-circle' || shape === 'semi-round') return 'half-round'
+  return TABLE_SHAPES.some(option => option.value === shape) ? shape : 'rectangle'
+}
+const shapeLabel = (shape) => TABLE_SHAPES.find(option => option.value === normalizeTableShape(shape))?.label || 'Rectangle'
+
+function normalizeLayoutItem(item) {
+  if (!item || item.type !== 'table') return item
+  const shape = normalizeTableShape(item.shape)
+  const currentW = dimensionValue(item.w, 92, TABLE_MAX_WIDTH)
+  const currentH = dimensionValue(item.h, 72, TABLE_MAX_HEIGHT)
+  const size = dimensionValue(Math.max(currentW, currentH), 92, Math.min(TABLE_MAX_WIDTH, TABLE_MAX_HEIGHT))
+  return {
+    ...item,
+    shape,
+    w: shape === 'circle' ? size : currentW,
+    h: shape === 'circle' ? size : currentH,
+    rotation: normalizeRotation(item.rotation),
+    chairs: normalizeChairCount(item.chairs),
+  }
+}
+
+function tableShapePatch(item, rawShape) {
+  const shape = normalizeTableShape(rawShape)
+  const currentW = dimensionValue(item.w, 92, TABLE_MAX_WIDTH)
+  const currentH = dimensionValue(item.h, 72, TABLE_MAX_HEIGHT)
+  const patch = { shape }
+
+  if (shape === 'circle') {
+    const size = dimensionValue(Math.max(currentW, currentH), 92, Math.min(TABLE_MAX_WIDTH, TABLE_MAX_HEIGHT))
+    return { ...patch, w: size, h: size }
+  }
+
+  if (shape === 'ellipse' && Math.abs(currentW - currentH) < 12) {
+    const size = Math.max(currentW, currentH)
+    return {
+      ...patch,
+      w: dimensionValue(size * 1.45, 132, TABLE_MAX_WIDTH),
+      h: dimensionValue(size * 0.8, 76, TABLE_MAX_HEIGHT),
+    }
+  }
+
+  if (shape === 'half-round' && currentW < currentH * 1.45) {
+    return { ...patch, w: dimensionValue(currentH * 1.65, 128, TABLE_MAX_WIDTH) }
+  }
+
+  if (shape === 'rectangle' && Math.abs(currentW - currentH) < 12) {
+    return {
+      ...patch,
+      w: dimensionValue(currentW * 1.35, 118, TABLE_MAX_WIDTH),
+      h: dimensionValue(currentH * 0.85, 68, TABLE_MAX_HEIGHT),
+    }
+  }
+
+  return patch
+}
+
+function chairPositions(count, width, height) {
+  const chairs = []
+  const total = normalizeChairCount(count, 0)
+  const w = numberValue(width, 92)
+  const h = numberValue(height, 72)
+  for (let index = 0; index < total; index += 1) {
+    const angle = -Math.PI / 2 + (Math.PI * 2 * index) / total
+    const x = w / 2 + (w / 2 + CHAIR_GAP) * Math.cos(angle) - CHAIR_WIDTH / 2
+    const y = h / 2 + (h / 2 + CHAIR_GAP) * Math.sin(angle) - CHAIR_HEIGHT / 2
+    chairs.push({
+      x: Math.round(x),
+      y: Math.round(y),
+      rotation: Math.round((angle * 180) / Math.PI + 90),
+    })
+  }
+  return chairs
+}
+
+function tableBorderRadius(shape, item) {
+  const normalized = normalizeTableShape(shape)
+  if (normalized === 'circle' || normalized === 'ellipse') return '50%'
+  if (normalized === 'half-round') {
+    const radius = Math.round(Math.min(numberValue(item.h, 72) / 2, numberValue(item.w, 92) / 2))
+    return `${radius}px 8px 8px ${radius}px`
+  }
+  return 1
+}
 
 function defaultLayout() {
   return {
@@ -62,14 +175,14 @@ function entityToLayout(entity) {
     id: String(entity.id),
     name: entity.drawingName || 'Drawing',
     persisted: true,
-    items: Array.isArray(parsed.items) ? parsed.items : [],
+    items: Array.isArray(parsed.items) ? parsed.items.map(normalizeLayoutItem) : [],
   }
 }
 
 function payloadForLayout(layout) {
   return {
     drawingName: (layout.name || 'Untitled drawing').trim() || 'Untitled drawing',
-    layoutJson: JSON.stringify({ items: layout.items || [] }),
+    layoutJson: JSON.stringify({ items: (layout.items || []).map(normalizeLayoutItem) }),
   }
 }
 
@@ -173,7 +286,7 @@ export default function ShopTableLayoutDesigner({ tables = [] }) {
     if (type === 'wall') Object.assign(base, { w: 210, h: 16 })
     if (type === 'door') Object.assign(base, { w: 84, h: 28 })
     if (type === 'chair') Object.assign(base, { w: 28, h: 28 })
-    if (type === 'table') Object.assign(base, { tableId: '', shape: 'square', chairs: 4 })
+    if (type === 'table') Object.assign(base, { tableId: '', shape: 'rectangle', chairs: 4, rotation: 0, ...extra })
     updateLayout(layout => ({ ...layout, items: [...(layout.items || []), base] }))
     setSelectedItemId(base.id)
   }
@@ -238,6 +351,40 @@ export default function ShopTableLayoutDesigner({ tables = [] }) {
     setSelectedItemId('')
   }
 
+  const changeSelectedTableShape = (shape) => {
+    if (!selectedItem || selectedItem.type !== 'table') return
+    updateItem(selectedItem.id, tableShapePatch(selectedItem, shape))
+  }
+
+  const updateSelectedTableSize = (axis, value) => {
+    if (!selectedItem || selectedItem.type !== 'table') return
+    const shape = normalizeTableShape(selectedItem.shape)
+    const next = dimensionValue(value, axis === 'w' ? 92 : 72, axis === 'w' ? TABLE_MAX_WIDTH : TABLE_MAX_HEIGHT)
+    if (shape === 'circle') {
+      const size = dimensionValue(next, 92, Math.min(TABLE_MAX_WIDTH, TABLE_MAX_HEIGHT))
+      updateItem(selectedItem.id, { w: size, h: size })
+      return
+    }
+    updateItem(selectedItem.id, { [axis]: next })
+  }
+
+  const scaleSelectedTable = (factor) => {
+    if (!selectedItem || selectedItem.type !== 'table') return
+    const shape = normalizeTableShape(selectedItem.shape)
+    const nextW = dimensionValue(numberValue(selectedItem.w, 92) * factor, 92, TABLE_MAX_WIDTH)
+    const nextH = dimensionValue(numberValue(selectedItem.h, 72) * factor, 72, TABLE_MAX_HEIGHT)
+    if (shape === 'circle') {
+      const size = dimensionValue(Math.max(nextW, nextH), 92, Math.min(TABLE_MAX_WIDTH, TABLE_MAX_HEIGHT))
+      updateItem(selectedItem.id, { w: size, h: size })
+      return
+    }
+    updateItem(selectedItem.id, { w: nextW, h: nextH })
+  }
+
+  const rotateSelectedTable = (delta) => {
+    if (!selectedItem || selectedItem.type !== 'table') return
+    updateItem(selectedItem.id, { rotation: normalizeRotation(numberValue(selectedItem.rotation, 0) + delta) })
+  }
   const beginPan = (event) => {
     event.stopPropagation()
     event.preventDefault()
@@ -291,6 +438,7 @@ export default function ShopTableLayoutDesigner({ tables = [] }) {
 
   const renderItem = (item) => {
     const isSelected = item.id === selectedItemId
+    const rotation = normalizeRotation(item.rotation)
     const commonSx = {
       position: 'absolute',
       left: `${item.x}px`,
@@ -299,6 +447,9 @@ export default function ShopTableLayoutDesigner({ tables = [] }) {
       height: `${item.h}px`,
       cursor: 'move',
       userSelect: 'none',
+      transform: rotation ? `rotate(${rotation}deg)` : undefined,
+      transformOrigin: 'center center',
+      zIndex: isSelected ? 3 : 1,
       border: isSelected ? '2px solid #1565c0' : '1px solid rgba(0,0,0,0.25)',
       boxShadow: isSelected ? '0 0 0 3px rgba(21,101,192,0.12)' : 'none',
     }
@@ -322,32 +473,63 @@ export default function ShopTableLayoutDesigner({ tables = [] }) {
     const table = item.tableId ? tableMap.get(String(item.tableId)) : null
     const orders = activeOrders(table)
     const numbers = orderNumberText(orders)
-    const round = item.shape === 'round'
+    const shape = normalizeTableShape(item.shape)
+    const tableLabel = shapeLabel(shape)
     return (
       <Box
         key={item.id}
         onPointerDown={event => beginDrag(event, item)}
         sx={{
           ...commonSx,
-          bgcolor: orders.length ? '#e3f2fd' : '#ffffff',
-          borderColor: isSelected ? '#1565c0' : orders.length ? '#0288d1' : '#90a4ae',
-          borderRadius: round ? '50%' : 1,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          p: 0.75,
-          textAlign: 'center',
-          overflow: 'hidden',
+          border: 'none',
+          boxShadow: 'none',
+          overflow: 'visible',
         }}
       >
-        <Typography variant="caption" fontWeight={900} noWrap sx={{ width: '100%' }}>{table?.tableName || 'No table'}</Typography>
-        <Typography variant="caption" color={orders.length ? 'primary.main' : 'text.secondary'} fontWeight={900} noWrap sx={{ width: '100%' }}>{numbers || 'No order'}</Typography>
-        <Typography variant="caption" color="text.secondary">{item.chairs || 0} chairs</Typography>
+        {chairPositions(item.chairs, item.w, item.h).map((chair, index) => (
+          <Box
+            key={`${item.id}-chair-${index}`}
+            sx={{
+              position: 'absolute',
+              left: `${chair.x}px`,
+              top: `${chair.y}px`,
+              width: CHAIR_WIDTH,
+              height: CHAIR_HEIGHT,
+              borderRadius: 0.75,
+              bgcolor: '#fff7ed',
+              border: '1px solid #c2410c',
+              boxShadow: '0 1px 2px rgba(15,23,42,0.16)',
+              transform: `rotate(${chair.rotation}deg)`,
+              transformOrigin: 'center center',
+              pointerEvents: 'none',
+            }}
+          />
+        ))}
+        <Box
+          sx={{
+            position: 'absolute',
+            inset: 0,
+            bgcolor: orders.length ? '#e3f2fd' : '#ffffff',
+            border: isSelected ? '2px solid #1565c0' : `1px solid ${orders.length ? '#0288d1' : '#90a4ae'}`,
+            boxShadow: isSelected ? '0 0 0 3px rgba(21,101,192,0.12)' : 'none',
+            borderRadius: tableBorderRadius(shape, item),
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            p: 0.75,
+            textAlign: 'center',
+            overflow: 'hidden',
+          }}
+        >
+          <Typography variant="caption" fontWeight={900} noWrap sx={{ width: '100%' }}>{table?.tableName || 'No table'}</Typography>
+          <Typography variant="caption" color={orders.length ? 'primary.main' : 'text.secondary'} fontWeight={900} noWrap sx={{ width: '100%' }}>{numbers || 'No order'}</Typography>
+          <Typography variant="caption" color="text.secondary" noWrap sx={{ width: '100%' }}>{tableLabel}</Typography>
+          <Typography variant="caption" color="text.secondary">{normalizeChairCount(item.chairs, 0)} chairs</Typography>
+        </Box>
       </Box>
     )
   }
-
   return (
     <Paper variant="outlined" sx={{ p: 1.5, mb: 1.5, borderRadius: 1 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 1 }}>
@@ -374,35 +556,69 @@ export default function ShopTableLayoutDesigner({ tables = [] }) {
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.75 }}>
             <Tooltip title="Add wall"><Button size="small" variant="outlined" onClick={() => addItem('wall')} disabled={loadingDrawings || savingDrawing}>Wall</Button></Tooltip>
             <Tooltip title="Add door"><Button size="small" variant="outlined" startIcon={<MeetingRoomIcon />} onClick={() => addItem('door')} disabled={loadingDrawings || savingDrawing}>Door</Button></Tooltip>
-            <Tooltip title="Add square table"><Button size="small" variant="outlined" startIcon={<CropSquareIcon />} onClick={() => addItem('table', { shape: 'square' })} disabled={loadingDrawings || savingDrawing}>Square</Button></Tooltip>
-            <Tooltip title="Add round table"><Button size="small" variant="outlined" startIcon={<RadioButtonUncheckedIcon />} onClick={() => addItem('table', { shape: 'round' })} disabled={loadingDrawings || savingDrawing}>Round</Button></Tooltip>
+            <Tooltip title="Add rectangle table"><Button size="small" variant="outlined" startIcon={<CropSquareIcon />} onClick={() => addItem('table', { shape: 'rectangle', w: 118, h: 72 })} disabled={loadingDrawings || savingDrawing}>Rect</Button></Tooltip>
+            <Tooltip title="Add circle table"><Button size="small" variant="outlined" startIcon={<RadioButtonUncheckedIcon />} onClick={() => addItem('table', { shape: 'circle', w: 88, h: 88 })} disabled={loadingDrawings || savingDrawing}>Circle</Button></Tooltip>
+            <Tooltip title="Add ellipse table"><Button size="small" variant="outlined" startIcon={<RadioButtonUncheckedIcon />} onClick={() => addItem('table', { shape: 'ellipse', w: 132, h: 76 })} disabled={loadingDrawings || savingDrawing}>Ellipse</Button></Tooltip>
+            <Tooltip title="Add half circle + rectangle table"><Button size="small" variant="outlined" startIcon={<TableBarIcon />} onClick={() => addItem('table', { shape: 'half-round', w: 132, h: 76 })} disabled={loadingDrawings || savingDrawing}>Half</Button></Tooltip>
             <Tooltip title="Add chair"><Button size="small" variant="outlined" startIcon={<EventSeatIcon />} onClick={() => addItem('chair')} disabled={loadingDrawings || savingDrawing}>Chair</Button></Tooltip>
           </Box>
-
           <Box sx={{ border: '1px solid #e0e0e0', borderRadius: 1, p: 1, minHeight: 190 }}>
             <Typography variant="subtitle2" fontWeight={900} sx={{ mb: 1 }}>Selected object</Typography>
             {!selectedItem ? (
               <Typography variant="caption" color="text.secondary">Select an object in the drawing.</Typography>
             ) : (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                <Chip label={selectedItem.type === 'table' ? `${selectedItem.shape} table` : selectedItem.type} size="small" icon={selectedItem.type === 'table' ? <TableBarIcon /> : undefined} />
+                <Chip label={selectedItem.type === 'table' ? `${shapeLabel(selectedItem.shape)} table` : selectedItem.type} size="small" icon={selectedItem.type === 'table' ? <TableBarIcon /> : undefined} />
                 {selectedItem.type === 'table' && (
                   <>
                     <TextField select size="small" label="Shop table" value={selectedItem.tableId || ''} onChange={event => updateItem(selectedItem.id, { tableId: event.target.value })}>
                       <MenuItem value=""><em>No table</em></MenuItem>
                       {tables.map(table => <MenuItem key={table.id} value={String(table.id)}>{table.tableName}</MenuItem>)}
                     </TextField>
-                    <TextField select size="small" label="Shape" value={selectedItem.shape || 'square'} onChange={event => updateItem(selectedItem.id, { shape: event.target.value })}>
-                      <MenuItem value="square">Square</MenuItem>
-                      <MenuItem value="round">Round</MenuItem>
+                    <TextField select size="small" label="Shape" value={normalizeTableShape(selectedItem.shape)} onChange={event => changeSelectedTableShape(event.target.value)}>
+                      {TABLE_SHAPES.map(option => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
                     </TextField>
-                    <TextField size="small" type="number" label="Chairs" value={selectedItem.chairs ?? 0} onChange={event => updateItem(selectedItem.id, { chairs: Number(event.target.value || 0) })} inputProps={{ min: 0 }} />
+                    <Box sx={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 0.5, alignItems: 'center' }}>
+                      <TextField
+                        size="small"
+                        type="number"
+                        label="Rotate"
+                        value={normalizeRotation(selectedItem.rotation)}
+                        onChange={event => updateItem(selectedItem.id, { rotation: normalizeRotation(event.target.value) })}
+                        inputProps={{ min: 0, max: 359, step: 15 }}
+                      />
+                      <Tooltip title="Rotate left 15 deg">
+                        <IconButton size="small" onClick={() => rotateSelectedTable(-15)}><RotateLeftIcon fontSize="small" /></IconButton>
+                      </Tooltip>
+                      <Tooltip title="Rotate right 15 deg">
+                        <IconButton size="small" onClick={() => rotateSelectedTable(15)}><RotateRightIcon fontSize="small" /></IconButton>
+                      </Tooltip>
+                    </Box>
+                    <TextField
+                      size="small"
+                      type="number"
+                      label="Chairs around"
+                      value={normalizeChairCount(selectedItem.chairs, 0)}
+                      onChange={event => updateItem(selectedItem.id, { chairs: normalizeChairCount(event.target.value, 0) })}
+                      inputProps={{ min: 0, max: MAX_CHAIRS }}
+                    />
+                    <ButtonGroup size="small" variant="outlined" fullWidth>
+                      {[2, 4, 6, 8].map(count => (
+                        <Button key={count} onClick={() => updateItem(selectedItem.id, { chairs: count })}>{count}</Button>
+                      ))}
+                    </ButtonGroup>
                   </>
                 )}
                 <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
-                  <TextField size="small" type="number" label="W" value={selectedItem.w} onChange={event => updateItem(selectedItem.id, { w: Number(event.target.value || 1) })} />
-                  <TextField size="small" type="number" label="H" value={selectedItem.h} onChange={event => updateItem(selectedItem.id, { h: Number(event.target.value || 1) })} />
+                  <TextField size="small" type="number" label="W" value={selectedItem.w} onChange={event => selectedItem.type === 'table' ? updateSelectedTableSize('w', event.target.value) : updateItem(selectedItem.id, { w: Number(event.target.value || 1) })} />
+                  <TextField size="small" type="number" label="H" value={selectedItem.h} onChange={event => selectedItem.type === 'table' ? updateSelectedTableSize('h', event.target.value) : updateItem(selectedItem.id, { h: Number(event.target.value || 1) })} />
                 </Box>
+                {selectedItem.type === 'table' && (
+                  <ButtonGroup size="small" variant="outlined" fullWidth>
+                    <Button startIcon={<ZoomOutIcon />} onClick={() => scaleSelectedTable(0.9)}>Smaller</Button>
+                    <Button startIcon={<ZoomInIcon />} onClick={() => scaleSelectedTable(1.1)}>Larger</Button>
+                  </ButtonGroup>
+                )}
                 <Button size="small" color="error" variant="outlined" startIcon={<DeleteIcon />} onClick={deleteSelectedItem}>Remove object</Button>
               </Box>
             )}
