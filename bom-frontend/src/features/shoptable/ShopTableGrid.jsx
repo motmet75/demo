@@ -24,6 +24,7 @@ import TableBarIcon from '@mui/icons-material/TableBar'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import NoteAddIcon from '@mui/icons-material/NoteAdd'
 import VisibilityIcon from '@mui/icons-material/Visibility'
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff'
 import {
   fetchShopTables, deleteShopTable, fetchTableQr, fetchShopOrders,
   completeShopOrder, resetOrderSequence
@@ -79,6 +80,7 @@ export default function ShopTableGrid() {
   const [completingSelected, setCompletingSelected] = useState(false)
   const [resettingSequence, setResettingSequence] = useState(false)
   const [detailOrder, setDetailOrder] = useState(null)
+  const [showTableList, setShowTableList] = useState(true)
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
@@ -325,13 +327,15 @@ export default function ShopTableGrid() {
 
   return (
     <Box sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column', gap: 1 }}>
-      <Box sx={{ display: 'flex', gap: 1 }}>
+      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
         <Button startIcon={<AddIcon />} variant="contained" size="small" onClick={() => setEditTable({})}>New Table</Button>
         <Button startIcon={<RefreshIcon />} onClick={load} variant="outlined" size="small">Refresh</Button>
         <Button startIcon={resettingSequence ? <CircularProgress size={14} /> : <RestartAltIcon />} onClick={resetDailyOrderNumber} variant="outlined" color="warning" size="small" disabled={resettingSequence}>Reset Order #</Button>
+        <Button startIcon={showTableList ? <VisibilityOffIcon /> : <VisibilityIcon />} onClick={() => setShowTableList(v => !v)} variant={showTableList ? "outlined" : "contained"} size="small">{showTableList ? "Hide Table List" : "Show Table List"}</Button>
       </Box>
       {error && <Alert severity="error" onClose={() => setError('')}>{error}</Alert>}
-      <ShopTableLayoutDesigner tables={rows} />
+      <ShopTableLayoutDesigner tables={rows} expanded={!showTableList} />
+      {showTableList && (
       <Box sx={{ flex: 1, minHeight: 300 }}>
         <DataGrid
           rows={rows}
@@ -347,6 +351,7 @@ export default function ShopTableGrid() {
           }}
         />
       </Box>
+      )}
 
       {editTable !== null && (
         <ShopTableEditModal

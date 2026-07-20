@@ -25,6 +25,8 @@ import PanToolIcon from '@mui/icons-material/PanTool'
 import CenterFocusStrongIcon from '@mui/icons-material/CenterFocusStrong'
 import RotateLeftIcon from '@mui/icons-material/RotateLeft'
 import RotateRightIcon from '@mui/icons-material/RotateRight'
+import VisibilityIcon from '@mui/icons-material/Visibility'
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff'
 import {
   createShopTableDrawing,
   deleteShopTableDrawing,
@@ -34,6 +36,7 @@ import {
 
 const STAGE_WIDTH = 960
 const STAGE_HEIGHT = 430
+const EXPANDED_STAGE_HEIGHT = 620
 const MIN_ZOOM = 0.5
 const MAX_ZOOM = 2.5
 const ZOOM_STEP = 0.1
@@ -48,7 +51,7 @@ const TABLE_SHAPES = [
   { value: 'rectangle', label: 'Rectangle' },
   { value: 'circle', label: 'Circle' },
   { value: 'ellipse', label: 'Ellipse' },
-  { value: 'half-round', label: 'Half circle + rectangle' },
+  { value: 'half-circle-rect', label: 'Half circle + rectangle' },
 ]
 const makeId = () => `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max)
@@ -68,7 +71,7 @@ const normalizeTableShape = (shape) => {
   if (shape === 'round') return 'circle'
   if (shape === 'square') return 'rectangle'
   if (shape === 'oval') return 'ellipse'
-  if (shape === 'halfCircleRectangle' || shape === 'half-circle' || shape === 'semi-round') return 'half-round'
+  if (shape === 'half-round' || shape === 'halfCircleRectangle' || shape === 'half-circle' || shape === 'semi-round') return 'half-circle-rect'
   return TABLE_SHAPES.some(option => option.value === shape) ? shape : 'rectangle'
 }
 const shapeLabel = (shape) => TABLE_SHAPES.find(option => option.value === normalizeTableShape(shape))?.label || 'Rectangle'
@@ -109,7 +112,7 @@ function tableShapePatch(item, rawShape) {
     }
   }
 
-  if (shape === 'half-round' && currentW < currentH * 1.45) {
+  if (shape === 'half-circle-rect' && currentW < currentH * 1.45) {
     return { ...patch, w: dimensionValue(currentH * 1.65, 128, TABLE_MAX_WIDTH) }
   }
 
@@ -145,7 +148,7 @@ function chairPositions(count, width, height) {
 function tableBorderRadius(shape, item) {
   const normalized = normalizeTableShape(shape)
   if (normalized === 'circle' || normalized === 'ellipse') return '50%'
-  if (normalized === 'half-round') {
+  if (normalized === 'half-circle-rect') {
     const radius = Math.round(Math.min(numberValue(item.h, 72) / 2, numberValue(item.w, 92) / 2))
     return `${radius}px 8px 8px ${radius}px`
   }
@@ -190,7 +193,7 @@ function apiMessage(data, fallback) {
   return (data && (data.message || data.error)) || (typeof data === 'string' ? data : null) || fallback
 }
 
-export default function ShopTableLayoutDesigner({ tables = [] }) {
+export default function ShopTableLayoutDesigner({ tables = [], expanded = false }) {
   const stageRef = useRef(null)
   const [layouts, setLayouts] = useState([defaultLayout()])
   const [selectedLayoutId, setSelectedLayoutId] = useState('')
@@ -204,6 +207,7 @@ export default function ShopTableLayoutDesigner({ tables = [] }) {
   const [loadingDrawings, setLoadingDrawings] = useState(false)
   const [savingDrawing, setSavingDrawing] = useState(false)
   const [drawingError, setDrawingError] = useState('')
+  const [toolsHidden, setToolsHidden] = useState(false)
 
   const loadDrawings = useCallback(async () => {
     setLoadingDrawings(true)
@@ -237,6 +241,7 @@ export default function ShopTableLayoutDesigner({ tables = [] }) {
   const selectedLayout = layouts.find(layout => layout.id === selectedLayoutId) || layouts[0]
   const items = selectedLayout?.items || []
   const selectedItem = items.find(item => item.id === selectedItemId) || null
+  const stageHeight = expanded ? EXPANDED_STAGE_HEIGHT : STAGE_HEIGHT
 
   const screenToCanvas = (event) => {
     const rect = stageRef.current?.getBoundingClientRect()
@@ -419,7 +424,7 @@ export default function ShopTableLayoutDesigner({ tables = [] }) {
     const y = pos.y - dragging.offsetY
     updateItem(item.id, {
       x: Math.round(clamp(x, 0, STAGE_WIDTH - (item.w || 80))),
-      y: Math.round(clamp(y, 0, STAGE_HEIGHT - (item.h || 60))),
+      y: Math.round(clamp(y, 0, stageHeight - (item.h || 60))),
     })
   }
 
@@ -540,6 +545,7 @@ export default function ShopTableLayoutDesigner({ tables = [] }) {
         <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={createDrawing} disabled={savingDrawing}>New</Button>
         <Button size="small" variant="contained" startIcon={savingDrawing ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />} onClick={saveDrawing} disabled={loadingDrawings || savingDrawing}>Save</Button>
         <Button size="small" color="error" variant="outlined" startIcon={<DeleteIcon />} onClick={deleteDrawing} disabled={loadingDrawings || savingDrawing}>Delete</Button>
+        <Button size="small" variant={toolsHidden ? "contained" : "outlined"} startIcon={toolsHidden ? <VisibilityIcon /> : <VisibilityOffIcon />} onClick={() => setToolsHidden(v => !v)}>{toolsHidden ? "Show Tools" : "Hide Tools"}</Button>
         {savedText && <Chip label={savedText} color="success" size="small" />}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 'auto' }}>
           <Button size="small" variant="outlined" startIcon={<ZoomOutIcon />} onClick={() => setZoomLevel(zoom - ZOOM_STEP)} disabled={zoom <= MIN_ZOOM}>Zoom</Button>
@@ -552,14 +558,15 @@ export default function ShopTableLayoutDesigner({ tables = [] }) {
       {drawingError && <Alert severity="error" sx={{ mb: 1 }} onClose={() => setDrawingError('')}>{drawingError}</Alert>}
 
       <Box sx={{ display: 'flex', gap: 1, alignItems: 'stretch', overflowX: 'auto' }}>
-        <Box sx={{ width: 230, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+        {!toolsHidden && (
+        <Box sx={{ width: 250, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.75 }}>
             <Tooltip title="Add wall"><Button size="small" variant="outlined" onClick={() => addItem('wall')} disabled={loadingDrawings || savingDrawing}>Wall</Button></Tooltip>
             <Tooltip title="Add door"><Button size="small" variant="outlined" startIcon={<MeetingRoomIcon />} onClick={() => addItem('door')} disabled={loadingDrawings || savingDrawing}>Door</Button></Tooltip>
             <Tooltip title="Add rectangle table"><Button size="small" variant="outlined" startIcon={<CropSquareIcon />} onClick={() => addItem('table', { shape: 'rectangle', w: 118, h: 72 })} disabled={loadingDrawings || savingDrawing}>Rect</Button></Tooltip>
             <Tooltip title="Add circle table"><Button size="small" variant="outlined" startIcon={<RadioButtonUncheckedIcon />} onClick={() => addItem('table', { shape: 'circle', w: 88, h: 88 })} disabled={loadingDrawings || savingDrawing}>Circle</Button></Tooltip>
             <Tooltip title="Add ellipse table"><Button size="small" variant="outlined" startIcon={<RadioButtonUncheckedIcon />} onClick={() => addItem('table', { shape: 'ellipse', w: 132, h: 76 })} disabled={loadingDrawings || savingDrawing}>Ellipse</Button></Tooltip>
-            <Tooltip title="Add half circle + rectangle table"><Button size="small" variant="outlined" startIcon={<TableBarIcon />} onClick={() => addItem('table', { shape: 'half-round', w: 132, h: 76 })} disabled={loadingDrawings || savingDrawing}>Half</Button></Tooltip>
+            <Tooltip title="Add half circle + rectangle table"><Button size="small" variant="outlined" startIcon={<TableBarIcon />} onClick={() => addItem('table', { shape: 'half-circle-rect', w: 132, h: 76 })} disabled={loadingDrawings || savingDrawing}>Half+Rect</Button></Tooltip>
             <Tooltip title="Add chair"><Button size="small" variant="outlined" startIcon={<EventSeatIcon />} onClick={() => addItem('chair')} disabled={loadingDrawings || savingDrawing}>Chair</Button></Tooltip>
           </Box>
           <Box sx={{ border: '1px solid #e0e0e0', borderRadius: 1, p: 1, minHeight: 190 }}>
@@ -624,6 +631,7 @@ export default function ShopTableLayoutDesigner({ tables = [] }) {
             )}
           </Box>
         </Box>
+        )}
 
         <Box
           ref={stageRef}
@@ -635,7 +643,7 @@ export default function ShopTableLayoutDesigner({ tables = [] }) {
             position: 'relative',
             width: '100%',
             minWidth: 0,
-            height: STAGE_HEIGHT,
+            height: stageHeight,
             overflow: 'hidden',
             border: '1px solid #cfd8dc',
             borderRadius: 1,
@@ -650,7 +658,7 @@ export default function ShopTableLayoutDesigner({ tables = [] }) {
               left: 0,
               top: 0,
               width: STAGE_WIDTH,
-              height: STAGE_HEIGHT,
+              height: stageHeight,
               transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
               transformOrigin: '0 0',
               bgcolor: '#fafafa',
