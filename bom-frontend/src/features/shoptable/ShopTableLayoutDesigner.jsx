@@ -51,7 +51,7 @@ const TABLE_SHAPES = [
   { value: 'rectangle', label: 'Rectangle' },
   { value: 'circle', label: 'Circle' },
   { value: 'ellipse', label: 'Ellipse' },
-  { value: 'half-circle-rect', label: 'Half circle + rectangle' },
+  { value: 'half-round-rect', label: 'Half round + rectangle' },
 ]
 const makeId = () => `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max)
@@ -71,7 +71,7 @@ const normalizeTableShape = (shape) => {
   if (shape === 'round') return 'circle'
   if (shape === 'square') return 'rectangle'
   if (shape === 'oval') return 'ellipse'
-  if (shape === 'half-round' || shape === 'halfCircleRectangle' || shape === 'half-circle' || shape === 'semi-round') return 'half-circle-rect'
+  if (shape === 'half-round-rect' || shape === 'half-circle-rect' || shape === 'half-round' || shape === 'halfCircleRectangle' || shape === 'half-circle' || shape === 'semi-round') return 'half-round-rect'
   return TABLE_SHAPES.some(option => option.value === shape) ? shape : 'rectangle'
 }
 const shapeLabel = (shape) => TABLE_SHAPES.find(option => option.value === normalizeTableShape(shape))?.label || 'Rectangle'
@@ -112,7 +112,7 @@ function tableShapePatch(item, rawShape) {
     }
   }
 
-  if (shape === 'half-circle-rect' && currentW < currentH * 1.45) {
+  if (shape === 'half-round-rect' && currentW < currentH * 1.45) {
     return { ...patch, w: dimensionValue(currentH * 1.65, 128, TABLE_MAX_WIDTH) }
   }
 
@@ -148,7 +148,7 @@ function chairPositions(count, width, height) {
 function tableBorderRadius(shape, item) {
   const normalized = normalizeTableShape(shape)
   if (normalized === 'circle' || normalized === 'ellipse') return '50%'
-  if (normalized === 'half-circle-rect') {
+  if (normalized === 'half-round-rect') {
     const radius = Math.round(Math.min(numberValue(item.h, 72) / 2, numberValue(item.w, 92) / 2))
     return `${radius}px 8px 8px ${radius}px`
   }
@@ -566,7 +566,7 @@ export default function ShopTableLayoutDesigner({ tables = [], expanded = false 
             <Tooltip title="Add rectangle table"><Button size="small" variant="outlined" startIcon={<CropSquareIcon />} onClick={() => addItem('table', { shape: 'rectangle', w: 118, h: 72 })} disabled={loadingDrawings || savingDrawing}>Rect</Button></Tooltip>
             <Tooltip title="Add circle table"><Button size="small" variant="outlined" startIcon={<RadioButtonUncheckedIcon />} onClick={() => addItem('table', { shape: 'circle', w: 88, h: 88 })} disabled={loadingDrawings || savingDrawing}>Circle</Button></Tooltip>
             <Tooltip title="Add ellipse table"><Button size="small" variant="outlined" startIcon={<RadioButtonUncheckedIcon />} onClick={() => addItem('table', { shape: 'ellipse', w: 132, h: 76 })} disabled={loadingDrawings || savingDrawing}>Ellipse</Button></Tooltip>
-            <Tooltip title="Add half circle + rectangle table"><Button size="small" variant="outlined" startIcon={<TableBarIcon />} onClick={() => addItem('table', { shape: 'half-circle-rect', w: 132, h: 76 })} disabled={loadingDrawings || savingDrawing}>Half+Rect</Button></Tooltip>
+            <Tooltip title="Add half round + rectangle table"><Button size="small" variant="outlined" startIcon={<TableBarIcon />} onClick={() => addItem('table', { shape: 'half-round-rect', w: 132, h: 76 })} disabled={loadingDrawings || savingDrawing}>Half Round</Button></Tooltip>
             <Tooltip title="Add chair"><Button size="small" variant="outlined" startIcon={<EventSeatIcon />} onClick={() => addItem('chair')} disabled={loadingDrawings || savingDrawing}>Chair</Button></Tooltip>
           </Box>
           <Box sx={{ border: '1px solid #e0e0e0', borderRadius: 1, p: 1, minHeight: 190 }}>
