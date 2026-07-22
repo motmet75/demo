@@ -23,6 +23,12 @@ import Badge from '@mui/material/Badge'
 import Stack from '@mui/material/Stack'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import VisibilityIcon from '@mui/icons-material/Visibility'
+import MoreHorizIcon from '@mui/icons-material/MoreHoriz'
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong'
+import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner'
+import LocalCafeIcon from '@mui/icons-material/LocalCafe'
+import LocalOfferIcon from '@mui/icons-material/LocalOffer'
+import PaymentsIcon from '@mui/icons-material/Payments'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import TableBarIcon from '@mui/icons-material/TableBar'
 import TvIcon from '@mui/icons-material/Tv'
@@ -39,10 +45,8 @@ import LocalShippingIcon from '@mui/icons-material/LocalShipping'
 import CloseIcon from '@mui/icons-material/Close'
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
 import AddShoppingCartIcon from '@mui/icons-material/AddShoppingCart'
-import LabelIcon from '@mui/icons-material/Label'
 import PaidIcon from '@mui/icons-material/Paid'
 import PrintIcon from '@mui/icons-material/Print'
-import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber'
 import DriveFileMoveIcon from '@mui/icons-material/DriveFileMove'
 import AssessmentIcon from '@mui/icons-material/Assessment'
 import SupportAgentIcon from '@mui/icons-material/SupportAgent'
@@ -65,6 +69,7 @@ import EodAuditDialog from './EodAuditDialog'
 import ConfirmActionDialog from './ConfirmActionDialog'
 import MergeBillsDialog from './MergeBillsDialog'
 import { useAppContext } from '../../context/AppContext'
+import { useI18n } from '../../i18n/I18nContext'
 import { fetchModels } from '../../api/modelApi'
 
 const BOARD_CHANNEL = 'shop_display_board'
@@ -158,6 +163,94 @@ function replaceOrderInList(list, order, include) {
   return next
 }
 
+
+const ACTION_ICON_COLORS = {
+  primary:   { bg: '#e3f2fd', color: '#1565c0', border: '#90caf9' },
+  secondary: { bg: '#f3e8ff', color: '#7c3aed', border: '#c4b5fd' },
+  success:   { bg: '#dcfce7', color: '#15803d', border: '#86efac' },
+  warning:   { bg: '#fff7ed', color: '#c2410c', border: '#fed7aa' },
+  error:     { bg: '#fee2e2', color: '#b91c1c', border: '#fecaca' },
+  info:      { bg: '#e0f2fe', color: '#0369a1', border: '#7dd3fc' },
+}
+
+function MobileOrderActions({ order, actionItems, sx }) {
+  const { t } = useI18n()
+  const [open, setOpen] = useState(false)
+  const visibleActions = actionItems.filter(action => action && action.show !== false)
+  if (!visibleActions.length) return null
+
+  const orderLabel = order?.orderNumber != null ? `#${order.orderNumber}` : (order?.orderCode || '')
+
+  return (
+    <Box sx={{ display: { xs: 'flex', sm: 'none' }, flexShrink: 0, ...sx }}>
+      <Button
+        variant="contained"
+        size="small"
+        startIcon={<MoreHorizIcon />}
+        onClick={(event) => { event.stopPropagation(); setOpen(true) }}
+        sx={{ minHeight: 44, px: 1.25, borderRadius: 1, textTransform: 'none', fontWeight: 900, fontSize: 15 }}
+      >
+        {t('shop.orderAction.more')}
+      </Button>
+      <Dialog
+        open={open}
+        onClose={() => setOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 2, overflow: 'hidden' } }}
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.25, pr: 1 }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography fontWeight={900} sx={{ fontSize: 20 }}>{t('shop.orderAction.more')}</Typography>
+            <Typography color="text.secondary" sx={{ fontSize: 14, fontWeight: 700 }} noWrap>
+              {t('shop.orderAction.title', { value: orderLabel })}
+            </Typography>
+          </Box>
+          <IconButton onClick={() => setOpen(false)} aria-label={t('common.close')}>
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 0, pb: 2 }}>
+          <Box sx={{ display: 'grid', gap: 1.1 }}>
+            {visibleActions.map(action => {
+              const iconColor = ACTION_ICON_COLORS[action.color || 'primary'] || ACTION_ICON_COLORS.primary
+              const icon = React.cloneElement(action.icon, {
+                sx: { fontSize: 34, color: iconColor.color, ...(action.icon.props.sx || {}) },
+              })
+              return (
+                <Button
+                  key={action.key}
+                  variant="outlined"
+                  fullWidth
+                  onClick={(event) => { event.stopPropagation(); setOpen(false); action.onClick?.() }}
+                  sx={{
+                    minHeight: 78,
+                    justifyContent: 'flex-start',
+                    gap: 1.25,
+                    px: 1.25,
+                    py: 1,
+                    borderRadius: 1,
+                    textTransform: 'none',
+                    borderColor: iconColor.border,
+                    bgcolor: '#fff',
+                    '&:hover': { borderColor: iconColor.color, bgcolor: iconColor.bg },
+                  }}
+                >
+                  <Box sx={{ width: 50, height: 50, borderRadius: 1, display: 'grid', placeItems: 'center', bgcolor: iconColor.bg, border: `1px solid ${iconColor.border}`, flexShrink: 0 }}>
+                    {icon}
+                  </Box>
+                  <Typography sx={{ fontSize: 17, fontWeight: 900, color: '#111827', lineHeight: 1.2, textAlign: 'left' }}>
+                    {t(action.labelKey)}
+                  </Typography>
+                </Button>
+              )
+            })}
+          </Box>
+        </DialogContent>
+      </Dialog>
+    </Box>
+  )
+}
 // ── Stock panel ─────────────────────────────────────────────────────
 
 function SectionLabel({ children }) {
@@ -346,7 +439,8 @@ const BOARD_HIGH_CONTRAST_STYLE = {
   PICKED_UP:  { headerBg: '#e0f2fe', border: '#0369a1',  cardBg: '#ffffff',  color: '#0f172a',  numColor: '#0369a1' },
 }
 
-function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, onPayQr, onPickupQr, onSwitchQr, onRevertCash, displaySize = 'normal', highContrast = false }) {
+function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, onPayQr, onPickupQr, onSwitchQr, onRevertCash, onShowTrackQr, onPrintTag, onMergeBills, displaySize = 'normal', highContrast = false }) {
+  const { t } = useI18n()
   // onAction(type, orderId, orderNumber)
   const large = displaySize === 'large'
   const style = highContrast
@@ -383,6 +477,15 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
     <Box sx={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${cardMinWidth}px, 1fr))`, gap: large ? 2 : 1.5, p: large ? 2 : 1.5 }}>
       {orders.map(order => {
         const since = elapsed(order.confirmedAt || order.createdAt)
+        const boardActionItems = [
+          { key: 'detail', labelKey: 'shop.orderAction.viewDetail', icon: <VisibilityIcon />, color: 'primary', onClick: () => onDetail(order) },
+          { key: 'receipt', labelKey: 'shop.orderAction.printReceipt', icon: <ReceiptLongIcon />, color: 'primary', onClick: () => printOrderReceiptTracked(order) },
+          { key: 'trackQr', labelKey: 'shop.orderAction.showTracking', icon: <QrCodeScannerIcon />, color: 'info', show: Boolean(onShowTrackQr), onClick: () => onShowTrackQr?.(order) },
+          { key: 'trackingTag', labelKey: 'shop.orderAction.printTrackingTag', icon: <LocalOfferIcon />, color: 'secondary', show: Boolean(onPrintTag), onClick: () => onPrintTag?.(order) },
+          { key: 'cupLabel', labelKey: 'shop.orderAction.printCupLabel', icon: <LocalCafeIcon />, color: 'warning', onClick: () => printCupLabelsTracked(order) },
+          { key: 'paymentQr', labelKey: 'shop.orderAction.paymentQr', icon: <PaymentsIcon />, color: 'success', show: order.paymentStatus !== 'PAID' && order.status !== 'CANCELLED', onClick: () => onPayQr(order) },
+          { key: 'merge', labelKey: 'shop.orderAction.mergeOtherBills', icon: <MergeTypeIcon />, color: 'secondary', show: Boolean(onMergeBills) && !['COMPLETED', 'PICKED_UP', 'CANCELLED'].includes(order.status), onClick: () => onMergeBills?.(order) },
+        ]
         return (
           <Card key={order.id} elevation={2} sx={{
             borderRadius: 2, border: `2px solid ${style.border}`, bgcolor: style.cardBg,
@@ -397,7 +500,7 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                 </Box>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap', mb: 0.25 }}>
-                    {order.tableName && <Chip icon={<TableBarIcon sx={{ fontSize: 12 }} />} label={order.tableName} size="small" color="info" variant="outlined" sx={{ height: 20, fontSize: 11 }} />}
+                    {order.tableName && <Chip icon={<TableBarIcon sx={{ fontSize: large ? 17 : 15 }} />} label={order.tableName} size="small" color="info" variant="outlined" sx={{ height: large ? 30 : 26, fontSize: large ? 15 : 13, fontWeight: 900, '& .MuiChip-label': { px: 1 } }} />}
                     {order.paymentStatus === 'PAID'
                       ? <Chip icon={<PaidIcon sx={{ fontSize: 12 }} />} label="PAID" size="small" color="success" sx={{ height: 20, fontSize: 11, fontWeight: 800 }} />
                       : <Chip label="UNPAID" size="small" color="warning" variant="outlined" sx={{ height: 20, fontSize: 10, fontWeight: 700 }} />
@@ -421,25 +524,26 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                     })()}
                   </Box>
                 </Box>
-                <Box sx={{ display: 'flex', gap: 0.25 }}>
-                  <Tooltip title="Print cup labels">
+                <Box sx={{ display: { xs: 'none', sm: 'flex' }, gap: 0.25 }}>
+                  <Tooltip title={t('shop.orderAction.printCupLabel')}>
                     <IconButton size="small" onClick={() => printCupLabelsTracked(order)} sx={{ p: 0.25, color: style.color }}>
-                      <LabelIcon sx={{ fontSize: 16 }} />
+                      <LocalCafeIcon sx={{ fontSize: 18 }} />
                     </IconButton>
                   </Tooltip>
                   {order.paymentStatus !== 'PAID' && (
-                    <Tooltip title="Payment QR">
+                    <Tooltip title={t('shop.orderAction.paymentQr')}>
                       <IconButton size="small" onClick={() => onPayQr(order)} sx={{ p: 0.25, color: '#1565c0' }}>
-                        <QrCode2Icon sx={{ fontSize: 16 }} />
+                        <PaymentsIcon sx={{ fontSize: 18 }} />
                       </IconButton>
                     </Tooltip>
                   )}
-                  <Tooltip title="View detail">
+                  <Tooltip title={t('shop.orderAction.viewDetail')}>
                     <IconButton size="small" onClick={() => onDetail(order)} sx={{ p: 0.25 }}>
-                      <VisibilityIcon sx={{ fontSize: 16 }} />
+                      <VisibilityIcon sx={{ fontSize: 18 }} />
                     </IconButton>
                   </Tooltip>
                 </Box>
+                <MobileOrderActions order={order} actionItems={boardActionItems} />
               </Box>
 
               <Divider sx={{ mb: 0.75 }} />
@@ -612,6 +716,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
   const [editNum, setEditNum]       = useState(false)
   const [numVal, setNumVal]         = useState(String(order.orderNumber ?? ''))
   const [imagePreview, setImagePreview] = useState(null)
+  const { t } = useI18n()
 
   const large = displaySize === 'large'
   const baseStyle = CARD_STYLE[order.status] || CARD_STYLE.CONFIRMED
@@ -633,7 +738,16 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
     if (!childMap[k]) childMap[k] = []
     childMap[k].push(it)
   })
-
+  const orderActionItems = [
+    { key: 'detail', labelKey: 'shop.orderAction.viewDetail', icon: <VisibilityIcon />, color: 'primary', onClick: () => actions.detail(order) },
+    { key: 'receipt', labelKey: 'shop.orderAction.printReceipt', icon: <ReceiptLongIcon />, color: 'primary', onClick: () => printOrderReceiptTracked(order) },
+    { key: 'combinedReceipt', labelKey: 'shop.orderAction.combinedReceipt', icon: <PeopleAltIcon />, color: 'secondary', show: Boolean(order.sourceToken), onClick: () => actions.combinedReceipt(order.sourceToken) },
+    { key: 'trackQr', labelKey: 'shop.orderAction.showTracking', icon: <QrCodeScannerIcon />, color: 'info', onClick: () => actions.showTrackQr(order) },
+    { key: 'trackingTag', labelKey: 'shop.orderAction.printTrackingTag', icon: <LocalOfferIcon />, color: 'secondary', onClick: () => actions.printTag(order) },
+    { key: 'cupLabel', labelKey: 'shop.orderAction.printCupLabel', icon: <LocalCafeIcon />, color: 'warning', onClick: () => printCupLabelsTracked(order) },
+    { key: 'paymentQr', labelKey: 'shop.orderAction.paymentQr', icon: <PaymentsIcon />, color: 'success', show: order.paymentStatus !== 'PAID' && order.status !== 'CANCELLED', onClick: () => actions.payQr(order) },
+    { key: 'merge', labelKey: 'shop.orderAction.mergeOtherBills', icon: <MergeTypeIcon />, color: 'secondary', show: isActive, onClick: () => actions.mergeBills(order) },
+  ]
   const commitNum = () => {
     const n = parseInt(numVal, 10)
     if (!isNaN(n) && n > 0 && n !== order.orderNumber) actions.setOrderNumber(order.id, n)
@@ -691,7 +805,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
             <Chip label={STATUS_LABEL[order.status] || order.status} color={STATUS_COLOR[order.status] || 'default'} size="small"
               sx={{ height: large ? 24 : 20, fontSize: large ? 12 : 10, fontWeight: 800 }} />
             {order.fulfillmentType && (() => { const m = { DINE_IN: '🪑', PICKUP: '🥡', DELIVERY: '🛵' }; return <Typography sx={{ fontSize: large ? 17 : 13 }}>{m[order.fulfillmentType] || ''}</Typography> })()}
-            {order.tableName && <Chip icon={<TableBarIcon sx={{ fontSize: 11 }} />} label={order.tableName} size="small" color="info" variant="outlined" sx={{ height: large ? 24 : 20, fontSize: large ? 12 : 10 }} />}
+            {order.tableName && <Chip icon={<TableBarIcon sx={{ fontSize: large ? 18 : 16 }} />} label={order.tableName} size="small" color="info" variant="outlined" sx={{ height: large ? 32 : 28, fontSize: large ? 16 : 14, fontWeight: 900, '& .MuiChip-label': { px: 1 } }} />}
             {order.paymentStatus === 'PAID'
               ? <Chip icon={<PaidIcon sx={{ fontSize: 11, ml: '4px !important' }} />} label="PAID" size="small" color="success" sx={{ height: large ? 24 : 20, fontSize: large ? 12 : 10, fontWeight: 800 }} />
               : <Chip label="UNPAID" size="small" color="warning" variant="outlined" sx={{ height: large ? 24 : 20, fontSize: large ? 12 : 10 }} />
@@ -711,53 +825,54 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
         </Box>
 
         {/* Icon cluster */}
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.1, flexShrink: 0 }}>
+        <Box sx={{ display: { xs: 'none', sm: 'flex' }, flexDirection: 'column', gap: 0.1, flexShrink: 0 }}>
           <Box sx={{ display: 'flex' }}>
-            <Tooltip title="View detail">
-              <IconButton size="small" onClick={() => actions.detail(order)} sx={{ p: 0.35 }}><VisibilityIcon sx={{ fontSize: large ? 19 : 15 }} /></IconButton>
+            <Tooltip title={t('shop.orderAction.viewDetail')}>
+              <IconButton size="small" onClick={() => actions.detail(order)} sx={{ p: 0.35 }}><VisibilityIcon sx={{ fontSize: large ? 20 : 17 }} /></IconButton>
             </Tooltip>
-            <Tooltip title="Print Receipt">
-              <IconButton size="small" color="primary" onClick={() => printOrderReceiptTracked(order)} sx={{ p: 0.35 }}><PrintIcon sx={{ fontSize: large ? 19 : 15 }} /></IconButton>
+            <Tooltip title={t('shop.orderAction.printReceipt')}>
+              <IconButton size="small" color="primary" onClick={() => printOrderReceiptTracked(order)} sx={{ p: 0.35 }}><ReceiptLongIcon sx={{ fontSize: large ? 20 : 17 }} /></IconButton>
             </Tooltip>
             {order.sourceToken && (
-              <Tooltip title="Combined Receipt">
-                <IconButton size="small" color="secondary" onClick={() => actions.combinedReceipt(order.sourceToken)} sx={{ p: 0.35 }}><PeopleAltIcon sx={{ fontSize: large ? 19 : 15 }} /></IconButton>
+              <Tooltip title={t('shop.orderAction.combinedReceipt')}>
+                <IconButton size="small" color="secondary" onClick={() => actions.combinedReceipt(order.sourceToken)} sx={{ p: 0.35 }}><PeopleAltIcon sx={{ fontSize: large ? 20 : 17 }} /></IconButton>
               </Tooltip>
             )}
           </Box>
           <Box sx={{ display: 'flex' }}>
-            <Tooltip title="Show Tracking QR for Customer">
+            <Tooltip title={t('shop.orderAction.showTracking')}>
               <IconButton size="small" onClick={() => actions.showTrackQr(order)} sx={{ p: 0.35, color: '#0288d1' }}>
-                <QrCode2Icon sx={{ fontSize: large ? 19 : 15 }} />
+                <QrCodeScannerIcon sx={{ fontSize: large ? 20 : 17 }} />
               </IconButton>
             </Tooltip>
-            <Tooltip title="Print Tracking Tag">
-              <IconButton size="small" color="secondary" onClick={() => actions.printTag(order)} sx={{ p: 0.35 }}><ConfirmationNumberIcon sx={{ fontSize: large ? 19 : 15 }} /></IconButton>
+            <Tooltip title={t('shop.orderAction.printTrackingTag')}>
+              <IconButton size="small" color="secondary" onClick={() => actions.printTag(order)} sx={{ p: 0.35 }}><LocalOfferIcon sx={{ fontSize: large ? 20 : 17 }} /></IconButton>
             </Tooltip>
-            <Tooltip title="Print Cup Labels">
-              <IconButton size="small" onClick={() => printCupLabelsTracked(order)} sx={{ p: 0.35 }}><LabelIcon sx={{ fontSize: large ? 19 : 15 }} /></IconButton>
+            <Tooltip title={t('shop.orderAction.printCupLabel')}>
+              <IconButton size="small" onClick={() => printCupLabelsTracked(order)} sx={{ p: 0.35 }}><LocalCafeIcon sx={{ fontSize: large ? 20 : 17 }} /></IconButton>
             </Tooltip>
             {order.paymentStatus !== 'PAID' && order.status !== 'CANCELLED' && (
-              <Tooltip title="Payment QR">
-                <IconButton size="small" color="primary" onClick={() => actions.payQr(order)} sx={{ p: 0.35 }}><QrCode2Icon sx={{ fontSize: large ? 19 : 15 }} /></IconButton>
+              <Tooltip title={t('shop.orderAction.paymentQr')}>
+                <IconButton size="small" color="primary" onClick={() => actions.payQr(order)} sx={{ p: 0.35 }}><PaymentsIcon sx={{ fontSize: large ? 20 : 17 }} /></IconButton>
               </Tooltip>
             )}
-            {!['COMPLETED','PICKED_UP','CANCELLED'].includes(order.status) && (
-              <Tooltip title="Merge other bills into this one">
-                <IconButton size="small" onClick={() => actions.mergeBills(order)} sx={{ p: 0.35, color: '#7c3aed' }}><MergeTypeIcon sx={{ fontSize: large ? 19 : 15 }} /></IconButton>
+            {isActive && (
+              <Tooltip title={t('shop.orderAction.mergeOtherBills')}>
+                <IconButton size="small" onClick={() => actions.mergeBills(order)} sx={{ p: 0.35, color: '#7c3aed' }}><MergeTypeIcon sx={{ fontSize: large ? 20 : 17 }} /></IconButton>
               </Tooltip>
             )}
           </Box>
         </Box>
+        <MobileOrderActions order={order} actionItems={orderActionItems} />
       </Box>
 
       {/* ── Table selector + order code ── */}
       <Box sx={{ px: large ? 1.5 : 1.25, pb: large ? 0.75 : 0.5, display: 'flex', alignItems: 'center', gap: 0.75 }}>
-        <TableBarIcon sx={{ fontSize: 13, color: '#94a3b8', flexShrink: 0 }} />
+        <TableBarIcon sx={{ fontSize: large ? 24 : 21, color: '#2563eb', flexShrink: 0 }} />
         <Box component="select"
           value={order.tableId || ''}
           onChange={e => actions.setTable(order.id, e.target.value)}
-          sx={{ fontSize: large ? 13 : 11, height: large ? 28 : 22, border: '1px solid #cbd5e1', borderRadius: 1, px: 0.5, flex: 1, cursor: 'pointer', bgcolor: 'white', color: '#334155' }}
+          sx={{ fontSize: large ? 17 : 15, height: large ? 42 : 38, border: '2px solid #93c5fd', borderRadius: 1, px: 1, flex: 1, cursor: 'pointer', bgcolor: 'white', color: '#111827', fontWeight: 900 }}
         >
           <option value="">No table</option>
           {tables.map(t => <option key={t.id} value={t.id}>{t.tableName}</option>)}
@@ -1024,7 +1139,7 @@ function OrderRowsGrid({ rows, tables, actions, selectedIds, onToggleSelect, dis
                   {order.customerEditing && <Chip label="Editing" color="warning" size="small" sx={{ ml: 0.5, fontWeight: 800, fontSize: large ? 12 : 10 }} />}
                 </Box>
                 <Box component="td" sx={cellSx}>
-                  <Box component="select" value={order.tableId || ''} onChange={e => actions.setTable(order.id, e.target.value)} sx={{ width: '100%', height: large ? 34 : 28, fontSize, border: '1px solid #cbd5e1', borderRadius: 1, px: 0.75, bgcolor: '#fff' }}>
+                  <Box component="select" value={order.tableId || ''} onChange={e => actions.setTable(order.id, e.target.value)} sx={{ width: '100%', height: large ? 42 : 38, fontSize: large ? 16 : 15, fontWeight: 900, border: '2px solid #93c5fd', borderRadius: 1, px: 1, bgcolor: '#fff', color: '#111827' }}>
                     <option value="">No table</option>
                     {tables.map(t => <option key={t.id} value={t.id}>{t.tableName}</option>)}
                   </Box>
@@ -1582,7 +1697,7 @@ export default function ShopOrderGrid() {
     try {
       const { data } = await fetchOrderTagQr(row.id)
       setTrackQrOrder({ order: row, qrBase64: data?.qrBase64 || null, loading: false })
-    } catch (e) {
+    } catch {
       setTrackQrOrder(prev => prev ? { ...prev, loading: false } : null)
       setError('Failed to fetch tracking QR')
     }
@@ -1824,10 +1939,10 @@ export default function ShopOrderGrid() {
               })}
             />
           )}
-          {tab === 1 && <StatusBoard status="CONFIRMED"  orders={confirmedOrders} modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} />}
-          {tab === 2 && <StatusBoard status="PREPARING"  orders={preparingOrders} modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} />}
-          {tab === 3 && <StatusBoard status="READY"      orders={readyOrders}     modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} />}
-          {tab === 4 && <StatusBoard status="PICKED_UP"  orders={pickedUpOrders}  modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} />}
+          {tab === 1 && <StatusBoard status="CONFIRMED"  orders={confirmedOrders} modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} onShowTrackQr={handleShowTrackQr} onPrintTag={handlePrintTrack} onMergeBills={cardActions.mergeBills} />}
+          {tab === 2 && <StatusBoard status="PREPARING"  orders={preparingOrders} modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} onShowTrackQr={handleShowTrackQr} onPrintTag={handlePrintTrack} onMergeBills={cardActions.mergeBills} />}
+          {tab === 3 && <StatusBoard status="READY"      orders={readyOrders}     modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} onShowTrackQr={handleShowTrackQr} onPrintTag={handlePrintTrack} onMergeBills={cardActions.mergeBills} />}
+          {tab === 4 && <StatusBoard status="PICKED_UP"  orders={pickedUpOrders}  modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} onShowTrackQr={handleShowTrackQr} onPrintTag={handlePrintTrack} onMergeBills={cardActions.mergeBills} />}
         </Box>
       </Box>
 
@@ -2000,7 +2115,7 @@ export default function ShopOrderGrid() {
                     </Typography>
                     <Button
                       size="small" variant="outlined"
-                      startIcon={<ContentCopyIcon sx={{ fontSize: large ? 17 : 13 }} />}
+                      startIcon={<ContentCopyIcon sx={{ fontSize: cardDisplaySize === 'large' ? 17 : 13 }} />}
                       onClick={() => { navigator.clipboard.writeText(customerBoardUrl); setCopiedCustomer(true); setTimeout(() => setCopiedCustomer(false), 2000) }}
                       sx={{ mt: 1, borderColor: '#4ade80', color: '#4ade80', fontWeight: 700, fontSize: 11, textTransform: 'none', '&:hover': { borderColor: '#22c55e', bgcolor: '#14532d' } }}>
                       {copiedCustomer ? 'Copied!' : 'Copy link'}

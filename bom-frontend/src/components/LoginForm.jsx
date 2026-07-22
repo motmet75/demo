@@ -1,10 +1,14 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Alert, Box, Button, Divider, Paper, TextField, Typography } from '@mui/material'
 import { consumeSessionExpiredReturnTo } from '../api/client'
 import { useAuth } from '../context/useAuth'
+import { useI18n } from '../i18n/I18nContext'
+import { SUPPORTED_LANGUAGES } from '../i18n/translations'
+import { LanguageFlag } from './LanguageSelector'
 
 const APP_BASE = '/bom-inventory'
+const LOGIN_LANGUAGE_CODES = ['vi', 'cn', 'tw', 'en']
 
 function locationPath(value) {
   if (!value?.pathname) return ''
@@ -25,27 +29,30 @@ function fullAppUrl(path) {
 
 export default function LoginForm() {
   const { login } = useAuth()
+  const { language, setLanguage, t, tx } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState({ key: '', message: '' })
 
   const sessionExpired = new URLSearchParams(location.search).get('expired') === '1'
   const from = normalizeAppPath(locationPath(location.state?.from)) || '/materials'
+  const loginLanguages = useMemo(() => LOGIN_LANGUAGE_CODES
+    .map((code) => SUPPORTED_LANGUAGES.find((item) => item.code === code))
+    .filter(Boolean), [])
 
-  // Show oauth2 error if redirected back from Google with ?error=oauth2
   useEffect(() => {
     if (new URLSearchParams(location.search).get('error') === 'oauth2') {
-      setError('Google login failed. Please try again.')
+      setError({ key: 'common.googleLoginFailed', message: '' })
     }
   }, [location.search])
 
   const handleSubmit = async (event) => {
     event.preventDefault()
     if (loading) return
-    setError('')
+    setError({ key: '', message: '' })
     setLoading(true)
     try {
       await login({ username, password })
@@ -57,31 +64,64 @@ export default function LoginForm() {
       }
       navigate(destination, { replace: true })
     } catch (err) {
-      setError(err?.message || 'Login failed')
+      setError({ key: '', message: err?.message || 'Login failed' })
     } finally {
       setLoading(false)
     }
   }
 
   const handleGoogleLogin = () => {
-    // Full-page redirect through the Vite proxy to Spring Security's OAuth2 auth endpoint
+    // Full-page redirect through the Vite proxy to Spring Security's OAuth2 auth endpoint.
     window.location.href = '/sapi/oauth2/authorization/google'
   }
 
+  const errorText = error.key ? t(error.key) : error.message ? tx(error.message) : ''
+
   return (
-    <Box sx={{ display: 'flex', justifyContent: 'center', mt: 6 }}>
-      <Paper elevation={3} sx={{ p: 4, width: '100%', maxWidth: 420 }}>
-        <Typography variant="h5" sx={{ mb: 2 }}>Sign in</Typography>
+    <Box sx={{ display: 'grid', placeItems: 'center', minHeight: { xs: 'calc(100vh - 43px)', sm: 'calc(100vh - 54px)' }, px: 2, py: 5, bgcolor: '#f6f8fb' }}>
+      <Paper elevation={2} sx={{ p: { xs: 2.5, sm: 4 }, width: '100%', maxWidth: 460, borderRadius: 1 }}>
+        <Box sx={{ mb: 2.5 }}>
+          <Typography variant="h5" sx={{ fontWeight: 700 }}>{t('login.title')}</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>{t('login.subtitle')}</Typography>
+        </Box>
 
-        {sessionExpired ? <Alert severity="warning" sx={{ mb: 2 }}>Your login session expired. Sign in again to reload the page you were using.</Alert> : null}
-        {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
+        <Box role="group" aria-label={t('language.label')} sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(4, minmax(0, 1fr))' }, gap: 1, mb: 2.5 }}>
+          {loginLanguages.map((item) => {
+            const selected = language === item.code
+            return (
+              <Button
+                key={item.code}
+                variant={selected ? 'contained' : 'outlined'}
+                color={selected ? 'primary' : 'inherit'}
+                onClick={() => setLanguage(item.code)}
+                startIcon={<LanguageFlag code={item.code} label={item.label} />}
+                sx={{
+                  minHeight: 40,
+                  justifyContent: 'flex-start',
+                  borderRadius: 1,
+                  textTransform: 'none',
+                  fontWeight: selected ? 700 : 500,
+                  px: 1,
+                  '& .MuiButton-startIcon': { ml: 0, mr: 0.75 },
+                  '& .MuiButton-startIcon > *:nth-of-type(1)': { fontSize: 'inherit' },
+                }}
+              >
+                <Box component="span" sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {item.nativeLabel}
+                </Box>
+              </Button>
+            )
+          })}
+        </Box>
 
-        {/* Google login */}
+        {sessionExpired ? <Alert severity="warning" sx={{ mb: 2 }}>{t('common.sessionExpired')}</Alert> : null}
+        {errorText ? <Alert severity="error" sx={{ mb: 2 }}>{errorText}</Alert> : null}
+
         <Button
           fullWidth
           variant="outlined"
           onClick={handleGoogleLogin}
-          sx={{ mb: 2, py: 1.2, gap: 1.5, borderColor: '#dadce0', color: '#3c4043', fontWeight: 500 }}
+          sx={{ mb: 2, py: 1.2, gap: 1.5, borderColor: '#dadce0', color: '#3c4043', fontWeight: 500, textTransform: 'none' }}
         >
           <svg width="18" height="18" viewBox="0 0 18 18">
             <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/>
@@ -89,18 +129,18 @@ export default function LoginForm() {
             <path fill="#FBBC05" d="M3.964 10.706A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.706V4.962H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.038l3.007-2.332z"/>
             <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.962L3.964 7.294C4.672 5.163 6.656 3.58 9 3.58z"/>
           </svg>
-          Continue with Google
+          {t('common.continueWithGoogle')}
         </Button>
 
         <Divider sx={{ mb: 2 }}>
-          <Typography variant="caption" color="text.secondary">or sign in with username</Typography>
+          <Typography variant="caption" color="text.secondary">{t('common.orSignInUsername')}</Typography>
         </Divider>
 
         <Box component="form" onSubmit={handleSubmit} sx={{ display: 'grid', gap: 2 }}>
-          <TextField label="Username" value={username} onChange={(e) => setUsername(e.target.value)} required />
-          <TextField label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-          <Button type="submit" variant="contained" disabled={loading}>
-            {loading ? 'Signing in...' : 'Login'}
+          <TextField label={t('common.username')} value={username} onChange={(e) => setUsername(e.target.value)} required disabled={loading} />
+          <TextField label={t('common.password')} type="password" value={password} onChange={(e) => setPassword(e.target.value)} required disabled={loading} />
+          <Button type="submit" variant="contained" disabled={loading} sx={{ py: 1.1, textTransform: 'none' }}>
+            {loading ? t('common.signingIn') : t('common.login')}
           </Button>
         </Box>
       </Paper>

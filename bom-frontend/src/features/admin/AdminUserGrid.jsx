@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { Alert, Box, Button, Chip, Stack, Typography } from '@mui/material'
 import { DataGrid, GridActionsCellItem } from '@mui/x-data-grid'
 import EditIcon from '@mui/icons-material/Edit'
@@ -7,9 +7,11 @@ import AddIcon from '@mui/icons-material/Add'
 import { createAdminUser, deleteAdminUser, fetchAdminUsers, updateAdminUser } from '../../api/adminUserApi'
 import { getTenants } from '../../api/tenantApi'
 import { getCompanies } from '../../api/companyApi'
+import { useI18n } from '../../i18n/I18nContext'
 import AdminUserEditModal from './AdminUserEditModal'
 
 export default function AdminUserGrid() {
+  const { t, tx } = useI18n()
   const [rows, setRows] = useState([])
   const [tenants, setTenants] = useState([])
   const [companies, setCompanies] = useState([])
@@ -19,33 +21,32 @@ export default function AdminUserGrid() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [selected, setSelected] = useState(null)
 
-  const tenantMap = Object.fromEntries(tenants.map((t) => [String(t.id), t]))
-  const companyMap = Object.fromEntries(companies.map((c) => [String(c.id), c]))
+  const tenantMap = Object.fromEntries(tenants.map((tenant) => [String(tenant.id), tenant]))
+  const companyMap = Object.fromEntries(companies.map((company) => [String(company.id), company]))
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
       const [users, tenantList] = await Promise.all([fetchAdminUsers(), getTenants().catch(() => [])])
       setTenants(tenantList)
       setRows(users.map((user) => ({ ...user, id: user.id })))
-      // load companies for all tenants that appear in users or tenant list
       const tenantIds = [...new Set([
-        ...tenantList.map((t) => String(t.id)),
-        ...users.filter((u) => u.assignedTenantId).map((u) => String(u.assignedTenantId))
+        ...tenantList.map((tenant) => String(tenant.id)),
+        ...users.filter((user) => user.assignedTenantId).map((user) => String(user.assignedTenantId))
       ])]
-      const companyArrays = await Promise.all(tenantIds.map((tid) => getCompanies(tid).catch(() => [])))
+      const companyArrays = await Promise.all(tenantIds.map((tenantId) => getCompanies(tenantId).catch(() => [])))
       setCompanies(companyArrays.flat())
     } catch (e) {
       setError(e.message || 'Failed to load users')
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     load()
-  }, [])
+  }, [load])
 
   const handleSave = async (payload) => {
     setSaving(true)
@@ -64,25 +65,29 @@ export default function AdminUserGrid() {
   }
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete this user?')) return
-    await deleteAdminUser(id)
-    await load()
+    if (!window.confirm(t('admin.users.deleteConfirm'))) return
+    try {
+      await deleteAdminUser(id)
+      await load()
+    } catch (e) {
+      setError(e.message || 'Failed to delete user')
+    }
   }
 
   const columns = [
-    { field: 'username', headerName: 'Username', flex: 1, minWidth: 140 },
-    { field: 'firstName', headerName: 'First Name', flex: 1, minWidth: 120 },
-    { field: 'lastName', headerName: 'Last Name', flex: 1, minWidth: 120 },
-    { field: 'email', headerName: 'Email', flex: 1, minWidth: 180 },
+    { field: 'username', headerName: t('admin.users.username'), flex: 1, minWidth: 140 },
+    { field: 'firstName', headerName: t('admin.users.firstName'), flex: 1, minWidth: 120 },
+    { field: 'lastName', headerName: t('admin.users.lastName'), flex: 1, minWidth: 120 },
+    { field: 'email', headerName: t('admin.users.email'), flex: 1, minWidth: 180 },
     {
       field: 'enabled',
-      headerName: 'Status',
+      headerName: t('common.status'),
       width: 110,
-      renderCell: ({ value }) => <Chip label={value ? 'Enabled' : 'Disabled'} color={value ? 'success' : 'default'} size="small" />
+      renderCell: ({ value }) => <Chip label={value ? t('admin.users.enabled') : t('admin.users.disabled')} color={value ? 'success' : 'default'} size="small" />
     },
     {
       field: 'authorities',
-      headerName: 'Authorities',
+      headerName: t('admin.users.authorities'),
       flex: 1.4,
       minWidth: 220,
       renderCell: ({ value }) => (
@@ -93,51 +98,52 @@ export default function AdminUserGrid() {
     },
     {
       field: 'assignedTenantId',
-      headerName: 'Assigned Tenant',
+      headerName: t('admin.users.assignedTenant'),
       flex: 1.2,
       minWidth: 180,
       renderCell: ({ value }) => {
-        if (!value) return <Chip label="— None —" size="small" variant="outlined" color="default" />
-        const t = tenantMap[String(value)]
-        return t
-          ? <Chip label={`${t.tenantName} (${t.tenantCode})`} size="small" color={t.isActive ? 'primary' : 'warning'} variant="outlined" />
+        if (!value) return <Chip label={t('admin.users.none')} size="small" variant="outlined" color="default" />
+        const tenant = tenantMap[String(value)]
+        return tenant
+          ? <Chip label={`${tenant.tenantName} (${tenant.tenantCode})`} size="small" color={tenant.isActive ? 'primary' : 'warning'} variant="outlined" />
           : <Chip label={value} size="small" variant="outlined" />
       }
     },
     {
       field: 'assignedCompanyId',
-      headerName: 'Assigned Company',
+      headerName: t('admin.users.assignedCompany'),
       flex: 1.2,
       minWidth: 200,
       renderCell: ({ value }) => {
-        if (!value) return <Chip label="— None —" size="small" variant="outlined" color="default" />
-        const c = companyMap[String(value)]
-        return c
-          ? <Chip label={`${c.companyName ?? c.name} (${c.companyCode ?? c.code})`} size="small" color="secondary" variant="outlined" />
+        if (!value) return <Chip label={t('admin.users.none')} size="small" variant="outlined" color="default" />
+        const company = companyMap[String(value)]
+        return company
+          ? <Chip label={`${company.companyName ?? company.name} (${company.companyCode ?? company.code})`} size="small" color="secondary" variant="outlined" />
           : <Chip label={value} size="small" variant="outlined" />
       }
     },
     {
       field: 'actions',
       type: 'actions',
+      headerName: t('admin.users.actions'),
       width: 90,
       getActions: (params) => [
-        <GridActionsCellItem icon={<EditIcon />} label="Edit" onClick={() => { setSelected(params.row); setDialogOpen(true) }} />,
-        <GridActionsCellItem icon={<DeleteIcon />} label="Delete" onClick={() => handleDelete(params.id)} />
+        <GridActionsCellItem key="edit" icon={<EditIcon />} label={t('common.edit')} onClick={() => { setSelected(params.row); setDialogOpen(true) }} />,
+        <GridActionsCellItem key="delete" icon={<DeleteIcon />} label={t('common.delete')} onClick={() => handleDelete(params.id)} />
       ]
     }
   ]
 
   return (
     <Box>
-      {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Box>
-          <Typography variant="h6">Users</Typography>
-          <Typography variant="body2" color="text.secondary">Admin-only CRUD for Spring Boot users and roles.</Typography>
+      {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{tx(error)}</Alert>}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, mb: 2 }}>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="h6">{t('admin.users.title')}</Typography>
+          <Typography variant="body2" color="text.secondary">{t('admin.users.description')}</Typography>
         </Box>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => { setSelected(null); setDialogOpen(true) }}>
-          New User
+        <Button variant="contained" startIcon={<AddIcon />} onClick={() => { setSelected(null); setDialogOpen(true) }} sx={{ flexShrink: 0 }}>
+          {t('admin.users.new')}
         </Button>
       </Box>
 
@@ -149,15 +155,19 @@ export default function AdminUserGrid() {
         disableRowSelectionOnClick
         pageSizeOptions={[5, 10, 25]}
         initialState={{ pagination: { paginationModel: { page: 0, pageSize: 10 } } }}
+        localeText={{ noRowsLabel: t('admin.users.noRows') }}
       />
 
-      <AdminUserEditModal
-        open={dialogOpen}
-        user={selected}
-        onClose={() => { if (!saving) { setDialogOpen(false); setSelected(null) } }}
-        onSave={handleSave}
-        saving={saving}
-      />
+      {dialogOpen ? (
+        <AdminUserEditModal
+          key={selected?.id || 'new'}
+          open={dialogOpen}
+          user={selected}
+          onClose={() => { if (!saving) { setDialogOpen(false); setSelected(null) } }}
+          onSave={handleSave}
+          saving={saving}
+        />
+      ) : null}
     </Box>
   )
 }

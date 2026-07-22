@@ -1,15 +1,17 @@
 import React from 'react'
 import { Alert, Box } from '@mui/material'
 import { useAuth } from '../../context/useAuth'
+import { useI18n } from '../../i18n/I18nContext'
 import AdminUserGrid from './AdminUserGrid'
 
 export default function AdminPage() {
   const { user } = useAuth()
+  const { t } = useI18n()
 
   return (
     <Box>
       <Alert severity="info" sx={{ mb: 2 }}>
-        Signed in as <strong>{user?.username}</strong>. Only users with <strong>ROLE_ADMIN</strong> can access this page.
+        {t('admin.accessNotice', { username: user?.username || t('common.notAvailable') })}
       </Alert>
       <AdminUserGrid />
     </Box>

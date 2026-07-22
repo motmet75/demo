@@ -26,7 +26,7 @@ const FLAG_IMAGES = Object.fromEntries(
   Object.entries(FLAG_SVGS).map(([code, svg]) => [code, `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`])
 )
 
-function LanguageFlag({ code, label, sx }) {
+export function LanguageFlag({ code, label, sx }) {
   return (
     <Box
       component="img"
@@ -45,8 +45,13 @@ function LanguageFlag({ code, label, sx }) {
   )
 }
 
-export default function LanguageSelector({ size = 'small', compact = false, variant = 'outlined' }) {
+export default function LanguageSelector({ size = 'small', compact = false, variant = 'outlined', languageCodes }) {
   const { language, setLanguage, t } = useI18n()
+  const languages = React.useMemo(() => {
+    if (!Array.isArray(languageCodes) || languageCodes.length === 0) return SUPPORTED_LANGUAGES
+    const allowedCodes = new Set(languageCodes)
+    return SUPPORTED_LANGUAGES.filter((item) => allowedCodes.has(item.code))
+  }, [languageCodes])
 
   return (
     <FormControl size={size} variant={variant} sx={{ minWidth: compact ? 54 : 150 }}>
@@ -58,7 +63,10 @@ export default function LanguageSelector({ size = 'small', compact = false, vari
         onChange={(event) => setLanguage(event.target.value)}
         sx={compact ? { '& .MuiSelect-select': { display: 'flex', justifyContent: 'center', alignItems: 'center', py: 0.75, px: 1 } } : undefined}
         renderValue={(value) => {
-          const selected = SUPPORTED_LANGUAGES.find((item) => item.code === value) || SUPPORTED_LANGUAGES[0]
+          const selected = languages.find((item) => item.code === value)
+            || SUPPORTED_LANGUAGES.find((item) => item.code === value)
+            || languages[0]
+            || SUPPORTED_LANGUAGES[0]
           return (
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: compact ? 'center' : 'flex-start', gap: compact ? 0 : 0.75 }}>
               {compact ? (
@@ -73,7 +81,7 @@ export default function LanguageSelector({ size = 'small', compact = false, vari
           )
         }}
       >
-        {SUPPORTED_LANGUAGES.map((item) => (
+        {languages.map((item) => (
           <MenuItem key={item.code} value={item.code} aria-label={item.label} sx={compact ? { justifyContent: 'center', minWidth: 54 } : undefined}>
             {compact ? <LanguageFlag code={item.code} label={item.label} sx={{ width: 28, height: 20 }} /> : `${item.nativeLabel} (${item.code.toUpperCase()})`}
           </MenuItem>

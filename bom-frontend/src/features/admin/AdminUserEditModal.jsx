@@ -5,6 +5,7 @@ import {
 } from '@mui/material'
 import { getTenants } from '../../api/tenantApi'
 import { getCompanies } from '../../api/companyApi'
+import { useI18n } from '../../i18n/I18nContext'
 
 const parseAuthoritiesInput = (value) => value
   .split(',')
@@ -12,6 +13,7 @@ const parseAuthoritiesInput = (value) => value
   .filter(Boolean)
 
 export default function AdminUserEditModal({ open, user, onClose, onSave, saving }) {
+  const { t, tx } = useI18n()
   const [tenants, setTenants] = useState([])
   const [companies, setCompanies] = useState([])
 
@@ -34,12 +36,7 @@ export default function AdminUserEditModal({ open, user, onClose, onSave, saving
   const [form, setForm] = useState(initial)
   const [error, setError] = useState('')
 
-  React.useEffect(() => {
-    setForm(initial)
-    setError('')
-  }, [initial, open])
 
-  // Load companies whenever the selected tenant changes
   useEffect(() => {
     let cancelled = false
     if (!form.assignedTenantId) {
@@ -56,7 +53,6 @@ export default function AdminUserEditModal({ open, user, onClose, onSave, saving
     const value = field === 'enabled' ? event.target.checked : event.target.value
     setForm((prev) => {
       const next = { ...prev, [field]: value }
-      // clear company when tenant changes
       if (field === 'assignedTenantId') next.assignedCompanyId = ''
       return next
     })
@@ -84,74 +80,74 @@ export default function AdminUserEditModal({ open, user, onClose, onSave, saving
 
   return (
     <Dialog open={open} onClose={saving ? undefined : onClose} fullWidth maxWidth="sm">
-      <DialogTitle>{user ? 'Edit User' : 'Create User'}</DialogTitle>
+      <DialogTitle>{t(user ? 'admin.users.editTitle' : 'admin.users.createTitle')}</DialogTitle>
       <Box component="form" onSubmit={handleSubmit}>
         <DialogContent sx={{ display: 'grid', gap: 2 }}>
-          {error ? <Alert severity="error">{error}</Alert> : null}
-          <TextField label="Username" value={form.username} onChange={handleChange('username')} required disabled={saving} />
+          {error ? <Alert severity="error">{tx(error)}</Alert> : null}
+          <TextField label={t('admin.users.username')} value={form.username} onChange={handleChange('username')} required disabled={saving} />
           <TextField
-            label={user ? 'New Password (leave blank to keep current)' : 'Password'}
+            label={user ? t('admin.users.newPasswordKeep') : t('common.password')}
             type="password"
             value={form.password}
             onChange={handleChange('password')}
             required={!user}
             disabled={saving}
           />
-          <TextField label="First Name" value={form.firstName} onChange={handleChange('firstName')} required disabled={saving} />
-          <TextField label="Last Name" value={form.lastName} onChange={handleChange('lastName')} required disabled={saving} />
-          <TextField label="Email" type="email" value={form.email} onChange={handleChange('email')} disabled={saving} />
-          <FormControlLabel control={<Switch checked={!!form.enabled} onChange={handleChange('enabled')} disabled={saving} />} label="Enabled" />
+          <TextField label={t('admin.users.firstName')} value={form.firstName} onChange={handleChange('firstName')} required disabled={saving} />
+          <TextField label={t('admin.users.lastName')} value={form.lastName} onChange={handleChange('lastName')} required disabled={saving} />
+          <TextField label={t('admin.users.email')} type="email" value={form.email} onChange={handleChange('email')} disabled={saving} />
+          <FormControlLabel control={<Switch checked={!!form.enabled} onChange={handleChange('enabled')} disabled={saving} />} label={t('admin.users.enabled')} />
           <TextField
-            label="Authorities"
+            label={t('admin.users.authorities')}
             value={form.authoritiesText}
             onChange={handleChange('authoritiesText')}
-            helperText="Comma-separated roles, for example: ROLE_ADMIN, ROLE_USER"
+            helperText={t('admin.users.authoritiesHelp')}
             disabled={saving}
           />
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
             {parseAuthoritiesInput(form.authoritiesText).map((role) => <Chip key={role} label={role} size="small" />)}
           </Box>
           <FormControl fullWidth disabled={saving}>
-            <InputLabel id="assigned-tenant-label">Assigned Tenant</InputLabel>
+            <InputLabel id="assigned-tenant-label">{t('admin.users.assignedTenant')}</InputLabel>
             <Select
               labelId="assigned-tenant-label"
-              label="Assigned Tenant"
+              label={t('admin.users.assignedTenant')}
               value={form.assignedTenantId}
               onChange={handleChange('assignedTenantId')}
             >
-              <MenuItem value=""><em>— None —</em></MenuItem>
-              {tenants.map((t) => (
-                <MenuItem key={t.id} value={t.id}>
-                  {t.tenantName} ({t.tenantCode}){!t.isActive ? ' [inactive]' : ''}
+              <MenuItem value=""><em>{t('admin.users.none')}</em></MenuItem>
+              {tenants.map((tenant) => (
+                <MenuItem key={tenant.id} value={tenant.id}>
+                  {tenant.tenantName} ({tenant.tenantCode}){!tenant.isActive ? ` [${t('admin.users.inactive')}]` : ''}
                 </MenuItem>
               ))}
             </Select>
           </FormControl>
           <FormControl fullWidth disabled={saving || !form.assignedTenantId}>
-            <InputLabel id="assigned-company-label">Assigned Company</InputLabel>
+            <InputLabel id="assigned-company-label">{t('admin.users.assignedCompany')}</InputLabel>
             <Select
               labelId="assigned-company-label"
-              label="Assigned Company"
+              label={t('admin.users.assignedCompany')}
               value={form.assignedCompanyId}
               onChange={handleChange('assignedCompanyId')}
             >
-              <MenuItem value=""><em>— None —</em></MenuItem>
-              {companies.map((c) => (
-                <MenuItem key={c.id} value={String(c.id)}>
-                  {c.companyName ?? c.name} ({c.companyCode ?? c.code})
+              <MenuItem value=""><em>{t('admin.users.none')}</em></MenuItem>
+              {companies.map((company) => (
+                <MenuItem key={company.id} value={String(company.id)}>
+                  {company.companyName ?? company.name} ({company.companyCode ?? company.code})
                 </MenuItem>
               ))}
             </Select>
             {!form.assignedTenantId && (
               <Box sx={{ fontSize: 12, color: 'text.secondary', mt: 0.5, ml: 1.5 }}>
-                Select a tenant first to load companies
+                {t('admin.users.selectTenantFirst')}
               </Box>
             )}
           </FormControl>
         </DialogContent>
         <DialogActions>
-          <Button onClick={onClose} disabled={saving}>Cancel</Button>
-          <Button type="submit" variant="contained" disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button>
+          <Button onClick={onClose} disabled={saving}>{t('common.cancel')}</Button>
+          <Button type="submit" variant="contained" disabled={saving}>{saving ? t('admin.users.saving') : t('common.save')}</Button>
         </DialogActions>
       </Box>
     </Dialog>

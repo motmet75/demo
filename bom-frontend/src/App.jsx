@@ -324,7 +324,7 @@ function Sidebar({ collapsed, onToggle, isAdmin }) {
       }}>
         {!collapsed && (
           <Typography variant="subtitle2" fontWeight={700} sx={{ color: '#1565c0', letterSpacing: 0.5 }}>
-            BOM System
+            {t('app.name')}
           </Typography>
         )}
         <IconButton size="small" onClick={onToggle} sx={{ flexShrink: 0 }}>
@@ -374,6 +374,7 @@ function HeaderBar({ user, logout }) {
       {!hideContext && <Box sx={{ flex: { xs: 1, sm: '0 1 auto' }, minWidth: 0 }}><CompanySelector /></Box>}
       {!hideContext && <Box sx={{ display: { xs: 'none', sm: 'block' } }}><BomSelector /></Box>}
       <Box sx={{ flex: 1 }} />
+      <LanguageSelector compact />
       <Typography variant="body2" color="text.secondary" sx={{ display: { xs: 'none', sm: 'block' } }}>
         <strong>{user.username}</strong>
       </Typography>
