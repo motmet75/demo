@@ -29,15 +29,18 @@ public class GoogleOAuth2UserService implements OAuth2UserService<OAuth2UserRequ
     private final TenantRepository tenantRepository;
     private final CompanyRepository companyRepository;
     private final AuthorityRepository authorityRepository;
+    private final NewUserNotificationService newUserNotificationService;
 
     public GoogleOAuth2UserService(UserRepository userRepository,
                                    TenantRepository tenantRepository,
                                    CompanyRepository companyRepository,
-                                   AuthorityRepository authorityRepository) {
+                                   AuthorityRepository authorityRepository,
+                                   NewUserNotificationService newUserNotificationService) {
         this.userRepository = userRepository;
         this.tenantRepository = tenantRepository;
         this.companyRepository = companyRepository;
         this.authorityRepository = authorityRepository;
+        this.newUserNotificationService = newUserNotificationService;
     }
 
     @Override
@@ -101,6 +104,8 @@ public class GoogleOAuth2UserService implements OAuth2UserService<OAuth2UserRequ
         user.setLastCompanyId(company.getId().toString());
         user.setAssignedTenantId(tenant.getId().toString());
         user.setAssignedCompanyId(company.getId().toString());
-        return userRepository.save(user);
+        User saved = userRepository.save(user);
+        newUserNotificationService.notifyNewUser(saved, "google-oauth2");
+        return saved;
     }
 }

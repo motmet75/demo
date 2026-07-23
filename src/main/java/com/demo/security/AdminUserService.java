@@ -24,11 +24,16 @@ public class AdminUserService {
     private final UserRepository userRepository;
     private final AuthorityRepository authorityRepository;
     private final PasswordEncoder passwordEncoder;
+    private final NewUserNotificationService newUserNotificationService;
 
-    public AdminUserService(UserRepository userRepository, AuthorityRepository authorityRepository, PasswordEncoder passwordEncoder) {
+    public AdminUserService(UserRepository userRepository,
+                            AuthorityRepository authorityRepository,
+                            PasswordEncoder passwordEncoder,
+                            NewUserNotificationService newUserNotificationService) {
         this.userRepository = userRepository;
         this.authorityRepository = authorityRepository;
         this.passwordEncoder = passwordEncoder;
+        this.newUserNotificationService = newUserNotificationService;
     }
 
     public List<AuthUserView> findAllUsers() {
@@ -64,6 +69,7 @@ public class AdminUserService {
 
         User saved = userRepository.save(user);
         replaceAuthorities(saved.getUsername(), request.authorities());
+        newUserNotificationService.notifyNewUser(saved, "admin");
         return toView(saved);
     }
 
