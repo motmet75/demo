@@ -1,5 +1,6 @@
 package com.ams.bomcore.controller.company;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -75,7 +76,7 @@ public class CompanyController {
         int max = tenant.getMaxCompanies() == null ? 1 : tenant.getMaxCompanies();
         int count = companies.size();
         return companies.stream()
-                .map(c -> new CompanyDto(c.getId(), c.getCompanyCode(), c.getCompanyName(), count, max))
+                .map(c -> new CompanyDto(c, count, max))
                 .collect(Collectors.toList());
     }
 
@@ -112,7 +113,7 @@ public class CompanyController {
         c.setCompanyCode(dto.companyCode);
         c.setCompanyName(dto.companyName);
         companyRepository.save(c);
-        return ResponseEntity.status(HttpStatus.CREATED).body(new CompanyDto(c.getId(), c.getCompanyCode(), c.getCompanyName(), (int)(current + 1), max));
+        return ResponseEntity.status(HttpStatus.CREATED).body(new CompanyDto(c, (int)(current + 1), max));
     }
 
     @PutMapping("/{id}")
@@ -143,7 +144,7 @@ public class CompanyController {
         Tenant finalTenant = c.getTenant();
         int max = finalTenant.getMaxCompanies() == null ? 1 : finalTenant.getMaxCompanies();
         int count = (int) companyRepository.countByTenant(finalTenant);
-        return ResponseEntity.ok(new CompanyDto(c.getId(), c.getCompanyCode(), c.getCompanyName(), count, max));
+        return ResponseEntity.ok(new CompanyDto(c, count, max));
     }
 
     @DeleteMapping("/{id}")
@@ -160,10 +161,20 @@ public class CompanyController {
         public final UUID id;
         public final String code;
         public final String name;
+        public final Instant createdAt;
+        public final Instant validUntil;
+        public final boolean expired;
+        public final boolean usageEnabled;
         public final int companyCount;
         public final int maxCompanies;
-        public CompanyDto(UUID id, String code, String name, int companyCount, int maxCompanies) {
-            this.id = id; this.code = code; this.name = name;
+        public CompanyDto(Company company, int companyCount, int maxCompanies) {
+            this.id = company.getId();
+            this.code = company.getCompanyCode();
+            this.name = company.getCompanyName();
+            this.createdAt = company.getCreatedAt();
+            this.validUntil = company.getValidUntil();
+            this.expired = validUntil != null && !validUntil.isAfter(Instant.now());
+            this.usageEnabled = !expired;
             this.companyCount = companyCount; this.maxCompanies = maxCompanies;
         }
     }
@@ -179,3 +190,5 @@ public class CompanyController {
         public ErrorDto(String message) { this.message = message; }
     }
 }
+
+

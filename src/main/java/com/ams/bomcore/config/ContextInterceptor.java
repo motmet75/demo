@@ -10,6 +10,7 @@ import com.ams.bomcore.context.TenantContext;
 import com.ams.bomcore.context.UserContext;
 import com.ams.bomcore.repository.CompanyRepository;
 import com.ams.bomcore.repository.TenantRepository;
+import com.ams.bomcore.service.CompanyUsageService;
 import com.ams.bomcore.service.TenantValidationService;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -21,11 +22,16 @@ public class ContextInterceptor implements HandlerInterceptor {
     private final CompanyRepository companyRepository;
     private final TenantRepository tenantRepository;
     private final TenantValidationService tenantValidationService;
+    private final CompanyUsageService companyUsageService;
 
-    public ContextInterceptor(CompanyRepository companyRepository, TenantRepository tenantRepository, TenantValidationService tenantValidationService) {
+    public ContextInterceptor(CompanyRepository companyRepository,
+                              TenantRepository tenantRepository,
+                              TenantValidationService tenantValidationService,
+                              CompanyUsageService companyUsageService) {
         this.companyRepository = companyRepository;
         this.tenantRepository = tenantRepository;
         this.tenantValidationService = tenantValidationService;
+        this.companyUsageService = companyUsageService;
     }
 
     @Override
@@ -87,6 +93,14 @@ public class ContextInterceptor implements HandlerInterceptor {
             }
             if (!tenant.getId().equals(tenantUuid)) {
                 response.sendError(HttpStatus.BAD_REQUEST.value(), "Company does not belong to tenant");
+                return false;
+            }
+            if (!companyUsageService.isUsable(company)) {
+                response.setStatus(HttpStatus.PAYMENT_REQUIRED.value());
+                response.setContentType("application/json");
+                response.getWriter().write("{\"error\":\"" + CompanyUsageService.EXPIRED_MESSAGE
+                        + "\",\"message\":\"" + CompanyUsageService.EXPIRED_MESSAGE
+                        + "\",\"validUntil\":\"" + company.getValidUntil() + "\"}");
                 return false;
             }
         } catch (IllegalArgumentException ex) {

@@ -18,8 +18,8 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(contextInterceptor)
-            // apply to all /bom/** business endpoints
-            .addPathPatterns("/bom/**")
+            // apply to business and authenticated shop staff endpoints
+            .addPathPatterns("/bom/**", "/shop/staff/**")
             // exclude endpoints that must work without tenant/company context
             .excludePathPatterns(
                 "/bom/tenants",
@@ -29,3 +29,4 @@ public class WebConfig implements WebMvcConfigurer {
             );
     }
 }
+
