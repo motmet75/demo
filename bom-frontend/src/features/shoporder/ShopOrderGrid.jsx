@@ -132,8 +132,8 @@ function playNewOrderSound() {
 
 const STATUS_COLOR  = { PENDING: 'default', CONFIRMED: 'primary', PREPARING: 'warning', READY: 'success', PICKED_UP: 'success', COMPLETED: 'success', CANCELLED: 'error' }
 const STATUS_LABEL  = { PENDING: 'Placed', CONFIRMED: 'Confirmed', PREPARING: 'Preparing', READY: 'Ready ✓', PICKED_UP: 'Picked Up ✓', COMPLETED: 'Done', CANCELLED: 'Cancelled' }
-const STATUS_LABEL_VI = { PENDING: 'Đã đặt', CONFIRMED: 'Đã xác nhận', PREPARING: 'Đang chuẩn bị', READY: 'Sẵn sàng ✓', PICKED_UP: 'Đã nhận ✓', COMPLETED: 'Hoàn tất', CANCELLED: 'Đã hủy' }
-const localizedStatusLabel = (status, language) => (language === 'vi' ? STATUS_LABEL_VI[status] : STATUS_LABEL[status]) || status
+const STATUS_I18N_KEY = { PENDING: 'shopOrder.status.pending', CONFIRMED: 'shopOrder.status.confirmed', PREPARING: 'shopOrder.status.preparing', READY: 'shopOrder.status.ready', PICKED_UP: 'shopOrder.status.pickedUp', COMPLETED: 'shopOrder.status.completed', CANCELLED: 'shopOrder.status.cancelled' }
+const localizedStatusLabel = (status, t) => STATUS_I18N_KEY[status] ? t(STATUS_I18N_KEY[status]) : (STATUS_LABEL[status] || status)
 const STATUSES      = ['', 'PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'PICKED_UP', 'COMPLETED', 'CANCELLED']
 const fmt           = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 const payableAmount = (order) => Math.max(0, Number(order?.totalAmount || 0) - Number(order?.discountAmount || 0))
@@ -265,6 +265,7 @@ function SectionLabel({ children }) {
 }
 
 function StockPanel({ items, onUseInOrder, onClear, onRemoveItem }) {
+  const { t } = useI18n()
   const [selectedUids, setSelectedUids] = useState(new Set())
 
   const available = items.filter(i => !i.utilizedOrderCode)
@@ -307,7 +308,7 @@ function StockPanel({ items, onUseInOrder, onClear, onRemoveItem }) {
         {/* Available */}
         {available.length > 0 && (
           <>
-            <SectionLabel>Available — tap + to select</SectionLabel>
+            <SectionLabel>{t('shopOrder.grid.availableTap')}</SectionLabel>
             <Stack spacing={0.5} sx={{ mb: utilized.length ? 1.5 : 0 }}>
               {available.map(item => {
                 const sel = selectedUids.has(item.uid)
@@ -639,10 +640,10 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                   </Button>
                 )}
                 {status === 'CONFIRMED' && (
-                  <Button size="small" variant="contained" color="warning" fullWidth onClick={() => onAction('prepare', order.id, order.orderNumber)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Start Preparing</Button>
+                  <Button size="small" variant="contained" color="warning" fullWidth onClick={() => onAction('prepare', order.id, order.orderNumber)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>{t('shopOrder.grid.prepare')}</Button>
                 )}
                 {status === 'PREPARING' && (
-                  <Button size="small" variant="contained" color="success" fullWidth onClick={() => onAction('ready', order.id, order.orderNumber)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Mark Ready ✓</Button>
+                  <Button size="small" variant="contained" color="success" fullWidth onClick={() => onAction('ready', order.id, order.orderNumber)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>{t('shopOrder.grid.readyCheck')}</Button>
                 )}
                 {status === 'READY' && (
                   <Stack spacing={0.5}>
@@ -654,8 +655,8 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                     </Button>
                     <Box sx={{ display: 'flex', gap: 0.75 }}>
                       {(order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT')
-                        ? <Button size="small" variant="contained" color="info" fullWidth onClick={() => onAction('pickup', order.id, order.orderNumber)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Picked Up ✓</Button>
-                        : <Button size="small" variant="contained" color="success" fullWidth onClick={() => onAction('complete', order.id, order.orderNumber)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>Complete ✓</Button>
+                        ? <Button size="small" variant="contained" color="info" fullWidth onClick={() => onAction('pickup', order.id, order.orderNumber)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>{t('shopOrder.grid.pickedUpCheck')}</Button>
+                        : <Button size="small" variant="contained" color="success" fullWidth onClick={() => onAction('complete', order.id, order.orderNumber)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>{t('shopOrder.grid.completeCheck')}</Button>
                       }
                     </Box>
                   </Stack>
@@ -718,7 +719,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
   const [editNum, setEditNum]       = useState(false)
   const [numVal, setNumVal]         = useState(String(order.orderNumber ?? ''))
   const [imagePreview, setImagePreview] = useState(null)
-  const { t, language } = useI18n()
+  const { t } = useI18n()
 
   const large = displaySize === 'large'
   const baseStyle = CARD_STYLE[order.status] || CARD_STYLE.CONFIRMED
@@ -804,7 +805,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
         {/* Status / meta */}
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Box sx={{ display: 'flex', gap: 0.4, flexWrap: 'wrap', alignItems: 'center', mb: 0.3 }}>
-            <Chip label={localizedStatusLabel(order.status, language)} color={STATUS_COLOR[order.status] || 'default'} size="small"
+            <Chip label={localizedStatusLabel(order.status, t)} color={STATUS_COLOR[order.status] || 'default'} size="small"
               sx={{ height: large ? 24 : 20, fontSize: large ? 12 : 10, fontWeight: 800 }} />
             {order.fulfillmentType && (() => { const m = { DINE_IN: '🪑', PICKUP: '🥡', DELIVERY: '🛵' }; return <Typography sx={{ fontSize: large ? 17 : 13 }}>{m[order.fulfillmentType] || ''}</Typography> })()}
             {order.tableName && <Chip icon={<TableBarIcon sx={{ fontSize: large ? 18 : 16 }} />} label={order.tableName} size="small" color="info" variant="outlined" sx={{ height: large ? 32 : 28, fontSize: large ? 16 : 14, fontWeight: 900, '& .MuiChip-label': { px: 1 } }} />}
@@ -876,7 +877,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
           onChange={e => actions.setTable(order.id, e.target.value)}
           sx={{ fontSize: large ? 17 : 15, height: large ? 42 : 38, border: '2px solid #93c5fd', borderRadius: 1, px: 1, flex: 1, cursor: 'pointer', bgcolor: 'white', color: '#111827', fontWeight: 900 }}
         >
-          <option value="">No table</option>
+          <option value="">{t('shopOrder.grid.noTable')}</option>
           {tables.map(t => <option key={t.id} value={t.id}>{t.tableName}</option>)}
         </Box>
         <Typography sx={{ fontSize: large ? 12 : 10, fontFamily: 'monospace', color: '#94a3b8', flexShrink: 0 }}>{order.orderCode}</Typography>
@@ -887,7 +888,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
       {/* ── Items ── */}
       <Box sx={{ px: large ? 1.5 : 1.25, py: large ? 1 : 0.75, flex: 1 }}>
         {roots.length === 0
-          ? <Typography sx={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>No items</Typography>
+          ? <Typography sx={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>{t('shopOrder.edit.noItems')}</Typography>
           : roots.slice(0, 7).map((root, rIdx) => {
               const children = childMap[String(root.id)] || []
               const opts = parseOpts(root.selectedOptions)
@@ -1007,8 +1008,8 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
                 Pickup QR
               </Button>
               {isQr
-                ? <Button size="small" variant="contained" color="info" onClick={() => actions.pickup(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: 12, flex: 1 }}>Picked Up ✓</Button>
-                : <Button size="small" variant="contained" color="success" onClick={() => actions.complete(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: 12, flex: 1 }}>Complete ✓</Button>
+                ? <Button size="small" variant="contained" color="info" onClick={() => actions.pickup(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: 12, flex: 1 }}>{t('shopOrder.grid.pickedUpCheck')}</Button>
+                : <Button size="small" variant="contained" color="success" onClick={() => actions.complete(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: 12, flex: 1 }}>{t('shopOrder.grid.completeCheck')}</Button>
               }
             </>
           )}
@@ -1076,8 +1077,7 @@ function summarizeOrderItems(order) {
 }
 
 function OrderRowsGrid({ rows, tables, actions, selectedIds, onToggleSelect, displaySize = 'normal', highContrast = false }) {
-  const { language } = useI18n()
-  const vi = language === 'vi'
+  const { t } = useI18n()
   const large = displaySize === 'large'
   const fontSize = large ? 15 : 13
   const headerSx = {
@@ -1101,11 +1101,11 @@ function OrderRowsGrid({ rows, tables, actions, selectedIds, onToggleSelect, dis
     bgcolor: highContrast ? '#fff' : 'inherit',
   }
   const renderPrimaryAction = (order) => {
-    if (order.status === 'PENDING') return <Button size="small" variant="contained" disabled={Boolean(order.customerEditing)} onClick={() => actions.confirm(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 13 : 11 }}>{vi ? 'Xác nhận' : 'Confirm'}</Button>
-    if (order.status === 'CONFIRMED') return <Button size="small" variant="contained" color="warning" onClick={() => actions.prepare(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 13 : 11 }}>{vi ? 'Chuẩn bị' : 'Prepare'}</Button>
-    if (order.status === 'PREPARING') return <Button size="small" variant="contained" color="success" onClick={() => actions.ready(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 13 : 11 }}>{vi ? 'Sẵn sàng' : 'Ready'}</Button>
-    if (order.status === 'READY') return <Button size="small" variant="contained" color={order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT' ? 'info' : 'success'} onClick={() => (order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT') ? actions.pickup(order) : actions.complete(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 13 : 11 }}>{order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT' ? (vi ? 'Đã nhận' : 'Picked Up') : (vi ? 'Hoàn tất' : 'Complete')}</Button>
-    return <Typography sx={{ fontSize: large ? 13 : 11, color: '#64748b', fontWeight: 700 }}>{localizedStatusLabel(order.status, language)}</Typography>
+    if (order.status === 'PENDING') return <Button size="small" variant="contained" disabled={Boolean(order.customerEditing)} onClick={() => actions.confirm(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 13 : 11 }}>{t('shopOrder.grid.confirm')}</Button>
+    if (order.status === 'CONFIRMED') return <Button size="small" variant="contained" color="warning" onClick={() => actions.prepare(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 13 : 11 }}>{t('shopOrder.grid.prepare')}</Button>
+    if (order.status === 'PREPARING') return <Button size="small" variant="contained" color="success" onClick={() => actions.ready(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 13 : 11 }}>{t('shopOrder.grid.ready')}</Button>
+    if (order.status === 'READY') return <Button size="small" variant="contained" color={order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT' ? 'info' : 'success'} onClick={() => (order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT') ? actions.pickup(order) : actions.complete(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 13 : 11 }}>{order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT' ? t('shopOrder.grid.pickedUp') : t('shopOrder.grid.complete')}</Button>
+    return <Typography sx={{ fontSize: large ? 13 : 11, color: '#64748b', fontWeight: 700 }}>{localizedStatusLabel(order.status, t)}</Typography>
   }
 
   return (
@@ -1114,15 +1114,15 @@ function OrderRowsGrid({ rows, tables, actions, selectedIds, onToggleSelect, dis
         <Box component="thead">
           <Box component="tr">
             <Box component="th" sx={{ ...headerSx, width: 44 }} />
-            <Box component="th" sx={{ ...headerSx, width: 110 }}>{vi ? 'Đơn' : 'Order'}</Box>
-            <Box component="th" sx={{ ...headerSx, width: 130 }}>{vi ? 'Trạng thái' : 'Status'}</Box>
-            <Box component="th" sx={{ ...headerSx, width: 150 }}>{vi ? 'Bàn' : 'Table'}</Box>
-            <Box component="th" sx={{ ...headerSx, minWidth: 260 }}>{vi ? 'Món' : 'Items'}</Box>
-            <Box component="th" sx={{ ...headerSx, width: 150 }}>{vi ? 'Khách hàng' : 'Customer'}</Box>
-            <Box component="th" sx={{ ...headerSx, width: 130 }}>{vi ? 'Thanh toán' : 'Payment'}</Box>
-            <Box component="th" sx={{ ...headerSx, width: 130, textAlign: 'right' }}>{vi ? 'Tổng' : 'Total'}</Box>
-            <Box component="th" sx={{ ...headerSx, width: 130 }}>{vi ? 'Thời gian' : 'Time'}</Box>
-            <Box component="th" sx={{ ...headerSx, width: 260 }}>{vi ? 'Thao tác' : 'Actions'}</Box>
+            <Box component="th" sx={{ ...headerSx, width: 110 }}>{t('shopOrder.common.order')}</Box>
+            <Box component="th" sx={{ ...headerSx, width: 130 }}>{t('common.status')}</Box>
+            <Box component="th" sx={{ ...headerSx, width: 150 }}>{t('common.table')}</Box>
+            <Box component="th" sx={{ ...headerSx, minWidth: 260 }}>{t('shopOrder.common.items')}</Box>
+            <Box component="th" sx={{ ...headerSx, width: 150 }}>{t('common.customer')}</Box>
+            <Box component="th" sx={{ ...headerSx, width: 130 }}>{t('common.payment')}</Box>
+            <Box component="th" sx={{ ...headerSx, width: 130, textAlign: 'right' }}>{t('common.total')}</Box>
+            <Box component="th" sx={{ ...headerSx, width: 130 }}>{t('shopOrder.common.time')}</Box>
+            <Box component="th" sx={{ ...headerSx, width: 260 }}>{t('shopOrder.common.actions')}</Box>
           </Box>
         </Box>
         <Box component="tbody">
@@ -1139,12 +1139,12 @@ function OrderRowsGrid({ rows, tables, actions, selectedIds, onToggleSelect, dis
                   <Typography sx={{ fontSize: large ? 12 : 10, fontFamily: 'monospace', color: '#64748b' }}>{order.orderCode}</Typography>
                 </Box>
                 <Box component="td" sx={cellSx}>
-                  <Chip label={localizedStatusLabel(order.status, language)} color={STATUS_COLOR[order.status] || 'default'} size="small" sx={{ fontWeight: 800, fontSize: large ? 12 : 10 }} />
+                  <Chip label={localizedStatusLabel(order.status, t)} color={STATUS_COLOR[order.status] || 'default'} size="small" sx={{ fontWeight: 800, fontSize: large ? 12 : 10 }} />
                   {order.customerEditing && <Chip label="Editing" color="warning" size="small" sx={{ ml: 0.5, fontWeight: 800, fontSize: large ? 12 : 10 }} />}
                 </Box>
                 <Box component="td" sx={cellSx}>
                   <Box component="select" value={order.tableId || ''} onChange={e => actions.setTable(order.id, e.target.value)} sx={{ width: '100%', height: large ? 42 : 38, fontSize: large ? 16 : 15, fontWeight: 900, border: '2px solid #93c5fd', borderRadius: 1, px: 1, bgcolor: '#fff', color: '#111827' }}>
-                    <option value="">No table</option>
+                    <option value="">{t('shopOrder.grid.noTable')}</option>
                     {tables.map(t => <option key={t.id} value={t.id}>{t.tableName}</option>)}
                   </Box>
                 </Box>
@@ -1171,11 +1171,11 @@ function OrderRowsGrid({ rows, tables, actions, selectedIds, onToggleSelect, dis
                 <Box component="td" sx={cellSx}>
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                     {renderPrimaryAction(order)}
-                    <Tooltip title="View detail"><IconButton size="small" onClick={() => actions.detail(order)}><VisibilityIcon sx={{ fontSize: large ? 20 : 17 }} /></IconButton></Tooltip>
-                    <Tooltip title="Print receipt"><IconButton size="small" color="primary" onClick={() => printOrderReceiptTracked(order)}><PrintIcon sx={{ fontSize: large ? 20 : 17 }} /></IconButton></Tooltip>
-                    {order.paymentStatus !== 'PAID' && isActive && <Button size="small" variant="outlined" color="success" onClick={() => actions.markPaid(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 12 : 10 }}>{vi ? 'Đã thanh toán' : 'Paid'}</Button>}
-                    {order.paymentStatus !== 'PAID' && order.status !== 'CANCELLED' && <Tooltip title="Payment QR"><IconButton size="small" color="primary" onClick={() => actions.payQr(order)}><QrCode2Icon sx={{ fontSize: large ? 20 : 17 }} /></IconButton></Tooltip>}
-                    {isActive && <Button size="small" color="error" onClick={() => actions.cancel(order)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: large ? 12 : 10 }}>Cancel</Button>}
+                    <Tooltip title={t('shopOrder.grid.viewDetail')}><IconButton size="small" onClick={() => actions.detail(order)}><VisibilityIcon sx={{ fontSize: large ? 20 : 17 }} /></IconButton></Tooltip>
+                    <Tooltip title={t('shopOrder.grid.printReceipt')}><IconButton size="small" color="primary" onClick={() => printOrderReceiptTracked(order)}><PrintIcon sx={{ fontSize: large ? 20 : 17 }} /></IconButton></Tooltip>
+                    {order.paymentStatus !== 'PAID' && isActive && <Button size="small" variant="outlined" color="success" onClick={() => actions.markPaid(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 12 : 10 }}>{t('shopOrder.status.paid')}</Button>}
+                    {order.paymentStatus !== 'PAID' && order.status !== 'CANCELLED' && <Tooltip title={t('shopOrder.grid.paymentQr')}><IconButton size="small" color="primary" onClick={() => actions.payQr(order)}><QrCode2Icon sx={{ fontSize: large ? 20 : 17 }} /></IconButton></Tooltip>}
+                    {isActive && <Button size="small" color="error" onClick={() => actions.cancel(order)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: large ? 12 : 10 }}>{t('shopOrder.edit.cancel')}</Button>}
                   </Box>
                 </Box>
               </Box>
@@ -1196,6 +1196,7 @@ const SORT_OPTIONS = [
 const STATUS_SORT_ORDER = { PENDING: 0, CONFIRMED: 1, PREPARING: 2, READY: 3, PICKED_UP: 4, COMPLETED: 5, CANCELLED: 6 }
 
 function OrderCardGrid({ rows, loading, tables, actions, modelImageMap = {}, selectedIds, onToggleSelect, viewMode = 'cards', displaySize = 'normal', highContrast = false }) {
+  const { t } = useI18n()
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState('newest')
   const [tableFilter, setTableFilter] = useState('')
@@ -1273,12 +1274,12 @@ function OrderCardGrid({ rows, loading, tables, actions, modelImageMap = {}, sel
           value={search} onChange={e => setSearch(e.target.value)}
           sx={{ flex: 1, display: { xs: 'none', sm: 'inline-flex' } }} inputProps={{ style: { fontSize: 13 } }} />
         <TextField select size="small" label="Table" value={tableFilter} onChange={e => setTableFilter(e.target.value)} sx={{ width: { xs: 150, sm: 150 }, flex: { xs: 1, sm: '0 0 auto' } }}>
-          <MenuItem value="">All tables</MenuItem>
-          <MenuItem value="__NONE__">No table</MenuItem>
+          <MenuItem value="">{t('shopOrder.grid.allTables')}</MenuItem>
+          <MenuItem value="__NONE__">{t('shopOrder.grid.noTable')}</MenuItem>
           {tables.map(t => <MenuItem key={t.id} value={String(t.id)}>{t.tableName}</MenuItem>)}
         </TextField>
         <TextField select size="small" label="Scan slip" value={slipFilter} onChange={e => setSlipFilter(e.target.value)} sx={{ width: 170, display: { xs: 'none', sm: 'inline-flex' } }}>
-          <MenuItem value="">All slips</MenuItem>
+          <MenuItem value="">{t('shopOrder.grid.allSlips')}</MenuItem>
           {slipOptions.map(slip => <MenuItem key={slip.token} value={slip.token}>{slip.label}</MenuItem>)}
         </TextField>
         <TextField select size="small" label="Sort" value={sortBy} onChange={e => setSortBy(e.target.value)} sx={{ width: 140, display: { xs: 'none', sm: 'inline-flex' } }}>
@@ -1288,7 +1289,7 @@ function OrderCardGrid({ rows, loading, tables, actions, modelImageMap = {}, sel
       </Box>
       <Box sx={{ flex: 1, overflow: 'auto', p: viewMode === 'grid' ? 0 : (displaySize === 'large' ? 2 : 1.5) }}>
         {filtered.length === 0
-          ? <Box sx={{ textAlign: 'center', py: 8 }}><Typography color="text.secondary">No orders found</Typography></Box>
+          ? <Box sx={{ textAlign: 'center', py: 8 }}><Typography color="text.secondary">{t('shopOrder.grid.noOrders')}</Typography></Box>
           : viewMode === 'grid' ? (
             <OrderRowsGrid
               rows={filtered}
@@ -1325,8 +1326,7 @@ function OrderCardGrid({ rows, loading, tables, actions, modelImageMap = {}, sel
 // ── Main ShopOrderGrid ──────────────────────────────────────────────
 
 export default function ShopOrderGrid() {
-  const { language } = useI18n()
-  const vi = language === 'vi'
+  const { t } = useI18n()
   const { tenantId: ctxTenantId, companyId: ctxCompanyId } = useAppContext()
   const [rows, setRows]                 = useState([])
   const [boardRows, setBoardRows]       = useState([])   // for board tabs — unfiltered
@@ -1836,24 +1836,24 @@ export default function ShopOrderGrid() {
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {/* Toolbar */}
         <Box sx={{ px: { xs: 1, sm: 1.5 }, py: { xs: 0.5, sm: 1 }, display: 'flex', gap: { xs: 0.75, sm: 1 }, alignItems: 'center', flexWrap: { xs: 'nowrap', sm: 'wrap' }, borderBottom: '1px solid #e0e0e0', flexShrink: 0 }}>
-          <TextField select label={vi ? 'Trạng thái' : 'Status'} value={statusFilter} onChange={e => setStatusFilter(e.target.value)} size="small" sx={{ width: { xs: 112, sm: 148 }, flexShrink: 1 }}>
-            {STATUSES.map(s => <MenuItem key={s} value={s}>{s ? (vi ? ({ PENDING: 'Đã đặt', CONFIRMED: 'Đã xác nhận', PREPARING: 'Đang chuẩn bị', READY: 'Sẵn sàng ✓', PICKED_UP: 'Đã nhận ✓', COMPLETED: 'Hoàn tất', CANCELLED: 'Đã hủy' }[s] || s) : (STATUS_LABEL[s] || s)) : (vi ? 'Tất cả' : 'All')}</MenuItem>)}
+          <TextField select label={t('common.status')} value={statusFilter} onChange={e => setStatusFilter(e.target.value)} size="small" sx={{ width: { xs: 112, sm: 148 }, flexShrink: 1 }}>
+            {STATUSES.map(s => <MenuItem key={s} value={s}>{s ? localizedStatusLabel(s, t) : t('common.all')}</MenuItem>)}
           </TextField>
           <Button startIcon={<RefreshIcon />} onClick={reload} variant="outlined" size="small"
             sx={{ minWidth: { xs: 40, sm: 64 }, px: { xs: 1, sm: 1.25 }, '& .MuiButton-startIcon': { mr: { xs: 0, sm: 1 } } }}>
-            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>{vi ? 'Làm mới' : 'Refresh'}</Box>
+            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>{t('shopOrder.grid.refresh')}</Box>
           </Button>
           <Box sx={{ display: { xs: 'none', sm: 'flex' }, border: '1px solid #cbd5e1', borderRadius: 1, overflow: 'hidden', bgcolor: '#fff' }}>
-            <Button startIcon={<TvIcon />} size="small" variant={orderViewMode === 'cards' ? 'contained' : 'text'} onClick={() => { setOrderViewMode('cards'); writeShopOrderPref(SHOP_ORDER_VIEW_PREF, 'cards') }} sx={{ borderRadius: 0, textTransform: 'none', fontWeight: 800 }}>{vi ? 'Thẻ' : 'Cards'}</Button>
-            <Button startIcon={<TableBarIcon />} size="small" variant={orderViewMode === 'grid' ? 'contained' : 'text'} onClick={() => { setOrderViewMode('grid'); writeShopOrderPref(SHOP_ORDER_VIEW_PREF, 'grid') }} sx={{ borderRadius: 0, textTransform: 'none', fontWeight: 800 }}>{vi ? 'Bảng' : 'Grid'}</Button>
+            <Button startIcon={<TvIcon />} size="small" variant={orderViewMode === 'cards' ? 'contained' : 'text'} onClick={() => { setOrderViewMode('cards'); writeShopOrderPref(SHOP_ORDER_VIEW_PREF, 'cards') }} sx={{ borderRadius: 0, textTransform: 'none', fontWeight: 800 }}>{t('shopOrder.grid.cards')}</Button>
+            <Button startIcon={<TableBarIcon />} size="small" variant={orderViewMode === 'grid' ? 'contained' : 'text'} onClick={() => { setOrderViewMode('grid'); writeShopOrderPref(SHOP_ORDER_VIEW_PREF, 'grid') }} sx={{ borderRadius: 0, textTransform: 'none', fontWeight: 800 }}>{t('shopOrder.grid.grid')}</Button>
           </Box>
-          <TextField select label={vi ? 'Cỡ thẻ' : 'Card size'} value={cardDisplaySize} onChange={e => { setCardDisplaySize(e.target.value); writeShopOrderPref(SHOP_ORDER_CARD_SIZE_PREF, e.target.value) }} size="small" sx={{ width: 132, display: { xs: 'none', sm: 'inline-flex' } }}>
-            <MenuItem value="normal">{vi ? 'Thường' : 'Normal'}</MenuItem>
-            <MenuItem value="large">{vi ? 'Lớn' : 'Large'}</MenuItem>
+          <TextField select label={t('shopOrder.grid.cardSize')} value={cardDisplaySize} onChange={e => { setCardDisplaySize(e.target.value); writeShopOrderPref(SHOP_ORDER_CARD_SIZE_PREF, e.target.value) }} size="small" sx={{ width: 132, display: { xs: 'none', sm: 'inline-flex' } }}>
+            <MenuItem value="normal">{t('shopOrder.grid.normal')}</MenuItem>
+            <MenuItem value="large">{t('shopOrder.grid.large')}</MenuItem>
           </TextField>
-          <Button startIcon={<MonitorIcon />} aria-pressed={highContrastCards} onClick={() => { const next = !highContrastCards; setHighContrastCards(next); writeShopOrderPref(SHOP_ORDER_CONTRAST_PREF, String(next)) }} variant={highContrastCards ? 'contained' : 'outlined'} size="small" color="secondary" sx={{ display: { xs: 'none', sm: 'inline-flex' }, textTransform: 'none', fontWeight: 900, borderWidth: highContrastCards ? 2 : 1, '&:hover': { borderWidth: highContrastCards ? 2 : 1 } }}>{vi ? 'Tương phản' : 'Contrast'}</Button>
+          <Button startIcon={<MonitorIcon />} aria-pressed={highContrastCards} onClick={() => { const next = !highContrastCards; setHighContrastCards(next); writeShopOrderPref(SHOP_ORDER_CONTRAST_PREF, String(next)) }} variant={highContrastCards ? 'contained' : 'outlined'} size="small" color="secondary" sx={{ display: { xs: 'none', sm: 'inline-flex' }, textTransform: 'none', fontWeight: 900, borderWidth: highContrastCards ? 2 : 1, '&:hover': { borderWidth: highContrastCards ? 2 : 1 } }}>{t('shopOrder.grid.contrast')}</Button>
           {staffCalls.length > 0 && (
-            <Tooltip title={vi ? `${staffCalls.length} thông báo nhân viên` : `${staffCalls.length} staff notification${staffCalls.length > 1 ? 's' : ''}`}>
+            <Tooltip title={t('shopOrder.grid.staffNotifications', { count: staffCalls.length })}>
               <IconButton
                 size="small"
                 color="warning"
@@ -1876,9 +1876,9 @@ export default function ShopOrderGrid() {
             </Tooltip>
           )}
           <Button startIcon={<AddCircleOutlineIcon />} onClick={() => { setManualDefaults(null); setManualOpen(true) }}
-            variant="contained" size="small" color="success" sx={{ textTransform: 'none', fontWeight: 700, whiteSpace: 'nowrap', px: { xs: 1, sm: 1.25 }, '& .MuiButton-startIcon': { mr: { xs: 0.5, sm: 1 } } }}>{vi ? 'Tạo đơn' : 'New Order'}</Button>
+            variant="contained" size="small" color="success" sx={{ textTransform: 'none', fontWeight: 700, whiteSpace: 'nowrap', px: { xs: 1, sm: 1.25 }, '& .MuiButton-startIcon': { mr: { xs: 0.5, sm: 1 } } }}>{t('shopOrder.grid.newOrder')}</Button>
           <Button startIcon={<QrCode2Icon />} onClick={() => setQrOrderOpen(true)}
-            variant="outlined" size="small" color="primary" sx={{ display: { xs: 'none', sm: 'inline-flex' }, textTransform: 'none', fontWeight: 700 }}>{vi ? 'Đơn QR' : 'QR Order'}</Button>
+            variant="outlined" size="small" color="primary" sx={{ display: { xs: 'none', sm: 'inline-flex' }, textTransform: 'none', fontWeight: 700 }}>{t('shopOrder.grid.qrOrder')}</Button>
           {selectedRows.size > 0 && (
             <Button
               startIcon={<DriveFileMoveIcon />}
@@ -1889,8 +1889,8 @@ export default function ShopOrderGrid() {
             </Button>
           )}
           <Box sx={{ flex: 1, display: { xs: 'none', sm: 'block' } }} />
-          <Button startIcon={<TvIcon />} onClick={handleOpenBoard} variant="outlined" size="small" color="info" sx={{ display: { xs: 'none', sm: 'inline-flex' } }}>{vi ? 'Bảng hiển thị' : 'Display Board'}</Button>
-          <Tooltip title={vi ? 'Mở màn hình khách hàng tại quầy trong thẻ mới' : 'Open the counter customer-facing display in a new tab'}>
+          <Button startIcon={<TvIcon />} onClick={handleOpenBoard} variant="outlined" size="small" color="info" sx={{ display: { xs: 'none', sm: 'inline-flex' } }}>{t('shopOrder.grid.displayBoard')}</Button>
+          <Tooltip title={t('shopOrder.grid.openCounterDisplay')}>
             <Button startIcon={<MonitorIcon />}
               onClick={() => {
                 const base = window.location.origin + '/bom-inventory/shop/counter'
@@ -1901,27 +1901,27 @@ export default function ShopOrderGrid() {
               Counter
             </Button>
           </Tooltip>
-          <Button startIcon={<AssessmentIcon />} onClick={() => setEodOpen(true)} variant="outlined" size="small" color="secondary" sx={{ display: { xs: 'none', sm: 'inline-flex' }, textTransform: 'none', fontWeight: 700 }}>{vi ? 'Kiểm kê cuối ca' : 'Shift Audit'}</Button>
-          <Button startIcon={<RestartAltIcon />} onClick={() => setResetOpen(true)} variant="outlined" size="small" color="warning" sx={{ display: { xs: 'none', sm: 'inline-flex' } }}>{vi ? 'Đặt lại số đơn' : 'Reset Counter'}</Button>
+          <Button startIcon={<AssessmentIcon />} onClick={() => setEodOpen(true)} variant="outlined" size="small" color="secondary" sx={{ display: { xs: 'none', sm: 'inline-flex' }, textTransform: 'none', fontWeight: 700 }}>{t('shopOrder.grid.shiftAudit')}</Button>
+          <Button startIcon={<RestartAltIcon />} onClick={() => setResetOpen(true)} variant="outlined" size="small" color="warning" sx={{ display: { xs: 'none', sm: 'inline-flex' } }}>{t('shopOrder.grid.resetCounter')}</Button>
         </Box>
 
         {error && <Alert severity="error" onClose={() => setError('')} sx={{ mx: 1.5, mt: 0.5 }}>{error}</Alert>}
         {newOrderNotice && (
           <Alert severity="info" onClose={() => setNewOrderNotice(null)} sx={{ mx: 1.5, mt: 0.5 }}>
             {newOrderNotice.count > 1
-              ? (vi ? `Đã nhận ${newOrderNotice.count} đơn mới` : `${newOrderNotice.count} new orders received`)
-              : (vi ? `Đã nhận đơn mới ${newOrderNotice.orderNumber != null ? `#${newOrderNotice.orderNumber}` : newOrderNotice.orderCode || ''}` : `New order ${newOrderNotice.orderNumber != null ? `#${newOrderNotice.orderNumber}` : newOrderNotice.orderCode || ''} received`)}
+              ? t('shopOrder.grid.newOrdersReceived', { count: newOrderNotice.count })
+              : t('shopOrder.grid.newOrderReceived', { number: newOrderNotice.orderNumber != null ? `#${newOrderNotice.orderNumber}` : newOrderNotice.orderCode || '' })}
           </Alert>
         )}
 
         {/* Tabs */}
         <Box sx={{ borderBottom: '1px solid #e0e0e0', px: { xs: 0.5, sm: 1.5 }, flexShrink: 0 }}>
           <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons={false} sx={{ minHeight: { xs: 36, sm: 40 } }}>
-            <Tab label={vi ? 'Đơn hàng' : 'Orders'}                                                                           sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
-            <Tab label={tabBadge(vi ? 'Sản xuất' : 'Production', confirmedOrders.length, 'primary')}                      sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
-            <Tab label={tabBadge(vi ? 'Đang xử lý' : 'Processing', preparingOrders.length, 'warning')}                      sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
-            <Tab label={tabBadge(vi ? 'Sẵn sàng' : 'Ready', readyOrders.length,     'success')}                      sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
-            <Tab label={tabBadge(vi ? 'Đã nhận' : 'Picked Up', pickedUpOrders.length,  'info')}                         sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
+            <Tab label={t('shop.orders')}                                                                           sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
+            <Tab label={tabBadge(t('shopOrder.grid.production'), confirmedOrders.length, 'primary')}                      sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
+            <Tab label={tabBadge(t('shopOrder.grid.processing'), preparingOrders.length, 'warning')}                      sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
+            <Tab label={tabBadge(t('shopOrder.grid.ready'), readyOrders.length,     'success')}                      sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
+            <Tab label={tabBadge(t('shopOrder.grid.pickedUp'), pickedUpOrders.length,  'info')}                         sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
           </Tabs>
         </Box>
 
@@ -1993,7 +1993,7 @@ export default function ShopOrderGrid() {
           <Badge badgeContent={staffCalls.length} color="error" max={99}>
             <NotificationsActiveIcon sx={{ color: '#ff5722' }} />
           </Badge>
-          <Typography fontWeight={800} sx={{ fontSize: 15, flex: 1 }}>Staff notifications</Typography>
+          <Typography fontWeight={800} sx={{ fontSize: 15, flex: 1 }}>{t('shopOrder.grid.staffNotifications')}</Typography>
         </DialogTitle>
         <DialogContent dividers sx={{ p: 1 }}>
           <Stack spacing={1}>
@@ -2039,11 +2039,11 @@ export default function ShopOrderGrid() {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setStaffCallMobileOpen(false)} size="small">Close</Button>
+          <Button onClick={() => setStaffCallMobileOpen(false)} size="small">{t('shopOrder.grid.close')}</Button>
         </DialogActions>
       </Dialog>
       <Dialog open={boardOpen} onClose={() => setBoardOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><TvIcon color="info" /> Display Boards</DialogTitle>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><TvIcon color="info" /> {t('shopOrder.grid.displayBoards')}</DialogTitle>
         <DialogContent>
           {boardLoading ? <Box sx={{ textAlign: 'center', py: 3 }}><CircularProgress /></Box> : boardUrl ? (
             <Stack spacing={2.5}>
@@ -2052,8 +2052,8 @@ export default function ShopOrderGrid() {
               <Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
                   <TvIcon fontSize="small" color="info" />
-                  <Typography variant="body2" fontWeight={700}>Staff Board</Typography>
-                  <Typography variant="caption" color="text.secondary">— full detail (kitchen / bar)</Typography>
+                  <Typography variant="body2" fontWeight={700}>{t('shopOrder.grid.staffBoard')}</Typography>
+                  <Typography variant="caption" color="text.secondary">{t('shopOrder.grid.staffBoardHelp')}</Typography>
                 </Box>
                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                   <TextField value={boardUrl} size="small" fullWidth inputProps={{ readOnly: true, style: { fontSize: 12 } }} onClick={e => e.target.select()} />
@@ -2063,15 +2063,15 @@ export default function ShopOrderGrid() {
                     </IconButton>
                   </Tooltip>
                 </Box>
-                <Button variant="text" size="small" sx={{ mt: 0.5 }} onClick={() => window.open(boardUrl, '_blank')}>Open in new tab →</Button>
+                <Button variant="text" size="small" sx={{ mt: 0.5 }} onClick={() => window.open(boardUrl, '_blank')}>{t('shopOrder.grid.openNewTab')}</Button>
               </Box>
 
               {/* Customer board + Link Device QR */}
               <Box sx={{ bgcolor: '#f0fdf4', borderRadius: 2, p: 1.5, border: '1px solid #bbf7d0' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
                   <PeopleAltIcon fontSize="small" sx={{ color: '#16a34a' }} />
-                  <Typography variant="body2" fontWeight={700} color="#16a34a">Customer Board</Typography>
-                  <Typography variant="caption" color="text.secondary">— order numbers (waiting area TV)</Typography>
+                  <Typography variant="body2" fontWeight={700} color="#16a34a">{t('shopOrder.grid.customerBoard')}</Typography>
+                  <Typography variant="caption" color="text.secondary">{t('shopOrder.grid.customerBoardHelp')}</Typography>
                 </Box>
                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                   <TextField value={customerBoardUrl} size="small" fullWidth inputProps={{ readOnly: true, style: { fontSize: 12 } }} onClick={e => e.target.select()} />
@@ -2081,7 +2081,7 @@ export default function ShopOrderGrid() {
                     </IconButton>
                   </Tooltip>
                 </Box>
-                <Button variant="text" size="small" color="success" sx={{ mt: 0.5 }} onClick={() => window.open(customerBoardUrl, '_blank')}>Open in new tab →</Button>
+                <Button variant="text" size="small" color="success" sx={{ mt: 0.5 }} onClick={() => window.open(customerBoardUrl, '_blank')}>{t('shopOrder.grid.openNewTab')}</Button>
 
                 {/* ── Link Device QR ── */}
                 <Box sx={{
@@ -2117,7 +2117,7 @@ export default function ShopOrderGrid() {
                       Scan this QR with a phone or tablet to mirror the customer board live.
                     </Typography>
                     <Typography sx={{ color: '#4ade80', fontSize: 11, mt: 0.75, lineHeight: 1.5, fontStyle: 'italic' }}>
-                      {vi ? 'Màn hình quầy' : 'Counter'} tip: open on your counter phone and show it to customers so they can track their order.
+                      {t('shopOrder.grid.counterDisplay')} tip: open on your counter phone and show it to customers so they can track their order.
                     </Typography>
                     <Button
                       size="small" variant="outlined"
@@ -2130,11 +2130,11 @@ export default function ShopOrderGrid() {
                 </Box>
               </Box>
 
-              <Typography variant="caption" color="text.secondary">Both links use the same token and are valid for 24 hours.</Typography>
+              <Typography variant="caption" color="text.secondary">{t('shopOrder.grid.boardExpiry')}</Typography>
             </Stack>
           ) : null}
         </DialogContent>
-        <DialogActions><Button onClick={() => setBoardOpen(false)}>Close</Button></DialogActions>
+        <DialogActions><Button onClick={() => setBoardOpen(false)}>{t('shopOrder.grid.close')}</Button></DialogActions>
       </Dialog>
 
       {/* Payment QR dialog — generate VietQR (qr_only, no logo in center) for any unpaid order */}
@@ -2153,7 +2153,7 @@ export default function ShopOrderGrid() {
             <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <QrCode2Icon color="primary" />
-                <Typography fontWeight={700}>Payment QR</Typography>
+                <Typography fontWeight={700}>{t('shopOrder.grid.paymentQr')}</Typography>
               </Box>
               <IconButton size="small" onClick={() => setPayQrOrder(null)}><CloseIcon fontSize="small" /></IconButton>
             </DialogTitle>
@@ -2181,12 +2181,12 @@ export default function ShopOrderGrid() {
                 </Box>
               ) : (
                 <Alert severity="warning" sx={{ mt: 1 }}>
-                  No bank account configured. Set it up in <strong>Bank Account Setup</strong> first.
+                  {t('shopOrder.grid.noBankConfig')}
                 </Alert>
               )}
             </DialogContent>
             <DialogActions sx={{ px: 2, pb: 2 }}>
-              <Button onClick={() => setPayQrOrder(null)} sx={{ textTransform: 'none' }}>Close</Button>
+              <Button onClick={() => setPayQrOrder(null)} sx={{ textTransform: 'none' }}>{t('shopOrder.grid.close')}</Button>
             </DialogActions>
           </Dialog>
         )
@@ -2194,20 +2194,20 @@ export default function ShopOrderGrid() {
 
       {/* Move to Table dialog */}
       <Dialog open={moveTableOpen} onClose={() => setMoveTableOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle fontWeight={700}>Move {selectedRows.size} Order{selectedRows.size > 1 ? 's' : ''} to Table</DialogTitle>
+        <DialogTitle fontWeight={700}>{t('shopOrder.grid.moveOrders', { count: selectedRows.size })}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Select the target table. Choose "No table" to unassign.
+            {t('shopOrder.grid.moveTableHelp')}
           </Typography>
           <TextField select label="Target table" size="small" fullWidth
             value={moveTableTarget}
             onChange={e => setMoveTableTarget(e.target.value)}>
-            <MenuItem value=""><em>No table</em></MenuItem>
+            <MenuItem value=""><em>{t('shopOrder.grid.noTable')}</em></MenuItem>
             {tables.map(t => <MenuItem key={t.id} value={t.id}>{t.tableName}</MenuItem>)}
           </TextField>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setMoveTableOpen(false)} disabled={moving}>Cancel</Button>
+          <Button onClick={() => setMoveTableOpen(false)} disabled={moving}>{t('shopOrder.edit.cancel')}</Button>
           <Button onClick={handleMoveTable} variant="contained" color="info" disabled={moving}
             startIcon={moving ? <CircularProgress size={14} /> : <DriveFileMoveIcon />}>
             {moving ? 'Moving…' : 'Confirm'}
@@ -2260,7 +2260,7 @@ export default function ShopOrderGrid() {
               </Button>
             </DialogContent>
             <DialogActions>
-              <Button onClick={() => setPickupQrOrder(null)}>Close</Button>
+              <Button onClick={() => setPickupQrOrder(null)}>{t('shopOrder.grid.close')}</Button>
             </DialogActions>
           </Dialog>
         )
@@ -2279,7 +2279,7 @@ export default function ShopOrderGrid() {
             <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <QrCode2Icon sx={{ color: '#0288d1' }} />
-                <Typography fontWeight={800} variant="h6">Track Order</Typography>
+                <Typography fontWeight={800} variant="h6">{t('shopOrder.grid.trackOrder')}</Typography>
               </Box>
               <IconButton size="small" onClick={() => setTrackQrOrder(null)}><CloseIcon fontSize="small" /></IconButton>
             </DialogTitle>
@@ -2300,7 +2300,7 @@ export default function ShopOrderGrid() {
                     style={{ width: 220, height: 220, display: 'block' }} />
                 </Box>
               ) : (
-                <Alert severity="error" sx={{ mb: 2, textAlign: 'left' }}>Failed to load tracking QR</Alert>
+                <Alert severity="error" sx={{ mb: 2, textAlign: 'left' }}>{t('shopOrder.grid.trackingQrFailed')}</Alert>
               )}
               <TextField
                 value={trackUrl}
@@ -2311,7 +2311,7 @@ export default function ShopOrderGrid() {
               />
             </DialogContent>
             <DialogActions sx={{ px: 2, pb: 2, pt: 0.5, gap: 1 }}>
-              <Button onClick={() => setTrackQrOrder(null)} sx={{ textTransform: 'none' }}>Close</Button>
+              <Button onClick={() => setTrackQrOrder(null)} sx={{ textTransform: 'none' }}>{t('shopOrder.grid.close')}</Button>
               <Button
                 variant="contained" startIcon={<PrintIcon />}
                 onClick={() => printOrderTagTracked(order, qrBase64)}
@@ -2325,7 +2325,7 @@ export default function ShopOrderGrid() {
       })()}
 
       <Dialog open={resetOpen} onClose={() => setResetOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle fontWeight={700}>Reset Order Counter</DialogTitle>
+        <DialogTitle fontWeight={700}>{t('shopOrder.grid.resetCounter')}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             Next new order will be <strong>#{Number(resetTo) + 1}</strong>.
@@ -2334,7 +2334,7 @@ export default function ShopOrderGrid() {
             onChange={e => setResetTo(e.target.value)} inputProps={{ min: 0 }} helperText="Use 0 to restart from #1" />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setResetOpen(false)} disabled={resetting}>Cancel</Button>
+          <Button onClick={() => setResetOpen(false)} disabled={resetting}>{t('shopOrder.edit.cancel')}</Button>
           <Button onClick={handleReset} variant="contained" color="warning" disabled={resetting}>
             {resetting ? 'Resetting…' : `Reset to ${resetTo}`}
           </Button>
@@ -2355,6 +2355,7 @@ export default function ShopOrderGrid() {
 
 // ── Combined Receipt Dialog ──────────────────────────────────────────
 function CombinedReceiptDialog({ token, onClose, onRefresh }) {
+  const { t } = useI18n()
   const [orders, setOrders]       = useState([])
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState('')
@@ -2485,14 +2486,14 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <PeopleAltIcon color="secondary" />
-          <Typography fontWeight={800}>Combined Receipt</Typography>
+          <Typography fontWeight={800}>{t('shopOrder.grid.combinedReceipt')}</Typography>
         </Box>
         <IconButton size="small" onClick={handleClose} disabled={closing}><CloseIcon fontSize="small" /></IconButton>
       </DialogTitle>
 
       <DialogContent sx={{ pt: 0 }}>
         {loading && <Box sx={{ textAlign: 'center', py: 4 }}><CircularProgress /></Box>}
-        {sessionLocked && <Alert severity="info" sx={{ mb: 2 }}>Customer ordering is paused while this counter receipt is open.</Alert>}
+        {sessionLocked && <Alert severity="info" sx={{ mb: 2 }}>{t('shopOrder.grid.receiptPaused')}</Alert>}
         {lockError && <Alert severity="warning" sx={{ mb: 2 }}>{lockError}</Alert>}
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
@@ -2584,11 +2585,11 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
                   <img src={payQrUrl} alt="QR Pay" style={{ width: 100, height: 100, display: 'block' }} />
                 </Box>
                 <Box>
-                  <Typography sx={{ fontWeight: 800, color: '#15803d', fontSize: 13 }}>💳 QR Payment</Typography>
+                  <Typography sx={{ fontWeight: 800, color: '#15803d', fontSize: 13 }}>💳 {t('shopOrder.grid.qrPayment')}</Typography>
                   <Typography sx={{ fontWeight: 900, color: '#15803d', fontSize: 20, lineHeight: 1.2 }}>
                     {fmtAmt(unpaidTotal)}
                   </Typography>
-                  <Typography variant="caption" color="text.secondary">Unpaid total · scan to pay</Typography>
+                  <Typography variant="caption" color="text.secondary">{t('shopOrder.grid.unpaidScan')}</Typography>
                 </Box>
               </Box>
             )}

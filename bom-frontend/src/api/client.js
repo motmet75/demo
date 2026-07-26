@@ -1,5 +1,5 @@
 // Lightweight fetch wrapper that attaches tenant/company headers from localStorage
-import { getBrowserTimeZone, getCurrentLanguage, getLanguageMeta } from '../i18n/translations'
+import { getCurrentLanguage, getCurrentTimeZone, getLanguageMeta } from '../i18n/translations'
 
 const STORAGE_KEY = 'bom_app_context_v1'
 
@@ -53,7 +53,7 @@ function getLocaleHeaders() {
   const headers = {}
   const language = getCurrentLanguage()
   const locale = getLanguageMeta(language).locale
-  const timeZone = getBrowserTimeZone()
+  const timeZone = getCurrentTimeZone()
   if (locale) headers['Accept-Language'] = locale
   if (language) headers['X-App-Language'] = language
   if (timeZone) headers['X-Time-Zone'] = timeZone

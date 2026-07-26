@@ -1,14 +1,55 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Alert, Box, Button, Divider, Paper, TextField, Typography } from '@mui/material'
+import {
+  Alert,
+  Box,
+  Button,
+  Divider,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Paper,
+  Select,
+  TextField,
+  Typography,
+} from '@mui/material'
 import { consumeSessionExpiredReturnTo } from '../api/client'
 import { useAuth } from '../context/useAuth'
 import { useI18n } from '../i18n/I18nContext'
-import { SUPPORTED_LANGUAGES } from '../i18n/translations'
+import {
+  getCurrentTimeZone,
+  setCurrentTimeZone,
+  SUPPORTED_LANGUAGES,
+} from '../i18n/translations'
 import { LanguageFlag } from './LanguageSelector'
 
 const APP_BASE = '/bom-inventory'
 const LOGIN_LANGUAGE_CODES = ['vi', 'cn', 'tw', 'en']
+const SHOP_TIME_ZONES = [
+  'Asia/Ho_Chi_Minh',
+  'Asia/Bangkok',
+  'Asia/Singapore',
+  'Asia/Shanghai',
+  'Asia/Taipei',
+  'Asia/Tokyo',
+  'Australia/Sydney',
+  'Europe/London',
+  'America/Los_Angeles',
+  'America/New_York',
+  'UTC',
+]
+
+function timeZoneLabel(timeZone) {
+  try {
+    const offsetName = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      timeZoneName: 'longOffset',
+    }).formatToParts(new Date()).find((part) => part.type === 'timeZoneName')?.value
+    return `${timeZone} (${offsetName || 'GMT'})`
+  } catch {
+    return timeZone
+  }
+}
 
 function locationPath(value) {
   if (!value?.pathname) return ''
@@ -34,6 +75,7 @@ export default function LoginForm() {
   const location = useLocation()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [timeZone, setTimeZone] = useState(() => getCurrentTimeZone())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState({ key: '', message: '' })
 
@@ -113,6 +155,25 @@ export default function LoginForm() {
             )
           })}
         </Box>
+
+        <FormControl fullWidth size="small" sx={{ mb: 1 }}>
+          <InputLabel>{t('login.timeZone')}</InputLabel>
+          <Select
+            value={timeZone}
+            label={t('login.timeZone')}
+            onChange={(event) => {
+              const nextTimeZone = setCurrentTimeZone(event.target.value)
+              setTimeZone(nextTimeZone)
+            }}
+          >
+            {Array.from(new Set([timeZone, ...SHOP_TIME_ZONES])).map((zone) => (
+              <MenuItem key={zone} value={zone}>{timeZoneLabel(zone)}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+          {t('login.timeZoneHelp')}
+        </Typography>
 
         {sessionExpired ? <Alert severity="warning" sx={{ mb: 2 }}>{t('common.sessionExpired')}</Alert> : null}
         {errorText ? <Alert severity="error" sx={{ mb: 2 }}>{errorText}</Alert> : null}

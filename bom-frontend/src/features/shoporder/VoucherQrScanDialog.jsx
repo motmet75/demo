@@ -17,11 +17,10 @@ import { useI18n } from '../../i18n/I18nContext'
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode'
 
 export default function VoucherQrScanDialog({ open, onClose, onScan, title = 'Scan Voucher QR', manualLabel = 'Voucher code or QR payload', scannerLabel = 'Camera or image scanner' }) {
-  const { language } = useI18n()
-  const vi = language === 'vi'
-  const shownTitle = vi && title === 'Scan Voucher QR' ? 'Quét QR voucher' : title
-  const shownManualLabel = vi && manualLabel === 'Voucher code or QR payload' ? 'Mã voucher hoặc dữ liệu QR' : manualLabel
-  const shownScannerLabel = vi && scannerLabel === 'Camera or image scanner' ? 'Máy quét camera hoặc hình ảnh' : scannerLabel
+  const { t } = useI18n()
+  const shownTitle = title === 'Scan Voucher QR' ? t('shopOrder.scanner.voucherTitle') : title
+  const shownManualLabel = manualLabel === 'Voucher code or QR payload' ? t('shopOrder.scanner.voucherInput') : manualLabel
+  const shownScannerLabel = scannerLabel === 'Camera or image scanner' ? t('shopOrder.scanner.cameraOrImage') : scannerLabel
   const scannerRef = useRef(null)
   const detectedRef = useRef(false)
   const readerIdRef = useRef(`voucher-qr-reader-${Math.random().toString(36).slice(2)}`)
@@ -162,12 +161,12 @@ export default function VoucherQrScanDialog({ open, onClose, onScan, title = 'Sc
           {starting && (
             <Box sx={{ textAlign: 'center', color: '#e2e8f0', zIndex: 1 }}>
               <CircularProgress size={28} sx={{ color: '#fff' }} />
-              <Typography variant="body2" sx={{ mt: 1 }}>{vi ? 'Đang khởi động camera' : 'Starting camera'}</Typography>
+              <Typography variant="body2" sx={{ mt: 1 }}>{t('shopOrder.scanner.starting')}</Typography>
             </Box>
           )}
           <Chip
             size="small"
-            label={streaming ? (vi ? 'Camera đang hoạt động' : 'Camera active') : (vi ? 'Máy quét' : 'Scanner')}
+            label={streaming ? t('shopOrder.scanner.cameraActive') : t('shopOrder.scanner.scanner')}
             color={streaming ? 'success' : 'default'}
             sx={{ position: 'absolute', top: 8, right: 8, fontWeight: 700, zIndex: 2 }}
           />
@@ -182,7 +181,7 @@ export default function VoucherQrScanDialog({ open, onClose, onScan, title = 'Sc
             disabled={starting || !cameraSupported}
             sx={{ textTransform: 'none', fontWeight: 700 }}
           >
-            {vi ? 'Mở camera' : 'Start Camera'}
+            {t('shopOrder.scanner.startCamera')}
           </Button>
           <Button
             size="small"
@@ -191,7 +190,7 @@ export default function VoucherQrScanDialog({ open, onClose, onScan, title = 'Sc
             startIcon={<UploadFileIcon />}
             sx={{ textTransform: 'none', fontWeight: 700 }}
           >
-            {vi ? 'Hình ảnh' : 'Image'}
+            {t('shopOrder.scanner.image')}
             <input
               hidden
               type="file"
@@ -212,14 +211,14 @@ export default function VoucherQrScanDialog({ open, onClose, onScan, title = 'Sc
         />
       </DialogContent>
       <DialogActions sx={{ px: 2, pb: 2 }}>
-        <Button onClick={() => { void stopCamera(); onClose?.() }} sx={{ textTransform: 'none' }}>{vi ? 'Hủy' : 'Cancel'}</Button>
+        <Button onClick={() => { void stopCamera(); onClose?.() }} sx={{ textTransform: 'none' }}>{t('common.cancel')}</Button>
         <Button
           variant="contained"
           onClick={submitManual}
           disabled={!manualValue.trim()}
           sx={{ textTransform: 'none', fontWeight: 700 }}
         >
-          {vi ? 'Sử dụng' : 'Use'}
+          {t('shopOrder.scanner.use')}
         </Button>
       </DialogActions>
     </Dialog>

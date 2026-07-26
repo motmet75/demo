@@ -171,8 +171,7 @@ function buildItemGroups(items) {
 }
 
 export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, displaySize = 'normal' }) {
-  const { language } = useI18n()
-  const vi = language === 'vi'
+  const { t } = useI18n()
   const large = displaySize === 'large'
   const [tagQr, setTagQr]           = useState(null)
   const [qrLoading, setQrLoading]   = useState(false)
@@ -439,7 +438,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
       <Box sx={{ mt: 1.25, display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 1 }}>
         <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: 1, overflow: 'hidden' }}>
           <Box sx={{ px: 1, py: 0.75, bgcolor: '#f8fafc', display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Typography variant="caption" fontWeight={800} sx={{ flex: 1 }}>Purchase History</Typography>
+            <Typography variant="caption" fontWeight={800} sx={{ flex: 1 }}>{t('shopOrder.detail.purchaseHistory')}</Typography>
             <Chip size="small" label={`${purchases.length} bills`} sx={{ height: 18, fontSize: 10, fontWeight: 700 }} />
           </Box>
           {custHistoryLoading ? (
@@ -460,13 +459,13 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
               </TableBody>
             </Table>
           ) : (
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', p: 1.25 }}>No linked purchases yet.</Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', p: 1.25 }}>{t('shopOrder.detail.noPurchases')}</Typography>
           )}
         </Box>
 
         <Box sx={{ bgcolor: '#fff', border: '1px solid #e5e7eb', borderRadius: 1, overflow: 'hidden' }}>
           <Box sx={{ px: 1, py: 0.75, bgcolor: '#f8fafc', display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Typography variant="caption" fontWeight={800} sx={{ flex: 1 }}>Voucher History</Typography>
+            <Typography variant="caption" fontWeight={800} sx={{ flex: 1 }}>{t('shopOrder.detail.voucherHistory')}</Typography>
             <Chip size="small" label={`${vouchers.length + appliedOrders.length} records`} sx={{ height: 18, fontSize: 10, fontWeight: 700 }} />
           </Box>
           {custHistoryLoading ? (
@@ -497,7 +496,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
               </TableBody>
             </Table>
           ) : (
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', p: 1.25 }}>No voucher activity yet.</Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', p: 1.25 }}>{t('shopOrder.detail.noVoucherActivity')}</Typography>
           )}
         </Box>
       </Box>
@@ -549,7 +548,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
               </Box>
             </Box>
             {order.staffName && (
-              <Typography variant="caption" color="text.secondary">{vi ? 'bởi' : 'by'} {order.staffName}</Typography>
+              <Typography variant="caption" color="text.secondary">{t('shopOrder.detail.by')} {order.staffName}</Typography>
             )}
           </Box>
           <Chip label={order.status} color={STATUS_COLOR[order.status] || 'default'} size="small" sx={{ fontWeight: 700 }} />
@@ -560,20 +559,20 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
 
           {/* ── Info grid ─────────────────────────────────────────── */}
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: large ? 1 : 0.75, mb: 1.5, p: large ? 1.5 : 1.25, bgcolor: '#f8f9fa', borderRadius: 1.5 }}>
-            <Typography variant="body2"><strong>{vi ? 'Khách hàng:' : 'Customer:'}</strong> {order.customerName || '—'}</Typography>
-            <Typography variant="body2"><strong>{vi ? 'Điện thoại:' : 'Phone:'}</strong> {order.customerPhone || '—'}</Typography>
-            <Typography variant="body2"><strong>{vi ? 'Loại:' : 'Type:'}</strong> {order.fulfillmentType}</Typography>
-            <Typography variant="body2"><strong>{vi ? 'Bàn:' : 'Table:'}</strong> {order.tableName || '—'}</Typography>
-            <Typography variant="body2"><strong>{vi ? 'Phí giao hàng:' : 'Delivery fee:'}</strong> {fmt(order.deliveryFee)}</Typography>
-            <Typography variant="body2"><strong>{vi ? 'Ngày tạo:' : 'Created:'}</strong> {dateFmt(order.createdAt)}</Typography>
-            {order.confirmedAt && <Typography variant="body2"><strong>{vi ? 'Đã xác nhận:' : 'Confirmed:'}</strong> {dateFmt(order.confirmedAt)}</Typography>}
-            {order.notes && <Typography variant="body2" sx={{ gridColumn: '1/-1', fontStyle: 'italic', color: 'text.secondary' }}>{vi ? 'Ghi chú:' : 'Note:'} {order.notes}</Typography>}
+            <Typography variant="body2"><strong>{t('common.customer')}:</strong> {order.customerName || '—'}</Typography>
+            <Typography variant="body2"><strong>{t('common.phone')}:</strong> {order.customerPhone || '—'}</Typography>
+            <Typography variant="body2"><strong>{t('shopOrder.manual.type')}:</strong> {order.fulfillmentType}</Typography>
+            <Typography variant="body2"><strong>{t('common.table')}:</strong> {order.tableName || '—'}</Typography>
+            <Typography variant="body2"><strong>{t('shopOrder.detail.deliveryFee')}</strong> {fmt(order.deliveryFee)}</Typography>
+            <Typography variant="body2"><strong>{t('shopOrder.detail.created')}</strong> {dateFmt(order.createdAt)}</Typography>
+            {order.confirmedAt && <Typography variant="body2"><strong>{t('shopOrder.detail.confirmed')}</strong> {dateFmt(order.confirmedAt)}</Typography>}
+            {order.notes && <Typography variant="body2" sx={{ gridColumn: '1/-1', fontStyle: 'italic', color: 'text.secondary' }}>{t('shopOrder.detail.note')} {order.notes}</Typography>}
           </Box>
 
           {showBillSummary && (
             <Box sx={{ mb: 1.5, p: 1, bgcolor: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 1.5 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
-                <Typography variant="caption" fontWeight={800} color="text.secondary" sx={{ mr: 0.5 }}>{vi ? 'Hóa đơn' : 'Bills'}</Typography>
+                <Typography variant="caption" fontWeight={800} color="text.secondary" sx={{ mr: 0.5 }}>{t('shopOrder.detail.bills')}</Typography>
                 {activeBills.map(b => {
                   const billNet = b.netAmount != null ? b.netAmount : Math.max(0, Number(b.totalAmount || 0) - Number(b.discountAmount || 0))
                   const selected = selectedBill?.id === b.id
@@ -598,12 +597,12 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
           <Table size={large ? "medium" : "small"}>
             <TableHead>
               <TableRow sx={{ '& th': { fontWeight: 700, fontSize: large ? 14 : 12, bgcolor: '#f0f4ff' } }}>
-                <TableCell>{vi ? 'Món và tùy chọn' : 'Item & Options'}</TableCell>
-                <TableCell align="center" width={52}>{vi ? 'SL' : 'Qty'}</TableCell>
-                <TableCell align="right" width={100}>{vi ? 'Giá' : 'Price'}</TableCell>
-                <TableCell align="right" width={80}>{vi ? 'Giá vốn' : 'Raw'}</TableCell>
-                <TableCell align="right" width={72}>{vi ? 'Lãi' : 'Margin'}</TableCell>
-                <TableCell align="right" width={110}>{vi ? 'Tổng' : 'Total'}</TableCell>
+                <TableCell>{t('shopOrder.detail.itemOptions')}</TableCell>
+                <TableCell align="center" width={52}>{t('shopOrder.detail.qty')}</TableCell>
+                <TableCell align="right" width={100}>{t('shopOrder.detail.price')}</TableCell>
+                <TableCell align="right" width={80}>{t('shopOrder.detail.raw')}</TableCell>
+                <TableCell align="right" width={72}>{t('shopOrder.detail.margin')}</TableCell>
+                <TableCell align="right" width={110}>{t('common.total')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -699,9 +698,9 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
                 </Box>
               </Box>
               <Box sx={{ textAlign: 'right' }}>
-                <Typography variant="body2" color="text.secondary">{vi ? 'Giá vốn:' : 'Raw cost:'} {fmt(order.totalRawCost)}</Typography>
+                <Typography variant="body2" color="text.secondary">{t('shopOrder.detail.rawCost')} {fmt(order.totalRawCost)}</Typography>
                 {delivery > 0 && (
-                  <Typography variant="body2" color="text.secondary">{vi ? 'Món:' : 'Items:'} {fmt(itemsTotal)} + {vi ? 'Giao hàng:' : 'Delivery:'} {fmt(delivery)}</Typography>
+                  <Typography variant="body2" color="text.secondary">{t('shopOrder.common.items')}: {fmt(itemsTotal)} + {t('shopOrder.detail.delivery')} {fmt(delivery)}</Typography>
                 )}
                 {discount > 0 && (
                   <Typography variant="body2" color="error.main">
@@ -713,11 +712,11 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
                     <Chip size="small" color={voucherDetail?.expired ? 'error' : 'warning'} label={order.voucherCode} sx={{ fontWeight: 700 }} />
                     <Button size="small" variant="outlined" onClick={handleViewVoucher}
                       disabled={voucherLoading} sx={{ textTransform: 'none', py: 0.15 }}>
-                      {voucherLoading ? (vi ? 'Đang tải...' : 'Loading...') : (vi ? 'Xem voucher' : 'View Voucher')}
+                      {voucherLoading ? t('common.loading') : t('shopOrder.detail.viewVoucher')}
                     </Button>
                   </Box>
                 )}
-                <Typography fontWeight={900} variant="h5" color="primary">{vi ? 'Tổng cộng:' : 'Total:'} {fmt(grandTotal)}</Typography>
+                <Typography fontWeight={900} variant="h5" color="primary">{t('shopOrder.detail.grandTotal')} {fmt(grandTotal)}</Typography>
               </Box>
             </Box>
             )
@@ -745,14 +744,14 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
               )}
               <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'flex-start' }}>
                 <TextField
-                  label={vi ? 'Số tiền giảm' : 'Discount amount'} size="small" type="text" inputMode="numeric"
+                  label={t('shopOrder.detail.discountAmount')} size="small" type="text" inputMode="numeric"
                   value={fmtDots(discountAmt)}
                   onChange={e => setDiscountAmt(stripNonDigits(e.target.value))}
                   InputProps={{ endAdornment: <InputAdornment position="end">đ</InputAdornment> }}
                   sx={{ width: 180 }}
                 />
                 <TextField
-                  label={vi ? 'Mã voucher' : 'Voucher code'} size="small"
+                  label={t('shopOrder.detail.voucherCode')} size="small"
                   value={voucherCode}
                   onChange={e => setVoucherCode(e.target.value)}
                   sx={{ flex: 1, minWidth: 120 }}
@@ -781,7 +780,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
                     disabled={voucherRemoving || discountSaving}
                     startIcon={voucherRemoving ? <CircularProgress size={14} /> : null}
                     sx={{ textTransform: 'none', fontWeight: 700, whiteSpace: 'nowrap', alignSelf: 'center' }}>
-                    {vi ? 'Gỡ voucher' : 'Remove Voucher'}
+                    {t('shopOrder.detail.removeVoucher')}
                   </Button>
                 )}
               </Box>
@@ -830,7 +829,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
                       onClick={handleApplyCustomerDiscount} disabled={discountSaving || !discountValue}
                       startIcon={discountSaving ? <CircularProgress size={12} /> : null}
                       sx={{ textTransform: 'none', fontWeight: 700, flexShrink: 0, fontSize: 11 }}>
-                      {vi ? 'Áp dụng' : 'Apply'} Discount
+                      {t('shopOrder.detail.applyDiscount')}
                     </Button>
                   </Box>
                 )}
@@ -853,7 +852,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
               <Box sx={{ position: 'relative' }}>
                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
                   <TextField
-                    label={vi ? 'Mã / điện thoại / tên khách hàng' : 'Customer code / phone / name'} size="small" fullWidth
+                    label={t('shopOrder.detail.customerLookup')} size="small" fullWidth
                     value={custSearch}
                     onChange={e => handleSearchCust(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleCustomerLookupSubmit() } }}
@@ -908,7 +907,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
               {/* Tracking QR */}
               {(qrLoading || tagQr) && (
                 <Box sx={{ textAlign: 'center' }}>
-                  <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>{vi ? 'QR theo dõi' : 'Tracking QR'}</Typography>
+                  <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>{t('shopOrder.common.trackingQr')}</Typography>
                   {qrLoading ? <CircularProgress size={24} /> : (
                     <img src={`data:image/png;base64,${tagQr}`} alt="Tracking QR"
                       style={{ width: 90, height: 90, borderRadius: 8, border: '1px solid #e0e0e0' }} />
@@ -924,7 +923,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
                 <Typography fontWeight={900} sx={{ fontSize: 32, color: '#e65100', lineHeight: 1.1, mb: 1 }}>
                   {fmt(total)}
                 </Typography>
-                <ChangeCalc label={vi ? 'Tính tiền khách đưa' : 'Customer cash calculator'} due={total}
+                <ChangeCalc label={t('shopOrder.detail.cashCalculator')} due={total}
                   color="#e65100" bg="#fff" borderColor="#f59e0b" />
               </Box>
             </Box>
@@ -936,7 +935,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
               {/* Tracking QR */}
               {(qrLoading || tagQr) && (
                 <Box sx={{ textAlign: 'center' }}>
-                  <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>{vi ? 'QR theo dõi' : 'Tracking QR'}</Typography>
+                  <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>{t('shopOrder.common.trackingQr')}</Typography>
                   {qrLoading ? <CircularProgress size={24} /> : (
                     <img src={`data:image/png;base64,${tagQr}`} alt="Tracking QR"
                       style={{ width: 90, height: 90, borderRadius: 8, border: '1px solid #e0e0e0' }} />
@@ -969,7 +968,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
               {/* Tracking QR */}
               {(qrLoading || tagQr) && (
                 <Box sx={{ textAlign: 'center' }}>
-                  <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>{vi ? 'QR theo dõi' : 'Tracking QR'}</Typography>
+                  <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>{t('shopOrder.common.trackingQr')}</Typography>
                   {qrLoading ? <CircularProgress size={24} /> : (
                     <img src={`data:image/png;base64,${tagQr}`} alt="Tracking QR"
                       style={{ width: 90, height: 90, borderRadius: 8, border: '1px solid #e0e0e0' }} />
@@ -1004,7 +1003,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
                 <Typography fontWeight={900} sx={{ fontSize: 32, color: '#e65100', lineHeight: 1.1, mb: 1.25 }}>
                   {fmt(splitCash)}
                 </Typography>
-                <ChangeCalc label={vi ? 'Tính tiền khách đưa' : 'Customer cash calculator'} due={splitCash}
+                <ChangeCalc label={t('shopOrder.detail.cashCalculator')} due={splitCash}
                   color="#e65100" bg="#fff" borderColor="#f59e0b" />
               </Box>
             </Box>
@@ -1013,7 +1012,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
           {/* Fallback: tracking QR only (no payment QR) — for any method not handled above */}
           {!['CASH','BANK_QR','SPLIT'].includes(order.paymentMethod) && (qrLoading || tagQr) && (
             <Box sx={{ textAlign: 'center' }}>
-              <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>{vi ? 'QR theo dõi' : 'Tracking QR'}</Typography>
+              <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>{t('shopOrder.common.trackingQr')}</Typography>
               {qrLoading ? <CircularProgress size={24} /> : (
                 <img src={`data:image/png;base64,${tagQr}`} alt="Tracking QR"
                   style={{ width: 120, height: 120, borderRadius: 8, border: '1px solid #e0e0e0' }} />
@@ -1027,7 +1026,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
           {/* ── Left: mutating actions ─────────────────────── */}
           <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
             {isPending && (
-              <Tooltip title={vi ? 'Sửa món trong đơn này' : 'Edit items on this order'}>
+              <Tooltip title={t('shopOrder.detail.editTooltip')}>
                 <Button variant="outlined" startIcon={<EditIcon />}
                   onClick={() => setEditOpen(true)} sx={{ textTransform: 'none' }}>
                   Edit Order
@@ -1035,7 +1034,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
               </Tooltip>
             )}
             {!isFinal && (order.items || []).filter(i => !i.parentItemId).length > 1 && (
-              <Tooltip title={vi ? 'Tách món sang hóa đơn mới' : 'Split items into a separate new bill'}>
+              <Tooltip title={t('shopOrder.detail.splitTooltip')}>
                 <Button variant="outlined" color="secondary" startIcon={<CallSplitIcon />}
                   onClick={() => setSplitBillOpen(true)} sx={{ textTransform: 'none', fontWeight: 700 }}>
                   Split Bill
@@ -1043,7 +1042,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
               </Tooltip>
             )}
             {!isFinal && mergedBills.length > 0 && (
-              <Tooltip title={vi ? 'Hoàn tác lần gộp hóa đơn gần nhất' : 'Undo the latest bill merge'}>
+              <Tooltip title={t('shopOrder.detail.undoTooltip')}>
                 <Button variant="outlined" color="warning"
                   startIcon={undoMerging ? <CircularProgress size={14} /> : <UndoIcon />}
                   onClick={handleUndoMerge} disabled={undoMerging}
@@ -1053,7 +1052,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
               </Tooltip>
             )}
             {canSwitchToQr && (
-              <Tooltip title={vi ? 'Chuyển sang thanh toán QR ngân hàng và in hóa đơn' : 'Switch to full Bank QR payment and print receipt'}>
+              <Tooltip title={t('shopOrder.detail.switchQrTooltip')}>
                 <Button variant="contained" color="success" startIcon={<QrCode2Icon />}
                   onClick={() => askConfirm({ title: 'Switch to QR Payment?', message: 'Switch this order to Bank QR payment and print the receipt?', confirmLabel: 'Switch & Print', confirmColor: 'success' }, handleSwitchAndPrint)}
                   sx={{ textTransform: 'none', fontWeight: 700 }}>
@@ -1062,7 +1061,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
               </Tooltip>
             )}
             {canSplit && (
-              <Tooltip title={vi ? 'Chia thanh toán: một phần QR, một phần tiền mặt' : 'Set a split payment: part by bank QR, part by cash'}>
+              <Tooltip title={t('shopOrder.detail.splitPaymentTooltip')}>
                 <Button variant="outlined" color="secondary" startIcon={<CallSplitIcon />}
                   onClick={() => { setCashInput(String(Math.round(total / 2))); setSplitOpen(true) }}
                   sx={{ textTransform: 'none', fontWeight: 700 }}>
@@ -1071,7 +1070,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
               </Tooltip>
             )}
             {canRevertCash && (
-              <Tooltip title={vi ? 'Đổi phương thức thanh toán về tiền mặt' : 'Revert payment method back to Cash'}>
+              <Tooltip title={t('shopOrder.detail.revertCashTooltip')}>
                 <Button variant="outlined" color="warning" startIcon={<CurrencyExchangeIcon />}
                   onClick={() => askConfirm({ title: 'Revert to Cash?', message: 'Change this order\'s payment method back to cash?', confirmLabel: '→ Cash', confirmColor: 'warning' }, handleRevertToCash)}
                   sx={{ textTransform: 'none' }}>
@@ -1083,7 +1082,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
 
           {/* ── Right: print actions + close ──────────────── */}
           <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', alignItems: 'center' }}>
-            <Tooltip title={vi ? 'Hiện đơn này trên màn hình khách hàng tại quầy' : 'Show this order on the counter customer display'}>
+            <Tooltip title={t('shopOrder.detail.counterTooltip')}>
               <Button variant="outlined" color="info" startIcon={<MonitorIcon />}
                 onClick={() => broadcastToCounter(order, tagQr || null)} sx={{ textTransform: 'none' }}>
                 Counter Display
@@ -1101,13 +1100,13 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
               onClick={() => printOrderReceiptTracked(order, tagQr)} sx={{ textTransform: 'none' }}>
               Print · Pay
             </Button>
-            <Tooltip title={vi ? 'In một nhãn ly cho mỗi đơn vị món' : 'Print one cup label per item unit'}>
+            <Tooltip title={t('shopOrder.detail.cupTooltip')}>
               <Button variant="outlined" color="secondary" startIcon={<LabelIcon />}
                 onClick={() => printCupLabelsTracked(order)} sx={{ textTransform: 'none' }}>
                 Cup Labels
               </Button>
             </Tooltip>
-            <Button onClick={onClose} sx={{ textTransform: 'none' }}>{vi ? 'Đóng' : 'Close'}</Button>
+            <Button onClick={onClose} sx={{ textTransform: 'none' }}>{t('common.close')}</Button>
           </Box>
         </DialogActions>
       </Dialog>
@@ -1142,7 +1141,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
       <Dialog open={splitOpen} onClose={() => setSplitOpen(false)} maxWidth="xs" fullWidth
         PaperProps={{ sx: { borderRadius: 2 } }}>
         <DialogTitle sx={{ pb: 0.5 }}>
-          <Typography fontWeight={800}>{vi ? 'Chia thanh toán' : 'Split Payment'}</Typography>
+          <Typography fontWeight={800}>{t('shopOrder.detail.splitPayment')}</Typography>
           <Typography variant="caption" color="text.secondary">
             Total: <strong>{fmt(total)}</strong> — type in either box, the other adjusts automatically
           </Typography>
@@ -1186,13 +1185,13 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
             </Box>
           </Box>
           <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
-            <Button size="small" variant="outlined" color="warning" onClick={() => setCashInput(String(Math.round(total / 2)))}>{vi ? 'Chia đôi' : 'Half / Half'}</Button>
-            <Button size="small" variant="outlined" color="success" onClick={() => setCashInput('0')}>{vi ? 'Tất cả QR' : 'All QR'}</Button>
-            <Button size="small" variant="outlined" onClick={() => setCashInput(String(Math.round(total)))}>{vi ? 'Tất cả tiền mặt' : 'All Cash'}</Button>
+            <Button size="small" variant="outlined" color="warning" onClick={() => setCashInput(String(Math.round(total / 2)))}>{t('shopOrder.detail.half')}</Button>
+            <Button size="small" variant="outlined" color="success" onClick={() => setCashInput('0')}>{t('shopOrder.detail.allQr')}</Button>
+            <Button size="small" variant="outlined" onClick={() => setCashInput(String(Math.round(total)))}>{t('shopOrder.detail.allCash')}</Button>
           </Box>
         </DialogContent>
         <DialogActions sx={{ px: 2, pb: 2 }}>
-          <Button onClick={() => setSplitOpen(false)} sx={{ textTransform: 'none' }}>{vi ? 'Hủy' : 'Cancel'}</Button>
+          <Button onClick={() => setSplitOpen(false)} sx={{ textTransform: 'none' }}>{t('common.cancel')}</Button>
           <Button variant="contained" color="success"
             startIcon={splitting ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : <CallSplitIcon />}
             onClick={handleSplit} disabled={splitting || cashNum < 0 || cashNum > total}
@@ -1212,15 +1211,15 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
         open={customerScanOpen}
         onClose={() => setCustomerScanOpen(false)}
         onScan={handleCustomerScan}
-        title={vi ? 'Quét QR khách hàng' : 'Scan Customer QR'}
-        manualLabel={vi ? 'Mã khách hàng, điện thoại hoặc dữ liệu QR' : 'Customer code, phone, or QR payload'}
-        scannerLabel={vi ? 'Máy quét mã khách hàng' : 'Customer code scanner'}
+        title={t('shopOrder.manual.scanCustomerQr')}
+        manualLabel={t('shopOrder.manual.customerScanInput')}
+        scannerLabel={t('shopOrder.manual.customerScanner')}
       />
 
       <Dialog open={voucherDetailOpen} onClose={() => setVoucherDetailOpen(false)} maxWidth="xs" fullWidth
         PaperProps={{ sx: { borderRadius: 2 } }}>
         <DialogTitle sx={{ pb: 0.5 }}>
-          <Typography fontWeight={800}>{vi ? 'Chi tiết voucher' : 'Voucher Detail'}</Typography>
+          <Typography fontWeight={800}>{t('shopOrder.detail.voucherDetail')}</Typography>
           <Typography variant="caption" color="text.secondary">{voucherDetail?.code || selectedBill?.voucherCode || order.voucherCode || voucherCode}</Typography>
         </DialogTitle>
         <DialogContent sx={{ pt: 1.5 }}>
@@ -1230,19 +1229,19 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
                 <Chip size="small" label={voucherDetail.status || 'UNKNOWN'}
                   color={voucherDetail.expired ? 'error' : voucherDetail.status === 'USED' ? 'success' : voucherDetail.status === 'ACTIVE' ? 'primary' : 'default'}
                   sx={{ fontWeight: 800 }} />
-                {voucherDetail.expired && <Chip size="small" color="error" label={vi ? 'Hết hạn' : 'Expired'} sx={{ fontWeight: 800 }} />}
+                {voucherDetail.expired && <Chip size="small" color="error" label={t('shopOrder.detail.expired')} sx={{ fontWeight: 800 }} />}
               </Box>
               <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
-                <Typography variant="body2"><strong>Face:</strong> {fmt(voucherDetail.faceValue)}</Typography>
-                <Typography variant="body2"><strong>Sale:</strong> {fmt(voucherDetail.salePrice)}</Typography>
-                <Typography variant="body2"><strong>Expiry:</strong> {voucherDetail.expiryDate || '—'}</Typography>
-                <Typography variant="body2"><strong>Issued:</strong> {dateFmt(voucherDetail.createdAt)}</Typography>
+                <Typography variant="body2"><strong>{t('shopOrder.detail.faceValue')}:</strong> {fmt(voucherDetail.faceValue)}</Typography>
+                <Typography variant="body2"><strong>{t('shopOrder.detail.salePrice')}:</strong> {fmt(voucherDetail.salePrice)}</Typography>
+                <Typography variant="body2"><strong>{t('shopOrder.detail.expiry')}:</strong> {voucherDetail.expiryDate || '—'}</Typography>
+                <Typography variant="body2"><strong>{t('shopOrder.detail.issued')}:</strong> {dateFmt(voucherDetail.createdAt)}</Typography>
               </Box>
               <Divider />
-              <Typography variant="body2"><strong>Redeemed order:</strong> {voucherDetail.redeemedOrderNumber ? `#${voucherDetail.redeemedOrderNumber}` : voucherDetail.redeemedOrderCode || '—'}</Typography>
-              <Typography variant="body2"><strong>Redeemed at:</strong> {dateFmt(voucherDetail.redeemedAt)}</Typography>
-              <Typography variant="body2"><strong>{vi ? 'Khách hàng:' : 'Customer:'}</strong> {voucherDetail.redeemedCustomerName || voucherDetail.customerId || '—'}</Typography>
-              {voucherDetail.notes && <Typography variant="body2"><strong>Notes:</strong> {voucherDetail.notes}</Typography>}
+              <Typography variant="body2"><strong>{t('shopOrder.detail.redeemedOrder')}:</strong> {voucherDetail.redeemedOrderNumber ? `#${voucherDetail.redeemedOrderNumber}` : voucherDetail.redeemedOrderCode || '—'}</Typography>
+              <Typography variant="body2"><strong>{t('shopOrder.detail.redeemedAt')}:</strong> {dateFmt(voucherDetail.redeemedAt)}</Typography>
+              <Typography variant="body2"><strong>{t('common.customer')}:</strong> {voucherDetail.redeemedCustomerName || voucherDetail.customerId || '—'}</Typography>
+              {voucherDetail.notes && <Typography variant="body2"><strong>{t('shopOrder.detail.notes')}:</strong> {voucherDetail.notes}</Typography>}
             </Stack>
           ) : (
             <Box sx={{ py: 2, textAlign: 'center' }}><CircularProgress size={22} /></Box>
@@ -1256,7 +1255,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
               Remove Voucher
             </Button>
           )}
-          <Button onClick={() => setVoucherDetailOpen(false)} sx={{ textTransform: 'none' }}>{vi ? 'Đóng' : 'Close'}</Button>
+          <Button onClick={() => setVoucherDetailOpen(false)} sx={{ textTransform: 'none' }}>{t('common.close')}</Button>
         </DialogActions>
       </Dialog>
     </>

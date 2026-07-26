@@ -22,6 +22,7 @@ import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd'
 import CloseIcon from '@mui/icons-material/Close'
 import { fetchModels } from '../../api/modelApi'
 import { fetchMenuOptions, updateOrderItems } from '../../api/shopApi'
+import { useI18n } from '../../i18n/I18nContext'
 
 const fmt       = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 const fmtDots   = (digits) => digits ? Number(digits).toLocaleString('vi-VN') : ''
@@ -33,6 +34,7 @@ function parseOpts(str) {
 }
 
 export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
+  const { t } = useI18n()
   const [models, setModels]               = useState([])
   const [loading, setLoading]             = useState(false)
   const [saving, setSaving]               = useState(false)
@@ -224,7 +226,7 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
   // ── Submit ─────────────────────────────────────────────────────────
 
   const handleSave = async () => {
-    if (!items.length) { setError('At least one item required'); return }
+    if (!items.length) { setError(t('shopOrder.edit.itemRequired')); return }
     setSaving(true); setError('')
     const payload = items.map(i => ({
       modelId: i.modelId, quantity: i.qty,
@@ -240,9 +242,9 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
     }))
     try {
       const { res, data } = await updateOrderItems(order.id, payload)
-      if (!res.ok) { setError(data?.message || 'Failed to save'); setSaving(false); return }
+      if (!res.ok) { setError(data?.message || t('shopOrder.edit.saveFailed')); setSaving(false); return }
       onUpdated?.(data)
-    } catch (e) { setError(e.message || 'Network error') }
+    } catch (e) { setError(e.message || t('shopOrder.common.networkError')) }
     setSaving(false)
   }
 
@@ -253,9 +255,9 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
       PaperProps={{ sx: { borderRadius: 3 } }}>
       <DialogTitle sx={{ pb: 1 }}>
         <Typography fontWeight={800} variant="h6">
-          Edit Order #{order?.orderNumber ?? order?.orderCode}
+          {t('shopOrder.edit.title', { number: order?.orderNumber ?? order?.orderCode })}
         </Typography>
-        <Typography variant="caption" color="text.secondary">Modify items — PENDING only</Typography>
+        <Typography variant="caption" color="text.secondary">{t('shopOrder.edit.subtitle')}</Typography>
       </DialogTitle>
 
       <DialogContent>
@@ -273,14 +275,14 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
                 getOptionLabel={m => `${m.modelName} — ${fmt(m.sellingPrice)}`}
                 value={selectedModel}
                 onChange={(_, v) => setSelectedModel(v)}
-                renderInput={params => <TextField {...params} label="Add item…" />}
+                renderInput={params => <TextField {...params} label={t('shopOrder.edit.addItem')} />}
                 sx={{ flex: 1 }}
                 isOptionEqualToValue={(a, b) => a.id === b.id}
-                noOptionsText="No items with price"
+                noOptionsText={t('shopOrder.edit.noPricedItems')}
               />
               <Button variant="contained" onClick={addItem} disabled={!selectedModel}
                 startIcon={<AddIcon />} sx={{ textTransform: 'none', flexShrink: 0 }}>
-                Add
+                {t('shopOrder.edit.add')}
               </Button>
             </Box>
 
@@ -347,7 +349,7 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
                                 sx={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                                 {grp.groupName}
                                 {grp.required && <span style={{ color: '#e53935' }}> *</span>}
-                                {grp.isFree ? ' (free)' : ''}
+                                {grp.isFree ? ` ${t('shopOrder.edit.free')}` : ''}
                               </Typography>
                               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.25 }}>
                                 {choices.map(choice => {
@@ -370,7 +372,7 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
                         })}
 
                         <TextField size="small" variant="standard" fullWidth
-                          placeholder="Item note…" value={item.itemNotes || ''}
+                          placeholder={t('shopOrder.edit.itemNote')} value={item.itemNotes || ''}
                           onChange={e => setItemNotes(item.uid, e.target.value)}
                           InputProps={{ disableUnderline: false, sx: { fontSize: 12 } }}
                           sx={{ mt: 0.5 }}
@@ -401,7 +403,7 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
                                     />
                                   )}
                                   sx={{ flex: 1, '& .MuiAutocomplete-endAdornment': { top: 'calc(50% - 10px)' } }}
-                                  noOptionsText="No items"
+                                  noOptionsText={t('shopOrder.edit.noItems')}
                                 />
                                 <IconButton size="small" onClick={() => removeSideItem(item.uid, si.uid)}
                                   sx={{ p: 0.25, color: '#94a3b8', '&:hover': { color: '#dc2626' } }}>
@@ -440,7 +442,7 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
                           {/* Block total row — only when there are side items */}
                           {item.sideItems.length > 0 && (
                             <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 0.5, px: 0.75, py: 0.4, borderBottom: '1px solid #e8eaf6' }}>
-                              <Typography variant="caption" sx={{ color: '#64748b', fontSize: 11 }}>Block total</Typography>
+                              <Typography variant="caption" sx={{ color: '#64748b', fontSize: 11 }}>{t('shopOrder.edit.blockTotal')}</Typography>
                               <Typography variant="caption" fontWeight={800} color="primary" sx={{ fontSize: 12 }}>
                                 {fmt(blockTotal)}
                               </Typography>
@@ -457,10 +459,10 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
                                 setSF(item.uid, 'model', v)
                                 if (v) setSF(item.uid, 'priceDigits', String(Math.round(Number(v.sellingPrice) || 0)))
                               }}
-                              renderInput={params => <TextField {...params} label="Add topping / side…" size="small" />}
+                              renderInput={params => <TextField {...params} label={t('shopOrder.edit.addSide')} size="small" />}
                               sx={{ flex: 1, minWidth: 130 }}
                               isOptionEqualToValue={(a, b) => a.id === b.id}
-                              noOptionsText="No items"
+                              noOptionsText={t('shopOrder.edit.noItems')}
                             />
                             {/* Qty for the new side item */}
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0, mt: 0.5 }}>
@@ -479,7 +481,7 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
                               </IconButton>
                             </Box>
                             <TextField
-                              size="small" type="text" inputMode="numeric" label="Price" placeholder="0"
+                              size="small" type="text" inputMode="numeric" label={t('shopOrder.edit.price')} placeholder="0"
                               value={fmtDots(sf.priceDigits || '')}
                               onChange={e => setSF(item.uid, 'priceDigits', stripDigs(e.target.value))}
                               inputProps={{ maxLength: 12 }}
@@ -491,7 +493,7 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
                               onClick={() => addSideItem(item.uid)} disabled={!sf.model}
                               sx={{ textTransform: 'none', fontSize: 11, height: 40, flexShrink: 0,
                                 bgcolor: '#6366f1', '&:hover': { bgcolor: '#4f46e5' }, '&.Mui-disabled': { bgcolor: '#e0e0e0' } }}>
-                              Add
+                              {t('shopOrder.edit.add')}
                             </Button>
                           </Box>
 
@@ -503,13 +505,13 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
                 })}
 
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 0.5, px: 1 }}>
-                  <Typography fontWeight={800}>Total</Typography>
+                  <Typography fontWeight={800}>{t('shopOrder.edit.total')}</Typography>
                   <Typography fontWeight={800} color="primary">{fmt(total)}</Typography>
                 </Box>
               </Stack>
             ) : (
               <Typography variant="body2" color="text.disabled" sx={{ textAlign: 'center', py: 2 }}>
-                No items — add at least one
+                {t('shopOrder.edit.empty')}
               </Typography>
             )}
           </Stack>
@@ -517,12 +519,12 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
       </DialogContent>
 
       <DialogActions sx={{ px: 2, pb: 2 }}>
-        <Button onClick={onClose} disabled={saving} sx={{ textTransform: 'none' }}>Cancel</Button>
+        <Button onClick={onClose} disabled={saving} sx={{ textTransform: 'none' }}>{t('shopOrder.edit.cancel')}</Button>
         <Button variant="contained" onClick={handleSave}
           disabled={saving || !items.length}
           startIcon={saving ? <CircularProgress size={16} /> : <SaveIcon />}
           sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none', minWidth: 140 }}>
-          {saving ? 'Saving…' : `Save · ${fmt(total)}`}
+          {saving ? t('shopOrder.edit.saving') : t('shopOrder.edit.saveTotal', { total: fmt(total) })}
         </Button>
       </DialogActions>
     </Dialog>

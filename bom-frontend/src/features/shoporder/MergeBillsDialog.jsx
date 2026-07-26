@@ -19,8 +19,7 @@ const ACTIVE = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY']
 const STATUS_COLOR = { PENDING: 'default', CONFIRMED: 'primary', PREPARING: 'warning', READY: 'success' }
 
 export default function MergeBillsDialog({ open, order, onClose, onMerge }) {
-  const { language } = useI18n()
-  const vi = language === 'vi'
+  const { t } = useI18n()
   const [orders, setOrders]   = useState([])
   const [selected, setSelected] = useState(new Set())
   const [loading, setLoading] = useState(false)
@@ -37,7 +36,7 @@ export default function MergeBillsDialog({ open, order, onClose, onMerge }) {
         )
         setOrders(others)
       })
-      .catch(() => setError(vi ? 'Không thể tải danh sách đơn' : 'Failed to load orders'))
+      .catch(() => setError(t('shopOrder.merge.loadFailed')))
       .finally(() => setLoading(false))
   }, [open, order])
 
@@ -50,14 +49,14 @@ export default function MergeBillsDialog({ open, order, onClose, onMerge }) {
   }
 
   const handleMerge = async () => {
-    if (selected.size === 0) { setError(vi ? 'Chọn ít nhất một đơn để gộp' : 'Select at least one order to merge'); return }
+    if (selected.size === 0) { setError(t('shopOrder.merge.selectRequired')); return }
     setSaving(true); setError('')
     try {
       const { res, data } = await mergeBills(order.id, [...selected])
-      if (!res.ok) { setError(data?.error || (vi ? 'Gộp hóa đơn thất bại' : 'Merge failed')); setSaving(false); return }
+      if (!res.ok) { setError(data?.error || t('shopOrder.merge.failed')); setSaving(false); return }
       onMerge?.(data)
       onClose()
-    } catch (e) { setError(e.message || (vi ? 'Lỗi mạng' : 'Network error')) }
+    } catch (e) { setError(e.message || t('shopOrder.common.networkError')) }
     setSaving(false)
   }
 
@@ -68,12 +67,12 @@ export default function MergeBillsDialog({ open, order, onClose, onMerge }) {
       PaperProps={{ sx: { borderRadius: 3 } }}>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, pb: 1 }}>
         <MergeIcon color="primary" />
-        <Typography fontWeight={800} variant="h6">{vi ? `Gộp hóa đơn vào ${primaryNum}` : `Merge Bills into ${primaryNum}`}</Typography>
+        <Typography fontWeight={800} variant="h6">{t('shopOrder.merge.title', { order: primaryNum })}</Typography>
       </DialogTitle>
 
       <DialogContent sx={{ pt: 0 }}>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-          {vi ? <>Chọn các đơn để gộp vào <strong>{primaryNum}</strong>. Các đơn đó sẽ bị hủy, nhưng có thể hoàn tác trong chi tiết đơn.</> : <>Select orders to merge into <strong>{primaryNum}</strong>. Those orders will be cancelled, but the merge can be undone from order detail.</>}
+          {t('shopOrder.merge.help', { order: primaryNum })}
         </Typography>
 
         {error && <Alert severity="error" sx={{ mb: 1.5 }}>{error}</Alert>}
@@ -81,7 +80,7 @@ export default function MergeBillsDialog({ open, order, onClose, onMerge }) {
         {loading ? (
           <Box sx={{ textAlign: 'center', py: 3 }}><CircularProgress /></Box>
         ) : orders.length === 0 ? (
-          <Typography color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>{vi ? 'Không tìm thấy đơn đang hoạt động khác' : 'No other active orders found'}</Typography>
+          <Typography color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>{t('shopOrder.merge.none')}</Typography>
         ) : (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
             {orders.map(o => {
@@ -98,12 +97,12 @@ export default function MergeBillsDialog({ open, order, onClose, onMerge }) {
                   }}>
                   <Checkbox checked={selected.has(o.id)} size="small" sx={{ p: 0.25 }} />
                   <Typography fontWeight={700} sx={{ minWidth: 40, fontSize: 15 }}>{num}</Typography>
-                  {o.tableName && <Chip label={vi ? `Bàn ${o.tableName}` : `Table ${o.tableName}`} size="small" sx={{ height: 18, fontSize: 10 }} />}
+                  {o.tableName && <Chip label={t('shopOrder.common.tableValue', { value: o.tableName })} size="small" sx={{ height: 18, fontSize: 10 }} />}
                   <Chip label={o.status} color={STATUS_COLOR[o.status] || 'default'} size="small" sx={{ height: 18, fontSize: 10 }} />
                   <Box sx={{ flex: 1 }} />
                   <Typography fontWeight={700} color="primary" sx={{ fontSize: 14 }}>{fmt(total)}</Typography>
                   <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
-                    {(o.items || []).filter(i => !i.parentItemId).length} {vi ? 'món' : 'items'}
+                    {t('shopOrder.common.itemCount', { count: (o.items || []).filter(i => !i.parentItemId).length })}
                   </Typography>
                 </Box>
               )
@@ -113,7 +112,7 @@ export default function MergeBillsDialog({ open, order, onClose, onMerge }) {
       </DialogContent>
 
       <DialogActions sx={{ px: 2, pb: 2, gap: 1 }}>
-        <Button onClick={onClose} sx={{ textTransform: 'none' }}>{vi ? 'Hủy' : 'Cancel'}</Button>
+        <Button onClick={onClose} sx={{ textTransform: 'none' }}>{t('common.cancel')}</Button>
         <Button variant="contained" onClick={handleMerge} disabled={saving || selected.size === 0}
           startIcon={saving ? <CircularProgress size={16} /> : <MergeIcon />}
           sx={{ textTransform: 'none', fontWeight: 700 }}>

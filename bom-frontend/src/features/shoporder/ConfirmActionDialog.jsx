@@ -36,8 +36,7 @@ export default function ConfirmActionDialog({
   onConfirm,
   onCancel,
 }) {
-  const { language } = useI18n()
-  const vi = language === 'vi'
+  const { t } = useI18n()
   const [reason, setReason]   = useState('')
   const [busy, setBusy]       = useState(false)
 
@@ -86,7 +85,7 @@ export default function ConfirmActionDialog({
             onChange={e => setReason(e.target.value)}
             size="small"
             error={reason.trim().length === 0}
-            helperText={reason.trim().length === 0 ? (vi ? 'Vui lòng nhập lý do' : 'A reason is required') : ' '}
+            helperText={reason.trim().length === 0 ? t('shopOrder.confirm.reasonRequired') : ' '}
             sx={{ mt: 0.5 }}
           />
         )}

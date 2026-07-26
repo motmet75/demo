@@ -92,8 +92,7 @@ const FULFILLMENT = [
 ]
 
 export default function ManualOrderDialog({ open, onClose, onCreated, defaultTable, defaultItems }) {
-  const { language } = useI18n()
-  const vi = language === 'vi'
+  const { t } = useI18n()
   const [models, setModels]         = useState([])
   const [tables, setTables]         = useState([])
   const [loading, setLoading]       = useState(false)
@@ -664,8 +663,8 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
       {/* Title row — always visible */}
       <DialogTitle sx={{ pb: 1, display: 'flex', alignItems: 'flex-start', gap: 1 }}>
         <Box sx={{ flex: 1 }}>
-          <Typography fontWeight={800} variant="h6">{vi ? 'Tạo đơn thủ công' : 'New Manual Order'}</Typography>
-          <Typography variant="caption" color="text.secondary">{vi ? 'Đơn do nhân viên tạo' : 'Staff-created order'}</Typography>
+          <Typography fontWeight={800} variant="h6">{t('shopOrder.manual.title')}</Typography>
+          <Typography variant="caption" color="text.secondary">{t('shopOrder.manual.subtitle')}</Typography>
         </Box>
         {counterBtn}
       </DialogTitle>
@@ -692,7 +691,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                 </Typography>
                 {createdOrder.tableName && (
                   <Chip icon={<TableBarIcon sx={{ color: '#fff !important', fontSize: 12 }} />}
-                    label={vi ? `Bàn ${createdOrder.tableName}` : `Table ${createdOrder.tableName}`} size="small"
+                    label={t('shopOrder.common.tableValue', { value: createdOrder.tableName })} size="small"
                     sx={{ mt: 0.25, bgcolor: 'rgba(255,255,255,0.12)', color: '#fff', fontSize: 11 }} />
                 )}
                 {discount > 0 && (
@@ -703,7 +702,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
               {/* Payment QR for BANK_QR orders */}
               {createdOrder.paymentMethod === 'BANK_QR' && createdOrder.paymentQr && (
                 <Box sx={{ textAlign: 'center' }}>
-                  <Typography sx={{ fontSize: 10, color: '#4ade80', fontWeight: 700, mb: 0.5 }}>{vi ? 'Quét để thanh toán' : 'Scan to Pay'}</Typography>
+                  <Typography sx={{ fontSize: 10, color: '#4ade80', fontWeight: 700, mb: 0.5 }}>{t('shopOrder.common.scanToPay')}</Typography>
                   <img
                     src={createdOrder.paymentQr.startsWith('https://')
                       ? createdOrder.paymentQr
@@ -735,7 +734,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                   startIcon={voucherRedeeming ? <CircularProgress size={12} sx={{ color: '#fff' }} /> : <QrCode2Icon />}
                   disabled={voucherRedeeming || !!createdOrder.voucherCode}
                   onClick={() => setVoucherScanOpen(true)}>
-                  {createdOrder.voucherCode ? (vi ? 'Đã dùng voucher' : 'Voucher Used') : 'Voucher'}
+                  {createdOrder.voucherCode ? t('shopOrder.manual.voucherUsed') : 'Voucher'}
                 </Button>
               </Box>
             </Box>
@@ -745,7 +744,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
         {voucherError && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setVoucherError('')}>{voucherError}</Alert>}
         {voucherResult && createdOrder && (
           <Alert severity="success" sx={{ mb: 2 }} onClose={() => setVoucherResult(null)}>
-            {vi ? `Đã sử dụng voucher ${voucherResult.voucher?.code}. Giảm: ${fmt(voucherResult.discountApplied)}` : `Voucher ${voucherResult.voucher?.code} redeemed. Discount: ${fmt(voucherResult.discountApplied)}`}
+            {t('shopOrder.manual.voucherRedeemed', { code: voucherResult.voucher?.code, discount: fmt(voucherResult.discountApplied) })}
           </Alert>
         )}
 
@@ -760,14 +759,14 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
               {/* Order number + fulfillment */}
               <Box sx={{ display: 'flex', gap: 1.5 }}>
                 <TextField
-                  label={vi ? 'Số đơn (không bắt buộc)' : 'Order # (optional)'}
+                  label={t('shopOrder.manual.orderNumberOptional')}
                   size="small" type="number" value={manualNum}
                   onChange={e => setManualNum(e.target.value)}
-                  placeholder={vi ? 'tự động' : 'auto'} sx={{ width: 140, flexShrink: 0 }}
-                  inputProps={{ min: 1 }} helperText={vi ? 'Để trống để tự động' : 'Leave blank for auto'}
+                  placeholder={t('shopOrder.manual.auto')} sx={{ width: 140, flexShrink: 0 }}
+                  inputProps={{ min: 1 }} helperText={t('shopOrder.manual.leaveBlankAuto')}
                 />
                 <Box sx={{ flex: 1 }}>
-                  <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>{vi ? 'Loại' : 'Type'}</Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>{t('shopOrder.manual.type')}</Typography>
                   <Box sx={{ display: 'flex', gap: 0.75 }}>
                     {FULFILLMENT.map(opt => (
                       <Box key={opt.value} onClick={() => setFulfillment(opt.value)} sx={{
@@ -777,7 +776,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                       }}>
                         <Box sx={{ color: fulfillment === opt.value ? 'primary.main' : 'text.secondary' }}>{opt.icon}</Box>
                         <Typography variant="caption" fontWeight={600}
-                          color={fulfillment === opt.value ? 'primary.main' : 'text.secondary'}>{vi ? ({ DINE_IN: 'Tại bàn', TAKEAWAY: 'Mang đi', DELIVERY: 'Giao hàng' }[opt.value] || opt.label) : opt.label}</Typography>
+                          color={fulfillment === opt.value ? 'primary.main' : 'text.secondary'}>{({ DINE_IN: t('shopOrder.manual.dineIn'), TAKEAWAY: t('shopOrder.manual.takeaway'), DELIVERY: t('shopOrder.manual.delivery') }[opt.value] || opt.label)}</Typography>
                       </Box>
                     ))}
                   </Box>
@@ -787,9 +786,9 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
               {/* Table */}
               {fulfillment === 'DINE_IN' && (
                 <FormControl size="small" fullWidth>
-                  <InputLabel>{vi ? 'Bàn' : 'Table'}</InputLabel>
-                  <Select value={tableId} label={vi ? 'Bàn' : 'Table'} onChange={e => setTableId(e.target.value)}>
-                    <MenuItem value=""><em>{vi ? 'Không chọn bàn' : 'No table'}</em></MenuItem>
+                  <InputLabel>{t('common.table')}</InputLabel>
+                  <Select value={tableId} label={t('common.table')} onChange={e => setTableId(e.target.value)}>
+                    <MenuItem value=""><em>{t('shopOrder.manual.noTable')}</em></MenuItem>
                     {tables.map(t => <MenuItem key={t.id} value={t.id}>{t.tableName}</MenuItem>)}
                   </Select>
                 </FormControl>
@@ -833,7 +832,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                     </li>
                   )}
                   renderInput={params => (
-                    <TextField {...params} label={customerId ? (vi ? 'Khách hàng (đã liên kết)' : 'Customer (linked)') : (vi ? 'Tên khách hàng' : 'Customer name')}
+                    <TextField {...params} label={customerId ? t('shopOrder.manual.customerLinked') : t('shopOrder.manual.customerName')}
                       InputProps={{
                         ...params.InputProps,
                         endAdornment: (
@@ -848,23 +847,23 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                   )}
                   sx={{ flex: 1 }}
                 />
-                <TextField size="small" label={vi ? 'Điện thoại' : 'Phone'} sx={{ width: 130 }} value={customer.phone}
+                <TextField size="small" label={t('common.phone')} sx={{ width: 130 }} value={customer.phone}
                   onChange={e => setCustomer(c => ({ ...c, phone: e.target.value }))} />
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25, flexShrink: 0, pt: 0.5 }}>
-                  <Tooltip title={vi ? 'Quét QR khách hàng' : 'Scan customer QR'}>
+                  <Tooltip title={t('shopOrder.manual.scanCustomerQr')}>
                     <IconButton size="small" onClick={() => setCustomerScanOpen(true)} disabled={custSearching}
                       sx={{ bgcolor: '#f0fdf4', color: '#15803d', '&:hover': { bgcolor: '#dcfce7' }, borderRadius: 1 }}>
                       <QrCode2Icon sx={{ fontSize: 17 }} />
                     </IconButton>
                   </Tooltip>
-                  <Tooltip title={vi ? 'Đăng ký khách hàng mới' : 'Register new customer'}>
+                  <Tooltip title={t('shopOrder.manual.registerCustomer')}>
                     <IconButton size="small" onClick={openNewCust}
                       sx={{ bgcolor: '#e3f2fd', color: '#1565c0', '&:hover': { bgcolor: '#bbdefb' }, borderRadius: 1 }}>
                       <PersonAddIcon sx={{ fontSize: 17 }} />
                     </IconButton>
                   </Tooltip>
                   {customerId && linkedCustomerCode && (
-                    <Tooltip title={vi ? 'Xem / in QR khách hàng' : 'View / print customer QR'}>
+                    <Tooltip title={t('shopOrder.manual.viewPrintCustomerQr')}>
                       <IconButton size="small"
                         onClick={() => setCustQrDialog({ name: customer.name, phone: customer.phone, customerCode: linkedCustomerCode })}
                         sx={{ color: '#0288d1' }}>
@@ -884,24 +883,24 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                   {newCustError && <Alert severity="error" sx={{ mb: 1 }} onClose={() => setNewCustError('')}>{newCustError}</Alert>}
                   <Stack spacing={1}>
                     <Box sx={{ display: 'flex', gap: 1 }}>
-                      <TextField size="small" label={vi ? 'Tên *' : 'Name *'} sx={{ flex: 1 }}
+                      <TextField size="small" label={t('shopOrder.manual.nameRequired')} sx={{ flex: 1 }}
                         value={newCustForm.name}
                         onChange={e => setNewCustForm(p => ({ ...p, name: e.target.value }))}
                         autoFocus
                       />
-                      <TextField size="small" label={vi ? 'Điện thoại' : 'Phone'} sx={{ width: 130 }}
+                      <TextField size="small" label={t('common.phone')} sx={{ width: 130 }}
                         value={newCustForm.phone}
                         onChange={e => setNewCustForm(p => ({ ...p, phone: e.target.value }))}
                       />
                     </Box>
                     <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
-                      <TextField size="small" label={vi ? 'Mã khách hàng' : 'Customer Code'} sx={{ flex: 1 }}
+                      <TextField size="small" label={t('shopOrder.manual.customerCode')} sx={{ flex: 1 }}
                         value={newCustForm.customerCode}
                         onChange={e => setNewCustForm(p => ({ ...p, customerCode: e.target.value.replace(/[^A-Z0-9a-z]/g, '').toUpperCase().slice(0, 8) }))}
                         inputProps={{ style: { fontFamily: 'monospace', fontWeight: 700, letterSpacing: 3, fontSize: 15 } }}
-                        helperText={vi ? 'Mã duy nhất — dùng để quét QR và theo dõi điểm' : 'Unique code — used for QR scan & point tracking'}
+                        helperText={t('shopOrder.manual.customerCodeHelp')}
                       />
-                      <Tooltip title={vi ? 'Tạo lại mã' : 'Regenerate code'}>
+                      <Tooltip title={t('shopOrder.manual.regenerateCode')}>
                         <IconButton size="small" onClick={() => setNewCustForm(p => ({ ...p, customerCode: genCode() }))}
                           sx={{ mt: 0.5, color: '#64748b' }}>
                           <AutorenewIcon sx={{ fontSize: 18 }} />
@@ -909,11 +908,11 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                       </Tooltip>
                     </Box>
                     <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
-                      <Button size="small" onClick={() => setNewCustOpen(false)} sx={{ textTransform: 'none' }}>{vi ? 'Hủy' : 'Cancel'}</Button>
+                      <Button size="small" onClick={() => setNewCustOpen(false)} sx={{ textTransform: 'none' }}>{t('common.cancel')}</Button>
                       <Button size="small" variant="contained" color="success" onClick={saveNewCust}
                         disabled={newCustSaving || !newCustForm.name.trim()}
                         sx={{ textTransform: 'none', fontWeight: 700 }}>
-                        {newCustSaving ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : (vi ? 'Tạo và liên kết' : 'Create & Link')}
+                        {newCustSaving ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : t('shopOrder.manual.createLink')}
                       </Button>
                     </Box>
                   </Stack>
@@ -923,10 +922,10 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
               {/* Payment */}
               <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'flex-start' }}>
                 <FormControl size="small" sx={{ flex: 1, minWidth: 160 }}>
-                  <InputLabel>{vi ? 'Thanh toán' : 'Payment'}</InputLabel>
-                  <Select value={payment} label={vi ? 'Thanh toán' : 'Payment'} onChange={e => setPayment(e.target.value)}>
-                    <MenuItem value="CASH">{vi ? 'Tiền mặt' : 'Cash'}</MenuItem>
-                    <MenuItem value="BANK_QR">{vi ? 'QR ngân hàng' : 'Bank QR'}</MenuItem>
+                  <InputLabel>{t('common.payment')}</InputLabel>
+                  <Select value={payment} label={t('common.payment')} onChange={e => setPayment(e.target.value)}>
+                    <MenuItem value="CASH">{t('shopOrder.common.cash')}</MenuItem>
+                    <MenuItem value="BANK_QR">{t('shopOrder.common.bankQr')}</MenuItem>
                   </Select>
                 </FormControl>
                 <Button
@@ -935,7 +934,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                   onClick={() => setVoucherScanOpen(true)}
                   disabled={voucherRedeeming}
                   sx={{ textTransform: 'none', fontWeight: 700, height: 40, flexShrink: 0 }}>
-                  {scannedVoucherPayload ? (vi ? 'Thay voucher' : 'Replace Voucher') : (vi ? 'Quét voucher' : 'Scan Voucher')}
+                  {scannedVoucherPayload ? t('shopOrder.manual.replaceVoucher') : t('shopOrder.manual.scanVoucher')}
                 </Button>
               </Box>
               {scannedVoucherPayload && !createdOrder && (
@@ -945,7 +944,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
               )}
 
               <Divider>
-                <Typography variant="caption" color="text.secondary" fontWeight={600}>{vi ? 'Món' : 'Items'}</Typography>
+                <Typography variant="caption" color="text.secondary" fontWeight={600}>{t('shopOrder.common.items')}</Typography>
               </Divider>
 
               {/* Item search + add */}
@@ -959,7 +958,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                   renderInput={params => <TextField {...params} label="Search item…" />}
                   sx={{ flex: 1 }}
                   isOptionEqualToValue={(a, b) => a.id === b.id}
-                  noOptionsText={vi ? 'Không có món đang bán' : 'No active menu items'}
+                  noOptionsText={t('shopOrder.manual.noActiveItems')}
                 />
                 <Button variant="contained" onClick={addItem} disabled={!selectedModel}
                   startIcon={<AddIcon />} sx={{ textTransform: 'none', flexShrink: 0 }}>
@@ -1255,7 +1254,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                             {/* Block total row — only when there are side items */}
                             {(item.sideItems || []).length > 0 && (
                               <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 0.5, px: 0.75, py: 0.4, borderBottom: '1px solid #e8eaf6' }}>
-                                <Typography variant="caption" sx={{ color: '#64748b', fontSize: 11 }}>{vi ? 'Tổng nhóm' : 'Block total'}</Typography>
+                                <Typography variant="caption" sx={{ color: '#64748b', fontSize: 11 }}>{t('shopOrder.manual.blockTotal')}</Typography>
                                 <Typography variant="caption" fontWeight={800} color="primary" sx={{ fontSize: 12 }}>
                                   {fmt(blockTotal)}
                                 </Typography>
@@ -1335,14 +1334,14 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                   })}
 
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 0.5, px: 1 }}>
-                    <Typography fontWeight={800}>{vi ? 'Tổng cộng' : 'Total'}</Typography>
+                    <Typography fontWeight={800}>{t('common.total')}</Typography>
                     <Typography fontWeight={800} color="primary">{fmt(total)}</Typography>
                   </Box>
                   {payment === 'CASH' && (
                     <Box sx={{ bgcolor: '#fff8e1', borderRadius: 1.5, px: 1.25, py: 1, mt: 0.5 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <TextField
-                          label={vi ? 'Tiền khách đưa' : 'Customer cash'} type="text" inputMode="numeric" size="small" sx={{ flex: 1 }}
+                          label={t('shopOrder.manual.customerCash')} type="text" inputMode="numeric" size="small" sx={{ flex: 1 }}
                           value={fmtDots(customerCash)}
                           onChange={e => setCustomerCash(stripDigits(e.target.value))}
                           placeholder="0"
@@ -1353,14 +1352,14 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                           <Box sx={{ minWidth: 120, textAlign: 'right' }}>
                             {Number(customerCash) >= total ? (
                               <>
-                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: 13 }}>{vi ? 'Tiền thừa' : 'Change'}</Typography>
+                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: 13 }}>{t('shopOrder.manual.change')}</Typography>
                                 <Typography fontWeight={800} color="#2e7d32" sx={{ fontSize: 18, lineHeight: 1.1 }}>
                                   {fmt(Number(customerCash) - total)}
                                 </Typography>
                               </>
                             ) : (
                               <>
-                                <Typography variant="caption" color="error" sx={{ fontSize: 13 }}>{vi ? 'Còn thiếu' : 'Short'}</Typography>
+                                <Typography variant="caption" color="error" sx={{ fontSize: 13 }}>{t('shopOrder.manual.short')}</Typography>
                                 <Typography fontWeight={800} color="error.main" sx={{ fontSize: 18, lineHeight: 1.1 }}>
                                   {fmt(total - Number(customerCash))}
                                 </Typography>
@@ -1379,7 +1378,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
               )}
 
               {/* Notes */}
-              <TextField size="small" fullWidth multiline rows={2} label={vi ? 'Ghi chú (không bắt buộc)' : 'Notes (optional)'}
+              <TextField size="small" fullWidth multiline rows={2} label={t('shopOrder.manual.notesOptional')}
                 value={notes} onChange={e => setNotes(e.target.value)} />
             </Stack>
           )}
@@ -1390,7 +1389,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
       <Dialog open={!!custQrDialog} onClose={() => setCustQrDialog(null)} maxWidth="xs" fullWidth
         PaperProps={{ sx: { borderRadius: 3 } }}>
         <DialogTitle sx={{ pb: 0.5 }}>
-          <Typography fontWeight={800}>{vi ? 'Mã QR khách hàng' : 'Customer QR Code'}</Typography>
+          <Typography fontWeight={800}>{t('shopOrder.manual.customerQr')}</Typography>
           {custQrDialog && (
             <Typography variant="caption" color="text.secondary">
               {custQrDialog.name}{custQrDialog.phone ? ` · ${custQrDialog.phone}` : ''}
@@ -1414,11 +1413,11 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
               </Typography>
             </Box>
           ) : (
-            <Typography color="text.secondary">{vi ? 'Khách hàng này chưa có mã khách hàng.' : 'No customer code available for this customer.'}</Typography>
+            <Typography color="text.secondary">{t('shopOrder.manual.noCustomerCode')}</Typography>
           )}
         </DialogContent>
         <DialogActions sx={{ px: 2, pb: 2 }}>
-          <Button onClick={() => setCustQrDialog(null)} sx={{ textTransform: 'none' }}>{vi ? 'Đóng' : 'Close'}</Button>
+          <Button onClick={() => setCustQrDialog(null)} sx={{ textTransform: 'none' }}>{t('common.close')}</Button>
           {custQrDialog?.customerCode && (
             <Button variant="contained" startIcon={<PrintIcon />}
               onClick={() => printCustomerQr(custQrDialog)}
@@ -1433,9 +1432,9 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
         open={customerScanOpen}
         onClose={() => setCustomerScanOpen(false)}
         onScan={handleCustomerScan}
-        title={vi ? 'Quét QR khách hàng' : 'Scan Customer QR'}
-        manualLabel={vi ? 'Mã khách hàng, điện thoại hoặc dữ liệu QR' : 'Customer code, phone, or QR payload'}
-        scannerLabel={vi ? 'Máy quét mã khách hàng' : 'Customer code scanner'}
+        title={t('shopOrder.manual.scanCustomerQr')}
+        manualLabel={t('shopOrder.manual.customerScanInput')}
+        scannerLabel={t('shopOrder.manual.customerScanner')}
       />
 
       <VoucherQrScanDialog
@@ -1448,7 +1447,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
       <DialogActions sx={{ px: 2, pb: 2, gap: 1 }}>
         {createdOrder ? (
           <>
-            <Button onClick={reset} sx={{ textTransform: 'none' }}>{vi ? 'Tạo đơn mới' : 'New Order'}</Button>
+            <Button onClick={reset} sx={{ textTransform: 'none' }}>{t('shopOrder.grid.newOrder')}</Button>
             <Box sx={{ flex: 1 }} />
             <Button variant="contained" onClick={handleClose}
               sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none', minWidth: 100 }}>
@@ -1457,7 +1456,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
           </>
         ) : (
           <>
-            <Button onClick={handleClose} disabled={submitting} sx={{ textTransform: 'none' }}>{vi ? 'Hủy' : 'Cancel'}</Button>
+            <Button onClick={handleClose} disabled={submitting} sx={{ textTransform: 'none' }}>{t('common.cancel')}</Button>
             <Box sx={{ flex: 1 }} />
             <Button variant="contained" onClick={handleSubmit}
               disabled={submitting || !items.length}
