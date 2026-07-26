@@ -20,6 +20,7 @@ import CloseIcon from '@mui/icons-material/Close'
 import TableRestaurantIcon from '@mui/icons-material/TableRestaurant'
 import { generateQueueQr, generateWalkUpQr } from '../../api/shopApi'
 import { printQueueQrTracked, printWalkUpQrTracked } from '../../utils/printWithHistory'
+import { useI18n } from '../../i18n/I18nContext'
 
 function fmtDate(value) {
   if (!value) return ''
@@ -27,6 +28,8 @@ function fmtDate(value) {
 }
 
 export default function QrOrderDialog({ open, onClose }) {
+  const { language } = useI18n()
+  const vi = language === 'vi'
   const [seq, setSeq] = useState('')
   const [maxOrders, setMaxOrders] = useState('12')
   const [queueDays, setQueueDays] = useState('30')
@@ -42,17 +45,17 @@ export default function QrOrderDialog({ open, onClose }) {
     try {
       const seqVal = seq !== '' ? Number(seq) : null
       if (seqVal != null && (!Number.isFinite(seqVal) || seqVal < 1)) {
-        setError('Order number must be a positive number')
+        setError(vi ? 'Số đơn phải là số dương' : 'Order number must be a positive number')
         return
       }
       const maxOrdersRaw = maxOrders !== '' ? Number(maxOrders) : 12
       if (!Number.isFinite(maxOrdersRaw) || maxOrdersRaw < 1) {
-        setError('Max orders must be at least 1')
+        setError(vi ? 'Số đơn tối đa phải từ 1 trở lên' : 'Max orders must be at least 1')
         return
       }
       const maxOrdersLimit = Math.min(Math.floor(maxOrdersRaw), 500)
       const { res, data } = await generateWalkUpQr(seqVal, maxOrdersLimit)
-      if (!res.ok) { setError(data?.message || 'Failed to generate QR'); return }
+      if (!res.ok) { setError(data?.message || (vi ? 'Không thể tạo mã QR' : 'Failed to generate QR')); return }
       setResult({
         type: 'ORDER',
         qrBase64: data.qrBase64,
@@ -62,7 +65,7 @@ export default function QrOrderDialog({ open, onClose }) {
         maxOrders: data.maxOrders ?? maxOrdersLimit,
       })
     } catch (e) {
-      setError(e.message || 'Network error')
+      setError(e.message || (vi ? 'Lỗi mạng' : 'Network error'))
     } finally {
       setLoadingType('')
     }
@@ -73,12 +76,12 @@ export default function QrOrderDialog({ open, onClose }) {
     try {
       const daysRaw = Number(queueDays)
       if (!Number.isFinite(daysRaw) || daysRaw < 1) {
-        setError('Valid days must be at least 1')
+        setError(vi ? 'Số ngày hiệu lực phải từ 1 trở lên' : 'Valid days must be at least 1')
         return
       }
       const validDays = Math.min(Math.floor(daysRaw), 366)
       const { res, data } = await generateQueueQr(validDays)
-      if (!res.ok) { setError(data?.message || data?.error || 'Failed to generate queue QR'); return }
+      if (!res.ok) { setError(data?.message || data?.error || (vi ? 'Không thể tạo QR xếp hàng' : 'Failed to generate queue QR')); return }
       setResult({
         type: 'QUEUE',
         qrBase64: data.qrBase64,
@@ -88,7 +91,7 @@ export default function QrOrderDialog({ open, onClose }) {
         validDays: data.validDays ?? validDays,
       })
     } catch (e) {
-      setError(e.message || 'Network error')
+      setError(e.message || (vi ? 'Lỗi mạng' : 'Network error'))
     } finally {
       setLoadingType('')
     }
@@ -104,7 +107,7 @@ export default function QrOrderDialog({ open, onClose }) {
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <QrCode2Icon color="primary" />
-          <Typography fontWeight={800} variant="h6">QR Ordering</Typography>
+          <Typography fontWeight={800} variant="h6">{vi ? 'Đặt hàng bằng QR' : 'QR Ordering'}</Typography>
         </Box>
         <IconButton size="small" onClick={handleClose}><CloseIcon fontSize="small" /></IconButton>
       </DialogTitle>
@@ -115,30 +118,30 @@ export default function QrOrderDialog({ open, onClose }) {
         {!result ? (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
             <Box>
-              <Typography fontWeight={800} sx={{ mb: 0.5 }}>Order slip QR</Typography>
+              <Typography fontWeight={800} sx={{ mb: 0.5 }}>{vi ? 'QR phiếu gọi món' : 'Order slip QR'}</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                Temporary QR for one walk-up customer. Optionally assign an order number.
+                {vi ? 'QR tạm thời cho một khách tại quầy. Có thể chỉ định số đơn.' : 'Temporary QR for one walk-up customer. Optionally assign an order number.'}
               </Typography>
               <TextField
-                label="Order number (optional)"
-                placeholder="Leave blank for auto"
+                label={vi ? 'Số đơn (không bắt buộc)' : 'Order number (optional)'}
+                placeholder={vi ? 'Để trống để tự động' : 'Leave blank for auto'}
                 type="number"
                 size="small"
                 fullWidth
                 value={seq}
                 onChange={e => setSeq(e.target.value)}
                 inputProps={{ min: 1 }}
-                helperText={seq ? `Order will be assigned #${seq}` : 'Next available number will be used'}
+                helperText={seq ? (vi ? `Đơn sẽ mang số #${seq}` : `Order will be assigned #${seq}`) : (vi ? 'Sẽ dùng số tiếp theo còn trống' : 'Next available number will be used')}
               />
               <TextField
-                label="Max orders accepted"
+                label={vi ? 'Số đơn tối đa được nhận' : 'Max orders accepted'}
                 type="number"
                 size="small"
                 fullWidth
                 value={maxOrders}
                 onChange={e => setMaxOrders(e.target.value)}
                 inputProps={{ min: 1, max: 500 }}
-                helperText="Default 12. Increase only when counter can accept more orders on this slip."
+                helperText={vi ? 'Mặc định 12. Chỉ tăng khi quầy có thể nhận thêm đơn trên phiếu này.' : 'Default 12. Increase only when counter can accept more orders on this slip.'}
                 sx={{ mt: 1.5 }}
               />
             </Box>
@@ -146,19 +149,19 @@ export default function QrOrderDialog({ open, onClose }) {
             <Divider />
 
             <Box>
-              <Typography fontWeight={800} sx={{ mb: 0.5 }}>Queue QR</Typography>
+              <Typography fontWeight={800} sx={{ mb: 0.5 }}>{vi ? 'QR xếp hàng' : 'Queue QR'}</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                Long-validity QR for customers to scan, choose their table, enter their name, then order.
+                {vi ? 'QR dài hạn để khách quét, chọn bàn, nhập tên rồi gọi món.' : 'Long-validity QR for customers to scan, choose their table, enter their name, then order.'}
               </Typography>
               <TextField
-                label="Valid days"
+                label={vi ? 'Số ngày hiệu lực' : 'Valid days'}
                 type="number"
                 size="small"
                 fullWidth
                 value={queueDays}
                 onChange={e => setQueueDays(e.target.value)}
                 inputProps={{ min: 1, max: 366 }}
-                helperText="Use 7, 30, 90, 180, or 365 days. Maximum is 366 days."
+                helperText={vi ? 'Dùng 7, 30, 90, 180 hoặc 365 ngày. Tối đa 366 ngày.' : 'Use 7, 30, 90, 180, or 365 days. Maximum is 366 days.'}
               />
             </Box>
           </Box>
@@ -171,15 +174,15 @@ export default function QrOrderDialog({ open, onClose }) {
                   Queue QR
                 </Typography>
                 <Typography sx={{ fontSize: 30, fontWeight: 900, lineHeight: 1.15, color: '#ff5722' }}>
-                  Seat + Order
+                  {vi ? 'Chọn bàn + Gọi món' : 'Seat + Order'}
                 </Typography>
-                <Chip icon={<TableRestaurantIcon />} label={`Valid ${result.validDays || queueDays} days`} size="small" sx={{ mt: 1, fontWeight: 700 }} />
+                <Chip icon={<TableRestaurantIcon />} label={vi ? `Hiệu lực ${result.validDays || queueDays} ngày` : `Valid ${result.validDays || queueDays} days`} size="small" sx={{ mt: 1, fontWeight: 700 }} />
               </Box>
             ) : result.seq != null && (
               <Box sx={{ mb: 1.5 }}>
                 <Typography variant="caption" color="text.secondary"
                   sx={{ textTransform: 'uppercase', letterSpacing: 0, fontSize: 10 }}>
-                  Order number
+                  {vi ? 'Số đơn' : 'Order number'}
                 </Typography>
                 <Typography sx={{ fontSize: 72, fontWeight: 900, lineHeight: 1, color: '#1976d2', letterSpacing: 0 }}>
                   #{result.seq}
@@ -188,7 +191,7 @@ export default function QrOrderDialog({ open, onClose }) {
             )}
             {!isQueue && (
               <Chip
-                label={`Max ${result.maxOrders || 12} order${Number(result.maxOrders || 12) === 1 ? '' : 's'}`}
+                label={vi ? `Tối đa ${result.maxOrders || 12} đơn` : `Max ${result.maxOrders || 12} order${Number(result.maxOrders || 12) === 1 ? '' : 's'}`}
                 size="small"
                 sx={{ mb: 1.5, fontWeight: 700 }}
               />
@@ -206,16 +209,16 @@ export default function QrOrderDialog({ open, onClose }) {
             </Box>
 
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5, fontWeight: 500 }}>
-              {isQueue ? 'Customer scans to choose table, enter name, and order' : 'Customer scans to view menu and order'}
+              {isQueue ? (vi ? 'Khách quét để chọn bàn, nhập tên và gọi món' : 'Customer scans to choose table, enter name, and order') : (vi ? 'Khách quét để xem thực đơn và gọi món' : 'Customer scans to view menu and order')}
             </Typography>
             {isQueue && result.expiresAt && (
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                Valid until {fmtDate(result.expiresAt)}
+                {vi ? 'Hiệu lực đến' : 'Valid until'} {fmtDate(result.expiresAt)}
               </Typography>
             )}
             {!isQueue && result.seq == null && (
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                Order number will be assigned automatically
+                {vi ? 'Số đơn sẽ được cấp tự động' : 'Order number will be assigned automatically'}
               </Typography>
             )}
           </Box>
@@ -225,28 +228,28 @@ export default function QrOrderDialog({ open, onClose }) {
       <DialogActions sx={{ px: 2, pb: 2, pt: 0.5, gap: 1, flexWrap: 'wrap' }}>
         {!result ? (
           <>
-            <Button onClick={handleClose} disabled={loading}>Cancel</Button>
+            <Button onClick={handleClose} disabled={loading}>{vi ? 'Hủy' : 'Cancel'}</Button>
             <Button
               variant="outlined" onClick={handleGenerateOrder} disabled={loading}
               startIcon={loadingType === 'order' ? <CircularProgress size={16} /> : <QrCode2Icon />}
               sx={{ fontWeight: 700, textTransform: 'none' }}
             >
-              {loadingType === 'order' ? 'Generating...' : 'Order QR'}
+              {loadingType === 'order' ? (vi ? 'Đang tạo...' : 'Generating...') : (vi ? 'QR gọi món' : 'Order QR')}
             </Button>
             <Button
               variant="contained" onClick={handleGenerateQueue} disabled={loading}
               startIcon={loadingType === 'queue' ? <CircularProgress size={16} /> : <TableRestaurantIcon />}
               sx={{ fontWeight: 700, textTransform: 'none', flex: '1 1 140px' }}
             >
-              {loadingType === 'queue' ? 'Generating...' : 'Queue QR'}
+              {loadingType === 'queue' ? (vi ? 'Đang tạo...' : 'Generating...') : (vi ? 'QR xếp hàng' : 'Queue QR')}
             </Button>
           </>
         ) : (
           <>
-            <Tooltip title="Generate a new QR">
+            <Tooltip title={vi ? 'Tạo mã QR mới' : 'Generate a new QR'}>
               <Button startIcon={<RefreshIcon />} onClick={handleReset}
                 sx={{ textTransform: 'none' }}>
-                New
+                {vi ? 'Tạo mới' : 'New'}
               </Button>
             </Tooltip>
             <Button
@@ -254,7 +257,7 @@ export default function QrOrderDialog({ open, onClose }) {
               onClick={() => isQueue ? printQueueQrTracked(result, setError) : printWalkUpQrTracked(result, setError)}
               sx={{ fontWeight: 700, textTransform: 'none', flex: 1 }}
             >
-              {isQueue ? 'Print Queue QR' : 'Print Slip'}
+              {isQueue ? (vi ? 'In QR xếp hàng' : 'Print Queue QR') : (vi ? 'In phiếu' : 'Print Slip')}
             </Button>
           </>
         )}

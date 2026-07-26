@@ -12,10 +12,13 @@ import CircularProgress from '@mui/material/CircularProgress'
 import Divider from '@mui/material/Divider'
 import CallSplitIcon from '@mui/icons-material/CallSplit'
 import { splitBill } from '../../api/shopApi'
+import { useI18n } from '../../i18n/I18nContext'
 
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : '—'
 
 export default function SplitBillDialog({ open, order, onClose, onSplit }) {
+  const { language } = useI18n()
+  const vi = language === 'vi'
   const [selected, setSelected] = useState(new Set())
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState('')
@@ -39,15 +42,15 @@ export default function SplitBillDialog({ open, order, onClose, onSplit }) {
   }
 
   const handleSplit = async () => {
-    if (selected.size === 0) { setError('Select at least one item'); return }
-    if (selected.size === rootItems.length) { setError('Keep at least one item in the original bill'); return }
+    if (selected.size === 0) { setError(vi ? 'Chọn ít nhất một món' : 'Select at least one item'); return }
+    if (selected.size === rootItems.length) { setError(vi ? 'Giữ lại ít nhất một món trong hóa đơn gốc' : 'Keep at least one item in the original bill'); return }
     setLoading(true); setError('')
     try {
       const { res, data } = await splitBill(order.id, [...selected])
-      if (!res.ok) { setError(data?.error || 'Split failed'); setLoading(false); return }
+      if (!res.ok) { setError(data?.error || (vi ? 'Tách hóa đơn thất bại' : 'Split failed')); setLoading(false); return }
       onSplit?.(data)
       onClose()
-    } catch (e) { setError(e.message || 'Network error') }
+    } catch (e) { setError(e.message || (vi ? 'Lỗi mạng' : 'Network error')) }
     setLoading(false)
   }
 
@@ -63,12 +66,12 @@ export default function SplitBillDialog({ open, order, onClose, onSplit }) {
       PaperProps={{ sx: { borderRadius: 3 } }}>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, pb: 1 }}>
         <CallSplitIcon color="primary" />
-        <Typography fontWeight={800} variant="h6">Split Bill</Typography>
+        <Typography fontWeight={800} variant="h6">{vi ? 'Tách hóa đơn' : 'Split Bill'}</Typography>
       </DialogTitle>
 
       <DialogContent sx={{ pt: 0 }}>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-          Select items to move to a new bill under this order. The rest stay in the original bill.
+          {vi ? 'Chọn các món để chuyển sang hóa đơn mới trong đơn này. Các món còn lại giữ trong hóa đơn gốc.' : 'Select items to move to a new bill under this order. The rest stay in the original bill.'}
         </Typography>
 
         {error && <Alert severity="error" sx={{ mb: 1.5 }}>{error}</Alert>}
@@ -111,7 +114,7 @@ export default function SplitBillDialog({ open, order, onClose, onSplit }) {
           <>
             <Divider sx={{ my: 1.5 }} />
             <Box sx={{ display: 'flex', justifyContent: 'space-between', px: 0.5 }}>
-              <Typography variant="body2" color="text.secondary">New bill total</Typography>
+              <Typography variant="body2" color="text.secondary">{vi ? 'Tổng hóa đơn mới' : 'New bill total'}</Typography>
               <Typography fontWeight={800} color="primary">{fmt(selectedTotal)}</Typography>
             </Box>
           </>
@@ -119,7 +122,7 @@ export default function SplitBillDialog({ open, order, onClose, onSplit }) {
       </DialogContent>
 
       <DialogActions sx={{ px: 2, pb: 2, gap: 1 }}>
-        <Button onClick={onClose} sx={{ textTransform: 'none' }}>Cancel</Button>
+        <Button onClick={onClose} sx={{ textTransform: 'none' }}>{vi ? 'Hủy' : 'Cancel'}</Button>
         <Button variant="contained" onClick={handleSplit} disabled={loading || selected.size === 0}
           startIcon={loading ? <CircularProgress size={16} /> : <CallSplitIcon />}
           sx={{ textTransform: 'none', fontWeight: 700 }}>

@@ -132,6 +132,8 @@ function playNewOrderSound() {
 
 const STATUS_COLOR  = { PENDING: 'default', CONFIRMED: 'primary', PREPARING: 'warning', READY: 'success', PICKED_UP: 'success', COMPLETED: 'success', CANCELLED: 'error' }
 const STATUS_LABEL  = { PENDING: 'Placed', CONFIRMED: 'Confirmed', PREPARING: 'Preparing', READY: 'Ready ✓', PICKED_UP: 'Picked Up ✓', COMPLETED: 'Done', CANCELLED: 'Cancelled' }
+const STATUS_LABEL_VI = { PENDING: 'Đã đặt', CONFIRMED: 'Đã xác nhận', PREPARING: 'Đang chuẩn bị', READY: 'Sẵn sàng ✓', PICKED_UP: 'Đã nhận ✓', COMPLETED: 'Hoàn tất', CANCELLED: 'Đã hủy' }
+const localizedStatusLabel = (status, language) => (language === 'vi' ? STATUS_LABEL_VI[status] : STATUS_LABEL[status]) || status
 const STATUSES      = ['', 'PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'PICKED_UP', 'COMPLETED', 'CANCELLED']
 const fmt           = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 const payableAmount = (order) => Math.max(0, Number(order?.totalAmount || 0) - Number(order?.discountAmount || 0))
@@ -440,7 +442,7 @@ const BOARD_HIGH_CONTRAST_STYLE = {
 }
 
 function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, onPayQr, onPickupQr, onSwitchQr, onRevertCash, onShowTrackQr, onPrintTag, onMergeBills, displaySize = 'normal', highContrast = false }) {
-  const { t } = useI18n()
+  const { t, language } = useI18n()
   // onAction(type, orderId, orderNumber)
   const large = displaySize === 'large'
   const style = highContrast
@@ -802,7 +804,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
         {/* Status / meta */}
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Box sx={{ display: 'flex', gap: 0.4, flexWrap: 'wrap', alignItems: 'center', mb: 0.3 }}>
-            <Chip label={STATUS_LABEL[order.status] || order.status} color={STATUS_COLOR[order.status] || 'default'} size="small"
+            <Chip label={localizedStatusLabel(order.status, language)} color={STATUS_COLOR[order.status] || 'default'} size="small"
               sx={{ height: large ? 24 : 20, fontSize: large ? 12 : 10, fontWeight: 800 }} />
             {order.fulfillmentType && (() => { const m = { DINE_IN: '🪑', PICKUP: '🥡', DELIVERY: '🛵' }; return <Typography sx={{ fontSize: large ? 17 : 13 }}>{m[order.fulfillmentType] || ''}</Typography> })()}
             {order.tableName && <Chip icon={<TableBarIcon sx={{ fontSize: large ? 18 : 16 }} />} label={order.tableName} size="small" color="info" variant="outlined" sx={{ height: large ? 32 : 28, fontSize: large ? 16 : 14, fontWeight: 900, '& .MuiChip-label': { px: 1 } }} />}
@@ -1074,6 +1076,8 @@ function summarizeOrderItems(order) {
 }
 
 function OrderRowsGrid({ rows, tables, actions, selectedIds, onToggleSelect, displaySize = 'normal', highContrast = false }) {
+  const { language } = useI18n()
+  const vi = language === 'vi'
   const large = displaySize === 'large'
   const fontSize = large ? 15 : 13
   const headerSx = {
@@ -1097,11 +1101,11 @@ function OrderRowsGrid({ rows, tables, actions, selectedIds, onToggleSelect, dis
     bgcolor: highContrast ? '#fff' : 'inherit',
   }
   const renderPrimaryAction = (order) => {
-    if (order.status === 'PENDING') return <Button size="small" variant="contained" disabled={Boolean(order.customerEditing)} onClick={() => actions.confirm(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 13 : 11 }}>Confirm</Button>
-    if (order.status === 'CONFIRMED') return <Button size="small" variant="contained" color="warning" onClick={() => actions.prepare(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 13 : 11 }}>Prepare</Button>
-    if (order.status === 'PREPARING') return <Button size="small" variant="contained" color="success" onClick={() => actions.ready(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 13 : 11 }}>Ready</Button>
-    if (order.status === 'READY') return <Button size="small" variant="contained" color={order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT' ? 'info' : 'success'} onClick={() => (order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT') ? actions.pickup(order) : actions.complete(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 13 : 11 }}>{order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT' ? 'Picked Up' : 'Complete'}</Button>
-    return <Typography sx={{ fontSize: large ? 13 : 11, color: '#64748b', fontWeight: 700 }}>{STATUS_LABEL[order.status] || order.status}</Typography>
+    if (order.status === 'PENDING') return <Button size="small" variant="contained" disabled={Boolean(order.customerEditing)} onClick={() => actions.confirm(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 13 : 11 }}>{vi ? 'Xác nhận' : 'Confirm'}</Button>
+    if (order.status === 'CONFIRMED') return <Button size="small" variant="contained" color="warning" onClick={() => actions.prepare(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 13 : 11 }}>{vi ? 'Chuẩn bị' : 'Prepare'}</Button>
+    if (order.status === 'PREPARING') return <Button size="small" variant="contained" color="success" onClick={() => actions.ready(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 13 : 11 }}>{vi ? 'Sẵn sàng' : 'Ready'}</Button>
+    if (order.status === 'READY') return <Button size="small" variant="contained" color={order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT' ? 'info' : 'success'} onClick={() => (order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT') ? actions.pickup(order) : actions.complete(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 13 : 11 }}>{order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT' ? (vi ? 'Đã nhận' : 'Picked Up') : (vi ? 'Hoàn tất' : 'Complete')}</Button>
+    return <Typography sx={{ fontSize: large ? 13 : 11, color: '#64748b', fontWeight: 700 }}>{localizedStatusLabel(order.status, language)}</Typography>
   }
 
   return (
@@ -1110,15 +1114,15 @@ function OrderRowsGrid({ rows, tables, actions, selectedIds, onToggleSelect, dis
         <Box component="thead">
           <Box component="tr">
             <Box component="th" sx={{ ...headerSx, width: 44 }} />
-            <Box component="th" sx={{ ...headerSx, width: 110 }}>Order</Box>
-            <Box component="th" sx={{ ...headerSx, width: 130 }}>Status</Box>
-            <Box component="th" sx={{ ...headerSx, width: 150 }}>Table</Box>
-            <Box component="th" sx={{ ...headerSx, minWidth: 260 }}>Items</Box>
-            <Box component="th" sx={{ ...headerSx, width: 150 }}>Customer</Box>
-            <Box component="th" sx={{ ...headerSx, width: 130 }}>Payment</Box>
-            <Box component="th" sx={{ ...headerSx, width: 130, textAlign: 'right' }}>Total</Box>
-            <Box component="th" sx={{ ...headerSx, width: 130 }}>Time</Box>
-            <Box component="th" sx={{ ...headerSx, width: 260 }}>Actions</Box>
+            <Box component="th" sx={{ ...headerSx, width: 110 }}>{vi ? 'Đơn' : 'Order'}</Box>
+            <Box component="th" sx={{ ...headerSx, width: 130 }}>{vi ? 'Trạng thái' : 'Status'}</Box>
+            <Box component="th" sx={{ ...headerSx, width: 150 }}>{vi ? 'Bàn' : 'Table'}</Box>
+            <Box component="th" sx={{ ...headerSx, minWidth: 260 }}>{vi ? 'Món' : 'Items'}</Box>
+            <Box component="th" sx={{ ...headerSx, width: 150 }}>{vi ? 'Khách hàng' : 'Customer'}</Box>
+            <Box component="th" sx={{ ...headerSx, width: 130 }}>{vi ? 'Thanh toán' : 'Payment'}</Box>
+            <Box component="th" sx={{ ...headerSx, width: 130, textAlign: 'right' }}>{vi ? 'Tổng' : 'Total'}</Box>
+            <Box component="th" sx={{ ...headerSx, width: 130 }}>{vi ? 'Thời gian' : 'Time'}</Box>
+            <Box component="th" sx={{ ...headerSx, width: 260 }}>{vi ? 'Thao tác' : 'Actions'}</Box>
           </Box>
         </Box>
         <Box component="tbody">
@@ -1135,7 +1139,7 @@ function OrderRowsGrid({ rows, tables, actions, selectedIds, onToggleSelect, dis
                   <Typography sx={{ fontSize: large ? 12 : 10, fontFamily: 'monospace', color: '#64748b' }}>{order.orderCode}</Typography>
                 </Box>
                 <Box component="td" sx={cellSx}>
-                  <Chip label={STATUS_LABEL[order.status] || order.status} color={STATUS_COLOR[order.status] || 'default'} size="small" sx={{ fontWeight: 800, fontSize: large ? 12 : 10 }} />
+                  <Chip label={localizedStatusLabel(order.status, language)} color={STATUS_COLOR[order.status] || 'default'} size="small" sx={{ fontWeight: 800, fontSize: large ? 12 : 10 }} />
                   {order.customerEditing && <Chip label="Editing" color="warning" size="small" sx={{ ml: 0.5, fontWeight: 800, fontSize: large ? 12 : 10 }} />}
                 </Box>
                 <Box component="td" sx={cellSx}>
@@ -1169,7 +1173,7 @@ function OrderRowsGrid({ rows, tables, actions, selectedIds, onToggleSelect, dis
                     {renderPrimaryAction(order)}
                     <Tooltip title="View detail"><IconButton size="small" onClick={() => actions.detail(order)}><VisibilityIcon sx={{ fontSize: large ? 20 : 17 }} /></IconButton></Tooltip>
                     <Tooltip title="Print receipt"><IconButton size="small" color="primary" onClick={() => printOrderReceiptTracked(order)}><PrintIcon sx={{ fontSize: large ? 20 : 17 }} /></IconButton></Tooltip>
-                    {order.paymentStatus !== 'PAID' && isActive && <Button size="small" variant="outlined" color="success" onClick={() => actions.markPaid(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 12 : 10 }}>Paid</Button>}
+                    {order.paymentStatus !== 'PAID' && isActive && <Button size="small" variant="outlined" color="success" onClick={() => actions.markPaid(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 12 : 10 }}>{vi ? 'Đã thanh toán' : 'Paid'}</Button>}
                     {order.paymentStatus !== 'PAID' && order.status !== 'CANCELLED' && <Tooltip title="Payment QR"><IconButton size="small" color="primary" onClick={() => actions.payQr(order)}><QrCode2Icon sx={{ fontSize: large ? 20 : 17 }} /></IconButton></Tooltip>}
                     {isActive && <Button size="small" color="error" onClick={() => actions.cancel(order)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: large ? 12 : 10 }}>Cancel</Button>}
                   </Box>
@@ -1321,6 +1325,8 @@ function OrderCardGrid({ rows, loading, tables, actions, modelImageMap = {}, sel
 // ── Main ShopOrderGrid ──────────────────────────────────────────────
 
 export default function ShopOrderGrid() {
+  const { language } = useI18n()
+  const vi = language === 'vi'
   const { tenantId: ctxTenantId, companyId: ctxCompanyId } = useAppContext()
   const [rows, setRows]                 = useState([])
   const [boardRows, setBoardRows]       = useState([])   // for board tabs — unfiltered
@@ -1830,24 +1836,24 @@ export default function ShopOrderGrid() {
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {/* Toolbar */}
         <Box sx={{ px: { xs: 1, sm: 1.5 }, py: { xs: 0.5, sm: 1 }, display: 'flex', gap: { xs: 0.75, sm: 1 }, alignItems: 'center', flexWrap: { xs: 'nowrap', sm: 'wrap' }, borderBottom: '1px solid #e0e0e0', flexShrink: 0 }}>
-          <TextField select label="Status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} size="small" sx={{ width: { xs: 112, sm: 148 }, flexShrink: 1 }}>
-            {STATUSES.map(s => <MenuItem key={s} value={s}>{s ? (STATUS_LABEL[s] || s) : 'All'}</MenuItem>)}
+          <TextField select label={vi ? 'Trạng thái' : 'Status'} value={statusFilter} onChange={e => setStatusFilter(e.target.value)} size="small" sx={{ width: { xs: 112, sm: 148 }, flexShrink: 1 }}>
+            {STATUSES.map(s => <MenuItem key={s} value={s}>{s ? (vi ? ({ PENDING: 'Đã đặt', CONFIRMED: 'Đã xác nhận', PREPARING: 'Đang chuẩn bị', READY: 'Sẵn sàng ✓', PICKED_UP: 'Đã nhận ✓', COMPLETED: 'Hoàn tất', CANCELLED: 'Đã hủy' }[s] || s) : (STATUS_LABEL[s] || s)) : (vi ? 'Tất cả' : 'All')}</MenuItem>)}
           </TextField>
           <Button startIcon={<RefreshIcon />} onClick={reload} variant="outlined" size="small"
             sx={{ minWidth: { xs: 40, sm: 64 }, px: { xs: 1, sm: 1.25 }, '& .MuiButton-startIcon': { mr: { xs: 0, sm: 1 } } }}>
-            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Refresh</Box>
+            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>{vi ? 'Làm mới' : 'Refresh'}</Box>
           </Button>
           <Box sx={{ display: { xs: 'none', sm: 'flex' }, border: '1px solid #cbd5e1', borderRadius: 1, overflow: 'hidden', bgcolor: '#fff' }}>
-            <Button startIcon={<TvIcon />} size="small" variant={orderViewMode === 'cards' ? 'contained' : 'text'} onClick={() => { setOrderViewMode('cards'); writeShopOrderPref(SHOP_ORDER_VIEW_PREF, 'cards') }} sx={{ borderRadius: 0, textTransform: 'none', fontWeight: 800 }}>Cards</Button>
-            <Button startIcon={<TableBarIcon />} size="small" variant={orderViewMode === 'grid' ? 'contained' : 'text'} onClick={() => { setOrderViewMode('grid'); writeShopOrderPref(SHOP_ORDER_VIEW_PREF, 'grid') }} sx={{ borderRadius: 0, textTransform: 'none', fontWeight: 800 }}>Grid</Button>
+            <Button startIcon={<TvIcon />} size="small" variant={orderViewMode === 'cards' ? 'contained' : 'text'} onClick={() => { setOrderViewMode('cards'); writeShopOrderPref(SHOP_ORDER_VIEW_PREF, 'cards') }} sx={{ borderRadius: 0, textTransform: 'none', fontWeight: 800 }}>{vi ? 'Thẻ' : 'Cards'}</Button>
+            <Button startIcon={<TableBarIcon />} size="small" variant={orderViewMode === 'grid' ? 'contained' : 'text'} onClick={() => { setOrderViewMode('grid'); writeShopOrderPref(SHOP_ORDER_VIEW_PREF, 'grid') }} sx={{ borderRadius: 0, textTransform: 'none', fontWeight: 800 }}>{vi ? 'Bảng' : 'Grid'}</Button>
           </Box>
-          <TextField select label="Card size" value={cardDisplaySize} onChange={e => { setCardDisplaySize(e.target.value); writeShopOrderPref(SHOP_ORDER_CARD_SIZE_PREF, e.target.value) }} size="small" sx={{ width: 132, display: { xs: 'none', sm: 'inline-flex' } }}>
-            <MenuItem value="normal">Normal</MenuItem>
-            <MenuItem value="large">Large</MenuItem>
+          <TextField select label={vi ? 'Cỡ thẻ' : 'Card size'} value={cardDisplaySize} onChange={e => { setCardDisplaySize(e.target.value); writeShopOrderPref(SHOP_ORDER_CARD_SIZE_PREF, e.target.value) }} size="small" sx={{ width: 132, display: { xs: 'none', sm: 'inline-flex' } }}>
+            <MenuItem value="normal">{vi ? 'Thường' : 'Normal'}</MenuItem>
+            <MenuItem value="large">{vi ? 'Lớn' : 'Large'}</MenuItem>
           </TextField>
-          <Button startIcon={<MonitorIcon />} aria-pressed={highContrastCards} onClick={() => { const next = !highContrastCards; setHighContrastCards(next); writeShopOrderPref(SHOP_ORDER_CONTRAST_PREF, String(next)) }} variant={highContrastCards ? 'contained' : 'outlined'} size="small" color="secondary" sx={{ display: { xs: 'none', sm: 'inline-flex' }, textTransform: 'none', fontWeight: 900, borderWidth: highContrastCards ? 2 : 1, '&:hover': { borderWidth: highContrastCards ? 2 : 1 } }}>Contrast</Button>
+          <Button startIcon={<MonitorIcon />} aria-pressed={highContrastCards} onClick={() => { const next = !highContrastCards; setHighContrastCards(next); writeShopOrderPref(SHOP_ORDER_CONTRAST_PREF, String(next)) }} variant={highContrastCards ? 'contained' : 'outlined'} size="small" color="secondary" sx={{ display: { xs: 'none', sm: 'inline-flex' }, textTransform: 'none', fontWeight: 900, borderWidth: highContrastCards ? 2 : 1, '&:hover': { borderWidth: highContrastCards ? 2 : 1 } }}>{vi ? 'Tương phản' : 'Contrast'}</Button>
           {staffCalls.length > 0 && (
-            <Tooltip title={`${staffCalls.length} staff notification${staffCalls.length > 1 ? 's' : ''}`}>
+            <Tooltip title={vi ? `${staffCalls.length} thông báo nhân viên` : `${staffCalls.length} staff notification${staffCalls.length > 1 ? 's' : ''}`}>
               <IconButton
                 size="small"
                 color="warning"
@@ -1870,9 +1876,9 @@ export default function ShopOrderGrid() {
             </Tooltip>
           )}
           <Button startIcon={<AddCircleOutlineIcon />} onClick={() => { setManualDefaults(null); setManualOpen(true) }}
-            variant="contained" size="small" color="success" sx={{ textTransform: 'none', fontWeight: 700, whiteSpace: 'nowrap', px: { xs: 1, sm: 1.25 }, '& .MuiButton-startIcon': { mr: { xs: 0.5, sm: 1 } } }}>New Order</Button>
+            variant="contained" size="small" color="success" sx={{ textTransform: 'none', fontWeight: 700, whiteSpace: 'nowrap', px: { xs: 1, sm: 1.25 }, '& .MuiButton-startIcon': { mr: { xs: 0.5, sm: 1 } } }}>{vi ? 'Tạo đơn' : 'New Order'}</Button>
           <Button startIcon={<QrCode2Icon />} onClick={() => setQrOrderOpen(true)}
-            variant="outlined" size="small" color="primary" sx={{ display: { xs: 'none', sm: 'inline-flex' }, textTransform: 'none', fontWeight: 700 }}>QR Order</Button>
+            variant="outlined" size="small" color="primary" sx={{ display: { xs: 'none', sm: 'inline-flex' }, textTransform: 'none', fontWeight: 700 }}>{vi ? 'Đơn QR' : 'QR Order'}</Button>
           {selectedRows.size > 0 && (
             <Button
               startIcon={<DriveFileMoveIcon />}
@@ -1883,8 +1889,8 @@ export default function ShopOrderGrid() {
             </Button>
           )}
           <Box sx={{ flex: 1, display: { xs: 'none', sm: 'block' } }} />
-          <Button startIcon={<TvIcon />} onClick={handleOpenBoard} variant="outlined" size="small" color="info" sx={{ display: { xs: 'none', sm: 'inline-flex' } }}>Display Board</Button>
-          <Tooltip title="Open the counter customer-facing display in a new tab">
+          <Button startIcon={<TvIcon />} onClick={handleOpenBoard} variant="outlined" size="small" color="info" sx={{ display: { xs: 'none', sm: 'inline-flex' } }}>{vi ? 'Bảng hiển thị' : 'Display Board'}</Button>
+          <Tooltip title={vi ? 'Mở màn hình khách hàng tại quầy trong thẻ mới' : 'Open the counter customer-facing display in a new tab'}>
             <Button startIcon={<MonitorIcon />}
               onClick={() => {
                 const base = window.location.origin + '/bom-inventory/shop/counter'
@@ -1895,27 +1901,27 @@ export default function ShopOrderGrid() {
               Counter
             </Button>
           </Tooltip>
-          <Button startIcon={<AssessmentIcon />} onClick={() => setEodOpen(true)} variant="outlined" size="small" color="secondary" sx={{ display: { xs: 'none', sm: 'inline-flex' }, textTransform: 'none', fontWeight: 700 }}>Shift Audit</Button>
-          <Button startIcon={<RestartAltIcon />} onClick={() => setResetOpen(true)} variant="outlined" size="small" color="warning" sx={{ display: { xs: 'none', sm: 'inline-flex' } }}>Reset Counter</Button>
+          <Button startIcon={<AssessmentIcon />} onClick={() => setEodOpen(true)} variant="outlined" size="small" color="secondary" sx={{ display: { xs: 'none', sm: 'inline-flex' }, textTransform: 'none', fontWeight: 700 }}>{vi ? 'Kiểm kê cuối ca' : 'Shift Audit'}</Button>
+          <Button startIcon={<RestartAltIcon />} onClick={() => setResetOpen(true)} variant="outlined" size="small" color="warning" sx={{ display: { xs: 'none', sm: 'inline-flex' } }}>{vi ? 'Đặt lại số đơn' : 'Reset Counter'}</Button>
         </Box>
 
         {error && <Alert severity="error" onClose={() => setError('')} sx={{ mx: 1.5, mt: 0.5 }}>{error}</Alert>}
         {newOrderNotice && (
           <Alert severity="info" onClose={() => setNewOrderNotice(null)} sx={{ mx: 1.5, mt: 0.5 }}>
             {newOrderNotice.count > 1
-              ? `${newOrderNotice.count} new orders received`
-              : `New order ${newOrderNotice.orderNumber != null ? `#${newOrderNotice.orderNumber}` : newOrderNotice.orderCode || ''} received`}
+              ? (vi ? `Đã nhận ${newOrderNotice.count} đơn mới` : `${newOrderNotice.count} new orders received`)
+              : (vi ? `Đã nhận đơn mới ${newOrderNotice.orderNumber != null ? `#${newOrderNotice.orderNumber}` : newOrderNotice.orderCode || ''}` : `New order ${newOrderNotice.orderNumber != null ? `#${newOrderNotice.orderNumber}` : newOrderNotice.orderCode || ''} received`)}
           </Alert>
         )}
 
         {/* Tabs */}
         <Box sx={{ borderBottom: '1px solid #e0e0e0', px: { xs: 0.5, sm: 1.5 }, flexShrink: 0 }}>
           <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons={false} sx={{ minHeight: { xs: 36, sm: 40 } }}>
-            <Tab label="Orders"                                                                           sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
-            <Tab label={tabBadge('Production',  confirmedOrders.length, 'primary')}                      sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
-            <Tab label={tabBadge('Processing',  preparingOrders.length, 'warning')}                      sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
-            <Tab label={tabBadge('Ready',       readyOrders.length,     'success')}                      sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
-            <Tab label={tabBadge('Picked Up',   pickedUpOrders.length,  'info')}                         sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
+            <Tab label={vi ? 'Đơn hàng' : 'Orders'}                                                                           sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
+            <Tab label={tabBadge(vi ? 'Sản xuất' : 'Production', confirmedOrders.length, 'primary')}                      sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
+            <Tab label={tabBadge(vi ? 'Đang xử lý' : 'Processing', preparingOrders.length, 'warning')}                      sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
+            <Tab label={tabBadge(vi ? 'Sẵn sàng' : 'Ready', readyOrders.length,     'success')}                      sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
+            <Tab label={tabBadge(vi ? 'Đã nhận' : 'Picked Up', pickedUpOrders.length,  'info')}                         sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
           </Tabs>
         </Box>
 
@@ -2111,7 +2117,7 @@ export default function ShopOrderGrid() {
                       Scan this QR with a phone or tablet to mirror the customer board live.
                     </Typography>
                     <Typography sx={{ color: '#4ade80', fontSize: 11, mt: 0.75, lineHeight: 1.5, fontStyle: 'italic' }}>
-                      Counter tip: open on your counter phone and show it to customers so they can track their order.
+                      {vi ? 'Màn hình quầy' : 'Counter'} tip: open on your counter phone and show it to customers so they can track their order.
                     </Typography>
                     <Button
                       size="small" variant="outlined"

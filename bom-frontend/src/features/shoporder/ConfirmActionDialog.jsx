@@ -9,6 +9,7 @@ import TextField from '@mui/material/TextField'
 import CircularProgress from '@mui/material/CircularProgress'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
+import { useI18n } from '../../i18n/I18nContext'
 
 /**
  * Reusable confirmation dialog.
@@ -35,6 +36,8 @@ export default function ConfirmActionDialog({
   onConfirm,
   onCancel,
 }) {
+  const { language } = useI18n()
+  const vi = language === 'vi'
   const [reason, setReason]   = useState('')
   const [busy, setBusy]       = useState(false)
 
@@ -83,7 +86,7 @@ export default function ConfirmActionDialog({
             onChange={e => setReason(e.target.value)}
             size="small"
             error={reason.trim().length === 0}
-            helperText={reason.trim().length === 0 ? 'A reason is required' : ' '}
+            helperText={reason.trim().length === 0 ? (vi ? 'Vui lòng nhập lý do' : 'A reason is required') : ' '}
             sx={{ mt: 0.5 }}
           />
         )}

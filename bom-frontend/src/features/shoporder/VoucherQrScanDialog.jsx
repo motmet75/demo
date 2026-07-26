@@ -13,9 +13,15 @@ import Chip from '@mui/material/Chip'
 import CameraAltIcon from '@mui/icons-material/CameraAlt'
 import UploadFileIcon from '@mui/icons-material/UploadFile'
 import QrCode2Icon from '@mui/icons-material/QrCode2'
+import { useI18n } from '../../i18n/I18nContext'
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode'
 
 export default function VoucherQrScanDialog({ open, onClose, onScan, title = 'Scan Voucher QR', manualLabel = 'Voucher code or QR payload', scannerLabel = 'Camera or image scanner' }) {
+  const { language } = useI18n()
+  const vi = language === 'vi'
+  const shownTitle = vi && title === 'Scan Voucher QR' ? 'Quét QR voucher' : title
+  const shownManualLabel = vi && manualLabel === 'Voucher code or QR payload' ? 'Mã voucher hoặc dữ liệu QR' : manualLabel
+  const shownScannerLabel = vi && scannerLabel === 'Camera or image scanner' ? 'Máy quét camera hoặc hình ảnh' : scannerLabel
   const scannerRef = useRef(null)
   const detectedRef = useRef(false)
   const readerIdRef = useRef(`voucher-qr-reader-${Math.random().toString(36).slice(2)}`)
@@ -129,7 +135,7 @@ export default function VoucherQrScanDialog({ open, onClose, onScan, title = 'Sc
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, fontWeight: 800 }}>
-        <QrCode2Icon color="primary" /> {title}
+        <QrCode2Icon color="primary" /> {shownTitle}
       </DialogTitle>
       <DialogContent sx={{ pt: '8px !important', display: 'flex', flexDirection: 'column', gap: 1.5 }}>
         {error && <Alert severity="warning">{error}</Alert>}
@@ -150,18 +156,18 @@ export default function VoucherQrScanDialog({ open, onClose, onScan, title = 'Sc
           {!streaming && !starting && (
             <Box sx={{ textAlign: 'center', color: '#e2e8f0', px: 2, zIndex: 1, pointerEvents: 'none' }}>
               <QrCode2Icon sx={{ fontSize: 42, mb: 1 }} />
-              <Typography variant="body2">{scannerLabel}</Typography>
+              <Typography variant="body2">{shownScannerLabel}</Typography>
             </Box>
           )}
           {starting && (
             <Box sx={{ textAlign: 'center', color: '#e2e8f0', zIndex: 1 }}>
               <CircularProgress size={28} sx={{ color: '#fff' }} />
-              <Typography variant="body2" sx={{ mt: 1 }}>Starting camera</Typography>
+              <Typography variant="body2" sx={{ mt: 1 }}>{vi ? 'Đang khởi động camera' : 'Starting camera'}</Typography>
             </Box>
           )}
           <Chip
             size="small"
-            label={streaming ? 'Camera active' : 'Scanner'}
+            label={streaming ? (vi ? 'Camera đang hoạt động' : 'Camera active') : (vi ? 'Máy quét' : 'Scanner')}
             color={streaming ? 'success' : 'default'}
             sx={{ position: 'absolute', top: 8, right: 8, fontWeight: 700, zIndex: 2 }}
           />
@@ -176,7 +182,7 @@ export default function VoucherQrScanDialog({ open, onClose, onScan, title = 'Sc
             disabled={starting || !cameraSupported}
             sx={{ textTransform: 'none', fontWeight: 700 }}
           >
-            Start Camera
+            {vi ? 'Mở camera' : 'Start Camera'}
           </Button>
           <Button
             size="small"
@@ -185,7 +191,7 @@ export default function VoucherQrScanDialog({ open, onClose, onScan, title = 'Sc
             startIcon={<UploadFileIcon />}
             sx={{ textTransform: 'none', fontWeight: 700 }}
           >
-            Image
+            {vi ? 'Hình ảnh' : 'Image'}
             <input
               hidden
               type="file"
@@ -197,7 +203,7 @@ export default function VoucherQrScanDialog({ open, onClose, onScan, title = 'Sc
         </Box>
 
         <TextField
-          label={manualLabel}
+          label={shownManualLabel}
           size="small"
           fullWidth
           value={manualValue}
@@ -206,14 +212,14 @@ export default function VoucherQrScanDialog({ open, onClose, onScan, title = 'Sc
         />
       </DialogContent>
       <DialogActions sx={{ px: 2, pb: 2 }}>
-        <Button onClick={() => { void stopCamera(); onClose?.() }} sx={{ textTransform: 'none' }}>Cancel</Button>
+        <Button onClick={() => { void stopCamera(); onClose?.() }} sx={{ textTransform: 'none' }}>{vi ? 'Hủy' : 'Cancel'}</Button>
         <Button
           variant="contained"
           onClick={submitManual}
           disabled={!manualValue.trim()}
           sx={{ textTransform: 'none', fontWeight: 700 }}
         >
-          Use
+          {vi ? 'Sử dụng' : 'Use'}
         </Button>
       </DialogActions>
     </Dialog>
