@@ -442,7 +442,7 @@ const BOARD_HIGH_CONTRAST_STYLE = {
 }
 
 function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, onPayQr, onPickupQr, onSwitchQr, onRevertCash, onShowTrackQr, onPrintTag, onMergeBills, displaySize = 'normal', highContrast = false }) {
-  const { t, language } = useI18n()
+  const { t } = useI18n()
   // onAction(type, orderId, orderNumber)
   const large = displaySize === 'large'
   const style = highContrast
@@ -718,7 +718,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
   const [editNum, setEditNum]       = useState(false)
   const [numVal, setNumVal]         = useState(String(order.orderNumber ?? ''))
   const [imagePreview, setImagePreview] = useState(null)
-  const { t } = useI18n()
+  const { t, language } = useI18n()
 
   const large = displaySize === 'large'
   const baseStyle = CARD_STYLE[order.status] || CARD_STYLE.CONFIRMED
