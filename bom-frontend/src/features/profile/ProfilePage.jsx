@@ -13,9 +13,11 @@ import AccessTimeIcon from '@mui/icons-material/AccessTime'
 import EmailIcon from '@mui/icons-material/Email'
 import RiceBowlIcon from '@mui/icons-material/RiceBowl'
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline'
+import LockResetIcon from '@mui/icons-material/LockReset'
 import { apiFetchJson } from '../../api/client'
 import { useAuth } from '../../context/useAuth'
 import { extendShopValidity } from '../../api/authApi'
+import { useI18n } from '../../i18n/I18nContext'
 
 function ValidityCard({ company, user, isAdmin, onExtended }) {
   const [extendOpen, setExtendOpen]   = useState(false)
@@ -134,6 +136,7 @@ function ValidityCard({ company, user, isAdmin, onExtended }) {
 export default function ProfilePage() {
   const { user, refreshMe } = useAuth()
   const navigate = useNavigate()
+  const { t } = useI18n()
   const [profile, setProfile] = useState(null)
   const [loadingProfile, setLoadingProfile] = useState(true)
   const [setupLoading, setSetupLoading] = useState('')
@@ -141,6 +144,14 @@ export default function ProfilePage() {
   const [resetLoading, setResetLoading] = useState(false)
   const resetTimerRef = useRef(null)
   const [snack, setSnack] = useState({ open: false, message: '', severity: 'success' })
+  const [passwordOpen, setPasswordOpen] = useState(false)
+  const [passwordOtpSent, setPasswordOtpSent] = useState(false)
+  const [passwordOtpEmail, setPasswordOtpEmail] = useState('')
+  const [passwordOtp, setPasswordOtp] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordBusy, setPasswordBusy] = useState(false)
+  const [passwordError, setPasswordError] = useState('')
 
   const loadProfile = useCallback(async () => {
     setLoadingProfile(true)
@@ -199,6 +210,51 @@ export default function ProfilePage() {
     }
   }
 
+  const closePasswordDialog = () => {
+    if (passwordBusy) return
+    setPasswordOpen(false)
+    setPasswordOtpSent(false)
+    setPasswordOtpEmail('')
+    setPasswordOtp('')
+    setNewPassword('')
+    setConfirmPassword('')
+    setPasswordError('')
+  }
+
+  const requestPasswordOtp = async () => {
+    setPasswordBusy(true)
+    setPasswordError('')
+    const { res, data } = await apiFetchJson('/auth/password-otp/request', {
+      method: 'POST', credentials: 'include',
+    })
+    setPasswordBusy(false)
+    if (!res.ok) {
+      setPasswordError(res.status === 400 ? t('profile.password.noEmail') : res.status === 429 ? t('profile.password.wait') : t('profile.password.sendFailed'))
+      return
+    }
+    setPasswordOtpSent(true)
+    setPasswordOtpEmail(data?.email || profile?.user?.email || '')
+  }
+
+  const confirmPasswordChange = async () => {
+    if (newPassword.length < 8) { setPasswordError(t('profile.password.minLength')); return }
+    if (newPassword !== confirmPassword) { setPasswordError(t('profile.password.mismatch')); return }
+    if (!/^\d{6}$/.test(passwordOtp.trim())) { setPasswordError(t('profile.password.otpRequired')); return }
+    setPasswordBusy(true)
+    setPasswordError('')
+    const { res } = await apiFetchJson('/auth/password-otp/confirm', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ otp: passwordOtp.trim(), newPassword, confirmPassword }),
+    })
+    setPasswordBusy(false)
+    if (!res.ok) {
+      setPasswordError(res.status === 429 ? t('profile.password.tooMany') : res.status === 400 ? t('profile.password.invalidOtp') : t('profile.password.changeFailed'))
+      return
+    }
+    closePasswordDialog()
+    setSnack({ open: true, message: t('profile.password.changed'), severity: 'success' })
+  }
   if (loadingProfile) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}>
@@ -248,6 +304,59 @@ export default function ProfilePage() {
           )}
         </Box>
       </Paper>
+
+            <Paper elevation={1} sx={{ p: 2.5, mb: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+          <LockResetIcon color="primary" />
+          <Box sx={{ flex: 1, minWidth: 180 }}>
+            <Typography variant="subtitle1" fontWeight={700}>{t('profile.password.title')}</Typography>
+            <Typography variant="body2" color="text.secondary">{t('profile.password.description')}</Typography>
+          </Box>
+          <Button variant="outlined" startIcon={<LockResetIcon />} onClick={() => setPasswordOpen(true)}>
+            {t('profile.password.action')}
+          </Button>
+        </Box>
+      </Paper>
+
+      <Dialog open={passwordOpen} onClose={closePasswordDialog} maxWidth="xs" fullWidth>
+        <DialogTitle fontWeight={700}>{t('profile.password.dialogTitle')}</DialogTitle>
+        <DialogContent>
+          {!passwordOtpSent ? (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              {t('profile.password.sendHelp', { email: p?.user?.email || '' })}
+            </Typography>
+          ) : (
+            <Box sx={{ display: 'grid', gap: 2, mt: 0.5 }}>
+              <Alert severity="info">{t('profile.password.sentTo', { email: passwordOtpEmail })}</Alert>
+              <TextField label={t('profile.password.otp')} value={passwordOtp}
+                onChange={e => setPasswordOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                inputProps={{ inputMode: 'numeric', maxLength: 6 }} autoFocus fullWidth />
+              <TextField label={t('profile.password.new')} type="password" value={newPassword}
+                onChange={e => setNewPassword(e.target.value)} autoComplete="new-password" fullWidth />
+              <TextField label={t('profile.password.confirm')} type="password" value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)} autoComplete="new-password" fullWidth />
+              <Button size="small" onClick={requestPasswordOtp} disabled={passwordBusy} sx={{ justifySelf: 'start' }}>
+                {t('profile.password.resend')}
+              </Button>
+            </Box>
+          )}
+          {passwordError && <Alert severity="error" sx={{ mt: 2 }}>{passwordError}</Alert>}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={closePasswordDialog} disabled={passwordBusy}>{t('common.cancel')}</Button>
+          {!passwordOtpSent ? (
+            <Button variant="contained" onClick={requestPasswordOtp} disabled={passwordBusy}
+              startIcon={passwordBusy ? <CircularProgress size={16} color="inherit" /> : <EmailIcon />}>
+              {t('profile.password.sendOtp')}
+            </Button>
+          ) : (
+            <Button variant="contained" onClick={confirmPasswordChange} disabled={passwordBusy}
+              startIcon={passwordBusy ? <CircularProgress size={16} color="inherit" /> : <LockResetIcon />}>
+              {t('profile.password.update')}
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
 
       {/* Validity card — always show when company exists */}
       {p?.company && (

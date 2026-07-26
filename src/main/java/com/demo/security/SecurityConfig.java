@@ -68,6 +68,7 @@ public class SecurityConfig {
                 .requestMatchers("/oauth2/**").permitAll()
                 .requestMatchers("/dang-nhap/oauth2/**").permitAll()
                 .requestMatchers("/bom/**").authenticated()
+                .requestMatchers("/auth/password-otp/**").authenticated()
                 .requestMatchers("/auth/login", "/auth/logout", "/auth/me", "/auth/change-password", "/auth/last-context", "/auth/profile", "/error").permitAll()
                 .requestMatchers("/bom/etl/**").authenticated()
                 .requestMatchers(HttpMethod.GET, "/bom/tenants", "/bom/tenants/**").permitAll()

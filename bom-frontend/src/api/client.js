@@ -121,6 +121,7 @@ function isProtectedApiPath(path) {
     '/auth/shop/reset',
     '/auth/shop/setup',
     '/auth/change-password',
+    '/auth/password-otp',
     '/auth/last-context',
     '/auth/admin/extend-validity'
   ].some(prefix => path === prefix || path.startsWith(prefix + '/'))

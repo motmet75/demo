@@ -58,13 +58,16 @@ public class AuthController {
      */
     private final PasswordEncoder passwordEncoder;
     private final UserRepository userRepository;
+    private final PasswordChangeOtpService passwordChangeOtpService;
 
-    public AuthController(AuthenticationManager authenticationManager,
+public AuthController(AuthenticationManager authenticationManager,
                           PasswordEncoder passwordEncoder,
-                          UserRepository userRepository) {
+                          UserRepository userRepository,
+                          PasswordChangeOtpService passwordChangeOtpService) {
         this.authenticationManager = authenticationManager;
         this.passwordEncoder = passwordEncoder;
         this.userRepository = userRepository;
+        this.passwordChangeOtpService = passwordChangeOtpService;
     }
 
     // -------------------------------------------------------------------------
@@ -179,6 +182,51 @@ public class AuthController {
             @NotBlank String currentPassword,
             @NotBlank String newPassword) {}
 
+    public record PasswordOtpResponse(boolean success, String message, String email, Long expiresInSeconds) {}
+    public record ConfirmPasswordOtpRequest(
+            @NotBlank String otp,
+            @NotBlank String newPassword,
+            @NotBlank String confirmPassword) {}
+
+    @PostMapping("/password-otp/request")
+    public ResponseEntity<PasswordOtpResponse> requestPasswordOtp(Authentication authentication) {
+        User user = currentDbUser(authentication);
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new PasswordOtpResponse(false, "Not authenticated", null, null));
+        }
+        try {
+            PasswordChangeOtpService.OtpRequestResult result = passwordChangeOtpService.request(user);
+            return ResponseEntity.ok(new PasswordOtpResponse(true, "OTP sent", result.maskedEmail(), result.expiresInSeconds()));
+        } catch (PasswordChangeOtpService.OtpException ex) {
+            return ResponseEntity.status(ex.status()).body(new PasswordOtpResponse(false, ex.getMessage(), null, null));
+        }
+    }
+
+    @PostMapping("/password-otp/confirm")
+    public ResponseEntity<AuthResponse> confirmPasswordOtp(
+            @Valid @RequestBody ConfirmPasswordOtpRequest request,
+            Authentication authentication) {
+        User user = currentDbUser(authentication);
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new AuthResponse(false, null, "Not authenticated"));
+        }
+        if (request.newPassword().length() < 8) {
+            return ResponseEntity.badRequest().body(new AuthResponse(false, null, "New password must be at least 8 characters"));
+        }
+        if (!request.newPassword().equals(request.confirmPassword())) {
+            return ResponseEntity.badRequest().body(new AuthResponse(false, null, "Password confirmation does not match"));
+        }
+        try {
+            passwordChangeOtpService.verifyAndConsume(user.getId(), request.otp());
+        } catch (PasswordChangeOtpService.OtpException ex) {
+            return ResponseEntity.status(ex.status()).body(new AuthResponse(false, null, ex.getMessage()));
+        }
+        user.setPassword(passwordEncoder.encode(request.newPassword()));
+        userRepository.save(user);
+        return ResponseEntity.ok(new AuthResponse(true, null, "Password changed successfully"));
+    }
     @PostMapping("/change-password")
     public ResponseEntity<AuthResponse> changePassword(
             @Valid @RequestBody ChangePasswordRequest request,
@@ -218,6 +266,10 @@ public class AuthController {
     // Internal helpers
     // -------------------------------------------------------------------------
 
+    private User currentDbUser(Authentication authentication) {
+        if (authentication == null || !(authentication.getPrincipal() instanceof User sessionUser)) return null;
+        return userRepository.findByUsernameIgnoreCase(sessionUser.getUsername()).orElse(null);
+    }
     private AuthUserView toView(Authentication authentication) {
         User user = (User) authentication.getPrincipal();
         return toView(user);
