@@ -1993,7 +1993,7 @@ export default function ShopOrderGrid() {
           <Badge badgeContent={staffCalls.length} color="error" max={99}>
             <NotificationsActiveIcon sx={{ color: '#ff5722' }} />
           </Badge>
-          <Typography fontWeight={800} sx={{ fontSize: 15, flex: 1 }}>{t('shopOrder.grid.staffNotifications')}</Typography>
+          <Typography fontWeight={800} sx={{ fontSize: 15, flex: 1 }}>{t('shopOrder.grid.staffNotifications', { count: staffCalls.length })}</Typography>
         </DialogTitle>
         <DialogContent dividers sx={{ p: 1 }}>
           <Stack spacing={1}>
@@ -2379,7 +2379,7 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { reload() }, [token]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { reload() }, [token])
   useEffect(() => {
     let active = true
     setSessionLocked(false)

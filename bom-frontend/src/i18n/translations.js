@@ -1,3 +1,5 @@
+import { VI_BOM_SOURCE_TRANSLATIONS } from './bomSourceVi'
+
 export const LANGUAGE_STORAGE_KEY = 'bom_language_v1'
 export const TIME_ZONE_STORAGE_KEY = 'bom_time_zone_v1'
 export const DEFAULT_TIME_ZONE = 'Asia/Ho_Chi_Minh'
@@ -293,7 +295,6 @@ const EN = {
   'shopOrder.grid.allTables': 'All tables',
   'shopOrder.grid.allSlips': 'All slips',
   'shopOrder.grid.noOrders': 'No orders found',
-  'shopOrder.grid.staffNotifications': 'Staff notifications',
   'shopOrder.grid.close': 'Close',
   'shopOrder.grid.displayBoards': 'Display Boards',
   'shopOrder.grid.staffBoard': 'Staff Board',
@@ -303,11 +304,9 @@ const EN = {
   'shopOrder.grid.customerBoardHelp': '— order numbers (waiting area TV)',
   'shopOrder.grid.boardExpiry': 'Both links use the same token and are valid for 24 hours.',
   'shopOrder.grid.noBankConfig': 'No bank account configured. Set it up in Bank Account Setup first.',
-  'shopOrder.grid.moveOrders': 'Move {count} order(s) to table',
   'shopOrder.grid.moveTableHelp': 'Select the target table. Choose No table to unassign.',
   'shopOrder.grid.trackOrder': 'Track Order',
   'shopOrder.grid.trackingQrFailed': 'Failed to load tracking QR',
-  'shopOrder.grid.resetCounter': 'Reset Order Counter',
   'shopOrder.grid.combinedReceipt': 'Combined Receipt',
   'shopOrder.grid.receiptPaused': 'Customer ordering is paused while this counter receipt is open.',
   'shopOrder.grid.qrPayment': 'QR Payment',
@@ -2051,7 +2050,6 @@ const VI = {
   'shopOrder.grid.allTables': 'Tất cả bàn',
   'shopOrder.grid.allSlips': 'Tất cả phiếu',
   'shopOrder.grid.noOrders': 'Không tìm thấy đơn hàng',
-  'shopOrder.grid.staffNotifications': 'Thông báo nhân viên',
   'shopOrder.grid.close': 'Đóng',
   'shopOrder.grid.displayBoards': 'Màn hình hiển thị',
   'shopOrder.grid.staffBoard': 'Màn hình nhân viên',
@@ -2061,11 +2059,9 @@ const VI = {
   'shopOrder.grid.customerBoardHelp': '— số đơn hàng (TV khu vực chờ)',
   'shopOrder.grid.boardExpiry': 'Hai liên kết dùng cùng mã và có hiệu lực trong 24 giờ.',
   'shopOrder.grid.noBankConfig': 'Chưa cấu hình tài khoản ngân hàng. Hãy thiết lập trong Cài đặt tài khoản ngân hàng trước.',
-  'shopOrder.grid.moveOrders': 'Chuyển {count} đơn hàng sang bàn',
   'shopOrder.grid.moveTableHelp': 'Chọn bàn đích. Chọn Không có bàn để bỏ gán bàn.',
   'shopOrder.grid.trackOrder': 'Theo dõi đơn hàng',
   'shopOrder.grid.trackingQrFailed': 'Không thể tải QR theo dõi',
-  'shopOrder.grid.resetCounter': 'Đặt lại bộ đếm đơn hàng',
   'shopOrder.grid.combinedReceipt': 'Hóa đơn gộp',
   'shopOrder.grid.receiptPaused': 'Khách hàng tạm thời không thể đặt món khi hóa đơn tại quầy này đang mở.',
   'shopOrder.grid.qrPayment': 'Thanh toán QR',
@@ -2740,10 +2736,11 @@ export function translateSource(language, text) {
   if (!trimmed) return source
 
   const key = SOURCE_KEYS[trimmed]
-  if (!key) return source
-
-  const translated = tFor(language, key)
-  if (translated === trimmed) return source
+  const normalizedLanguage = normalizeLanguage(language) || DEFAULT_LANGUAGE
+  const translated = key
+    ? tFor(normalizedLanguage, key)
+    : normalizedLanguage === 'vi' ? VI_BOM_SOURCE_TRANSLATIONS[trimmed] : ''
+  if (!translated || translated === trimmed) return source
 
   const leading = source.match(/^\s*/)?.[0] || ''
   const trailing = source.match(/\s*$/)?.[0] || ''
