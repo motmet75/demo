@@ -15,6 +15,8 @@ import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
 import org.springframework.mail.MailException;
 import org.springframework.mail.SimpleMailMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -23,6 +25,7 @@ import com.ams.bomcore.domain.user.User;
 
 @Service
 public class PasswordChangeOtpService {
+    private static final Logger log = LoggerFactory.getLogger(PasswordChangeOtpService.class);
     private static final Duration OTP_TTL = Duration.ofMinutes(10);
     private static final Duration RESEND_DELAY = Duration.ofSeconds(60);
     private static final int MAX_ATTEMPTS = 5;
@@ -34,7 +37,7 @@ public class PasswordChangeOtpService {
 
     public PasswordChangeOtpService(ObjectProvider<JavaMailSender> mailSenderProvider, Environment environment) {
         this.mailSenderProvider = mailSenderProvider;
-        this.from = environment.getProperty("spring.mail.username", "");
+        this.from = environment.getProperty("app.mail.from", "services@anhmedia.vn").trim();
     }
 
     public synchronized OtpRequestResult request(User user) {
@@ -68,6 +71,9 @@ public class PasswordChangeOtpService {
             mailSender.send(message);
         } catch (MailException ex) {
             challenges.remove(user.getId());
+            Throwable cause = ex.getMostSpecificCause();
+            log.warn("Could not send password OTP email via Amazon SES: {}",
+                    cause != null ? cause.getMessage() : ex.getMessage());
             throw new OtpException(HttpStatus.SERVICE_UNAVAILABLE, "Could not send the OTP email");
         }
         return new OtpRequestResult(maskEmail(email), OTP_TTL.toSeconds());
