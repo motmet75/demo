@@ -99,3 +99,6 @@ src/main/resources/google/
 bom-frontend/eslint.config.js
 QR2.jpeg
 QR1.jpeg
+
+# Server secrets
+/secrets/application-secrets.properties

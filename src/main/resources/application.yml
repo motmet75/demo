@@ -1,0 +1,18 @@
+spring:
+  config:
+    import: "optional:file:./secrets/application-secrets.properties"
+  mail:
+    host: "${SES_SMTP_HOST:email-smtp.ap-northeast-2.amazonaws.com}"
+    port: "${SES_SMTP_PORT:587}"
+    username: "${SES_SMTP_USERNAME:}"
+    password: "${SES_SMTP_PASSWORD:}"
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          connectiontimeout: 10000
+          timeout: 10000
+          writetimeout: 10000
