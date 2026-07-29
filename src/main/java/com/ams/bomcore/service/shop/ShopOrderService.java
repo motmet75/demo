@@ -42,6 +42,7 @@ import java.util.Map;
 @Service
 public class ShopOrderService {
 
+    private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
     public static final int DEFAULT_WALK_UP_MAX_ORDERS = 12;
 
     private final ShopOrderRepository shopOrderRepository;
@@ -108,12 +109,11 @@ public class ShopOrderService {
                 .toList();
 
         // Collect IDs referenced in allowedSideIds of any active menu item
-        ObjectMapper om = new ObjectMapper();
         Set<String> neededSideIds = new HashSet<>();
         for (Model m : active) {
             if (m.getAllowedSideIds() != null) {
                 try {
-                    JsonNode node = om.readTree(m.getAllowedSideIds());
+                    JsonNode node = JSON_MAPPER.readTree(m.getAllowedSideIds());
                     if (node.isArray()) {
                         for (JsonNode entry : node) {
                             if (entry.isTextual()) {
@@ -807,9 +807,19 @@ public class ShopOrderService {
                              List<ShopOrderItem> accumulator, BigDecimal[] totals,
                              UUID tenantId, UUID companyId) {
         if (requests == null) return;
+        if (parent != null) validateSideItemRequests(parent, requests);
         for (var req : requests) {
+            if (req == null || req.modelId() == null) {
+                throw new IllegalArgumentException("Each order item must have a modelId");
+            }
+            if (req.quantity() == null || req.quantity().compareTo(BigDecimal.ZERO) <= 0) {
+                throw new IllegalArgumentException("Order item quantity must be greater than zero");
+            }
             Model model = modelRepository.findById(req.modelId())
                     .orElseThrow(() -> new IllegalArgumentException("Model not found: " + req.modelId()));
+            if (!tenantId.equals(model.getTenantId()) || !companyId.equals(model.getCompanyId())) {
+                throw new IllegalArgumentException("Model not found: " + req.modelId());
+            }
             BigDecimal qty = req.quantity();
             BigDecimal unitPrice = req.unitPriceOverride() != null
                     ? req.unitPriceOverride()
@@ -843,6 +853,64 @@ public class ShopOrderService {
             totals[1] = totals[1].add(costBreakdown.total());
 
             buildItems(order, req.sideItems(), item, accumulator, totals, tenantId, companyId);
+        }
+    }
+
+    private void validateSideItemRequests(ShopOrderItem parent, List<ItemRequest> requests) {
+        Map<UUID, Integer> limits = parseAllowedSideLimits(parent.getModel());
+        Map<UUID, BigDecimal> requestedByModel = new LinkedHashMap<>();
+
+        for (ItemRequest request : requests) {
+            if (request == null || request.modelId() == null) {
+                throw new IllegalArgumentException("Each side/topping item must have a modelId");
+            }
+            if (request.quantity() == null || request.quantity().compareTo(BigDecimal.ZERO) <= 0) {
+                throw new IllegalArgumentException("Side/topping quantity must be greater than zero");
+            }
+            if (!limits.containsKey(request.modelId())) {
+                throw new IllegalArgumentException("Side/topping is not allowed for " + parent.getModelName());
+            }
+            requestedByModel.merge(request.modelId(), request.quantity(), BigDecimal::add);
+        }
+
+        for (Map.Entry<UUID, BigDecimal> requested : requestedByModel.entrySet()) {
+            int maxPerItem = limits.get(requested.getKey());
+            if (maxPerItem == Integer.MAX_VALUE) continue;
+            BigDecimal maximum = parent.getQuantity().multiply(BigDecimal.valueOf(maxPerItem));
+            if (requested.getValue().compareTo(maximum) > 0) {
+                throw new IllegalArgumentException(
+                        "Side/topping quantity exceeds the maximum of " + maxPerItem + " per " + parent.getModelName());
+            }
+        }
+    }
+
+    private Map<UUID, Integer> parseAllowedSideLimits(Model parentModel) {
+        Map<UUID, Integer> limits = new LinkedHashMap<>();
+        String raw = parentModel != null ? parentModel.getAllowedSideIds() : null;
+        if (raw == null || raw.isBlank()) return limits;
+
+        try {
+            JsonNode parsed = JSON_MAPPER.readTree(raw);
+            if (!parsed.isArray()) {
+                throw new IllegalArgumentException("Invalid side/topping configuration for " + parentModel.getModelName());
+            }
+            for (JsonNode entry : parsed) {
+                String rawId = entry.isTextual()
+                        ? entry.asText()
+                        : entry.isObject() && entry.hasNonNull("modelId") ? entry.get("modelId").asText() : null;
+                if (rawId == null || rawId.isBlank()) continue;
+
+                UUID modelId = UUID.fromString(rawId);
+                int maxQty = entry.isObject() && entry.hasNonNull("maxQty")
+                        ? entry.get("maxQty").asInt(1)
+                        : Integer.MAX_VALUE;
+                limits.putIfAbsent(modelId, maxQty > 0 ? maxQty : 1);
+            }
+            return limits;
+        } catch (IllegalArgumentException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new IllegalArgumentException("Invalid side/topping configuration for " + parentModel.getModelName(), ex);
         }
     }
 

@@ -57,6 +57,7 @@ import VoucherQrScanDialog from '../shoporder/VoucherQrScanDialog'
 import LanguageSelector from '../../components/LanguageSelector'
 import { useI18n } from '../../i18n/I18nContext'
 import { localizedCategory, localizedChoiceLabel, localizedGroupName, localizedModelName, normalizeChoice, parseChoices as parseMenuChoices } from '../../i18n/menuLocalization'
+import { decorateAllowedSideOptions, getAllowedSideMax } from '../../utils/sideItemConfig'
 
 const genUid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
 const fmt    = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
@@ -550,7 +551,7 @@ export default function ShopMenuPage() {
         return `${displayGroup}: ${Object.entries(value).map(([label, qty]) => `${displayChoice(label)} x${qty}`).join(', ')}`
       }
       return `${displayGroup}: ${displayChoice(String(value))}`
-    }).join(' � ')
+    }).join(' - ')
   }, [choiceName, optionGroupName, optionsByModel])
   // ── Data loading ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -770,6 +771,12 @@ export default function ShopMenuPage() {
     : activeStaffCall?.status === 'DISMISSED'
       ? t('shop.requestHandled')
       : t('shop.waitingStaffReply')
+  const allowedSideOptionsFor = (model) => decorateAllowedSideOptions(menu, model?.allowedSideIds)
+  const maxAllowedSideQty = (parentModelId, sideModelId) => {
+    const parent = menu.find(item => String(item.id) === String(parentModelId))
+    return getAllowedSideMax(parent?.allowedSideIds, sideModelId) || 0
+  }
+
   // ── Cart mutations ────────────────────────────────────────────────────
   const createEntry = (model, qty, selectedOptions, itemNotes, rawSides = []) => {
     const id = genUid()
@@ -851,7 +858,12 @@ export default function ShopMenuPage() {
       const parent = prev[parentUid]; if (!parent) return prev
       return { ...prev, [parentUid]: { ...parent,
         sideItems: parent.sideItems
-          .map(si => si.uid === sideUid ? { ...si, qty: Math.max(0, (si.qty || 1) + delta) } : si)
+          .map(si => {
+            if (si.uid !== sideUid) return si
+            const limit = maxAllowedSideQty(parent.modelId, si.modelId)
+            const requested = Math.max(0, (si.qty || 1) + delta)
+            return { ...si, qty: limit > 0 ? Math.min(limit, requested) : requested }
+          })
           .filter(si => si.qty > 0) } }
     })
 
@@ -864,9 +876,7 @@ export default function ShopMenuPage() {
   // ── Menu card click handlers ──────────────────────────────────────────
   const handleAddClick = (model) => {
     const hasOpts = (optionsByModel[model.id] || []).length > 0
-    let allowedSideIds = null
-    try { allowedSideIds = model.allowedSideIds ? JSON.parse(model.allowedSideIds) : null } catch { allowedSideIds = null }
-    const allowedSideOptions = allowedSideIds ? menu.filter(x => allowedSideIds.includes(x.id)) : []
+    const allowedSideOptions = allowedSideOptionsFor(model)
     const hasSides = allowedSideOptions.length > 0
     if (hasOpts || hasSides) {
       setOptionsTarget({ model, allowedSideOptions })
@@ -1064,9 +1074,7 @@ export default function ShopMenuPage() {
         const unitPrice = Number(m.sellingPrice || 0) + calcOptAddOn(entry)
         const mainTotal = entry.qty * unitPrice
         const sideTotal = eTotal - mainTotal
-        let allowedSideIds = null
-        try { allowedSideIds = m.allowedSideIds ? JSON.parse(m.allowedSideIds) : null } catch { allowedSideIds = null }
-        const allowedSideOptions = allowedSideIds ? menu.filter(x => allowedSideIds.includes(x.id)) : []
+        const allowedSideOptions = allowedSideOptionsFor(m)
         const canAddSides = allowedSideOptions.length > 0
 
         return (
@@ -1194,7 +1202,7 @@ export default function ShopMenuPage() {
             {(sides.length > 0 || canAddSides) && (
               <Box sx={{ bgcolor: '#f0f4ff', borderTop: '1px solid #e2e8f0' }}>
                 <Box sx={{ ml: 1.5, borderLeft: '2px solid #c7d2fe' }}>
-                  {sides.map((si, siIdx) => {
+                  {sides.map(si => {
                     const sm = menu.find(x => x.id === si.modelId)
                     const sideImage = si.imageUrl || si.thumbnailUrl || sm?.imageUrl || sm?.thumbnailUrl || ''
                     const sideMaxQty = maxAllowedSideQty(entry.modelId, si.modelId)
@@ -1224,7 +1232,7 @@ export default function ShopMenuPage() {
                             <Typography fontWeight={800} sx={{ minWidth: large ? 34 : 28, textAlign: 'center', fontSize: large ? 22 : 18, color: '#4f46e5' }}>
                               {effectiveQty}
                             </Typography>
-                            <IconButton onClick={() => changeSideQty(entry.uid, si.uid, 1)}
+                            <IconButton onClick={() => changeSideQty(entry.uid, si.uid, 1)} disabled={sideMaxQty > 0 && perCup >= sideMaxQty}
                               sx={{ p: 0.75, bgcolor: '#6366f1', color: '#fff', borderRadius: 1 }}>
                               <AddIcon sx={{ fontSize: large ? 24 : 20 }} />
                             </IconButton>

@@ -63,7 +63,10 @@ public class Model {
     @Column(name = "image_url", columnDefinition = "TEXT")
     private String imageUrl;
 
-    /** JSON array of model UUIDs that are allowed as side items/toppings for this model, e.g. ["uuid1","uuid2"]. Null means no sides allowed. */
+    /**
+     * JSON side/topping links: [{"modelId":"uuid","maxQty":5}].
+     * Legacy UUID string arrays remain readable for backward compatibility.
+     */
     @Column(name = "allowed_side_ids", columnDefinition = "TEXT")
     private String allowedSideIds;
 

@@ -5,6 +5,7 @@ import DialogContent from '@mui/material/DialogContent'
 import DialogActions from '@mui/material/DialogActions'
 import Button from '@mui/material/Button'
 import Box from '@mui/material/Box'
+import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
 import TextField from '@mui/material/TextField'
 import Chip from '@mui/material/Chip'
@@ -17,8 +18,6 @@ import IconButton from '@mui/material/IconButton'
 import CloseIcon from '@mui/icons-material/Close'
 import { useI18n } from '../../i18n/I18nContext'
 import { localizedChoiceLabel, localizedGroupName, localizedModelName } from '../../i18n/menuLocalization'
-
-const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 
 function parseChoices(str) {
   if (!str) return []
@@ -57,7 +56,12 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
 
   useEffect(() => {
     if (!open) return
-    setSides({})
+    setSides(initialCart
+      ? Object.fromEntries((initialCart.sideItems || [])
+        .filter(side => side?.modelId && Number(side.qty || side.quantity) > 0)
+        .map(side => [String(side.modelId), Number(side.qty || side.quantity)]))
+      : {}
+    )
     if (initialCart) {
       setQty(initialCart.qty || 1)
       try { setSelected(initialCart.selectedOptions ? JSON.parse(initialCart.selectedOptions) : {}) } catch { setSelected({}) }
@@ -125,12 +129,12 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
 
   // ── Button total ──────────────────────────────────────────────────────
   const sidesTotal = Object.entries(sides).reduce((sum, [modelId, sQty]) => {
-    const m = allowedSideOptions.find(x => x.id === modelId)
+    const m = allowedSideOptions.find(x => String(x.id) === String(modelId))
     return sum + (m ? Number(m.sellingPrice || 0) * sQty : 0)
   }, 0)
 
   const pricedOptsTotal = options.filter(g => isPricedGroup(g)).reduce((sum, grp) => {
-    let defs = []; try { defs = JSON.parse(grp.choices) } catch {}
+    let defs = []; try { defs = JSON.parse(grp.choices) } catch { /* malformed choices have no add-on */ }
     const cur = selected[grp.groupName]
     if (!cur || typeof cur !== 'object' || Array.isArray(cur)) return sum
     return sum + Object.entries(cur).reduce((s, [label, cQty]) => {
@@ -154,7 +158,7 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
     const sideItems = Object.entries(sides)
       .filter(([, sQty]) => sQty > 0)
       .map(([modelId, sQty]) => {
-        const m = allowedSideOptions.find(x => x.id === modelId)
+        const m = allowedSideOptions.find(x => String(x.id) === String(modelId))
         return { modelId, modelName: m?.modelName || '', imageUrl: m?.imageUrl || m?.thumbnailUrl || null, sellingPrice: Number(m?.sellingPrice || 0), qty: sQty }
       })
     onConfirm({
@@ -275,59 +279,68 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
         {allowedSideOptions.length > 0 && (
           <>
             {options.length > 0 && <Divider sx={{ mb: 1.5 }} />}
-            <Typography fontWeight={700} sx={{ fontSize: 15, mb: 1, color: '#334155' }}>Toppings / sides</Typography>
-            {allowedSideOptions.map(side => {
-              const sideQty = sides[side.id] || 0
-              const sideMaxQty = Number(side.maxQty || 0)
-              return (
-                <Box key={side.id} sx={{
-                  display: 'flex', alignItems: 'center', gap: 1.25, mb: 1.25,
-                  pl: 1.25, pr: 0.75, py: 1,
-                  bgcolor: sideQty > 0 ? '#f0f0ff' : '#f8faff',
-                  borderRadius: 2,
-                  border: sideQty > 0 ? '1.5px solid #6366f1' : '1px solid #e2e8f0',
-                  transition: 'border-color 0.15s, background-color 0.15s',
-                }}>
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography fontWeight={700}
-                      onClick={() => (side.imageUrl || side.thumbnailUrl) && setImagePreview({ ...side, imageUrl: side.imageUrl || side.thumbnailUrl })}
-                      sx={{ fontSize: 16, color: '#1e293b', lineHeight: 1.2, overflowWrap: 'anywhere', ...((side.imageUrl || side.thumbnailUrl) ? { cursor: 'pointer', '&:hover': { color: '#1976d2', textDecoration: 'underline dotted' } } : {}) }}>
-                      {modelLabel(side)}
-                    </Typography>
-                    <Typography sx={{ fontSize: 14, fontWeight: 700, color: '#6366f1', mt: 0.35 }}>+{fmtLocal(side.sellingPrice)}</Typography>
-                    {sideMaxQty > 0 && <Typography sx={{ fontSize: 12, color: '#64748b', mt: 0.2 }}>Max {sideMaxQty} per item</Typography>}
-                    {sideMaxQty > 0 && <Typography sx={{ fontSize: 12, color: '#64748b', mt: 0.2 }}>Max {sideMaxQty} per item</Typography>}
-                  </Box>
-                  {sideQty === 0 ? (
-                    <IconButton onClick={() => changeSideQty(side.id, 1)} disabled={sideMaxQty > 0 && sideQty >= sideMaxQty}
-                      sx={{ bgcolor: '#6366f1', color: '#fff', borderRadius: 1.5, p: 0.75, flexShrink: 0, '&:hover': { bgcolor: '#4f46e5' }, '&.Mui-disabled': { bgcolor: '#cbd5e1', color: '#fff' } }}>
-                      <AddIcon sx={{ fontSize: 24 }} />
-                    </IconButton>
-                  ) : (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
-                      <IconButton onClick={() => changeSideQty(side.id, -1)} sx={{ p: 0.75, bgcolor: '#f1f5f9', borderRadius: 1 }}>
-                        <RemoveIcon sx={{ fontSize: 20 }} />
-                      </IconButton>
-                      <Typography fontWeight={800} sx={{ minWidth: 26, textAlign: 'center', fontSize: 17, color: '#4f46e5' }}>
-                        {sideQty * qty}
+            <Box sx={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 1, mb: 1 }}>
+              <Box>
+                <Typography fontWeight={900} sx={{ fontSize: 16, color: '#1e293b' }}>Toppings / sides</Typography>
+                <Typography sx={{ fontSize: 12, color: '#64748b' }}>Tap + to add for each main item</Typography>
+              </Box>
+              <Chip label={`${allowedSideOptions.length} choices`} size="small" variant="outlined" sx={{ fontWeight: 700 }} />
+            </Box>
+            <Stack spacing={1}>
+              {allowedSideOptions.map(side => {
+                const sideKey = String(side.id)
+                const sideQty = sides[sideKey] || 0
+                const sideMaxQty = Number(side.maxQty || 0)
+                const sideImage = side.imageUrl || side.thumbnailUrl || ''
+                const atMax = sideMaxQty > 0 && sideQty >= sideMaxQty
+                return (
+                  <Box key={side.id} sx={{
+                    display: 'flex', alignItems: 'center', gap: 1,
+                    pl: 1.25, pr: 0.75, py: 0.9, minHeight: 68,
+                    bgcolor: sideQty > 0 ? '#eef2ff' : '#f8fafc',
+                    borderRadius: 2,
+                    border: sideQty > 0 ? '2px solid #4f46e5' : '1px solid #dbe3ef',
+                    boxShadow: sideQty > 0 ? '0 4px 12px rgba(79,70,229,0.10)' : 'none',
+                  }}>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography fontWeight={800} sx={{ fontSize: 15, color: '#1e293b', lineHeight: 1.2, overflowWrap: 'anywhere' }}>
+                        {modelLabel(side)}
                       </Typography>
-                      <IconButton onClick={() => changeSideQty(side.id, 1)} disabled={sideMaxQty > 0 && sideQty >= sideMaxQty}
-                        sx={{ p: 0.75, bgcolor: '#6366f1', color: '#fff', borderRadius: 1, '&:hover': { bgcolor: '#4f46e5' }, '&.Mui-disabled': { bgcolor: '#cbd5e1', color: '#fff' } }}>
-                        <AddIcon sx={{ fontSize: 20 }} />
-                      </IconButton>
+                      <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.75, mt: 0.35 }}>
+                        <Typography sx={{ fontSize: 13, fontWeight: 800, color: '#4f46e5' }}>+{fmtLocal(side.sellingPrice)}</Typography>
+                        {sideMaxQty > 0 && <Typography sx={{ fontSize: 11, color: '#64748b' }}>Max {sideMaxQty} per item</Typography>}
+                        {qty > 1 && sideQty > 0 && <Typography sx={{ fontSize: 11, color: '#64748b' }}>{sideQty * qty} total</Typography>}
+                      </Box>
                     </Box>
-                  )}
-                  <Box onClick={() => (side.imageUrl || side.thumbnailUrl) && setImagePreview({ ...side, imageUrl: side.imageUrl || side.thumbnailUrl })}
-                    sx={{ width: 40, height: 40, mr: 0.25, flexShrink: 0, borderRadius: 1.25, bgcolor: '#e8eaf6', overflow: 'hidden', border: '1px solid #d7deea', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: (side.imageUrl || side.thumbnailUrl) ? 'pointer' : 'default' }}>
-                    {(side.imageUrl || side.thumbnailUrl) ? (
-                      <Box component="img" src={side.imageUrl || side.thumbnailUrl} alt={modelLabel(side)} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none' }} />
+                    {sideQty === 0 ? (
+                      <IconButton aria-label={`Add ${modelLabel(side)}`} onClick={() => changeSideQty(sideKey, 1)} disabled={atMax}
+                        sx={{ width: 40, height: 40, bgcolor: '#4f46e5', color: '#fff', borderRadius: 1.5, flexShrink: 0, '&:hover': { bgcolor: '#4338ca' }, '&.Mui-disabled': { bgcolor: '#cbd5e1', color: '#fff' } }}>
+                        <AddIcon sx={{ fontSize: 24 }} />
+                      </IconButton>
                     ) : (
-                      <Typography fontWeight={900} sx={{ fontSize: 16, lineHeight: 1, color: '#94a3b8' }}>{String(modelLabel(side) || '?').slice(0, 1)}</Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
+                        <IconButton aria-label={`Remove one ${modelLabel(side)}`} onClick={() => changeSideQty(sideKey, -1)} sx={{ width: 38, height: 38, bgcolor: '#e2e8f0', borderRadius: 1.25 }}>
+                          <RemoveIcon sx={{ fontSize: 20 }} />
+                        </IconButton>
+                        <Typography fontWeight={900} sx={{ minWidth: 28, textAlign: 'center', fontSize: 18, color: '#3730a3' }}>{sideQty}</Typography>
+                        <IconButton aria-label={`Add one ${modelLabel(side)}`} onClick={() => changeSideQty(sideKey, 1)} disabled={atMax}
+                          sx={{ width: 38, height: 38, bgcolor: '#4f46e5', color: '#fff', borderRadius: 1.25, '&:hover': { bgcolor: '#4338ca' }, '&.Mui-disabled': { bgcolor: '#cbd5e1', color: '#fff' } }}>
+                          <AddIcon sx={{ fontSize: 20 }} />
+                        </IconButton>
+                      </Box>
                     )}
+                    <Box onClick={() => sideImage && setImagePreview({ ...side, imageUrl: sideImage })}
+                      sx={{ width: 48, height: 48, ml: 0.25, flexShrink: 0, borderRadius: 1.5, bgcolor: '#e8eaf6', overflow: 'hidden', border: '1px solid #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: sideImage ? 'pointer' : 'default' }}>
+                      {sideImage ? (
+                        <Box component="img" src={sideImage} alt={modelLabel(side)} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.currentTarget.style.visibility = 'hidden' }} />
+                      ) : (
+                        <Typography fontWeight={900} sx={{ fontSize: 18, lineHeight: 1, color: '#94a3b8' }}>{String(modelLabel(side) || '?').slice(0, 1)}</Typography>
+                      )}
+                    </Box>
                   </Box>
-                </Box>
-              )
-            })}
+                )
+              })}
+            </Stack>
           </>
         )}
 

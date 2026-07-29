@@ -158,7 +158,7 @@ function CloneDialog({ open, source, onClose, onCreated }) {
       const suffix = Date.now().toString(36).toUpperCase().slice(-4)
       const newCode = ((source.modelCode || 'ITEM') + '-' + type.slice(0,2).toUpperCase() + suffix).slice(0, 50)
       const newCategory = t.catPrefix
-        ? t.catPrefix + (source.category ? ' � ' + source.category : '')
+        ? t.catPrefix + (source.category ? ' - ' + source.category : '')
         : source.category || null
 
       const created = await createModel({
@@ -273,7 +273,7 @@ function CloneDialog({ open, source, onClose, onCreated }) {
 
 // -- Edit dialog -------------------------------------------------------------
 
-const EMPTY_FORM   = { sellingPrice: '', category: '', imageUrl: '', allowedSideIds: [], modelNameTranslations: {}, categoryTranslations: {} }
+const EMPTY_FORM   = { sellingPrice: '', category: '', imageUrl: '', allowedSideIds: [], sideImageUrls: {}, modelNameTranslations: {}, categoryTranslations: {} }
 const EMPTY_CHOICE = { label: '', price: '', modelId: null, labelTranslations: {} }
 const EMPTY_OPT    = { groupName: '', groupNameTranslations: {}, choiceRows: [{ ...EMPTY_CHOICE }], required: false, multiSelect: false, isFree: false, defaultValue: '' }
 
@@ -400,6 +400,10 @@ function EditDialog({ open, model, models, onClose, onSave, onTranslated }) {
       category: model.category ?? '',
       imageUrl: model.imageUrl ?? '',
       allowedSideIds: parsedSideIds,
+      sideImageUrls: Object.fromEntries(parsedSideIds.map(side => {
+        const sideModel = (models || []).find(item => String(item.id) === String(side.modelId))
+        return [String(side.modelId), sideModel?.imageUrl || '']
+      })),
       modelNameTranslations: parseJsonObject(model.modelNameTranslations),
       categoryTranslations: parseJsonObject(model.categoryTranslations),
     })
@@ -429,28 +433,42 @@ function EditDialog({ open, model, models, onClose, onSave, onTranslated }) {
 
   const replaceAllowedSide = (currentId, nextModel) => {
     if (!nextModel?.id) return
-    setForm(f => ({
-      ...f,
-      allowedSideIds: (f.allowedSideIds || []).map(side => String(side.modelId) === String(currentId)
-        ? { ...side, modelId: nextModel.id }
-        : side
-      ).filter((side, idx, arr) => arr.findIndex(other => String(other.modelId) === String(side.modelId)) === idx),
-    }))
+    setForm(f => {
+      const currentKey = String(currentId)
+      const nextKey = String(nextModel.id)
+      const nextSides = (f.allowedSideIds || [])
+        .map(side => String(side.modelId) === currentKey ? { ...side, modelId: nextModel.id } : side)
+        .filter((side, idx, arr) => arr.findIndex(other => String(other.modelId) === String(side.modelId)) === idx)
+      const sideImageUrls = { ...(f.sideImageUrls || {}) }
+      delete sideImageUrls[currentKey]
+      sideImageUrls[nextKey] = nextModel.imageUrl || ''
+      return { ...f, allowedSideIds: nextSides, sideImageUrls }
+    })
   }
 
   const setAllowedSideMaxQty = (modelId, value) => {
     const parsed = Number(value)
-    const maxQty = Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1
+    const maxQty = Number.isFinite(parsed) && parsed > 0 ? Math.min(99, Math.floor(parsed)) : 1
     setForm(f => ({
       ...f,
       allowedSideIds: (f.allowedSideIds || []).map(side => String(side.modelId) === String(modelId) ? { ...side, maxQty } : side),
     }))
   }
 
-  const removeAllowedSide = (modelId) => setForm(f => ({
+  const setAllowedSideImage = (modelId, value) => setForm(f => ({
     ...f,
-    allowedSideIds: (f.allowedSideIds || []).filter(side => String(side.modelId) !== String(modelId)),
+    sideImageUrls: { ...(f.sideImageUrls || {}), [String(modelId)]: value },
   }))
+
+  const removeAllowedSide = (modelId) => setForm(f => {
+    const sideImageUrls = { ...(f.sideImageUrls || {}) }
+    delete sideImageUrls[String(modelId)]
+    return {
+      ...f,
+      allowedSideIds: (f.allowedSideIds || []).filter(side => String(side.modelId) !== String(modelId)),
+      sideImageUrls,
+    }
+  })
   const selectedSourceOption = translationLanguageOptions.find(option => option.language === translationSource) || translationLanguageOptions[0]
   const availableTargetOptions = translationTargetOptions.filter(option => option.language !== translationSource)
   const selectedTargetOptions = availableTargetOptions.filter(option => translationTargets.includes(option.language))
@@ -483,6 +501,14 @@ function EditDialog({ open, model, models, onClose, onSave, onTranslated }) {
   const handleSave = async () => {
     setSaving(true); setError('')
     try {
+      const changedSideImages = selectedSideModels.filter(side =>
+        String(form.sideImageUrls?.[String(side.id)] || '') !== String(side.imageUrl || '')
+      )
+      await Promise.all(changedSideImages.map(side => onSave(side.id, {
+        ...side,
+        imageUrl: form.sideImageUrls?.[String(side.id)] || null,
+      })))
+
       await onSave(model.id, {
         ...model,
         sellingPrice: form.sellingPrice !== '' ? Number(form.sellingPrice) : null,
@@ -674,7 +700,16 @@ function EditDialog({ open, model, models, onClose, onSave, onTranslated }) {
             options={sideItemOptions}
             getOptionLabel={x => x.modelName}
             value={selectedSideModels}
-            onChange={(_, v) => setForm(f => ({ ...f, allowedSideIds: v.map(x => ({ modelId: x.id, maxQty: 1 })) }))}
+            onChange={(_, v) => setForm(f => {
+              const previous = new Map((f.allowedSideIds || []).map(side => [String(side.modelId), side]))
+              return {
+                ...f,
+                allowedSideIds: v.map(item => previous.get(String(item.id)) || { modelId: item.id, maxQty: 1 }),
+                sideImageUrls: Object.fromEntries(v.map(item => [
+                  String(item.id), f.sideImageUrls?.[String(item.id)] ?? item.imageUrl ?? '',
+                ])),
+              }
+            })}
             isOptionEqualToValue={(a, b) => a.id === b.id}
             renderOption={(props, option) => {
               const thumb = option.imageUrl || ''
@@ -700,55 +735,68 @@ function EditDialog({ open, model, models, onClose, onSave, onTranslated }) {
           />
 
           {selectedSideModels.length > 0 && (
-            <Box sx={{ border: '1px solid #e2e8f0', borderRadius: 1.5, p: 1.25, bgcolor: '#fff' }}>
-              <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ display: 'block', mb: 1 }}>
-                Edit added side / topping items
-              </Typography>
-              <Stack spacing={1}>
+            <Box sx={{ border: '1px solid #cbd5e1', borderRadius: 2, p: 1.5, bgcolor: '#f8fafc' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 1.25 }}>
+                <Box>
+                  <Typography fontWeight={800} sx={{ fontSize: 14, color: '#0f172a' }}>
+                    Side / topping settings
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Set a touch-screen thumbnail and the maximum allowed for one main item.
+                  </Typography>
+                </Box>
+                <Chip size="small" label={`${selectedSideModels.length} linked`} color="primary" variant="outlined" />
+              </Box>
+              <Stack spacing={1.25}>
                 {selectedSideModels.map(side => {
-                  const thumb = side.imageUrl || ''
+                  const sideKey = String(side.id)
+                  const thumb = form.sideImageUrls?.[sideKey] || ''
                   const sideConfig = sideConfigFor(side.id)
                   return (
-                    <Box key={side.id} sx={{ display: 'grid', gridTemplateColumns: '44px minmax(0, 1fr) 96px auto', gap: 1, alignItems: 'center' }}>
-                      <Box sx={{ width: 44, height: 44, borderRadius: 1.25, overflow: 'hidden', bgcolor: '#eef2f7', border: '1px solid #dbe3ef', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Box key={side.id} sx={{
+                      display: 'grid',
+                      gridTemplateColumns: { xs: '52px minmax(0, 1fr) auto', sm: '52px minmax(0, 1fr) 116px auto' },
+                      gap: 1, alignItems: 'center', p: 1,
+                      border: '1px solid #dbe3ef', borderRadius: 1.75, bgcolor: '#fff',
+                    }}>
+                      <Box sx={{ width: 52, height: 52, borderRadius: 1.5, overflow: 'hidden', bgcolor: '#eef2f7', border: '1px solid #dbe3ef', display: 'flex', alignItems: 'center', justifyContent: 'center', gridRow: { xs: '1', sm: '1' } }}>
                         {thumb
-                          ? <Box component="img" src={thumb} alt={side.modelName} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none' }} />
-                          : <Typography fontWeight={900} sx={{ fontSize: 16, color: '#94a3b8' }}>{String(side.modelName || '?').slice(0, 1)}</Typography>}
+                          ? <Box component="img" src={thumb} alt={side.modelName} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} onLoad={e => { e.currentTarget.style.visibility = 'visible' }} onError={e => { e.currentTarget.style.visibility = 'hidden' }} />
+                          : <Typography fontWeight={900} sx={{ fontSize: 18, color: '#94a3b8' }}>{String(side.modelName || '?').slice(0, 1)}</Typography>}
                       </Box>
                       <Autocomplete
                         size="small"
                         options={sideItemOptions}
-                        value={sideItemOptions.find(option => String(option.id) === String(side.id)) || side}
+                        value={sideItemOptions.find(option => String(option.id) === sideKey) || side}
                         getOptionLabel={option => option.modelName}
                         isOptionEqualToValue={(a, b) => a.id === b.id}
                         onChange={(_, value) => value && replaceAllowedSide(side.id, value)}
-                        renderInput={params => <TextField {...params} label="Selected side / topping item" size="small" />}
-                        renderOption={(props, option) => {
-                          const optionThumb = option.imageUrl || ''
-                          return (
-                            <Box component="li" {...props} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Box sx={{ width: 30, height: 30, borderRadius: 1, overflow: 'hidden', bgcolor: '#eef2f7', border: '1px solid #dbe3ef', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                {optionThumb
-                                  ? <Box component="img" src={optionThumb} alt={option.modelName} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none' }} />
-                                  : <Typography fontWeight={900} sx={{ fontSize: 12, color: '#94a3b8' }}>{String(option.modelName || '?').slice(0, 1)}</Typography>}
-                              </Box>
-                              <Typography sx={{ fontWeight: 700, fontSize: 13 }}>{option.modelName}</Typography>
-                            </Box>
-                          )
-                        }}
+                        renderInput={params => <TextField {...params} label="Side / topping item" size="small" />}
                         noOptionsText="No menu items"
                       />
                       <TextField
-                        label="Max qty"
+                        label="Max per item"
                         size="small"
                         type="number"
                         value={sideConfig?.maxQty || 1}
                         onChange={e => setAllowedSideMaxQty(side.id, e.target.value)}
-                        inputProps={{ min: 1, max: 99 }}
+                        inputProps={{ min: 1, max: 99, inputMode: 'numeric' }}
+                        helperText="1-99"
+                        sx={{ gridColumn: { xs: '2 / 3', sm: '3 / 4' } }}
                       />
-                      <IconButton size="small" color="error" onClick={() => removeAllowedSide(side.id)}>
+                      <IconButton size="small" color="error" aria-label={`Remove ${side.modelName}`} onClick={() => removeAllowedSide(side.id)} sx={{ alignSelf: 'start', mt: 0.5 }}>
                         <DeleteIcon fontSize="small" />
                       </IconButton>
+                      <TextField
+                        label="Side / topping thumbnail URL"
+                        size="small"
+                        fullWidth
+                        value={thumb}
+                        onChange={e => setAllowedSideImage(side.id, e.target.value)}
+                        placeholder="https://..."
+                        helperText="Saved on the side/topping item and reused in customer, counter, cart, and order views."
+                        sx={{ gridColumn: { xs: '1 / -1', sm: '2 / -1' } }}
+                      />
                     </Box>
                   )
                 })}
@@ -781,7 +829,7 @@ function EditDialog({ open, model, models, onClose, onSave, onTranslated }) {
                         <Typography variant="body2" fontWeight={700}>{opt.groupName}</Typography>
                         {opt.required && <Chip label="required" size="small" color="error" sx={{ fontSize: 9, height: 16 }} />}
                         {opt.multiSelect && <Chip label="multi" size="small" variant="outlined" sx={{ fontSize: 9, height: 16 }} />}
-                        <Tooltip title={opt.isFree ? 'All choices free � click to charge prices' : 'Click to mark all choices as free'}>
+                        <Tooltip title={opt.isFree ? 'All choices free - click to charge prices' : 'Click to mark all choices as free'}>
                           <Chip
                             label={opt.isFree ? 'Free' : 'Priced'}
                             size="small"
@@ -793,7 +841,7 @@ function EditDialog({ open, model, models, onClose, onSave, onTranslated }) {
                         </Tooltip>
                       </Box>
                       <Typography variant="caption" color="text.secondary">
-                        {choices.map(c => fmtChoiceSummary(c, opt.isFree)).join(' � ')}
+                        {choices.map(c => fmtChoiceSummary(c, opt.isFree)).join(' - ')}
                         {opt.defaultValue ? ` (default: ${opt.defaultValue})` : ''}
                       </Typography>
                       {choices.some(c => c.modelId) && (
@@ -844,7 +892,7 @@ function EditDialog({ open, model, models, onClose, onSave, onTranslated }) {
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
                   <Typography variant="caption" color="text.secondary" fontWeight={600}>Choices</Typography>
                   <Typography variant="caption" color="text.disabled" sx={{ fontSize: 10 }}>
-                    � Link a BOM model to override inventory deduction per choice (e.g. Small/Medium/Large variants)
+                    - Link a BOM model to override inventory deduction per choice (e.g. Small/Medium/Large variants)
                   </Typography>
                 </Box>
                 {newOpt.choiceRows.map((row, idx) => {
@@ -875,7 +923,7 @@ function EditDialog({ open, model, models, onClose, onSave, onTranslated }) {
                       <Autocomplete
                         size="small"
                         options={models || []}
-                        getOptionLabel={m => `${m.modelName}${m.sellingPrice ? ' � ' + fmt(m.sellingPrice) : ''}`}
+                        getOptionLabel={m => `${m.modelName}${m.sellingPrice ? ' - ' + fmt(m.sellingPrice) : ''}`}
                         value={linkedModel || null}
                         onChange={(_, v) => setRow({ modelId: v ? v.id : null })}
                         isOptionEqualToValue={(a, b) => a.id === b.id}

@@ -3,8 +3,10 @@ package com.ams.bomcore.controller.model;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import org.apache.poi.ss.usermodel.*;
@@ -22,6 +24,10 @@ import com.ams.bomcore.repository.ModelRepository;
 import com.ams.bomcore.repository.TenantRepository;
 import com.ams.bomcore.service.model.ModelService;
 import com.ams.bomcore.service.shop.ShopPricingService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import jakarta.validation.Valid;
 
@@ -32,6 +38,8 @@ import jakarta.validation.Valid;
 @RestController
 @RequestMapping("/bom/models")
 public class ModelController {
+
+    private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
 
     private final ModelService modelService;
     private final ModelRepository modelRepository;
@@ -111,6 +119,11 @@ public class ModelController {
 
         model.setTenantId(tenant.getId());
         model.setCompanyId(company.getId());
+        try {
+            normalizeAllowedSideConfig(model, tenant.getId(), company.getId());
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(ex.getMessage());
+        }
         Model saved = modelService.createForTenantAndCompany(model, tenant.getId(), company.getId());
         return ResponseEntity.status(HttpStatus.CREATED).body(saved);
     }
@@ -129,8 +142,8 @@ public class ModelController {
 			return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
 		}
 
-        model.setId(id);
-        if (!modelRepository.existsById(id)) {
+        Model existingModel = modelRepository.findById(id).orElse(null);
+        if (existingModel == null) {
             return ResponseEntity.notFound().build();
         }
 
@@ -141,10 +154,83 @@ public class ModelController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("company does not belong to tenant");
         }
 
+        if (!tenant.getId().equals(existingModel.getTenantId()) || !company.getId().equals(existingModel.getCompanyId())) {
+            return ResponseEntity.notFound().build();
+        }
+
+        model.setId(id);
         model.setTenantId(tenant.getId());
         model.setCompanyId(company.getId());
+        try {
+            normalizeAllowedSideConfig(model, tenant.getId(), company.getId());
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(ex.getMessage());
+        }
         Model saved = modelService.updateForTenantAndCompany(model, tenant.getId(), company.getId());
         return ResponseEntity.ok(saved);
+    }
+
+    private void normalizeAllowedSideConfig(Model model, UUID tenantId, UUID companyId) {
+        String raw = model.getAllowedSideIds();
+        if (raw == null || raw.isBlank()) {
+            model.setAllowedSideIds(null);
+            return;
+        }
+
+        try {
+            JsonNode parsed = JSON_MAPPER.readTree(raw);
+            if (!parsed.isArray()) {
+                throw new IllegalArgumentException("allowedSideIds must be a JSON array");
+            }
+
+            ArrayNode normalized = JSON_MAPPER.createArrayNode();
+            Set<UUID> seen = new LinkedHashSet<>();
+            for (JsonNode entry : parsed) {
+                String rawId = entry.isTextual()
+                        ? entry.asText()
+                        : entry.isObject() && entry.hasNonNull("modelId") ? entry.get("modelId").asText() : null;
+                if (rawId == null || rawId.isBlank()) {
+                    throw new IllegalArgumentException("Each side/topping item must have a modelId");
+                }
+
+                UUID sideId;
+                try {
+                    sideId = UUID.fromString(rawId);
+                } catch (IllegalArgumentException ex) {
+                    throw new IllegalArgumentException("Invalid side/topping modelId: " + rawId);
+                }
+                if (sideId.equals(model.getId())) {
+                    throw new IllegalArgumentException("A menu item cannot be its own side/topping");
+                }
+                if (!seen.add(sideId)) {
+                    continue;
+                }
+
+                Model side = modelRepository.findById(sideId)
+                        .filter(candidate -> tenantId.equals(candidate.getTenantId())
+                                && companyId.equals(candidate.getCompanyId()))
+                        .orElseThrow(() -> new IllegalArgumentException("Side/topping item not found: " + sideId));
+                if (side.getSellingPrice() == null) {
+                    throw new IllegalArgumentException("Side/topping item must have a selling price: " + side.getModelName());
+                }
+
+                int maxQty = entry.isObject() && entry.hasNonNull("maxQty")
+                        ? entry.get("maxQty").asInt(1)
+                        : 1;
+                if (maxQty < 1 || maxQty > 99) {
+                    throw new IllegalArgumentException("Side/topping maxQty must be between 1 and 99");
+                }
+
+                ObjectNode item = normalized.addObject();
+                item.put("modelId", sideId.toString());
+                item.put("maxQty", maxQty);
+            }
+            model.setAllowedSideIds(normalized.isEmpty() ? null : JSON_MAPPER.writeValueAsString(normalized));
+        } catch (IllegalArgumentException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new IllegalArgumentException("Invalid allowedSideIds JSON", ex);
+        }
     }
 
     @GetMapping("/{id}/cost-estimate")

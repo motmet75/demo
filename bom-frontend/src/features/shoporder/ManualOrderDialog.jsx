@@ -42,6 +42,7 @@ import { broadcastToCounter } from '../shopboard/CounterDisplayPage'
 import VoucherQrScanDialog from './VoucherQrScanDialog'
 import ItemOptionsDialog from '../shopfront/ItemOptionsDialog'
 import { useI18n } from '../../i18n/I18nContext'
+import { decorateAllowedSideOptions, getAllowedSideMax } from '../../utils/sideItemConfig'
 
 const fmt         = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 const fmtDots     = (digits) => digits ? Number(digits).toLocaleString('vi-VN') : ''
@@ -67,16 +68,6 @@ function extractCustomerLookup(raw) {
 
 const normalizeCustomerLookup = (value) => String(value || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase()
 
-const parseAllowedSideIds = (model) => {
-  try {
-    const ids = model?.allowedSideIds ? JSON.parse(model.allowedSideIds) : []
-    return Array.isArray(ids)
-      ? ids.map(entry => typeof entry === 'object' && entry !== null ? String(entry.modelId || entry.id || '') : String(entry)).filter(Boolean)
-      : []
-  } catch {
-    return []
-  }
-}
 
 const hasPricedChoices = (choices) =>
   choices.some(choice => typeof choice === 'object' && choice !== null && Number(choice.price || 0) > 0)
@@ -194,7 +185,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
       <code>${c.customerCode}</code>
       <p><strong>${c.name}</strong></p>
       ${c.phone ? `<p>${c.phone}</p>` : ''}
-      <script>document.querySelector('img').onload=()=>window.print()<\/script>
+      <script>document.querySelector('img').onload=()=>window.print()</script>
       </body></html>`)
     w.document.close()
   }
@@ -383,8 +374,12 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
   // ── Side item helpers ──────────────────────────────────────────────
   const allowedSideOptionsFor = (modelId) => {
     const model = models.find(m => String(m.id) === String(modelId))
-    const allowedIds = parseAllowedSideIds(model)
-    return allowedIds.length ? models.filter(m => allowedIds.includes(String(m.id))) : []
+    return decorateAllowedSideOptions(models, model?.allowedSideIds)
+  }
+
+  const allowedSideMaxQty = (parentModelId, sideModelId) => {
+    const parent = models.find(model => String(model.id) === String(parentModelId))
+    return getAllowedSideMax(parent?.allowedSideIds, sideModelId) || 0
   }
 
   const isAllowedSideModel = (parentModelId, sideModelId) =>
@@ -1245,6 +1240,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                             {(item.sideItems || []).map(si => {
                               const sideModel = models.find(m => String(m.id) === String(si.modelId))
                               const sideImage = si.imageUrl || si.thumbnailUrl || sideModel?.imageUrl || sideModel?.thumbnailUrl || ''
+                              const sideMaxQty = allowedSideMaxQty(item.modelId, si.modelId)
                               const effectiveQty = sideEffectiveQty(item, si)
                               const effectiveTotal = sideLineTotal(item, si)
                               return (
@@ -1292,7 +1288,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                                     <Typography variant="caption" fontWeight={700} sx={{ minWidth: 18, textAlign: 'center', fontSize: 13 }}>
                                       {effectiveQty}
                                     </Typography>
-                                    <IconButton size="small" onClick={() => changeSideQty(item.uid, si.uid, 1)}
+                                    <IconButton size="small" onClick={() => changeSideQty(item.uid, si.uid, 1)} disabled={sideMaxQty > 0 && (si.qty || 1) >= sideMaxQty}
                                       sx={{ p: 0.2, bgcolor: '#6366f1', color: '#fff', borderRadius: 0.5, '&:hover': { bgcolor: '#4f46e5' } }}>
                                       <AddIcon sx={{ fontSize: 12 }} />
                                     </IconButton>
@@ -1335,6 +1331,8 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                                     {allowedSideOptions.map(option => {
                                       const selectedSide = (item.sideItems || []).find(si => String(si.modelId) === String(option.id))
                                       const optionQty = selectedSide?.qty || 0
+                                      const optionMaxQty = Number(option.maxQty || 0)
+                                      const optionAtMax = optionMaxQty > 0 && optionQty >= optionMaxQty
                                       const effectiveQty = optionQty * (item.qty || 1)
                                       const unitPrice = Number(selectedSide?.customPriceDigits ?? option.sellingPrice ?? 0) || 0
                                       const optionTotal = unitPrice * effectiveQty
@@ -1349,10 +1347,11 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                                             <Typography fontWeight={800} sx={{ fontSize: 13, lineHeight: 1.2, overflowWrap: 'anywhere' }}>{option.modelName}</Typography>
                                             <Typography color="primary" fontWeight={900} sx={{ fontSize: 12, mt: 0.25 }}>
                                               +{fmt(unitPrice)}{optionQty > 0 ? ` = ${fmt(optionTotal)}` : ''}
+                                            {optionMaxQty > 0 && <Typography sx={{ fontSize: 11, color: '#64748b' }}>Max {optionMaxQty} per item</Typography>}
                                             </Typography>
                                           </Box>
                                           {optionQty === 0 ? (
-                                            <IconButton size="small" onClick={() => changeSideOptionQty(item.uid, option, 1)}
+                                            <IconButton size="small" onClick={() => changeSideOptionQty(item.uid, option, 1)} disabled={optionAtMax}
                                               sx={{ p: 0.75, bgcolor: '#6366f1', color: '#fff', borderRadius: 1, flexShrink: 0, '&:hover': { bgcolor: '#4f46e5' } }}>
                                               <AddIcon sx={{ fontSize: 20 }} />
                                             </IconButton>
@@ -1364,7 +1363,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                                               <Typography fontWeight={900} sx={{ minWidth: 28, textAlign: 'center', color: '#4f46e5', fontSize: 16 }}>
                                                 {effectiveQty}
                                               </Typography>
-                                              <IconButton size="small" onClick={() => changeSideOptionQty(item.uid, option, 1)}
+                                              <IconButton size="small" onClick={() => changeSideOptionQty(item.uid, option, 1)} disabled={optionAtMax}
                                                 sx={{ p: 0.6, bgcolor: '#6366f1', color: '#fff', borderRadius: 1, '&:hover': { bgcolor: '#4f46e5' } }}>
                                                 <AddIcon sx={{ fontSize: 18 }} />
                                               </IconButton>

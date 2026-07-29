@@ -52,6 +52,7 @@ export default function ModelEditModal({ open, model, onClose, onSave, saving: p
     setIsSubmitting(true)
 
     const payload = {
+      ...(model || {}),
       ...(model && model.id ? { id: model.id } : {}),
       modelCode: form.modelCode,
       modelName: form.modelName,
