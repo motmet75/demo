@@ -79,11 +79,18 @@ const BOARD_VISIBLE_STATUSES = new Set(['CONFIRMED', 'PREPARING', 'READY', 'PICK
 const SHOP_ORDER_VIEW_PREF = 'shop.orders.viewMode'
 const SHOP_ORDER_CARD_SIZE_PREF = 'shop.orders.cardSize'
 const SHOP_ORDER_CONTRAST_PREF = 'shop.orders.highContrast'
+const SHOP_ORDER_STATUS_FILTER_SESSION_KEY = 'shop.orders.statusFilter'
 function readShopOrderPref(key, fallback) {
   try { return localStorage.getItem(key) || fallback } catch { return fallback }
 }
 function writeShopOrderPref(key, value) {
   try { localStorage.setItem(key, value) } catch { /* browser storage may be blocked */ }
+}
+function readShopOrderSessionValue(key, fallback) {
+  try { return sessionStorage.getItem(key) || fallback } catch { return fallback }
+}
+function writeShopOrderSessionValue(key, value) {
+  try { sessionStorage.setItem(key, value) } catch { /* browser storage may be blocked */ }
 }
 function broadcastReady() {
   try { new BroadcastChannel(BOARD_CHANNEL).postMessage({ type: 'ORDER_READY' }) } catch { /* */ }
@@ -1332,7 +1339,7 @@ export default function ShopOrderGrid() {
   const [boardRows, setBoardRows]       = useState([])   // for board tabs — unfiltered
   const [loading, setLoading]           = useState(false)
   const [error, setError]               = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState(() => readShopOrderSessionValue(SHOP_ORDER_STATUS_FILTER_SESSION_KEY, ''))
   const [detailOrder, setDetailOrder]   = useState(null)
   const [resetOpen, setResetOpen]       = useState(false)
   const [resetTo, setResetTo]           = useState(0)
@@ -1836,7 +1843,7 @@ export default function ShopOrderGrid() {
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {/* Toolbar */}
         <Box sx={{ px: { xs: 1, sm: 1.5 }, py: { xs: 0.5, sm: 1 }, display: 'flex', gap: { xs: 0.75, sm: 1 }, alignItems: 'center', flexWrap: { xs: 'nowrap', sm: 'wrap' }, borderBottom: '1px solid #e0e0e0', flexShrink: 0 }}>
-          <TextField select label={t('common.status')} value={statusFilter} onChange={e => setStatusFilter(e.target.value)} size="small" sx={{ width: { xs: 112, sm: 148 }, flexShrink: 1 }}>
+          <TextField select label={t('common.status')} value={statusFilter} onChange={e => { setStatusFilter(e.target.value); writeShopOrderSessionValue(SHOP_ORDER_STATUS_FILTER_SESSION_KEY, e.target.value) }} size="small" sx={{ width: { xs: 112, sm: 148 }, flexShrink: 1 }}>
             {STATUSES.map(s => <MenuItem key={s} value={s}>{s ? localizedStatusLabel(s, t) : t('common.all')}</MenuItem>)}
           </TextField>
           <Button startIcon={<RefreshIcon />} onClick={reload} variant="outlined" size="small"
