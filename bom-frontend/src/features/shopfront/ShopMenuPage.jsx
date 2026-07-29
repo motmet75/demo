@@ -807,13 +807,28 @@ export default function ShopMenuPage() {
     const parent = menu.find(item => String(item.id) === String(parentModelId))
     return getAllowedSideMax(parent?.allowedSideIds, sideModelId) || 0
   }
+  const clampAllowedSideQty = (parentModelId, sideModelId, quantity) => {
+    const requested = Math.max(0, Math.floor(Number(quantity) || 0))
+    const limit = maxAllowedSideQty(parentModelId, sideModelId)
+    return limit > 0 ? Math.min(limit, requested) : requested
+  }
 
   // ── Cart mutations ────────────────────────────────────────────────────
   const createEntry = (model, qty, selectedOptions, itemNotes, rawSides = []) => {
     const id = genUid()
+    const allowedSideIds = new Set(allowedSideOptionsFor(model).map(side => String(side.id)))
+    const sideItems = rawSides
+      .filter(side => allowedSideIds.has(String(side.modelId)))
+      .map(side => ({
+        ...side,
+        imageUrl: side.imageUrl || side.thumbnailUrl || null,
+        qty: clampAllowedSideQty(model.id, side.modelId, side.qty),
+        uid: genUid(),
+      }))
+      .filter(side => side.qty > 0)
     setCart(prev => ({
       ...prev,
-      [id]: { uid: id, modelId: model.id, imageUrl: model.imageUrl || model.thumbnailUrl || null, qty, selectedOptions: selectedOptions || null, itemNotes: itemNotes || null, sideItems: rawSides.map(s => ({ ...s, imageUrl: s.imageUrl || s.thumbnailUrl || null, uid: genUid() })) },
+      [id]: { uid: id, modelId: model.id, imageUrl: model.imageUrl || model.thumbnailUrl || null, qty, selectedOptions: selectedOptions || null, itemNotes: itemNotes || null, sideItems },
     }))
   }
 
@@ -945,7 +960,7 @@ export default function ShopMenuPage() {
       const parentQty = Number(it.quantity) || 1
       const sideItems = (children[String(it.id)] || []).map(child => ({
         uid: genUid(), modelId: child.modelId, modelName: child.modelName, imageUrl: child.imageUrl || child.thumbnailUrl || null,
-        qty: Math.max(1, Math.round(Number(child.quantity) / parentQty)),
+        qty: clampAllowedSideQty(it.modelId, child.modelId, Math.max(1, Math.round(Number(child.quantity) / parentQty))),
       }))
       newCart[uid] = { uid, modelId: it.modelId, imageUrl: it.imageUrl || it.thumbnailUrl || null, qty: Number(it.quantity) || 1,
         selectedOptions: it.selectedOptions || null, itemNotes: it.itemNotes || null, sideItems }
@@ -953,12 +968,24 @@ export default function ShopMenuPage() {
     setCart(newCart); setSideForm({})
   }
 
-  const buildItemRequests = () => cartEntries.map(entry => ({
-    modelId: entry.modelId, quantity: entry.qty,
-    selectedOptions: entry.selectedOptions || null, itemNotes: entry.itemNotes || null,
-    sideItems: (entry.sideItems || []).map(side => ({ modelId: side.modelId, quantity: (side.qty || 1) * (entry.qty || 1),
-      selectedOptions: null, itemNotes: null, sideItems: [] })),
-  }))
+  const buildItemRequests = () => cartEntries.map(entry => {
+    const parentModel = menu.find(model => String(model.id) === String(entry.modelId))
+    const allowedSideIds = new Set(allowedSideOptionsFor(parentModel).map(side => String(side.id)))
+    return {
+      modelId: entry.modelId, quantity: entry.qty,
+      selectedOptions: entry.selectedOptions || null, itemNotes: entry.itemNotes || null,
+      sideItems: (entry.sideItems || [])
+        .filter(side => allowedSideIds.has(String(side.modelId)))
+        .map(side => ({
+          modelId: side.modelId,
+          quantity: clampAllowedSideQty(entry.modelId, side.modelId, side.qty) * (entry.qty || 1),
+          selectedOptions: null,
+          itemNotes: null,
+          sideItems: [],
+        }))
+        .filter(side => side.quantity > 0),
+    }
+  })
 
   const showVoucherSnack = (message, severity = 'success') =>
     setVoucherSnack({ open: true, message, severity })
@@ -1107,6 +1134,18 @@ export default function ShopMenuPage() {
         const sideTotal = eTotal - mainTotal
         const allowedSideOptions = allowedSideOptionsFor(m)
         const canAddSides = allowedSideOptions.length > 0
+        const sideFormModelId = sf.model?.id
+        const sideFormMaxQty = sideFormModelId ? maxAllowedSideQty(entry.modelId, sideFormModelId) : 0
+        const sideFormCurrentQty = sideFormModelId
+          ? Number(sides.find(side => String(side.modelId) === String(sideFormModelId))?.qty || 0)
+          : 0
+        const sideFormRemainingQty = sideFormMaxQty > 0
+          ? Math.max(0, sideFormMaxQty - sideFormCurrentQty)
+          : null
+        const sideFormQty = sideFormRemainingQty == null
+          ? Math.max(1, Number(sf.qty) || 1)
+          : Math.min(sideFormRemainingQty, Math.max(1, Number(sf.qty) || 1))
+        const sideFormAtMax = sideFormRemainingQty === 0
 
         return (
           <Box key={entry.uid} sx={{ border: highContrast ? '2px solid #111827' : '1.5px solid #e2e8f0', borderRadius: 2, overflow: 'hidden', bgcolor: '#fff' }}>
@@ -1284,7 +1323,10 @@ export default function ShopMenuPage() {
                   {canAddSides && (
                     <Box sx={{ pt: 0.75, pb: 1, px: 1 }}>
                       <Autocomplete size="small" options={allowedSideOptions} getOptionLabel={m => modelName(m)}
-                        value={sf.model || null} onChange={(_, v) => setSF(entry.uid, 'model', v)}
+                        value={sf.model || null} onChange={(_, v) => setSideForm(prev => ({
+                          ...prev,
+                          [entry.uid]: { model: v, qty: 1 },
+                        }))}
                         renderOption={(props, option) => {
                           const img = option.imageUrl || option.thumbnailUrl || ''
                           return (
@@ -1303,20 +1345,22 @@ export default function ShopMenuPage() {
                           inputProps={{ ...params.inputProps, style: { ...params.inputProps.style, fontSize: large ? 16 : 14 } }} />}
                         isOptionEqualToValue={(a, b) => a.id === b.id} noOptionsText="Không có" fullWidth />
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
-                        <IconButton onClick={() => setSF(entry.uid, 'qty', Math.max(1, (sf.qty || 1) - 1))}
+                        <IconButton onClick={() => setSF(entry.uid, 'qty', Math.max(1, sideFormQty - 1))}
+                          disabled={sideFormQty <= 1}
                           sx={{ p: 0.75, bgcolor: '#f1f5f9', borderRadius: 1 }}>
                           <RemoveIcon sx={{ fontSize: large ? 24 : 20 }} />
                         </IconButton>
                         <Typography fontWeight={800} sx={{ minWidth: large ? 34 : 28, textAlign: 'center', fontSize: large ? 22 : 18, color: '#4f46e5' }}>
-                          {sf.qty || 1}
+                          {sideFormQty}
                         </Typography>
-                        <IconButton onClick={() => setSF(entry.uid, 'qty', (sf.qty || 1) + 1)}
+                        <IconButton onClick={() => setSF(entry.uid, 'qty', sideFormQty + 1)}
+                          disabled={!sf.model || (sideFormRemainingQty != null && sideFormQty >= sideFormRemainingQty)}
                           sx={{ p: 0.75, bgcolor: '#6366f1', color: '#fff', borderRadius: 1 }}>
                           <AddIcon sx={{ fontSize: large ? 24 : 20 }} />
                         </IconButton>
                         <Box sx={{ flex: 1 }} />
                         <Button variant="contained" startIcon={<PlaylistAddIcon />}
-                          onClick={() => addSideInline(entry.uid)} disabled={!sf.model}
+                          onClick={() => addSideInline(entry.uid)} disabled={!sf.model || sideFormAtMax}
                           sx={{ textTransform: 'none', bgcolor: '#6366f1', '&:hover': { bgcolor: '#4f46e5' },
                             '&.Mui-disabled': { bgcolor: '#e0e0e0', color: '#9e9e9e' } }}>
                           Thêm
