@@ -119,6 +119,16 @@ const STATUS_STYLE = {
   CANCELLED: { color: '#e53935', bg: '#fce4ec', label: 'Order cancelled' },
 }
 
+const STATUS_TRANSLATION_KEYS = {
+  PENDING: 'shopOrder.status.pending',
+  CONFIRMED: 'shopOrder.status.confirmed',
+  PREPARING: 'shopOrder.status.preparing',
+  READY: 'shopOrder.status.ready',
+  PICKED_UP: 'shopOrder.status.pickedUp',
+  COMPLETED: 'shopOrder.status.completed',
+  CANCELLED: 'shopOrder.status.cancelled',
+}
+
 function buildChildMap(items) {
   const map = {}
   ;(items || []).forEach(it => {
@@ -284,6 +294,7 @@ function SessionOrderList({ session, token, onEdit, onView, t, formatAmount, ite
 
 function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpdated }) {
   const [order, setOrder] = React.useState(initialOrder)
+  const [imagePreview, setImagePreview] = React.useState(null)
   const { language, t, formatMoney } = useI18n()
   const fmtLocal = React.useCallback((n) => n != null ? formatMoney(n, 'VND') : '', [formatMoney])
   const displayItemName = React.useCallback((item) => localizedModelName(item, language), [language])
@@ -438,6 +449,26 @@ function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpda
           {order.orderCode}
         </Typography>
       </Box>
+
+      <Dialog open={Boolean(imagePreview)} onClose={() => setImagePreview(null)} maxWidth="xs" fullWidth
+        PaperProps={{ sx: { borderRadius: 3, overflow: 'hidden' } }}>
+        {imagePreview && (
+          <>
+            <Box sx={{ position: 'relative', bgcolor: '#f0f0f0', lineHeight: 0 }}>
+              <Box component="img" src={imagePreview.imageUrl} alt={imagePreview.modelName}
+                sx={{ width: '100%', maxHeight: 340, objectFit: 'contain', display: 'block' }}
+                onError={e => { e.target.style.display = 'none' }} />
+              <IconButton size="small" onClick={() => setImagePreview(null)}
+                sx={{ position: 'absolute', top: 8, right: 8, bgcolor: 'rgba(0,0,0,0.45)', color: '#fff' }}>
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </Box>
+            <Box sx={{ px: 2.5, py: 2 }}>
+              <Typography fontWeight={800}>{imagePreview.modelName}</Typography>
+            </Box>
+          </>
+        )}
+      </Dialog>
     </Box>
   )
 }
