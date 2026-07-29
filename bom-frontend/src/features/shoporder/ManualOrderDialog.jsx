@@ -40,6 +40,7 @@ import { fetchShopTables, createStaffOrder, fetchOrderTagQr, fetchMenuOptions, f
 import { printOrderReceiptTracked, printOrderTagTracked } from '../../utils/printWithHistory'
 import { broadcastToCounter } from '../shopboard/CounterDisplayPage'
 import VoucherQrScanDialog from './VoucherQrScanDialog'
+import ItemOptionsDialog from '../shopfront/ItemOptionsDialog'
 import { useI18n } from '../../i18n/I18nContext'
 
 const fmt         = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
@@ -69,7 +70,9 @@ const normalizeCustomerLookup = (value) => String(value || '').replace(/[^A-Za-z
 const parseAllowedSideIds = (model) => {
   try {
     const ids = model?.allowedSideIds ? JSON.parse(model.allowedSideIds) : []
-    return Array.isArray(ids) ? ids.map(String) : []
+    return Array.isArray(ids)
+      ? ids.map(entry => typeof entry === 'object' && entry !== null ? String(entry.modelId || entry.id || '') : String(entry)).filter(Boolean)
+      : []
   } catch {
     return []
   }
@@ -110,6 +113,10 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
   const [items, setItems]               = useState([])
   const [selectedModel, setSelectedModel] = useState(null)
   const [optsByModel, setOptsByModel]   = useState({})
+  const [configuringModel, setConfiguringModel] = useState(null)
+  const [configuringOptions, setConfiguringOptions] = useState([])
+  const [configuringOpen, setConfiguringOpen] = useState(false)
+  const [configuringLoading, setConfiguringLoading] = useState(false)
 
   // customer search/link
   const [customerId, setCustomerId]         = useState(null)
@@ -367,6 +374,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
     setCustomerScanOpen(false)
     setVoucherScanOpen(false); setScannedVoucherPayload(''); setVoucherRedeeming(false)
     setVoucherResult(null); setVoucherError('')
+    setConfiguringModel(null); setConfiguringOptions([]); setConfiguringOpen(false); setConfiguringLoading(false)
     setImagePreview(null)
   }
 
@@ -389,6 +397,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
       if (!isAllowedSideModel(i.modelId, option.id)) return i
       const sideItems = i.sideItems || []
       const existing = sideItems.find(si => String(si.modelId) === String(option.id))
+      const limit = allowedSideMaxQty(i.modelId, option.id)
       if (!existing) {
         if (delta < 1) return i
         return {
@@ -399,14 +408,14 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
             modelName: option.modelName,
             imageUrl: option.imageUrl || option.thumbnailUrl || null,
             customPriceDigits: String(Math.round(Number(option.sellingPrice) || 0)),
-            qty: delta,
+            qty: limit > 0 ? Math.min(limit, delta) : delta,
           }],
         }
       }
       return {
         ...i,
         sideItems: sideItems
-          .map(si => si.uid === existing.uid ? { ...si, qty: (si.qty || 1) + delta } : si)
+          .map(si => si.uid === existing.uid ? { ...si, qty: limit > 0 ? Math.min(limit, (si.qty || 1) + delta) : (si.qty || 1) + delta } : si)
           .filter(si => si.qty > 0),
       }
     }))
@@ -430,7 +439,12 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
     setItems(prev => prev.map(i =>
       i.uid !== parentUid ? i : {
         ...i, sideItems: i.sideItems
-          .map(si => si.uid === sideUid ? { ...si, qty: (si.qty || 1) + delta } : si)
+          .map(si => {
+            if (si.uid !== sideUid) return si
+            const limit = allowedSideMaxQty(i.modelId, si.modelId)
+            const nextQty = limit > 0 ? Math.min(limit, (si.qty || 1) + delta) : (si.qty || 1) + delta
+            return { ...si, qty: nextQty }
+          })
           .filter(si => si.qty > 0)
       }
     ))
@@ -453,30 +467,86 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
     ))
   }
 
-  const addModelToOrder = (model) => {
+  const closeItemConfigurator = () => {
+    setConfiguringOpen(false)
+    setConfiguringModel(null)
+    setConfiguringOptions([])
+  }
+
+  const addConfiguredModelToOrder = (model, configured = {}) => {
     if (!model) return
-    const mid = model.id
+    let selectedOptions = {}
+    if (configured.selectedOptions) {
+      if (typeof configured.selectedOptions === 'string') {
+        try { selectedOptions = JSON.parse(configured.selectedOptions) || {} } catch { selectedOptions = {} }
+      } else if (typeof configured.selectedOptions === 'object') {
+        selectedOptions = configured.selectedOptions
+      }
+    }
+    const sideItems = Array.isArray(configured.sideItems)
+      ? configured.sideItems
+        .filter(si => si && Number(si.qty) > 0)
+        .map(si => ({
+          uid: crypto.randomUUID(),
+          modelId: si.modelId,
+          modelName: si.modelName,
+          imageUrl: si.imageUrl || si.thumbnailUrl || null,
+          customPriceDigits: String(Math.round(Number(si.sellingPrice) || 0)),
+          qty: Number(si.qty) || 1,
+        }))
+      : []
     setItems(prev => [...prev, {
       uid: crypto.randomUUID(),
-      modelId: mid, modelName: model.modelName,
+      modelId: model.id,
+      modelName: model.modelName,
       sellingPrice: model.sellingPrice,
       imageUrl: model.imageUrl || model.thumbnailUrl || null,
       customPriceDigits: String(Math.round(Number(model.sellingPrice) || 0)),
-      qty: 1, selectedOptions: {}, itemNotes: '',
-      sideItems: [],
+      qty: Number(configured.qty) || 1,
+      selectedOptions,
+      itemNotes: configured.itemNotes || '',
+      sideItems,
     }])
-    if (!optsByModel[mid]) {
-      fetchMenuOptions(mid)
-        .then(({ data }) => setOptsByModel(prev => ({ ...prev, [mid]: Array.isArray(data) ? data : [] })))
-        .catch(() => setOptsByModel(prev => ({ ...prev, [mid]: [] })))
+  }
+
+  const addModelToOrder = async (model) => {
+    if (!model || configuringLoading) return
+    const mid = model.id ?? model.modelId
+    if (mid == null) return
+    setConfiguringLoading(true)
+    try {
+      let optionList = null
+      if (Object.prototype.hasOwnProperty.call(optsByModel, mid)) optionList = optsByModel[mid] || []
+      if (optionList == null) {
+        const { data } = await fetchMenuOptions(mid)
+        optionList = Array.isArray(data) ? data : []
+        setOptsByModel(prev => Object.prototype.hasOwnProperty.call(prev, mid) ? prev : { ...prev, [mid]: optionList })
+      }
+      setConfiguringModel({
+        ...model,
+        id: mid,
+        modelId: mid,
+        imageUrl: model.imageUrl || model.thumbnailUrl || null,
+        thumbnailUrl: model.thumbnailUrl || model.imageUrl || null,
+      })
+      setConfiguringOptions(optionList || [])
+      setConfiguringOpen(true)
+    } catch (e) {
+      setError(e?.message || 'Failed to load item options')
+    } finally {
+      setConfiguringLoading(false)
     }
+  }
+
+  const handleConfiguredItemConfirm = (configured) => {
+    addConfiguredModelToOrder(configuringModel, configured)
+    closeItemConfigurator()
+    setSelectedModel(null)
   }
 
   const addItem = () => {
     addModelToOrder(selectedModel)
-    setSelectedModel(null)
   }
-
   const toggleOption = (uid, groupName, value, multiSelect) => {
     setItems(prev => prev.map(item => {
       if (item.uid !== uid) return item
@@ -960,7 +1030,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                   isOptionEqualToValue={(a, b) => a.id === b.id}
                   noOptionsText={t('shopOrder.manual.noActiveItems')}
                 />
-                <Button variant="contained" onClick={addItem} disabled={!selectedModel}
+                <Button variant="contained" onClick={addItem} disabled={!selectedModel || configuringLoading}
                   startIcon={<AddIcon />} sx={{ textTransform: 'none', flexShrink: 0 }}>
                   Add
                 </Button>
@@ -973,8 +1043,8 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                 }}>
                   {mainModels.map(model => (
                     <Box key={model.id} role="button" tabIndex={0}
-                      onClick={() => addModelToOrder(model)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') addModelToOrder(model) }}
+                      onClick={() => { if (!configuringLoading) addModelToOrder(model) }}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && !configuringLoading) addModelToOrder(model) }}
                       sx={{
                         minHeight: 118, border: '1px solid #dbe3ef', borderRadius: 1.5, overflow: 'hidden', bgcolor: '#fff',
                         display: 'grid', gridTemplateColumns: '72px 1fr', cursor: 'pointer', boxShadow: '0 1px 2px rgba(15,23,42,0.06)',
@@ -1007,20 +1077,13 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                     e.preventDefault()
                     try {
                       const item = JSON.parse(e.dataTransfer.getData('application/json'))
-                      setItems(prev => [...prev, {
-                        uid: crypto.randomUUID(),
+                      addModelToOrder({
+                        id: item.modelId,
                         modelId: item.modelId, modelName: item.modelName,
                         sellingPrice: item.sellingPrice,
                         imageUrl: item.imageUrl || item.thumbnailUrl || null,
-                        customPriceDigits: String(Math.round(Number(item.sellingPrice) || 0)),
-                        qty: item.qty || 1,
-                        selectedOptions: {}, itemNotes: '', sideItems: [],
-                      }])
-                      if (!optsByModel[item.modelId]) {
-                        fetchMenuOptions(item.modelId)
-                          .then(({ data }) => setOptsByModel(p => ({ ...p, [item.modelId]: Array.isArray(data) ? data : [] })))
-                          .catch(() => setOptsByModel(p => ({ ...p, [item.modelId]: [] })))
-                      }
+                        thumbnailUrl: item.thumbnailUrl || item.imageUrl || null,
+                      })
                     } catch { /* ignore */ }
                   }}
                 >
@@ -1278,30 +1341,19 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                                       const optionImage = option.imageUrl || option.thumbnailUrl || ''
                                       return (
                                         <Box key={option.id} sx={{
-                                          display: 'flex', alignItems: 'center', gap: 1, px: 1, py: 0.75,
+                                          display: 'flex', alignItems: 'center', gap: 0.85, px: 1, py: 0.75,
                                           border: `1.5px solid ${optionQty > 0 ? '#6366f1' : '#dbe3ef'}`,
                                           borderRadius: 1.5, bgcolor: optionQty > 0 ? '#eef2ff' : '#fff',
                                         }}>
-                                          <Box onClick={() => optionImage && setImagePreview({ imageUrl: optionImage, modelName: option.modelName })} sx={{ width: 64, height: 64, flexShrink: 0, borderRadius: 1.25, bgcolor: '#eef2f7', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: optionImage ? 'pointer' : 'default' }}>
-                                            {optionImage ? (
-                                              <Box component="img" src={optionImage} alt={option.modelName}
-                                                onError={e => { e.target.style.display = 'none' }}
-                                                sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                            ) : (
-                                              <Typography fontWeight={900} color="text.secondary" sx={{ fontSize: 18 }}>
-                                                {String(option.modelName || '?').slice(0, 1)}
-                                              </Typography>
-                                            )}
-                                          </Box>
                                           <Box sx={{ flex: 1, minWidth: 0 }}>
                                             <Typography fontWeight={800} sx={{ fontSize: 13, lineHeight: 1.2, overflowWrap: 'anywhere' }}>{option.modelName}</Typography>
-                                            <Typography color="primary" fontWeight={900} sx={{ fontSize: 12 }}>
+                                            <Typography color="primary" fontWeight={900} sx={{ fontSize: 12, mt: 0.25 }}>
                                               +{fmt(unitPrice)}{optionQty > 0 ? ` = ${fmt(optionTotal)}` : ''}
                                             </Typography>
                                           </Box>
                                           {optionQty === 0 ? (
                                             <IconButton size="small" onClick={() => changeSideOptionQty(item.uid, option, 1)}
-                                              sx={{ p: 0.75, bgcolor: '#6366f1', color: '#fff', borderRadius: 1, '&:hover': { bgcolor: '#4f46e5' } }}>
+                                              sx={{ p: 0.75, bgcolor: '#6366f1', color: '#fff', borderRadius: 1, flexShrink: 0, '&:hover': { bgcolor: '#4f46e5' } }}>
                                               <AddIcon sx={{ fontSize: 20 }} />
                                             </IconButton>
                                           ) : (
@@ -1318,6 +1370,18 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                                               </IconButton>
                                             </Box>
                                           )}
+                                          <Box onClick={() => optionImage && setImagePreview({ imageUrl: optionImage, modelName: option.modelName })}
+                                            sx={{ width: 38, height: 38, mr: 0.25, flexShrink: 0, borderRadius: 1.1, bgcolor: '#eef2f7', overflow: 'hidden', border: '1px solid #dbe3ef', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: optionImage ? 'pointer' : 'default' }}>
+                                            {optionImage ? (
+                                              <Box component="img" src={optionImage} alt={option.modelName}
+                                                onError={e => { e.target.style.display = 'none' }}
+                                                sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                            ) : (
+                                              <Typography fontWeight={900} color="text.secondary" sx={{ fontSize: 14 }}>
+                                                {String(option.modelName || '?').slice(0, 1)}
+                                              </Typography>
+                                            )}
+                                          </Box>
                                         </Box>
                                       )
                                     })}
@@ -1469,6 +1533,16 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
         )}
       </DialogActions>
     </Dialog>
+
+      <ItemOptionsDialog
+        open={configuringOpen}
+        model={configuringModel}
+        options={configuringOptions}
+        allowedSideOptions={configuringModel ? allowedSideOptionsFor(configuringModel.id) : []}
+        initialCart={null}
+        onConfirm={handleConfiguredItemConfirm}
+        onClose={closeItemConfigurator}
+      />
 
       <Dialog open={Boolean(imagePreview)} onClose={() => setImagePreview(null)} maxWidth="xs" fullWidth
         PaperProps={{ sx: { borderRadius: 3, overflow: 'hidden' } }}>

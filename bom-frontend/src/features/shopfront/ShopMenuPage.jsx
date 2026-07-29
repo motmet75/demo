@@ -829,11 +829,19 @@ export default function ShopMenuPage() {
   const addSideInline = (parentUid) => {
     const sf = sideForm[parentUid] || {}
     if (!sf.model) return
-    const id = genUid()
     setCart(prev => {
       const parent = prev[parentUid]; if (!parent) return prev
-      return { ...prev, [parentUid]: { ...parent, sideItems: [...(parent.sideItems || []),
-        { uid: id, modelId: sf.model.id, modelName: sf.model.modelName, imageUrl: sf.model.imageUrl || sf.model.thumbnailUrl || null, qty: sf.qty || 1 }] } }
+      const currentSides = parent.sideItems || []
+      const existing = currentSides.find(si => String(si.modelId) === String(sf.model.id))
+      const currentQty = existing?.qty || 0
+      const requestedQty = Math.max(1, sf.qty || 1)
+      const limit = maxAllowedSideQty(parent.modelId, sf.model.id)
+      const nextQty = limit > 0 ? Math.min(limit, currentQty + requestedQty) : currentQty + requestedQty
+      if (nextQty <= currentQty) return prev
+      const nextSideItems = existing
+        ? currentSides.map(si => si.uid === existing.uid ? { ...si, qty: nextQty } : si)
+        : [...currentSides, { uid: genUid(), modelId: sf.model.id, modelName: sf.model.modelName, imageUrl: sf.model.imageUrl || sf.model.thumbnailUrl || null, qty: nextQty }]
+      return { ...prev, [parentUid]: { ...parent, sideItems: nextSideItems } }
     })
     setSideForm(prev => ({ ...prev, [parentUid]: {} }))
   }
@@ -1189,6 +1197,7 @@ export default function ShopMenuPage() {
                   {sides.map((si, siIdx) => {
                     const sm = menu.find(x => x.id === si.modelId)
                     const sideImage = si.imageUrl || si.thumbnailUrl || sm?.imageUrl || sm?.thumbnailUrl || ''
+                    const sideMaxQty = maxAllowedSideQty(entry.modelId, si.modelId)
                     const perCup = si.qty || 1; const effectiveQty = perCup * entry.qty
                     const effectivePrice = sm ? effectiveQty * Number(sm.sellingPrice || 0) : 0
                     return (
@@ -1205,6 +1214,7 @@ export default function ShopMenuPage() {
                           <Box sx={{ flex: 1, minWidth: 0 }}>
                             <Typography fontWeight={800} sx={{ fontSize: large ? 17 : 14, color: '#1e293b' }} noWrap>{modelName(si)}</Typography>
                             <Typography sx={{ color: '#6366f1', fontSize: large ? 15 : 13, fontWeight: 800 }}>{sm ? fmt(effectivePrice) : ''}</Typography>
+                            {sideMaxQty > 0 && <Typography sx={{ color: '#64748b', fontSize: large ? 13 : 11 }}>Max {sideMaxQty}</Typography>}
                           </Box>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
                             <IconButton onClick={() => changeSideQty(entry.uid, si.uid, -1)}

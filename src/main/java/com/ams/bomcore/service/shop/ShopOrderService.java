@@ -28,6 +28,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
@@ -112,8 +113,19 @@ public class ShopOrderService {
         for (Model m : active) {
             if (m.getAllowedSideIds() != null) {
                 try {
-                    List<String> ids = om.readValue(m.getAllowedSideIds(), new TypeReference<List<String>>() {});
-                    neededSideIds.addAll(ids);
+                    JsonNode node = om.readTree(m.getAllowedSideIds());
+                    if (node.isArray()) {
+                        for (JsonNode entry : node) {
+                            if (entry.isTextual()) {
+                                neededSideIds.add(entry.asText());
+                            } else if (entry.isObject()) {
+                                JsonNode modelId = entry.get("modelId");
+                                if (modelId != null && modelId.isTextual()) {
+                                    neededSideIds.add(modelId.asText());
+                                }
+                            }
+                        }
+                    }
                 } catch (Exception ignored) {}
             }
         }

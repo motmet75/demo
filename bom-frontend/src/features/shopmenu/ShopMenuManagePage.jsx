@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useMemo } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import Card from '@mui/material/Card'
@@ -36,8 +36,9 @@ import { fetchModels, updateModel, createModel } from '../../api/modelApi'
 import { fetchMenuOptions, createMenuOption, updateMenuOption, deleteMenuOption, translateMenuItem } from '../../api/shopApi'
 import { MENU_TRANSLATION_LANGUAGES, compactTranslations, parseJsonObject, stringifyTranslations } from '../../i18n/menuLocalization'
 import { getLanguageMeta } from '../../i18n/translations'
+import { parseAllowedSideConfig, serializeAllowedSideConfig } from '../../utils/sideItemConfig'
 
-const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
+const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' d' : ''
 
 function ModelCard({ model, onEdit, onClone, onToggle, saving }) {
   const onMenu = Boolean(model.sellingPrice) && model.isActive !== false
@@ -117,7 +118,7 @@ function ModelCard({ model, onEdit, onClone, onToggle, saving }) {
   )
 }
 
-// ── Clone dialog ────────────────────────────────────────────────────────────
+// -- Clone dialog ------------------------------------------------------------
 
 const CLONE_TYPES = [
   { value: 'special', label: 'Special Menu', suffix: ' (Special)', catPrefix: 'Special', color: '#7c3aed' },
@@ -157,7 +158,7 @@ function CloneDialog({ open, source, onClose, onCreated }) {
       const suffix = Date.now().toString(36).toUpperCase().slice(-4)
       const newCode = ((source.modelCode || 'ITEM') + '-' + type.slice(0,2).toUpperCase() + suffix).slice(0, 50)
       const newCategory = t.catPrefix
-        ? t.catPrefix + (source.category ? ' · ' + source.category : '')
+        ? t.catPrefix + (source.category ? ' � ' + source.category : '')
         : source.category || null
 
       const created = await createModel({
@@ -247,7 +248,7 @@ function CloneDialog({ open, source, onClose, onCreated }) {
             type="number" size="small" fullWidth
             value={price}
             onChange={e => setPrice(e.target.value)}
-            InputProps={{ endAdornment: <InputAdornment position="end">đ</InputAdornment> }}
+            InputProps={{ endAdornment: <InputAdornment position="end">d</InputAdornment> }}
             helperText={source.sellingPrice ? `Original: ${fmt(source.sellingPrice)}` : 'Original has no price'}
           />
 
@@ -270,7 +271,7 @@ function CloneDialog({ open, source, onClose, onCreated }) {
   )
 }
 
-// ── Edit dialog ─────────────────────────────────────────────────────────────
+// -- Edit dialog -------------------------------------------------------------
 
 const EMPTY_FORM   = { sellingPrice: '', category: '', imageUrl: '', allowedSideIds: [], modelNameTranslations: {}, categoryTranslations: {} }
 const EMPTY_CHOICE = { label: '', price: '', modelId: null, labelTranslations: {} }
@@ -367,12 +368,12 @@ function TranslationFields({ label, values, onChange }) {
 }
 function fmtChoicePrice(price, isFree) {
   if (isFree || !price) return ''
-  return ` +${Number(price).toLocaleString('vi-VN')}đ`
+  return ` +${Number(price).toLocaleString('vi-VN')}d`
 }
 
 function fmtChoiceSummary(choice, isFree) {
   const price = fmtChoicePrice(choice.price, isFree)
-  const bom   = choice.modelId ? ' 🔗' : ''
+  const bom   = choice.modelId ? ' ??' : ''
   return `${choice.label}${price}${bom}`
 }
 
@@ -393,7 +394,7 @@ function EditDialog({ open, model, models, onClose, onSave, onTranslated }) {
   useEffect(() => {
     if (!open || !model) return
     let parsedSideIds = []
-    try { parsedSideIds = model.allowedSideIds ? JSON.parse(model.allowedSideIds) : [] } catch { parsedSideIds = [] }
+    try { parsedSideIds = parseAllowedSideConfig(model.allowedSideIds) } catch { parsedSideIds = [] }
     setForm({
       sellingPrice: model.sellingPrice ?? '',
       category: model.category ?? '',
@@ -422,6 +423,34 @@ function EditDialog({ open, model, models, onClose, onSave, onTranslated }) {
     groupNameTranslations: { ...(f.groupNameTranslations || {}), [language]: value },
   }))
 
+  const sideItemOptions = (models || []).filter(x => x.id !== model?.id && x.sellingPrice != null)
+  const selectedSideModels = sideItemOptions.filter(x => (form.allowedSideIds || []).some(side => String(side.modelId) === String(x.id)))
+  const sideConfigFor = (modelId) => (form.allowedSideIds || []).find(side => String(side.modelId) === String(modelId)) || null
+
+  const replaceAllowedSide = (currentId, nextModel) => {
+    if (!nextModel?.id) return
+    setForm(f => ({
+      ...f,
+      allowedSideIds: (f.allowedSideIds || []).map(side => String(side.modelId) === String(currentId)
+        ? { ...side, modelId: nextModel.id }
+        : side
+      ).filter((side, idx, arr) => arr.findIndex(other => String(other.modelId) === String(side.modelId)) === idx),
+    }))
+  }
+
+  const setAllowedSideMaxQty = (modelId, value) => {
+    const parsed = Number(value)
+    const maxQty = Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1
+    setForm(f => ({
+      ...f,
+      allowedSideIds: (f.allowedSideIds || []).map(side => String(side.modelId) === String(modelId) ? { ...side, maxQty } : side),
+    }))
+  }
+
+  const removeAllowedSide = (modelId) => setForm(f => ({
+    ...f,
+    allowedSideIds: (f.allowedSideIds || []).filter(side => String(side.modelId) !== String(modelId)),
+  }))
   const selectedSourceOption = translationLanguageOptions.find(option => option.language === translationSource) || translationLanguageOptions[0]
   const availableTargetOptions = translationTargetOptions.filter(option => option.language !== translationSource)
   const selectedTargetOptions = availableTargetOptions.filter(option => translationTargets.includes(option.language))
@@ -459,7 +488,7 @@ function EditDialog({ open, model, models, onClose, onSave, onTranslated }) {
         sellingPrice: form.sellingPrice !== '' ? Number(form.sellingPrice) : null,
         category: form.category || null,
         imageUrl: form.imageUrl || null,
-        allowedSideIds: form.allowedSideIds.length ? JSON.stringify(form.allowedSideIds) : null,
+        allowedSideIds: serializeAllowedSideConfig(form.allowedSideIds),
         modelNameTranslations: stringifyTranslations(form.modelNameTranslations),
         categoryTranslations: stringifyTranslations(form.categoryTranslations),
       })
@@ -574,7 +603,7 @@ function EditDialog({ open, model, models, onClose, onSave, onTranslated }) {
         <Stack spacing={2} sx={{ mt: 0.5 }}>
           <TextField label="Selling Price" type="number" size="small" fullWidth
             value={form.sellingPrice} onChange={set('sellingPrice')}
-            InputProps={{ endAdornment: <InputAdornment position="end">đ</InputAdornment> }}
+            InputProps={{ endAdornment: <InputAdornment position="end">d</InputAdornment> }}
             helperText="Leave empty to hide from menu" />
           <TextField label="Category" size="small" fullWidth
             value={form.category} onChange={set('category')} placeholder="e.g. Coffee, Tea, Food" />
@@ -642,17 +671,90 @@ function EditDialog({ open, model, models, onClose, onSave, onTranslated }) {
 
           <Autocomplete
             multiple
-            options={(models || []).filter(x => x.id !== model?.id && x.sellingPrice != null)}
+            options={sideItemOptions}
             getOptionLabel={x => x.modelName}
-            value={(models || []).filter(x => (form.allowedSideIds || []).includes(x.id))}
-            onChange={(_, v) => setForm(f => ({ ...f, allowedSideIds: v.map(x => x.id) }))}
+            value={selectedSideModels}
+            onChange={(_, v) => setForm(f => ({ ...f, allowedSideIds: v.map(x => ({ modelId: x.id, maxQty: 1 })) }))}
             isOptionEqualToValue={(a, b) => a.id === b.id}
+            renderOption={(props, option) => {
+              const thumb = option.imageUrl || ''
+              return (
+                <Box component="li" {...props} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Box sx={{ width: 34, height: 34, borderRadius: 1, overflow: 'hidden', bgcolor: '#eef2f7', border: '1px solid #dbe3ef', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {thumb
+                      ? <Box component="img" src={thumb} alt={option.modelName} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none' }} />
+                      : <Typography fontWeight={900} sx={{ fontSize: 14, color: '#94a3b8' }}>{String(option.modelName || '?').slice(0, 1)}</Typography>}
+                  </Box>
+                  <Box sx={{ minWidth: 0, flex: 1 }}>
+                    <Typography sx={{ fontWeight: 700, fontSize: 14, lineHeight: 1.2, overflowWrap: 'anywhere' }}>{option.modelName}</Typography>
+                    <Typography variant="caption" color="text.secondary">{option.sellingPrice ? fmt(option.sellingPrice) : 'No price'}</Typography>
+                  </Box>
+                </Box>
+              )
+            }}
             renderInput={params => (
               <TextField {...params} label="Allowed side / topping items" size="small"
                 helperText="Only these items will appear as side options when ordering. Leave empty to disable sides for this item." />
             )}
             noOptionsText="No menu items"
           />
+
+          {selectedSideModels.length > 0 && (
+            <Box sx={{ border: '1px solid #e2e8f0', borderRadius: 1.5, p: 1.25, bgcolor: '#fff' }}>
+              <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ display: 'block', mb: 1 }}>
+                Edit added side / topping items
+              </Typography>
+              <Stack spacing={1}>
+                {selectedSideModels.map(side => {
+                  const thumb = side.imageUrl || ''
+                  const sideConfig = sideConfigFor(side.id)
+                  return (
+                    <Box key={side.id} sx={{ display: 'grid', gridTemplateColumns: '44px minmax(0, 1fr) 96px auto', gap: 1, alignItems: 'center' }}>
+                      <Box sx={{ width: 44, height: 44, borderRadius: 1.25, overflow: 'hidden', bgcolor: '#eef2f7', border: '1px solid #dbe3ef', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {thumb
+                          ? <Box component="img" src={thumb} alt={side.modelName} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none' }} />
+                          : <Typography fontWeight={900} sx={{ fontSize: 16, color: '#94a3b8' }}>{String(side.modelName || '?').slice(0, 1)}</Typography>}
+                      </Box>
+                      <Autocomplete
+                        size="small"
+                        options={sideItemOptions}
+                        value={sideItemOptions.find(option => String(option.id) === String(side.id)) || side}
+                        getOptionLabel={option => option.modelName}
+                        isOptionEqualToValue={(a, b) => a.id === b.id}
+                        onChange={(_, value) => value && replaceAllowedSide(side.id, value)}
+                        renderInput={params => <TextField {...params} label="Selected side / topping item" size="small" />}
+                        renderOption={(props, option) => {
+                          const optionThumb = option.imageUrl || ''
+                          return (
+                            <Box component="li" {...props} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Box sx={{ width: 30, height: 30, borderRadius: 1, overflow: 'hidden', bgcolor: '#eef2f7', border: '1px solid #dbe3ef', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                {optionThumb
+                                  ? <Box component="img" src={optionThumb} alt={option.modelName} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none' }} />
+                                  : <Typography fontWeight={900} sx={{ fontSize: 12, color: '#94a3b8' }}>{String(option.modelName || '?').slice(0, 1)}</Typography>}
+                              </Box>
+                              <Typography sx={{ fontWeight: 700, fontSize: 13 }}>{option.modelName}</Typography>
+                            </Box>
+                          )
+                        }}
+                        noOptionsText="No menu items"
+                      />
+                      <TextField
+                        label="Max qty"
+                        size="small"
+                        type="number"
+                        value={sideConfig?.maxQty || 1}
+                        onChange={e => setAllowedSideMaxQty(side.id, e.target.value)}
+                        inputProps={{ min: 1, max: 99 }}
+                      />
+                      <IconButton size="small" color="error" onClick={() => removeAllowedSide(side.id)}>
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+                  )
+                })}
+              </Stack>
+            </Box>
+          )}
 
           <Divider>
             <Typography variant="caption" color="text.secondary" fontWeight={600}>Option Groups</Typography>
@@ -679,7 +781,7 @@ function EditDialog({ open, model, models, onClose, onSave, onTranslated }) {
                         <Typography variant="body2" fontWeight={700}>{opt.groupName}</Typography>
                         {opt.required && <Chip label="required" size="small" color="error" sx={{ fontSize: 9, height: 16 }} />}
                         {opt.multiSelect && <Chip label="multi" size="small" variant="outlined" sx={{ fontSize: 9, height: 16 }} />}
-                        <Tooltip title={opt.isFree ? 'All choices free — click to charge prices' : 'Click to mark all choices as free'}>
+                        <Tooltip title={opt.isFree ? 'All choices free � click to charge prices' : 'Click to mark all choices as free'}>
                           <Chip
                             label={opt.isFree ? 'Free' : 'Priced'}
                             size="small"
@@ -691,12 +793,12 @@ function EditDialog({ open, model, models, onClose, onSave, onTranslated }) {
                         </Tooltip>
                       </Box>
                       <Typography variant="caption" color="text.secondary">
-                        {choices.map(c => fmtChoiceSummary(c, opt.isFree)).join(' · ')}
+                        {choices.map(c => fmtChoiceSummary(c, opt.isFree)).join(' � ')}
                         {opt.defaultValue ? ` (default: ${opt.defaultValue})` : ''}
                       </Typography>
                       {choices.some(c => c.modelId) && (
                         <Typography variant="caption" sx={{ color: '#1976d2', fontSize: 10 }}>
-                          🔗 = linked BOM model
+                          ?? = linked BOM model
                         </Typography>
                       )}
                       <Box sx={{ mt: 1, display: 'grid', gap: 1 }}>
@@ -742,7 +844,7 @@ function EditDialog({ open, model, models, onClose, onSave, onTranslated }) {
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
                   <Typography variant="caption" color="text.secondary" fontWeight={600}>Choices</Typography>
                   <Typography variant="caption" color="text.disabled" sx={{ fontSize: 10 }}>
-                    — Link a BOM model to override inventory deduction per choice (e.g. Small/Medium/Large variants)
+                    � Link a BOM model to override inventory deduction per choice (e.g. Small/Medium/Large variants)
                   </Typography>
                 </Box>
                 {newOpt.choiceRows.map((row, idx) => {
@@ -758,7 +860,7 @@ function EditDialog({ open, model, models, onClose, onSave, onTranslated }) {
                           placeholder="e.g. Small / Medium / Large" />
                         <TextField label="Price add-on" size="small" type="number" sx={{ flex: 1 }}
                           value={row.price} onChange={e => setRow({ price: e.target.value })}
-                          InputProps={{ endAdornment: <InputAdornment position="end">đ</InputAdornment> }}
+                          InputProps={{ endAdornment: <InputAdornment position="end">d</InputAdornment> }}
                           placeholder="0" />
                         <IconButton size="small" color="error" disabled={newOpt.choiceRows.length <= 1}
                           onClick={() => setNewOpt(f => ({ ...f, choiceRows: f.choiceRows.filter((_, i) => i !== idx) }))}>
@@ -773,7 +875,7 @@ function EditDialog({ open, model, models, onClose, onSave, onTranslated }) {
                       <Autocomplete
                         size="small"
                         options={models || []}
-                        getOptionLabel={m => `${m.modelName}${m.sellingPrice ? ' — ' + fmt(m.sellingPrice) : ''}`}
+                        getOptionLabel={m => `${m.modelName}${m.sellingPrice ? ' � ' + fmt(m.sellingPrice) : ''}`}
                         value={linkedModel || null}
                         onChange={(_, v) => setRow({ modelId: v ? v.id : null })}
                         isOptionEqualToValue={(a, b) => a.id === b.id}

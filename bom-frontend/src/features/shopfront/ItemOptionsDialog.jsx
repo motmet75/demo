@@ -106,7 +106,10 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
   // ── Qty stepper for linked side items ─────────────────────────────────
   const changeSideQty = (modelId, delta) =>
     setSides(prev => {
-      const next = Math.max(0, (prev[modelId] || 0) + delta)
+      const current = prev[modelId] || 0
+      const limit = Number(allowedSideOptions.find(x => String(x.id) === String(modelId))?.maxQty || 0)
+      const capped = limit > 0 ? Math.min(limit, current + delta) : current + delta
+      const next = Math.max(0, capped)
       if (next === 0) { const { [modelId]: _, ...rest } = prev; return rest }
       return { ...prev, [modelId]: next }
     })
@@ -152,7 +155,7 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
       .filter(([, sQty]) => sQty > 0)
       .map(([modelId, sQty]) => {
         const m = allowedSideOptions.find(x => x.id === modelId)
-        return { modelId, modelName: m?.modelName || '', imageUrl: m?.imageUrl || m?.thumbnailUrl || null, qty: sQty }
+        return { modelId, modelName: m?.modelName || '', imageUrl: m?.imageUrl || m?.thumbnailUrl || null, sellingPrice: Number(m?.sellingPrice || 0), qty: sQty }
       })
     onConfirm({
       qty,
@@ -275,34 +278,29 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
             <Typography fontWeight={700} sx={{ fontSize: 15, mb: 1, color: '#334155' }}>Toppings / sides</Typography>
             {allowedSideOptions.map(side => {
               const sideQty = sides[side.id] || 0
+              const sideMaxQty = Number(side.maxQty || 0)
               return (
                 <Box key={side.id} sx={{
-                  display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.25,
-                  px: 1.25, py: 1,
+                  display: 'flex', alignItems: 'center', gap: 1.25, mb: 1.25,
+                  pl: 1.25, pr: 0.75, py: 1,
                   bgcolor: sideQty > 0 ? '#f0f0ff' : '#f8faff',
                   borderRadius: 2,
                   border: sideQty > 0 ? '1.5px solid #6366f1' : '1px solid #e2e8f0',
                   transition: 'border-color 0.15s, background-color 0.15s',
                 }}>
-                  <Box onClick={() => (side.imageUrl || side.thumbnailUrl) && setImagePreview({ ...side, imageUrl: side.imageUrl || side.thumbnailUrl })}
-                    sx={{ width: 52, height: 52, flexShrink: 0, borderRadius: 1.5, bgcolor: '#e8eaf6', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: (side.imageUrl || side.thumbnailUrl) ? 'pointer' : 'default' }}>
-                    {(side.imageUrl || side.thumbnailUrl) ? (
-                      <Box component="img" src={side.imageUrl || side.thumbnailUrl} alt={modelLabel(side)} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none' }} />
-                    ) : (
-                      <Typography sx={{ fontSize: 26, lineHeight: 1 }}>🧋</Typography>
-                    )}
-                  </Box>
                   <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography fontWeight={700} noWrap
+                    <Typography fontWeight={700}
                       onClick={() => (side.imageUrl || side.thumbnailUrl) && setImagePreview({ ...side, imageUrl: side.imageUrl || side.thumbnailUrl })}
-                      sx={{ fontSize: 16, color: '#1e293b', ...((side.imageUrl || side.thumbnailUrl) ? { cursor: 'pointer', '&:hover': { color: '#1976d2', textDecoration: 'underline dotted' } } : {}) }}>
+                      sx={{ fontSize: 16, color: '#1e293b', lineHeight: 1.2, overflowWrap: 'anywhere', ...((side.imageUrl || side.thumbnailUrl) ? { cursor: 'pointer', '&:hover': { color: '#1976d2', textDecoration: 'underline dotted' } } : {}) }}>
                       {modelLabel(side)}
                     </Typography>
-                    <Typography sx={{ fontSize: 14, fontWeight: 700, color: '#6366f1' }}>+{fmtLocal(side.sellingPrice)}</Typography>
+                    <Typography sx={{ fontSize: 14, fontWeight: 700, color: '#6366f1', mt: 0.35 }}>+{fmtLocal(side.sellingPrice)}</Typography>
+                    {sideMaxQty > 0 && <Typography sx={{ fontSize: 12, color: '#64748b', mt: 0.2 }}>Max {sideMaxQty} per item</Typography>}
+                    {sideMaxQty > 0 && <Typography sx={{ fontSize: 12, color: '#64748b', mt: 0.2 }}>Max {sideMaxQty} per item</Typography>}
                   </Box>
                   {sideQty === 0 ? (
-                    <IconButton onClick={() => changeSideQty(side.id, 1)}
-                      sx={{ bgcolor: '#6366f1', color: '#fff', borderRadius: 1.5, p: 0.75, '&:hover': { bgcolor: '#4f46e5' } }}>
+                    <IconButton onClick={() => changeSideQty(side.id, 1)} disabled={sideMaxQty > 0 && sideQty >= sideMaxQty}
+                      sx={{ bgcolor: '#6366f1', color: '#fff', borderRadius: 1.5, p: 0.75, flexShrink: 0, '&:hover': { bgcolor: '#4f46e5' }, '&.Mui-disabled': { bgcolor: '#cbd5e1', color: '#fff' } }}>
                       <AddIcon sx={{ fontSize: 24 }} />
                     </IconButton>
                   ) : (
@@ -313,12 +311,20 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
                       <Typography fontWeight={800} sx={{ minWidth: 26, textAlign: 'center', fontSize: 17, color: '#4f46e5' }}>
                         {sideQty * qty}
                       </Typography>
-                      <IconButton onClick={() => changeSideQty(side.id, 1)}
-                        sx={{ p: 0.75, bgcolor: '#6366f1', color: '#fff', borderRadius: 1, '&:hover': { bgcolor: '#4f46e5' } }}>
+                      <IconButton onClick={() => changeSideQty(side.id, 1)} disabled={sideMaxQty > 0 && sideQty >= sideMaxQty}
+                        sx={{ p: 0.75, bgcolor: '#6366f1', color: '#fff', borderRadius: 1, '&:hover': { bgcolor: '#4f46e5' }, '&.Mui-disabled': { bgcolor: '#cbd5e1', color: '#fff' } }}>
                         <AddIcon sx={{ fontSize: 20 }} />
                       </IconButton>
                     </Box>
                   )}
+                  <Box onClick={() => (side.imageUrl || side.thumbnailUrl) && setImagePreview({ ...side, imageUrl: side.imageUrl || side.thumbnailUrl })}
+                    sx={{ width: 40, height: 40, mr: 0.25, flexShrink: 0, borderRadius: 1.25, bgcolor: '#e8eaf6', overflow: 'hidden', border: '1px solid #d7deea', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: (side.imageUrl || side.thumbnailUrl) ? 'pointer' : 'default' }}>
+                    {(side.imageUrl || side.thumbnailUrl) ? (
+                      <Box component="img" src={side.imageUrl || side.thumbnailUrl} alt={modelLabel(side)} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none' }} />
+                    ) : (
+                      <Typography fontWeight={900} sx={{ fontSize: 16, lineHeight: 1, color: '#94a3b8' }}>{String(modelLabel(side) || '?').slice(0, 1)}</Typography>
+                    )}
+                  </Box>
                 </Box>
               )
             })}
@@ -380,3 +386,5 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
     </>
   )
 }
+
+
