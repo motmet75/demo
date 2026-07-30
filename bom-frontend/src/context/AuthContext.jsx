@@ -86,6 +86,7 @@ export function AuthProvider({ children }) {
     if (res.ok && data?.mfaRequired) {
       return {
         mfaRequired: true,
+        mfaMethod: data.mfaMethod,
         maskedEmail: data.maskedEmail,
         expiresInSeconds: data.expiresInSeconds,
       }
@@ -94,6 +95,31 @@ export function AuthProvider({ children }) {
       throw new Error(data?.message || 'Login failed')
     }
 
+    const u = data.user || null
+    setUser(u)
+    setLiveUsername(u?.username ?? null)
+    resetSessionExpiredNotice()
+    restoreFromUser(u)
+    return { mfaRequired: false, user: u }
+  }, [restoreFromUser])
+
+  const verifyLoginTotp = useCallback(async (otp) => {
+    const { res, data } = await apiFetchJson('/auth/login-totp/verify', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ otp })
+    })
+    if (!res.ok) throw new Error(data?.message || 'Authenticator verification failed')
+    if (data?.mfaRequired) {
+      return {
+        mfaRequired: true,
+        mfaMethod: data.mfaMethod,
+        maskedEmail: data.maskedEmail,
+        expiresInSeconds: data.expiresInSeconds,
+      }
+    }
+    if (!data?.authenticated) throw new Error(data?.message || 'Login failed')
     const u = data.user || null
     setUser(u)
     setLiveUsername(u?.username ?? null)
@@ -144,12 +170,13 @@ export function AuthProvider({ children }) {
     user,
     loading,
     login,
+    verifyLoginTotp,
     verifyLoginOtp,
     resendLoginOtp,
     logout,
     refreshMe,
     isAdmin: !!user?.authorities?.includes('ROLE_ADMIN')
-  }), [user, loading, login, verifyLoginOtp, resendLoginOtp, logout, refreshMe])
+  }), [user, loading, login, verifyLoginTotp, verifyLoginOtp, resendLoginOtp, logout, refreshMe])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

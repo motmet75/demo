@@ -5,9 +5,13 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.time.temporal.ChronoUnit;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HexFormat;
+
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.env.Environment;
@@ -32,6 +36,7 @@ import jakarta.servlet.http.HttpSession;
 @Service
 public class LoginOtpService {
     private static final String PENDING_KEY = "LOGIN_EMAIL_OTP_PENDING";
+    private static final String PENDING_TOTP_KEY = "LOGIN_AUTHENTICATOR_OTP_PENDING";
     private static final String DEVICE_COOKIE = "AMS_TRUSTED_DEVICE";
     private static final Duration OTP_TTL = Duration.ofMinutes(10);
     private static final Duration RESEND_DELAY = Duration.ofSeconds(60);
@@ -70,6 +75,47 @@ public class LoginOtpService {
         return start(authentication, user, request, deviceId);
     }
 
+    public void startAuthenticatorChallenge(Authentication authentication, User user,
+            HttpServletRequest request) {
+        if (user == null || !Boolean.TRUE.equals(user.getSecondMFA())
+                || !StringUtils.hasText(user.getSecondMFAKey())) {
+            throw new LoginOtpException(HttpStatus.BAD_REQUEST,
+                    "Authenticator verification is not configured for this account");
+        }
+        request.getSession(true).setAttribute(PENDING_TOTP_KEY,
+                new PendingAuthenticatorLogin(authentication, user.getSecondMFAKey()));
+        request.getSession(true).removeAttribute(
+                HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY);
+        SecurityContextHolder.clearContext();
+    }
+
+    public AuthenticatorResult verifyAuthenticatorCode(String code, HttpServletRequest request) {
+        Object value = request.getSession(true).getAttribute(PENDING_TOTP_KEY);
+        if (!(value instanceof PendingAuthenticatorLogin pending)) {
+            throw new LoginOtpException(HttpStatus.BAD_REQUEST,
+                    "No pending authenticator verification. Please sign in again");
+        }
+        if (Instant.now().isAfter(pending.expiresAt)) {
+            request.getSession(true).removeAttribute(PENDING_TOTP_KEY);
+            throw new LoginOtpException(HttpStatus.BAD_REQUEST,
+                    "Authenticator verification expired. Please sign in again");
+        }
+        if (!verifyTotp(pending.secret, code)) {
+            pending.attempts++;
+            if (pending.attempts >= MAX_ATTEMPTS) {
+                request.getSession(true).removeAttribute(PENDING_TOTP_KEY);
+                throw new LoginOtpException(HttpStatus.TOO_MANY_REQUESTS,
+                        "Too many incorrect authenticator codes. Please sign in again");
+            }
+            throw new LoginOtpException(HttpStatus.BAD_REQUEST,
+                    "Authenticator code is incorrect. "
+                            + (MAX_ATTEMPTS - pending.attempts) + " attempt(s) remaining");
+        }
+        request.getSession(true).removeAttribute(PENDING_TOTP_KEY);
+        return new AuthenticatorResult(pending.authentication,
+                (User) pending.authentication.getPrincipal());
+    }
+
     public LoginResult resend(HttpServletRequest request) {
         PendingLogin pending = requiredPending(request);
         Instant now = Instant.now();
@@ -106,7 +152,10 @@ public class LoginOtpService {
 
     public void clear(HttpServletRequest request) {
         HttpSession session = request.getSession(false);
-        if (session != null) session.removeAttribute(PENDING_KEY);
+        if (session != null) {
+            session.removeAttribute(PENDING_KEY);
+            session.removeAttribute(PENDING_TOTP_KEY);
+        }
     }
 
     private LoginResult start(Authentication auth, User user, HttpServletRequest request, String existingId) {
@@ -235,7 +284,70 @@ public class LoginOtpService {
         return email.substring(0, 1) + "***" + email.substring(at);
     }
 
+    private boolean verifyTotp(String base32Secret, String code) {
+        if (!StringUtils.hasText(base32Secret) || code == null || !code.trim().matches("\\d{6}")) {
+            return false;
+        }
+        try {
+            byte[] key = decodeBase32(base32Secret);
+            long currentStep = Instant.now().truncatedTo(ChronoUnit.SECONDS).getEpochSecond() / 30;
+            for (long step = currentStep - 1; step <= currentStep + 1; step++) {
+                if (String.format("%06d", totp(key, step)).equals(code.trim())) return true;
+            }
+            return false;
+        } catch (Exception ex) {
+            return false;
+        }
+    }
+
+    private int totp(byte[] key, long step) throws Exception {
+        byte[] counter = new byte[8];
+        for (int i = 7; i >= 0; i--) {
+            counter[i] = (byte) step;
+            step >>>= 8;
+        }
+        Mac mac = Mac.getInstance("HmacSHA1");
+        mac.init(new SecretKeySpec(key, "HmacSHA1"));
+        byte[] hash = mac.doFinal(counter);
+        int offset = hash[hash.length - 1] & 0x0f;
+        int binary = ((hash[offset] & 0x7f) << 24)
+                | ((hash[offset + 1] & 0xff) << 16)
+                | ((hash[offset + 2] & 0xff) << 8)
+                | (hash[offset + 3] & 0xff);
+        return binary % 1_000_000;
+    }
+
+    private byte[] decodeBase32(String secret) {
+        String normalized = secret.replace(" ", "").replace("=", "").toUpperCase();
+        java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream();
+        int buffer = 0;
+        int bits = 0;
+        for (int i = 0; i < normalized.length(); i++) {
+            int value = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567".indexOf(normalized.charAt(i));
+            if (value < 0) throw new IllegalArgumentException("Invalid Base32 secret");
+            buffer = (buffer << 5) | value;
+            bits += 5;
+            if (bits >= 8) {
+                output.write((buffer >> (bits - 8)) & 0xff);
+                bits -= 8;
+            }
+        }
+        return output.toByteArray();
+    }
+
     public record LoginResult(boolean mfaRequired, String maskedEmail, long expiresInSeconds) {}
+    public record AuthenticatorResult(Authentication authentication, User user) {}
+    private static class PendingAuthenticatorLogin implements Serializable {
+        private static final long serialVersionUID = 1L;
+        final Authentication authentication;
+        final String secret;
+        final Instant expiresAt = Instant.now().plus(OTP_TTL);
+        int attempts;
+        PendingAuthenticatorLogin(Authentication authentication, String secret) {
+            this.authentication = authentication;
+            this.secret = secret;
+        }
+    }
     private static class PendingLogin implements Serializable {
         private static final long serialVersionUID = 1L;
         final Authentication authentication;

@@ -83,27 +83,32 @@ public AuthController(AuthenticationManager authenticationManager,
             Authentication authentication = authenticationManager.authenticate(
                     UsernamePasswordAuthenticationToken.unauthenticated(request.username(), request.password()));
             User user = (User) authentication.getPrincipal();
+            if (Boolean.TRUE.equals(user.getSecondMFA())) {
+                loginOtpService.startAuthenticatorChallenge(authentication, user, httpRequest);
+                return ResponseEntity.ok(new LoginAuthResponse(false, true, "authenticator", null,
+                        "Enter the code from your authenticator app", null, 600L));
+            }
             LoginOtpService.LoginResult result =
                     loginOtpService.continueOrChallenge(authentication, user, httpRequest);
             if (result.mfaRequired()) {
-                return ResponseEntity.ok(new LoginAuthResponse(false, true, null,
+                return ResponseEntity.ok(new LoginAuthResponse(false, true, "email", null,
                         "A verification code was sent to your email",
                         result.maskedEmail(), result.expiresInSeconds()));
             }
-            return ResponseEntity.ok(new LoginAuthResponse(true, false, toView(authentication),
+            return ResponseEntity.ok(new LoginAuthResponse(true, false, null, toView(authentication),
                     "Login successful", null, null));
         } catch (LoginOtpService.LoginOtpException ex) {
             return ResponseEntity.status(ex.status())
-                    .body(new LoginAuthResponse(false, false, null, ex.getMessage(), null, null));
+                    .body(new LoginAuthResponse(false, false, null, null, ex.getMessage(), null, null));
         } catch (DisabledException ex) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(new LoginAuthResponse(false, false, null, "Account is disabled", null, null));
+                    .body(new LoginAuthResponse(false, false, null, null, "Account is disabled", null, null));
         } catch (LockedException ex) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(new LoginAuthResponse(false, false, null, "Account is locked", null, null));
+                    .body(new LoginAuthResponse(false, false, null, null, "Account is locked", null, null));
         } catch (BadCredentialsException ex) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(new LoginAuthResponse(false, false, null, "Invalid username or password", null, null));
+                    .body(new LoginAuthResponse(false, false, null, null, "Invalid username or password", null, null));
         }
     }
 
@@ -117,11 +122,34 @@ public AuthController(AuthenticationManager authenticationManager,
         try {
             Authentication authentication =
                     loginOtpService.verify(request.otp(), httpRequest, httpResponse);
-            return ResponseEntity.ok(new LoginAuthResponse(true, false, toView(authentication),
+            return ResponseEntity.ok(new LoginAuthResponse(true, false, null, toView(authentication),
                     "Login successful", null, null));
         } catch (LoginOtpService.LoginOtpException ex) {
             return ResponseEntity.status(ex.status())
-                    .body(new LoginAuthResponse(false, true, null, ex.getMessage(), null, null));
+                    .body(new LoginAuthResponse(false, true, "email", null, ex.getMessage(), null, null));
+        }
+    }
+
+    @PostMapping("/login-totp/verify")
+    public ResponseEntity<LoginAuthResponse> verifyLoginTotp(
+            @Valid @RequestBody LoginOtpRequest request,
+            HttpServletRequest httpRequest) {
+        try {
+            LoginOtpService.AuthenticatorResult verified =
+                    loginOtpService.verifyAuthenticatorCode(request.otp(), httpRequest);
+            LoginOtpService.LoginResult result = loginOtpService.continueOrChallenge(
+                    verified.authentication(), verified.user(), httpRequest);
+            if (result.mfaRequired()) {
+                return ResponseEntity.ok(new LoginAuthResponse(false, true, "email", null,
+                        "Authenticator accepted. A verification code was sent to your email",
+                        result.maskedEmail(), result.expiresInSeconds()));
+            }
+            return ResponseEntity.ok(new LoginAuthResponse(true, false, null,
+                    toView(verified.authentication()), "Login successful", null, null));
+        } catch (LoginOtpService.LoginOtpException ex) {
+            return ResponseEntity.status(ex.status())
+                    .body(new LoginAuthResponse(false, true, "authenticator", null,
+                            ex.getMessage(), null, null));
         }
     }
 
@@ -129,11 +157,11 @@ public AuthController(AuthenticationManager authenticationManager,
     public ResponseEntity<LoginAuthResponse> resendLoginOtp(HttpServletRequest httpRequest) {
         try {
             LoginOtpService.LoginResult result = loginOtpService.resend(httpRequest);
-            return ResponseEntity.ok(new LoginAuthResponse(false, true, null,
+            return ResponseEntity.ok(new LoginAuthResponse(false, true, "email", null,
                     "A new verification code was sent", result.maskedEmail(), result.expiresInSeconds()));
         } catch (LoginOtpService.LoginOtpException ex) {
             return ResponseEntity.status(ex.status())
-                    .body(new LoginAuthResponse(false, true, null, ex.getMessage(), null, null));
+                    .body(new LoginAuthResponse(false, true, "email", null, ex.getMessage(), null, null));
         }
     }
 

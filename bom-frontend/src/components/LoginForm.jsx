@@ -69,7 +69,7 @@ function fullAppUrl(path) {
 }
 
 export default function LoginForm() {
-  const { login, verifyLoginOtp, resendLoginOtp } = useAuth()
+  const { login, verifyLoginTotp, verifyLoginOtp, resendLoginOtp } = useAuth()
   const { language, setLanguage, t, tx } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
@@ -78,7 +78,7 @@ export default function LoginForm() {
   const [timeZone, setTimeZone] = useState(() => getCurrentTimeZone())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState({ key: '', message: '' })
-  const [otpRequired, setOtpRequired] = useState(false)
+  const [mfaMethod, setMfaMethod] = useState('')
   const [otp, setOtp] = useState('')
   const [maskedEmail, setMaskedEmail] = useState('')
 
@@ -102,7 +102,7 @@ export default function LoginForm() {
     try {
       const result = await login({ username, password })
       if (result?.mfaRequired) {
-        setOtpRequired(true)
+        setMfaMethod(result.mfaMethod || 'email')
         setMaskedEmail(result.maskedEmail || '')
         setPassword('')
         return
@@ -110,6 +110,27 @@ export default function LoginForm() {
       finishLogin()
     } catch (err) {
       setError({ key: '', message: err?.message || 'Login failed' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleTotpSubmit = async (event) => {
+    event.preventDefault()
+    if (loading) return
+    setError({ key: '', message: '' })
+    setLoading(true)
+    try {
+      const result = await verifyLoginTotp(otp)
+      if (result?.mfaRequired) {
+        setMfaMethod(result.mfaMethod || 'email')
+        setMaskedEmail(result.maskedEmail || '')
+        setOtp('')
+        return
+      }
+      finishLogin()
+    } catch (err) {
+      setError({ key: '', message: err?.message || 'Authenticator verification failed' })
     } finally {
       setLoading(false)
     }
@@ -221,7 +242,7 @@ export default function LoginForm() {
         {sessionExpired ? <Alert severity="warning" sx={{ mb: 2 }}>{t('common.sessionExpired')}</Alert> : null}
         {errorText ? <Alert severity="error" sx={{ mb: 2 }}>{errorText}</Alert> : null}
 
-        {!otpRequired ? <Button
+        {!mfaMethod ? <Button
           fullWidth
           variant="outlined"
           onClick={handleGoogleLogin}
@@ -236,17 +257,40 @@ export default function LoginForm() {
           {t('common.continueWithGoogle')}
         </Button> : null}
 
-        {!otpRequired ? <Divider sx={{ mb: 2 }}>
+        {!mfaMethod ? <Divider sx={{ mb: 2 }}>
           <Typography variant="caption" color="text.secondary">{t('common.orSignInUsername')}</Typography>
         </Divider> : null}
 
-        {!otpRequired ? <Box component="form" onSubmit={handleSubmit} sx={{ display: 'grid', gap: 2 }}>
+        {!mfaMethod ? <Box component="form" onSubmit={handleSubmit} sx={{ display: 'grid', gap: 2 }}>
           <TextField label={t('common.username')} value={username} onChange={(e) => setUsername(e.target.value)} required disabled={loading} />
           <TextField label={t('common.password')} type="password" value={password} onChange={(e) => setPassword(e.target.value)} required disabled={loading} />
           <Button type="submit" variant="contained" disabled={loading} sx={{ py: 1.1, textTransform: 'none' }}>
             {loading ? t('common.signingIn') : t('common.login')}
           </Button>
-        </Box> : (
+        </Box> : mfaMethod === 'authenticator' ? (
+          <Box component="form" onSubmit={handleTotpSubmit} sx={{ display: 'grid', gap: 2 }}>
+            <Alert severity="info">
+              Two-factor authentication is enabled. Enter the current 6-digit code from your authenticator app.
+            </Alert>
+            <TextField
+              label="Authenticator code"
+              value={otp}
+              onChange={(event) => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
+              inputProps={{ inputMode: 'numeric', autoComplete: 'one-time-code', pattern: '[0-9]{6}' }}
+              required
+              autoFocus
+              disabled={loading}
+            />
+            <Button type="submit" variant="contained" disabled={loading || otp.length !== 6}>
+              {loading ? 'Verifying…' : 'Verify authenticator'}
+            </Button>
+            <Button type="button" color="inherit" onClick={() => {
+              setMfaMethod('')
+              setOtp('')
+              setError({ key: '', message: '' })
+            }} disabled={loading}>Back to sign in</Button>
+          </Box>
+        ) : (
           <Box component="form" onSubmit={handleOtpSubmit} sx={{ display: 'grid', gap: 2 }}>
             <Alert severity="info">
               This is a new or unrecognized device. Enter the 6-digit code sent to {maskedEmail || 'your email'}.
@@ -266,7 +310,7 @@ export default function LoginForm() {
             </Button>
             <Button type="button" onClick={handleResendOtp} disabled={loading}>Resend code</Button>
             <Button type="button" color="inherit" onClick={() => {
-              setOtpRequired(false)
+              setMfaMethod('')
               setOtp('')
               setError({ key: '', message: '' })
             }} disabled={loading}>Back to sign in</Button>
