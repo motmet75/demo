@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -21,6 +22,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.web.context.WebApplicationContext;
 
 import com.ams.bomcore.domain.user.Authority;
@@ -64,6 +66,9 @@ class AuthLoginDiagnosticTest {
 
     @Autowired
     private WebApplicationContext webApplicationContext;
+
+    @MockitoBean
+    private JavaMailSender mailSender;
 
     private MockMvc mockMvc;
 
@@ -199,7 +204,7 @@ class AuthLoginDiagnosticTest {
     }
 
     // -------------------------------------------------------------------------
-    // 8. Full HTTP POST /auth/login returns 200 with success=true
+    // 8. Full HTTP POST /auth/login accepts credentials and starts new-device MFA
     // -------------------------------------------------------------------------
     @Test
     void step8_httpLoginEndpointReturns200() throws Exception {
@@ -209,7 +214,8 @@ class AuthLoginDiagnosticTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.authenticated").value(true))
+                .andExpect(jsonPath("$.authenticated").value(false))
+                .andExpect(jsonPath("$.mfaRequired").value(true))
                 .andReturn();
 
         System.out.println("[DIAG] Response body: " + result.getResponse().getContentAsString());
