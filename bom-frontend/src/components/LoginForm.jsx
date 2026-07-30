@@ -69,7 +69,7 @@ function fullAppUrl(path) {
 }
 
 export default function LoginForm() {
-  const { login } = useAuth()
+  const { login, verifyLoginOtp, resendLoginOtp } = useAuth()
   const { language, setLanguage, t, tx } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
@@ -78,6 +78,9 @@ export default function LoginForm() {
   const [timeZone, setTimeZone] = useState(() => getCurrentTimeZone())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState({ key: '', message: '' })
+  const [otpRequired, setOtpRequired] = useState(false)
+  const [otp, setOtp] = useState('')
+  const [maskedEmail, setMaskedEmail] = useState('')
 
   const sessionExpired = new URLSearchParams(location.search).get('expired') === '1'
   const from = normalizeAppPath(locationPath(location.state?.from)) || '/materials'
@@ -97,16 +100,56 @@ export default function LoginForm() {
     setError({ key: '', message: '' })
     setLoading(true)
     try {
-      await login({ username, password })
-      const savedReturnTo = sessionExpired ? consumeSessionExpiredReturnTo() : ''
-      const destination = normalizeAppPath(savedReturnTo) || from
-      if (sessionExpired) {
-        window.location.assign(fullAppUrl(destination))
+      const result = await login({ username, password })
+      if (result?.mfaRequired) {
+        setOtpRequired(true)
+        setMaskedEmail(result.maskedEmail || '')
+        setPassword('')
         return
       }
-      navigate(destination, { replace: true })
+      finishLogin()
     } catch (err) {
       setError({ key: '', message: err?.message || 'Login failed' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const finishLogin = () => {
+    const savedReturnTo = sessionExpired ? consumeSessionExpiredReturnTo() : ''
+    const destination = normalizeAppPath(savedReturnTo) || from
+    if (sessionExpired) {
+      window.location.assign(fullAppUrl(destination))
+      return
+    }
+    navigate(destination, { replace: true })
+  }
+
+  const handleOtpSubmit = async (event) => {
+    event.preventDefault()
+    if (loading) return
+    setError({ key: '', message: '' })
+    setLoading(true)
+    try {
+      await verifyLoginOtp(otp)
+      finishLogin()
+    } catch (err) {
+      setError({ key: '', message: err?.message || 'OTP verification failed' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleResendOtp = async () => {
+    if (loading) return
+    setError({ key: '', message: '' })
+    setLoading(true)
+    try {
+      const result = await resendLoginOtp()
+      setMaskedEmail(result?.maskedEmail || maskedEmail)
+      setOtp('')
+    } catch (err) {
+      setError({ key: '', message: err?.message || 'Could not resend the verification code' })
     } finally {
       setLoading(false)
     }
@@ -178,7 +221,7 @@ export default function LoginForm() {
         {sessionExpired ? <Alert severity="warning" sx={{ mb: 2 }}>{t('common.sessionExpired')}</Alert> : null}
         {errorText ? <Alert severity="error" sx={{ mb: 2 }}>{errorText}</Alert> : null}
 
-        <Button
+        {!otpRequired ? <Button
           fullWidth
           variant="outlined"
           onClick={handleGoogleLogin}
@@ -191,19 +234,44 @@ export default function LoginForm() {
             <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.962L3.964 7.294C4.672 5.163 6.656 3.58 9 3.58z"/>
           </svg>
           {t('common.continueWithGoogle')}
-        </Button>
+        </Button> : null}
 
-        <Divider sx={{ mb: 2 }}>
+        {!otpRequired ? <Divider sx={{ mb: 2 }}>
           <Typography variant="caption" color="text.secondary">{t('common.orSignInUsername')}</Typography>
-        </Divider>
+        </Divider> : null}
 
-        <Box component="form" onSubmit={handleSubmit} sx={{ display: 'grid', gap: 2 }}>
+        {!otpRequired ? <Box component="form" onSubmit={handleSubmit} sx={{ display: 'grid', gap: 2 }}>
           <TextField label={t('common.username')} value={username} onChange={(e) => setUsername(e.target.value)} required disabled={loading} />
           <TextField label={t('common.password')} type="password" value={password} onChange={(e) => setPassword(e.target.value)} required disabled={loading} />
           <Button type="submit" variant="contained" disabled={loading} sx={{ py: 1.1, textTransform: 'none' }}>
             {loading ? t('common.signingIn') : t('common.login')}
           </Button>
-        </Box>
+        </Box> : (
+          <Box component="form" onSubmit={handleOtpSubmit} sx={{ display: 'grid', gap: 2 }}>
+            <Alert severity="info">
+              This is a new or unrecognized device. Enter the 6-digit code sent to {maskedEmail || 'your email'}.
+              This device will be trusted for 30 days.
+            </Alert>
+            <TextField
+              label="Verification code"
+              value={otp}
+              onChange={(event) => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
+              inputProps={{ inputMode: 'numeric', autoComplete: 'one-time-code', pattern: '[0-9]{6}' }}
+              required
+              autoFocus
+              disabled={loading}
+            />
+            <Button type="submit" variant="contained" disabled={loading || otp.length !== 6}>
+              {loading ? 'Verifying…' : 'Verify and sign in'}
+            </Button>
+            <Button type="button" onClick={handleResendOtp} disabled={loading}>Resend code</Button>
+            <Button type="button" color="inherit" onClick={() => {
+              setOtpRequired(false)
+              setOtp('')
+              setError({ key: '', message: '' })
+            }} disabled={loading}>Back to sign in</Button>
+          </Box>
+        )}
       </Paper>
     </Box>
   )

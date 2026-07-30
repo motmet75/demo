@@ -12,7 +12,6 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -59,15 +58,18 @@ public class AuthController {
     private final PasswordEncoder passwordEncoder;
     private final UserRepository userRepository;
     private final PasswordChangeOtpService passwordChangeOtpService;
+    private final LoginOtpService loginOtpService;
 
 public AuthController(AuthenticationManager authenticationManager,
                           PasswordEncoder passwordEncoder,
                           UserRepository userRepository,
-                          PasswordChangeOtpService passwordChangeOtpService) {
+                          PasswordChangeOtpService passwordChangeOtpService,
+                          LoginOtpService loginOtpService) {
         this.authenticationManager = authenticationManager;
         this.passwordEncoder = passwordEncoder;
         this.userRepository = userRepository;
         this.passwordChangeOtpService = passwordChangeOtpService;
+        this.loginOtpService = loginOtpService;
     }
 
     // -------------------------------------------------------------------------
@@ -75,25 +77,63 @@ public AuthController(AuthenticationManager authenticationManager,
     // -------------------------------------------------------------------------
 
     @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(@Valid @RequestBody AuthLoginRequest request,
+    public ResponseEntity<LoginAuthResponse> login(@Valid @RequestBody AuthLoginRequest request,
                                               HttpServletRequest httpRequest) {
         try {
             Authentication authentication = authenticationManager.authenticate(
                     UsernamePasswordAuthenticationToken.unauthenticated(request.username(), request.password()));
-            SecurityContextHolder.getContext().setAuthentication(authentication);
-            httpRequest.getSession(true).setAttribute(
-                    HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY,
-                    SecurityContextHolder.getContext());
-            return ResponseEntity.ok(new AuthResponse(true, toView(authentication), "Login successful"));
+            User user = (User) authentication.getPrincipal();
+            LoginOtpService.LoginResult result =
+                    loginOtpService.continueOrChallenge(authentication, user, httpRequest);
+            if (result.mfaRequired()) {
+                return ResponseEntity.ok(new LoginAuthResponse(false, true, null,
+                        "A verification code was sent to your email",
+                        result.maskedEmail(), result.expiresInSeconds()));
+            }
+            return ResponseEntity.ok(new LoginAuthResponse(true, false, toView(authentication),
+                    "Login successful", null, null));
+        } catch (LoginOtpService.LoginOtpException ex) {
+            return ResponseEntity.status(ex.status())
+                    .body(new LoginAuthResponse(false, false, null, ex.getMessage(), null, null));
         } catch (DisabledException ex) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(new AuthResponse(false, null, "Account is disabled"));
+                    .body(new LoginAuthResponse(false, false, null, "Account is disabled", null, null));
         } catch (LockedException ex) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(new AuthResponse(false, null, "Account is locked"));
+                    .body(new LoginAuthResponse(false, false, null, "Account is locked", null, null));
         } catch (BadCredentialsException ex) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(new AuthResponse(false, null, "Invalid username or password"));
+                    .body(new LoginAuthResponse(false, false, null, "Invalid username or password", null, null));
+        }
+    }
+
+    public record LoginOtpRequest(@NotBlank String otp) {}
+
+    @PostMapping("/login-otp/verify")
+    public ResponseEntity<LoginAuthResponse> verifyLoginOtp(
+            @Valid @RequestBody LoginOtpRequest request,
+            HttpServletRequest httpRequest,
+            HttpServletResponse httpResponse) {
+        try {
+            Authentication authentication =
+                    loginOtpService.verify(request.otp(), httpRequest, httpResponse);
+            return ResponseEntity.ok(new LoginAuthResponse(true, false, toView(authentication),
+                    "Login successful", null, null));
+        } catch (LoginOtpService.LoginOtpException ex) {
+            return ResponseEntity.status(ex.status())
+                    .body(new LoginAuthResponse(false, true, null, ex.getMessage(), null, null));
+        }
+    }
+
+    @PostMapping("/login-otp/resend")
+    public ResponseEntity<LoginAuthResponse> resendLoginOtp(HttpServletRequest httpRequest) {
+        try {
+            LoginOtpService.LoginResult result = loginOtpService.resend(httpRequest);
+            return ResponseEntity.ok(new LoginAuthResponse(false, true, null,
+                    "A new verification code was sent", result.maskedEmail(), result.expiresInSeconds()));
+        } catch (LoginOtpService.LoginOtpException ex) {
+            return ResponseEntity.status(ex.status())
+                    .body(new LoginAuthResponse(false, true, null, ex.getMessage(), null, null));
         }
     }
 

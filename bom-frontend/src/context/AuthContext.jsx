@@ -83,6 +83,13 @@ export function AuthProvider({ children }) {
       body: JSON.stringify({ username, password })
     })
 
+    if (res.ok && data?.mfaRequired) {
+      return {
+        mfaRequired: true,
+        maskedEmail: data.maskedEmail,
+        expiresInSeconds: data.expiresInSeconds,
+      }
+    }
     if (!res.ok || !data?.authenticated) {
       throw new Error(data?.message || 'Login failed')
     }
@@ -92,8 +99,35 @@ export function AuthProvider({ children }) {
     setLiveUsername(u?.username ?? null)
     resetSessionExpiredNotice()
     restoreFromUser(u)
+    return { mfaRequired: false, user: u }
+  }, [restoreFromUser])
+
+  const verifyLoginOtp = useCallback(async (otp) => {
+    const { res, data } = await apiFetchJson('/auth/login-otp/verify', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ otp })
+    })
+    if (!res.ok || !data?.authenticated) {
+      throw new Error(data?.message || 'OTP verification failed')
+    }
+    const u = data.user || null
+    setUser(u)
+    setLiveUsername(u?.username ?? null)
+    resetSessionExpiredNotice()
+    restoreFromUser(u)
     return u
   }, [restoreFromUser])
+
+  const resendLoginOtp = useCallback(async () => {
+    const { res, data } = await apiFetchJson('/auth/login-otp/resend', {
+      method: 'POST',
+      credentials: 'include'
+    })
+    if (!res.ok) throw new Error(data?.message || 'Could not resend the verification code')
+    return data
+  }, [])
 
   const logout = useCallback(async () => {
     await apiFetchJson('/auth/logout', {
@@ -110,10 +144,12 @@ export function AuthProvider({ children }) {
     user,
     loading,
     login,
+    verifyLoginOtp,
+    resendLoginOtp,
     logout,
     refreshMe,
     isAdmin: !!user?.authorities?.includes('ROLE_ADMIN')
-  }), [user, loading, login, logout, refreshMe])
+  }), [user, loading, login, verifyLoginOtp, resendLoginOtp, logout, refreshMe])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
