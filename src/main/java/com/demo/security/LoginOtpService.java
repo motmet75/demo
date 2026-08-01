@@ -47,16 +47,23 @@ public class LoginOtpService {
     private final ObjectProvider<JavaMailSender> mailSenderProvider;
     private final SecureRandom random = new SecureRandom();
     private final String from;
+    private final boolean emailOtpRequired;
 
     public LoginOtpService(TrustedLoginDeviceRepository devices,
             ObjectProvider<JavaMailSender> mailSenderProvider, Environment environment) {
         this.devices = devices;
         this.mailSenderProvider = mailSenderProvider;
         this.from = environment.getProperty("app.mail.from", "services@anhmedia.vn").trim();
+        this.emailOtpRequired = environment.getProperty(
+                "app.login.email-otp-required", Boolean.class, Boolean.FALSE);
     }
 
     public LoginResult continueOrChallenge(Authentication authentication, User user,
             HttpServletRequest request) {
+        if (!emailOtpRequired) {
+            persist(authentication, request);
+            return new LoginResult(false, null, 0);
+        }
         String deviceId = deviceId(request);
         if (!deviceId.isBlank()) {
             String fingerprint = fingerprint(user.getId(), deviceId);

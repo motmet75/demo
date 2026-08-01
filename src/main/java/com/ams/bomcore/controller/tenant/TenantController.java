@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -19,7 +20,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.ams.bomcore.domain.company.Company;
 import com.ams.bomcore.domain.tenant.Tenant;
+import com.ams.bomcore.repository.CompanyRepository;
 import com.ams.bomcore.repository.TenantRepository;
 
 @RestController
@@ -30,16 +33,18 @@ public class TenantController {
     private static final Logger log = LoggerFactory.getLogger(TenantController.class);
 
     private final TenantRepository tenantRepository;
+    private final CompanyRepository companyRepository;
 
-    public TenantController(TenantRepository tenantRepository) {
+    public TenantController(TenantRepository tenantRepository, CompanyRepository companyRepository) {
         this.tenantRepository = tenantRepository;
+        this.companyRepository = companyRepository;
     }
 
     @GetMapping
     public ResponseEntity<?> list() {
         try {
             List<TenantDto> result = tenantRepository.findAll().stream()
-                    .map(t -> new TenantDto(t.getId(), t.getTenantCode(), t.getTenantName(), t.getIsActive(), t.getMaxCompanies(), t.getCreatedAt()))
+                    .map(t -> toDto(t, null))
                     .collect(Collectors.toList());
             return ResponseEntity.ok(result);
         } catch (Exception e) {
@@ -51,6 +56,7 @@ public class TenantController {
 
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
+    @Transactional
     public ResponseEntity<?> create(@RequestBody CreateTenantDto dto) {
         var existing = tenantRepository.findByTenantCode(dto.tenantCode);
         if (existing.isPresent()) {
@@ -62,7 +68,14 @@ public class TenantController {
         t.setIsActive(dto.isActive == null ? Boolean.TRUE : dto.isActive);
         t.setMaxCompanies(dto.maxCompanies == null || dto.maxCompanies < 1 ? 1 : dto.maxCompanies);
         tenantRepository.save(t);
-        return ResponseEntity.status(HttpStatus.CREATED).body(new TenantDto(t.getId(), t.getTenantCode(), t.getTenantName(), t.getIsActive(), t.getMaxCompanies(), t.getCreatedAt()));
+
+        Company company = new Company();
+        company.setTenant(t);
+        company.setCompanyCode(hasText(dto.companyCode) ? dto.companyCode.trim() : dto.tenantCode.trim());
+        company.setCompanyName(hasText(dto.companyName) ? dto.companyName.trim() : dto.tenantName.trim());
+        companyRepository.save(company);
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(toDto(t, company.getId()));
     }
 
     @PutMapping("/{id}")
@@ -90,7 +103,7 @@ public class TenantController {
 			t.setMaxCompanies(dto.maxCompanies);
 		}
         tenantRepository.save(t);
-        return ResponseEntity.ok(new TenantDto(t.getId(), t.getTenantCode(), t.getTenantName(), t.getIsActive(), t.getMaxCompanies(), t.getCreatedAt()));
+        return ResponseEntity.ok(toDto(t, null));
     }
 
     @PatchMapping("/{id}/activate")
@@ -103,18 +116,28 @@ public class TenantController {
         var t = opt.get();
         t.setIsActive(dto.isActive == null ? Boolean.TRUE : dto.isActive);
         tenantRepository.save(t);
-        return ResponseEntity.ok(new TenantDto(t.getId(), t.getTenantCode(), t.getTenantName(), t.getIsActive(), t.getMaxCompanies(), t.getCreatedAt()));
+        return ResponseEntity.ok(toDto(t, null));
+    }
+
+    private TenantDto toDto(Tenant tenant, UUID companyId) {
+        return new TenantDto(tenant.getId(), companyId, tenant.getTenantCode(), tenant.getTenantName(),
+                tenant.getIsActive(), tenant.getMaxCompanies(), tenant.getCreatedAt());
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     public static class TenantDto {
         public final UUID id;
+        public final UUID companyId;
         public final String tenantCode;
         public final String tenantName;
         public final Boolean isActive;
         public final Integer maxCompanies;
         public final java.time.Instant createdAt;
-        public TenantDto(UUID id, String tenantCode, String tenantName, Boolean isActive, Integer maxCompanies, java.time.Instant createdAt) {
-            this.id = id; this.tenantCode = tenantCode; this.tenantName = tenantName;
+        public TenantDto(UUID id, UUID companyId, String tenantCode, String tenantName, Boolean isActive, Integer maxCompanies, java.time.Instant createdAt) {
+            this.id = id; this.companyId = companyId; this.tenantCode = tenantCode; this.tenantName = tenantName;
             this.isActive = isActive; this.maxCompanies = maxCompanies; this.createdAt = createdAt;
         }
     }
@@ -124,6 +147,8 @@ public class TenantController {
         public String tenantName;
         public Boolean isActive;
         public Integer maxCompanies;
+        public String companyCode;
+        public String companyName;
     }
 
     public static class ActivateDto {
