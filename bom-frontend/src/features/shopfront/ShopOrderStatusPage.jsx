@@ -7,13 +7,17 @@ import CircularProgress from '@mui/material/CircularProgress'
 import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
 import Divider from '@mui/material/Divider'
+import Dialog from '@mui/material/Dialog'
+import DialogTitle from '@mui/material/DialogTitle'
+import DialogContent from '@mui/material/DialogContent'
 import Collapse from '@mui/material/Collapse'
 import PrintIcon from '@mui/icons-material/Print'
 import EditIcon from '@mui/icons-material/Edit'
 import AddShoppingCartIcon from '@mui/icons-material/AddShoppingCart'
+import QrCode2Icon from '@mui/icons-material/QrCode2'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
-import { fetchPublicOrder, fetchTokenSession } from '../../api/shopApi'
+import { fetchPublicOrder, fetchTokenSession, fetchCounterOrderQr } from '../../api/shopApi'
 import { printOrderReceipt } from '../../utils/printOrderReceipt'
 import { useI18n } from '../../i18n/I18nContext'
 import { localizedModelName } from '../../i18n/menuLocalization'
@@ -49,6 +53,46 @@ const STATUS_CHIP = {
   PICKED_UP: { color: 'success',  label: 'Picked up' },
   COMPLETED: { color: 'success',  label: 'Done' },
   CANCELLED: { color: 'error',    label: 'Cancelled' },
+}
+
+function CounterQrButton({ orders, label = 'Show order QR' }) {
+  const [open, setOpen] = useState(false)
+  const [slides, setSlides] = useState([])
+  const [loading, setLoading] = useState(false)
+
+  const show = async () => {
+    setOpen(true); setLoading(true)
+    const loaded = await Promise.all((orders || []).map(async order => {
+      try {
+        const { data } = await fetchCounterOrderQr(order.orderCode)
+        return { order, qrBase64: data?.qrBase64 || '' }
+      } catch { return { order, qrBase64: '' } }
+    }))
+    setSlides(loaded); setLoading(false)
+  }
+
+  return <>
+    <Button variant="contained" size="small" startIcon={<QrCode2Icon />} onClick={show}
+      sx={{ textTransform: 'none', fontWeight: 800 }}>{label}</Button>
+    <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="xs">
+      <DialogTitle>Order QR {slides.length > 1 ? `· ${slides.length} orders` : ''}</DialogTitle>
+      <DialogContent sx={{ px: 0 }}>
+        {loading ? <Box sx={{ py: 8, textAlign: 'center' }}><CircularProgress /></Box> : (
+          <Box sx={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory', gap: 1, px: 2, pb: 2 }}>
+            {slides.map(({ order, qrBase64 }, index) => (
+              <Box key={order.orderCode} sx={{ minWidth: '100%', scrollSnapAlign: 'center', textAlign: 'center' }}>
+                <Typography variant="h3" fontWeight={900}>#{order.orderNumber ?? order.dailySeq ?? index + 1}</Typography>
+                {qrBase64 && <img src={`data:image/png;base64,${qrBase64}`} alt={`Order ${order.orderCode} QR`}
+                  style={{ width: 'min(78vw, 320px)', height: 'min(78vw, 320px)' }} />}
+                <Typography fontWeight={800}>Show this QR to the counter</Typography>
+                {slides.length > 1 && <Typography variant="body2" color="text.secondary">Swipe left/right for the next order · {index + 1}/{slides.length}</Typography>}
+              </Box>
+            ))}
+          </Box>
+        )}
+      </DialogContent>
+    </Dialog>
+  </>
 }
 
 function StepDot({ step, activeIdx, idx }) {
@@ -195,6 +239,7 @@ function SingleOrderView({ order, onEdit, itemName, fmtLocal }) {
             Edit Order
           </Button>
         )}
+        <CounterQrButton orders={[order]} />
         <Box sx={{ textAlign: 'center' }}>
           <Button size="small" startIcon={<PrintIcon />} onClick={() => printOrderReceipt(order)}
             sx={{ textTransform: 'none', color: 'text.disabled', fontSize: 12 }}>
@@ -345,6 +390,7 @@ function OrderCard({ order, highlighted, token, itemName, fmtLocal }) {
               Note: {order.notes}
             </Typography>
           )}
+          <Box sx={{ mt: 1 }}><CounterQrButton orders={[order]} /></Box>
         </Box>
 
         {isPending && (
@@ -478,6 +524,7 @@ function TokenSessionView({ token, highlightCode, itemName, fmtLocal }) {
             sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none', py: 1.25 }}>
             {hasPending ? 'Order More' : 'New Order'}
           </Button>
+          {hasOrders && <CounterQrButton orders={session.orders} label={session.orders.length > 1 ? `Show ${session.orders.length} order QRs` : 'Show order QR'} />}
         </Box>
       )}
 

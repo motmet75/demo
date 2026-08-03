@@ -28,6 +28,8 @@ public class ShopOrderResponseDto {
     private String customerPhone;
     private String deliveryProvider;
     private String deliveryAddress;
+    private String customerTableTag;
+    private Instant requestedFulfillmentAt;
     private BigDecimal deliveryFee;
     private BigDecimal totalRawCost;
     private BigDecimal totalAmount;
@@ -246,6 +248,8 @@ public class ShopOrderResponseDto {
         dto.customerPhone = order.getCustomerPhone();
         dto.deliveryProvider = order.getDeliveryProvider();
         dto.deliveryAddress = order.getDeliveryAddress();
+        dto.customerTableTag = order.getCustomerTableTag();
+        dto.requestedFulfillmentAt = order.getRequestedFulfillmentAt();
         dto.deliveryFee = order.getDeliveryFee();
         dto.totalRawCost = order.getTotalRawCost();
         dto.totalAmount = order.getTotalAmount();
@@ -312,6 +316,8 @@ public class ShopOrderResponseDto {
     public String getCustomerPhone() { return customerPhone; }
     public String getDeliveryProvider() { return deliveryProvider; }
     public String getDeliveryAddress() { return deliveryAddress; }
+    public String getCustomerTableTag() { return customerTableTag; }
+    public Instant getRequestedFulfillmentAt() { return requestedFulfillmentAt; }
     public BigDecimal getDeliveryFee() { return deliveryFee; }
     public BigDecimal getTotalRawCost() { return totalRawCost; }
     public BigDecimal getTotalAmount() { return totalAmount; }
@@ -343,4 +349,3 @@ public class ShopOrderResponseDto {
     public List<ItemDto> getItems() { return items; }
     public List<BillDto> getBills() { return bills; }
 }
-

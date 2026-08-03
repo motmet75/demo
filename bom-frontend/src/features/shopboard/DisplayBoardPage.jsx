@@ -235,6 +235,13 @@ const COL_QUEUED = {
   childBorder: '#fcd34d', childColor: '#a8a29e',
   glow: false, glowColor: '#fbbf24', readyBadge: false,
 }
+const COL_PAYMENT = {
+  cardBg: '#fff7ed', headerBg: '#ffedd5', border: '#f97316',
+  numColor: '#c2410c', labelColor: '#9a3412', qtyColor: '#ea580c',
+  itemColor: '#1c1917', optBg: '#fed7aa', optColor: '#9a3412',
+  childBorder: '#fdba74', childColor: '#a8a29e',
+  glow: true, glowColor: '#f97316', readyBadge: false,
+}
 const COL_MAKING = {
   cardBg: '#eff6ff', headerBg: '#dbeafe', border: '#3b82f6',
   numColor: '#1d4ed8', labelColor: '#1e40af', qtyColor: '#2563eb',
@@ -399,6 +406,9 @@ export default function DisplayBoardPage() {
     </Box>
   )
 
+  const paymentQueue = confirmed.filter(order => order.paymentStatus !== 'PAID')
+  const productionQueue = confirmed.filter(order => order.paymentStatus === 'PAID')
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: '#f1f5f9', overflow: 'hidden' }}>
 
@@ -440,7 +450,7 @@ export default function DisplayBoardPage() {
         </Box>
       </Box>
 
-      {/* Three-column layout */}
+      {/* Payment and production queues */}
       <Box sx={{
         flex: 1,
         display: 'flex',
@@ -451,12 +461,25 @@ export default function DisplayBoardPage() {
         bgcolor: '#cbd5e1',
       }}>
 
-        {/* 1. Queued (confirmed, waiting to start) */}
+        <Column
+          title="Pay at cashier"
+          emoji="💳"
+          subtitle="Show your order QR and pay"
+          orders={paymentQueue}
+          colStyle={COL_PAYMENT}
+          emptyEmoji="✓"
+          emptyText="No payments waiting"
+          headerBg="#ffedd5"
+          headerColor="#9a3412"
+          borderColor="#f97316"
+        />
+
+        {/* Paid and waiting to start */}
         <Column
           title="Queued"
           emoji="🕐"
           subtitle="Waiting to start"
-          orders={confirmed}
+          orders={productionQueue}
           colStyle={COL_QUEUED}
           emptyEmoji="✓"
           emptyText="No orders queued"

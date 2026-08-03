@@ -32,6 +32,10 @@ export function fetchPublicOrder(orderCode) {
   return apiFetchJsonNoContext(`/shop/public/orders/${encodeURIComponent(orderCode)}`)
 }
 
+export function fetchCounterOrderQr(orderCode) {
+  return apiFetchJsonNoContext(`/shop/public/orders/${encodeURIComponent(orderCode)}/counter-qr`)
+}
+
 export function createOrder(tenantId, companyId, body) {
   return apiFetchJsonNoContext('/shop/public/orders' + qs({ tenantId, companyId }), {
     method: 'POST',
@@ -181,6 +185,14 @@ export function fetchShopOrder(orderId) {
 
 export function confirmShopOrder(orderId) {
   return apiFetchJson(`/shop/staff/orders/${orderId}/confirm`, { method: 'PATCH' })
+}
+
+export function confirmScannedOrder(code) {
+  return apiFetchJson('/shop/staff/orders/scan-confirm', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code }),
+  })
 }
 
 export function prepareShopOrder(orderId) {

@@ -16,7 +16,7 @@ import QrCode2Icon from '@mui/icons-material/QrCode2'
 import { useI18n } from '../../i18n/I18nContext'
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode'
 
-export default function VoucherQrScanDialog({ open, onClose, onScan, title = 'Scan Voucher QR', manualLabel = 'Voucher code or QR payload', scannerLabel = 'Camera or image scanner' }) {
+export default function VoucherQrScanDialog({ open, onClose, onScan, continuous = false, title = 'Scan Voucher QR', manualLabel = 'Voucher code or QR payload', scannerLabel = 'Camera or image scanner' }) {
   const { t } = useI18n()
   const shownTitle = title === 'Scan Voucher QR' ? t('shopOrder.scanner.voucherTitle') : title
   const shownManualLabel = manualLabel === 'Voucher code or QR payload' ? t('shopOrder.scanner.voucherInput') : manualLabel
@@ -54,9 +54,10 @@ export default function VoucherQrScanDialog({ open, onClose, onScan, title = 'Sc
     const value = String(rawValue || '').trim()
     if (!value || detectedRef.current) return
     detectedRef.current = true
-    void stopCamera()
+    if (!continuous) void stopCamera()
     onScan?.(value)
-  }, [onScan, stopCamera])
+    if (continuous) window.setTimeout(() => { detectedRef.current = false }, 1200)
+  }, [continuous, onScan, stopCamera])
 
   const createScanner = useCallback(() => new Html5Qrcode(readerIdRef.current, {
     formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],

@@ -539,7 +539,7 @@ export default function ShopMenuPage() {
   const [voucherSnack, setVoucherSnack]     = useState({ open: false, message: '', severity: 'success' })
   const [form, setForm] = useState({
     fulfillmentType: 'PICKUP', customerName: rawCustomerName, customerPhone: '',
-    deliveryAddress: '', paymentMethod: 'CASH',
+    deliveryAddress: '', customerTableTag: '', requestedFulfillmentAt: '', paymentMethod: 'CASH',
   })
 
   // ── New UI state ───────────────────────────────────────────────────────
@@ -1026,6 +1026,19 @@ export default function ShopMenuPage() {
   }
   const handlePlaceOrder = async () => {
     if (!itemCount) return
+    if (!editingOrderCode) {
+      const name = form.customerName.trim()
+      const phone = form.customerPhone.trim()
+      if (form.fulfillmentType === 'DINE_IN' && !ctx?.tableId && !form.customerTableTag.trim()) {
+        setError('Vui lòng nhập thẻ bàn hoặc số bàn'); return
+      }
+      if (form.fulfillmentType === 'PICKUP' && (!name || !phone)) {
+        setError('Vui lòng nhập tên và số điện thoại nhận món'); return
+      }
+      if (form.fulfillmentType === 'DELIVERY' && (!name || !phone || !form.requestedFulfillmentAt || !form.deliveryAddress.trim())) {
+        setError('Vui lòng nhập tên, số điện thoại, thời gian nhận và địa chỉ giao hàng'); return
+      }
+    }
     setSubmitting(true); setError('')
     const items = buildItemRequests()
     try {
@@ -1047,6 +1060,9 @@ export default function ShopMenuPage() {
           fulfillmentType: form.fulfillmentType, tableId: ctx.tableId || null,
           customerName: form.customerName || null, customerPhone: form.customerPhone || null,
           deliveryAddress: form.fulfillmentType === 'DELIVERY' ? form.deliveryAddress : null,
+          customerTableTag: form.fulfillmentType === 'DINE_IN' ? form.customerTableTag || null : null,
+          requestedFulfillmentAt: form.fulfillmentType === 'DELIVERY' && form.requestedFulfillmentAt
+            ? new Date(form.requestedFulfillmentAt).toISOString() : null,
           deliveryFee: null, paymentMethod: form.paymentMethod, notes: notes || null,
           manualOrderNumber: seqParam ? Number(seqParam) : null, token: tokenParam || null, items,
         }
@@ -1993,13 +2009,24 @@ export default function ShopMenuPage() {
               </Box>
             </Box>
 
-            <TextField label={t('shop.customerName')} size="small" fullWidth value={form.customerName}
-              onChange={e => setForm(f => ({ ...f, customerName: e.target.value }))} />
-            <TextField label={t('shop.customerPhone')} size="small" fullWidth type="tel" value={form.customerPhone}
-              onChange={e => setForm(f => ({ ...f, customerPhone: e.target.value }))} />
+            {form.fulfillmentType === 'DINE_IN' && !ctx?.tableId && (
+              <TextField label="Thẻ bàn / số bàn" size="small" fullWidth required value={form.customerTableTag}
+                onChange={e => setForm(f => ({ ...f, customerTableTag: e.target.value }))} />
+            )}
+            {form.fulfillmentType !== 'DINE_IN' && <>
+              <TextField label={t('shop.customerName')} size="small" fullWidth required value={form.customerName}
+                onChange={e => setForm(f => ({ ...f, customerName: e.target.value }))} />
+              <TextField label={t('shop.customerPhone')} size="small" fullWidth required type="tel" value={form.customerPhone}
+                onChange={e => setForm(f => ({ ...f, customerPhone: e.target.value }))} />
+            </>}
             {form.fulfillmentType === 'DELIVERY' && (
-              <TextField label={t('shop.deliveryAddress')} size="small" fullWidth multiline rows={2}
-                value={form.deliveryAddress} onChange={e => setForm(f => ({ ...f, deliveryAddress: e.target.value }))} />
+              <>
+                <TextField label="Thời gian nhận" type="datetime-local" size="small" fullWidth required
+                  value={form.requestedFulfillmentAt} onChange={e => setForm(f => ({ ...f, requestedFulfillmentAt: e.target.value }))}
+                  InputLabelProps={{ shrink: true }} />
+                <TextField label={t('shop.deliveryAddress')} size="small" fullWidth required multiline rows={2}
+                  value={form.deliveryAddress} onChange={e => setForm(f => ({ ...f, deliveryAddress: e.target.value }))} />
+              </>
             )}
             <TextField label={t('shop.orderNote')} size="small" fullWidth multiline rows={2}
               placeholder={t('shop.specialRequest')}

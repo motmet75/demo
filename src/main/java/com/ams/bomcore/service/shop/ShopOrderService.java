@@ -186,6 +186,8 @@ public class ShopOrderService {
         order.setCustomerPhone(req.customerPhone());
         order.setDeliveryProvider(req.deliveryProvider());
         order.setDeliveryAddress(req.deliveryAddress());
+        order.setCustomerTableTag(req.customerTableTag());
+        order.setRequestedFulfillmentAt(req.requestedFulfillmentAt());
         order.setDeliveryFee(req.deliveryFee());
         order.setPaymentMethod(req.paymentMethod() != null ? req.paymentMethod() : ShopOrder.PAYMENT_CASH);
         order.setNotes(req.notes());
@@ -239,7 +241,8 @@ public class ShopOrderService {
         CreateOrderRequest sessionRequest = new CreateOrderRequest(
                 req.fulfillmentType(), req.tableId(), req.customerName(), req.customerPhone(),
                 req.deliveryProvider(), req.deliveryAddress(), req.deliveryFee(), req.paymentMethod(),
-                req.notes(), req.items(), req.manualOrderNumber(), token.getToken());
+                req.notes(), req.items(), req.manualOrderNumber(), token.getToken(),
+                req.customerTableTag(), req.requestedFulfillmentAt());
         return createOrder(sessionRequest, tenantId, companyId, orderZone);
     }
 
@@ -336,6 +339,9 @@ public class ShopOrderService {
     public ShopOrderResponseDto startPreparing(UUID orderId, UUID tenantId, UUID companyId) {
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         requireStatus(order, ShopOrder.STATUS_CONFIRMED);
+        if (!ShopOrder.PAY_STATUS_PAID.equals(order.getPaymentStatus())) {
+            throw new IllegalStateException("Order must be paid before preparation");
+        }
 
         shopMaterialAuditService.deductOrderMaterials(order, ShopMaterialAudit.SOURCE_PREPARE);
 
@@ -1898,7 +1904,9 @@ public class ShopOrderService {
             String notes,
             List<ItemRequest> items,
             Integer manualOrderNumber,
-            String token
+            String token,
+            String customerTableTag,
+            Instant requestedFulfillmentAt
     ) {}
 
     public record BulkImportOrder(
@@ -1943,7 +1951,7 @@ public class ShopOrderService {
                 CreateOrderRequest create = new CreateOrderRequest(
                         ShopOrder.FULFILLMENT_PICKUP, null, imported.customerName(), imported.customerPhone(),
                         source, null, BigDecimal.ZERO, ShopOrder.PAYMENT_CASH,
-                        imported.notes(), imported.items(), null, importToken);
+                        imported.notes(), imported.items(), null, importToken, null, null);
                 ShopOrderResponseDto dto = createOrder(create, tenantId, companyId);
                 ShopOrder order = shopOrderRepository.findById(dto.getId()).orElseThrow();
                 order.setStatus(ShopOrder.STATUS_CONFIRMED);
@@ -1969,6 +1977,21 @@ public class ShopOrderService {
             url += "?t=" + java.net.URLEncoder.encode(order.getSourceToken(), java.nio.charset.StandardCharsets.UTF_8);
         }
         return QrCodeUtil.generateBase64Png(url, 300);
+    }
+
+    public String generateCounterOrderQr(String orderCode) {
+        ShopOrder order = requireOrderByCode(orderCode);
+        String payload = "SHOP_ORDER:" + order.getOrderCode();
+        return QrCodeUtil.generateBase64Png(payload, 360);
+    }
+
+    @Transactional
+    public ShopOrderResponseDto confirmScannedOrder(String orderCode, UUID tenantId, UUID companyId) {
+        String clean = orderCode == null ? "" : orderCode.trim();
+        int marker = clean.lastIndexOf("/shop/order/");
+        if (marker >= 0) clean = clean.substring(marker + "/shop/order/".length()).split("[?&#]")[0];
+        if (clean.startsWith("SHOP_ORDER:")) clean = clean.substring("SHOP_ORDER:".length());
+        return confirmOrder(requireOrderByCode(clean).getId(), tenantId, companyId);
     }
 
     // ── Customer self-cancel (separate from staff cancel) ────────────

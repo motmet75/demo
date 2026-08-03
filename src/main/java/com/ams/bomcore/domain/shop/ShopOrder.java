@@ -69,6 +69,12 @@ public class ShopOrder {
     @Column(name = "delivery_address", columnDefinition = "TEXT")
     private String deliveryAddress;
 
+    @Column(name = "customer_table_tag", length = 100)
+    private String customerTableTag;
+
+    @Column(name = "requested_fulfillment_at")
+    private Instant requestedFulfillmentAt;
+
     @Column(name = "delivery_fee", columnDefinition = "numeric")
     private BigDecimal deliveryFee;
 
@@ -190,6 +196,10 @@ public class ShopOrder {
     public void setDeliveryProvider(String deliveryProvider) { this.deliveryProvider = deliveryProvider; }
     public String getDeliveryAddress() { return deliveryAddress; }
     public void setDeliveryAddress(String deliveryAddress) { this.deliveryAddress = deliveryAddress; }
+    public String getCustomerTableTag() { return customerTableTag; }
+    public void setCustomerTableTag(String customerTableTag) { this.customerTableTag = customerTableTag; }
+    public Instant getRequestedFulfillmentAt() { return requestedFulfillmentAt; }
+    public void setRequestedFulfillmentAt(Instant requestedFulfillmentAt) { this.requestedFulfillmentAt = requestedFulfillmentAt; }
     public BigDecimal getDeliveryFee() { return deliveryFee; }
     public void setDeliveryFee(BigDecimal deliveryFee) { this.deliveryFee = deliveryFee; }
     public BigDecimal getTotalRawCost() { return totalRawCost; }
@@ -247,5 +257,4 @@ public class ShopOrder {
     public Instant getMaterialDeductedAt() { return materialDeductedAt; }
     public void setMaterialDeductedAt(Instant materialDeductedAt) { this.materialDeductedAt = materialDeductedAt; }
 }
-
 

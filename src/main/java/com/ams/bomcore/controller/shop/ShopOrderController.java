@@ -171,6 +171,11 @@ public class ShopOrderController {
         return ResponseEntity.ok(shopOrderService.getOrderByCode(orderCode));
     }
 
+    @GetMapping("/shop/public/orders/{orderCode}/counter-qr")
+    public ResponseEntity<?> counterOrderQr(@PathVariable String orderCode) {
+        return ResponseEntity.ok(Map.of("qrBase64", shopOrderService.generateCounterOrderQr(orderCode)));
+    }
+
     @PatchMapping("/shop/public/orders/{orderCode}/pickup-scan")
     public ResponseEntity<?> pickupScan(@PathVariable String orderCode) {
         return ResponseEntity.ok(shopOrderService.markPickupScan(orderCode));
@@ -451,6 +456,23 @@ public class ShopOrderController {
         validateScope(tId, cId);
         ShopOrderResponseDto dto = shopOrderService.createCounterOrder(req, tId, cId, RequestTimeZone.resolve(timeZone));
         return ResponseEntity.status(HttpStatus.CREATED).body(dto);
+    }
+
+    @PostMapping("/shop/staff/orders/scan-confirm")
+    public ResponseEntity<?> confirmScannedOrder(@RequestBody Map<String, Object> body,
+                                                  @RequestParam(required = false) UUID tenantId,
+                                                  @RequestParam(required = false) UUID companyId,
+                                                  @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                                  @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        try {
+            return ResponseEntity.ok(shopOrderService.confirmScannedOrder(stringValue(body.get("code")), tId, cId));
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.status(404).body(Map.of("message", e.getMessage()));
+        } catch (IllegalStateException | IllegalArgumentException e) {
+            return ResponseEntity.status(409).body(Map.of("message", e.getMessage()));
+        }
     }
 
     @PostMapping("/shop/staff/materials/import-orders")

@@ -60,6 +60,7 @@ import {
   fetchShopTables, setOrderTable, fetchPickupQr, fetchOrdersByToken,
   lockTokenSession, unlockTokenSession,
   fetchStaffCalls, dismissStaffCall, replyStaffCall, forceConfirmOrder,
+  confirmScannedOrder,
 } from '../../api/shopApi'
 import { printCupLabelsTracked, printOrderReceiptTracked, printOrderTagTracked, printCombinedReceiptTracked } from '../../utils/printWithHistory'
 import ShopOrderDetailModal from './ShopOrderDetailModal'
@@ -68,6 +69,7 @@ import QrOrderDialog from './QrOrderDialog'
 import EodAuditDialog from './EodAuditDialog'
 import ConfirmActionDialog from './ConfirmActionDialog'
 import MergeBillsDialog from './MergeBillsDialog'
+import VoucherQrScanDialog from './VoucherQrScanDialog'
 import { useAppContext } from '../../context/AppContext'
 import { useI18n } from '../../i18n/I18nContext'
 import { fetchModels } from '../../api/modelApi'
@@ -1368,6 +1370,8 @@ export default function ShopOrderGrid() {
   const [cardDisplaySize, setCardDisplaySize] = useState(() => readShopOrderPref(SHOP_ORDER_CARD_SIZE_PREF, 'normal'))
   const [highContrastCards, setHighContrastCards] = useState(() => readShopOrderPref(SHOP_ORDER_CONTRAST_PREF, 'false') === 'true')
   const [confirmDlg, setConfirmDlg]     = useState(null)
+  const [orderScannerOpen, setOrderScannerOpen] = useState(false)
+  const [scannedOrders, setScannedOrders] = useState([])
   // confirmDlg shape: { title, message, confirmLabel, confirmColor, requireReason, onConfirm }
   const [pickupQrOrder, setPickupQrOrder] = useState(null)  // { id, orderNumber, orderCode, qrBase64 }
   const [trackQrOrder, setTrackQrOrder]   = useState(null)  // { order, qrBase64, loading }
@@ -1429,6 +1433,18 @@ export default function ShopOrderGrid() {
     if (!res.ok) throw new Error(data?.message || data?.error || 'Failed to refresh order')
     if (data?.id) mergeOrderIntoState(data)
     return data || null
+  }, [mergeOrderIntoState])
+
+  const handleScannedOrder = useCallback(async (code) => {
+    const { res, data } = await confirmScannedOrder(code)
+    if (!res.ok) {
+      setError(data?.message || 'Cannot confirm scanned order')
+      return
+    }
+    if (data?.id) {
+      mergeOrderIntoState(data)
+      setScannedOrders(prev => [data, ...prev.filter(order => order.id !== data.id)].slice(0, 8))
+    }
   }, [mergeOrderIntoState])
 
   const applyOrderResult = useCallback(async (result, orderId, fallbackMessage = 'Action failed') => {
@@ -1886,6 +1902,8 @@ export default function ShopOrderGrid() {
             variant="contained" size="small" color="success" sx={{ textTransform: 'none', fontWeight: 700, whiteSpace: 'nowrap', px: { xs: 1, sm: 1.25 }, '& .MuiButton-startIcon': { mr: { xs: 0.5, sm: 1 } } }}>{t('shopOrder.grid.newOrder')}</Button>
           <Button startIcon={<QrCode2Icon />} onClick={() => setQrOrderOpen(true)}
             variant="outlined" size="small" color="primary" sx={{ display: { xs: 'none', sm: 'inline-flex' }, textTransform: 'none', fontWeight: 700 }}>{t('shopOrder.grid.qrOrder')}</Button>
+          <Button startIcon={<QrCodeScannerIcon />} onClick={() => { setScannedOrders([]); setOrderScannerOpen(true) }}
+            variant="contained" size="small" color="primary" sx={{ textTransform: 'none', fontWeight: 800 }}>Scan customer orders</Button>
           {selectedRows.size > 0 && (
             <Button
               startIcon={<DriveFileMoveIcon />}
@@ -1976,6 +1994,15 @@ export default function ShopOrderGrid() {
           else reload()
         }}
         defaultItems={manualDefaults}
+      />
+      <VoucherQrScanDialog
+        open={orderScannerOpen}
+        onClose={() => setOrderScannerOpen(false)}
+        onScan={handleScannedOrder}
+        continuous
+        title="Scan customer order QRs"
+        manualLabel="Order QR or order code"
+        scannerLabel={scannedOrders.length ? `${scannedOrders.length} order(s) confirmed — keep scanning` : 'Scan orders one by one'}
       />
       <EodAuditDialog open={eodOpen} onClose={() => setEodOpen(false)} />
       <QrOrderDialog open={qrOrderOpen} onClose={() => setQrOrderOpen(false)} />
