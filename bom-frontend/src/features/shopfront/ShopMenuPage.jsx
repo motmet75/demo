@@ -50,7 +50,7 @@ import { resolveToken, fetchMenu, createOrder, fetchPublicMenuOptions,
          fetchActiveTableOrders, startCustomerEdit, cancelCustomerEdit,
          updatePublicOrderItems, fetchPublicOrder, fetchTokenSession,
          cancelPublicOrder, fetchShopConfig, callStaff, fetchPublicStaffCall,
-         fetchLatestPublicStaffCall, redeemPublicVoucher } from '../../api/shopApi'
+         fetchLatestPublicStaffCall, redeemPublicVoucher, fetchPublicTables } from '../../api/shopApi'
 import ItemOptionsDialog from './ItemOptionsDialog'
 import OrderReceiptDialog from './OrderReceiptDialog'
 import VoucherQrScanDialog from '../shoporder/VoucherQrScanDialog'
@@ -96,9 +96,9 @@ function readStoredStaffCall(key) {
 }
 
 const FULFILLMENT_OPTIONS = [
-  { value: 'PICKUP',   label: 'Pickup',   icon: <TakeoutDiningIcon fontSize="small" /> },
-  { value: 'DINE_IN',  label: 'Dine In',  icon: <TableBarIcon fontSize="small" /> },
-  { value: 'DELIVERY', label: 'Delivery', icon: <DeliveryDiningIcon fontSize="small" /> },
+  { value: 'DINE_IN',  label: 'Dine In',  icon: <TableBarIcon sx={{ fontSize: 38 }} /> },
+  { value: 'PICKUP',   label: 'Pickup',   icon: <TakeoutDiningIcon sx={{ fontSize: 38 }} /> },
+  { value: 'DELIVERY', label: 'Delivery', icon: <DeliveryDiningIcon sx={{ fontSize: 38 }} /> },
 ]
 
 const TRACKING_STEPS = [
@@ -532,14 +532,15 @@ export default function ShopMenuPage() {
   const [tokenSession, setTokenSession]     = useState(null)
   const [sessionOpen, setSessionOpen]       = useState(false)
   const [shopConfig, setShopConfig]         = useState({ prepaidMenu: false, bankBin: '', bankAccountNumber: '', bankAccountName: '' })
+  const [publicTables, setPublicTables]     = useState([])
   const [prepaidQrOrder, setPrepaidQrOrder] = useState(null)
   const [imagePreview, setImagePreview]     = useState(null)
   const [voucherScanOpen, setVoucherScanOpen] = useState(false)
   const [voucherPayload, setVoucherPayload] = useState('')
   const [voucherSnack, setVoucherSnack]     = useState({ open: false, message: '', severity: 'success' })
   const [form, setForm] = useState({
-    fulfillmentType: 'PICKUP', customerName: rawCustomerName, customerPhone: '',
-    deliveryAddress: '', customerTableTag: '', requestedFulfillmentAt: '', paymentMethod: 'CASH',
+    fulfillmentType: 'DINE_IN', customerName: rawCustomerName, customerPhone: '',
+    deliveryAddress: '', customerTableTag: '', selectedTableId: '', requestedFulfillmentAt: '', paymentMethod: 'CASH',
   })
 
   // ── New UI state ───────────────────────────────────────────────────────
@@ -616,7 +617,8 @@ export default function ShopMenuPage() {
       fetchMenu(ctx.tenantId, ctx.companyId),
       fetchPublicMenuOptions(ctx.tenantId, ctx.companyId),
       fetchShopConfig(ctx.tenantId, ctx.companyId),
-    ]).then(([menuRes, optsRes, cfgRes]) => {
+      fetchPublicTables(ctx.tenantId, ctx.companyId),
+    ]).then(([menuRes, optsRes, cfgRes, tablesRes]) => {
       setMenu(Array.isArray(menuRes.data) ? menuRes.data : [])
       const byModel = {}
       ;(Array.isArray(optsRes.data) ? optsRes.data : []).forEach(opt => {
@@ -625,6 +627,7 @@ export default function ShopMenuPage() {
       })
       setOptionsByModel(byModel)
       if (cfgRes.data) setShopConfig(cfgRes.data)
+      setPublicTables(Array.isArray(tablesRes.data) ? tablesRes.data : [])
       setLoading(false)
     }).catch(() => { setError('Không tải được thực đơn.'); setLoading(false) })
   }, [ctx])
@@ -1029,7 +1032,7 @@ export default function ShopMenuPage() {
     if (!editingOrderCode) {
       const name = form.customerName.trim()
       const phone = form.customerPhone.trim()
-      if (form.fulfillmentType === 'DINE_IN' && !ctx?.tableId && !form.customerTableTag.trim()) {
+      if (form.fulfillmentType === 'DINE_IN' && !ctx?.tableId && !form.selectedTableId && !form.customerTableTag.trim()) {
         setError('Vui lòng nhập thẻ bàn hoặc số bàn'); return
       }
       if (form.fulfillmentType === 'PICKUP' && (!name || !phone)) {
@@ -1057,7 +1060,8 @@ export default function ShopMenuPage() {
         loadTokenSession()
       } else {
         const body = {
-          fulfillmentType: form.fulfillmentType, tableId: ctx.tableId || null,
+          fulfillmentType: form.fulfillmentType,
+          tableId: form.fulfillmentType === 'DINE_IN' ? (ctx.tableId || form.selectedTableId || null) : null,
           customerName: form.customerName || null, customerPhone: form.customerPhone || null,
           deliveryAddress: form.fulfillmentType === 'DELIVERY' ? form.deliveryAddress : null,
           customerTableTag: form.fulfillmentType === 'DINE_IN' ? form.customerTableTag || null : null,
@@ -1992,17 +1996,19 @@ export default function ShopMenuPage() {
               <Typography variant="caption" color="text.secondary" sx={{ mb: 0.75, display: 'block' }}>
                 Hình thức
               </Typography>
-              <Box sx={{ display: 'flex', gap: 1 }}>
+              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1 }}>
                 {FULFILLMENT_OPTIONS.map(opt => (
                   <Box key={opt.value} onClick={() => setForm(f => ({ ...f, fulfillmentType: opt.value }))} sx={{
-                    flex: 1, border: '1.5px solid', borderRadius: 2, py: 1, px: 0.5, textAlign: 'center',
+                    border: '2px solid', borderRadius: 3, py: 1.5, px: 0.5, textAlign: 'center',
                     cursor: 'pointer',
                     borderColor: form.fulfillmentType === opt.value ? '#ff5722' : '#e0e0e0',
                     bgcolor: form.fulfillmentType === opt.value ? '#fff3e0' : '#fff',
                     transition: 'all 0.15s',
+                    transform: form.fulfillmentType === opt.value ? 'translateY(-2px)' : 'none',
+                    boxShadow: form.fulfillmentType === opt.value ? '0 6px 16px rgba(255,87,34,.18)' : 'none',
                   }}>
                     <Box sx={{ color: form.fulfillmentType === opt.value ? '#ff5722' : 'text.secondary' }}>{opt.icon}</Box>
-                    <Typography variant="caption" fontWeight={600}
+                    <Typography sx={{ display: 'block', fontSize: 13, lineHeight: 1.2 }} fontWeight={800}
                       color={form.fulfillmentType === opt.value ? '#ff5722' : 'text.secondary'}>{t(opt.value === 'DINE_IN' ? 'shop.dineIn' : opt.value === 'DELIVERY' ? 'shop.delivery' : 'shop.pickup')}</Typography>
                   </Box>
                 ))}
@@ -2010,8 +2016,27 @@ export default function ShopMenuPage() {
             </Box>
 
             {form.fulfillmentType === 'DINE_IN' && !ctx?.tableId && (
-              <TextField label="Thẻ bàn / số bàn" size="small" fullWidth required value={form.customerTableTag}
-                onChange={e => setForm(f => ({ ...f, customerTableTag: e.target.value }))} />
+              <Box sx={{ p: 1.5, borderRadius: 2.5, bgcolor: '#fff8f4', border: '1px solid #ffccbc' }}>
+                <Typography fontWeight={800} sx={{ mb: 1, fontSize: 14 }}>Nhập thẻ bàn hoặc chọn bàn</Typography>
+                <Stack spacing={1.25}>
+                  <TextField label="Số trên thẻ bàn" size="small" fullWidth
+                    placeholder="Ví dụ: A12" value={form.customerTableTag}
+                    onChange={e => setForm(f => ({ ...f, customerTableTag: e.target.value, selectedTableId: '' }))}
+                    helperText="Số này sẽ hiển thị trên bảng đơn tại quầy" />
+                  {publicTables.length > 0 && (
+                    <>
+                      <Divider><Typography variant="caption" color="text.secondary">HOẶC</Typography></Divider>
+                      <TextField select label="Chọn số bàn" size="small" fullWidth value={form.selectedTableId}
+                        onChange={e => setForm(f => ({ ...f, selectedTableId: e.target.value, customerTableTag: '' }))}>
+                        {publicTables.map(table => <MenuItem key={table.id} value={table.id}>{table.tableName}</MenuItem>)}
+                      </TextField>
+                    </>
+                  )}
+                </Stack>
+              </Box>
+            )}
+            {form.fulfillmentType === 'DINE_IN' && ctx?.tableId && (
+              <Alert severity="info" icon={<TableBarIcon />}>Đơn sẽ được gửi đến bàn đã quét QR.</Alert>
             )}
             {form.fulfillmentType !== 'DINE_IN' && <>
               <TextField label={t('shop.customerName')} size="small" fullWidth required value={form.customerName}

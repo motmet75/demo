@@ -818,6 +818,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
               sx={{ height: large ? 24 : 20, fontSize: large ? 12 : 10, fontWeight: 800 }} />
             {order.fulfillmentType && (() => { const m = { DINE_IN: '🪑', PICKUP: '🥡', DELIVERY: '🛵' }; return <Typography sx={{ fontSize: large ? 17 : 13 }}>{m[order.fulfillmentType] || ''}</Typography> })()}
             {order.tableName && <Chip icon={<TableBarIcon sx={{ fontSize: large ? 18 : 16 }} />} label={order.tableName} size="small" color="info" variant="outlined" sx={{ height: large ? 32 : 28, fontSize: large ? 16 : 14, fontWeight: 900, '& .MuiChip-label': { px: 1 } }} />}
+            {order.customerTableTag && <Chip icon={<TableBarIcon sx={{ fontSize: large ? 19 : 17 }} />} label={`THẺ ${order.customerTableTag}`} size="small" color="error" sx={{ height: large ? 34 : 29, fontSize: large ? 17 : 14, fontWeight: 900, '& .MuiChip-label': { px: 1 } }} />}
             {order.paymentStatus === 'PAID'
               ? <Chip icon={<PaidIcon sx={{ fontSize: 11, ml: '4px !important' }} />} label="PAID" size="small" color="success" sx={{ height: large ? 24 : 20, fontSize: large ? 12 : 10, fontWeight: 800 }} />
               : <Chip label="UNPAID" size="small" color="warning" variant="outlined" sx={{ height: large ? 24 : 20, fontSize: large ? 12 : 10 }} />
