@@ -68,9 +68,27 @@ export default function ShopBankConfigPage() {
   const handleSave = async () => {
     setSaving(true); setError(''); setSuccess(false)
     try {
-      await updateBankConfig(form)
+      const { res, data } = await updateBankConfig(form)
+      if (!res.ok) throw new Error(data?.message || data?.error || 'Save failed')
       setSuccess(true)
     } catch (e) {
+      setError(e.message || 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const saveToggle = async (field, checked) => {
+    const previous = form[field]
+    const next = { ...form, [field]: checked }
+    setForm(next)
+    setSaving(true); setError(''); setSuccess(false)
+    try {
+      const { res, data } = await updateBankConfig(next)
+      if (!res.ok) throw new Error(data?.message || data?.error || 'Save failed')
+      setSuccess(true)
+    } catch (e) {
+      setForm(current => ({ ...current, [field]: previous }))
       setError(e.message || 'Save failed')
     } finally {
       setSaving(false)
@@ -95,7 +113,7 @@ export default function ShopBankConfigPage() {
         <Stack spacing={3}>
 
           {/* Status alerts */}
-          {success && <Alert severity="success" icon={<CheckCircleIcon />}>Bank account saved. Payment QR will use this account.</Alert>}
+          {success && <Alert severity="success" icon={<CheckCircleIcon />}>Settings saved.</Alert>}
           {error && <Alert severity="error" onClose={() => setError('')}>{error}</Alert>}
 
           {/* Bank selector */}
@@ -164,7 +182,8 @@ export default function ShopBankConfigPage() {
                 control={
                   <Switch
                     checked={form.prepaidMenu}
-                    onChange={e => { setForm(f => ({ ...f, prepaidMenu: e.target.checked })); setSuccess(false) }}
+                    onChange={e => saveToggle('prepaidMenu', e.target.checked)}
+                    disabled={saving}
                     color="primary"
                   />
                 }
@@ -183,7 +202,8 @@ export default function ShopBankConfigPage() {
                 control={
                   <Switch
                     checked={form.realtimeInventory}
-                    onChange={e => { setForm(f => ({ ...f, realtimeInventory: e.target.checked })); setSuccess(false) }}
+                    onChange={e => saveToggle('realtimeInventory', e.target.checked)}
+                    disabled={saving}
                     color="warning"
                   />
                 }
@@ -201,7 +221,8 @@ export default function ShopBankConfigPage() {
                 control={
                   <Switch
                     checked={form.processingInventoryRecheck}
-                    onChange={e => { setForm(f => ({ ...f, processingInventoryRecheck: e.target.checked })); setSuccess(false) }}
+                    onChange={e => saveToggle('processingInventoryRecheck', e.target.checked)}
+                    disabled={saving}
                     color="success"
                   />
                 }
