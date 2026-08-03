@@ -449,7 +449,7 @@ public class ShopOrderController {
                                                @RequestHeader(value = "X-Time-Zone", required = false) String timeZone) {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
-        ShopOrderResponseDto dto = shopOrderService.createOrder(req, tId, cId, RequestTimeZone.resolve(timeZone));
+        ShopOrderResponseDto dto = shopOrderService.createCounterOrder(req, tId, cId, RequestTimeZone.resolve(timeZone));
         return ResponseEntity.status(HttpStatus.CREATED).body(dto);
     }
 
@@ -2025,4 +2025,3 @@ public class ShopOrderController {
         }
     }
 }
-

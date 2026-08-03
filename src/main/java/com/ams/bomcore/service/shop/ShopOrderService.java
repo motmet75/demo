@@ -227,6 +227,22 @@ public class ShopOrderService {
         return dto(order);
     }
 
+    /**
+     * Creates a counter order with its own short-lived customer session. The token lets the
+     * customer track this order and place more orders from the same QR for four hours.
+     */
+    @Transactional
+    public ShopOrderResponseDto createCounterOrder(CreateOrderRequest req, UUID tenantId, UUID companyId,
+                                                    ZoneId orderZone) {
+        ShopAccessToken token = createWalkUpToken(null, DEFAULT_WALK_UP_MAX_ORDERS, tenantId, companyId,
+                "Manual counter order");
+        CreateOrderRequest sessionRequest = new CreateOrderRequest(
+                req.fulfillmentType(), req.tableId(), req.customerName(), req.customerPhone(),
+                req.deliveryProvider(), req.deliveryAddress(), req.deliveryFee(), req.paymentMethod(),
+                req.notes(), req.items(), req.manualOrderNumber(), token.getToken());
+        return createOrder(sessionRequest, tenantId, companyId, orderZone);
+    }
+
     // ── Status transitions ────────────────────────────────────────────
 
     @Transactional
@@ -516,18 +532,23 @@ public class ShopOrderService {
     @Transactional
     public WalkUpQrResult generateWalkUpQr(Integer seq, Integer maxOrders, UUID tenantId, UUID companyId) {
         int limit = normalizeMaxOrders(maxOrders);
+        ShopAccessToken sat = createWalkUpToken(seq, limit, tenantId, companyId, null);
+        String url = publicBaseUrl + "/shop/menu?t=" + sat.getToken()
+                   + (seq != null ? "&seq=" + seq : "");
+        return new WalkUpQrResult(QrCodeUtil.generateBase64Png(url, 400), url, sat.getToken(), seq, limit);
+    }
+
+    private ShopAccessToken createWalkUpToken(Integer seq, int maxOrders, UUID tenantId, UUID companyId,
+                                               String description) {
         ShopAccessToken sat = new ShopAccessToken();
         sat.setToken(UUID.randomUUID().toString());
         sat.setTenantId(tenantId);
         sat.setCompanyId(companyId);
         sat.setTokenType(ShopAccessToken.TYPE_TABLE_QR);
-        sat.setDescription("Walk-up QR" + (seq != null ? " #" + seq : ""));
+        sat.setDescription(description != null ? description : "Walk-up QR" + (seq != null ? " #" + seq : ""));
         sat.setExpiresAt(java.time.Instant.now().plus(4, java.time.temporal.ChronoUnit.HOURS));
-        sat.setMaxOrders(limit);
-        shopAccessTokenRepository.save(sat);
-        String url = publicBaseUrl + "/shop/menu?t=" + sat.getToken()
-                   + (seq != null ? "&seq=" + seq : "");
-        return new WalkUpQrResult(QrCodeUtil.generateBase64Png(url, 400), url, sat.getToken(), seq, limit);
+        sat.setMaxOrders(maxOrders);
+        return shopAccessTokenRepository.save(sat);
     }
 
     private int normalizeMaxOrders(Integer maxOrders) {
@@ -1944,6 +1965,9 @@ public class ShopOrderService {
     public String generateOrderTagQr(UUID orderId, UUID tenantId, UUID companyId) {
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         String url = publicBaseUrl + "/shop/order/" + order.getOrderCode();
+        if (order.getSourceToken() != null && !order.getSourceToken().isBlank()) {
+            url += "?t=" + java.net.URLEncoder.encode(order.getSourceToken(), java.nio.charset.StandardCharsets.UTF_8);
+        }
         return QrCodeUtil.generateBase64Png(url, 300);
     }
 
