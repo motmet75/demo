@@ -698,11 +698,19 @@ export default function ShopMenuPage() {
         restoreCartFromOrder(data)
         setEditingOrderCode(data.orderCode)
         setCartOpen(true)
-        navigate({ search: tokenParam ? `t=${encodeURIComponent(tokenParam)}` : '' }, { replace: true })
+        const nextParams = new URLSearchParams()
+        if (tokenParam) {
+          nextParams.set('t', tokenParam)
+        } else {
+          if (data.tenantId || ctx?.tenantId) nextParams.set('tenantId', data.tenantId || ctx.tenantId)
+          if (data.companyId || ctx?.companyId) nextParams.set('companyId', data.companyId || ctx.companyId)
+          if (data.tableId || ctx?.tableId) nextParams.set('tableId', data.tableId || ctx.tableId)
+        }
+        navigate({ search: nextParams.toString() }, { replace: true })
       })
       .catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editOrderCode, loading])
+  }, [editOrderCode, loading, tokenParam, ctx?.tenantId, ctx?.companyId, ctx?.tableId, navigate])
 
   // ── Header measurement ────────────────────────────────────────────────
   useEffect(() => {

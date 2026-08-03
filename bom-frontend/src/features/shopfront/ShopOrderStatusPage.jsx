@@ -81,7 +81,40 @@ function StepDot({ step, activeIdx, idx }) {
 
 // ── Single order full view (no token) ────────────────────────────────────────
 
-function SingleOrderView({ order, onEdit }) {
+function OrderItems({ order, itemName, fmtLocal }) {
+  const roots = (order.items || []).filter(item => !item.parentItemId)
+  const children = (order.items || []).filter(item => item.parentItemId)
+
+  if (roots.length === 0) return null
+
+  return (
+    <Box sx={{ px: { xs: 1.5, md: 4 }, pt: 2, maxWidth: 560, mx: 'auto', width: '100%' }}>
+      {roots.map((item, index) => (
+        <Box key={item.id} sx={{ mb: 1, p: 1.25, border: '1px solid #e2e8f0', borderRadius: 2 }}>
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+            <Typography fontWeight={800} sx={{ flex: 1 }}>
+              {index + 1}. {item.quantity}x {itemName(item)}
+            </Typography>
+            <Typography color="primary" fontWeight={800}>{fmtLocal(item.lineTotal)}</Typography>
+          </Box>
+          {item.selectedOptions && (
+            <Typography variant="body2" color="text.secondary">{item.selectedOptions}</Typography>
+          )}
+          {children.filter(child => child.parentItemId === item.id).map(child => (
+            <Box key={child.id} sx={{ display: 'flex', gap: 1, pl: 2, mt: 0.5 }}>
+              <Typography variant="body2" sx={{ flex: 1 }}>
+                + {child.quantity}x {itemName(child)}
+              </Typography>
+              <Typography variant="body2" color="primary" fontWeight={700}>{fmtLocal(child.lineTotal)}</Typography>
+            </Box>
+          ))}
+        </Box>
+      ))}
+    </Box>
+  )
+}
+
+function SingleOrderView({ order, onEdit, itemName, fmtLocal }) {
   const status    = order.status || 'PENDING'
   const cancelled = status === 'CANCELLED'
   const isDone    = status === 'COMPLETED' || status === 'PICKED_UP'
@@ -143,6 +176,8 @@ function SingleOrderView({ order, onEdit }) {
         </Box>
       )}
 
+      <OrderItems order={order} itemName={itemName} fmtLocal={fmtLocal} />
+
       {isDone && (
         <Box sx={{ textAlign: 'center', pt: 3 }}>
           <Typography variant="h4">🎉</Typography>
@@ -181,7 +216,7 @@ function menuUrl(qs) {
   return window.location.origin + appBase + '/shop/menu?' + new URLSearchParams(qs)
 }
 
-function OrderCard({ order, highlighted, token }) {
+function OrderCard({ order, highlighted, token, itemName, fmtLocal }) {
   const [expanded, setExpanded] = useState(highlighted)
   const status   = order.status || 'PENDING'
   const chip     = STATUS_CHIP[status] || STATUS_CHIP.PENDING
@@ -345,7 +380,7 @@ function OrderCard({ order, highlighted, token }) {
 
 // ── Token session view (all orders for a token) ───────────────────────────────
 
-function TokenSessionView({ token, highlightCode }) {
+function TokenSessionView({ token, highlightCode, itemName, fmtLocal }) {
   const [session, setSession] = useState(null)
   const [error, setError]     = useState('')
 
@@ -423,6 +458,8 @@ function TokenSessionView({ token, highlightCode }) {
             order={order}
             highlighted={order.orderCode === highlightCode}
             token={token}
+            itemName={itemName}
+            fmtLocal={fmtLocal}
           />
         ))}
       </Box>
@@ -480,7 +517,7 @@ export default function ShopOrderStatusPage() {
 
   // Token session view
   if (token) {
-    return <TokenSessionView token={token} highlightCode={orderCode} />
+    return <TokenSessionView token={token} highlightCode={orderCode} itemName={itemName} fmtLocal={fmtLocal} />
   }
 
   // Single order view (no token — staff-generated links etc.)
@@ -504,5 +541,5 @@ export default function ShopOrderStatusPage() {
     window.location.href = window.location.origin + appBase + '/shop/menu?' + new URLSearchParams(parts)
   }
 
-  return <SingleOrderView order={order} onEdit={goEditNoToken} />
+  return <SingleOrderView order={order} onEdit={goEditNoToken} itemName={itemName} fmtLocal={fmtLocal} />
 }
