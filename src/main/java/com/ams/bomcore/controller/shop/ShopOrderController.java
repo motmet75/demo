@@ -564,7 +564,11 @@ public class ShopOrderController {
                                       @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
-        return ResponseEntity.ok(shopOrderService.startPreparing(orderId, tId, cId));
+        try {
+            return ResponseEntity.ok(shopOrderService.startPreparing(orderId, tId, cId));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", e.getMessage()));
+        }
     }
 
     @PatchMapping("/shop/staff/orders/{orderId}/ready")

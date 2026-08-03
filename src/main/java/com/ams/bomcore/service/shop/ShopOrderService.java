@@ -342,7 +342,8 @@ public class ShopOrderService {
         Company company = companyRepository.findById(companyId).orElse(null);
         if (company != null && Boolean.TRUE.equals(company.getPrepaidMenu())
                 && !ShopOrder.PAY_STATUS_PAID.equals(order.getPaymentStatus())) {
-            throw new IllegalStateException("Order must be paid before preparation");
+            throw new IllegalStateException(
+                    "Prepaid Menu is enabled. Mark this order as paid before starting preparation.");
         }
 
         shopMaterialAuditService.deductOrderMaterials(order, ShopMaterialAudit.SOURCE_PREPARE);
