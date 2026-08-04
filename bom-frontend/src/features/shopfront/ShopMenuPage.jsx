@@ -1033,13 +1033,25 @@ export default function ShopMenuPage() {
       const name = form.customerName.trim()
       const phone = form.customerPhone.trim()
       if (form.fulfillmentType === 'DINE_IN' && !ctx?.tableId && !form.selectedTableId && !form.customerTableTag.trim()) {
-        setError('Vui lòng nhập thẻ bàn hoặc số bàn'); return
+        setError('Hãy nhập số thẻ bàn hoặc chọn bàn.'); return
       }
-      if (form.fulfillmentType === 'PICKUP' && (!name || !phone)) {
-        setError('Vui lòng nhập tên và số điện thoại nhận món'); return
+      if (form.fulfillmentType === 'PICKUP' && !name) {
+        setError('Hãy nhập tên người nhận món.'); return
       }
-      if (form.fulfillmentType === 'DELIVERY' && (!name || !phone || !form.requestedFulfillmentAt || !form.deliveryAddress.trim())) {
-        setError('Vui lòng nhập tên, số điện thoại, thời gian nhận và địa chỉ giao hàng'); return
+      if (form.fulfillmentType === 'PICKUP' && !phone) {
+        setError('Hãy nhập số điện thoại người nhận món.'); return
+      }
+      if (form.fulfillmentType === 'DELIVERY' && !name) {
+        setError('Hãy nhập tên người nhận hàng.'); return
+      }
+      if (form.fulfillmentType === 'DELIVERY' && !phone) {
+        setError('Hãy nhập số điện thoại người nhận hàng.'); return
+      }
+      if (form.fulfillmentType === 'DELIVERY' && !form.requestedFulfillmentAt) {
+        setError('Hãy chọn thời gian nhận hàng.'); return
+      }
+      if (form.fulfillmentType === 'DELIVERY' && !form.deliveryAddress.trim()) {
+        setError('Hãy nhập địa chỉ giao hàng.'); return
       }
     }
     setSubmitting(true); setError('')
@@ -1903,7 +1915,7 @@ export default function ShopMenuPage() {
           <IconButton size="small" onClick={() => setCartOpen(false)}><CloseIcon /></IconButton>
         </DialogTitle>
         <DialogContent sx={{ overflowY: 'auto' }}>
-          {renderCartPanel(() => { setCartOpen(false); editingOrderCode ? handlePlaceOrder() : setCheckout(true) })}
+          {renderCartPanel(() => { setCartOpen(false); setError(''); editingOrderCode ? handlePlaceOrder() : setCheckout(true) })}
         </DialogContent>
       </Dialog>
 
@@ -1998,7 +2010,7 @@ export default function ShopMenuPage() {
               </Typography>
               <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1 }}>
                 {FULFILLMENT_OPTIONS.map(opt => (
-                  <Box key={opt.value} onClick={() => setForm(f => ({ ...f, fulfillmentType: opt.value }))} sx={{
+                  <Box key={opt.value} onClick={() => { setForm(f => ({ ...f, fulfillmentType: opt.value })); setError('') }} sx={{
                     border: '2px solid', borderRadius: 3, py: 1.5, px: 0.5, textAlign: 'center',
                     cursor: 'pointer',
                     borderColor: form.fulfillmentType === opt.value ? '#ff5722' : '#e0e0e0',
@@ -2021,13 +2033,13 @@ export default function ShopMenuPage() {
                 <Stack spacing={1.25}>
                   <TextField label="Số trên thẻ bàn" size="small" fullWidth
                     placeholder="Ví dụ: A12" value={form.customerTableTag}
-                    onChange={e => setForm(f => ({ ...f, customerTableTag: e.target.value, selectedTableId: '' }))}
+                    onChange={e => { setForm(f => ({ ...f, customerTableTag: e.target.value, selectedTableId: '' })); setError('') }}
                     helperText="Số này sẽ hiển thị trên bảng đơn tại quầy" />
                   {publicTables.length > 0 && (
                     <>
                       <Divider><Typography variant="caption" color="text.secondary">HOẶC</Typography></Divider>
                       <TextField select label="Chọn số bàn" size="small" fullWidth value={form.selectedTableId}
-                        onChange={e => setForm(f => ({ ...f, selectedTableId: e.target.value, customerTableTag: '' }))}>
+                        onChange={e => { setForm(f => ({ ...f, selectedTableId: e.target.value, customerTableTag: '' })); setError('') }}>
                         {publicTables.map(table => <MenuItem key={table.id} value={table.id}>{table.tableName}</MenuItem>)}
                       </TextField>
                     </>
@@ -2040,17 +2052,17 @@ export default function ShopMenuPage() {
             )}
             {form.fulfillmentType !== 'DINE_IN' && <>
               <TextField label={t('shop.customerName')} size="small" fullWidth required value={form.customerName}
-                onChange={e => setForm(f => ({ ...f, customerName: e.target.value }))} />
+                onChange={e => { setForm(f => ({ ...f, customerName: e.target.value })); setError('') }} />
               <TextField label={t('shop.customerPhone')} size="small" fullWidth required type="tel" value={form.customerPhone}
-                onChange={e => setForm(f => ({ ...f, customerPhone: e.target.value }))} />
+                onChange={e => { setForm(f => ({ ...f, customerPhone: e.target.value })); setError('') }} />
             </>}
             {form.fulfillmentType === 'DELIVERY' && (
               <>
                 <TextField label="Thời gian nhận" type="datetime-local" size="small" fullWidth required
-                  value={form.requestedFulfillmentAt} onChange={e => setForm(f => ({ ...f, requestedFulfillmentAt: e.target.value }))}
+                  value={form.requestedFulfillmentAt} onChange={e => { setForm(f => ({ ...f, requestedFulfillmentAt: e.target.value })); setError('') }}
                   InputLabelProps={{ shrink: true }} />
                 <TextField label={t('shop.deliveryAddress')} size="small" fullWidth required multiline rows={2}
-                  value={form.deliveryAddress} onChange={e => setForm(f => ({ ...f, deliveryAddress: e.target.value }))} />
+                  value={form.deliveryAddress} onChange={e => { setForm(f => ({ ...f, deliveryAddress: e.target.value })); setError('') }} />
               </>
             )}
             <TextField label={t('shop.orderNote')} size="small" fullWidth multiline rows={2}
