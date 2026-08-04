@@ -94,6 +94,19 @@ function readShopOrderSessionValue(key, fallback) {
 function writeShopOrderSessionValue(key, value) {
   try { sessionStorage.setItem(key, value) } catch { /* browser storage may be blocked */ }
 }
+function readShopOrderStatusFilters() {
+  const fallback = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY']
+  try {
+    const stored = sessionStorage.getItem(SHOP_ORDER_STATUS_FILTER_SESSION_KEY)
+    if (!stored) return fallback
+    const parsed = JSON.parse(stored)
+    if (Array.isArray(parsed)) return parsed.filter(status => ORDER_STATUSES.includes(status))
+  } catch {
+    const legacy = readShopOrderSessionValue(SHOP_ORDER_STATUS_FILTER_SESSION_KEY, '')
+    if (ORDER_STATUSES.includes(legacy)) return [legacy]
+  }
+  return fallback
+}
 function broadcastReady() {
   try { new BroadcastChannel(BOARD_CHANNEL).postMessage({ type: 'ORDER_READY' }) } catch { /* */ }
 }
@@ -143,7 +156,7 @@ const STATUS_COLOR  = { PENDING: 'default', CONFIRMED: 'primary', PREPARING: 'wa
 const STATUS_LABEL  = { PENDING: 'Placed', CONFIRMED: 'Confirmed', PREPARING: 'Preparing', READY: 'Ready ✓', PICKED_UP: 'Picked Up ✓', COMPLETED: 'Done', CANCELLED: 'Cancelled' }
 const STATUS_I18N_KEY = { PENDING: 'shopOrder.status.pending', CONFIRMED: 'shopOrder.status.confirmed', PREPARING: 'shopOrder.status.preparing', READY: 'shopOrder.status.ready', PICKED_UP: 'shopOrder.status.pickedUp', COMPLETED: 'shopOrder.status.completed', CANCELLED: 'shopOrder.status.cancelled' }
 const localizedStatusLabel = (status, t) => STATUS_I18N_KEY[status] ? t(STATUS_I18N_KEY[status]) : (STATUS_LABEL[status] || status)
-const STATUSES      = ['', 'PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'PICKED_UP', 'COMPLETED', 'CANCELLED']
+const ORDER_STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'PICKED_UP', 'COMPLETED', 'CANCELLED']
 const fmt           = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 const payableAmount = (order) => Math.max(0, Number(order?.totalAmount || 0) - Number(order?.discountAmount || 0))
 const dateFmt       = (v) => v ? new Date(v).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) + ' ' + new Date(v).toLocaleDateString('vi-VN') : ''
@@ -1342,7 +1355,7 @@ export default function ShopOrderGrid() {
   const [boardRows, setBoardRows]       = useState([])   // for board tabs — unfiltered
   const [loading, setLoading]           = useState(false)
   const [error, setError]               = useState('')
-  const [statusFilter, setStatusFilter] = useState(() => readShopOrderSessionValue(SHOP_ORDER_STATUS_FILTER_SESSION_KEY, ''))
+  const [statusFilters, setStatusFilters] = useState(readShopOrderStatusFilters)
   const [detailOrder, setDetailOrder]   = useState(null)
   const [resetOpen, setResetOpen]       = useState(false)
   const [resetTo, setResetTo]           = useState(0)
@@ -1353,6 +1366,7 @@ export default function ShopOrderGrid() {
   const [boardOpen, setBoardOpen]       = useState(false)
   const [boardUrl, setBoardUrl]         = useState('')
   const [customerBoardUrl, setCustomerBoardUrl] = useState('')
+  const [separateCustomerConfirmed, setSeparateCustomerConfirmed] = useState(false)
   const [boardLoading, setBoardLoading] = useState(false)
   const [copied, setCopied]             = useState(false)
   const [copiedCustomer, setCopiedCustomer] = useState(false)
@@ -1382,6 +1396,9 @@ export default function ShopOrderGrid() {
   const [staffCalls, setStaffCalls]       = useState([])   // pending staff calls
   const [staffCallMobileOpen, setStaffCallMobileOpen] = useState(false)
   const [newOrderNotice, setNewOrderNotice] = useState(null)
+  const customerBoardDisplayUrl = customerBoardUrl
+    ? `${customerBoardUrl}${separateCustomerConfirmed ? '&separateConfirmed=1' : ''}`
+    : ''
   const seenCallIdsRef = React.useRef(new Set())
   const knownOrderIdsRef = React.useRef(new Set())
   const orderPollReadyRef = React.useRef(false)
@@ -1410,7 +1427,7 @@ export default function ShopOrderGrid() {
     })
   }, [rememberOrders])
 
-  const shouldShowInRows = useCallback((order) => !statusFilter || order?.status === statusFilter, [statusFilter])
+  const shouldShowInRows = useCallback((order) => statusFilters.length === 0 || statusFilters.includes(order?.status), [statusFilters])
 
   const mergeOrderIntoState = useCallback((order) => {
     if (!order?.id) return
@@ -1424,9 +1441,9 @@ export default function ShopOrderGrid() {
     const list = Array.isArray(orders) ? orders : []
     if (notify) notifyNewOrders(list)
     else rememberOrders(list)
-    setRows(statusFilter ? list.filter(order => order?.status === statusFilter) : list)
+    setRows(statusFilters.length ? list.filter(order => statusFilters.includes(order?.status)) : list)
     setBoardRows(list.filter(order => BOARD_VISIBLE_STATUSES.has(order?.status)))
-  }, [notifyNewOrders, rememberOrders, statusFilter])
+  }, [notifyNewOrders, rememberOrders, statusFilters])
 
   const refreshOrderCard = useCallback(async (orderId) => {
     if (!orderId) return null
@@ -1461,15 +1478,15 @@ export default function ShopOrderGrid() {
   const load = useCallback(async () => {
     setLoading(true); setError('')
     try {
-      const result = await fetchShopOrders(statusFilter || null)
+      const result = await fetchShopOrders(null)
       const { data } = result
       const list = Array.isArray(data) ? data : []
-      setRows(list)
+      setRows(statusFilters.length ? list.filter(order => statusFilters.includes(order?.status)) : list)
       rememberOrders(list)
-      if (!statusFilter) orderPollReadyRef.current = true
+      orderPollReadyRef.current = true
     } catch { setError('Failed to load orders') }
     setLoading(false)
-  }, [rememberOrders, statusFilter])
+  }, [rememberOrders, statusFilters])
 
   const loadBoard = useCallback(async () => {
     try {
@@ -1860,8 +1877,31 @@ export default function ShopOrderGrid() {
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {/* Toolbar */}
         <Box sx={{ px: { xs: 1, sm: 1.5 }, py: { xs: 0.5, sm: 1 }, display: 'flex', gap: { xs: 0.75, sm: 1 }, alignItems: 'center', flexWrap: { xs: 'nowrap', sm: 'wrap' }, borderBottom: '1px solid #e0e0e0', flexShrink: 0 }}>
-          <TextField select label={t('common.status')} value={statusFilter} onChange={e => { setStatusFilter(e.target.value); writeShopOrderSessionValue(SHOP_ORDER_STATUS_FILTER_SESSION_KEY, e.target.value) }} size="small" sx={{ width: { xs: 112, sm: 148 }, flexShrink: 1 }}>
-            {STATUSES.map(s => <MenuItem key={s} value={s}>{s ? localizedStatusLabel(s, t) : t('common.all')}</MenuItem>)}
+          <TextField select label={t('common.status')} value={statusFilters}
+            onChange={e => {
+              const values = typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value
+              const next = values.includes('__ALL__') ? [] : values
+              setStatusFilters(next)
+              writeShopOrderSessionValue(SHOP_ORDER_STATUS_FILTER_SESSION_KEY, JSON.stringify(next))
+            }}
+            SelectProps={{
+              multiple: true,
+              displayEmpty: true,
+              renderValue: selected => selected.length
+                ? selected.map(status => localizedStatusLabel(status, t)).join(', ')
+                : t('common.all'),
+            }}
+            size="small" sx={{ width: { xs: 160, sm: 250 }, flexShrink: 1 }}>
+            <MenuItem value="__ALL__">
+              <Checkbox size="small" checked={statusFilters.length === 0} />
+              {t('common.all')}
+            </MenuItem>
+            {ORDER_STATUSES.map(status => (
+              <MenuItem key={status} value={status}>
+                <Checkbox size="small" checked={statusFilters.includes(status)} />
+                {localizedStatusLabel(status, t)}
+              </MenuItem>
+            ))}
           </TextField>
           <Button startIcon={<RefreshIcon />} onClick={reload} variant="outlined" size="small"
             sx={{ minWidth: { xs: 40, sm: 64 }, px: { xs: 1, sm: 1.25 }, '& .MuiButton-startIcon': { mr: { xs: 0, sm: 1 } } }}>
@@ -2108,15 +2148,23 @@ export default function ShopOrderGrid() {
                   <Typography variant="body2" fontWeight={700} color="#16a34a">{t('shopOrder.grid.customerBoard')}</Typography>
                   <Typography variant="caption" color="text.secondary">{t('shopOrder.grid.customerBoardHelp')}</Typography>
                 </Box>
+                <Box component="label" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1, cursor: 'pointer' }}>
+                  <Checkbox size="small" checked={separateCustomerConfirmed}
+                    onChange={e => setSeparateCustomerConfirmed(e.target.checked)} />
+                  <Box>
+                    <Typography variant="body2" fontWeight={700}>Separate confirmed orders</Typography>
+                    <Typography variant="caption" color="text.secondary">Tell confirmed customers to approach the cashier area.</Typography>
+                  </Box>
+                </Box>
                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                  <TextField value={customerBoardUrl} size="small" fullWidth inputProps={{ readOnly: true, style: { fontSize: 12 } }} onClick={e => e.target.select()} />
+                  <TextField value={customerBoardDisplayUrl} size="small" fullWidth inputProps={{ readOnly: true, style: { fontSize: 12 } }} onClick={e => e.target.select()} />
                   <Tooltip title={copiedCustomer ? 'Copied!' : 'Copy URL'}>
-                    <IconButton onClick={() => { navigator.clipboard.writeText(customerBoardUrl); setCopiedCustomer(true); setTimeout(() => setCopiedCustomer(false), 2000) }} color={copiedCustomer ? 'success' : 'default'} size="small">
+                    <IconButton onClick={() => { navigator.clipboard.writeText(customerBoardDisplayUrl); setCopiedCustomer(true); setTimeout(() => setCopiedCustomer(false), 2000) }} color={copiedCustomer ? 'success' : 'default'} size="small">
                       <ContentCopyIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
                 </Box>
-                <Button variant="text" size="small" color="success" sx={{ mt: 0.5 }} onClick={() => window.open(customerBoardUrl, '_blank')}>{t('shopOrder.grid.openNewTab')}</Button>
+                <Button variant="text" size="small" color="success" sx={{ mt: 0.5 }} onClick={() => window.open(customerBoardDisplayUrl, '_blank')}>{t('shopOrder.grid.openNewTab')}</Button>
 
                 {/* ── Link Device QR ── */}
                 <Box sx={{
@@ -2138,7 +2186,7 @@ export default function ShopOrderGrid() {
                     border: '2px solid #4ade80',
                   }}>
                     <img
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=4&data=${encodeURIComponent(customerBoardUrl)}`}
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=4&data=${encodeURIComponent(customerBoardDisplayUrl)}`}
                       alt="Customer Board QR"
                       style={{ width: 160, height: 160, display: 'block' }}
                     />
@@ -2157,7 +2205,7 @@ export default function ShopOrderGrid() {
                     <Button
                       size="small" variant="outlined"
                       startIcon={<ContentCopyIcon sx={{ fontSize: cardDisplaySize === 'large' ? 17 : 13 }} />}
-                      onClick={() => { navigator.clipboard.writeText(customerBoardUrl); setCopiedCustomer(true); setTimeout(() => setCopiedCustomer(false), 2000) }}
+                      onClick={() => { navigator.clipboard.writeText(customerBoardDisplayUrl); setCopiedCustomer(true); setTimeout(() => setCopiedCustomer(false), 2000) }}
                       sx={{ mt: 1, borderColor: '#4ade80', color: '#4ade80', fontWeight: 700, fontSize: 11, textTransform: 'none', '&:hover': { borderColor: '#22c55e', bgcolor: '#14532d' } }}>
                       {copiedCustomer ? 'Copied!' : 'Copy link'}
                     </Button>
