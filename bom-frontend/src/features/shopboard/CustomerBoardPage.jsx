@@ -178,8 +178,17 @@ export default function CustomerBoardPage() {
   useEffect(() => { load(); const t = setInterval(load, POLL_MS); return () => clearInterval(t) }, [load])
 
   const confirmed = data?.confirmed || []
-  const preparing = [...(separateConfirmed ? [] : confirmed), ...(data?.processing || [])]
-  const ready     = data?.ready || []
+  const showCashier = Boolean(data?.prepaidMenu) || separateConfirmed
+  const cashierOrders = showCashier
+    ? confirmed.filter(order => order.paymentStatus !== 'PAID')
+    : []
+  const preparing = [
+    ...(showCashier
+      ? confirmed.filter(order => order.paymentStatus === 'PAID')
+      : confirmed),
+    ...(data?.processing || []),
+  ]
+  const ready = data?.ready || []
 
   if (!token || error) return (
     <Box sx={{ height: '100vh', bgcolor: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -238,14 +247,14 @@ export default function CustomerBoardPage() {
         minHeight: 0,
         overflow: 'hidden',
       }}>
-        {separateConfirmed && (
+        {showCashier && (
           <Section
-            title="Approach Cashier"
-            subtitle="Please come to the cashier area"
+            title="Cashier / Quầy thu ngân"
+            subtitle="Vui lòng đến quầy thanh toán trước khi đơn được chế biến"
             emoji="💳"
-            orders={confirmed}
+            orders={cashierOrders}
             cashier
-            emptyText="No orders waiting at cashier"
+            emptyText="Không có đơn chờ thanh toán"
           />
         )}
         <Section

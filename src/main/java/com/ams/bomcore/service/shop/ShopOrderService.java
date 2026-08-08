@@ -620,6 +620,9 @@ public class ShopOrderService {
 
         UUID tId = sat.getTenantId();
         UUID cId = sat.getCompanyId();
+        boolean prepaidMenu = companyRepository.findById(cId)
+                .map(Company::getPrepaidMenu)
+                .orElse(false);
 
         List<ShopOrderResponseDto> confirmed = shopOrderRepository
                 .findAllByTenantIdAndCompanyIdAndStatusInOrderByOrderNumberAsc(tId, cId, List.of(ShopOrder.STATUS_CONFIRMED))
@@ -644,6 +647,7 @@ public class ShopOrderService {
         inProgress.sort(java.util.Comparator.comparingInt(d -> d.getOrderNumber() != null ? d.getOrderNumber() : Integer.MAX_VALUE));
 
         return Map.of(
+                "prepaidMenu", prepaidMenu,
                 "preparing",  inProgress,
                 "ready",      readyList,
                 "confirmed",  confirmed,
