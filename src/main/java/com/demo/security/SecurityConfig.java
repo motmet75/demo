@@ -65,6 +65,9 @@ public class SecurityConfig {
             }))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                // The legacy iPad HTML/login shell is public. Its shop staff
+                // API calls remain protected by the /shop/staff/** rule below.
+                .requestMatchers("/bom-inventory/ipad4", "/bom-inventory/ipad4/**").permitAll()
                 .requestMatchers("/oauth2/**").permitAll()
                 .requestMatchers("/dang-nhap/oauth2/**").permitAll()
                 .requestMatchers("/bom/**").authenticated()
