@@ -570,10 +570,25 @@ public class ShopOrderService {
     public record QueueQrResult(String qrBase64, String qrUrl, String token, Instant expiresAt, int validDays) {}
 
     @Transactional
-    public QueueQrResult generateQueueQr(Integer validDays, UUID tenantId, UUID companyId) {
+    public QueueQrResult generateQueueQr(Integer validDays, boolean forceNew, UUID tenantId, UUID companyId) {
         int days = validDays != null ? validDays : 30;
         if (days < 1) days = 1;
         if (days > 366) days = 366;
+
+        if (!forceNew) {
+            ShopAccessToken current = shopAccessTokenRepository
+                    .findAllByTenantIdAndCompanyId(tenantId, companyId)
+                    .stream()
+                    .filter(t -> ShopAccessToken.TYPE_QUEUE_QR.equals(t.getTokenType()))
+                    .filter(ShopAccessToken::isValid)
+                    .findFirst()
+                    .orElse(null);
+            if (current != null) {
+                String currentUrl = publicBaseUrl + "/shop/queue?t=" + current.getToken();
+                return new QueueQrResult(QrCodeUtil.generateBase64Png(currentUrl, 400), currentUrl,
+                        current.getToken(), current.getExpiresAt(), days);
+            }
+        }
 
         ShopAccessToken sat = new ShopAccessToken();
         sat.setToken(UUID.randomUUID().toString());

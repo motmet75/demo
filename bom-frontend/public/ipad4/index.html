@@ -44,6 +44,26 @@
     .qr-frame img { display: block; width: 100%; max-width: 360px; height: auto; margin: 0 auto; }
     .pay-amount { margin: 12px 0 3px; color: #168447; font-size: 34px; font-weight: bold; }
     .close-button { width: 100%; margin-top: 15px; background: #4d5963; }
+    .toolbar { margin-bottom: 14px; overflow: hidden; }
+    .toolbar button { width: 48%; margin-right: 2%; min-height: 58px; }
+    .toolbar .queue { background: #7a4aa0; }
+    .item-row { overflow: hidden; min-height: 70px; }
+    .item-photo { float: left; width: 64px; height: 64px; margin-right: 10px; border-radius: 6px; border: 1px solid #d5dce2; object-fit: cover; background: #f2f4f6; }
+    .item-info { overflow: hidden; }
+    .item-money { float: right; color: #168447; font-weight: bold; }
+    .flow-actions { margin-top: 12px; }
+    .flow-actions button { width: 100%; background: #d87812; }
+    .form-modal .modal-card { max-width: 850px; text-align: left; }
+    select { width: 100%; height: 48px; padding: 7px; border: 1px solid #929ca6; border-radius: 5px; background: #fff; font-size: 18px; }
+    .member-result { padding: 10px; margin-top: 8px; border-radius: 5px; background: #e9f6ed; color: #176334; }
+    .menu-grid { max-height: 280px; overflow: auto; margin-top: 10px; border: 1px solid #d5dce2; }
+    .menu-choice { overflow: hidden; padding: 9px; border-bottom: 1px solid #d5dce2; }
+    .menu-choice img { float: left; width: 58px; height: 58px; margin-right: 9px; object-fit: cover; }
+    .menu-choice button { float: right; min-height: 42px; }
+    .cart-line { overflow: hidden; padding: 9px 0; border-bottom: 1px solid #d5dce2; }
+    .cart-line button { float: right; min-height: 38px; padding: 4px 11px; background: #a33b35; }
+    .form-buttons { overflow: hidden; margin-top: 16px; }
+    .form-buttons button { width: 48%; margin-right: 2%; }
     .clear { clear: both; }
     #ordersView, #contextBox, #otpBox { display: none; }
     @media (max-width: 600px) { .page { width: 94%; } .bar h1 { float: none; } .bar .right { float: none; margin-top: 10px; } }
@@ -91,6 +111,10 @@
         <input id="companyId" type="text" autocapitalize="off">
         <button id="saveContextButton" class="wide" type="button">Mở đơn hàng</button>
       </div>
+      <div class="toolbar">
+        <button id="newOrderButton" type="button">+ Tạo đơn mới</button>
+        <button id="queueQrButton" class="queue" type="button">QR xếp hàng</button>
+      </div>
       <div id="orders"></div>
     </div>
   </div>
@@ -104,7 +128,39 @@
       <div id="qrFrame" class="qr-frame"><p>Đang tạo mã QR...</p></div>
       <div id="qrAmount" class="pay-amount"></div>
       <div id="qrReference" class="muted"></div>
+      <button id="newQueueQrButton" class="wide queue" style="display:none;background:#7a4aa0" type="button">Tạo Queue QR mới</button>
       <button id="closeQrButton" class="close-button" type="button">Đóng</button>
+    </div>
+  </div>
+
+  <div id="orderModal" class="modal form-modal">
+    <div class="modal-card">
+      <h2 class="modal-title">Tạo đơn tại quầy</h2>
+      <div id="formError" class="message"></div>
+      <label for="customerPhone">Số điện thoại đầy đủ</label>
+      <input id="customerPhone" type="tel" inputmode="tel" placeholder="Ví dụ: 0901234567">
+      <button id="findCustomerButton" class="wide secondary" type="button">Tìm hội viên</button>
+      <div id="memberResult"></div>
+      <div id="newMemberFields" style="display:none">
+        <label for="customerName">Tên hội viên mới</label>
+        <input id="customerName" type="text" placeholder="Nhập họ tên">
+        <p class="muted">Hội viên mới sẽ được tạo bằng số điện thoại trên khi lưu đơn.</p>
+      </div>
+      <label for="fulfillmentType">Hình thức nhận hàng</label>
+      <select id="fulfillmentType"><option value="PICKUP">Mang đi</option><option value="DINE_IN">Dùng tại quán</option><option value="DELIVERY">Giao hàng</option></select>
+      <label>Chọn món</label>
+      <div id="menuChoices" class="menu-grid"><div class="menu-choice">Đang tải thực đơn...</div></div>
+      <h3 style="margin-top:16px">Món đã chọn</h3>
+      <div id="cartLines"><p class="muted">Chưa chọn món.</p></div>
+      <div id="cartTotal" class="total">0 đ</div>
+      <label for="paymentMethod">Thanh toán</label>
+      <select id="paymentMethod"><option value="CASH">Tiền mặt</option><option value="BANK_QR">Chuyển khoản QR</option></select>
+      <label for="orderNotes">Ghi chú</label>
+      <input id="orderNotes" type="text" placeholder="Ghi chú cho đơn hàng">
+      <div class="form-buttons">
+        <button id="submitOrderButton" type="button">Tạo đơn</button>
+        <button id="cancelOrderFormButton" class="secondary" type="button">Đóng</button>
+      </div>
     </div>
   </div>
 
@@ -116,11 +172,19 @@
     var companyId = '';
     var mfaMethod = '';
     var orderById = {};
+    var menuModels = [];
+    var cart = [];
+    var selectedCustomer = null;
 
     function byId(id) { return document.getElementById(id); }
     function text(value) { return value === null || typeof value === 'undefined' ? '' : String(value); }
     function escapeHtml(value) {
       return text(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    function safeImage(value) {
+      var src = text(value);
+      if (src.indexOf('https://') === 0 || src.indexOf('http://') === 0 || src.indexOf('/') === 0 || src.indexOf('data:image/') === 0) return escapeHtml(src);
+      return '';
     }
     function setBusy(id, busy, normalText) {
       var button = byId(id);
@@ -212,7 +276,8 @@
     }
     function renderOrders(rows) {
       var html = '';
-      var i, j, order, item, items;
+      var i, j, order, item, items, photo, actionLabel, actionName;
+      orderById = {};
       if (!rows || !rows.length) {
         byId('orders').innerHTML = '<div class="panel">Chưa có đơn hàng.</div>';
         return;
@@ -228,7 +293,13 @@
         html += '<ul class="items">';
         for (j = 0; j < items.length; j += 1) {
           item = items[j] || {};
-          html += '<li><span class="qty">' + escapeHtml(item.quantity) + ' x</span> ' + escapeHtml(item.modelName || 'Món') + (item.itemNotes ? '<br><span class="muted">' + escapeHtml(item.itemNotes) + '</span>' : '') + '</li>';
+          photo = safeImage(item.imageUrl);
+          html += '<li class="item-row">' + (photo ? '<img class="item-photo" src="' + photo + '" alt="">' : '<span class="item-photo"></span>');
+          html += '<div class="item-info"><span class="item-money">' + escapeHtml(formatMoney(item.lineTotal)) + '</span>';
+          html += '<span class="qty">' + escapeHtml(item.quantity) + ' x</span> ' + escapeHtml(item.modelName || 'Món');
+          html += '<br><span class="muted">' + escapeHtml(formatMoney(item.unitPrice)) + ' / món</span>';
+          if (item.itemNotes) html += '<br><span class="muted">' + escapeHtml(item.itemNotes) + '</span>';
+          html += '</div></li>';
         }
         html += '</ul><div class="total">' + escapeHtml(formatMoney(Math.max(0, Number(order.totalAmount || 0) - Number(order.discountAmount || 0)))) + '</div>';
         if (order.paymentStatus === 'PAID') html += '<div class="paid">ĐÃ THANH TOÁN</div>';
@@ -237,7 +308,14 @@
         if (order.paymentStatus !== 'PAID' && order.status !== 'CANCELLED') {
           html += '<button type="button" class="pay" data-action="pay" data-id="' + escapeHtml(order.id) + '">QR thanh toán</button>';
         }
-        html += '</div><div class="clear"></div></div>';
+        html += '</div><div class="clear"></div>';
+        actionName = ''; actionLabel = '';
+        if (order.status === 'PENDING') { actionName = 'confirm'; actionLabel = 'Xác nhận đơn'; }
+        else if (order.status === 'CONFIRMED') { actionName = 'prepare'; actionLabel = 'Bắt đầu chế biến'; }
+        else if (order.status === 'PREPARING') { actionName = 'ready'; actionLabel = 'Món đã sẵn sàng'; }
+        else if (order.status === 'READY' || order.status === 'PICKED_UP') { actionName = 'complete'; actionLabel = 'Hoàn tất đơn'; }
+        if (actionName) html += '<div class="flow-actions"><button type="button" data-action="' + actionName + '" data-id="' + escapeHtml(order.id) + '">' + actionLabel + '</button></div>';
+        html += '</div>';
       }
       byId('orders').innerHTML = html;
     }
@@ -248,6 +326,7 @@
       byId('qrFrame').innerHTML = '<p>Đang tạo mã QR...</p>';
       byId('qrAmount').innerHTML = '';
       byId('qrReference').innerHTML = '';
+      byId('newQueueQrButton').style.display = 'none';
       message('qrError', '', false);
       byId('qrModal').style.display = 'block';
       document.body.style.overflow = 'hidden';
@@ -294,6 +373,120 @@
         url = 'https://img.vietqr.io/image/' + encodeURIComponent(data.bankBin) + '-' + encodeURIComponent(data.bankAccountNumber) + '-qr_only.png';
         url += '?amount=' + Math.round(amount) + '&addInfo=' + encodeURIComponent(order.orderCode || '') + '&accountName=' + encodeURIComponent(data.bankAccountName || '');
         byId('qrFrame').innerHTML = qrImage(url, 'VietQR thanh toán');
+      });
+    }
+    function queueStorageKey() { return 'bom_ipad_queue_qr_' + tenantId + '_' + companyId; }
+    function displayQueueQr(data) {
+      openQr('Queue QR', { orderCode: 'XẾP HÀNG' }, 'Khách quét mã để chọn bàn, nhập tên và gọi món');
+      byId('qrOrder').innerHTML = 'XẾP HÀNG';
+      byId('qrFrame').innerHTML = qrImage(data.qrBase64, 'Queue QR');
+      byId('qrReference').innerHTML = data.expiresAt ? 'Dùng đến: ' + escapeHtml(formatDate(data.expiresAt)) : '';
+      byId('newQueueQrButton').style.display = 'block';
+    }
+    function openQueueQr(forceNew) {
+      var saved = null;
+      if (!forceNew) {
+        try { saved = JSON.parse(localStorage.getItem(queueStorageKey()) || 'null'); } catch (ignore) {}
+        if (saved && saved.qrBase64 && (!saved.expiresAt || new Date(saved.expiresAt).getTime() > new Date().getTime())) {
+          displayQueueQr(saved);
+          return;
+        }
+      }
+      openQr('Queue QR', { orderCode: 'XẾP HÀNG' }, 'Đang tạo mã xếp hàng cho khách');
+      byId('qrOrder').innerHTML = 'XẾP HÀNG';
+      byId('newQueueQrButton').style.display = 'none';
+      request('POST', '/sapi/shop/staff/queue-qr', { validDays: 30, forceNew: !!forceNew }, function (status, data) {
+        if (status < 200 || status >= 300 || !data || !data.qrBase64) {
+          byId('qrFrame').innerHTML = '';
+          message('qrError', errorText(status, data), false);
+          return;
+        }
+        try { localStorage.setItem(queueStorageKey(), JSON.stringify(data)); } catch (ignore) {}
+        displayQueueQr(data);
+      });
+    }
+    function closeOrderForm() { byId('orderModal').style.display = 'none'; document.body.style.overflow = ''; }
+    function normalizePhone(value) { return text(value).replace(/[^0-9+]/g, '').replace(/^\+84/, '0'); }
+    function renderMenu() {
+      var html = '', i, model, photo;
+      if (!menuModels.length) { byId('menuChoices').innerHTML = '<div class="menu-choice">Không có món đang bán.</div>'; return; }
+      for (i = 0; i < menuModels.length; i += 1) {
+        model = menuModels[i]; photo = safeImage(model.imageUrl || model.thumbnailUrl);
+        html += '<div class="menu-choice">' + (photo ? '<img src="' + photo + '" alt="">' : '');
+        html += '<button type="button" data-menu-id="' + escapeHtml(model.id) + '">+ Thêm</button>';
+        html += '<strong>' + escapeHtml(model.modelName || model.name || 'Món') + '</strong><br><span class="item-money" style="float:none">' + escapeHtml(formatMoney(model.sellingPrice)) + '</span><div class="clear"></div></div>';
+      }
+      byId('menuChoices').innerHTML = html;
+    }
+    function renderCart() {
+      var html = '', total = 0, i, line;
+      if (!cart.length) { byId('cartLines').innerHTML = '<p class="muted">Chưa chọn món.</p>'; byId('cartTotal').innerHTML = '0 đ'; return; }
+      for (i = 0; i < cart.length; i += 1) {
+        line = cart[i]; total += Number(line.sellingPrice || 0) * line.quantity;
+        html += '<div class="cart-line"><button type="button" data-remove-id="' + escapeHtml(line.id) + '">Xóa</button><strong>' + escapeHtml(line.quantity) + ' x ' + escapeHtml(line.modelName || line.name) + '</strong><br><span class="muted">' + escapeHtml(formatMoney(Number(line.sellingPrice || 0) * line.quantity)) + '</span></div>';
+      }
+      byId('cartLines').innerHTML = html;
+      byId('cartTotal').innerHTML = formatMoney(total);
+    }
+    function openOrderForm() {
+      cart = []; selectedCustomer = null;
+      byId('customerPhone').value = ''; byId('customerName').value = ''; byId('orderNotes').value = '';
+      byId('memberResult').innerHTML = ''; byId('newMemberFields').style.display = 'none';
+      message('formError', '', false); renderCart();
+      byId('orderModal').style.display = 'block'; document.body.style.overflow = 'hidden';
+      request('GET', '/sapi/bom/models', null, function (status, data) {
+        var list = data instanceof Array ? data : data && (data.data || data.items || data.content);
+        menuModels = list instanceof Array ? list.filter(function (m) { return m.sellingPrice !== null && m.sellingPrice !== undefined && m.isActive !== false; }) : [];
+        renderMenu();
+      });
+    }
+    function findCustomer() {
+      var phone = normalizePhone(byId('customerPhone').value);
+      if (phone.length < 9) { message('formError', 'Vui lòng nhập đầy đủ số điện thoại.', false); return; }
+      byId('customerPhone').value = phone; message('formError', '', false);
+      request('GET', '/sapi/shop/staff/customers?q=' + encodeURIComponent(phone), null, function (status, data) {
+        var list = data instanceof Array ? data : [], i, found = null;
+        if (status < 200 || status >= 300) { message('formError', errorText(status, data), false); return; }
+        for (i = 0; i < list.length; i += 1) if (normalizePhone(list[i].phone) === phone) { found = list[i]; break; }
+        selectedCustomer = found;
+        if (found) {
+          byId('memberResult').innerHTML = '<div class="member-result">Hội viên: <strong>' + escapeHtml(found.name) + '</strong><br>' + escapeHtml(found.phone) + (found.points !== undefined ? ' · ' + escapeHtml(found.points) + ' điểm' : '') + '</div>';
+          byId('newMemberFields').style.display = 'none';
+        } else {
+          byId('memberResult').innerHTML = '<div class="message notice" style="display:block">Chưa có hội viên với số này. Nhập tên để tạo mới.</div>';
+          byId('newMemberFields').style.display = 'block';
+        }
+      });
+    }
+    function submitOrder() {
+      var phone = normalizePhone(byId('customerPhone').value), name, body;
+      if (!cart.length) { message('formError', 'Vui lòng chọn ít nhất một món.', false); return; }
+      if (phone.length < 9) { message('formError', 'Vui lòng nhập và kiểm tra đầy đủ số điện thoại.', false); return; }
+      name = selectedCustomer ? selectedCustomer.name : byId('customerName').value.replace(/^\s+|\s+$/g, '');
+      if (!selectedCustomer && !name) { message('formError', 'Vui lòng nhập tên hội viên mới.', false); return; }
+      setBusy('submitOrderButton', true, 'Tạo đơn'); message('formError', '', false);
+      function createWithCustomer(customer) {
+        body = { fulfillmentType: byId('fulfillmentType').value, tableId: null, customerName: customer.name, customerPhone: phone, paymentMethod: byId('paymentMethod').value, notes: byId('orderNotes').value || null, manualOrderNumber: null,
+          items: cart.map(function (item) { return { modelId: item.id, quantity: item.quantity, selectedOptions: null, itemNotes: null, unitPriceOverride: Number(item.sellingPrice) || null, sideItems: [] }; }) };
+        request('POST', '/sapi/shop/staff/orders', body, function (status, order) {
+          if (status < 200 || status >= 300 || !order || !order.id) { setBusy('submitOrderButton', false, 'Tạo đơn'); message('formError', errorText(status, order), false); return; }
+          request('PATCH', '/sapi/shop/staff/orders/' + encodeURIComponent(order.id) + '/customer', { customerId: customer.id }, function () {
+            setBusy('submitOrderButton', false, 'Tạo đơn'); closeOrderForm(); loadOrders(); showTracking(order);
+          });
+        });
+      }
+      if (selectedCustomer) { createWithCustomer(selectedCustomer); return; }
+      request('POST', '/sapi/shop/staff/customers', { name: name, phone: phone }, function (status, customer) {
+        if (status < 200 || status >= 300 || !customer || !customer.id) { setBusy('submitOrderButton', false, 'Tạo đơn'); message('formError', errorText(status, customer), false); return; }
+        selectedCustomer = customer; createWithCustomer(customer);
+      });
+    }
+    function advanceOrder(order, action) {
+      var labels = { confirm: 'xác nhận', prepare: 'bắt đầu chế biến', ready: 'đánh dấu sẵn sàng', complete: 'hoàn tất' };
+      if (!window.confirm('Bạn chắc chắn muốn ' + labels[action] + ' đơn #' + (order.orderNumber || order.orderCode) + '?')) return;
+      request('PATCH', '/sapi/shop/staff/orders/' + encodeURIComponent(order.id) + '/' + action, null, function (status, data) {
+        if (status < 200 || status >= 300) { message('ordersMessage', errorText(status, data), false); return; }
+        loadOrders();
       });
     }
     function loadOrders() {
@@ -343,6 +536,30 @@
     byId('backButton').onclick = showLogin;
     byId('refreshButton').onclick = loadOrders;
     byId('closeQrButton').onclick = closeQr;
+    byId('newOrderButton').onclick = openOrderForm;
+    byId('queueQrButton').onclick = function () { openQueueQr(false); };
+    byId('newQueueQrButton').onclick = function () {
+      if (window.confirm('Tạo Queue QR mới? Mã hiện tại sẽ không còn được hiển thị tại quầy.')) openQueueQr(true);
+    };
+    byId('cancelOrderFormButton').onclick = closeOrderForm;
+    byId('findCustomerButton').onclick = findCustomer;
+    byId('submitOrderButton').onclick = submitOrder;
+    byId('menuChoices').onclick = function (event) {
+      var target = event.target || event.srcElement, id, i, found = null;
+      if (!target || target.tagName !== 'BUTTON') return;
+      id = target.getAttribute('data-menu-id');
+      for (i = 0; i < menuModels.length; i += 1) if (text(menuModels[i].id) === id) { found = menuModels[i]; break; }
+      if (!found) return;
+      for (i = 0; i < cart.length; i += 1) if (text(cart[i].id) === id) { cart[i].quantity += 1; renderCart(); return; }
+      found.quantity = 1; cart.push(found); renderCart();
+    };
+    byId('cartLines').onclick = function (event) {
+      var target = event.target || event.srcElement, id, i;
+      if (!target || target.tagName !== 'BUTTON') return;
+      id = target.getAttribute('data-remove-id');
+      for (i = 0; i < cart.length; i += 1) if (text(cart[i].id) === id) { cart.splice(i, 1); break; }
+      renderCart();
+    };
     byId('orders').onclick = function (event) {
       var target = event.target || event.srcElement;
       var action;
@@ -354,6 +571,7 @@
       if (!order) return;
       if (action === 'track') showTracking(order);
       if (action === 'pay') showPayment(order);
+      if (action === 'confirm' || action === 'prepare' || action === 'ready' || action === 'complete') advanceOrder(order, action);
     };
     byId('saveContextButton').onclick = function () {
       tenantId = byId('tenantId').value.replace(/^\s+|\s+$/g, '');
