@@ -181,6 +181,19 @@ public class ShopOrderController {
         return ResponseEntity.ok(shopOrderService.markPickupScan(orderCode));
     }
 
+    @PatchMapping("/shop/public/orders/{orderCode}/table")
+    public ResponseEntity<?> changePublicOrderTable(@PathVariable String orderCode,
+                                                     @RequestBody Map<String, Object> body) {
+        try {
+            UUID tableId = parseUuid(body.get("tableId"));
+            if (tableId == null) return ResponseEntity.badRequest().body(Map.of("error", "tableId is required"));
+            return ResponseEntity.ok(shopOrderService.changeTableByCustomer(
+                    orderCode, tableId, stringValue(body.get("token"))));
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @GetMapping("/shop/public/active-pickup")
     public ResponseEntity<?> activePickup(@RequestParam UUID tenantId, @RequestParam UUID companyId) {
         validateScope(tenantId, companyId);
@@ -521,6 +534,17 @@ public class ShopOrderController {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
         return ResponseEntity.ok(shopOrderService.confirmOrder(orderId, tId, cId));
+    }
+
+    @PatchMapping("/shop/staff/orders/{orderId}/confirm-wait-payment")
+    public ResponseEntity<?> confirmWaitPayment(@PathVariable UUID orderId,
+                                                 @RequestParam(required = false) UUID tenantId,
+                                                 @RequestParam(required = false) UUID companyId,
+                                                 @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                                 @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        return ResponseEntity.ok(shopOrderService.confirmAndRequestPayment(orderId, tId, cId));
     }
 
     @PatchMapping("/shop/staff/orders/{orderId}/force-confirm")

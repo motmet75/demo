@@ -215,6 +215,17 @@ function SessionOrderList({ session, token, onEdit, onView, t, formatAmount, ite
                 </Typography>
               </Box>
 
+              {(order.customerName || order.customerPhone) && (
+                <Box sx={{ px: 2, pt: 1, fontWeight: 800, fontSize: 14 }}>
+                  {order.customerName || 'Khách'}{order.customerPhone ? ` · ***${String(order.customerPhone).replace(/\D/g, '').slice(-3)}` : ''}
+                </Box>
+              )}
+              {order.paymentRequestedAt && order.paymentStatus !== 'PAID' && (
+                <Alert severity="warning" sx={{ mx: 2, mt: 1, fontWeight: 800 }}>
+                  Vui lòng đến quầy thu ngân để thanh toán đơn hàng.
+                </Alert>
+              )}
+
               <Box sx={{ px: 2, py: 1 }}>
                 {roots.slice(0, 4).map((item) => (
                   <Box key={item.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
@@ -379,6 +390,12 @@ function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpda
             })}
           </Box>
         </Box>
+      )}
+
+      {order.paymentRequestedAt && order.paymentStatus !== 'PAID' && (
+        <Alert severity="warning" sx={{ mx: 'auto', mt: 1.5, width: 'calc(100% - 32px)', maxWidth: 520, fontWeight: 800, flexShrink: 0 }}>
+          Đơn đã được xác nhận. Vui lòng đến quầy thu ngân để thanh toán.
+        </Alert>
       )}
 
       <Box sx={{ flex: 1, overflowY: 'auto', px: { xs: 2, md: 4 }, py: 1.5 }}>

@@ -56,6 +56,14 @@ export function fetchPublicTables(tenantId, companyId) {
   return apiFetchJsonNoContext('/shop/public/tables' + qs({ tenantId, companyId }))
 }
 
+export function changePublicOrderTable(orderCode, tableId, token) {
+  return apiFetchJsonNoContext(`/shop/public/orders/${encodeURIComponent(orderCode)}/table`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tableId, token: token || null }),
+  })
+}
+
 export function cancelPublicOrder(orderCode, note) {
   return apiFetchJsonNoContext(`/shop/public/orders/${encodeURIComponent(orderCode)}/cancel-by-customer`, {
     method: 'PATCH',
@@ -185,6 +193,10 @@ export function fetchShopOrder(orderId) {
 
 export function confirmShopOrder(orderId) {
   return apiFetchJson(`/shop/staff/orders/${orderId}/confirm`, { method: 'PATCH' })
+}
+
+export function confirmShopOrderWaitPayment(orderId) {
+  return apiFetchJson(`/shop/staff/orders/${orderId}/confirm-wait-payment`, { method: 'PATCH' })
 }
 
 export function confirmScannedOrder(code) {

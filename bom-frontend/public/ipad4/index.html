@@ -64,6 +64,10 @@
     .cart-line button { float: right; min-height: 38px; padding: 4px 11px; background: #a33b35; }
     .form-buttons { overflow: hidden; margin-top: 16px; }
     .form-buttons button { width: 48%; margin-right: 2%; }
+    .config-group { padding: 10px 0; border-bottom: 1px solid #d5dce2; }
+    .config-choice { overflow: hidden; padding: 6px 0; }
+    .config-choice input { float: right; width: 80px; height: 42px; }
+    .config-choice input[type="checkbox"], .config-choice input[type="radio"] { width: 32px; height: 32px; }
     .clear { clear: both; }
     #ordersView, #contextBox, #otpBox { display: none; }
     @media (max-width: 600px) { .page { width: 94%; } .bar h1 { float: none; } .bar .right { float: none; margin-top: 10px; } }
@@ -164,6 +168,24 @@
     </div>
   </div>
 
+  <div id="itemModal" class="modal form-modal">
+    <div class="modal-card" style="max-width:600px">
+      <h2 id="itemConfigTitle" class="modal-title">Cấu hình món</h2>
+      <div id="itemConfigError" class="message"></div>
+      <label for="itemQuantity">Số lượng món</label>
+      <input id="itemQuantity" type="number" min="1" value="1">
+      <div id="itemOptions"></div>
+      <div id="itemSides"></div>
+      <label for="itemNote">Ghi chú món</label>
+      <input id="itemNote" type="text" placeholder="Ít đá, không hành...">
+      <div id="itemConfigTotal" class="total">0 đ</div>
+      <div class="form-buttons">
+        <button id="confirmItemButton" type="button">Thêm vào đơn</button>
+        <button id="cancelItemButton" class="secondary" type="button">Đóng</button>
+      </div>
+    </div>
+  </div>
+
   <script>
   (function () {
     'use strict';
@@ -175,6 +197,9 @@
     var menuModels = [];
     var cart = [];
     var selectedCustomer = null;
+    var configuringModel = null;
+    var configuringOptions = [];
+    var allModels = [];
 
     function byId(id) { return document.getElementById(id); }
     function text(value) { return value === null || typeof value === 'undefined' ? '' : String(value); }
@@ -315,6 +340,7 @@
         else if (order.status === 'PREPARING') { actionName = 'ready'; actionLabel = 'Món đã sẵn sàng'; }
         else if (order.status === 'READY' || order.status === 'PICKED_UP') { actionName = 'complete'; actionLabel = 'Hoàn tất đơn'; }
         if (actionName) html += '<div class="flow-actions"><button type="button" data-action="' + actionName + '" data-id="' + escapeHtml(order.id) + '">' + actionLabel + '</button></div>';
+        if (order.status === 'PENDING' && order.paymentStatus !== 'PAID') html += '<div class="flow-actions"><button type="button" style="background:#a33b35" data-action="confirm-wait-payment" data-id="' + escapeHtml(order.id) + '">Xác nhận &amp; mời khách thanh toán</button></div>';
         html += '</div>';
       }
       byId('orders').innerHTML = html;
@@ -418,12 +444,115 @@
       }
       byId('menuChoices').innerHTML = html;
     }
+    function parseJson(value, fallback) { try { return JSON.parse(value); } catch (ignore) { return fallback; } }
+    function allowedSides(model) {
+      var raw = parseJson(model.allowedSideIds || '[]', []), result = [], i, j, entry, id;
+      if (!(raw instanceof Array)) return result;
+      for (i = 0; i < raw.length; i += 1) {
+        entry = raw[i]; id = typeof entry === 'string' ? entry : entry && (entry.modelId || entry.id);
+        for (j = 0; id && j < allModels.length; j += 1) if (text(allModels[j].id) === text(id)) {
+          result.push({ model: allModels[j], maxQty: entry && typeof entry === 'object' ? Number(entry.maxQty || 0) : 0 }); break;
+        }
+      }
+      return result;
+    }
+    function optionChoices(group) {
+      var parsed = parseJson(group.choices || '[]', null);
+      if (parsed instanceof Array) return parsed;
+      return text(group.choices).split(',');
+    }
+    function choiceLabel(choice) { return typeof choice === 'object' && choice !== null ? text(choice.label) : text(choice).replace(/^\s+|\s+$/g, ''); }
+    function choicePrice(choice) { return typeof choice === 'object' && choice !== null ? Number(choice.price || 0) : 0; }
+    function renderItemConfig() {
+      var html = '', sidesHtml = '', i, j, group, choices, choice, priced, side, model;
+      for (i = 0; i < configuringOptions.length; i += 1) {
+        group = configuringOptions[i]; choices = optionChoices(group); priced = false;
+        for (j = 0; j < choices.length; j += 1) if (choicePrice(choices[j]) > 0 && !group.isFree) priced = true;
+        html += '<div class="config-group"><strong>' + escapeHtml(group.groupName) + (group.required ? ' *' : '') + '</strong>';
+        for (j = 0; j < choices.length; j += 1) {
+          choice = choices[j];
+          html += '<div class="config-choice"><input class="option-input" type="' + (priced ? 'number' : (group.multiSelect ? 'checkbox' : 'radio')) + '" ';
+          if (priced) html += 'min="0" value="0" ';
+          else html += 'value="1" name="option_' + i + '" ';
+          html += 'data-group="' + escapeHtml(group.groupName) + '" data-label="' + escapeHtml(choiceLabel(choice)) + '" data-price="' + escapeHtml(choicePrice(choice)) + '" data-priced="' + (priced ? '1' : '0') + '" data-multi="' + (group.multiSelect ? '1' : '0') + '">';
+          html += escapeHtml(choiceLabel(choice)) + (choicePrice(choice) ? ' <span class="item-money">+' + escapeHtml(formatMoney(choicePrice(choice))) + '</span>' : '') + '</div>';
+        }
+        html += '</div>';
+      }
+      side = allowedSides(configuringModel);
+      if (side.length) sidesHtml = '<div class="config-group"><h3>Món ăn kèm / topping</h3>';
+      for (i = 0; i < side.length; i += 1) {
+        model = side[i].model;
+        sidesHtml += '<div class="config-choice"><input class="side-input" type="number" min="0" ' + (side[i].maxQty ? 'max="' + side[i].maxQty + '" ' : '') + 'value="0" data-model-id="' + escapeHtml(model.id) + '" data-price="' + escapeHtml(model.sellingPrice || 0) + '">';
+        sidesHtml += escapeHtml(model.modelName || model.name) + ' <span class="item-money">+' + escapeHtml(formatMoney(model.sellingPrice)) + '</span></div>';
+      }
+      if (side.length) sidesHtml += '</div>';
+      byId('itemOptions').innerHTML = html;
+      byId('itemSides').innerHTML = sidesHtml;
+      updateItemConfigTotal();
+    }
+    function updateItemConfigTotal() {
+      var qty = Math.max(1, Number(byId('itemQuantity').value || 1)), unit = Number(configuringModel && configuringModel.sellingPrice || 0), inputs, i;
+      inputs = byId('itemModal').getElementsByTagName('input');
+      for (i = 0; i < inputs.length; i += 1) {
+        if (inputs[i].className === 'option-input') unit += Number(inputs[i].getAttribute('data-price') || 0) * (inputs[i].type === 'number' ? Number(inputs[i].value || 0) : (inputs[i].checked ? 1 : 0));
+        if (inputs[i].className === 'side-input') unit += Number(inputs[i].getAttribute('data-price') || 0) * Number(inputs[i].value || 0);
+      }
+      byId('itemConfigTotal').innerHTML = formatMoney(unit * qty);
+    }
+    function openItemConfig(model) {
+      configuringModel = model; configuringOptions = [];
+      byId('itemConfigTitle').innerHTML = escapeHtml(model.modelName || model.name || 'Cấu hình món');
+      byId('itemQuantity').value = '1'; byId('itemNote').value = ''; byId('itemOptions').innerHTML = '<p>Đang tải topping...</p>'; byId('itemSides').innerHTML = '';
+      message('itemConfigError', '', false); byId('itemModal').style.display = 'block';
+      request('GET', '/sapi/shop/staff/menu-options?modelId=' + encodeURIComponent(model.id), null, function (status, data) {
+        configuringOptions = status >= 200 && status < 300 && data instanceof Array ? data : [];
+        renderItemConfig();
+      });
+    }
+    function closeItemConfig() { byId('itemModal').style.display = 'none'; }
+    function confirmItemConfig() {
+      var qty = Math.max(1, Number(byId('itemQuantity').value || 1)), selected = {}, sideItems = [], optionAddOn = 0, inputs, i, input, group, label, value, model, j;
+      inputs = byId('itemModal').getElementsByTagName('input');
+      for (i = 0; i < inputs.length; i += 1) {
+        input = inputs[i];
+        if (input.className === 'option-input') {
+          value = input.type === 'number' ? Number(input.value || 0) : (input.checked ? 1 : 0);
+          if (!value) continue; group = input.getAttribute('data-group'); label = input.getAttribute('data-label');
+          optionAddOn += Number(input.getAttribute('data-price') || 0) * value;
+          if (input.getAttribute('data-priced') === '1') { if (!selected[group] || typeof selected[group] !== 'object') selected[group] = {}; selected[group][label] = value; }
+          else if (input.getAttribute('data-multi') === '1') { if (!(selected[group] instanceof Array)) selected[group] = []; selected[group].push(label); }
+          else selected[group] = label;
+        }
+        if (input.className === 'side-input' && Number(input.value || 0) > 0) {
+          model = null; for (j = 0; j < allModels.length; j += 1) if (text(allModels[j].id) === input.getAttribute('data-model-id')) { model = allModels[j]; break; }
+          if (model) sideItems.push({ modelId: model.id, modelName: model.modelName || model.name, sellingPrice: Number(model.sellingPrice || 0), quantity: Number(input.value) });
+        }
+      }
+      for (i = 0; i < configuringOptions.length; i += 1) {
+        group = configuringOptions[i];
+        if (group.required && (!selected[group.groupName] || (typeof selected[group.groupName] === 'object' && !Object.keys(selected[group.groupName]).length))) {
+          message('itemConfigError', 'Vui lòng chọn: ' + group.groupName, false); return;
+        }
+      }
+      cart.push({ cartKey: new Date().getTime() + '_' + cart.length, id: configuringModel.id, modelName: configuringModel.modelName || configuringModel.name, sellingPrice: Number(configuringModel.sellingPrice || 0), optionAddOn: optionAddOn, quantity: qty, selectedOptions: selected, sideItems: sideItems, itemNotes: byId('itemNote').value || null });
+      closeItemConfig(); renderCart();
+    }
     function renderCart() {
-      var html = '', total = 0, i, line;
+      var html = '', total = 0, i, j, line, sideTotal, optionsText, group, optionValue;
       if (!cart.length) { byId('cartLines').innerHTML = '<p class="muted">Chưa chọn món.</p>'; byId('cartTotal').innerHTML = '0 đ'; return; }
       for (i = 0; i < cart.length; i += 1) {
-        line = cart[i]; total += Number(line.sellingPrice || 0) * line.quantity;
-        html += '<div class="cart-line"><button type="button" data-remove-id="' + escapeHtml(line.id) + '">Xóa</button><strong>' + escapeHtml(line.quantity) + ' x ' + escapeHtml(line.modelName || line.name) + '</strong><br><span class="muted">' + escapeHtml(formatMoney(Number(line.sellingPrice || 0) * line.quantity)) + '</span></div>';
+        line = cart[i]; sideTotal = 0; optionsText = '';
+        for (group in line.selectedOptions) if (line.selectedOptions.hasOwnProperty(group)) {
+          optionValue = line.selectedOptions[group];
+          optionsText += (optionsText ? '; ' : '') + group + ': ' + (typeof optionValue === 'object' ? JSON.stringify(optionValue) : optionValue);
+        }
+        for (j = 0; j < line.sideItems.length; j += 1) sideTotal += line.sideItems[j].sellingPrice * line.sideItems[j].quantity;
+        total += (Number(line.sellingPrice || 0) + Number(line.optionAddOn || 0) + sideTotal) * line.quantity;
+        html += '<div class="cart-line"><button type="button" data-remove-id="' + escapeHtml(line.cartKey) + '">Xóa</button><strong>' + escapeHtml(line.quantity) + ' x ' + escapeHtml(line.modelName || line.name) + '</strong>';
+        if (optionsText) html += '<br><span class="muted">' + escapeHtml(optionsText) + '</span>';
+        if (line.sideItems.length) html += '<br><span class="muted">Ăn kèm: ' + escapeHtml(line.sideItems.map(function (s) { return s.quantity + ' x ' + s.modelName; }).join(', ')) + '</span>';
+        html += '<br><span class="muted">' + escapeHtml(formatMoney((Number(line.sellingPrice || 0) + Number(line.optionAddOn || 0) + sideTotal) * line.quantity)) + '</span></div>';
       }
       byId('cartLines').innerHTML = html;
       byId('cartTotal').innerHTML = formatMoney(total);
@@ -436,7 +565,8 @@
       byId('orderModal').style.display = 'block'; document.body.style.overflow = 'hidden';
       request('GET', '/sapi/bom/models', null, function (status, data) {
         var list = data instanceof Array ? data : data && (data.data || data.items || data.content);
-        menuModels = list instanceof Array ? list.filter(function (m) { return m.sellingPrice !== null && m.sellingPrice !== undefined && m.isActive !== false; }) : [];
+        allModels = list instanceof Array ? list : [];
+        menuModels = allModels.filter(function (m) { return m.sellingPrice !== null && m.sellingPrice !== undefined && m.isActive !== false; });
         renderMenu();
       });
     }
@@ -467,7 +597,8 @@
       setBusy('submitOrderButton', true, 'Tạo đơn'); message('formError', '', false);
       function createWithCustomer(customer) {
         body = { fulfillmentType: byId('fulfillmentType').value, tableId: null, customerName: customer.name, customerPhone: phone, paymentMethod: byId('paymentMethod').value, notes: byId('orderNotes').value || null, manualOrderNumber: null,
-          items: cart.map(function (item) { return { modelId: item.id, quantity: item.quantity, selectedOptions: null, itemNotes: null, unitPriceOverride: Number(item.sellingPrice) || null, sideItems: [] }; }) };
+          items: cart.map(function (item) { return { modelId: item.id, quantity: item.quantity, selectedOptions: Object.keys(item.selectedOptions || {}).length ? JSON.stringify(item.selectedOptions) : null, itemNotes: item.itemNotes || null, unitPriceOverride: Number(item.sellingPrice) || null,
+            sideItems: (item.sideItems || []).map(function (side) { return { modelId: side.modelId, quantity: side.quantity * item.quantity, selectedOptions: null, itemNotes: null, unitPriceOverride: Number(side.sellingPrice) || null, sideItems: [] }; }) }; }) };
         request('POST', '/sapi/shop/staff/orders', body, function (status, order) {
           if (status < 200 || status >= 300 || !order || !order.id) { setBusy('submitOrderButton', false, 'Tạo đơn'); message('formError', errorText(status, order), false); return; }
           request('PATCH', '/sapi/shop/staff/orders/' + encodeURIComponent(order.id) + '/customer', { customerId: customer.id }, function () {
@@ -482,7 +613,7 @@
       });
     }
     function advanceOrder(order, action) {
-      var labels = { confirm: 'xác nhận', prepare: 'bắt đầu chế biến', ready: 'đánh dấu sẵn sàng', complete: 'hoàn tất' };
+      var labels = { confirm: 'xác nhận', 'confirm-wait-payment': 'xác nhận và mời khách đến thu ngân', prepare: 'bắt đầu chế biến', ready: 'đánh dấu sẵn sàng', complete: 'hoàn tất' };
       if (!window.confirm('Bạn chắc chắn muốn ' + labels[action] + ' đơn #' + (order.orderNumber || order.orderCode) + '?')) return;
       request('PATCH', '/sapi/shop/staff/orders/' + encodeURIComponent(order.id) + '/' + action, null, function (status, data) {
         if (status < 200 || status >= 300) { message('ordersMessage', errorText(status, data), false); return; }
@@ -542,6 +673,10 @@
       if (window.confirm('Tạo Queue QR mới? Mã hiện tại sẽ không còn được hiển thị tại quầy.')) openQueueQr(true);
     };
     byId('cancelOrderFormButton').onclick = closeOrderForm;
+    byId('cancelItemButton').onclick = closeItemConfig;
+    byId('confirmItemButton').onclick = confirmItemConfig;
+    byId('itemModal').onchange = updateItemConfigTotal;
+    byId('itemModal').onkeyup = updateItemConfigTotal;
     byId('findCustomerButton').onclick = findCustomer;
     byId('submitOrderButton').onclick = submitOrder;
     byId('menuChoices').onclick = function (event) {
@@ -550,14 +685,13 @@
       id = target.getAttribute('data-menu-id');
       for (i = 0; i < menuModels.length; i += 1) if (text(menuModels[i].id) === id) { found = menuModels[i]; break; }
       if (!found) return;
-      for (i = 0; i < cart.length; i += 1) if (text(cart[i].id) === id) { cart[i].quantity += 1; renderCart(); return; }
-      found.quantity = 1; cart.push(found); renderCart();
+      openItemConfig(found);
     };
     byId('cartLines').onclick = function (event) {
       var target = event.target || event.srcElement, id, i;
       if (!target || target.tagName !== 'BUTTON') return;
       id = target.getAttribute('data-remove-id');
-      for (i = 0; i < cart.length; i += 1) if (text(cart[i].id) === id) { cart.splice(i, 1); break; }
+      for (i = 0; i < cart.length; i += 1) if (text(cart[i].cartKey) === id) { cart.splice(i, 1); break; }
       renderCart();
     };
     byId('orders').onclick = function (event) {
@@ -571,7 +705,7 @@
       if (!order) return;
       if (action === 'track') showTracking(order);
       if (action === 'pay') showPayment(order);
-      if (action === 'confirm' || action === 'prepare' || action === 'ready' || action === 'complete') advanceOrder(order, action);
+      if (action === 'confirm' || action === 'confirm-wait-payment' || action === 'prepare' || action === 'ready' || action === 'complete') advanceOrder(order, action);
     };
     byId('saveContextButton').onclick = function () {
       tenantId = byId('tenantId').value.replace(/^\s+|\s+$/g, '');

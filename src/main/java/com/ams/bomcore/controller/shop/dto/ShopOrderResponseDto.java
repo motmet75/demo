@@ -35,6 +35,7 @@ public class ShopOrderResponseDto {
     private BigDecimal totalAmount;
     private String paymentMethod;
     private String paymentStatus;
+    private Instant paymentRequestedAt;
     private String paymentQr;
     private BigDecimal splitCashAmount;
     private BigDecimal discountAmount;
@@ -255,6 +256,7 @@ public class ShopOrderResponseDto {
         dto.totalAmount = order.getTotalAmount();
         dto.paymentMethod = order.getPaymentMethod();
         dto.paymentStatus = order.getPaymentStatus();
+        dto.paymentRequestedAt = order.getPaymentRequestedAt();
         dto.paymentQr = order.getPaymentQr();
         dto.splitCashAmount = order.getSplitCashAmount();
         dto.discountAmount = order.getDiscountAmount();
@@ -323,6 +325,7 @@ public class ShopOrderResponseDto {
     public BigDecimal getTotalAmount() { return totalAmount; }
     public String getPaymentMethod() { return paymentMethod; }
     public String getPaymentStatus() { return paymentStatus; }
+    public Instant getPaymentRequestedAt() { return paymentRequestedAt; }
     public String getPaymentQr() { return paymentQr; }
     public BigDecimal getSplitCashAmount() { return splitCashAmount; }
     public BigDecimal getDiscountAmount() { return discountAmount; }

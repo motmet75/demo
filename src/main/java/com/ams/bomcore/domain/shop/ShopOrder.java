@@ -90,6 +90,9 @@ public class ShopOrder {
     @Column(name = "payment_status", length = 20)
     private String paymentStatus;
 
+    @Column(name = "payment_requested_at")
+    private Instant paymentRequestedAt;
+
     @Column(name = "payment_qr", columnDefinition = "TEXT")
     private String paymentQr;
 
@@ -210,6 +213,8 @@ public class ShopOrder {
     public void setPaymentMethod(String paymentMethod) { this.paymentMethod = paymentMethod; }
     public String getPaymentStatus() { return paymentStatus; }
     public void setPaymentStatus(String paymentStatus) { this.paymentStatus = paymentStatus; }
+    public Instant getPaymentRequestedAt() { return paymentRequestedAt; }
+    public void setPaymentRequestedAt(Instant paymentRequestedAt) { this.paymentRequestedAt = paymentRequestedAt; }
     public String getPaymentQr() { return paymentQr; }
     public void setPaymentQr(String paymentQr) { this.paymentQr = paymentQr; }
     public BigDecimal getSplitCashAmount() { return splitCashAmount; }
@@ -257,4 +262,3 @@ public class ShopOrder {
     public Instant getMaterialDeductedAt() { return materialDeductedAt; }
     public void setMaterialDeductedAt(Instant materialDeductedAt) { this.materialDeductedAt = materialDeductedAt; }
 }
-

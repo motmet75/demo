@@ -264,6 +264,30 @@ public class ShopOrderService {
         return dto(order);
     }
 
+    @Transactional
+    public ShopOrderResponseDto confirmAndRequestPayment(UUID orderId, UUID tenantId, UUID companyId) {
+        confirmOrder(orderId, tenantId, companyId);
+        ShopOrder order = requireOrder(orderId, tenantId, companyId);
+        if (!ShopOrder.PAY_STATUS_PAID.equals(order.getPaymentStatus())) {
+            order.setPaymentRequestedAt(Instant.now());
+            shopOrderRepository.save(order);
+        }
+        return dto(order);
+    }
+
+    @Transactional
+    public ShopOrderResponseDto changeTableByCustomer(String orderCode, UUID tableId, String token) {
+        ShopOrder order = requireOrderByCode(orderCode);
+        if (order.getSourceToken() != null && !order.getSourceToken().isBlank()
+                && !order.getSourceToken().equals(token)) {
+            throw new IllegalArgumentException("Order session does not match");
+        }
+        if (ShopOrder.STATUS_CANCELLED.equals(order.getStatus()) || ShopOrder.STATUS_COMPLETED.equals(order.getStatus())) {
+            throw new IllegalStateException("Finished orders cannot change table");
+        }
+        return setOrderTable(order.getId(), tableId, order.getTenantId(), order.getCompanyId());
+    }
+
     // Customer edit-lock endpoints ──────────────────────────────────
 
     @Transactional
@@ -396,6 +420,7 @@ public class ShopOrderService {
         order.setStatus(ShopOrder.STATUS_PICKED_UP);
         order.setCompletedAt(Instant.now());
         order.setPaymentStatus(ShopOrder.PAY_STATUS_PAID);
+        order.setPaymentRequestedAt(null);
         shopOrderRepository.save(order);
         disableSourceToken(order);
         return dto(order);
@@ -408,6 +433,7 @@ public class ShopOrderService {
         order.setStatus(ShopOrder.STATUS_COMPLETED);
         order.setCompletedAt(Instant.now());
         order.setPaymentStatus(ShopOrder.PAY_STATUS_PAID);
+        order.setPaymentRequestedAt(null);
         shopOrderRepository.save(order);
         disableSourceToken(order);
         return dto(order);
@@ -806,6 +832,7 @@ public class ShopOrderService {
             throw new IllegalStateException("Cannot mark a cancelled order as paid");
         }
         order.setPaymentStatus(ShopOrder.PAY_STATUS_PAID);
+        order.setPaymentRequestedAt(null);
         shopOrderRepository.save(order);
         return dto(order);
     }

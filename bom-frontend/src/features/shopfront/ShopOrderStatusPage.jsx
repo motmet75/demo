@@ -17,7 +17,7 @@ import AddShoppingCartIcon from '@mui/icons-material/AddShoppingCart'
 import QrCode2Icon from '@mui/icons-material/QrCode2'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
-import { fetchPublicOrder, fetchTokenSession, fetchCounterOrderQr } from '../../api/shopApi'
+import { fetchPublicOrder, fetchTokenSession, fetchCounterOrderQr, fetchPublicTables, changePublicOrderTable } from '../../api/shopApi'
 import { printOrderReceipt } from '../../utils/printOrderReceipt'
 import { useI18n } from '../../i18n/I18nContext'
 import { localizedModelName } from '../../i18n/menuLocalization'
@@ -202,6 +202,12 @@ function SingleOrderView({ order, onEdit, itemName, fmtLocal }) {
         </Box>
       )}
 
+      {order.paymentRequestedAt && order.paymentStatus !== 'PAID' && (
+        <Alert severity="warning" sx={{ mx: 'auto', mt: 2, width: 'calc(100% - 32px)', maxWidth: 560, fontWeight: 800 }}>
+          Đơn đã được xác nhận. Vui lòng đến quầy thu ngân để thanh toán.
+        </Alert>
+      )}
+
       {status === 'READY' && order.paymentQr && (
         <Box sx={{ textAlign: 'center', px: { xs: 2, md: 4 }, pt: 3, pb: 1 }}>
           {bankLogoUrl && <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1 }}><img src={bankLogoUrl} alt="Bank" style={{ height: 40, maxWidth: 140, objectFit: 'contain', borderRadius: 6 }} /></Box>}
@@ -221,6 +227,10 @@ function SingleOrderView({ order, onEdit, itemName, fmtLocal }) {
       )}
 
       <OrderItems order={order} itemName={itemName} fmtLocal={fmtLocal} />
+
+      <Box sx={{ px: 2, maxWidth: 560, width: '100%', mx: 'auto' }}>
+        <CustomerTableChanger order={order} token={order.sourceToken || null} onChanged={() => window.location.reload()} />
+      </Box>
 
       {isDone && (
         <Box sx={{ textAlign: 'center', pt: 3 }}>
@@ -261,6 +271,47 @@ function menuUrl(qs) {
   return window.location.origin + appBase + '/shop/menu?' + new URLSearchParams(qs)
 }
 
+function CustomerTableChanger({ order, token, onChanged }) {
+  const [tables, setTables] = useState([])
+  const [tableId, setTableId] = useState(order.tableId || '')
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    if (!order.tenantId || !order.companyId) return
+    fetchPublicTables(order.tenantId, order.companyId)
+      .then(({ data }) => setTables(Array.isArray(data) ? data : []))
+      .catch(() => setTables([]))
+  }, [order.tenantId, order.companyId])
+
+  const save = async () => {
+    if (!tableId || tableId === order.tableId) return
+    setSaving(true); setMessage('')
+    try {
+      const { res, data } = await changePublicOrderTable(order.orderCode, tableId, token)
+      if (!res.ok) setMessage(data?.error || 'Không thể đổi bàn')
+      else { setMessage('Đã đổi bàn'); onChanged?.(data) }
+    } catch { setMessage('Không thể kết nối máy chủ') }
+    setSaving(false)
+  }
+
+  if (!tables.length || ['CANCELLED', 'COMPLETED'].includes(order.status)) return null
+  return (
+    <Box sx={{ mt: 1.5, p: 1.5, bgcolor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 2 }}>
+      <Typography fontWeight={800} sx={{ mb: 0.75 }}>Đổi bàn</Typography>
+      <Box sx={{ display: 'flex', gap: 1 }}>
+        <Box component="select" value={tableId} onChange={e => setTableId(e.target.value)}
+          sx={{ flex: 1, minHeight: 42, borderRadius: 1, border: '1px solid #93c5fd', px: 1, bgcolor: '#fff' }}>
+          <option value="">Chọn bàn</option>
+          {tables.map(table => <option key={table.id} value={table.id}>{table.tableName}</option>)}
+        </Box>
+        <Button variant="contained" onClick={save} disabled={saving || !tableId || tableId === order.tableId}>Lưu</Button>
+      </Box>
+      {message && <Typography variant="caption" color={message === 'Đã đổi bàn' ? 'success.main' : 'error'}>{message}</Typography>}
+    </Box>
+  )
+}
+
 function OrderCard({ order, highlighted, token, itemName, fmtLocal }) {
   const [expanded, setExpanded] = useState(highlighted)
   const status   = order.status || 'PENDING'
@@ -295,6 +346,11 @@ function OrderCard({ order, highlighted, token, itemName, fmtLocal }) {
           {displayNum}
         </Typography>
         <Box sx={{ flex: 1 }}>
+          {(order.customerName || order.customerPhone) && (
+            <Typography fontWeight={800} sx={{ fontSize: 13, mb: 0.4 }}>
+              {order.customerName || 'Khách'}{order.customerPhone ? ` · ***${String(order.customerPhone).replace(/\D/g, '').slice(-3)}` : ''}
+            </Typography>
+          )}
           <Chip label={chip.label} color={chip.color} size="small" sx={{ fontWeight: 700, fontSize: 11 }} />
           {status === 'PREPARING' && (
             <Box component="span" sx={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%',
@@ -304,12 +360,16 @@ function OrderCard({ order, highlighted, token, itemName, fmtLocal }) {
         </Box>
         <Typography fontWeight={800} color="primary" sx={{ fontSize: 15 }}>{fmtLocal(payableAmount(order))}</Typography>
         <Box sx={{ color: '#94a3b8' }}>{expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}</Box>
+        <Button size="small" variant="outlined" onClick={event => { event.stopPropagation(); setExpanded(true) }}>Xem đơn</Button>
       </Box>
 
       <Collapse in={expanded}>
         <Divider />
         <Box sx={{ px: 2, py: 1.5 }}>
           {/* Step bar (compact) */}
+          {order.paymentRequestedAt && order.paymentStatus !== 'PAID' && (
+            <Alert severity="warning" sx={{ mb: 1.5, fontWeight: 800 }}>Vui lòng đến quầy thu ngân để thanh toán đơn hàng.</Alert>
+          )}
           {status !== 'CANCELLED' && (
             <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1.5 }}>
               {STEPS.map((step, idx) => {
@@ -390,6 +450,7 @@ function OrderCard({ order, highlighted, token, itemName, fmtLocal }) {
               Note: {order.notes}
             </Typography>
           )}
+          <CustomerTableChanger order={order} token={token} onChanged={() => window.location.reload()} />
           <Box sx={{ mt: 1 }}><CounterQrButton orders={[order]} /></Box>
         </Box>
 
