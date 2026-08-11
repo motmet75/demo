@@ -90,9 +90,9 @@
       <div style="margin:22px 0;border-top:1px solid #d5dce2"></div>
       <form id="quickLoginForm">
         <h3>Đăng nhập nhanh</h3>
-        <p class="muted">Nhập mã 16 ký tự đang hiển thị trên máy quầy hoặc PC.</p>
+        <p class="muted">Nhập mã PIN 6 số đang hiển thị trên máy quầy hoặc PC. Mã có hiệu lực 5 phút.</p>
         <label for="quickLoginCode">Mã đăng nhập nhanh</label>
-        <input id="quickLoginCode" type="text" maxlength="20" autocapitalize="characters" autocorrect="off" autocomplete="off" placeholder="Ví dụ: AB12CD34EF56GH78">
+        <input id="quickLoginCode" type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" placeholder="000000" style="font-size:30px;letter-spacing:8px;text-align:center">
         <button id="quickLoginButton" class="wide" type="submit">Đăng nhập bằng mã</button>
       </form>
       <form id="otpBox">
@@ -667,8 +667,8 @@
       return false;
     };
     byId('quickLoginForm').onsubmit = function () {
-      var code = byId('quickLoginCode').value.replace(/[^A-Za-z0-9_-]/g, '');
-      if (!code) { message('loginMessage', 'Vui lòng nhập mã đăng nhập nhanh.', false); return false; }
+      var code = byId('quickLoginCode').value.replace(/[^0-9]/g, '');
+      if (code.length !== 6) { message('loginMessage', 'Vui lòng nhập đủ 6 số.', false); return false; }
       setBusy('quickLoginButton', true, 'Đăng nhập bằng mã'); message('loginMessage', '', false);
       request('POST', '/sapi/auth/quick-login/redeem', { token: code }, function (status, data) {
         setBusy('quickLoginButton', false, 'Đăng nhập bằng mã');

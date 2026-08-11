@@ -6,7 +6,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.Base64;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Set;
 import java.util.UUID;
 
@@ -32,6 +32,9 @@ public class QuickLoginService {
     private final UserRepository users;
     private final AppUserDetailsService userDetailsService;
     private final SecureRandom random = new SecureRandom();
+    private final ConcurrentHashMap<String, AttemptWindow> attempts = new ConcurrentHashMap<>();
+    private static final int MAX_ATTEMPTS = 6;
+    private static final long ATTEMPT_WINDOW_SECONDS = 600;
 
     public QuickLoginService(QuickLoginTokenRepository tokens, UserRepository users,
                              AppUserDetailsService userDetailsService) {
@@ -44,11 +47,10 @@ public class QuickLoginService {
     public IssuedToken issue(User user, Integer requestedHours) {
         int hours = requestedHours != null ? requestedHours : 12;
         if (!ALLOWED_HOURS.contains(hours)) throw new QuickLoginException(HttpStatus.BAD_REQUEST, "Hours must be 6, 8, 12 or 24");
-        // 96 bits of entropy remains impractical to guess while producing a
-        // 16-character code that can be typed on legacy iPads without a camera.
-        byte[] bytes = new byte[12];
-        random.nextBytes(bytes);
-        String raw = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+        String raw;
+        do {
+            raw = String.format("%06d", random.nextInt(1_000_000));
+        } while (tokens.findByTokenHash(hash(raw)).isPresent());
         Instant now = Instant.now();
         QuickLoginToken token = new QuickLoginToken();
         token.setId(UUID.randomUUID());
@@ -56,13 +58,17 @@ public class QuickLoginService {
         token.setUserId(user.getId());
         token.setSessionHours(hours);
         token.setCreatedAt(now);
-        token.setExpiresAt(now.plus(hours, ChronoUnit.HOURS));
+        // The short PIN is exposed only for five minutes. The authenticated
+        // session created from it still lasts the selected number of hours.
+        token.setExpiresAt(now.plus(5, ChronoUnit.MINUTES));
         tokens.save(token);
         return new IssuedToken(raw, hours, token.getExpiresAt());
     }
 
     @Transactional
     public User redeem(String raw, HttpServletRequest request, HttpServletResponse response) {
+        String client = clientIp(request);
+        checkAttemptLimit(client);
         QuickLoginToken token = tokens.findByTokenHash(hash(raw == null ? "" : raw.trim()))
                 .orElseThrow(() -> new QuickLoginException(HttpStatus.UNAUTHORIZED, "Quick login token is invalid"));
         Instant now = Instant.now();
@@ -90,7 +96,35 @@ public class QuickLoginService {
         response.addCookie(sessionCookie);
         token.setUsedAt(now);
         tokens.save(token);
+        attempts.remove(client);
         return user;
+    }
+
+    private void checkAttemptLimit(String client) {
+        Instant now = Instant.now();
+        AttemptWindow window = attempts.compute(client, (key, current) -> {
+            if (current == null || now.isAfter(current.started.plusSeconds(ATTEMPT_WINDOW_SECONDS))) {
+                return new AttemptWindow(now, 1);
+            }
+            current.count++;
+            return current;
+        });
+        if (window.count > MAX_ATTEMPTS) {
+            throw new QuickLoginException(HttpStatus.TOO_MANY_REQUESTS,
+                    "Too many quick login attempts. Please wait 10 minutes");
+        }
+    }
+
+    private static String clientIp(HttpServletRequest request) {
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) return forwarded.split(",")[0].trim();
+        return request.getRemoteAddr();
+    }
+
+    private static final class AttemptWindow {
+        private final Instant started;
+        private int count;
+        private AttemptWindow(Instant started, int count) { this.started = started; this.count = count; }
     }
 
     private static String hash(String value) {
