@@ -11,7 +11,7 @@
     .bar { background: #174a75; color: #fff; padding: 14px 16px; overflow: hidden; }
     .bar h1 { float: left; margin: 4px 0; font-size: 22px; }
     .bar .right { float: right; }
-    .page { width: 96%; max-width: 900px; margin: 18px auto; }
+    .page { width: 96%; max-width: 980px; margin: 14px auto; }
     .panel, .order { background: #fff; border: 1px solid #cbd2d9; border-radius: 7px; padding: 16px; margin-bottom: 14px; }
     .login { max-width: 440px; margin: 45px auto; }
     h2, h3, p { margin-top: 0; }
@@ -32,6 +32,18 @@
     .items li { padding: 9px 2px; border-bottom: 1px solid #e4e7ea; }
     .qty { display: inline-block; min-width: 45px; font-weight: bold; color: #174a75; }
     .total { margin-top: 12px; text-align: right; font-size: 20px; font-weight: bold; }
+    .order-actions { margin-top: 14px; overflow: hidden; }
+    .order-actions button { float: left; width: 48%; margin-right: 2%; min-height: 58px; }
+    .order-actions button.pay { background: #168447; }
+    .paid { color: #168447; font-size: 15px; font-weight: bold; text-align: right; margin-top: 10px; }
+    .modal { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background: #17212b; background: rgba(10, 20, 30, .94); }
+    .modal-card { width: 92%; max-width: 540px; margin: 24px auto; padding: 18px; background: #fff; border-radius: 9px; text-align: center; }
+    .modal-title { margin: 0 0 4px; color: #174a75; font-size: 30px; }
+    .modal-order { margin: 0 0 10px; color: #20252b; font-size: 54px; font-weight: bold; }
+    .qr-frame { min-height: 280px; padding: 10px; border: 3px solid #dce8f1; border-radius: 8px; background: #fff; }
+    .qr-frame img { display: block; width: 100%; max-width: 360px; height: auto; margin: 0 auto; }
+    .pay-amount { margin: 12px 0 3px; color: #168447; font-size: 34px; font-weight: bold; }
+    .close-button { width: 100%; margin-top: 15px; background: #4d5963; }
     .clear { clear: both; }
     #ordersView, #contextBox, #otpBox { display: none; }
     @media (max-width: 600px) { .page { width: 94%; } .bar h1 { float: none; } .bar .right { float: none; margin-top: 10px; } }
@@ -83,6 +95,19 @@
     </div>
   </div>
 
+  <div id="qrModal" class="modal">
+    <div class="modal-card">
+      <h2 id="qrTitle" class="modal-title">Mã QR</h2>
+      <div id="qrOrder" class="modal-order"></div>
+      <p id="qrHelp" class="muted"></p>
+      <div id="qrError" class="message"></div>
+      <div id="qrFrame" class="qr-frame"><p>Đang tạo mã QR...</p></div>
+      <div id="qrAmount" class="pay-amount"></div>
+      <div id="qrReference" class="muted"></div>
+      <button id="closeQrButton" class="close-button" type="button">Đóng</button>
+    </div>
+  </div>
+
   <script>
   (function () {
     'use strict';
@@ -90,6 +115,7 @@
     var tenantId = '';
     var companyId = '';
     var mfaMethod = '';
+    var orderById = {};
 
     function byId(id) { return document.getElementById(id); }
     function text(value) { return value === null || typeof value === 'undefined' ? '' : String(value); }
@@ -193,6 +219,7 @@
       }
       for (i = 0; i < rows.length; i += 1) {
         order = rows[i] || {};
+        orderById[order.id] = order;
         items = order.items || [];
         html += '<div class="order"><span class="status">' + escapeHtml(order.status) + '</span>';
         html += '<div class="order-title">Đơn #' + escapeHtml(order.orderNumber || order.dailySeq || order.orderCode) + '</div>';
@@ -203,9 +230,71 @@
           item = items[j] || {};
           html += '<li><span class="qty">' + escapeHtml(item.quantity) + ' x</span> ' + escapeHtml(item.modelName || 'Món') + (item.itemNotes ? '<br><span class="muted">' + escapeHtml(item.itemNotes) + '</span>' : '') + '</li>';
         }
-        html += '</ul><div class="total">' + escapeHtml(formatMoney(order.totalAmount)) + '</div><div class="clear"></div></div>';
+        html += '</ul><div class="total">' + escapeHtml(formatMoney(Math.max(0, Number(order.totalAmount || 0) - Number(order.discountAmount || 0)))) + '</div>';
+        if (order.paymentStatus === 'PAID') html += '<div class="paid">ĐÃ THANH TOÁN</div>';
+        html += '<div class="order-actions">';
+        html += '<button type="button" data-action="track" data-id="' + escapeHtml(order.id) + '">QR theo dõi</button>';
+        if (order.paymentStatus !== 'PAID' && order.status !== 'CANCELLED') {
+          html += '<button type="button" class="pay" data-action="pay" data-id="' + escapeHtml(order.id) + '">QR thanh toán</button>';
+        }
+        html += '</div><div class="clear"></div></div>';
       }
       byId('orders').innerHTML = html;
+    }
+    function openQr(title, order, help) {
+      byId('qrTitle').innerHTML = escapeHtml(title);
+      byId('qrOrder').innerHTML = '#' + escapeHtml(order.orderNumber || order.dailySeq || order.orderCode);
+      byId('qrHelp').innerHTML = escapeHtml(help);
+      byId('qrFrame').innerHTML = '<p>Đang tạo mã QR...</p>';
+      byId('qrAmount').innerHTML = '';
+      byId('qrReference').innerHTML = '';
+      message('qrError', '', false);
+      byId('qrModal').style.display = 'block';
+      document.body.style.overflow = 'hidden';
+    }
+    function closeQr() {
+      byId('qrModal').style.display = 'none';
+      document.body.style.overflow = '';
+    }
+    function qrImage(source, alt) {
+      if (!source) return '';
+      if (source.indexOf('http://') === 0 || source.indexOf('https://') === 0 || source.indexOf('data:') === 0) {
+        return '<img src="' + escapeHtml(source) + '" alt="' + escapeHtml(alt) + '">';
+      }
+      return '<img src="data:image/png;base64,' + escapeHtml(source) + '" alt="' + escapeHtml(alt) + '">';
+    }
+    function showTracking(order) {
+      openQr('Theo dõi đơn hàng', order, 'Khách hàng quét mã này để xem trạng thái đơn');
+      request('GET', '/sapi/shop/staff/orders/' + encodeURIComponent(order.id) + '/tag-qr', null, function (status, data) {
+        if (status < 200 || status >= 300 || !data || !data.qrBase64) {
+          byId('qrFrame').innerHTML = '';
+          message('qrError', errorText(status, data), false);
+          return;
+        }
+        byId('qrFrame').innerHTML = qrImage(data.qrBase64, 'QR theo dõi đơn hàng');
+        byId('qrReference').innerHTML = escapeHtml(order.orderCode || '');
+      });
+    }
+    function showPayment(order) {
+      var amount = Math.max(0, Number(order.totalAmount || 0) - Number(order.discountAmount || 0));
+      openQr('Thanh toán', order, 'Khách hàng mở ứng dụng ngân hàng và quét mã');
+      byId('qrAmount').innerHTML = escapeHtml(formatMoney(amount));
+      byId('qrReference').innerHTML = 'Nội dung: ' + escapeHtml(order.orderCode || '');
+      if (order.paymentQr) {
+        byId('qrFrame').innerHTML = qrImage(order.paymentQr, 'QR thanh toán');
+        return;
+      }
+      request('GET', '/sapi/shop/staff/bank-config', null, function (status, data) {
+        var url;
+        if (status < 200 || status >= 300 || !data || !data.bankBin || !data.bankAccountNumber) {
+          byId('qrFrame').innerHTML = '';
+          message('qrError', status >= 200 && status < 300 ? 'Chưa cấu hình tài khoản ngân hàng.' : errorText(status, data), false);
+          return;
+        }
+        url = 'https://img.vietqr.io/image/' + encodeURIComponent(data.bankBin) + '-' + encodeURIComponent(data.bankAccountNumber) + '-qr_only.png';
+        url += '?amount=' + Math.round(amount) + '&addInfo=' + encodeURIComponent(order.orderCode || '') + '&accountName=' + encodeURIComponent(data.bankAccountName || '');
+        byId('qrFrame').innerHTML = qrImage(url, 'VietQR thanh toán');
+      });
     }
     function loadOrders() {
       message('ordersMessage', 'Đang tải đơn hàng...', true);
@@ -253,6 +342,19 @@
     };
     byId('backButton').onclick = showLogin;
     byId('refreshButton').onclick = loadOrders;
+    byId('closeQrButton').onclick = closeQr;
+    byId('orders').onclick = function (event) {
+      var target = event.target || event.srcElement;
+      var action;
+      var order;
+      while (target && target !== byId('orders') && target.tagName !== 'BUTTON') target = target.parentNode;
+      if (!target || target.tagName !== 'BUTTON') return;
+      action = target.getAttribute('data-action');
+      order = orderById[target.getAttribute('data-id')];
+      if (!order) return;
+      if (action === 'track') showTracking(order);
+      if (action === 'pay') showPayment(order);
+    };
     byId('saveContextButton').onclick = function () {
       tenantId = byId('tenantId').value.replace(/^\s+|\s+$/g, '');
       companyId = byId('companyId').value.replace(/^\s+|\s+$/g, '');
