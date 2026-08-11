@@ -53,6 +53,7 @@
     .item-money { float: right; color: #168447; font-weight: bold; }
     .flow-actions { margin-top: 12px; }
     .flow-actions button { width: 100%; background: #d87812; }
+    .customer-editing { margin: 12px 0; padding: 14px; border: 3px solid #f59e0b; border-radius: 7px; background: #fff3cd; color: #8a3b00; text-align: center; font-size: 19px; font-weight: bold; }
     .form-modal .modal-card { max-width: 850px; text-align: left; }
     select { width: 100%; height: 48px; padding: 7px; border: 1px solid #929ca6; border-radius: 5px; background: #fff; font-size: 18px; }
     .member-result { padding: 10px; margin-top: 8px; border-radius: 5px; background: #e9f6ed; color: #176334; }
@@ -241,7 +242,9 @@
       xhr.send(body === null ? null : JSON.stringify(body));
     }
     function errorText(status, data) {
-      if (data && (data.message || data.error)) return data.message || data.error;
+      var detail = data && (data.message || data.error) ? text(data.message || data.error) : '';
+      if (detail.toLowerCase().indexOf('customer is currently editing') >= 0) return 'Khách hàng đang chỉnh sửa đơn. Vui lòng chờ khách hoàn tất.';
+      if (detail) return detail;
       if (status === 0) return 'Không thể kết nối máy chủ.';
       if (status === 401) return 'Phiên đăng nhập đã hết hạn.';
       return 'Có lỗi xảy ra (' + status + ').';
@@ -315,6 +318,7 @@
         html += '<div class="order-title">Đơn #' + escapeHtml(order.orderNumber || order.dailySeq || order.orderCode) + '</div>';
         html += '<div class="meta">' + escapeHtml(order.tableName || order.fulfillmentType || '') + ' &middot; ' + escapeHtml(formatDate(order.createdAt)) + '</div>';
         if (order.customerName) html += '<div>Khách: ' + escapeHtml(order.customerName) + '</div>';
+        if (order.customerEditing) html += '<div class="customer-editing">KHÁCH HÀNG ĐANG CHỈNH SỬA<br><span class="muted">Vui lòng chờ khách bấm Hoàn tất chỉnh sửa</span></div>';
         html += '<ul class="items">';
         for (j = 0; j < items.length; j += 1) {
           item = items[j] || {};
@@ -339,8 +343,8 @@
         else if (order.status === 'CONFIRMED') { actionName = 'prepare'; actionLabel = 'Bắt đầu chế biến'; }
         else if (order.status === 'PREPARING') { actionName = 'ready'; actionLabel = 'Món đã sẵn sàng'; }
         else if (order.status === 'READY' || order.status === 'PICKED_UP') { actionName = 'complete'; actionLabel = 'Hoàn tất đơn'; }
-        if (actionName) html += '<div class="flow-actions"><button type="button" data-action="' + actionName + '" data-id="' + escapeHtml(order.id) + '">' + actionLabel + '</button></div>';
-        if (order.status === 'PENDING' && order.paymentStatus !== 'PAID') html += '<div class="flow-actions"><button type="button" style="background:#a33b35" data-action="confirm-wait-payment" data-id="' + escapeHtml(order.id) + '">Xác nhận &amp; mời khách thanh toán</button></div>';
+        if (actionName && !order.customerEditing) html += '<div class="flow-actions"><button type="button" data-action="' + actionName + '" data-id="' + escapeHtml(order.id) + '">' + actionLabel + '</button></div>';
+        if (order.status === 'PENDING' && order.paymentStatus !== 'PAID' && !order.customerEditing) html += '<div class="flow-actions"><button type="button" style="background:#a33b35" data-action="confirm-wait-payment" data-id="' + escapeHtml(order.id) + '">Xác nhận &amp; mời khách thanh toán</button></div>';
         html += '</div>';
       }
       byId('orders').innerHTML = html;

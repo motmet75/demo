@@ -50,7 +50,7 @@ import { resolveToken, fetchMenu, createOrder, fetchPublicMenuOptions,
          fetchActiveTableOrders, startCustomerEdit, cancelCustomerEdit,
          updatePublicOrderItems, fetchPublicOrder, fetchTokenSession,
          cancelPublicOrder, fetchShopConfig, callStaff, fetchPublicStaffCall,
-         fetchLatestPublicStaffCall, redeemPublicVoucher, fetchPublicTables } from '../../api/shopApi'
+         fetchLatestPublicStaffCall, redeemPublicVoucher, fetchPublicTables, changePublicOrderTable } from '../../api/shopApi'
 import ItemOptionsDialog from './ItemOptionsDialog'
 import OrderReceiptDialog from './OrderReceiptDialog'
 import VoucherQrScanDialog from '../shoporder/VoucherQrScanDialog'
@@ -303,14 +303,39 @@ function SessionOrderList({ session, token, onEdit, onView, t, formatAmount, ite
   )
 }
 
-function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpdated }) {
+function TrackingOverlay({ order: initialOrder, ctx, token, tables = [], onEdit, onOrderMore, onUpdated }) {
   const [order, setOrder] = React.useState(initialOrder)
   const [imagePreview, setImagePreview] = React.useState(null)
+  const [finishingEdit, setFinishingEdit] = React.useState(false)
+  const [changingTable, setChangingTable] = React.useState(false)
+  const [selectedTableId, setSelectedTableId] = React.useState(initialOrder?.tableId || '')
+  const [actionMessage, setActionMessage] = React.useState('')
   const { language, t, formatMoney } = useI18n()
   const fmtLocal = React.useCallback((n) => n != null ? formatMoney(n, 'VND') : '', [formatMoney])
   const displayItemName = React.useCallback((item) => localizedModelName(item, language), [language])
 
-  React.useEffect(() => { setOrder(initialOrder) }, [initialOrder])
+  React.useEffect(() => { setOrder(initialOrder); setSelectedTableId(initialOrder?.tableId || '') }, [initialOrder])
+
+  const finishEditing = async () => {
+    setFinishingEdit(true); setActionMessage('')
+    try {
+      const { res, data } = await cancelCustomerEdit(order.orderCode)
+      if (!res.ok) setActionMessage(data?.error || data?.message || 'Không thể hoàn tất sửa đơn')
+      else { setOrder(data); onUpdated?.(data); setActionMessage('Đã hoàn tất sửa đơn') }
+    } catch { setActionMessage('Không thể kết nối máy chủ') }
+    setFinishingEdit(false)
+  }
+
+  const changeTable = async () => {
+    if (!selectedTableId || selectedTableId === order.tableId) return
+    setChangingTable(true); setActionMessage('')
+    try {
+      const { res, data } = await changePublicOrderTable(order.orderCode, selectedTableId, token)
+      if (!res.ok) setActionMessage(data?.error || data?.message || 'Không thể đổi bàn')
+      else { setOrder(data); onUpdated?.(data); setActionMessage('Đã đổi bàn thành công') }
+    } catch { setActionMessage('Không thể kết nối máy chủ') }
+    setChangingTable(false)
+  }
 
   React.useEffect(() => {
     if (!order?.orderCode) return
@@ -444,6 +469,29 @@ function TrackingOverlay({ order: initialOrder, ctx, onEdit, onOrderMore, onUpda
       </Box>
 
       <Box sx={{ px: 2, pb: 3, pt: 1.5, display: 'flex', flexDirection: 'column', gap: 1, flexShrink: 0, borderTop: '1px solid #f0f0f0' }}>
+        {actionMessage && (
+          <Alert severity={actionMessage.startsWith('Đã ') ? 'success' : 'error'}>{actionMessage}</Alert>
+        )}
+        {order.customerEditing && (
+          <Button variant="contained" color="warning" fullWidth onClick={finishEditing} disabled={finishingEdit}
+            sx={{ borderRadius: 20, fontWeight: 800, textTransform: 'none' }}>
+            {finishingEdit ? <CircularProgress size={20} color="inherit" /> : 'Hoàn tất sửa đơn'}
+          </Button>
+        )}
+        {tables.length > 0 && !isDone && !isCancelled && (
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Box component="select" value={selectedTableId} onChange={e => setSelectedTableId(e.target.value)}
+              sx={{ flex: 1, minHeight: 44, px: 1, border: '1px solid #93c5fd', borderRadius: 2, bgcolor: '#fff', fontSize: 16 }}>
+              <option value="">Chọn bàn</option>
+              {tables.map(table => <option key={table.id} value={table.id}>{table.tableName}</option>)}
+            </Box>
+            <Button variant="outlined" onClick={changeTable}
+              disabled={changingTable || !selectedTableId || selectedTableId === order.tableId}
+              sx={{ borderRadius: 2, fontWeight: 800, textTransform: 'none' }}>
+              {changingTable ? <CircularProgress size={18} /> : 'Đổi bàn'}
+            </Button>
+          </Box>
+        )}
         {isPending && !order.customerEditing && (
           <Button variant="outlined" fullWidth startIcon={<EditNoteIcon />} onClick={() => onEdit(order)}
             sx={{ borderRadius: 20, fontWeight: 700, textTransform: 'none', borderColor: '#f59e0b', color: '#b45309' }}>
@@ -1717,6 +1765,20 @@ export default function ShopMenuPage() {
       {error && <Alert severity="error" sx={{ mx: 2, mt: 1, position: 'relative', zIndex: 1 }}>{error}</Alert>}
 
       <Box sx={{ pt: `${headerH}px`, pb: itemCount > 0 ? '80px' : '24px' }}>
+        {editingOrderCode && (
+          <Box sx={{ mx: 1.5, mt: 1.5, mb: 0.5, p: 1.5, bgcolor: '#fff7ed', border: '2px solid #f59e0b', borderRadius: 2.5, boxShadow: '0 3px 12px rgba(245,158,11,.18)' }}>
+            <Typography fontWeight={900} sx={{ color: '#9a3412', fontSize: 17 }}>
+              Bạn đang sửa đơn hàng
+            </Typography>
+            <Typography sx={{ mt: 0.5, mb: 1.25, color: '#7c2d12', fontSize: 14, lineHeight: 1.35 }}>
+              Nếu bạn bấm nhầm hoặc không muốn thay đổi món, hãy bấm nút bên dưới để mở khóa đơn và quay lại theo dõi.
+            </Typography>
+            <Button variant="contained" color="warning" fullWidth onClick={handleCancelEdit}
+              sx={{ minHeight: 48, borderRadius: 20, fontWeight: 900, textTransform: 'none', fontSize: 16 }}>
+              Hoàn tất chỉnh sửa
+            </Button>
+          </Box>
+        )}
         {searchQuery.trim() ? (
           /* ── Search results ────────────────────────────── */
           <Box sx={{ px: 1.5, pt: 1.5 }}>
@@ -1850,8 +1912,8 @@ export default function ShopMenuPage() {
 
             {editingOrderCode && (
               <Button variant="text" size="small" onClick={handleCancelEdit}
-                sx={{ textTransform: 'none', color: '#888', flexShrink: 0, fontSize: 12, px: 0.5 }}>
-                {t('common.cancel')}
+                sx={{ textTransform: 'none', color: '#9a3412', flexShrink: 0, fontSize: 12, px: 0.5, fontWeight: 800 }}>
+                Hoàn tất sửa
               </Button>
             )}
           </Box>
@@ -2198,6 +2260,8 @@ export default function ShopMenuPage() {
         <TrackingOverlay
           order={trackingOrder}
           ctx={ctx}
+          token={tokenParam}
+          tables={publicTables}
           onEdit={handleEditOrder}
           onOrderMore={() => setTrackingOrder(null)}
           onUpdated={setTrackingOrder}

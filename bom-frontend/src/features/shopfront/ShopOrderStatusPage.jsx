@@ -17,7 +17,7 @@ import AddShoppingCartIcon from '@mui/icons-material/AddShoppingCart'
 import QrCode2Icon from '@mui/icons-material/QrCode2'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
-import { fetchPublicOrder, fetchTokenSession, fetchCounterOrderQr, fetchPublicTables, changePublicOrderTable } from '../../api/shopApi'
+import { fetchPublicOrder, fetchTokenSession, fetchCounterOrderQr, fetchPublicTables, changePublicOrderTable, cancelCustomerEdit } from '../../api/shopApi'
 import { printOrderReceipt } from '../../utils/printOrderReceipt'
 import { useI18n } from '../../i18n/I18nContext'
 import { localizedModelName } from '../../i18n/menuLocalization'
@@ -229,6 +229,7 @@ function SingleOrderView({ order, onEdit, itemName, fmtLocal }) {
       <OrderItems order={order} itemName={itemName} fmtLocal={fmtLocal} />
 
       <Box sx={{ px: 2, maxWidth: 560, width: '100%', mx: 'auto' }}>
+        <FinishEditingButton order={order} onFinished={() => window.location.reload()} />
         <CustomerTableChanger order={order} token={order.sourceToken || null} onChanged={() => window.location.reload()} />
       </Box>
 
@@ -308,6 +309,30 @@ function CustomerTableChanger({ order, token, onChanged }) {
         <Button variant="contained" onClick={save} disabled={saving || !tableId || tableId === order.tableId}>Lưu</Button>
       </Box>
       {message && <Typography variant="caption" color={message === 'Đã đổi bàn' ? 'success.main' : 'error'}>{message}</Typography>}
+    </Box>
+  )
+}
+
+function FinishEditingButton({ order, onFinished }) {
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  if (!order.customerEditing) return null
+  const finish = async () => {
+    setSaving(true); setError('')
+    try {
+      const { res, data } = await cancelCustomerEdit(order.orderCode)
+      if (!res.ok) setError(data?.error || data?.message || 'Không thể hoàn tất sửa đơn')
+      else onFinished?.(data)
+    } catch { setError('Không thể kết nối máy chủ') }
+    setSaving(false)
+  }
+  return (
+    <Box sx={{ mt: 1.5 }}>
+      <Button variant="contained" color="warning" fullWidth onClick={finish} disabled={saving}
+        sx={{ fontWeight: 800, textTransform: 'none' }}>
+        {saving ? <CircularProgress size={19} color="inherit" /> : 'Hoàn tất sửa đơn'}
+      </Button>
+      {error && <Alert severity="error" sx={{ mt: 1 }}>{error}</Alert>}
     </Box>
   )
 }
@@ -450,6 +475,7 @@ function OrderCard({ order, highlighted, token, itemName, fmtLocal }) {
               Note: {order.notes}
             </Typography>
           )}
+          <FinishEditingButton order={order} onFinished={() => window.location.reload()} />
           <CustomerTableChanger order={order} token={token} onChanged={() => window.location.reload()} />
           <Box sx={{ mt: 1 }}><CounterQrButton orders={[order]} /></Box>
         </Box>
