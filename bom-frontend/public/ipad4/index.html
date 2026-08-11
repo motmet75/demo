@@ -203,6 +203,10 @@
     var allModels = [];
 
     function byId(id) { return document.getElementById(id); }
+    function queryParam(name) {
+      var match = new RegExp('[?&]' + name + '=([^&]*)').exec(window.location.search || '');
+      return match ? decodeURIComponent(match[1].replace(/\+/g, ' ')) : '';
+    }
     function text(value) { return value === null || typeof value === 'undefined' ? '' : String(value); }
     function escapeHtml(value) {
       return text(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -724,9 +728,23 @@
     };
 
     restoreContext();
-    request('GET', '/sapi/auth/me', null, function (status, data) {
-      if (status >= 200 && status < 300 && data && data.authenticated) { finishLogin(data.user); } else { showLogin(); }
-    });
+    (function start() {
+      var quickToken = queryParam('loginToken');
+      if (quickToken) {
+        message('loginMessage', 'Đang đăng nhập nhanh...', true); showLogin();
+        request('POST', '/sapi/auth/quick-login/redeem', { token: quickToken }, function (status, data) {
+          if (status >= 200 && status < 300 && data && data.authenticated) {
+            try { window.history.replaceState({}, document.title, window.location.pathname); } catch (ignore) {}
+            finishLogin(data.user); return;
+          }
+          message('loginMessage', data && data.message ? data.message : 'Link đăng nhập đã hết hạn hoặc đã được sử dụng.', false);
+        });
+        return;
+      }
+      request('GET', '/sapi/auth/me', null, function (status, data) {
+        if (status >= 200 && status < 300 && data && data.authenticated) { finishLogin(data.user); } else { showLogin(); }
+      });
+    }());
   }());
   </script>
 </body>

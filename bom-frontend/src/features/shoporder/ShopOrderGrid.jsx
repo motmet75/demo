@@ -73,6 +73,7 @@ import VoucherQrScanDialog from './VoucherQrScanDialog'
 import { useAppContext } from '../../context/AppContext'
 import { useI18n } from '../../i18n/I18nContext'
 import { fetchModels } from '../../api/modelApi'
+import { apiFetchJson } from '../../api/client'
 
 const BOARD_CHANNEL = 'shop_display_board'
 const ORDER_POLL_MS = 30000
@@ -1396,6 +1397,11 @@ export default function ShopOrderGrid() {
   const [staffCalls, setStaffCalls]       = useState([])   // pending staff calls
   const [staffCallMobileOpen, setStaffCallMobileOpen] = useState(false)
   const [newOrderNotice, setNewOrderNotice] = useState(null)
+  const [quickLoginOpen, setQuickLoginOpen] = useState(false)
+  const [quickLoginHours, setQuickLoginHours] = useState(12)
+  const [quickLoginData, setQuickLoginData] = useState(null)
+  const [quickLoginLoading, setQuickLoginLoading] = useState(false)
+  const [quickLoginError, setQuickLoginError] = useState('')
   const customerBoardDisplayUrl = customerBoardUrl
     ? `${customerBoardUrl}${separateCustomerConfirmed ? '&separateConfirmed=1' : ''}`
     : ''
@@ -1464,6 +1470,19 @@ export default function ShopOrderGrid() {
       setScannedOrders(prev => [data, ...prev.filter(order => order.id !== data.id)].slice(0, 8))
     }
   }, [mergeOrderIntoState])
+
+  const generateQuickLogin = async () => {
+    setQuickLoginLoading(true); setQuickLoginError(''); setQuickLoginData(null)
+    try {
+      const { res, data } = await apiFetchJson('/auth/quick-login/generate', {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hours: quickLoginHours }),
+      })
+      if (!res.ok) setQuickLoginError(data?.message || 'Không thể tạo link đăng nhập')
+      else setQuickLoginData(data)
+    } catch { setQuickLoginError('Không thể kết nối máy chủ') }
+    setQuickLoginLoading(false)
+  }
 
   const applyOrderResult = useCallback(async (result, orderId, fallbackMessage = 'Action failed') => {
     const { res, data } = result || {}
@@ -1945,6 +1964,8 @@ export default function ShopOrderGrid() {
             variant="outlined" size="small" color="primary" sx={{ display: { xs: 'none', sm: 'inline-flex' }, textTransform: 'none', fontWeight: 700 }}>{t('shopOrder.grid.qrOrder')}</Button>
           <Button startIcon={<QrCodeScannerIcon />} onClick={() => { setScannedOrders([]); setOrderScannerOpen(true) }}
             variant="contained" size="small" color="primary" sx={{ textTransform: 'none', fontWeight: 800 }}>Scan customer orders</Button>
+          <Button startIcon={<QrCode2Icon />} onClick={() => { setQuickLoginData(null); setQuickLoginError(''); setQuickLoginHours(12); setQuickLoginOpen(true) }}
+            variant="outlined" size="small" color="secondary" sx={{ textTransform: 'none', fontWeight: 800 }}>Đăng nhập iPad</Button>
           {selectedRows.size > 0 && (
             <Button
               startIcon={<DriveFileMoveIcon />}
@@ -2019,6 +2040,39 @@ export default function ShopOrderGrid() {
       </Box>
 
       {/* Dialogs */}
+      <Dialog open={quickLoginOpen} onClose={() => !quickLoginLoading && setQuickLoginOpen(false)} fullWidth maxWidth="xs">
+        <DialogTitle>Đăng nhập nhanh cho iPad</DialogTitle>
+        <DialogContent>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Link chỉ dùng một lần. iPad sẽ giữ đăng nhập cho đúng thời gian đã chọn mà không cần mật khẩu.
+          </Alert>
+          <TextField select fullWidth size="small" label="Thời gian đăng nhập" value={quickLoginHours}
+            onChange={event => { setQuickLoginHours(Number(event.target.value)); setQuickLoginData(null) }}>
+            {[6, 8, 12, 24].map(hours => <MenuItem key={hours} value={hours}>{hours} giờ{hours === 12 ? ' (mặc định)' : ''}</MenuItem>)}
+          </TextField>
+          {!quickLoginData && (
+            <Button variant="contained" fullWidth onClick={generateQuickLogin} disabled={quickLoginLoading}
+              sx={{ mt: 2, textTransform: 'none', fontWeight: 800 }}>
+              {quickLoginLoading ? <CircularProgress size={20} color="inherit" /> : 'Tạo link đăng nhập'}
+            </Button>
+          )}
+          {quickLoginError && <Alert severity="error" sx={{ mt: 2 }}>{quickLoginError}</Alert>}
+          {quickLoginData?.link && (
+            <Box sx={{ textAlign: 'center', mt: 2 }}>
+              <img src={`https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(quickLoginData.link)}`}
+                alt="QR đăng nhập iPad" style={{ width: 260, height: 260, maxWidth: '100%' }} />
+              <Typography fontWeight={800}>Quét bằng iPad để đăng nhập</Typography>
+              <Typography variant="caption" color="text.secondary" display="block" sx={{ overflowWrap: 'anywhere', mt: 1 }}>
+                {quickLoginData.link}
+              </Typography>
+              <Button variant="outlined" fullWidth sx={{ mt: 1.5, textTransform: 'none' }}
+                onClick={() => navigator.clipboard?.writeText(quickLoginData.link)}>Sao chép link</Button>
+              <Alert severity="warning" sx={{ mt: 1.5, textAlign: 'left' }}>Sau khi iPad dùng link, link này không thể dùng lại.</Alert>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions><Button onClick={() => setQuickLoginOpen(false)}>Đóng</Button></DialogActions>
+      </Dialog>
       <ManualOrderDialog
         open={manualOpen}
         onClose={() => { setManualOpen(false); setManualDefaults(null); setPendingStockUids([]) }}

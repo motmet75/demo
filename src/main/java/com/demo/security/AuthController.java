@@ -1,6 +1,7 @@
 package com.demo.security;
 
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -59,17 +60,56 @@ public class AuthController {
     private final UserRepository userRepository;
     private final PasswordChangeOtpService passwordChangeOtpService;
     private final LoginOtpService loginOtpService;
+    private final QuickLoginService quickLoginService;
 
 public AuthController(AuthenticationManager authenticationManager,
                           PasswordEncoder passwordEncoder,
                           UserRepository userRepository,
                           PasswordChangeOtpService passwordChangeOtpService,
-                          LoginOtpService loginOtpService) {
+                          LoginOtpService loginOtpService,
+                          QuickLoginService quickLoginService) {
         this.authenticationManager = authenticationManager;
         this.passwordEncoder = passwordEncoder;
         this.userRepository = userRepository;
         this.passwordChangeOtpService = passwordChangeOtpService;
         this.loginOtpService = loginOtpService;
+        this.quickLoginService = quickLoginService;
+    }
+
+    public record QuickLoginCreateRequest(Integer hours) {}
+    public record QuickLoginRedeemRequest(@NotBlank String token) {}
+
+    @PostMapping("/quick-login/generate")
+    public ResponseEntity<?> generateQuickLogin(@RequestBody(required = false) QuickLoginCreateRequest body,
+                                                 Authentication authentication,
+                                                 HttpServletRequest request) {
+        if (authentication == null || !(authentication.getPrincipal() instanceof User user)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Not authenticated"));
+        }
+        try {
+            QuickLoginService.IssuedToken issued = quickLoginService.issue(user, body != null ? body.hours() : 12);
+            String proto = StringUtils.hasText(request.getHeader("X-Forwarded-Proto"))
+                    ? request.getHeader("X-Forwarded-Proto") : request.getScheme();
+            String host = StringUtils.hasText(request.getHeader("X-Forwarded-Host"))
+                    ? request.getHeader("X-Forwarded-Host") : request.getHeader("Host");
+            String link = proto + "://" + host + "/bom-inventory/ipad4/?loginToken=" + issued.token();
+            return ResponseEntity.ok(Map.of("token", issued.token(), "link", link,
+                    "sessionHours", issued.sessionHours(), "expiresAt", issued.expiresAt()));
+        } catch (QuickLoginService.QuickLoginException ex) {
+            return ResponseEntity.status(ex.status()).body(Map.of("message", ex.getMessage()));
+        }
+    }
+
+    @PostMapping("/quick-login/redeem")
+    public ResponseEntity<?> redeemQuickLogin(@Valid @RequestBody QuickLoginRedeemRequest body,
+                                               HttpServletRequest request,
+                                               HttpServletResponse response) {
+        try {
+            User user = quickLoginService.redeem(body.token(), request, response);
+            return ResponseEntity.ok(new AuthResponse(true, toView(user), "Quick login successful"));
+        } catch (QuickLoginService.QuickLoginException ex) {
+            return ResponseEntity.status(ex.status()).body(Map.of("message", ex.getMessage()));
+        }
     }
 
     // -------------------------------------------------------------------------
