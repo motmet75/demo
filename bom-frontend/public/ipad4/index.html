@@ -150,8 +150,8 @@
     <div class="modal-card">
       <h2 class="modal-title">Tạo đơn tại quầy</h2>
       <div id="formError" class="message"></div>
-      <label for="customerPhone">Số điện thoại đầy đủ</label>
-      <input id="customerPhone" type="tel" inputmode="tel" placeholder="Ví dụ: 0901234567">
+      <label for="customerPhone">Số điện thoại hội viên (không bắt buộc)</label>
+      <input id="customerPhone" type="tel" inputmode="tel" placeholder="Bỏ trống nếu là khách lẻ">
       <button id="findCustomerButton" class="wide secondary" type="button">Tìm hội viên</button>
       <div id="memberResult"></div>
       <div id="newMemberFields" style="display:none">
@@ -608,21 +608,26 @@
     function submitOrder() {
       var phone = normalizePhone(byId('customerPhone').value), name, body;
       if (!cart.length) { message('formError', 'Vui lòng chọn ít nhất một món.', false); return; }
-      if (phone.length < 9) { message('formError', 'Vui lòng nhập và kiểm tra đầy đủ số điện thoại.', false); return; }
+      if (phone && phone.length < 9) { message('formError', 'Số điện thoại chưa đầy đủ. Hãy nhập đủ hoặc để trống cho khách lẻ.', false); return; }
       name = selectedCustomer ? selectedCustomer.name : byId('customerName').value.replace(/^\s+|\s+$/g, '');
-      if (!selectedCustomer && !name) { message('formError', 'Vui lòng nhập tên hội viên mới.', false); return; }
+      if (phone && !selectedCustomer && !name) { message('formError', 'Bấm Tìm hội viên; nếu chưa có, nhập tên hội viên mới.', false); return; }
       setBusy('submitOrderButton', true, 'Tạo đơn'); message('formError', '', false);
       function createWithCustomer(customer) {
-        body = { fulfillmentType: byId('fulfillmentType').value, tableId: null, customerName: customer.name, customerPhone: phone, paymentMethod: byId('paymentMethod').value, notes: byId('orderNotes').value || null, manualOrderNumber: null,
+        body = { fulfillmentType: byId('fulfillmentType').value, tableId: null, customerName: customer ? customer.name : null, customerPhone: phone || null, paymentMethod: byId('paymentMethod').value, notes: byId('orderNotes').value || null, manualOrderNumber: null,
           items: cart.map(function (item) { return { modelId: item.id, quantity: item.quantity, selectedOptions: Object.keys(item.selectedOptions || {}).length ? JSON.stringify(item.selectedOptions) : null, itemNotes: item.itemNotes || null, unitPriceOverride: Number(item.sellingPrice) || null,
             sideItems: (item.sideItems || []).map(function (side) { return { modelId: side.modelId, quantity: side.quantity * item.quantity, selectedOptions: null, itemNotes: null, unitPriceOverride: Number(side.sellingPrice) || null, sideItems: [] }; }) }; }) };
         request('POST', '/sapi/shop/staff/orders', body, function (status, order) {
           if (status < 200 || status >= 300 || !order || !order.id) { setBusy('submitOrderButton', false, 'Tạo đơn'); message('formError', errorText(status, order), false); return; }
-          request('PATCH', '/sapi/shop/staff/orders/' + encodeURIComponent(order.id) + '/customer', { customerId: customer.id }, function () {
+          if (customer && customer.id) {
+            request('PATCH', '/sapi/shop/staff/orders/' + encodeURIComponent(order.id) + '/customer', { customerId: customer.id }, function () {
+              setBusy('submitOrderButton', false, 'Tạo đơn'); closeOrderForm(); loadOrders(); showTracking(order);
+            });
+          } else {
             setBusy('submitOrderButton', false, 'Tạo đơn'); closeOrderForm(); loadOrders(); showTracking(order);
-          });
+          }
         });
       }
+      if (!phone) { createWithCustomer(null); return; }
       if (selectedCustomer) { createWithCustomer(selectedCustomer); return; }
       request('POST', '/sapi/shop/staff/customers', { name: name, phone: phone }, function (status, customer) {
         if (status < 200 || status >= 300 || !customer || !customer.id) { setBusy('submitOrderButton', false, 'Tạo đơn'); message('formError', errorText(status, customer), false); return; }
