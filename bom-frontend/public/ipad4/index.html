@@ -351,6 +351,9 @@
           html += '<button type="button" class="pay" data-action="pay" data-id="' + escapeHtml(order.id) + '">QR thanh toán</button>';
         }
         html += '</div><div class="clear"></div>';
+        if (order.paymentStatus !== 'PAID' && order.status !== 'CANCELLED' && !order.customerEditing) {
+          html += '<div class="flow-actions"><button type="button" style="background:#168447" data-action="mark-paid" data-id="' + escapeHtml(order.id) + '">Xác nhận đã thanh toán</button></div>';
+        }
         actionName = ''; actionLabel = '';
         if (order.status === 'PENDING') { actionName = 'confirm'; actionLabel = 'Xác nhận đơn'; }
         else if (order.status === 'CONFIRMED') { actionName = 'prepare'; actionLabel = 'Bắt đầu chế biến'; }
@@ -635,7 +638,7 @@
       });
     }
     function advanceOrder(order, action) {
-      var labels = { confirm: 'xác nhận', 'confirm-wait-payment': 'xác nhận và mời khách đến thu ngân', prepare: 'bắt đầu chế biến', ready: 'đánh dấu sẵn sàng', complete: 'hoàn tất' };
+      var labels = { confirm: 'xác nhận', 'confirm-wait-payment': 'xác nhận và mời khách đến thu ngân', 'mark-paid': 'xác nhận đơn đã thanh toán', prepare: 'bắt đầu chế biến', ready: 'đánh dấu sẵn sàng', complete: 'hoàn tất' };
       if (!window.confirm('Bạn chắc chắn muốn ' + labels[action] + ' đơn #' + (order.orderNumber || order.orderCode) + '?')) return;
       request('PATCH', '/sapi/shop/staff/orders/' + encodeURIComponent(order.id) + '/' + action, null, function (status, data) {
         if (status < 200 || status >= 300) { message('ordersMessage', errorText(status, data), false); return; }
@@ -740,6 +743,13 @@
       if (action === 'track') showTracking(order);
       if (action === 'pay') showPayment(order);
       if (action === 'confirm' || action === 'confirm-wait-payment' || action === 'prepare' || action === 'ready' || action === 'complete') advanceOrder(order, action);
+      if (action === 'mark-paid') {
+        if (!window.confirm('Xác nhận đơn #' + (order.orderNumber || order.orderCode) + ' đã nhận đủ tiền?')) return;
+        request('PATCH', '/sapi/shop/staff/orders/' + encodeURIComponent(order.id) + '/pay', null, function (status, data) {
+          if (status < 200 || status >= 300) { message('ordersMessage', errorText(status, data), false); return; }
+          loadOrders();
+        });
+      }
     };
     byId('saveContextButton').onclick = function () {
       tenantId = byId('tenantId').value.replace(/^\s+|\s+$/g, '');
