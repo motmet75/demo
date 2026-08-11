@@ -87,6 +87,14 @@
         <input id="password" name="password" type="password" autocomplete="current-password" required>
         <button id="loginButton" class="wide" type="submit">Đăng nhập</button>
       </form>
+      <div style="margin:22px 0;border-top:1px solid #d5dce2"></div>
+      <form id="quickLoginForm">
+        <h3>Đăng nhập nhanh</h3>
+        <p class="muted">Nhập mã 16 ký tự đang hiển thị trên máy quầy hoặc PC.</p>
+        <label for="quickLoginCode">Mã đăng nhập nhanh</label>
+        <input id="quickLoginCode" type="text" maxlength="20" autocapitalize="characters" autocorrect="off" autocomplete="off" placeholder="Ví dụ: AB12CD34EF56GH78">
+        <button id="quickLoginButton" class="wide" type="submit">Đăng nhập bằng mã</button>
+      </form>
       <form id="otpBox">
         <label for="otp">Mã xác minh</label>
         <input id="otp" name="otp" type="tel" inputmode="numeric" autocomplete="one-time-code" required>
@@ -275,6 +283,7 @@
       byId('ordersView').style.display = 'none';
       byId('loginView').style.display = 'block';
       byId('loginForm').style.display = 'block';
+      byId('quickLoginForm').style.display = 'block';
       byId('otpBox').style.display = 'none';
       byId('password').value = '';
       byId('otp').value = '';
@@ -647,12 +656,24 @@
         if (status >= 200 && status < 300 && data && data.mfaRequired) {
           mfaMethod = data.mfaMethod || 'email';
           byId('loginForm').style.display = 'none';
+          byId('quickLoginForm').style.display = 'none';
           byId('otpBox').style.display = 'block';
           message('loginMessage', data.message || 'Nhập mã xác minh.', true);
           byId('otp').focus();
           return;
         }
         message('loginMessage', errorText(status, data), false);
+      });
+      return false;
+    };
+    byId('quickLoginForm').onsubmit = function () {
+      var code = byId('quickLoginCode').value.replace(/[^A-Za-z0-9_-]/g, '');
+      if (!code) { message('loginMessage', 'Vui lòng nhập mã đăng nhập nhanh.', false); return false; }
+      setBusy('quickLoginButton', true, 'Đăng nhập bằng mã'); message('loginMessage', '', false);
+      request('POST', '/sapi/auth/quick-login/redeem', { token: code }, function (status, data) {
+        setBusy('quickLoginButton', false, 'Đăng nhập bằng mã');
+        if (status >= 200 && status < 300 && data && data.authenticated) { byId('quickLoginCode').value = ''; finishLogin(data.user); return; }
+        message('loginMessage', data && data.message ? data.message : 'Mã đăng nhập không đúng, đã hết hạn hoặc đã được sử dụng.', false);
       });
       return false;
     };

@@ -44,7 +44,9 @@ public class QuickLoginService {
     public IssuedToken issue(User user, Integer requestedHours) {
         int hours = requestedHours != null ? requestedHours : 12;
         if (!ALLOWED_HOURS.contains(hours)) throw new QuickLoginException(HttpStatus.BAD_REQUEST, "Hours must be 6, 8, 12 or 24");
-        byte[] bytes = new byte[32];
+        // 96 bits of entropy remains impractical to guess while producing a
+        // 16-character code that can be typed on legacy iPads without a camera.
+        byte[] bytes = new byte[12];
         random.nextBytes(bytes);
         String raw = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
         Instant now = Instant.now();

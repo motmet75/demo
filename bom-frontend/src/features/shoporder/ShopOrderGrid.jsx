@@ -2062,6 +2062,12 @@ export default function ShopOrderGrid() {
               <img src={`https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(quickLoginData.link)}`}
                 alt="QR đăng nhập iPad" style={{ width: 260, height: 260, maxWidth: '100%' }} />
               <Typography fontWeight={800}>Quét bằng iPad để đăng nhập</Typography>
+              <Box sx={{ mt: 1.5, p: 1.5, bgcolor: '#f3f4f6', border: '2px dashed #6366f1', borderRadius: 2 }}>
+                <Typography variant="caption" color="text.secondary">Nếu camera iPad không quét được, nhập mã:</Typography>
+                <Typography sx={{ mt: 0.5, fontFamily: 'monospace', fontSize: 23, fontWeight: 900, letterSpacing: 2, color: '#3730a3', userSelect: 'all', overflowWrap: 'anywhere' }}>
+                  {quickLoginData.token}
+                </Typography>
+              </Box>
               <Typography variant="caption" color="text.secondary" display="block" sx={{ overflowWrap: 'anywhere', mt: 1 }}>
                 {quickLoginData.link}
               </Typography>
