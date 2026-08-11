@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>BOM Shop Orders - iPad</title>
+  <style>
+    html, body { margin: 0; padding: 0; background: #eef1f4; color: #20252b; font: 18px Arial, sans-serif; }
+    * { -webkit-box-sizing: border-box; box-sizing: border-box; }
+    .bar { background: #174a75; color: #fff; padding: 14px 16px; overflow: hidden; }
+    .bar h1 { float: left; margin: 4px 0; font-size: 22px; }
+    .bar .right { float: right; }
+    .page { width: 96%; max-width: 900px; margin: 18px auto; }
+    .panel, .order { background: #fff; border: 1px solid #cbd2d9; border-radius: 7px; padding: 16px; margin-bottom: 14px; }
+    .login { max-width: 440px; margin: 45px auto; }
+    h2, h3, p { margin-top: 0; }
+    label { display: block; margin: 13px 0 5px; font-weight: bold; }
+    input { display: block; width: 100%; height: 48px; padding: 8px 10px; border: 1px solid #929ca6; border-radius: 5px; font-size: 18px; background: #fff; }
+    button { min-height: 46px; padding: 8px 16px; border: 0; border-radius: 5px; background: #1769aa; color: #fff; font-size: 18px; font-weight: bold; }
+    button:active { background: #0d4775; }
+    button.secondary { background: #65727e; }
+    button.small { min-height: 38px; padding: 6px 12px; font-size: 15px; }
+    .wide { width: 100%; margin-top: 18px; }
+    .message { display: none; padding: 11px; margin: 12px 0; border-radius: 5px; background: #ffe3e3; color: #8b1111; }
+    .notice { background: #fff5c7; color: #574800; }
+    .muted { color: #68727c; font-size: 15px; }
+    .status { float: right; padding: 5px 8px; border-radius: 4px; background: #dde8f2; font-size: 14px; font-weight: bold; }
+    .order-title { font-size: 22px; font-weight: bold; margin-bottom: 8px; }
+    .meta { margin-bottom: 10px; color: #525d66; }
+    .items { margin: 8px 0 0; padding: 0; list-style: none; border-top: 1px solid #dde1e5; }
+    .items li { padding: 9px 2px; border-bottom: 1px solid #e4e7ea; }
+    .qty { display: inline-block; min-width: 45px; font-weight: bold; color: #174a75; }
+    .total { margin-top: 12px; text-align: right; font-size: 20px; font-weight: bold; }
+    .clear { clear: both; }
+    #ordersView, #contextBox, #otpBox { display: none; }
+    @media (max-width: 600px) { .page { width: 94%; } .bar h1 { float: none; } .bar .right { float: none; margin-top: 10px; } }
+  </style>
+</head>
+<body>
+  <div id="loginView" class="page">
+    <div class="panel login">
+      <h2>Đăng nhập BOM</h2>
+      <p class="muted">Phiên bản đơn giản cho iPad cũ</p>
+      <div id="loginMessage" class="message"></div>
+      <form id="loginForm">
+        <label for="username">Tên đăng nhập</label>
+        <input id="username" name="username" type="text" autocomplete="username" autocapitalize="off" autocorrect="off" required>
+        <label for="password">Mật khẩu</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+        <button id="loginButton" class="wide" type="submit">Đăng nhập</button>
+      </form>
+      <form id="otpBox">
+        <label for="otp">Mã xác minh</label>
+        <input id="otp" name="otp" type="tel" inputmode="numeric" autocomplete="one-time-code" required>
+        <button id="otpButton" class="wide" type="submit">Xác minh</button>
+        <button id="backButton" class="wide secondary" type="button">Quay lại</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="ordersView">
+    <div class="bar">
+      <h1>Shop Orders</h1>
+      <div class="right">
+        <button id="refreshButton" class="small" type="button">Làm mới</button>
+        <button id="logoutButton" class="small secondary" type="button">Đăng xuất</button>
+      </div>
+      <div class="clear"></div>
+    </div>
+    <div class="page">
+      <div id="ordersMessage" class="message"></div>
+      <div id="contextBox" class="panel">
+        <h3>Chọn cửa hàng</h3>
+        <p class="muted">Tài khoản chưa có cửa hàng mặc định. Nhập ID để tiếp tục.</p>
+        <label for="tenantId">Tenant ID</label>
+        <input id="tenantId" type="text" autocapitalize="off">
+        <label for="companyId">Company ID</label>
+        <input id="companyId" type="text" autocapitalize="off">
+        <button id="saveContextButton" class="wide" type="button">Mở đơn hàng</button>
+      </div>
+      <div id="orders"></div>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    'use strict';
+    var user = null;
+    var tenantId = '';
+    var companyId = '';
+    var mfaMethod = '';
+
+    function byId(id) { return document.getElementById(id); }
+    function text(value) { return value === null || typeof value === 'undefined' ? '' : String(value); }
+    function escapeHtml(value) {
+      return text(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    function setBusy(id, busy, normalText) {
+      var button = byId(id);
+      button.disabled = busy;
+      button.innerHTML = busy ? 'Đang xử lý...' : normalText;
+    }
+    function message(id, value, notice) {
+      var box = byId(id);
+      box.className = notice ? 'message notice' : 'message';
+      box.innerHTML = escapeHtml(value);
+      box.style.display = value ? 'block' : 'none';
+    }
+    function request(method, url, body, callback) {
+      var xhr = new XMLHttpRequest();
+      xhr.open(method, url, true);
+      xhr.withCredentials = true;
+      xhr.setRequestHeader('Accept', 'application/json');
+      if (body !== null) xhr.setRequestHeader('Content-Type', 'application/json');
+      if (tenantId) xhr.setRequestHeader('X-Tenant-Id', tenantId);
+      if (companyId) xhr.setRequestHeader('X-Company-Id', companyId);
+      xhr.setRequestHeader('X-Time-Zone', 'Asia/Ho_Chi_Minh');
+      xhr.onreadystatechange = function () {
+        var data = null;
+        if (xhr.readyState !== 4) return;
+        try { data = xhr.responseText ? JSON.parse(xhr.responseText) : null; } catch (ignore) { data = null; }
+        callback(xhr.status, data);
+      };
+      xhr.onerror = function () { callback(0, null); };
+      xhr.send(body === null ? null : JSON.stringify(body));
+    }
+    function errorText(status, data) {
+      if (data && (data.message || data.error)) return data.message || data.error;
+      if (status === 0) return 'Không thể kết nối máy chủ.';
+      if (status === 401) return 'Phiên đăng nhập đã hết hạn.';
+      return 'Có lỗi xảy ra (' + status + ').';
+    }
+    function saveContext() {
+      try { localStorage.setItem('bom_ipad_context_v1', JSON.stringify({ tenantId: tenantId, companyId: companyId })); } catch (ignore) {}
+    }
+    function restoreContext() {
+      var saved;
+      try {
+        saved = JSON.parse(localStorage.getItem('bom_ipad_context_v1') || '{}');
+        tenantId = saved.tenantId || '';
+        companyId = saved.companyId || '';
+      } catch (ignore) {}
+    }
+    function chooseContext(authUser) {
+      tenantId = authUser.assignedTenantId || authUser.lastTenantId || tenantId;
+      companyId = authUser.assignedCompanyId || authUser.lastCompanyId || companyId;
+      saveContext();
+      byId('tenantId').value = tenantId;
+      byId('companyId').value = companyId;
+    }
+    function showLogin() {
+      byId('ordersView').style.display = 'none';
+      byId('loginView').style.display = 'block';
+      byId('loginForm').style.display = 'block';
+      byId('otpBox').style.display = 'none';
+      byId('password').value = '';
+      byId('otp').value = '';
+      mfaMethod = '';
+    }
+    function showOrders() {
+      byId('loginView').style.display = 'none';
+      byId('ordersView').style.display = 'block';
+      if (!tenantId || !companyId) {
+        byId('contextBox').style.display = 'block';
+        byId('orders').innerHTML = '';
+      } else {
+        byId('contextBox').style.display = 'none';
+        loadOrders();
+      }
+    }
+    function finishLogin(authUser) {
+      user = authUser || {};
+      chooseContext(user);
+      message('loginMessage', '', false);
+      showOrders();
+    }
+    function formatMoney(value) {
+      var n = Number(value || 0);
+      return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' đ';
+    }
+    function formatDate(value) {
+      var d = new Date(value);
+      if (!value || isNaN(d.getTime())) return '';
+      return ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + ' ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+    }
+    function renderOrders(rows) {
+      var html = '';
+      var i, j, order, item, items;
+      if (!rows || !rows.length) {
+        byId('orders').innerHTML = '<div class="panel">Chưa có đơn hàng.</div>';
+        return;
+      }
+      for (i = 0; i < rows.length; i += 1) {
+        order = rows[i] || {};
+        items = order.items || [];
+        html += '<div class="order"><span class="status">' + escapeHtml(order.status) + '</span>';
+        html += '<div class="order-title">Đơn #' + escapeHtml(order.orderNumber || order.dailySeq || order.orderCode) + '</div>';
+        html += '<div class="meta">' + escapeHtml(order.tableName || order.fulfillmentType || '') + ' &middot; ' + escapeHtml(formatDate(order.createdAt)) + '</div>';
+        if (order.customerName) html += '<div>Khách: ' + escapeHtml(order.customerName) + '</div>';
+        html += '<ul class="items">';
+        for (j = 0; j < items.length; j += 1) {
+          item = items[j] || {};
+          html += '<li><span class="qty">' + escapeHtml(item.quantity) + ' x</span> ' + escapeHtml(item.modelName || 'Món') + (item.itemNotes ? '<br><span class="muted">' + escapeHtml(item.itemNotes) + '</span>' : '') + '</li>';
+        }
+        html += '</ul><div class="total">' + escapeHtml(formatMoney(order.totalAmount)) + '</div><div class="clear"></div></div>';
+      }
+      byId('orders').innerHTML = html;
+    }
+    function loadOrders() {
+      message('ordersMessage', 'Đang tải đơn hàng...', true);
+      request('GET', '/sapi/shop/staff/orders', null, function (status, data) {
+        if (status === 401) { showLogin(); message('loginMessage', 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.', false); return; }
+        if (status < 200 || status >= 300) { message('ordersMessage', errorText(status, data), false); return; }
+        message('ordersMessage', '', false);
+        renderOrders(data instanceof Array ? data : []);
+      });
+    }
+
+    byId('loginForm').onsubmit = function () {
+      setBusy('loginButton', true, 'Đăng nhập');
+      message('loginMessage', '', false);
+      request('POST', '/sapi/auth/login', { username: byId('username').value, password: byId('password').value }, function (status, data) {
+        setBusy('loginButton', false, 'Đăng nhập');
+        if (status >= 200 && status < 300 && data && data.authenticated) { finishLogin(data.user); return; }
+        if (status >= 200 && status < 300 && data && data.mfaRequired) {
+          mfaMethod = data.mfaMethod || 'email';
+          byId('loginForm').style.display = 'none';
+          byId('otpBox').style.display = 'block';
+          message('loginMessage', data.message || 'Nhập mã xác minh.', true);
+          byId('otp').focus();
+          return;
+        }
+        message('loginMessage', errorText(status, data), false);
+      });
+      return false;
+    };
+    byId('otpBox').onsubmit = function () {
+      var endpoint = mfaMethod === 'authenticator' ? '/sapi/auth/login-totp/verify' : '/sapi/auth/login-otp/verify';
+      setBusy('otpButton', true, 'Xác minh');
+      request('POST', endpoint, { otp: byId('otp').value }, function (status, data) {
+        setBusy('otpButton', false, 'Xác minh');
+        if (status >= 200 && status < 300 && data && data.authenticated) { finishLogin(data.user); return; }
+        if (status >= 200 && status < 300 && data && data.mfaRequired) {
+          mfaMethod = data.mfaMethod || mfaMethod;
+          byId('otp').value = '';
+          message('loginMessage', data.message || 'Nhập mã xác minh tiếp theo.', true);
+          return;
+        }
+        message('loginMessage', errorText(status, data), false);
+      });
+      return false;
+    };
+    byId('backButton').onclick = showLogin;
+    byId('refreshButton').onclick = loadOrders;
+    byId('saveContextButton').onclick = function () {
+      tenantId = byId('tenantId').value.replace(/^\s+|\s+$/g, '');
+      companyId = byId('companyId').value.replace(/^\s+|\s+$/g, '');
+      if (!tenantId || !companyId) { message('ordersMessage', 'Cần nhập Tenant ID và Company ID.', false); return; }
+      saveContext();
+      byId('contextBox').style.display = 'none';
+      loadOrders();
+    };
+    byId('logoutButton').onclick = function () {
+      request('POST', '/sapi/auth/logout', null, function () { user = null; showLogin(); });
+    };
+
+    restoreContext();
+    request('GET', '/sapi/auth/me', null, function (status, data) {
+      if (status >= 200 && status < 300 && data && data.authenticated) { finishLogin(data.user); } else { showLogin(); }
+    });
+  }());
+  </script>
+</body>
+</html>
