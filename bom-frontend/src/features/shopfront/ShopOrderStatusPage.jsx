@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
@@ -24,6 +24,24 @@ import { localizedModelName } from '../../i18n/menuLocalization'
 
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 const payableAmount = (order) => Math.max(0, Number(order?.totalAmount || 0) - Number(order?.discountAmount || 0))
+
+function CustomerNotificationsButton() {
+  const supported = typeof window !== 'undefined' && 'Notification' in window
+  const [permission, setPermission] = useState(supported ? Notification.permission : 'unsupported')
+  if (!supported) return <Alert severity="info">Thiết bị này chỉ nhận cập nhật khi trang đang mở.</Alert>
+  if (permission === 'granted') return <Chip label="Đã bật thông báo" color="success" />
+  return (
+    <Button variant="outlined" onClick={() => Notification.requestPermission().then(setPermission)} sx={{ textTransform: 'none' }}>
+      Bật thông báo trạng thái
+    </Button>
+  )
+}
+
+function notifyCustomer(title, body) {
+  if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+    try { new Notification(title, { body }) } catch { /* notification unsupported by this browser */ }
+  }
+}
 
 const STEPS = [
   { key: 'PENDING',   label: 'Placed',    emoji: '📋' },
@@ -243,6 +261,7 @@ function SingleOrderView({ order, onEdit, itemName, fmtLocal }) {
 
       <Box sx={{ flex: 1 }} />
       <Box sx={{ px: 2, pb: 2, pt: 1, display: 'flex', flexDirection: 'column', gap: 1, maxWidth: 480, mx: 'auto', width: '100%' }}>
+        <CustomerNotificationsButton />
         {order.status === 'PENDING' && (
           <Button variant="outlined" fullWidth startIcon={<EditIcon />}
             onClick={() => onEdit(order)}
@@ -516,10 +535,21 @@ function OrderCard({ order, highlighted, token, itemName, fmtLocal }) {
 function TokenSessionView({ token, highlightCode, itemName, fmtLocal }) {
   const [session, setSession] = useState(null)
   const [error, setError]     = useState('')
+  const previousRef = useRef({})
 
   const load = useCallback(() => {
     fetchTokenSession(token)
-      .then(({ data }) => { if (data?.orders != null) setSession(data); else setError('Session not found') })
+      .then(({ data }) => {
+        if (data?.orders == null) { setError('Session not found'); return }
+        const previous = previousRef.current
+        ;(data.orders || []).forEach(order => {
+          const old = previous[order.id]
+          if (old && old.status !== order.status) notifyCustomer(`Đơn #${order.orderNumber || order.orderCode}`, STATUS_STYLE[order.status]?.label || order.status)
+          if (old && !old.paymentRequestedAt && order.paymentRequestedAt && order.paymentStatus !== 'PAID') notifyCustomer('Mời thanh toán', 'Vui lòng đến quầy thu ngân để thanh toán.')
+        })
+        previousRef.current = Object.fromEntries((data.orders || []).map(order => [order.id, order]))
+        setSession(data)
+      })
       .catch(() => setError('Failed to load session'))
   }, [token])
 
@@ -612,6 +642,7 @@ function TokenSessionView({ token, highlightCode, itemName, fmtLocal }) {
             {hasPending ? 'Order More' : 'New Order'}
           </Button>
           {hasOrders && <CounterQrButton orders={session.orders} label={session.orders.length > 1 ? `Show ${session.orders.length} order QRs` : 'Show order QR'} />}
+          <CustomerNotificationsButton />
         </Box>
       )}
 
@@ -634,12 +665,20 @@ export default function ShopOrderStatusPage() {
 
   const [order, setOrder] = useState(null)
   const [error, setError] = useState('')
+  const previousOrderRef = useRef(null)
 
   // Only load single order when there's no token
   const load = useCallback(() => {
     if (token || !orderCode) return
     fetchPublicOrder(orderCode)
-      .then(({ data }) => { if (data?.orderCode) setOrder(data); else setError('Order not found') })
+      .then(({ data }) => {
+        if (!data?.orderCode) { setError('Order not found'); return }
+        const old = previousOrderRef.current
+        if (old && old.status !== data.status) notifyCustomer(`Đơn #${data.orderNumber || data.orderCode}`, STATUS_STYLE[data.status]?.label || data.status)
+        if (old && !old.paymentRequestedAt && data.paymentRequestedAt && data.paymentStatus !== 'PAID') notifyCustomer('Mời thanh toán', 'Vui lòng đến quầy thu ngân để thanh toán.')
+        previousOrderRef.current = data
+        setOrder(data)
+      })
       .catch(() => setError('Failed to load order'))
   }, [orderCode, token])
 

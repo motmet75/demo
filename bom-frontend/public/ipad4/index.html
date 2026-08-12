@@ -47,6 +47,18 @@
     .toolbar { margin-bottom: 14px; overflow: hidden; }
     .toolbar button { width: 48%; margin-right: 2%; min-height: 58px; }
     .toolbar .queue { background: #7a4aa0; }
+    .view-controls { background: #fff; border: 1px solid #cbd2d9; border-radius: 7px; padding: 12px; margin-bottom: 14px; overflow: hidden; }
+    .view-control { float: left; width: 32%; margin-right: 1.3%; }
+    .view-control label { margin: 0 0 5px; font-size: 14px; }
+    .view-control select { height: 42px; font-size: 16px; }
+    .order-summary { clear: both; padding-top: 10px; color: #525d66; font-size: 15px; font-weight: bold; }
+    .plain-order { padding: 12px; border-left: 5px solid #1769aa; }
+    .plain-order .order-title { font-size: 20px; }
+    .plain-order .items { font-size: 16px; }
+    .plain-order .item-row { min-height: 0; padding: 6px 2px; }
+    .plain-order .item-photo { display: none; }
+    .plain-order .order-actions button { min-height: 46px; }
+    .customer-phone { color: #174a75; font-weight: bold; }
     .item-row { overflow: hidden; min-height: 70px; }
     .item-photo { float: left; width: 64px; height: 64px; margin-right: 10px; border-radius: 6px; border: 1px solid #d5dce2; object-fit: cover; background: #f2f4f6; }
     .item-info { overflow: hidden; }
@@ -71,7 +83,7 @@
     .config-choice input[type="checkbox"], .config-choice input[type="radio"] { width: 32px; height: 32px; }
     .clear { clear: both; }
     #ordersView, #contextBox, #otpBox { display: none; }
-    @media (max-width: 600px) { .page { width: 94%; } .bar h1 { float: none; } .bar .right { float: none; margin-top: 10px; } }
+    @media (max-width: 600px) { .page { width: 94%; } .bar h1 { float: none; } .bar .right { float: none; margin-top: 10px; } .view-control { float:none;width:100%;margin:0 0 8px; } }
   </style>
 </head>
 <body>
@@ -108,6 +120,7 @@
     <div class="bar">
       <h1>Shop Orders</h1>
       <div class="right">
+        <button id="notifyButton" class="small" type="button">Bật thông báo</button>
         <button id="refreshButton" class="small" type="button">Làm mới</button>
         <button id="logoutButton" class="small secondary" type="button">Đăng xuất</button>
       </div>
@@ -127,6 +140,12 @@
       <div class="toolbar">
         <button id="newOrderButton" type="button">+ Tạo đơn mới</button>
         <button id="queueQrButton" class="queue" type="button">QR xếp hàng</button>
+      </div>
+      <div class="view-controls">
+        <div class="view-control"><label for="statusFilter">Trạng thái</label><select id="statusFilter"><option value="">Tất cả</option><option value="PENDING">Chờ xác nhận</option><option value="CONFIRMED">Đã xác nhận</option><option value="PREPARING">Đang chế biến</option><option value="READY">Sẵn sàng</option><option value="PICKED_UP">Đã nhận</option><option value="COMPLETED">Hoàn tất</option><option value="CANCELLED">Đã hủy</option></select></div>
+        <div class="view-control"><label for="orderSort">Sắp xếp</label><select id="orderSort"><option value="newest">Mới nhất trước</option><option value="oldest">FIFO - Cũ nhất trước</option></select></div>
+        <div class="view-control"><label for="viewMode">Kiểu xem</label><select id="viewMode"><option value="cards">Thẻ có hình</option><option value="plain">Chữ gọn, không hình</option></select></div>
+        <div id="orderSummary" class="order-summary"></div>
       </div>
       <div id="orders"></div>
     </div>
@@ -209,6 +228,12 @@
     var configuringModel = null;
     var configuringOptions = [];
     var allModels = [];
+    var loadedOrders = [];
+    var statusFilter = '';
+    var orderSort = 'newest';
+    var viewMode = 'cards';
+    var knownOrderIds = {};
+    var firstOrderLoad = true;
 
     function byId(id) { return document.getElementById(id); }
     function queryParam(name) {
@@ -264,6 +289,27 @@
     function saveContext() {
       try { localStorage.setItem('bom_ipad_context_v1', JSON.stringify({ tenantId: tenantId, companyId: companyId })); } catch (ignore) {}
     }
+    function saveViewPrefs() {
+      try { localStorage.setItem('bom_ipad_order_view_v1', JSON.stringify({ statusFilter: statusFilter, orderSort: orderSort, viewMode: viewMode })); } catch (ignore) {}
+    }
+    function browserNotice(title, body) {
+      if (window.Notification && Notification.permission === 'granted') {
+        try { new Notification(title, { body: body }); } catch (ignore) {}
+      }
+    }
+    function detectNewOrders(rows) {
+      var next = {}, fresh = [], i, order;
+      for (i = 0; i < rows.length; i += 1) {
+        order = rows[i]; if (!order || !order.id) continue;
+        next[order.id] = true;
+        if (!firstOrderLoad && !knownOrderIds[order.id]) fresh.push(order);
+      }
+      knownOrderIds = next; firstOrderLoad = false;
+      if (fresh.length) {
+        browserNotice('Có đơn hàng mới', fresh.length === 1 ? 'Đơn #' + (fresh[0].orderNumber || fresh[0].orderCode) : fresh.length + ' đơn mới');
+        message('ordersMessage', fresh.length === 1 ? 'Có đơn mới #' + (fresh[0].orderNumber || fresh[0].orderCode) : 'Có ' + fresh.length + ' đơn mới', true);
+      }
+    }
     function restoreContext() {
       var saved;
       try {
@@ -315,6 +361,20 @@
       if (!value || isNaN(d.getTime())) return '';
       return ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + ' ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
     }
+    function statusText(status) {
+      var labels = { PENDING: 'Chờ xác nhận', CONFIRMED: 'Đã xác nhận', PREPARING: 'Đang chế biến', READY: 'Sẵn sàng', PICKED_UP: 'Đã nhận', COMPLETED: 'Hoàn tất', CANCELLED: 'Đã hủy' };
+      return labels[status] || status || '';
+    }
+    function applyOrderView() {
+      var rows = loadedOrders.slice(0), visible = [], i;
+      for (i = 0; i < rows.length; i += 1) if (!statusFilter || rows[i].status === statusFilter) visible.push(rows[i]);
+      visible.sort(function (a, b) {
+        var left = new Date(a.createdAt || 0).getTime(), right = new Date(b.createdAt || 0).getTime();
+        return orderSort === 'oldest' ? left - right : right - left;
+      });
+      byId('orderSummary').innerHTML = escapeHtml(visible.length + ' đơn' + (statusFilter ? ' · ' + statusText(statusFilter) : '') + (orderSort === 'oldest' ? ' · FIFO' : ' · Mới nhất'));
+      renderOrders(visible);
+    }
     function renderOrders(rows) {
       var html = '';
       var i, j, order, item, items, photo, actionLabel, actionName;
@@ -327,15 +387,15 @@
         order = rows[i] || {};
         orderById[order.id] = order;
         items = order.items || [];
-        html += '<div class="order"><span class="status">' + escapeHtml(order.status) + '</span>';
+        html += '<div class="order' + (viewMode === 'plain' ? ' plain-order' : '') + '"><span class="status">' + escapeHtml(statusText(order.status)) + '</span>';
         html += '<div class="order-title">Đơn #' + escapeHtml(order.orderNumber || order.dailySeq || order.orderCode) + '</div>';
         html += '<div class="meta">' + escapeHtml(order.tableName || order.fulfillmentType || '') + ' &middot; ' + escapeHtml(formatDate(order.createdAt)) + '</div>';
-        if (order.customerName) html += '<div>Khách: ' + escapeHtml(order.customerName) + '</div>';
+        if (order.customerName || order.customerPhone) html += '<div>Khách: <strong>' + escapeHtml(order.customerName || 'Khách lẻ') + '</strong>' + (order.customerPhone ? ' · <span class="customer-phone">' + escapeHtml(order.customerPhone) + '</span>' : '') + '</div>';
         if (order.customerEditing) html += '<div class="customer-editing">KHÁCH HÀNG ĐANG CHỈNH SỬA<br><span class="muted">Vui lòng chờ khách bấm Hoàn tất chỉnh sửa</span></div>';
         html += '<ul class="items">';
         for (j = 0; j < items.length; j += 1) {
           item = items[j] || {};
-          photo = safeImage(item.imageUrl);
+          photo = viewMode === 'plain' ? '' : safeImage(item.imageUrl);
           html += '<li class="item-row">' + (photo ? '<img class="item-photo" src="' + photo + '" alt="">' : '<span class="item-photo"></span>');
           html += '<div class="item-info"><span class="item-money">' + escapeHtml(formatMoney(item.lineTotal)) + '</span>';
           html += '<span class="qty">' + escapeHtml(item.quantity) + ' x</span> ' + escapeHtml(item.modelName || 'Món');
@@ -651,7 +711,9 @@
         if (status === 401) { showLogin(); message('loginMessage', 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.', false); return; }
         if (status < 200 || status >= 300) { message('ordersMessage', errorText(status, data), false); return; }
         message('ordersMessage', '', false);
-        renderOrders(data instanceof Array ? data : []);
+        loadedOrders = data instanceof Array ? data : [];
+        detectNewOrders(loadedOrders);
+        applyOrderView();
       });
     }
 
@@ -703,6 +765,16 @@
     };
     byId('backButton').onclick = showLogin;
     byId('refreshButton').onclick = loadOrders;
+    byId('notifyButton').onclick = function () {
+      if (!window.Notification) { window.alert('Thiết bị này không hỗ trợ thông báo trình duyệt. Danh sách vẫn tự làm mới trong trang.'); return; }
+      Notification.requestPermission(function (permission) {
+        byId('notifyButton').innerHTML = permission === 'granted' ? 'Đã bật thông báo' : 'Bật thông báo';
+        if (permission === 'granted') browserNotice('BOM Shop Orders', 'Thông báo đơn mới đã được bật.');
+      });
+    };
+    byId('statusFilter').onchange = function () { statusFilter = this.value; saveViewPrefs(); applyOrderView(); };
+    byId('orderSort').onchange = function () { orderSort = this.value; saveViewPrefs(); applyOrderView(); };
+    byId('viewMode').onchange = function () { viewMode = this.value; saveViewPrefs(); applyOrderView(); };
     byId('closeQrButton').onclick = closeQr;
     byId('newOrderButton').onclick = openOrderForm;
     byId('queueQrButton').onclick = function () { openQueueQr(false); };
@@ -764,6 +836,12 @@
     };
 
     restoreContext();
+    (function restoreViewPrefs() {
+      var prefs = null;
+      try { prefs = JSON.parse(localStorage.getItem('bom_ipad_order_view_v1') || 'null'); } catch (ignore) {}
+      if (prefs) { statusFilter = prefs.statusFilter || ''; orderSort = prefs.orderSort || 'newest'; viewMode = prefs.viewMode || 'cards'; }
+      byId('statusFilter').value = statusFilter; byId('orderSort').value = orderSort; byId('viewMode').value = viewMode;
+    }());
     (function start() {
       var quickToken = queryParam('loginToken');
       if (quickToken) {
@@ -781,6 +859,9 @@
         if (status >= 200 && status < 300 && data && data.authenticated) { finishLogin(data.user); } else { showLogin(); }
       });
     }());
+    window.setInterval(function () {
+      if (byId('ordersView').style.display !== 'none' && tenantId && companyId) loadOrders();
+    }, 15000);
   }());
   </script>
 </body>
