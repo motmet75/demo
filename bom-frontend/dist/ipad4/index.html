@@ -23,6 +23,16 @@
     button.secondary { background: #65727e; }
     button.small { min-height: 38px; padding: 5px 8px; font-size: 14px; }
     .icon-button { position: relative; min-width: 42px; font-size: 20px !important; padding: 4px 7px !important; margin-left: 3px; }
+    #refreshButton { width: 42px; background: #1769aa; }
+    #refreshButton .refresh-glyph { display: inline-block; }
+    #refreshButton .network-dot { position: absolute; right: 3px; bottom: 3px; width: 9px; height: 9px; border: 1px solid #fff; border-radius: 50%; background: #54d17a; }
+    #refreshButton.refreshing { background: #b87511; }
+    #refreshButton.refreshing .refresh-glyph { -webkit-animation: refresh-spin 1s linear infinite; animation: refresh-spin 1s linear infinite; }
+    #refreshButton.refresh-error { background: #a33b35; }
+    #refreshButton.refresh-error .network-dot { background: #ffb3ad; }
+    #refreshButton.refresh-ok { background: #168447; }
+    @-webkit-keyframes refresh-spin { from { -webkit-transform: rotate(0deg); } to { -webkit-transform: rotate(360deg); } }
+    @keyframes refresh-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     .top-action { min-height: 40px; padding: 5px 9px; font-size: 14px; margin-left: 3px; }
     .top-queue { background: #7a4aa0; }
     .badge { display: none; position: absolute; right: -4px; top: -5px; min-width: 20px; height: 20px; padding: 2px 5px; border-radius: 10px; background: #e1261c; color: #fff; font: bold 12px Arial; border: 2px solid #174a75; }
@@ -134,7 +144,7 @@
         <button id="newOrderBell" class="icon-button" title="Đơn mới" type="button">🔔<span id="newOrderBadge" class="badge">0</span></button>
         <button id="staffCallBell" class="icon-button" title="Gọi nhân viên" type="button">🙋<span id="staffCallBadge" class="badge">0</span></button>
         <button id="notifyButton" class="icon-button" title="Bật thông báo" type="button">🔊</button>
-        <button id="refreshButton" class="icon-button" title="Làm mới" type="button">↻</button>
+        <button id="refreshButton" class="icon-button" title="Mạng: đã kết nối · Nhấn để làm mới" type="button"><span class="refresh-glyph">↻</span><span class="network-dot"></span></button>
         <button id="logoutButton" class="icon-button secondary" title="Đăng xuất" type="button">⇥</button>
       </div>
       <div class="clear"></div>
@@ -254,6 +264,7 @@
     var firstOrderLoad = true;
     var unreadOrderIds = [];
     var staffCalls = [];
+    var refreshStateTimer = null;
 
     function byId(id) { return document.getElementById(id); }
     function queryParam(name) {
@@ -279,6 +290,16 @@
       box.className = notice ? 'message notice' : 'message';
       box.innerHTML = escapeHtml(value);
       box.style.display = value ? 'block' : 'none';
+    }
+    function setRefreshState(state) {
+      var button = byId('refreshButton');
+      if (!button) return;
+      if (refreshStateTimer) { window.clearTimeout(refreshStateTimer); refreshStateTimer = null; }
+      button.className = 'icon-button' + (state ? ' refresh-' + state : '');
+      if (state === 'refreshing') button.title = 'Đang cập nhật đơn hàng...';
+      else if (state === 'error') button.title = 'Mất kết nối · Nhấn để thử lại';
+      else button.title = 'Mạng: đã kết nối · Nhấn để làm mới';
+      if (state === 'ok') refreshStateTimer = window.setTimeout(function () { setRefreshState(''); }, 1200);
     }
     function request(method, url, body, callback) {
       var xhr = new XMLHttpRequest();
@@ -770,10 +791,11 @@
       });
     }
     function loadOrders() {
-      message('ordersMessage', 'Đang tải đơn hàng...', true);
+      setRefreshState('refreshing');
       request('GET', '/sapi/shop/staff/orders', null, function (status, data) {
-        if (status === 401) { showLogin(); message('loginMessage', 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.', false); return; }
-        if (status < 200 || status >= 300) { message('ordersMessage', errorText(status, data), false); return; }
+        if (status === 401) { setRefreshState('error'); showLogin(); message('loginMessage', 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.', false); return; }
+        if (status < 200 || status >= 300) { setRefreshState('error'); message('ordersMessage', errorText(status, data), false); return; }
+        setRefreshState('ok');
         message('ordersMessage', '', false);
         loadedOrders = data instanceof Array ? data : [];
         detectNewOrders(loadedOrders);
