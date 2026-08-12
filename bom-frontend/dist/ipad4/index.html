@@ -915,6 +915,7 @@
       loadOrders();
     };
     byId('logoutButton').onclick = function () {
+      if (!window.confirm('Bạn có chắc muốn đăng xuất khỏi thiết bị này?')) return;
       request('POST', '/sapi/auth/logout', null, function () { user = null; showLogin(); });
     };
 

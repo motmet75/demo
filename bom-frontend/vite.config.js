@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
-2  base: '/bom-inventory/',
+  base: '/bom-inventory/',
   build: {
     rollupOptions: {
       output: {
