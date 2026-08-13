@@ -336,6 +336,13 @@ export function setOrderTable(orderId, tableId) {
   })
 }
 
+export function setOrderSeat(orderId, tableId, customerTableTag) {
+  return apiFetchJson(`/shop/staff/orders/${orderId}/seat`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tableId: tableId || null, customerTableTag: customerTableTag || null })
+  })
+}
+
 // ── Menu options ───────────────────────────────────────────────────
 
 export function fetchPublicMenuOptions(tenantId, companyId) {

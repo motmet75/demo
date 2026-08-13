@@ -855,6 +855,28 @@ public class ShopOrderService {
     }
 
     @Transactional
+    public ShopOrderResponseDto setOrderSeat(UUID orderId, UUID tableId, String customerTableTag,
+                                             UUID tenantId, UUID companyId) {
+        ShopOrder order = requireOrder(orderId, tenantId, companyId);
+        if (ShopOrder.STATUS_CANCELLED.equals(order.getStatus()) || ShopOrder.STATUS_COMPLETED.equals(order.getStatus())) {
+            throw new IllegalStateException("Cannot change table for a finished order");
+        }
+        if (tableId == null) {
+            order.setTable(null);
+        } else {
+            ShopTable table = shopTableRepository.findById(tableId)
+                    .orElseThrow(() -> new IllegalArgumentException("Table not found"));
+            if (!table.getTenantId().equals(tenantId) || !table.getCompanyId().equals(companyId)) {
+                throw new IllegalArgumentException("Table does not belong to this company");
+            }
+            order.setTable(table);
+        }
+        order.setCustomerTableTag(customerTableTag == null || customerTableTag.isBlank() ? null : customerTableTag.trim());
+        shopOrderRepository.save(order);
+        return dto(order);
+    }
+
+    @Transactional
     public ShopOrderResponseDto updateOrderItems(UUID orderId, List<ItemRequest> newItems, UUID tenantId, UUID companyId) {
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         requireStatus(order, ShopOrder.STATUS_PENDING);

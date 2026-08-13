@@ -57,7 +57,7 @@ import {
   completeShopOrder, cancelShopOrder, resetOrderSequence, setShopOrderNumber,
   generateDisplayBoardToken, pickupShopOrder, revertShopOrder, markOrderPaid,
   fetchBankConfig, switchToQrPayment, revertToCash, fetchOrderTagQr, fetchShopOrder,
-  fetchShopTables, setOrderTable, fetchPickupQr, fetchOrdersByToken,
+  fetchShopTables, setOrderTable, setOrderSeat, fetchPickupQr, fetchOrdersByToken,
   lockTokenSession, unlockTokenSession,
   fetchStaffCalls, dismissStaffCall, replyStaffCall, forceConfirmOrder,
   confirmScannedOrder,
@@ -465,7 +465,7 @@ const BOARD_HIGH_CONTRAST_STYLE = {
   PICKED_UP:  { headerBg: '#e0f2fe', border: '#0369a1',  cardBg: '#ffffff',  color: '#0f172a',  numColor: '#0369a1' },
 }
 
-function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, onPayQr, onPickupQr, onSwitchQr, onRevertCash, onShowTrackQr, onPrintTag, onMergeBills, displaySize = 'normal', highContrast = false }) {
+function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, onPayQr, onPickupQr, onSwitchQr, onRevertCash, onShowTrackQr, onPrintTag, onMergeBills, onChangeSeat, displaySize = 'normal', highContrast = false }) {
   const { t } = useI18n()
   // onAction(type, orderId, orderNumber)
   const large = displaySize === 'large'
@@ -526,7 +526,7 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                 </Box>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap', mb: 0.25 }}>
-                    {order.tableName && <Chip icon={<TableBarIcon sx={{ fontSize: large ? 17 : 15 }} />} label={order.tableName} size="small" color="info" variant="outlined" sx={{ height: large ? 30 : 26, fontSize: large ? 15 : 13, fontWeight: 900, '& .MuiChip-label': { px: 1 } }} />}
+                    {order.fulfillmentType === 'DINE_IN' && <Tooltip title="Click to change table or tag"><Chip clickable onClick={() => onChangeSeat?.(order)} icon={<TableBarIcon sx={{ fontSize: large ? 17 : 15 }} />} label={order.tableName || order.customerTableTag || '?'} size="small" color="info" variant="outlined" sx={{ height: large ? 30 : 26, fontSize: large ? 15 : 13, fontWeight: 900, '& .MuiChip-label': { px: 1 } }} /></Tooltip>}
                     {order.paymentStatus === 'PAID'
                       ? <Chip icon={<PaidIcon sx={{ fontSize: 12 }} />} label="PAID" size="small" color="success" sx={{ height: 20, fontSize: 11, fontWeight: 800 }} />
                       : <Chip label="UNPAID" size="small" color="warning" variant="outlined" sx={{ height: 20, fontSize: 10, fontWeight: 700 }} />
@@ -831,8 +831,8 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
             <Chip label={localizedStatusLabel(order.status, t)} color={STATUS_COLOR[order.status] || 'default'} size="small"
               sx={{ height: large ? 24 : 20, fontSize: large ? 12 : 10, fontWeight: 800 }} />
             {order.fulfillmentType && (() => { const m = { DINE_IN: '🪑', PICKUP: '🥡', DELIVERY: '🛵' }; return <Typography sx={{ fontSize: large ? 17 : 13 }}>{m[order.fulfillmentType] || ''}</Typography> })()}
-            {order.tableName && <Chip icon={<TableBarIcon sx={{ fontSize: large ? 18 : 16 }} />} label={order.tableName} size="small" color="info" variant="outlined" sx={{ height: large ? 32 : 28, fontSize: large ? 16 : 14, fontWeight: 900, '& .MuiChip-label': { px: 1 } }} />}
-            {order.customerTableTag && <Chip icon={<TableBarIcon sx={{ fontSize: large ? 19 : 17 }} />} label={`THẺ ${order.customerTableTag}`} size="small" color="error" sx={{ height: large ? 34 : 29, fontSize: large ? 17 : 14, fontWeight: 900, '& .MuiChip-label': { px: 1 } }} />}
+            {order.fulfillmentType === 'DINE_IN' && <Tooltip title="Bấm để đổi bàn hoặc số tag"><Chip clickable onClick={() => actions.changeSeat(order)} icon={<TableBarIcon sx={{ fontSize: large ? 18 : 16 }} />} label={order.tableName || '?'} size="small" color="info" variant="outlined" sx={{ height: large ? 32 : 28, fontSize: large ? 16 : 14, fontWeight: 900, '& .MuiChip-label': { px: 1 } }} /></Tooltip>}
+            {order.customerTableTag && <Tooltip title="Bấm để đổi bàn hoặc số tag"><Chip clickable onClick={() => actions.changeSeat(order)} icon={<TableBarIcon sx={{ fontSize: large ? 19 : 17 }} />} label={`THẺ ${order.customerTableTag}`} size="small" color="error" sx={{ height: large ? 34 : 29, fontSize: large ? 17 : 14, fontWeight: 900, '& .MuiChip-label': { px: 1 } }} /></Tooltip>}
             {order.paymentStatus === 'PAID'
               ? <Chip icon={<PaidIcon sx={{ fontSize: 11, ml: '4px !important' }} />} label="PAID" size="small" color="success" sx={{ height: large ? 24 : 20, fontSize: large ? 12 : 10, fontWeight: 800 }} />
               : <Chip label="UNPAID" size="small" color="warning" variant="outlined" sx={{ height: large ? 24 : 20, fontSize: large ? 12 : 10 }} />
@@ -1732,6 +1732,20 @@ export default function ShopOrderGrid() {
     catch (e) { setError(e.message || 'Failed to set table') }
   }
 
+  const handleChangeSeat = async (order) => {
+    const entered = window.prompt('Nhập số bàn hoặc số tag mới:', order.customerTableTag || order.tableName || '')
+    if (entered === null) return
+    const clean = entered.trim()
+    const normalized = clean.replace(/^0+/, '')
+    const match = tables.find(table => {
+      const name = String(table.tableName || '')
+      const number = (name.match(/[0-9]+/) || [''])[0]
+      return name.toLowerCase() === clean.toLowerCase() || (number && number.replace(/^0+/, '') === normalized)
+    })
+    try { await applyOrderResult(await setOrderSeat(order.id, match?.id || order.tableId || null, clean || null), order.id, 'Failed to change table/tag') }
+    catch (e) { setError(e.message || 'Failed to change table/tag') }
+  }
+
   const handlePrintTrack = async (row) => {
     try {
       const { data } = await fetchOrderTagQr(row.id)
@@ -1775,6 +1789,7 @@ export default function ShopOrderGrid() {
     payQr:           handlePayQr,
     printTag:        handlePrintTrack,
     setTable:        handleInlineTableChange,
+    changeSeat:      handleChangeSeat,
     setOrderNumber:  async (id, num) => {
       const n = parseInt(num, 10)
       if (isNaN(n) || n < 1) return
@@ -2032,10 +2047,10 @@ export default function ShopOrderGrid() {
               })}
             />
           )}
-          {tab === 1 && <StatusBoard status="CONFIRMED"  orders={confirmedOrders} modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} onShowTrackQr={handleShowTrackQr} onPrintTag={handlePrintTrack} onMergeBills={cardActions.mergeBills} />}
-          {tab === 2 && <StatusBoard status="PREPARING"  orders={preparingOrders} modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} onShowTrackQr={handleShowTrackQr} onPrintTag={handlePrintTrack} onMergeBills={cardActions.mergeBills} />}
-          {tab === 3 && <StatusBoard status="READY"      orders={readyOrders}     modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} onShowTrackQr={handleShowTrackQr} onPrintTag={handlePrintTrack} onMergeBills={cardActions.mergeBills} />}
-          {tab === 4 && <StatusBoard status="PICKED_UP"  orders={pickedUpOrders}  modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} onShowTrackQr={handleShowTrackQr} onPrintTag={handlePrintTrack} onMergeBills={cardActions.mergeBills} />}
+          {tab === 1 && <StatusBoard status="CONFIRMED"  orders={confirmedOrders} modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} onShowTrackQr={handleShowTrackQr} onPrintTag={handlePrintTrack} onMergeBills={cardActions.mergeBills} onChangeSeat={handleChangeSeat} />}
+          {tab === 2 && <StatusBoard status="PREPARING"  orders={preparingOrders} modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} onShowTrackQr={handleShowTrackQr} onPrintTag={handlePrintTrack} onMergeBills={cardActions.mergeBills} onChangeSeat={handleChangeSeat} />}
+          {tab === 3 && <StatusBoard status="READY"      orders={readyOrders}     modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} onShowTrackQr={handleShowTrackQr} onPrintTag={handlePrintTrack} onMergeBills={cardActions.mergeBills} onChangeSeat={handleChangeSeat} />}
+          {tab === 4 && <StatusBoard status="PICKED_UP"  orders={pickedUpOrders}  modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} onShowTrackQr={handleShowTrackQr} onPrintTag={handlePrintTrack} onMergeBills={cardActions.mergeBills} onChangeSeat={handleChangeSeat} />}
         </Box>
       </Box>
 

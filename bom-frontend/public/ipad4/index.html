@@ -73,7 +73,7 @@
     .plain-order .order-actions button { min-height: 46px; }
     .customer-phone { color: #174a75; font-weight: bold; }
     .fulfillment-badge { display: inline-block; padding: 5px 9px; border-radius: 6px; background: #e6eef6; color: #174a75; font-weight: bold; }
-    .table-number { display: inline-block; min-width: 48px; margin-left: 5px; padding: 5px 9px; border-radius: 6px; background: #174a75; color: #fff; font-size: 24px; font-weight: bold; text-align: center; }
+    .table-number { display: inline-block; min-width: 48px; min-height: 36px; margin-left: 5px; padding: 3px 9px; border-radius: 6px; background: #174a75; color: #fff; font-size: 24px; font-weight: bold; text-align: center; }
     .item-row { overflow: hidden; min-height: 70px; }
     .item-photo { float: left; width: 64px; height: 64px; margin-right: 10px; border-radius: 6px; border: 1px solid #d5dce2; object-fit: cover; background: #f2f4f6; }
     .item-info { overflow: hidden; }
@@ -192,7 +192,8 @@
 
   <div id="orderModal" class="modal form-modal">
     <div class="modal-card">
-      <h2 class="modal-title">Tạo đơn tại quầy</h2>
+      <h2 id="orderFormTitle" class="modal-title">Tạo đơn tại quầy</h2>
+      <div id="editOrderNotice" class="message notice">Chỉ sửa món, topping và ghi chú món. Hội viên, bàn và thanh toán của đơn được giữ nguyên.</div>
       <div id="formError" class="message"></div>
       <label for="customerPhone">Tìm hội viên (không bắt buộc)</label>
       <input id="customerPhone" type="text" placeholder="Tên, số điện thoại hoặc mã thẻ">
@@ -291,6 +292,7 @@
     var firstOrderLoad = true;
     var unreadOrderIds = [];
     var staffCalls = [];
+    var editingOrder = null;
     var refreshStateTimer = null;
 
     function byId(id) { return document.getElementById(id); }
@@ -481,7 +483,7 @@
       var type = text(order.fulfillmentType), table = text(order.tableName), tag = text(order.customerTableTag), number, html;
       if (type === 'DINE_IN' || table) {
         number = (table.match(/[0-9]+/) || [table || tag || '?'])[0];
-        html = '<span class="fulfillment-badge">🍽 Tại bàn</span><span class="table-number">' + escapeHtml(number) + '</span>';
+        html = '<span class="fulfillment-badge">🍽 Tại bàn</span><button type="button" class="table-number" data-action="change-seat" data-id="' + escapeHtml(order.id) + '" title="Đổi bàn hoặc số tag">' + escapeHtml(number) + '</button>';
         if (tag && tag !== number) html += ' <span class="fulfillment-badge">🏷 ' + escapeHtml(tag) + '</span>';
         return html;
       }
@@ -554,6 +556,7 @@
         else if (order.status === 'PREPARING') { actionName = 'ready'; actionLabel = '🔔 Sẵn sàng'; }
         else if (order.status === 'READY' || order.status === 'PICKED_UP') { actionName = 'complete'; actionLabel = '✓ Hoàn tất'; }
         if (actionName && !order.customerEditing) html += '<div class="flow-actions"><button type="button" data-action="' + actionName + '" data-id="' + escapeHtml(order.id) + '">' + actionLabel + '</button></div>';
+        if (order.status === 'PENDING' && !order.customerEditing) html += '<div class="flow-actions"><button type="button" style="background:#65727e" data-action="edit" data-id="' + escapeHtml(order.id) + '">✎ Sửa đơn</button></div>';
         if (order.status === 'PENDING' && order.paymentStatus !== 'PAID' && !order.customerEditing) html += '<div class="flow-actions"><button type="button" style="background:#a33b35" data-action="confirm-wait-payment" data-id="' + escapeHtml(order.id) + '">Xác nhận &amp; mời khách thanh toán</button></div>';
         html += '</div>';
       }
@@ -776,7 +779,8 @@
       byId('cartTotal').innerHTML = formatMoney(total);
     }
     function openOrderForm() {
-      cart = []; selectedCustomer = null;
+      editingOrder = null; cart = []; selectedCustomer = null;
+      byId('orderFormTitle').innerHTML = 'Tạo đơn tại quầy'; byId('editOrderNotice').style.display = 'none'; byId('submitOrderButton').innerHTML = 'Tạo đơn';
       byId('customerPhone').value = ''; byId('customerName').value = ''; byId('orderNotes').value = ''; byId('fulfillmentType').value = 'PICKUP'; byId('orderTableId').value = ''; byId('customerTableTag').value = ''; byId('dineInFields').style.display = 'none';
       byId('memberResult').innerHTML = ''; byId('newMemberFields').style.display = 'none';
       message('formError', '', false); renderCart();
@@ -792,6 +796,40 @@
         shopTables = status >= 200 && status < 300 && data instanceof Array ? data : [];
         for (i = 0; i < shopTables.length; i += 1) if (shopTables[i].isActive !== false) html += '<option value="' + escapeHtml(shopTables[i].id) + '">' + escapeHtml(shopTables[i].tableName || ('Bàn ' + (i + 1))) + '</option>';
         byId('orderTableId').innerHTML = html;
+      });
+    }
+    function openEditOrder(order) {
+      var existing = order.items || [], roots, i;
+      editingOrder = order; cart = []; selectedCustomer = null;
+      byId('orderFormTitle').innerHTML = 'Sửa đơn #' + escapeHtml(order.orderNumber || order.orderCode);
+      byId('editOrderNotice').style.display = 'block'; byId('submitOrderButton').innerHTML = 'Lưu thay đổi';
+      byId('memberResult').innerHTML = ''; byId('newMemberFields').style.display = 'none'; message('formError', '', false);
+      byId('orderModal').style.display = 'block'; document.body.style.overflow = 'hidden';
+      request('GET', '/sapi/bom/models', null, function (status, data) {
+        var list = data instanceof Array ? data : data && (data.data || data.items || data.content), item, sides, j;
+        allModels = list instanceof Array ? list : []; menuModels = allModels.filter(function (m) { return m.sellingPrice !== null && m.sellingPrice !== undefined && m.isActive !== false; }); renderMenu();
+        roots = existing.filter(function (entry) { return !entry.parentItemId; });
+        for (i = 0; i < roots.length; i += 1) {
+          item = roots[i]; sides = [];
+          for (j = 0; j < existing.length; j += 1) if (text(existing[j].parentItemId) === text(item.id)) sides.push({ modelId: existing[j].modelId, modelName: existing[j].modelName, sellingPrice: Number(existing[j].unitPrice || 0), quantity: Math.max(1, Number(existing[j].quantity || 1) / Math.max(1, Number(item.quantity || 1))) });
+          cart.push({ cartKey: 'edit_' + item.id, id: item.modelId, modelName: item.modelName, sellingPrice: Number(item.unitPrice || 0), optionAddOn: 0, optionDetails: [], quantity: Number(item.quantity || 1), selectedOptions: parseJson(item.selectedOptions || '{}', {}), sideItems: sides, itemNotes: item.itemNotes || null });
+        }
+        renderCart();
+      });
+    }
+    function changeOrderSeat(order) {
+      var current = order.customerTableTag || order.tableName || '', value = window.prompt('Nhập số bàn hoặc số tag mới:', current), clean;
+      if (value === null) return; clean = text(value).replace(/^\s+|\s+$/g, '');
+      request('GET', '/sapi/shop/staff/tables', null, function (status, data) {
+        var tables = status >= 200 && status < 300 && data instanceof Array ? data : [], match = null, i, tableName, tableNumber;
+        for (i = 0; i < tables.length; i += 1) {
+          tableName = text(tables[i].tableName); tableNumber = (tableName.match(/[0-9]+/) || [''])[0];
+          if (tableName.toLowerCase() === clean.toLowerCase() || (tableNumber && tableNumber.replace(/^0+/, '') === clean.replace(/^0+/, ''))) { match = tables[i]; break; }
+        }
+        request('PATCH', '/sapi/shop/staff/orders/' + encodeURIComponent(order.id) + '/seat', { tableId: match ? match.id : (order.tableId || null), customerTableTag: clean || null }, function (saveStatus, saved) {
+          if (saveStatus < 200 || saveStatus >= 300) { message('ordersMessage', errorText(saveStatus, saved), false); return; }
+          loadOrders();
+        });
       });
     }
     function findCustomer() {
@@ -822,6 +860,17 @@
     function submitOrder() {
       var phone = selectedCustomer ? normalizePhone(selectedCustomer.phone) : normalizePhone(byId('customerPhone').value), name, body;
       if (!cart.length) { message('formError', 'Vui lòng chọn ít nhất một món.', false); return; }
+      if (editingOrder) {
+        if (!window.confirm('Lưu thay đổi món cho đơn #' + (editingOrder.orderNumber || editingOrder.orderCode) + '?')) return;
+        setBusy('submitOrderButton', true, 'Lưu thay đổi');
+        body = cart.map(function (item) { return { modelId: item.id, quantity: item.quantity, selectedOptions: Object.keys(item.selectedOptions || {}).length ? JSON.stringify(item.selectedOptions) : null, itemNotes: item.itemNotes || null, unitPriceOverride: Number(item.sellingPrice) || null, sideItems: (item.sideItems || []).map(function (side) { return { modelId: side.modelId, quantity: side.quantity * item.quantity, selectedOptions: null, itemNotes: null, unitPriceOverride: Number(side.sellingPrice) || null, sideItems: [] }; }) }; });
+        request('PUT', '/sapi/shop/staff/orders/' + encodeURIComponent(editingOrder.id) + '/items', body, function (status, data) {
+          setBusy('submitOrderButton', false, 'Lưu thay đổi');
+          if (status < 200 || status >= 300) { message('formError', errorText(status, data), false); return; }
+          closeOrderForm(); editingOrder = null; loadOrders();
+        });
+        return;
+      }
       if (!selectedCustomer && byId('customerPhone').value.replace(/^\s+|\s+$/g, '') && !phone) { message('formError', 'Hãy chọn một hội viên trong kết quả tìm kiếm hoặc xóa ô tìm kiếm để tạo đơn khách lẻ.', false); return; }
       if (!selectedCustomer && phone && !isFullPhone(phone)) { message('formError', 'Số điện thoại mới phải đủ 10 số và bắt đầu bằng 0 (hoặc dùng +84).', false); return; }
       name = selectedCustomer ? selectedCustomer.name : byId('customerName').value.replace(/^\s+|\s+$/g, '');
@@ -1005,6 +1054,8 @@
       if (!order) return;
       if (action === 'track') showTracking(order);
       if (action === 'pay') showPayment(order);
+      if (action === 'edit') openEditOrder(order);
+      if (action === 'change-seat') changeOrderSeat(order);
       if (action === 'confirm' || action === 'confirm-wait-payment' || action === 'prepare' || action === 'ready' || action === 'complete') advanceOrder(order, action);
       if (action === 'mark-paid') {
         if (!window.confirm('Xác nhận đơn #' + (order.orderNumber || order.orderCode) + ' đã nhận đủ tiền?')) return;
