@@ -268,7 +268,7 @@ function MobileOrderActions({ order, actionItems, sx }) {
                     {icon}
                   </Box>
                   <Typography sx={{ fontSize: 17, fontWeight: 900, color: '#111827', lineHeight: 1.2, textAlign: 'left' }}>
-                    {t(action.labelKey)}
+                    {action.label || t(action.labelKey)}
                   </Typography>
                 </Button>
               )
@@ -776,6 +776,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
     { key: 'cupLabel', labelKey: 'shop.orderAction.printCupLabel', icon: <LocalCafeIcon />, color: 'warning', onClick: () => printCupLabelsTracked(order) },
     { key: 'paymentQr', labelKey: 'shop.orderAction.paymentQr', icon: <PaymentsIcon />, color: 'success', show: order.paymentStatus !== 'PAID' && order.status !== 'CANCELLED', onClick: () => actions.payQr(order) },
     { key: 'merge', labelKey: 'shop.orderAction.mergeOtherBills', icon: <MergeTypeIcon />, color: 'secondary', show: isActive, onClick: () => actions.mergeBills(order) },
+    { key: 'revert', label: 'Hoàn tác đơn', icon: <UndoIcon />, color: 'warning', show: !['PENDING', 'CANCELLED'].includes(order.status), onClick: () => actions.revert(order) },
   ]
   const commitNum = () => {
     const n = parseInt(numVal, 10)
@@ -1315,7 +1316,11 @@ function OrderCardGrid({ rows, loading, tables, actions, modelImageMap = {}, sel
           <MenuItem value="">{t('shopOrder.grid.allSlips')}</MenuItem>
           {slipOptions.map(slip => <MenuItem key={slip.token} value={slip.token}>{slip.label}</MenuItem>)}
         </TextField>
-        <TextField select size="small" label="Sort" value={sortBy} onChange={e => { setSortBy(e.target.value); try { localStorage.setItem('shop_orders_sort', e.target.value) } catch {} }} sx={{ width: { xs: 165, sm: 170 }, flex: { xs: 1, sm: '0 0 auto' } }}>
+        <Box sx={{ display: { xs: 'flex', sm: 'none' }, gap: 0.5, flex: 1 }}>
+          <Button size="small" variant={sortBy === 'newest' ? 'contained' : 'outlined'} onClick={() => { setSortBy('newest'); try { localStorage.setItem('shop_orders_sort', 'newest') } catch {} }} sx={{ flex: 1, minHeight: 40, px: 0.75, fontSize: 11, fontWeight: 800 }}>Mới nhất</Button>
+          <Button size="small" variant={sortBy === 'oldest' ? 'contained' : 'outlined'} color="warning" onClick={() => { setSortBy('oldest'); try { localStorage.setItem('shop_orders_sort', 'oldest') } catch {} }} sx={{ flex: 1, minHeight: 40, px: 0.75, fontSize: 11, fontWeight: 800 }}>FIFO</Button>
+        </Box>
+        <TextField select size="small" label="Sort" value={sortBy} onChange={e => { setSortBy(e.target.value); try { localStorage.setItem('shop_orders_sort', e.target.value) } catch {} }} sx={{ width: 170, display: { xs: 'none', sm: 'inline-flex' } }}>
           {SORT_OPTIONS.map(o => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
         </TextField>
         <Typography sx={{ fontSize: 12, color: '#94a3b8', flexShrink: 0 }}>{filtered.length} / {rows.length} orders</Typography>
@@ -1819,6 +1824,7 @@ export default function ShopOrderGrid() {
     pickup:     (row) => askConfirm({ title: 'Mark as Picked Up?', message: 'Confirm customer has picked up this order?', confirmLabel: 'Picked Up', confirmColor: 'primary' }, () => act(pickupShopOrder, row.id)),
     markPaid:   (row) => askConfirm({ title: 'Mark as Paid?', message: `Mark order #${row.orderNumber ?? row.orderCode} as paid?`, confirmLabel: 'Mark Paid', confirmColor: 'success' }, () => act(markOrderPaid, row.id)),
     cancel:     handleCancel,
+    revert:     (row) => askConfirm({ title: 'Hoàn tác đơn?', message: `Đưa đơn #${row.orderNumber ?? row.orderCode} về bước trước?`, confirmLabel: 'Hoàn tác', confirmColor: 'warning' }, () => act(revertShopOrder, row.id)),
     switchToQr: (row) => askConfirm({ title: 'Switch to QR payment?', message: 'Switch this order to Bank QR and print receipt?', confirmLabel: 'Switch & Print', confirmColor: 'success' }, () => handleSwitchAndPrint(row)),
     revertCash: (row) => askConfirm({ title: 'Revert to Cash?', message: 'Change payment method back to cash?', confirmLabel: '→ Cash', confirmColor: 'warning' }, () => handleRevertToCash(row)),
     pickupQr:    handlePickupQr,
