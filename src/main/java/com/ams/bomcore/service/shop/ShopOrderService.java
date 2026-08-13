@@ -855,12 +855,17 @@ public class ShopOrderService {
     }
 
     @Transactional
-    public ShopOrderResponseDto setOrderSeat(UUID orderId, UUID tableId, String customerTableTag,
+    public ShopOrderResponseDto setOrderSeat(UUID orderId, UUID tableId, String customerTableTag, String fulfillmentType,
                                              UUID tenantId, UUID companyId) {
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         if (ShopOrder.STATUS_CANCELLED.equals(order.getStatus()) || ShopOrder.STATUS_COMPLETED.equals(order.getStatus())) {
             throw new IllegalStateException("Cannot change table for a finished order");
         }
+        if (fulfillmentType != null && !Set.of(ShopOrder.FULFILLMENT_DINE_IN, ShopOrder.FULFILLMENT_PICKUP,
+                ShopOrder.FULFILLMENT_DELIVERY).contains(fulfillmentType)) {
+            throw new IllegalArgumentException("Invalid fulfillment type");
+        }
+        if (fulfillmentType != null) order.setFulfillmentType(fulfillmentType);
         if (tableId == null) {
             order.setTable(null);
         } else {

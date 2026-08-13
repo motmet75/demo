@@ -1733,16 +1733,23 @@ export default function ShopOrderGrid() {
   }
 
   const handleChangeSeat = async (order) => {
-    const entered = window.prompt('Nhập số bàn hoặc số tag mới:', order.customerTableTag || order.tableName || '')
+    const entered = window.prompt('Nhập số bàn/tag, hoặc nhập:\nPICKUP = Mang đi\nDELIVERY = Giao hàng\nNONE = Dùng tại quán, không bàn', order.customerTableTag || order.tableName || '')
     if (entered === null) return
     const clean = entered.trim()
+    const command = clean.toUpperCase()
+    let fulfillmentType = 'DINE_IN'
+    if (['PICKUP', 'MANG DI', 'MANG ĐI'].includes(command)) fulfillmentType = 'PICKUP'
+    if (['DELIVERY', 'GIAO HANG', 'GIAO HÀNG'].includes(command)) fulfillmentType = 'DELIVERY'
+    const noTable = ['NONE', 'NO TABLE', 'KHONG BAN', 'KHÔNG BÀN'].includes(command)
     const normalized = clean.replace(/^0+/, '')
-    const match = tables.find(table => {
+    const match = fulfillmentType === 'DINE_IN' && !noTable ? tables.find(table => {
       const name = String(table.tableName || '')
       const number = (name.match(/[0-9]+/) || [''])[0]
       return name.toLowerCase() === clean.toLowerCase() || (number && number.replace(/^0+/, '') === normalized)
-    })
-    try { await applyOrderResult(await setOrderSeat(order.id, match?.id || order.tableId || null, clean || null), order.id, 'Failed to change table/tag') }
+    }) : null
+    const tableId = fulfillmentType === 'DINE_IN' && !noTable ? (match?.id || order.tableId || null) : null
+    const tag = fulfillmentType === 'DINE_IN' && !noTable ? (clean || null) : null
+    try { await applyOrderResult(await setOrderSeat(order.id, tableId, tag, fulfillmentType), order.id, 'Failed to change fulfillment/table/tag') }
     catch (e) { setError(e.message || 'Failed to change table/tag') }
   }
 

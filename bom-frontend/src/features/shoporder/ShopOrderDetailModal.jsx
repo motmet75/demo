@@ -194,6 +194,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
   const [custSearching, setCustSearching]     = useState(false)
   const [linkedCustomer, setLinkedCustomer]   = useState(null)
   const [custLinking, setCustLinking]         = useState(false)
+  const [changingCustomer, setChangingCustomer] = useState(false)
   const [ptsSaving, setPtsSaving]             = useState(false)
   const [bankCfg, setBankCfg]                 = useState(null)
   const [undoMerging, setUndoMerging]         = useState(false)
@@ -224,7 +225,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
     setSelectedBillId(targetBill?.id || null)
     setDiscountAmt(targetBill?.discountAmount ? String(targetBill.discountAmount) : (order.discountAmount ? String(order.discountAmount) : ''))
     setVoucherCode(targetBill?.voucherCode || order.voucherCode || '')
-    setLinkedCustomer(null); setCustSearch(''); setCustResults([]); setCustHistory(null); setVoucherDetail(null); setVoucherDetailOpen(false)
+    setLinkedCustomer(null); setChangingCustomer(false); setCustSearch(''); setCustResults([]); setCustHistory(null); setVoucherDetail(null); setVoucherDetailOpen(false)
     if (order.customerId) {
       fetchCustomers().then(({ data }) => {
         const c = (data || []).find(x => x.id === order.customerId)
@@ -387,7 +388,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
     try {
       const { res } = await linkOrderCustomer(order.id, c.id)
       if (!res.ok) { setError('Failed to link customer'); setCustLinking(false); return }
-      setLinkedCustomer(c); setCustSearch(''); setCustResults([])
+      setLinkedCustomer(c); setChangingCustomer(false); setCustSearch(''); setCustResults([])
       onRefresh?.()
     } catch (e) { setError(e.message || 'Network error') }
     setCustLinking(false)
@@ -793,7 +794,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
               sx={{ textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', mb: 1 }}>
               Customer (points)
             </Typography>
-            {linkedCustomer ? (() => {
+            {linkedCustomer && !changingCustomer ? (() => {
               const rate = bankCfg?.pointsConversionRate || 10000
               const roundUp = bankCfg?.pointsRoundUp || false
               const net = payableAmount(order)
@@ -814,10 +815,12 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
                     </Box>
                   </Box>
                   {!isFinal && (
-                    <Button size="small" color="error" onClick={handleUnlinkCustomer} disabled={custLinking}
-                      sx={{ textTransform: 'none', flexShrink: 0 }}>
-                      Unlink
-                    </Button>
+                    <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
+                      <Button size="small" variant="outlined" onClick={() => { setChangingCustomer(true); setCustSearch(''); setCustResults([]) }} disabled={custLinking}
+                        sx={{ textTransform: 'none' }}>Change member</Button>
+                      <Button size="small" color="error" onClick={handleUnlinkCustomer} disabled={custLinking}
+                        sx={{ textTransform: 'none' }}>Unlink</Button>
+                    </Box>
                   )}
                 </Box>
                 {discountPct > 0 && !isFinal && (
@@ -850,6 +853,11 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
               )
             })() : (
               <Box sx={{ position: 'relative' }}>
+                {changingCustomer && linkedCustomer && (
+                  <Alert severity="info" sx={{ mb: 1 }} action={<Button size="small" onClick={() => { setChangingCustomer(false); setCustSearch(''); setCustResults([]) }}>Cancel</Button>}>
+                    Current member: <strong>{linkedCustomer.name}</strong>. Search and select a replacement below.
+                  </Alert>
+                )}
                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
                   <TextField
                     label={t('shopOrder.detail.customerLookup')} size="small" fullWidth

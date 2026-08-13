@@ -336,10 +336,10 @@ export function setOrderTable(orderId, tableId) {
   })
 }
 
-export function setOrderSeat(orderId, tableId, customerTableTag) {
+export function setOrderSeat(orderId, tableId, customerTableTag, fulfillmentType = null) {
   return apiFetchJson(`/shop/staff/orders/${orderId}/seat`, {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tableId: tableId || null, customerTableTag: customerTableTag || null })
+    body: JSON.stringify({ tableId: tableId || null, customerTableTag: customerTableTag || null, fulfillmentType })
   })
 }
 

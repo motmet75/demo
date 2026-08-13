@@ -727,7 +727,8 @@ public class ShopOrderController {
         String tableIdValue = body.get("tableId") != null ? String.valueOf(body.get("tableId")) : null;
         UUID tableId = tableIdValue != null && !tableIdValue.isBlank() ? UUID.fromString(tableIdValue) : null;
         String tag = body.get("customerTableTag") != null ? String.valueOf(body.get("customerTableTag")).trim() : null;
-        return ResponseEntity.ok(shopOrderService.setOrderSeat(orderId, tableId, tag, tId, cId));
+        String fulfillmentType = body.get("fulfillmentType") != null ? String.valueOf(body.get("fulfillmentType")) : null;
+        return ResponseEntity.ok(shopOrderService.setOrderSeat(orderId, tableId, tag, fulfillmentType, tId, cId));
     }
 
     @PatchMapping("/shop/staff/orders/{orderId}/pay")
