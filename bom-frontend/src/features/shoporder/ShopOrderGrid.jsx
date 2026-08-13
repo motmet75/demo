@@ -211,11 +211,14 @@ function MobileOrderActions({ order, actionItems, sx }) {
       <Button
         variant="contained"
         size="small"
-        startIcon={<MoreHorizIcon />}
         onClick={(event) => { event.stopPropagation(); setOpen(true) }}
-        sx={{ minHeight: 44, px: 1.25, borderRadius: 1, textTransform: 'none', fontWeight: 900, fontSize: 15 }}
+        aria-label={t('shop.orderAction.more')}
+        sx={{ minWidth: 48, minHeight: 48, px: 0.5, py: 0.25, borderRadius: 1, textTransform: 'none', flexDirection: 'column', lineHeight: 1 }}
       >
-        {t('shop.orderAction.more')}
+        <MoreHorizIcon sx={{ fontSize: 24 }} />
+        <Typography component="span" sx={{ mt: 0.2, color: 'inherit', fontSize: 9, fontWeight: 800, lineHeight: 1, whiteSpace: 'nowrap' }}>
+          {elapsed(order.confirmedAt || order.createdAt)}
+        </Typography>
       </Button>
       <Dialog
         open={open}
@@ -538,7 +541,7 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                   </Box>
                   {order.customerName && <Typography variant="caption" display="block" noWrap>{order.customerName}</Typography>}
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: metaFont }}>{since} ago</Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', sm: 'block' }, fontSize: metaFont }}>{since} ago</Typography>
                     {(() => {
                       const roots = (order.items || []).filter(it => !it.parentItemId)
                       const totalQty = roots.reduce((s, it) => s + Number(it.quantity || 1), 0)
@@ -846,7 +849,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
           </Box>
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
             {order.customerName && <Typography sx={{ fontSize: large ? 15 : 12, fontWeight: 800, color: '#1e293b', flex: 1 }} noWrap>{order.customerName}</Typography>}
-            <Typography sx={{ fontSize: large ? 12 : 10, color: '#64748b', flexShrink: 0 }}>{elapsed(order.confirmedAt || order.createdAt)} ago</Typography>
+            <Typography sx={{ display: { xs: 'none', sm: 'block' }, fontSize: large ? 12 : 10, color: '#64748b', flexShrink: 0 }}>{elapsed(order.confirmedAt || order.createdAt)} ago</Typography>
           </Box>
           {order.staffName && <Typography sx={{ fontSize: large ? 12 : 10, color: '#64748b' }} noWrap>by {order.staffName}</Typography>}
         </Box>
