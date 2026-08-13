@@ -849,9 +849,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
           </Box>
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
             {order.customerName && <Typography sx={{ fontSize: large ? 15 : 12, fontWeight: 800, color: '#1e293b', flex: 1 }} noWrap>{order.customerName}</Typography>}
-            <Typography sx={{ display: { xs: 'none', sm: 'block' }, fontSize: large ? 12 : 10, color: '#64748b', flexShrink: 0 }}>{elapsed(order.confirmedAt || order.createdAt)} ago</Typography>
           </Box>
-          {order.staffName && <Typography sx={{ fontSize: large ? 12 : 10, color: '#64748b' }} noWrap>by {order.staffName}</Typography>}
         </Box>
 
         {/* Icon cluster */}
@@ -891,6 +889,12 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
                 <IconButton size="small" onClick={() => actions.mergeBills(order)} sx={{ p: 0.35, color: '#7c3aed' }}><MergeTypeIcon sx={{ fontSize: large ? 20 : 17 }} /></IconButton>
               </Tooltip>
             )}
+          </Box>
+          <Box sx={{ mt: 0.15, maxWidth: large ? 150 : 125, textAlign: 'right', alignSelf: 'flex-end' }}>
+            <Typography sx={{ fontSize: large ? 11 : 9, color: '#64748b', lineHeight: 1.15, whiteSpace: 'nowrap' }}>
+              {elapsed(order.confirmedAt || order.createdAt)} ago
+            </Typography>
+            {order.staffName && <Typography title={order.staffName} sx={{ fontSize: large ? 11 : 9, color: '#64748b', lineHeight: 1.15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>by {order.staffName}</Typography>}
           </Box>
         </Box>
         <MobileOrderActions order={order} actionItems={orderActionItems} />
