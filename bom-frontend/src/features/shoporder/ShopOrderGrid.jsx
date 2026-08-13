@@ -1219,7 +1219,7 @@ function OrderRowsGrid({ rows, tables, actions, selectedIds, onToggleSelect, dis
 }
 const SORT_OPTIONS = [
   { value: 'newest', label: 'Newest first' },
-  { value: 'oldest', label: 'Oldest first' },
+  { value: 'oldest', label: 'FIFO – Oldest first' },
   { value: 'status', label: 'By status' },
   { value: 'number', label: 'By order #' },
   { value: 'total',  label: 'By total ↓' },
@@ -1229,7 +1229,9 @@ const STATUS_SORT_ORDER = { PENDING: 0, CONFIRMED: 1, PREPARING: 2, READY: 3, PI
 function OrderCardGrid({ rows, loading, tables, actions, modelImageMap = {}, selectedIds, onToggleSelect, viewMode = 'cards', displaySize = 'normal', highContrast = false }) {
   const { t } = useI18n()
   const [search, setSearch] = useState('')
-  const [sortBy, setSortBy] = useState('newest')
+  const [sortBy, setSortBy] = useState(() => {
+    try { return localStorage.getItem('shop_orders_sort') || 'oldest' } catch { return 'oldest' }
+  })
   const [tableFilter, setTableFilter] = useState('')
   const [slipFilter, setSlipFilter] = useState('')
 
@@ -1313,7 +1315,7 @@ function OrderCardGrid({ rows, loading, tables, actions, modelImageMap = {}, sel
           <MenuItem value="">{t('shopOrder.grid.allSlips')}</MenuItem>
           {slipOptions.map(slip => <MenuItem key={slip.token} value={slip.token}>{slip.label}</MenuItem>)}
         </TextField>
-        <TextField select size="small" label="Sort" value={sortBy} onChange={e => setSortBy(e.target.value)} sx={{ width: 140, display: { xs: 'none', sm: 'inline-flex' } }}>
+        <TextField select size="small" label="Sort" value={sortBy} onChange={e => { setSortBy(e.target.value); try { localStorage.setItem('shop_orders_sort', e.target.value) } catch {} }} sx={{ width: { xs: 165, sm: 170 }, flex: { xs: 1, sm: '0 0 auto' } }}>
           {SORT_OPTIONS.map(o => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
         </TextField>
         <Typography sx={{ fontSize: 12, color: '#94a3b8', flexShrink: 0 }}>{filtered.length} / {rows.length} orders</Typography>
