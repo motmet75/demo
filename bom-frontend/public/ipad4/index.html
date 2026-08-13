@@ -636,6 +636,7 @@
     }
     function closeOrderForm() { byId('orderModal').style.display = 'none'; document.body.style.overflow = ''; }
     function normalizePhone(value) { return text(value).replace(/[^0-9+]/g, '').replace(/^\+84/, '0'); }
+    function isFullPhone(value) { return /^0[0-9]{9}$/.test(normalizePhone(value)); }
     function renderMenu() {
       var html = '', i, model, photo;
       if (!menuModels.length) { byId('menuChoices').innerHTML = '<div class="menu-choice">Không có món đang bán.</div>'; return; }
@@ -778,7 +779,7 @@
     }
     function findCustomer() {
       var keyword = byId('customerPhone').value.replace(/^\s+|\s+$/g, '');
-      if (keyword.length < 2) { message('formError', 'Nhập ít nhất 2 ký tự của tên, điện thoại hoặc mã thẻ.', false); return; }
+      if (!keyword) { message('formError', 'Nhập tên, điện thoại hoặc mã thẻ cần tìm.', false); return; }
       selectedCustomer = null; message('formError', '', false);
       request('GET', '/sapi/shop/staff/customers?q=' + encodeURIComponent(keyword), null, function (status, data) {
         var list = data instanceof Array ? data : [], i, html = '';
@@ -786,7 +787,7 @@
         if (list.length) for (i = 0; i < list.length; i += 1) html += '<button class="member-choice" type="button" data-customer-index="' + i + '"><strong>' + escapeHtml(list[i].name) + '</strong><br>☎ ' + escapeHtml(list[i].phone || 'Không có SĐT') + ' · Thẻ: ' + escapeHtml(list[i].customerCode || '—') + (list[i].points !== undefined ? ' · ' + escapeHtml(list[i].points) + ' điểm' : '') + '</button>';
         else html = '<div class="message notice" style="display:block">Không tìm thấy. Chỉ có thể tạo hội viên mới khi nhập đầy đủ số điện thoại.</div>';
         byId('memberResult').innerHTML = html; byId('memberResult')._customers = list;
-        byId('newMemberFields').style.display = !list.length && normalizePhone(keyword).length >= 9 ? 'block' : 'none';
+        byId('newMemberFields').style.display = !list.length && isFullPhone(keyword) ? 'block' : 'none';
       });
     }
     function openVoucher() { byId('voucherCode').value = ''; byId('voucherResult').innerHTML = ''; message('voucherError', '', false); byId('voucherModal').style.display = 'block'; }
@@ -805,7 +806,7 @@
       var phone = selectedCustomer ? normalizePhone(selectedCustomer.phone) : normalizePhone(byId('customerPhone').value), name, body;
       if (!cart.length) { message('formError', 'Vui lòng chọn ít nhất một món.', false); return; }
       if (!selectedCustomer && byId('customerPhone').value.replace(/^\s+|\s+$/g, '') && !phone) { message('formError', 'Hãy chọn một hội viên trong kết quả tìm kiếm hoặc xóa ô tìm kiếm để tạo đơn khách lẻ.', false); return; }
-      if (phone && phone.length < 9) { message('formError', 'Số điện thoại chưa đầy đủ. Hãy nhập đủ hoặc để trống cho khách lẻ.', false); return; }
+      if (!selectedCustomer && phone && !isFullPhone(phone)) { message('formError', 'Số điện thoại mới phải đủ 10 số và bắt đầu bằng 0 (hoặc dùng +84).', false); return; }
       name = selectedCustomer ? selectedCustomer.name : byId('customerName').value.replace(/^\s+|\s+$/g, '');
       if (phone && !selectedCustomer && !name) { message('formError', 'Bấm Tìm hội viên; nếu chưa có, nhập tên hội viên mới.', false); return; }
       setBusy('submitOrderButton', true, 'Tạo đơn'); message('formError', '', false);
@@ -824,8 +825,8 @@
           }
         });
       }
-      if (!phone) { createWithCustomer(null); return; }
       if (selectedCustomer) { createWithCustomer(selectedCustomer); return; }
+      if (!phone) { createWithCustomer(null); return; }
       request('POST', '/sapi/shop/staff/customers', { name: name, phone: phone }, function (status, customer) {
         if (status < 200 || status >= 300 || !customer || !customer.id) { setBusy('submitOrderButton', false, 'Tạo đơn'); message('formError', errorText(status, customer), false); return; }
         selectedCustomer = customer; createWithCustomer(customer);
