@@ -91,7 +91,9 @@
     select { width: 100%; height: 48px; padding: 7px; border: 1px solid #929ca6; border-radius: 5px; background: #fff; font-size: 18px; }
     .member-result { padding: 10px; margin-top: 8px; border-radius: 5px; background: #e9f6ed; color: #176334; }
     .member-choice { display: block; width: 100%; margin: 7px 0; padding: 10px; background: #eef4f8; color: #173d5e; text-align: left; }
-    .remove-member { width: 100%; margin-top: 8px; background: #a33b35; }
+    .member-actions { display: flex; gap: 6px; margin-top: 8px; }
+    .member-actions button { flex: 1; min-height: 38px; font-size: 14px; }
+    .remove-member { background: #a33b35; }
     .price-line { color: #168447; font-weight: bold; }
     .menu-grid { max-height: 280px; overflow: auto; margin-top: 10px; border: 1px solid #d5dce2; }
     .menu-choice { overflow: hidden; padding: 9px; border-bottom: 1px solid #d5dce2; }
@@ -883,8 +885,10 @@
         request('POST', '/sapi/shop/staff/orders', body, function (status, order) {
           if (status < 200 || status >= 300 || !order || !order.id) { setBusy('submitOrderButton', false, 'Tạo đơn'); message('formError', errorText(status, order), false); return; }
           if (customer && customer.id) {
-            request('PATCH', '/sapi/shop/staff/orders/' + encodeURIComponent(order.id) + '/customer', { customerId: customer.id }, function () {
-              setBusy('submitOrderButton', false, 'Tạo đơn'); closeOrderForm(); loadOrders(); showTracking(order);
+            request('PATCH', '/sapi/shop/staff/orders/' + encodeURIComponent(order.id) + '/customer', { customerId: customer.id }, function (linkStatus, linkedOrder) {
+              setBusy('submitOrderButton', false, 'Tạo đơn');
+              if (linkStatus < 200 || linkStatus >= 300) { message('formError', 'Đơn đã được tạo nhưng chưa liên kết được hội viên: ' + errorText(linkStatus, linkedOrder), false); loadOrders(); return; }
+              closeOrderForm(); loadOrders(); showTracking(linkedOrder && linkedOrder.id ? linkedOrder : order);
             });
           } else {
             setBusy('submitOrderButton', false, 'Tạo đơn'); closeOrderForm(); loadOrders(); showTracking(order);
@@ -1020,10 +1024,13 @@
       if (target.getAttribute('data-remove-customer')) {
         selectedCustomer = null; byId('customerPhone').value = ''; byId('customerName').value = ''; this.innerHTML = ''; this._customers = []; byId('newMemberFields').style.display = 'none'; return;
       }
+      if (target.getAttribute('data-change-customer')) {
+        selectedCustomer = null; byId('customerPhone').value = ''; byId('customerName').value = ''; this.innerHTML = ''; this._customers = []; byId('newMemberFields').style.display = 'none'; byId('customerPhone').focus(); return;
+      }
       index = Number(target.getAttribute('data-customer-index')); customer = this._customers && this._customers[index];
       if (!customer) return;
       selectedCustomer = customer; byId('customerPhone').value = customer.phone || customer.customerCode || customer.name;
-      this.innerHTML = '<div class="member-result">Đã chọn: <strong>' + escapeHtml(customer.name) + '</strong><br>☎ ' + escapeHtml(customer.phone || 'Không có SĐT') + ' · Thẻ: ' + escapeHtml(customer.customerCode || '—') + (customer.points !== undefined ? ' · ' + escapeHtml(customer.points) + ' điểm' : '') + '<button class="remove-member" type="button" data-remove-customer="1">× Bỏ chọn hội viên</button></div>';
+      this.innerHTML = '<div class="member-result">Đã chọn: <strong>' + escapeHtml(customer.name) + '</strong><br>☎ ' + escapeHtml(customer.phone || 'Không có SĐT') + ' · Thẻ: ' + escapeHtml(customer.customerCode || '—') + (customer.points !== undefined ? ' · ' + escapeHtml(customer.points) + ' điểm' : '') + '<div class="member-actions"><button type="button" data-change-customer="1">↻ Đổi hội viên</button><button class="remove-member" type="button" data-remove-customer="1">× Bỏ chọn</button></div></div>';
       byId('newMemberFields').style.display = 'none'; message('formError', '', false);
     };
     byId('fulfillmentType').onchange = function () { byId('dineInFields').style.display = this.value === 'DINE_IN' ? 'block' : 'none'; };
