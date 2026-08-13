@@ -91,6 +91,7 @@
     select { width: 100%; height: 48px; padding: 7px; border: 1px solid #929ca6; border-radius: 5px; background: #fff; font-size: 18px; }
     .member-result { padding: 10px; margin-top: 8px; border-radius: 5px; background: #e9f6ed; color: #176334; }
     .member-choice { display: block; width: 100%; margin: 7px 0; padding: 10px; background: #eef4f8; color: #173d5e; text-align: left; }
+    .remove-member { width: 100%; margin-top: 8px; background: #a33b35; }
     .price-line { color: #168447; font-weight: bold; }
     .menu-grid { max-height: 280px; overflow: auto; margin-top: 10px; border: 1px solid #d5dce2; }
     .menu-choice { overflow: hidden; padding: 9px; border-bottom: 1px solid #d5dce2; }
@@ -204,6 +205,13 @@
       </div>
       <label for="fulfillmentType">Hình thức nhận hàng</label>
       <select id="fulfillmentType"><option value="PICKUP">Mang đi</option><option value="DINE_IN">Dùng tại quán</option><option value="DELIVERY">Giao hàng</option></select>
+      <div id="dineInFields" style="display:none">
+        <label for="orderTableId">Chọn bàn</label>
+        <select id="orderTableId"><option value="">-- Chưa chọn bàn --</option></select>
+        <label for="customerTableTag">Số thẻ bàn / số tag</label>
+        <input id="customerTableTag" type="text" inputmode="numeric" placeholder="Ví dụ: 05">
+        <p class="muted">Có thể chọn bàn đã cấu hình, nhập số thẻ/tag, hoặc dùng cả hai.</p>
+      </div>
       <label>Chọn món</label>
       <div id="menuChoices" class="menu-grid"><div class="menu-choice">Đang tải thực đơn...</div></div>
       <h3 style="margin-top:16px">Món đã chọn</h3>
@@ -269,6 +277,7 @@
     var mfaMethod = '';
     var orderById = {};
     var menuModels = [];
+    var shopTables = [];
     var cart = [];
     var selectedCustomer = null;
     var configuringModel = null;
@@ -469,10 +478,12 @@
       return labels[status] || status || '';
     }
     function fulfillmentHtml(order) {
-      var type = text(order.fulfillmentType), table = text(order.tableName), number;
+      var type = text(order.fulfillmentType), table = text(order.tableName), tag = text(order.customerTableTag), number, html;
       if (type === 'DINE_IN' || table) {
-        number = (table.match(/[0-9]+/) || [table || '?'])[0];
-        return '<span class="fulfillment-badge">🍽 Tại bàn</span><span class="table-number">' + escapeHtml(number) + '</span>';
+        number = (table.match(/[0-9]+/) || [table || tag || '?'])[0];
+        html = '<span class="fulfillment-badge">🍽 Tại bàn</span><span class="table-number">' + escapeHtml(number) + '</span>';
+        if (tag && tag !== number) html += ' <span class="fulfillment-badge">🏷 ' + escapeHtml(tag) + '</span>';
+        return html;
       }
       if (type === 'DELIVERY') return '<span class="fulfillment-badge">🛵 Giao hàng</span>';
       return '<span class="fulfillment-badge">🥡 Mang đi</span>';
@@ -766,7 +777,7 @@
     }
     function openOrderForm() {
       cart = []; selectedCustomer = null;
-      byId('customerPhone').value = ''; byId('customerName').value = ''; byId('orderNotes').value = '';
+      byId('customerPhone').value = ''; byId('customerName').value = ''; byId('orderNotes').value = ''; byId('fulfillmentType').value = 'PICKUP'; byId('orderTableId').value = ''; byId('customerTableTag').value = ''; byId('dineInFields').style.display = 'none';
       byId('memberResult').innerHTML = ''; byId('newMemberFields').style.display = 'none';
       message('formError', '', false); renderCart();
       byId('orderModal').style.display = 'block'; document.body.style.overflow = 'hidden';
@@ -775,6 +786,12 @@
         allModels = list instanceof Array ? list : [];
         menuModels = allModels.filter(function (m) { return m.sellingPrice !== null && m.sellingPrice !== undefined && m.isActive !== false; });
         renderMenu();
+      });
+      request('GET', '/sapi/shop/staff/tables', null, function (status, data) {
+        var html = '<option value="">-- Chưa chọn bàn --</option>', i;
+        shopTables = status >= 200 && status < 300 && data instanceof Array ? data : [];
+        for (i = 0; i < shopTables.length; i += 1) if (shopTables[i].isActive !== false) html += '<option value="' + escapeHtml(shopTables[i].id) + '">' + escapeHtml(shopTables[i].tableName || ('Bàn ' + (i + 1))) + '</option>';
+        byId('orderTableId').innerHTML = html;
       });
     }
     function findCustomer() {
@@ -811,7 +828,7 @@
       if (phone && !selectedCustomer && !name) { message('formError', 'Bấm Tìm hội viên; nếu chưa có, nhập tên hội viên mới.', false); return; }
       setBusy('submitOrderButton', true, 'Tạo đơn'); message('formError', '', false);
       function createWithCustomer(customer) {
-        body = { fulfillmentType: byId('fulfillmentType').value, tableId: null, customerName: customer ? customer.name : null, customerPhone: phone || null, paymentMethod: byId('paymentMethod').value, notes: byId('orderNotes').value || null, manualOrderNumber: null,
+        body = { fulfillmentType: byId('fulfillmentType').value, tableId: byId('fulfillmentType').value === 'DINE_IN' && byId('orderTableId').value ? byId('orderTableId').value : null, customerTableTag: byId('fulfillmentType').value === 'DINE_IN' ? (byId('customerTableTag').value.replace(/^\s+|\s+$/g, '') || null) : null, customerName: customer ? customer.name : null, customerPhone: phone || null, paymentMethod: byId('paymentMethod').value, notes: byId('orderNotes').value || null, manualOrderNumber: null,
           items: cart.map(function (item) { return { modelId: item.id, quantity: item.quantity, selectedOptions: Object.keys(item.selectedOptions || {}).length ? JSON.stringify(item.selectedOptions) : null, itemNotes: item.itemNotes || null, unitPriceOverride: Number(item.sellingPrice) || null,
             sideItems: (item.sideItems || []).map(function (side) { return { modelId: side.modelId, quantity: side.quantity * item.quantity, selectedOptions: null, itemNotes: null, unitPriceOverride: Number(side.sellingPrice) || null, sideItems: [] }; }) }; }) };
         request('POST', '/sapi/shop/staff/orders', body, function (status, order) {
@@ -951,12 +968,16 @@
       var target = event.target || event.srcElement, index, customer;
       while (target && target !== this && target.tagName !== 'BUTTON') target = target.parentNode;
       if (!target || target.tagName !== 'BUTTON') return;
+      if (target.getAttribute('data-remove-customer')) {
+        selectedCustomer = null; byId('customerPhone').value = ''; byId('customerName').value = ''; this.innerHTML = ''; this._customers = []; byId('newMemberFields').style.display = 'none'; return;
+      }
       index = Number(target.getAttribute('data-customer-index')); customer = this._customers && this._customers[index];
       if (!customer) return;
       selectedCustomer = customer; byId('customerPhone').value = customer.phone || customer.customerCode || customer.name;
-      this.innerHTML = '<div class="member-result">Đã chọn: <strong>' + escapeHtml(customer.name) + '</strong><br>☎ ' + escapeHtml(customer.phone || 'Không có SĐT') + ' · Thẻ: ' + escapeHtml(customer.customerCode || '—') + (customer.points !== undefined ? ' · ' + escapeHtml(customer.points) + ' điểm' : '') + '</div>';
+      this.innerHTML = '<div class="member-result">Đã chọn: <strong>' + escapeHtml(customer.name) + '</strong><br>☎ ' + escapeHtml(customer.phone || 'Không có SĐT') + ' · Thẻ: ' + escapeHtml(customer.customerCode || '—') + (customer.points !== undefined ? ' · ' + escapeHtml(customer.points) + ' điểm' : '') + '<button class="remove-member" type="button" data-remove-customer="1">× Bỏ chọn hội viên</button></div>';
       byId('newMemberFields').style.display = 'none'; message('formError', '', false);
     };
+    byId('fulfillmentType').onchange = function () { byId('dineInFields').style.display = this.value === 'DINE_IN' ? 'block' : 'none'; };
     byId('submitOrderButton').onclick = submitOrder;
     byId('menuChoices').onclick = function (event) {
       var target = event.target || event.srcElement, id, i, found = null;
