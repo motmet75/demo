@@ -114,6 +114,7 @@
   </style>
 </head>
 <body>
+  <audio id="newOrderSound" preload="auto" src="new-order.wav"></audio>
   <div id="loginView" class="page">
     <div class="panel login">
       <h2>Đăng nhập BOM</h2>
@@ -151,7 +152,7 @@
         <button id="queueQrButton" class="top-action top-queue" type="button">▦ <span class="top-label">QR xếp hàng</span></button>
         <button id="newOrderBell" class="icon-button" title="Đơn mới" type="button">🔔<span id="newOrderBadge" class="badge">0</span></button>
         <button id="staffCallBell" class="icon-button" title="Gọi nhân viên" type="button">🙋<span id="staffCallBadge" class="badge">0</span></button>
-        <button id="notifyButton" class="icon-button" title="Bật thông báo" type="button">🔊</button>
+        <button id="notifyButton" class="icon-button" title="Bật / thử âm thanh đơn mới" type="button">🔊</button>
         <button id="voucherButton" class="icon-button" title="Kiểm tra voucher" type="button">🎟</button>
         <button id="refreshButton" class="icon-button" title="Mạng: đã kết nối · Nhấn để làm mới" type="button"><span class="refresh-glyph">↻</span><span class="network-dot"></span></button>
         <button id="logoutButton" class="icon-button secondary" title="Đăng xuất" type="button">⇥</button>
@@ -298,6 +299,7 @@
     var staffCalls = [];
     var editingOrder = null;
     var refreshStateTimer = null;
+    var orderSoundReady = false;
 
     function byId(id) { return document.getElementById(id); }
     function queryParam(name) {
@@ -366,10 +368,26 @@
     function saveViewPrefs() {
       try { localStorage.setItem('bom_ipad_order_view_v1', JSON.stringify({ statusFilter: statusFilter, orderSort: orderSort, viewMode: viewMode })); } catch (ignore) {}
     }
-    function browserNotice(title, body) {
-      if (window.Notification && Notification.permission === 'granted') {
-        try { new Notification(title, { body: body }); } catch (ignore) {}
-      }
+    function unlockOrderSound() {
+      var audio = byId('newOrderSound'), played;
+      if (!audio || orderSoundReady) return;
+      audio.volume = 0;
+      try {
+        played = audio.play();
+        if (played && played.then) played.then(function () {
+          audio.pause(); audio.currentTime = 0; audio.volume = 1; orderSoundReady = true;
+        }).catch(function () { audio.volume = 1; });
+        else { audio.pause(); audio.currentTime = 0; audio.volume = 1; orderSoundReady = true; }
+      } catch (ignore) { audio.volume = 1; }
+    }
+    function playNewOrderSound() {
+      var audio = byId('newOrderSound'), played;
+      if (!audio) return;
+      try {
+        audio.pause(); audio.currentTime = 0; audio.volume = 1;
+        played = audio.play();
+        if (played && played.catch) played.catch(function () { orderSoundReady = false; });
+      } catch (ignore) { orderSoundReady = false; }
     }
     function unreadStorageKey() { return 'bom_ipad_unread_orders_' + tenantId + '_' + companyId; }
     function saveUnreadOrders() { try { localStorage.setItem(unreadStorageKey(), JSON.stringify(unreadOrderIds)); } catch (ignore) {} updateBadges(); }
@@ -386,7 +404,7 @@
       knownOrderIds = next; firstOrderLoad = false;
       if (fresh.length) {
         saveUnreadOrders();
-        browserNotice('Có đơn hàng mới', fresh.length === 1 ? 'Đơn #' + (fresh[0].orderNumber || fresh[0].orderCode) : fresh.length + ' đơn mới');
+        playNewOrderSound();
         message('ordersMessage', fresh.length === 1 ? 'Có đơn mới #' + (fresh[0].orderNumber || fresh[0].orderCode) : 'Có ' + fresh.length + ' đơn mới', true);
       }
     }
@@ -984,12 +1002,12 @@
     byId('checkVoucherButton').onclick = checkVoucher;
     byId('voucherCode').onkeyup = function (event) { if ((event || window.event).keyCode === 13) checkVoucher(); };
     byId('notifyButton').onclick = function () {
-      if (!window.Notification) { window.alert('Thiết bị này không hỗ trợ thông báo trình duyệt. Danh sách vẫn tự làm mới trong trang.'); return; }
-      Notification.requestPermission(function (permission) {
-        byId('notifyButton').innerHTML = permission === 'granted' ? 'Đã bật thông báo' : 'Bật thông báo';
-        if (permission === 'granted') browserNotice('BOM Shop Orders', 'Thông báo đơn mới đã được bật.');
-      });
+      unlockOrderSound();
+      playNewOrderSound();
+      byId('notifyButton').title = 'Âm thanh đơn mới đã bật · Nhấn để thử lại';
     };
+    document.addEventListener('touchstart', unlockOrderSound, false);
+    document.addEventListener('click', unlockOrderSound, false);
     byId('newOrderBell').onclick = function () { renderNoticeModal('orders'); };
     byId('staffCallBell').onclick = function () { loadStaffCalls(); renderNoticeModal('calls'); };
     byId('closeNoticeButton').onclick = closeNoticeModal;

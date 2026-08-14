@@ -162,8 +162,11 @@ public class ShopOrderService {
         order.setCompanyId(companyId);
         order.setOrderCode(String.valueOf(System.currentTimeMillis()));
 
-        // Assign sequence number — manual override or auto-increment
-        if (req.manualOrderNumber() != null) {
+        // Queue QR orders always take the next number from the counter sequence.
+        // Ignore any client-provided seq/manualOrderNumber so an old/bookmarked URL
+        // cannot submit a duplicate or out-of-order counter number.
+        boolean queueQrOrder = isQueueQrToken(req.token(), tenantId, companyId);
+        if (req.manualOrderNumber() != null && !queueQrOrder) {
             order.setOrderNumber(req.manualOrderNumber());
         } else {
             companyRepository.incrementOrderNumber(companyId);
@@ -227,6 +230,16 @@ public class ShopOrderService {
         resetOrderBills(order, items);
 
         return dto(order);
+    }
+
+    private boolean isQueueQrToken(String token, UUID tenantId, UUID companyId) {
+        if (token == null || token.isBlank()) return false;
+        return shopAccessTokenRepository.findByToken(token)
+                .filter(ShopAccessToken::isValid)
+                .filter(access -> tenantId.equals(access.getTenantId()))
+                .filter(access -> companyId.equals(access.getCompanyId()))
+                .map(access -> ShopAccessToken.TYPE_QUEUE_QR.equals(access.getTokenType()))
+                .orElse(false);
     }
 
     /**
