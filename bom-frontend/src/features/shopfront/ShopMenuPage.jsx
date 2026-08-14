@@ -42,6 +42,7 @@ import GridViewIcon from '@mui/icons-material/GridView'
 import ViewListIcon from '@mui/icons-material/ViewList'
 import SupportAgentIcon from '@mui/icons-material/SupportAgent'
 import QrCode2Icon from '@mui/icons-material/QrCode2'
+import DownloadIcon from '@mui/icons-material/Download'
 import Radio from '@mui/material/Radio'
 import RadioGroup from '@mui/material/RadioGroup'
 import FormControlLabel from '@mui/material/FormControlLabel'
@@ -58,6 +59,7 @@ import LanguageSelector from '../../components/LanguageSelector'
 import { useI18n } from '../../i18n/I18nContext'
 import { localizedCategory, localizedChoiceLabel, localizedGroupName, localizedModelName, normalizeChoice, parseChoices as parseMenuChoices } from '../../i18n/menuLocalization'
 import { decorateAllowedSideOptions, getAllowedSideMax } from '../../utils/sideItemConfig'
+import { saveQrImage } from '../../utils/saveQrImage'
 
 const genUid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
 const fmt    = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
@@ -631,6 +633,14 @@ export default function ShopMenuPage() {
   const [optionsTarget, setOptionsTarget] = useState(null)
   const large = displaySize === 'large'
 
+  const openTrackingScreen = useCallback((order) => {
+    if (!order?.orderCode) return
+    const query = tokenParam || order.sourceToken
+      ? `?t=${encodeURIComponent(tokenParam || order.sourceToken)}`
+      : ''
+    navigate(`/shop/order/${encodeURIComponent(order.orderCode)}${query}`)
+  }, [navigate, tokenParam])
+
   const formatSelectedOptions = useCallback((modelId, selectedOptions) => {
     if (!selectedOptions) return null
     const selected = parseOpts(selectedOptions)
@@ -1151,10 +1161,10 @@ export default function ShopMenuPage() {
         if (!res.ok) { setError(data?.message || 'Không thể đặt đơn'); setSubmitting(false); return }
         const finalOrder = await applyVoucherToOrder(data)
         setCart({}); setSideForm({}); setNotes(''); setCheckout(false); setCartOpen(false)
-        if (shopConfig.prepaidMenu && shopConfig.bankBin && shopConfig.bankAccountNumber) {
+        if (form.paymentMethod === 'BANK_QR' && finalOrder.paymentQr) {
           setPrepaidQrOrder(finalOrder)
         } else {
-          setTrackingOrder(finalOrder)
+          openTrackingScreen(finalOrder)
         }
       }
     } catch { setError('Lỗi mạng') } finally { setSubmitting(false) }
@@ -2013,11 +2023,11 @@ export default function ShopMenuPage() {
       {/* ── Prepaid payment QR ────────────────────────────────── */}
       {prepaidQrOrder && (() => {
         const amount = Math.round(payableAmount(prepaidQrOrder))
-        const qrUrl = shopConfig.bankBin && shopConfig.bankAccountNumber
+        const qrUrl = prepaidQrOrder.paymentQr || (shopConfig.bankBin && shopConfig.bankAccountNumber
           ? `https://img.vietqr.io/image/${shopConfig.bankBin}-${shopConfig.bankAccountNumber}-qr_only.png`
             + `?amount=${amount}&addInfo=${encodeURIComponent(prepaidQrOrder.orderCode)}`
             + `&accountName=${encodeURIComponent(shopConfig.bankAccountName || '')}`
-          : null
+          : null)
         const orderNum = prepaidQrOrder.orderNumber ? `#${prepaidQrOrder.orderNumber}` : prepaidQrOrder.orderCode
         return (
           <Dialog open fullWidth maxWidth="xs" PaperProps={{ sx: { borderRadius: 3 } }}>
@@ -2043,13 +2053,18 @@ export default function ShopMenuPage() {
               </Typography>
             </DialogContent>
             <DialogActions sx={{ px: 3, pb: 2.5, flexDirection: 'column', gap: 1 }}>
+              <Button variant="outlined" fullWidth startIcon={<DownloadIcon />}
+                onClick={() => saveQrImage(qrUrl, prepaidQrOrder.orderCode)}
+                sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 20 }}>
+                Save QR to Photos
+              </Button>
               <Button variant="contained" fullWidth size="large"
-                onClick={() => { setPrepaidQrOrder(null); setTrackingOrder(prepaidQrOrder) }}
+                onClick={() => { const order = prepaidQrOrder; setPrepaidQrOrder(null); openTrackingScreen(order) }}
                 sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 20 }}>
                 {t('shop.paidTrackOrder')}
               </Button>
               <Button fullWidth size="small" color="inherit"
-                onClick={() => { setPrepaidQrOrder(null); setTrackingOrder(prepaidQrOrder) }}
+                onClick={() => { const order = prepaidQrOrder; setPrepaidQrOrder(null); openTrackingScreen(order) }}
                 sx={{ textTransform: 'none', color: 'text.secondary' }}>
                 {t('shop.payLaterClose')}
               </Button>
@@ -2165,9 +2180,16 @@ export default function ShopMenuPage() {
               <Select value={form.paymentMethod} label={t('common.payment')}
                 onChange={e => setForm(f => ({ ...f, paymentMethod: e.target.value }))}>
                 <MenuItem value="CASH">{t('common.cash')}</MenuItem>
-                <MenuItem value="BANK_QR">{t('common.bankTransfer')} QR</MenuItem>
+                <MenuItem value="BANK_QR" disabled={!shopConfig.bankBin || !shopConfig.bankAccountNumber}>
+                  {t('common.bankTransfer')} QR
+                </MenuItem>
               </Select>
             </FormControl>
+            {(!shopConfig.bankBin || !shopConfig.bankAccountNumber) && (
+              <Alert severity="info" sx={{ py: 0.25 }}>
+                {t('shop.bankNotConfigured')}
+              </Alert>
+            )}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
               <Button variant="outlined" size="small" startIcon={<QrCode2Icon />}
                 onClick={() => setVoucherScanOpen(true)}

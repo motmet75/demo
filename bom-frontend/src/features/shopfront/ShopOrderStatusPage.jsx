@@ -15,12 +15,14 @@ import PrintIcon from '@mui/icons-material/Print'
 import EditIcon from '@mui/icons-material/Edit'
 import AddShoppingCartIcon from '@mui/icons-material/AddShoppingCart'
 import QrCode2Icon from '@mui/icons-material/QrCode2'
+import DownloadIcon from '@mui/icons-material/Download'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import { fetchPublicOrder, fetchTokenSession, fetchCounterOrderQr, fetchPublicTables, changePublicOrderTable, cancelCustomerEdit } from '../../api/shopApi'
 import { printOrderReceipt } from '../../utils/printOrderReceipt'
 import { useI18n } from '../../i18n/I18nContext'
 import { localizedModelName } from '../../i18n/menuLocalization'
+import { saveQrImage } from '../../utils/saveQrImage'
 
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 const payableAmount = (order) => Math.max(0, Number(order?.totalAmount || 0) - Number(order?.discountAmount || 0))
@@ -226,7 +228,7 @@ function SingleOrderView({ order, onEdit, itemName, fmtLocal }) {
         </Alert>
       )}
 
-      {status === 'READY' && order.paymentQr && (
+      {order.paymentQr && order.paymentStatus !== 'PAID' && (
         <Box sx={{ textAlign: 'center', px: { xs: 2, md: 4 }, pt: 3, pb: 1 }}>
           {bankLogoUrl && <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1 }}><img src={bankLogoUrl} alt="Bank" style={{ height: 40, maxWidth: 140, objectFit: 'contain', borderRadius: 6 }} /></Box>}
           <Typography variant="subtitle2" fontWeight={700} color="#0277bd" sx={{ mb: 1.5 }}>Scan to Pay</Typography>
@@ -234,6 +236,11 @@ function SingleOrderView({ order, onEdit, itemName, fmtLocal }) {
             style={{ width: 200, height: 200, display: 'block', margin: '0 auto', borderRadius: 8 }} />
           <Typography variant="h6" fontWeight={800} color="primary" sx={{ mt: 1.25 }}>{fmtLocal(payableAmount(order))}</Typography>
           <Typography variant="caption" color="text.secondary">ref: {order.orderCode}</Typography>
+          <Button variant="outlined" size="small" startIcon={<DownloadIcon />}
+            onClick={() => saveQrImage(order.paymentQr, order.orderCode)}
+            sx={{ display: 'flex', mx: 'auto', mt: 1.25, textTransform: 'none', fontWeight: 700 }}>
+            Save QR to Photos
+          </Button>
         </Box>
       )}
 
@@ -481,11 +488,16 @@ function OrderCard({ order, highlighted, token, itemName, fmtLocal }) {
           })}
 
           {/* Payment QR if READY */}
-          {status === 'READY' && order.paymentQr && (
+          {order.paymentQr && order.paymentStatus !== 'PAID' && (
             <Box sx={{ textAlign: 'center', mt: 1.5, pb: 0.5 }}>
               <Typography variant="caption" fontWeight={700} color="#0277bd" sx={{ display: 'block', mb: 1 }}>Scan to Pay</Typography>
               <img src={isQrUrl ? order.paymentQr : `data:image/png;base64,${order.paymentQr}`}
                 alt="Payment QR" style={{ width: 160, height: 160, borderRadius: 8 }} />
+              <Button variant="outlined" size="small" startIcon={<DownloadIcon />}
+                onClick={() => saveQrImage(order.paymentQr, order.orderCode)}
+                sx={{ display: 'flex', mx: 'auto', mt: 1, textTransform: 'none', fontWeight: 700 }}>
+                Save QR to Photos
+              </Button>
             </Box>
           )}
 
