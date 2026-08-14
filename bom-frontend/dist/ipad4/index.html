@@ -370,6 +370,7 @@
     var checkedVoucherDetail = null;
     var pendingVoucherDetail = null;
     var voucherForOrder = false;
+    var voucherRemovalBusy = false;
     var configuringModel = null;
     var configuringOptions = [];
     var configuringCartLine = null;
@@ -1065,7 +1066,7 @@
         var discount = Math.min(total, Number(pendingVoucherDetail.faceValue || 0));
         byId('orderVoucherSummary').innerHTML = '<div class="voucher-summary"><strong>Voucher ID: ' + escapeHtml(pendingVoucherDetail.id || pendingVoucherDetail.code || pendingVoucherCode) + '</strong><br><span class="before-discount">Trước giảm: ' + escapeHtml(formatMoney(total)) + '</span><br><span>Giảm dự kiến: -' + escapeHtml(formatMoney(discount)) + '</span><br><span class="after-discount">Còn lại dự kiến: ' + escapeHtml(formatMoney(Math.max(0, total - discount))) + '</span></div>';
       } else if (editingOrder && (editingOrder.voucherCode || Number(editingOrder.discountAmount || 0) > 0)) {
-        byId('orderVoucherSummary').innerHTML = '<div class="voucher-summary"><strong>Voucher: ' + escapeHtml(editingOrder.voucherCode || '—') + '</strong><br><span class="before-discount">Trước giảm: ' + escapeHtml(formatMoney(editingOrder.totalAmount)) + '</span><br><span>Giảm: -' + escapeHtml(formatMoney(editingOrder.discountAmount)) + '</span><br><span class="after-discount">Còn lại: ' + escapeHtml(formatMoney(Math.max(0, Number(editingOrder.totalAmount || 0) - Number(editingOrder.discountAmount || 0)))) + '</span></div>';
+        byId('orderVoucherSummary').innerHTML = '<div class="voucher-summary"><strong>Voucher: ' + escapeHtml(editingOrder.voucherCode || '—') + '</strong><br><span class="before-discount">Trước giảm: ' + escapeHtml(formatMoney(editingOrder.totalAmount)) + '</span><br><span>Giảm: -' + escapeHtml(formatMoney(editingOrder.discountAmount)) + '</span><br><span class="after-discount">Còn lại: ' + escapeHtml(formatMoney(Math.max(0, Number(editingOrder.totalAmount || 0) - Number(editingOrder.discountAmount || 0)))) + '</span><br><button type="button" data-remove-order-vouchers="1" style="margin-top:9px;background:#a33b35">Gỡ voucher và tính lại</button></div>';
       } else byId('orderVoucherSummary').innerHTML = '';
     }
     function openOrderForm() {
@@ -1178,10 +1179,12 @@
       message('formError', 'Voucher sẽ được áp dụng ngay sau khi tạo đơn.', true);
     }
     function removeOrderVouchers() {
-      if (!editingOrder || !editingOrder.id || !editingOrder.voucherCode) return;
+      if (voucherRemovalBusy || !editingOrder || !editingOrder.id || !editingOrder.voucherCode) return;
       if (!window.confirm('Gỡ tất cả voucher ' + editingOrder.voucherCode + ' khỏi đơn? Các voucher sẽ được mở lại để dùng sau.')) return;
+      voucherRemovalBusy = true;
       setBusy('removeVoucherButton', true, 'Gỡ tất cả voucher để dùng sau');
       request('DELETE', '/sapi/shop/staff/orders/' + encodeURIComponent(editingOrder.id) + '/voucher', null, function (status, data) {
+        voucherRemovalBusy = false;
         setBusy('removeVoucherButton', false, 'Gỡ tất cả voucher để dùng sau');
         if (status < 200 || status >= 300) { message('voucherError', errorText(status, data), false); return; }
         if (data && data.id) editingOrder = data;
@@ -1318,6 +1321,7 @@
     byId('refreshButton').onclick = loadOrders;
     byId('voucherButton').onclick = function () { openVoucher(false); };
     byId('orderVoucherButton').onclick = function () { openVoucher(true); };
+    byId('orderVoucherSummary').onclick = function (event) { var target = event.target || event.srcElement; if (target && target.getAttribute('data-remove-order-vouchers')) removeOrderVouchers(); };
     byId('closeVoucherButton').onclick = closeVoucher;
     byId('checkVoucherButton').onclick = checkVoucher;
     byId('applyVoucherButton').onclick = applyCheckedVoucher;
