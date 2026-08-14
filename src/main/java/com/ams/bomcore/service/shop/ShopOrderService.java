@@ -269,6 +269,8 @@ public class ShopOrderService {
             throw new IllegalStateException("Customer is currently editing this order - please wait.");
         order.setStatus(ShopOrder.STATUS_CONFIRMED);
         order.setConfirmedAt(Instant.now());
+        // Customers may pay only after staff has confirmed the order.
+        refreshPaymentQr(order, companyRepository.findById(companyId).orElse(null));
         shopOrderRepository.save(order);
         Company company = companyRepository.findById(companyId).orElse(null);
         if (company != null && Boolean.TRUE.equals(company.getRealtimeInventory())) {
@@ -758,6 +760,12 @@ public class ShopOrderService {
     }
 
     private void refreshPaymentQr(ShopOrder order, Company company) {
+        // Selecting BANK_QR at checkout records the intended method, but a payable
+        // QR is not issued until staff confirms the order.
+        if (ShopOrder.STATUS_PENDING.equals(order.getStatus())) {
+            order.setPaymentQr(null);
+            return;
+        }
         BigDecimal amount;
         if (ShopOrder.PAYMENT_BANK_QR.equals(order.getPaymentMethod())) {
             amount = payableAmount(order);
