@@ -373,6 +373,7 @@
     var configuringModel = null;
     var configuringOptions = [];
     var configuringCartLine = null;
+    var configuringCartIndex = -1;
     var allModels = [];
     var loadedOrders = [];
     var statusFilter = '';
@@ -989,20 +990,21 @@
       }
       byId('itemConfigTotal').innerHTML = formatMoney(unit * qty);
     }
-    function openItemConfig(model, cartLine) {
-      configuringModel = model; configuringOptions = []; configuringCartLine = cartLine || null;
+    function openItemConfig(model, cartLine, cartIndex) {
+      configuringModel = model; configuringOptions = []; configuringCartLine = cartLine || null; configuringCartIndex = typeof cartIndex === 'number' ? cartIndex : -1;
       byId('itemConfigTitle').innerHTML = escapeHtml(model.modelName || model.name || 'Cấu hình món') + '<br><span class="price-line">' + escapeHtml(formatMoney(model.sellingPrice)) + '</span>';
       byId('itemIngredients').innerHTML = escapeHtml(model.ingredients || '');
       byId('itemIngredients').style.display = model.ingredients ? 'block' : 'none';
       byId('itemQuantity').value = cartLine ? Math.max(1, Number(cartLine.quantity || 1)) : '1'; byId('itemNote').value = cartLine ? (cartLine.itemNotes || '') : ''; byId('itemOptions').innerHTML = '<p>Đang tải topping...</p>'; byId('itemSides').innerHTML = '';
       byId('confirmItemButton').innerHTML = cartLine ? 'Lưu thay đổi món' : 'Thêm vào đơn';
+      byId('confirmItemButton').disabled = false;
       message('itemConfigError', '', false); byId('itemModal').style.display = 'block';
       request('GET', '/sapi/shop/staff/menu-options?modelId=' + encodeURIComponent(model.id), null, function (status, data) {
         configuringOptions = status >= 200 && status < 300 && data instanceof Array ? data : [];
         renderItemConfig();
       });
     }
-    function closeItemConfig() { byId('itemModal').style.display = 'none'; configuringCartLine = null; }
+    function closeItemConfig() { byId('itemModal').style.display = 'none'; configuringCartLine = null; configuringCartIndex = -1; }
     function confirmItemConfig() {
       var qty = Math.max(1, Number(byId('itemQuantity').value || 1)), selected = {}, optionDetails = [], sideItems = [], optionAddOn = 0, inputs, i, input, group, label, value, model, j, optionPrice, wasEditingLine = !!configuringCartLine;
       inputs = byId('itemModal').getElementsByTagName('input');
@@ -1029,8 +1031,10 @@
         }
       }
       model = { cartKey: configuringCartLine ? configuringCartLine.cartKey : new Date().getTime() + '_' + cart.length, id: configuringModel.id, modelName: configuringModel.modelName || configuringModel.name, sellingPrice: configuringCartLine ? Number(configuringCartLine.sellingPrice || 0) : Number(configuringModel.sellingPrice || 0), optionAddOn: optionAddOn, optionDetails: optionDetails, quantity: qty, selectedOptions: selected, sideItems: sideItems, itemNotes: byId('itemNote').value || null };
-      if (configuringCartLine) for (i = 0; i < cart.length; i += 1) if (text(cart[i].cartKey) === text(configuringCartLine.cartKey)) { cart[i] = model; break; }
-      else cart.push(model);
+      byId('confirmItemButton').disabled = true;
+      if (wasEditingLine && configuringCartIndex >= 0 && configuringCartIndex < cart.length) cart[configuringCartIndex] = model;
+      else if (!wasEditingLine) cart.push(model);
+      else { byId('confirmItemButton').disabled = false; message('itemConfigError', 'Không tìm thấy món cần sửa. Vui lòng đóng và chọn lại.', false); return; }
       closeItemConfig(); renderCart();
       if (editingOrder && !wasEditingLine) {
         message('formError', 'Đã thêm ' + model.modelName + ' vào đơn đang sửa. Nhấn “Lưu thay đổi” để cập nhật đơn.', true);
@@ -1192,11 +1196,9 @@
         setBusy('submitOrderButton', true, 'Lưu thay đổi');
         body = cart.map(function (item) { return { modelId: item.id, quantity: item.quantity, selectedOptions: Object.keys(item.selectedOptions || {}).length ? JSON.stringify(item.selectedOptions) : null, itemNotes: item.itemNotes || null, unitPriceOverride: Number(item.sellingPrice) || null, sideItems: (item.sideItems || []).map(function (side) { return { modelId: side.modelId, quantity: side.quantity * item.quantity, selectedOptions: null, itemNotes: null, unitPriceOverride: Number(side.sellingPrice) || null, sideItems: [] }; }) }; });
         request('PUT', '/sapi/shop/staff/orders/' + encodeURIComponent(editingOrder.id) + '/items', body, function (status, data) {
-          var savedRoots;
           setBusy('submitOrderButton', false, 'Lưu thay đổi');
           if (status < 200 || status >= 300) { message('formError', errorText(status, data), false); return; }
-          savedRoots = data && data.items instanceof Array ? data.items.filter(function (item) { return !item.parentItemId; }) : [];
-          if (!data || !data.id || savedRoots.length < cart.length) { message('formError', 'Máy chủ chưa lưu đủ món mới. Đơn vẫn đang mở để bạn thử lại.', false); return; }
+          if (!data || !data.id) { message('formError', 'Máy chủ chưa trả về đơn đã cập nhật. Vui lòng tải lại trước khi thử tiếp.', false); return; }
           editingOrder = data;
           if (byId('fulfillmentType').value === 'DINE_IN') {
             request('PATCH', '/sapi/shop/staff/orders/' + encodeURIComponent(editingOrder.id) + '/seat', { tableId: byId('orderTableId').value || null, customerTableTag: byId('customerTableTag').value.replace(/^\s+|\s+$/g, '') || null }, function (seatStatus, seatData) {
@@ -1419,7 +1421,7 @@
       id = target.getAttribute('data-edit-id');
       if (id) {
         for (i = 0; i < cart.length; i += 1) if (text(cart[i].cartKey) === id) {
-          for (var j = 0; j < allModels.length; j += 1) if (text(allModels[j].id) === text(cart[i].id)) { openItemConfig(allModels[j], cart[i]); return; }
+          for (var j = 0; j < allModels.length; j += 1) if (text(allModels[j].id) === text(cart[i].id)) { openItemConfig(allModels[j], cart[i], i); return; }
         }
         return;
       }
