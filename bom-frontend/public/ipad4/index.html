@@ -83,6 +83,39 @@
     #orders { overflow: hidden; }
     #orders .order { float: left; width: 49%; margin-right: 1%; }
     #orders .order:nth-child(2n+1) { clear: both; }
+    /* Printed menu artwork as the counter-card background. The white wash and
+       outlined text keep order details readable on older iPad displays. */
+    #orders .order {
+      background-color: #fff;
+      background-image: -webkit-linear-gradient(rgba(255,255,255,.91), rgba(255,255,255,.91)), url('menu-background.jpg');
+      background-image: linear-gradient(rgba(255,255,255,.91), rgba(255,255,255,.91)), url('menu-background.jpg');
+      background-position: center center;
+      background-size: cover;
+      border: 3px solid #17212b;
+      box-shadow: 0 4px 12px rgba(0,0,0,.30);
+      color: #101820;
+    }
+    #orders .order, #orders .order * {
+      text-shadow: -1px -1px 0 rgba(255,255,255,.98), 1px -1px 0 rgba(255,255,255,.98),
+                   -1px 1px 0 rgba(255,255,255,.98), 1px 1px 0 rgba(255,255,255,.98);
+    }
+    #orders .order-title {
+      display: inline-block;
+      padding: 4px 9px;
+      border: 2px solid #17212b;
+      border-radius: 5px;
+      background: rgba(255,255,255,.94);
+      color: #0b2942;
+    }
+    #orders .meta, #orders .order > div:not(.order-actions):not(.flow-actions):not(.total):not(.paid):not(.order-title),
+    #orders .items {
+      background: rgba(255,255,255,.86);
+    }
+    #orders .items { border: 2px solid #596773; border-radius: 5px; }
+    #orders .items li { padding-left: 7px; padding-right: 7px; border-bottom: 2px solid #9aa5ae; }
+    #orders .status { border: 2px solid #174a75; background: #eef6ff; color: #092f50; }
+    #orders .total { display: inline-block; float: right; padding: 5px 9px; border: 2px solid #12643a; border-radius: 5px; background: #f1fff6; color: #0b5b31; }
+    #orders .order button { border: 2px solid #102c43; text-shadow: none; box-shadow: 0 2px 4px rgba(0,0,0,.22); }
     .notice-list { text-align: left; }
     .notice-row { padding: 12px 4px; border-bottom: 1px solid #d5dce2; overflow: hidden; }
     .notice-row button { float: right; min-height: 36px; padding: 4px 9px; font-size: 14px; background: #a33b35; }
@@ -114,7 +147,7 @@
   </style>
 </head>
 <body>
-  <audio id="newOrderSound" preload="auto" src="new-order.wav"></audio>
+  <audio id="newOrderSound" preload="auto" playsinline src="new-order.wav"></audio>
   <div id="loginView" class="page">
     <div class="panel login">
       <h2>Đăng nhập BOM</h2>
@@ -294,6 +327,7 @@
     var orderSort = 'newest';
     var viewMode = 'cards';
     var knownOrderIds = {};
+    var knownEditingByOrderId = {};
     var firstOrderLoad = true;
     var unreadOrderIds = [];
     var staffCalls = [];
@@ -382,12 +416,25 @@
     }
     function playNewOrderSound() {
       var audio = byId('newOrderSound'), played;
-      if (!audio) return;
+      if (!audio) { playFallbackBeep(); return; }
       try {
         audio.pause(); audio.currentTime = 0; audio.volume = 1;
         played = audio.play();
-        if (played && played.catch) played.catch(function () { orderSoundReady = false; });
-      } catch (ignore) { orderSoundReady = false; }
+        if (played && played.catch) played.catch(function () { orderSoundReady = false; playFallbackBeep(); });
+      } catch (ignore) { orderSoundReady = false; playFallbackBeep(); }
+    }
+    function playFallbackBeep() {
+      var AudioCtx = window.AudioContext || window.webkitAudioContext, ctx, oscillator, gain;
+      if (!AudioCtx) return;
+      try {
+        ctx = new AudioCtx(); oscillator = ctx.createOscillator(); gain = ctx.createGain();
+        oscillator.type = 'sine'; oscillator.frequency.value = 980;
+        gain.gain.setValueAtTime(0.32, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.32);
+        oscillator.connect(gain); gain.connect(ctx.destination);
+        oscillator.start(); oscillator.stop(ctx.currentTime + 0.32);
+        oscillator.onended = function () { try { ctx.close(); } catch (ignore) {} };
+      } catch (ignore) {}
     }
     function unreadStorageKey() { return 'bom_ipad_unread_orders_' + tenantId + '_' + companyId; }
     function saveUnreadOrders() { try { localStorage.setItem(unreadStorageKey(), JSON.stringify(unreadOrderIds)); } catch (ignore) {} updateBadges(); }
@@ -395,17 +442,25 @@
     function updateBadge(id, count) { var badge = byId(id); badge.innerHTML = count; badge.style.display = count > 0 ? 'block' : 'none'; }
     function updateBadges() { updateBadge('newOrderBadge', unreadOrderIds.length); updateBadge('staffCallBadge', staffCalls.length); }
     function detectNewOrders(rows) {
-      var next = {}, fresh = [], i, order;
+      var next = {}, nextEditing = {}, fresh = [], editingStarted = [], i, order;
       for (i = 0; i < rows.length; i += 1) {
         order = rows[i]; if (!order || !order.id) continue;
         next[order.id] = true;
+        nextEditing[order.id] = !!order.customerEditing;
         if (!firstOrderLoad && !knownOrderIds[order.id]) { fresh.push(order); if (unreadOrderIds.indexOf(order.id) < 0) unreadOrderIds.push(order.id); }
+        if (!firstOrderLoad && knownOrderIds[order.id] && !knownEditingByOrderId[order.id] && order.customerEditing) editingStarted.push(order);
       }
-      knownOrderIds = next; firstOrderLoad = false;
+      knownOrderIds = next; knownEditingByOrderId = nextEditing; firstOrderLoad = false;
       if (fresh.length) {
         saveUnreadOrders();
         playNewOrderSound();
         message('ordersMessage', fresh.length === 1 ? 'Có đơn mới #' + (fresh[0].orderNumber || fresh[0].orderCode) : 'Có ' + fresh.length + ' đơn mới', true);
+      }
+      if (editingStarted.length) {
+        playNewOrderSound();
+        message('ordersMessage', editingStarted.length === 1
+          ? 'Khách đang sửa đơn #' + (editingStarted[0].orderNumber || editingStarted[0].orderCode) + (editingStarted[0].customerName ? ' · ' + editingStarted[0].customerName : '')
+          : 'Có ' + editingStarted.length + ' khách đang sửa đơn', true);
       }
     }
     function renderNoticeModal(type) {

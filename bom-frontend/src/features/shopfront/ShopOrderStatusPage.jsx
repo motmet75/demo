@@ -179,6 +179,7 @@ function OrderItems({ order, itemName, fmtLocal }) {
 }
 
 function SingleOrderView({ order, onEdit, itemName, fmtLocal }) {
+  const [paymentQrOpen, setPaymentQrOpen] = useState(false)
   const status    = order.status || 'PENDING'
   const cancelled = status === 'CANCELLED'
   const isDone    = status === 'COMPLETED' || status === 'PICKED_UP'
@@ -228,8 +229,15 @@ function SingleOrderView({ order, onEdit, itemName, fmtLocal }) {
         </Alert>
       )}
 
-      {order.paymentQr && order.paymentStatus !== 'PAID' && (
-        <Box sx={{ textAlign: 'center', px: { xs: 2, md: 4 }, pt: 3, pb: 1 }}>
+      {status !== 'PENDING' && order.paymentQr && order.paymentStatus !== 'PAID' && (
+        <Box sx={{ px: 2, pt: 2, maxWidth: 560, width: '100%', mx: 'auto' }}>
+          <Button variant="contained" fullWidth startIcon={<QrCode2Icon />}
+            onClick={() => setPaymentQrOpen(open => !open)}
+            sx={{ borderRadius: 2, fontWeight: 900, textTransform: 'none', py: 1.25 }}>
+            {paymentQrOpen ? 'Hide payment QR' : 'Show payment QR'}
+          </Button>
+        <Collapse in={paymentQrOpen}>
+        <Box sx={{ textAlign: 'center', pt: 2, pb: 1 }}>
           {bankLogoUrl && <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1 }}><img src={bankLogoUrl} alt="Bank" style={{ height: 40, maxWidth: 140, objectFit: 'contain', borderRadius: 6 }} /></Box>}
           <Typography variant="subtitle2" fontWeight={700} color="#0277bd" sx={{ mb: 1.5 }}>Scan to Pay</Typography>
           <img src={isQrUrl ? order.paymentQr : `data:image/png;base64,${order.paymentQr}`} alt="Payment QR"
@@ -242,6 +250,8 @@ function SingleOrderView({ order, onEdit, itemName, fmtLocal }) {
             Save QR to Photos
           </Button>
         </Box>
+        </Collapse>
+        </Box>
       )}
 
       {order.notes && (
@@ -252,6 +262,15 @@ function SingleOrderView({ order, onEdit, itemName, fmtLocal }) {
       )}
 
       <OrderItems order={order} itemName={itemName} fmtLocal={fmtLocal} />
+
+      <Box sx={{ mx: { xs: 1.5, md: 'auto' }, mt: 1, px: 2, py: 1.5, maxWidth: 560, width: { md: '100%' },
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        bgcolor: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 2 }}>
+        <Typography fontWeight={900} sx={{ fontSize: { xs: 17, md: 18 }, color: '#7c2d12' }}>Total</Typography>
+        <Typography fontWeight={900} color="primary" sx={{ fontSize: { xs: 20, md: 22 }, lineHeight: 1.1 }}>
+          {fmtLocal(payableAmount(order))}
+        </Typography>
+      </Box>
 
       <Box sx={{ px: 2, maxWidth: 560, width: '100%', mx: 'auto' }}>
         <FinishEditingButton order={order} onFinished={() => window.location.reload()} />
@@ -365,6 +384,7 @@ function FinishEditingButton({ order, onFinished }) {
 
 function OrderCard({ order, highlighted, token, itemName, fmtLocal }) {
   const [expanded, setExpanded] = useState(highlighted)
+  const [paymentQrOpen, setPaymentQrOpen] = useState(false)
   const status   = order.status || 'PENDING'
   const chip     = STATUS_CHIP[status] || STATUS_CHIP.PENDING
   const style    = STATUS_STYLE[status] || STATUS_STYLE.PENDING
@@ -409,7 +429,9 @@ function OrderCard({ order, highlighted, token, itemName, fmtLocal }) {
               animation: 'blink2 1.4s infinite', '@keyframes blink2': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0.2 } } }} />
           )}
         </Box>
-        <Typography fontWeight={800} color="primary" sx={{ fontSize: 15 }}>{fmtLocal(payableAmount(order))}</Typography>
+        <Typography fontWeight={900} color="primary" sx={{ fontSize: { xs: 19, sm: 20 }, lineHeight: 1.1 }}>
+          {fmtLocal(payableAmount(order))}
+        </Typography>
         <Box sx={{ color: '#94a3b8' }}>{expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}</Box>
         <Button size="small" variant="outlined" onClick={event => { event.stopPropagation(); setExpanded(true) }}>Xem đơn</Button>
       </Box>
@@ -487,9 +509,23 @@ function OrderCard({ order, highlighted, token, itemName, fmtLocal }) {
             )
           })}
 
+          <Box sx={{ mt: 1.5, pt: 1.25, borderTop: '2px solid #fed7aa', display: 'flex',
+            alignItems: 'center', justifyContent: 'space-between' }}>
+            <Typography fontWeight={900} sx={{ fontSize: 17, color: '#7c2d12' }}>Total</Typography>
+            <Typography color="primary" fontWeight={900} sx={{ fontSize: { xs: 20, sm: 22 }, lineHeight: 1.1 }}>
+              {fmtLocal(payableAmount(order))}
+            </Typography>
+          </Box>
+
           {/* Payment QR if READY */}
-          {order.paymentQr && order.paymentStatus !== 'PAID' && (
+          {status !== 'PENDING' && order.paymentQr && order.paymentStatus !== 'PAID' && (
             <Box sx={{ textAlign: 'center', mt: 1.5, pb: 0.5 }}>
+              <Button variant="contained" fullWidth startIcon={<QrCode2Icon />}
+                onClick={() => setPaymentQrOpen(open => !open)}
+                sx={{ mb: paymentQrOpen ? 1.5 : 0, borderRadius: 2, fontWeight: 900, textTransform: 'none' }}>
+                {paymentQrOpen ? 'Hide payment QR' : 'Show payment QR'}
+              </Button>
+              <Collapse in={paymentQrOpen}>
               <Typography variant="caption" fontWeight={700} color="#0277bd" sx={{ display: 'block', mb: 1 }}>Scan to Pay</Typography>
               <img src={isQrUrl ? order.paymentQr : `data:image/png;base64,${order.paymentQr}`}
                 alt="Payment QR" style={{ width: 160, height: 160, borderRadius: 8 }} />
@@ -498,6 +534,7 @@ function OrderCard({ order, highlighted, token, itemName, fmtLocal }) {
                 sx={{ display: 'flex', mx: 'auto', mt: 1, textTransform: 'none', fontWeight: 700 }}>
                 Save QR to Photos
               </Button>
+              </Collapse>
             </Box>
           )}
 
