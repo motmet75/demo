@@ -76,6 +76,12 @@ function ModelCard({ model, onEdit, onClone, onToggle, saving }) {
           <Chip label={model.category} size="small" variant="outlined"
             sx={{ mt: 0.5, fontSize: 10, height: 20, borderRadius: 1 }} />
         )}
+        {model.ingredients && (
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.75, display: '-webkit-box',
+            WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.3 }}>
+            {model.ingredients}
+          </Typography>
+        )}
         <Box sx={{ mt: 1 }}>
           {model.sellingPrice ? (
             <Typography variant="body2" color="primary" fontWeight={600}>{fmt(model.sellingPrice)}</Typography>
@@ -166,6 +172,7 @@ function CloneDialog({ open, source, onClose, onCreated }) {
         modelName: name.trim(),
         sellingPrice: price !== '' ? Number(price) : null,
         category: newCategory,
+        ingredients: source.ingredients || null,
         imageUrl: source.imageUrl || null,
         allowedSideIds: source.allowedSideIds || null,
         isActive: true,
@@ -273,7 +280,7 @@ function CloneDialog({ open, source, onClose, onCreated }) {
 
 // -- Edit dialog -------------------------------------------------------------
 
-const EMPTY_FORM   = { sellingPrice: '', category: '', imageUrl: '', allowedSideIds: [], sideImageUrls: {}, modelNameTranslations: {}, categoryTranslations: {} }
+const EMPTY_FORM   = { sellingPrice: '', category: '', ingredients: '', imageUrl: '', allowedSideIds: [], sideImageUrls: {}, modelNameTranslations: {}, categoryTranslations: {} }
 const EMPTY_CHOICE = { label: '', price: '', modelId: null, labelTranslations: {} }
 const EMPTY_OPT    = { groupName: '', groupNameTranslations: {}, choiceRows: [{ ...EMPTY_CHOICE }], required: false, multiSelect: false, isFree: false, defaultValue: '' }
 
@@ -398,6 +405,7 @@ function EditDialog({ open, model, models, onClose, onSave, onTranslated }) {
     setForm({
       sellingPrice: model.sellingPrice ?? '',
       category: model.category ?? '',
+      ingredients: model.ingredients ?? '',
       imageUrl: model.imageUrl ?? '',
       allowedSideIds: parsedSideIds,
       sideImageUrls: Object.fromEntries(parsedSideIds.map(side => {
@@ -513,6 +521,7 @@ function EditDialog({ open, model, models, onClose, onSave, onTranslated }) {
         ...model,
         sellingPrice: form.sellingPrice !== '' ? Number(form.sellingPrice) : null,
         category: form.category || null,
+        ingredients: form.ingredients || null,
         imageUrl: form.imageUrl || null,
         allowedSideIds: serializeAllowedSideConfig(form.allowedSideIds),
         modelNameTranslations: stringifyTranslations(form.modelNameTranslations),
@@ -633,6 +642,9 @@ function EditDialog({ open, model, models, onClose, onSave, onTranslated }) {
             helperText="Leave empty to hide from menu" />
           <TextField label="Category" size="small" fullWidth
             value={form.category} onChange={set('category')} placeholder="e.g. Coffee, Tea, Food" />
+          <TextField label="Ingredients shown to customers" size="small" fullWidth multiline minRows={2}
+            value={form.ingredients} onChange={set('ingredients')}
+            placeholder="e.g. chicken feet, mango, ambarella, Vietnamese coriander, lemongrass" />
           <Box sx={{ border: '1px solid #dbeafe', borderRadius: 1.5, p: 1.25, bgcolor: '#f8fbff' }}>
             <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ display: 'block', mb: 1 }}>
               Quick translate menu item

@@ -1538,6 +1538,12 @@ export default function ShopMenuPage() {
           <Typography fontWeight={700} sx={{ fontSize: large ? 18 : 15, lineHeight: 1.25, color: '#111827' }}>
             {modelName(m)}
           </Typography>
+          {m.ingredients && (
+            <Typography sx={{ color: '#64748b', fontSize: large ? 13 : 11, lineHeight: 1.35, mt: 0.35,
+              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+              {m.ingredients}
+            </Typography>
+          )}
           {hasOpts && !optsStr && (
             <Typography variant="caption" sx={{ color: '#64748b', fontSize: large ? 13 : 11 }}>{t('shop.customizable')}</Typography>
           )}
@@ -1611,6 +1617,12 @@ export default function ShopMenuPage() {
           }}>
             {modelName(m)}
           </Typography>
+          {m.ingredients && (
+            <Typography sx={{ color: '#64748b', fontSize: large ? 12 : 10, lineHeight: 1.3, mb: 0.75,
+              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+              {m.ingredients}
+            </Typography>
+          )}
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <Typography fontWeight={800} sx={{ color: '#ff5722', fontSize: large ? 17 : 14 }}>
               {fmt(m.sellingPrice)}

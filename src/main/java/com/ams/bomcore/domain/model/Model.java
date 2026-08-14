@@ -63,6 +63,10 @@ public class Model {
     @Column(name = "image_url", columnDefinition = "TEXT")
     private String imageUrl;
 
+    /** Customer-facing ingredient/composition text displayed on the ordering menu. */
+    @Column(name = "ingredients", columnDefinition = "TEXT")
+    private String ingredients;
+
     /**
      * JSON side/topping links: [{"modelId":"uuid","maxQty":5}].
      * Legacy UUID string arrays remain readable for backward compatibility.
@@ -162,6 +166,9 @@ public class Model {
 
     public String getImageUrl() { return imageUrl; }
     public void setImageUrl(String imageUrl) { this.imageUrl = imageUrl; }
+
+    public String getIngredients() { return ingredients; }
+    public void setIngredients(String ingredients) { this.ingredients = ingredients; }
 
     public String getAllowedSideIds() { return allowedSideIds; }
     public void setAllowedSideIds(String allowedSideIds) { this.allowedSideIds = allowedSideIds; }

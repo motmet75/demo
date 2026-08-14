@@ -189,6 +189,11 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography fontWeight={900} sx={{ fontSize: 22, lineHeight: 1.15, color: '#0f172a' }}>{modelLabel(model)}</Typography>
+            {model.ingredients && (
+              <Typography sx={{ color: '#64748b', fontSize: 12, lineHeight: 1.35, mt: 0.5 }}>
+                {model.ingredients}
+              </Typography>
+            )}
             <Typography color="primary" fontWeight={800} sx={{ fontSize: 17, mt: 0.5 }}>{fmtLocal(model.sellingPrice)}</Typography>
           </Box>
         </Box>
@@ -399,5 +404,4 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
     </>
   )
 }
-
 

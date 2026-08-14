@@ -99,6 +99,7 @@
     .menu-choice { overflow: hidden; padding: 9px; border-bottom: 1px solid #d5dce2; }
     .menu-choice img { float: left; width: 58px; height: 58px; margin-right: 9px; object-fit: cover; }
     .menu-choice button { float: right; min-height: 42px; }
+    .menu-ingredients { margin: 4px 72px 0 0; color: #68727c; font-size: 14px; line-height: 1.3; }
     .cart-line { overflow: hidden; padding: 9px 0; border-bottom: 1px solid #d5dce2; }
     .cart-line button { float: right; min-height: 38px; padding: 4px 11px; background: #a33b35; }
     .form-buttons { overflow: hidden; margin-top: 16px; }
@@ -247,6 +248,7 @@
   <div id="itemModal" class="modal form-modal">
     <div class="modal-card" style="max-width:600px">
       <h2 id="itemConfigTitle" class="modal-title">Cấu hình món</h2>
+      <p id="itemIngredients" class="muted" style="display:none"></p>
       <div id="itemConfigError" class="message"></div>
       <label for="itemQuantity">Số lượng món</label>
       <input id="itemQuantity" type="number" min="1" value="1">
@@ -660,7 +662,9 @@
         model = menuModels[i]; photo = safeImage(model.imageUrl || model.thumbnailUrl);
         html += '<div class="menu-choice">' + (photo ? '<img src="' + photo + '" alt="">' : '');
         html += '<button type="button" data-menu-id="' + escapeHtml(model.id) + '">+ Thêm</button>';
-        html += '<strong>' + escapeHtml(model.modelName || model.name || 'Món') + '</strong><br><span class="item-money" style="float:none">' + escapeHtml(formatMoney(model.sellingPrice)) + '</span><div class="clear"></div></div>';
+        html += '<strong>' + escapeHtml(model.modelName || model.name || 'Món') + '</strong><br><span class="item-money" style="float:none">' + escapeHtml(formatMoney(model.sellingPrice)) + '</span>';
+        if (model.ingredients) html += '<div class="menu-ingredients">' + escapeHtml(model.ingredients) + '</div>';
+        html += '<div class="clear"></div></div>';
       }
       byId('menuChoices').innerHTML = html;
     }
@@ -723,6 +727,8 @@
     function openItemConfig(model) {
       configuringModel = model; configuringOptions = [];
       byId('itemConfigTitle').innerHTML = escapeHtml(model.modelName || model.name || 'Cấu hình món') + '<br><span class="price-line">' + escapeHtml(formatMoney(model.sellingPrice)) + '</span>';
+      byId('itemIngredients').innerHTML = escapeHtml(model.ingredients || '');
+      byId('itemIngredients').style.display = model.ingredients ? 'block' : 'none';
       byId('itemQuantity').value = '1'; byId('itemNote').value = ''; byId('itemOptions').innerHTML = '<p>Đang tải topping...</p>'; byId('itemSides').innerHTML = '';
       message('itemConfigError', '', false); byId('itemModal').style.display = 'block';
       request('GET', '/sapi/shop/staff/menu-options?modelId=' + encodeURIComponent(model.id), null, function (status, data) {
