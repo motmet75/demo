@@ -1428,12 +1428,14 @@ export default function ShopOrderGrid() {
   const seenCallIdsRef = React.useRef(new Set())
   const knownOrderIdsRef = React.useRef(new Set())
   const knownEditingRef = React.useRef(new Map())
+  const knownSeatRef = React.useRef(new Map())
   const orderPollReadyRef = React.useRef(false)
   const rememberOrders = useCallback((orders) => {
     ;(Array.isArray(orders) ? orders : []).forEach(order => {
       if (order?.id) {
         knownOrderIdsRef.current.add(order.id)
         knownEditingRef.current.set(order.id, Boolean(order.customerEditing))
+        knownSeatRef.current.set(order.id, `${order.tableId || ''}|${order.tableName || ''}|${order.customerTableTag || ''}`)
       }
     })
   }, [])
@@ -1442,6 +1444,8 @@ export default function ShopOrderGrid() {
     const list = Array.isArray(orders) ? orders : []
     const fresh = list.filter(order => order?.id && !knownOrderIdsRef.current.has(order.id))
     const editingStarted = orderPollReadyRef.current ? list.filter(order => order?.id && knownOrderIdsRef.current.has(order.id) && !knownEditingRef.current.get(order.id) && order.customerEditing) : []
+    const tableChanged = orderPollReadyRef.current ? list.filter(order => order?.id && knownOrderIdsRef.current.has(order.id) && knownSeatRef.current.has(order.id) && knownSeatRef.current.get(order.id) !== `${order.tableId || ''}|${order.tableName || ''}|${order.customerTableTag || ''}`) : []
+    const previousSeats = new Map(tableChanged.map(order => [order.id, knownSeatRef.current.get(order.id)]))
     rememberOrders(list)
     if (!orderPollReadyRef.current) {
       orderPollReadyRef.current = true
@@ -1458,6 +1462,13 @@ export default function ShopOrderGrid() {
       playNewOrderSound()
       const now = Date.now()
       const entries = editingStarted.map((order, index) => ({ id: `edit_${order.id}_${now}_${index}`, type: 'customer_edit', orderId: order.id, orderNumber: order.orderNumber ?? order.orderCode ?? '', customerName: order.customerName || 'Khách lẻ', at: now }))
+      setCustomerEditHistory(prev => [...entries, ...prev].slice(0, 50))
+      setCustomerEditNotice({ count: entries.length, ...entries[0] })
+    }
+    if (tableChanged.length) {
+      playNewOrderSound()
+      const now = Date.now()
+      const entries = tableChanged.map((order, index) => ({ id: `table_${order.id}_${now}_${index}`, type: 'table_change', orderId: order.id, orderNumber: order.orderNumber ?? order.orderCode ?? '', customerName: order.customerName || 'Customer', detail: `${String(previousSeats.get(order.id) || '').split('|').slice(1).filter(Boolean).join(' / ') || 'No table'} → ${order.tableName || order.customerTableTag || 'No table'}`, at: now }))
       setCustomerEditHistory(prev => [...entries, ...prev].slice(0, 50))
       setCustomerEditNotice({ count: entries.length, ...entries[0] })
     }
@@ -2070,7 +2081,7 @@ export default function ShopOrderGrid() {
             action={<Button color="inherit" size="small" onClick={() => setCustomerEditHistoryOpen(true)}>History</Button>}>
             {customerEditNotice.count > 1
               ? `${customerEditNotice.count} customers started editing orders`
-              : `Customer ${customerEditNotice.customerName} started editing order #${customerEditNotice.orderNumber}`}
+              : customerEditNotice.type === 'table_change' ? `Customer changed table for order #${customerEditNotice.orderNumber}: ${customerEditNotice.detail}` : `Customer ${customerEditNotice.customerName} started editing order #${customerEditNotice.orderNumber}`}
           </Alert>
         )}
 
@@ -2121,7 +2132,7 @@ export default function ShopOrderGrid() {
             {customerEditHistory.map(entry => (
               <Box key={entry.id} sx={{ p: 1.25, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
                 <Typography fontWeight={800}>
-                  {entry.type === 'new_order' ? `New order #${entry.orderNumber}` : entry.type === 'shop_qr' ? `Shop QR notification${entry.orderNumber ? ` · Order #${entry.orderNumber}` : ''}` : `Customer editing order #${entry.orderNumber}`}
+                  {entry.type === 'new_order' ? `New order #${entry.orderNumber}` : entry.type === 'shop_qr' ? `Shop QR notification${entry.orderNumber ? ` · Order #${entry.orderNumber}` : ''}` : entry.type === 'table_change' ? `Customer changed table · Order #${entry.orderNumber}` : `Customer editing order #${entry.orderNumber}`}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">{entry.customerName}{entry.detail ? ` · ${entry.detail}` : ''} · {dateFmt(entry.at)} · Read</Typography>
               </Box>

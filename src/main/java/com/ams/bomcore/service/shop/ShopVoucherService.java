@@ -213,11 +213,9 @@ public class ShopVoucherService {
         if (isExpired(v))
             throw new IllegalStateException("Voucher has expired");
 
-        removeExistingVoucherFromBill(bill, tenantId, companyId);
-
         BigDecimal current = bill.getDiscountAmount() != null ? bill.getDiscountAmount() : BigDecimal.ZERO;
         bill.setDiscountAmount(current.add(v.getFaceValue() != null ? v.getFaceValue() : BigDecimal.ZERO));
-        bill.setVoucherCode(v.getCode());
+        bill.setVoucherCode(combineVoucherCodes(bill.getVoucherCode(), v.getCode()));
         billRepository.save(bill);
         recalcBillTotals(bill);
         syncOrderFromBills(order);
@@ -432,20 +430,23 @@ public class ShopVoucherService {
     }
 
     private boolean sameVoucher(ShopBill bill, ShopVoucher v) {
-        return bill != null
-            && bill.getVoucherCode() != null
-            && bill.getVoucherCode().equalsIgnoreCase(v.getCode())
-            && bill.getId().equals(v.getRedeemedBillId());
+        if (bill == null || bill.getVoucherCode() == null || !bill.getId().equals(v.getRedeemedBillId())) return false;
+        for (String code : bill.getVoucherCode().split(",")) {
+            if (code.trim().equalsIgnoreCase(v.getCode())) return true;
+        }
+        return false;
     }
 
     private void removeExistingVoucherFromBill(ShopBill bill, UUID tenantId, UUID companyId) {
         String currentCode = bill.getVoucherCode();
         if (currentCode == null || currentCode.isBlank()) return;
 
-        voucherRepository
-            .findByTenantIdAndCompanyIdAndCode(tenantId, companyId, currentCode.trim().toUpperCase())
-            .filter(v -> bill.getId().equals(v.getRedeemedBillId()))
-            .ifPresent(v -> {
+        for (String rawCode : currentCode.split(",")) {
+            String code = rawCode.trim().toUpperCase();
+            if (code.isBlank()) continue;
+            voucherRepository.findByTenantIdAndCompanyIdAndCode(tenantId, companyId, code)
+                .filter(v -> bill.getId().equals(v.getRedeemedBillId()))
+                .ifPresent(v -> {
                 BigDecimal discount = bill.getDiscountAmount() != null ? bill.getDiscountAmount() : BigDecimal.ZERO;
                 BigDecimal face = v.getFaceValue() != null ? v.getFaceValue() : BigDecimal.ZERO;
                 BigDecimal next = discount.subtract(face);
@@ -457,7 +458,8 @@ public class ShopVoucherService {
                 v.setRedeemedCustomerId(null);
                 v.setRedeemedCustomerName(null);
                 voucherRepository.save(v);
-            });
+                });
+        }
         bill.setVoucherCode(null);
         billRepository.save(bill);
     }

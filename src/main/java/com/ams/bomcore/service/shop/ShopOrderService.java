@@ -1798,8 +1798,15 @@ public class ShopOrderService {
     }
 
     private void resetOrderBills(ShopOrder order, List<ShopOrderItem> items) {
-        shopBillRepository.deleteAllByOrder_Id(order.getId());
-        ShopBill bill = createBill(order, 1, null);
+        List<ShopBill> existingActiveBills = activeBills(order);
+        ShopBill bill;
+        if (existingActiveBills.size() == 1) {
+            // Preserve bill identity because redeemed vouchers reference this bill across item edits.
+            bill = existingActiveBills.get(0);
+        } else {
+            shopBillRepository.deleteAllByOrder_Id(order.getId());
+            bill = createBill(order, 1, null);
+        }
         bill.setDiscountAmount(nonNegative(order.getDiscountAmount()));
         bill.setVoucherCode(cleanVoucherCodes(order.getVoucherCode()));
         shopBillRepository.save(bill);

@@ -311,13 +311,15 @@ public class ShopOrderController {
 
     @GetMapping("/shop/staff/staff-calls")
     public ResponseEntity<?> listStaffCalls(@RequestParam(required = false) UUID tenantId,
+                                             @RequestParam(defaultValue = "false") boolean includeHistory,
                                             @RequestParam(required = false) UUID companyId,
                                             @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
                                             @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
-        return ResponseEntity.ok(shopStaffCallRepository
-                .findAllByTenantIdAndCompanyIdAndStatusOrderByCreatedAtDesc(tId, cId, ShopStaffCall.STATUS_OPEN)
+        return ResponseEntity.ok((includeHistory
+                ? shopStaffCallRepository.findAllByTenantIdAndCompanyIdOrderByCreatedAtDesc(tId, cId)
+                : shopStaffCallRepository.findAllByTenantIdAndCompanyIdAndStatusOrderByCreatedAtDesc(tId, cId, ShopStaffCall.STATUS_OPEN))
                 .stream().map(this::staffCallMap).toList());
     }
 
@@ -728,7 +730,12 @@ public class ShopOrderController {
         UUID tableId = tableIdValue != null && !tableIdValue.isBlank() ? UUID.fromString(tableIdValue) : null;
         String tag = body.get("customerTableTag") != null ? String.valueOf(body.get("customerTableTag")).trim() : null;
         String fulfillmentType = body.get("fulfillmentType") != null ? String.valueOf(body.get("fulfillmentType")) : null;
-        return ResponseEntity.ok(shopOrderService.setOrderSeat(orderId, tableId, tag, fulfillmentType, tId, cId));
+        ShopOrder before = shopOrderRepository.findById(orderId).orElse(null);
+        String previousSeat = before == null ? "" : ((before.getTable() != null ? before.getTable().getTableName() : "") + " / " + (before.getCustomerTableTag() != null ? before.getCustomerTableTag() : ""));
+        ShopOrderResponseDto updated = shopOrderService.setOrderSeat(orderId, tableId, tag, fulfillmentType, tId, cId);
+        String nextSeat = (updated.getTableName() != null ? updated.getTableName() : "") + " / " + (updated.getCustomerTableTag() != null ? updated.getCustomerTableTag() : "");
+        if (!previousSeat.equals(nextSeat)) createOrderEvent(updated, "table_change", previousSeat + " → " + nextSeat);
+        return ResponseEntity.ok(updated);
     }
 
     @PatchMapping("/shop/staff/orders/{orderId}/pay")
@@ -898,7 +905,9 @@ public class ShopOrderController {
     @PatchMapping("/shop/public/orders/{orderCode}/start-edit")
     public ResponseEntity<?> startCustomerEdit(@PathVariable String orderCode) {
         try {
-            return ResponseEntity.ok(shopOrderService.startCustomerEdit(orderCode));
+            ShopOrderResponseDto updated = shopOrderService.startCustomerEdit(orderCode);
+            createOrderEvent(updated, "customer_edit", "Customer started editing order");
+            return ResponseEntity.ok(updated);
         } catch (IllegalStateException e) {
             return ResponseEntity.status(409).body(Map.of("error", e.getMessage()));
         }
@@ -923,7 +932,9 @@ public class ShopOrderController {
         rejected = rejectPublicTokenLock(order.getSourceToken());
         if (rejected != null) return rejected;
         try {
-            return ResponseEntity.ok(shopOrderService.updateOrderByCustomer(orderCode, items));
+            ShopOrderResponseDto updated = shopOrderService.updateOrderByCustomer(orderCode, items);
+            createOrderEvent(updated, "customer_edit_saved", "Customer saved edited order items");
+            return ResponseEntity.ok(updated);
         } catch (IllegalStateException e) {
             return ResponseEntity.status(409).body(Map.of("error", e.getMessage(), "message", e.getMessage()));
         }
@@ -1998,6 +2009,18 @@ public class ShopOrderController {
         call.setReason(STAFF_CALL_REASON_NEW_ORDER);
         call.setNote("New order");
         call.setStatus(ShopStaffCall.STATUS_OPEN);
+        shopStaffCallRepository.save(call);
+    }
+
+    private void createOrderEvent(ShopOrderResponseDto order, String reason, String note) {
+        if (order == null || order.getId() == null) return;
+        ShopStaffCall call = new ShopStaffCall();
+        call.setTenantId(order.getTenantId()); call.setCompanyId(order.getCompanyId());
+        call.setOrderId(order.getId()); call.setOrderNumber(order.getOrderNumber()); call.setDailySeq(order.getDailySeq()); call.setOrderCode(order.getOrderCode());
+        if (order.getTableId() != null && !order.getTableId().isBlank()) call.setTableId(UUID.fromString(order.getTableId()));
+        call.setTableName(order.getTableName() != null ? order.getTableName() : order.getCustomerTableTag());
+        // Audit events are retained for includeHistory queries but do not pollute the active staff-call queue.
+        call.setReason(reason); call.setNote(note); call.setStatus(ShopStaffCall.STATUS_DISMISSED); call.setDismissedAt(Instant.now());
         shopStaffCallRepository.save(call);
     }
 

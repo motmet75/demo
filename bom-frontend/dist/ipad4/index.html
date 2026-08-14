@@ -130,6 +130,7 @@
     #orders .order button { border: 2px solid #102c43; text-shadow: none; box-shadow: 0 2px 4px rgba(0,0,0,.22); }
     .notice-list { text-align: left; }
     .notice-row { padding: 12px 4px; border-bottom: 1px solid #d5dce2; overflow: hidden; }
+    .notice-group { margin: 12px 0 0; padding: 8px 10px; border-radius: 6px 6px 0 0; background: #174a75; color: #fff; font-weight: bold; }
     .notice-row button { float: right; min-height: 36px; padding: 4px 9px; font-size: 14px; background: #a33b35; }
     .customer-editing { margin: 12px 0; padding: 14px; border: 3px solid #f59e0b; border-radius: 7px; background: #fff3cd; color: #8a3b00; text-align: center; font-size: 19px; font-weight: bold; }
     .form-modal .modal-card { max-width: 850px; text-align: left; }
@@ -141,7 +142,7 @@
     .remove-member { background: #a33b35; }
     .price-line { color: #168447; font-weight: bold; }
     .voucher-summary { margin-top: 9px; padding: 8px 10px; border: 2px solid #168447; border-radius: 6px; background: #effaf2; color: #145b31; text-align: right; }
-    .voucher-summary .before-discount { font-size: 13px; color: #68727c; text-decoration: line-through; }
+    .voucher-summary .before-discount { font-size: 13px; color: #68727c; }
     .voucher-summary .after-discount { font-size: 21px; font-weight: bold; }
     .menu-grid { max-height: 280px; overflow: auto; margin-top: 10px; border: 1px solid #d5dce2; }
     .menu-choice { overflow: hidden; padding: 9px; border-bottom: 1px solid #d5dce2; }
@@ -158,6 +159,9 @@
     .config-choice { overflow: hidden; padding: 6px 0; }
     .config-choice input { float: right; width: 80px; height: 42px; }
     .config-choice input[type="checkbox"], .config-choice input[type="radio"] { width: 32px; height: 32px; }
+    .quantity-stepper { display: inline-flex; float: right; align-items: center; gap: 5px; margin-left: 8px; }
+    .quantity-stepper button { min-width: 42px; min-height: 42px; padding: 2px 10px; font-size: 24px; line-height: 1; }
+    .quantity-stepper input { float: none; display: inline-block; width: 58px; height: 42px; padding: 4px; text-align: center; font-weight: bold; }
     .clear { clear: both; }
     #ordersView, #contextBox, #otpBox { display: none; }
     @media (max-width: 700px) { .page { width: 96%; } .bar h1 { display:none; } .view-control { float:none;width:100%;margin:0 0 8px; } #orders .order { float:none;width:100%;margin-right:0; } .top-action .top-label { display:none; } }
@@ -272,6 +276,8 @@
       <label for="fulfillmentType">Hình thức nhận hàng</label>
       <select id="fulfillmentType"><option value="PICKUP">Mang đi</option><option value="DINE_IN">Dùng tại quán</option><option value="DELIVERY">Giao hàng</option></select>
       <div id="dineInFields" style="display:none">
+        <label for="tableFilter">Tìm nhanh bàn</label>
+        <input id="tableFilter" type="search" autocomplete="off" placeholder="Gõ tên hoặc số bàn...">
         <label for="orderTableId">Chọn bàn</label>
         <select id="orderTableId"><option value="">-- Chưa chọn bàn --</option></select>
         <label for="customerTableTag">Số thẻ bàn / số tag</label>
@@ -307,6 +313,7 @@
       <button id="checkVoucherButton" class="wide" type="button">Kiểm tra</button>
       <div id="voucherResult"></div>
       <button id="applyVoucherButton" class="wide" style="display:none;background:#168447" type="button">✓ Áp dụng voucher</button>
+      <button id="removeVoucherButton" class="wide" style="display:none;background:#a33b35" type="button">Gỡ tất cả voucher để dùng sau</button>
       <button id="closeVoucherButton" class="close-button" type="button">Đóng</button>
     </div>
   </div>
@@ -333,6 +340,13 @@
   <div id="noticeModal" class="modal">
     <div class="modal-card">
       <h2 id="noticeTitle" class="modal-title">Thông báo</h2>
+      <div id="noticeHistoryControls" style="display:none">
+        <button id="toggleHistoryButton" class="wide secondary" type="button">Xem toàn bộ lịch sử</button>
+        <label for="noticeOrderFilter">Lọc theo số đơn</label>
+        <input id="noticeOrderFilter" type="search" inputmode="numeric" placeholder="Ví dụ: 25">
+        <label for="noticeTableFilter">Lọc theo phiếu bàn / số bàn</label>
+        <input id="noticeTableFilter" type="search" placeholder="Ví dụ: Bàn 5 hoặc tag 05">
+      </div>
       <div id="noticeList" class="notice-list"></div>
       <button id="readAllButton" class="wide" type="button">✓ Đánh dấu tất cả đã đọc</button>
       <button id="closeNoticeButton" class="close-button" type="button">Đóng</button>
@@ -366,6 +380,7 @@
     var viewMode = 'cards';
     var knownOrderIds = {};
     var knownEditingByOrderId = {};
+    var knownTableByOrderId = {};
     var firstOrderLoad = true;
     var unreadOrderIds = [];
     var orderNoticeHistory = [];
@@ -375,6 +390,7 @@
     var refreshStateTimer = null;
     var orderSoundReady = false;
     var alertAudioContext = null;
+    var showFullNoticeHistory = false;
 
     function byId(id) { return document.getElementById(id); }
     function queryParam(name) {
@@ -499,18 +515,26 @@
     function restoreEditHistory() { try { customerEditHistory = JSON.parse(localStorage.getItem(editHistoryStorageKey()) || '[]'); if (!(customerEditHistory instanceof Array)) customerEditHistory = []; } catch (ignore) { customerEditHistory = []; } updateBadges(); }
     function updateBadge(id, count) { var badge = byId(id); badge.innerHTML = count; badge.style.display = count > 0 ? 'block' : 'none'; }
     function updateBadges() { updateBadge('newOrderBadge', orderNoticeHistory.filter(function (entry) { return !entry.read; }).length + customerEditHistory.filter(function (entry) { return !entry.read; }).length); updateBadge('staffCallBadge', staffCalls.length); }
+    function noticeTableLabel(order) {
+      var table = text(order && order.tableName), tag = text(order && order.customerTableTag);
+      if (table && tag) return table + ' · QR/Tag ' + tag;
+      if (tag) return 'QR/Tag ' + tag;
+      return table;
+    }
     function detectNewOrders(rows) {
-      var next = {}, nextEditing = {}, fresh = [], editingStarted = [], i, order;
+      var next = {}, nextEditing = {}, nextTable = {}, fresh = [], editingStarted = [], tableChanged = [], i, order, tableKey;
       for (i = 0; i < rows.length; i += 1) {
         order = rows[i]; if (!order || !order.id) continue;
         next[order.id] = true;
         nextEditing[order.id] = !!order.customerEditing;
+        tableKey = text(order.tableId) + '|' + text(order.tableName) + '|' + text(order.customerTableTag); nextTable[order.id] = tableKey;
         if (!firstOrderLoad && !knownOrderIds[order.id]) { fresh.push(order); if (unreadOrderIds.indexOf(order.id) < 0) unreadOrderIds.push(order.id); }
         if (!firstOrderLoad && knownOrderIds[order.id] && !knownEditingByOrderId[order.id] && order.customerEditing) editingStarted.push(order);
+        if (!firstOrderLoad && knownOrderIds[order.id] && knownTableByOrderId[order.id] !== undefined && knownTableByOrderId[order.id] !== tableKey) tableChanged.push({ order: order, before: knownTableByOrderId[order.id] });
       }
-      knownOrderIds = next; knownEditingByOrderId = nextEditing; firstOrderLoad = false;
+      knownOrderIds = next; knownEditingByOrderId = nextEditing; knownTableByOrderId = nextTable; firstOrderLoad = false;
       if (fresh.length) {
-        for (i = 0; i < fresh.length; i += 1) { order = fresh[i]; orderNoticeHistory.unshift({ id: 'order_' + text(order.id) + '_' + Date.now() + '_' + i, orderId: order.id, orderNumber: order.orderNumber || order.orderCode || '', customerName: order.customerName || 'Khách lẻ', at: order.createdAt || new Date().toISOString(), read: false }); }
+        for (i = 0; i < fresh.length; i += 1) { order = fresh[i]; orderNoticeHistory.unshift({ id: 'order_' + text(order.id) + '_' + Date.now() + '_' + i, orderId: order.id, orderNumber: order.orderNumber || order.orderCode || '', customerName: order.customerName || 'Khách lẻ', tableLabel: noticeTableLabel(order), at: order.createdAt || new Date().toISOString(), read: false }); }
         orderNoticeHistory = orderNoticeHistory.slice(0, 50); saveOrderHistory();
         saveUnreadOrders();
         playNewOrderSound();
@@ -519,7 +543,7 @@
       if (editingStarted.length) {
         for (i = 0; i < editingStarted.length; i += 1) {
           order = editingStarted[i];
-          customerEditHistory.unshift({ id: text(order.id) + '_' + Date.now() + '_' + i, orderId: order.id, orderNumber: order.orderNumber || order.orderCode || '', customerName: order.customerName || 'Khách lẻ', at: new Date().toISOString(), read: false });
+          customerEditHistory.unshift({ id: text(order.id) + '_' + Date.now() + '_' + i, orderId: order.id, orderNumber: order.orderNumber || order.orderCode || '', customerName: order.customerName || 'Khách lẻ', tableLabel: noticeTableLabel(order), at: new Date().toISOString(), read: false });
         }
         customerEditHistory = customerEditHistory.slice(0, 50); saveEditHistory();
         playNewOrderSound();
@@ -527,22 +551,46 @@
           ? 'Khách đang sửa đơn #' + (editingStarted[0].orderNumber || editingStarted[0].orderCode) + (editingStarted[0].customerName ? ' · ' + editingStarted[0].customerName : '')
           : 'Có ' + editingStarted.length + ' khách đang sửa đơn', true);
       }
+      if (tableChanged.length) {
+        for (i = 0; i < tableChanged.length; i += 1) {
+          order = tableChanged[i].order;
+          customerEditHistory.unshift({ id: 'table_' + text(order.id) + '_' + Date.now() + '_' + i, eventType: 'table_change', orderId: order.id, orderNumber: order.orderNumber || order.orderCode || '', customerName: order.customerName || 'Khách lẻ', tableLabel: noticeTableLabel(order), detail: text(tableChanged[i].before).split('|').slice(1).filter(function (value) { return value; }).join(' / ') + ' → ' + (noticeTableLabel(order) || 'Không có bàn'), at: new Date().toISOString(), read: false });
+        }
+        customerEditHistory = customerEditHistory.slice(0, 50); saveEditHistory(); playNewOrderSound();
+        message('ordersMessage', tableChanged.length === 1 ? 'Khách đã đổi bàn cho đơn #' + (tableChanged[0].order.orderNumber || tableChanged[0].order.orderCode) + ' → ' + (noticeTableLabel(tableChanged[0].order) || 'Không có bàn') : 'Có ' + tableChanged.length + ' đơn vừa đổi bàn', true);
+      }
     }
     function renderNoticeModal(type) {
-      var html = '', i, order, call, edit;
+      var html = '', i, order, call, edit, orderFilter = text(byId('noticeOrderFilter').value).toLowerCase(), tableFilter = text(byId('noticeTableFilter').value).toLowerCase(), currentOrder, tableLabel, entries = [], entry, lastGroup = '';
       byId('noticeModal').style.display = 'block'; document.body.style.overflow = 'hidden';
       if (type === 'orders') {
-        byId('noticeTitle').innerHTML = 'Lịch sử thông báo đơn hàng'; byId('readAllButton').style.display = (orderNoticeHistory.some(function (entry) { return !entry.read; }) || customerEditHistory.some(function (entry) { return !entry.read; })) ? 'block' : 'none';
+        byId('noticeTitle').innerHTML = showFullNoticeHistory ? 'Toàn bộ lịch sử thông báo' : 'Thông báo chưa đọc'; byId('noticeHistoryControls').style.display = 'block'; byId('toggleHistoryButton').innerHTML = showFullNoticeHistory ? 'Chỉ xem chưa đọc' : 'Xem toàn bộ lịch sử'; byId('readAllButton').style.display = (orderNoticeHistory.some(function (entry) { return !entry.read; }) || customerEditHistory.some(function (entry) { return !entry.read; })) ? 'block' : 'none';
         for (i = 0; i < orderNoticeHistory.length; i += 1) {
           order = orderNoticeHistory[i];
-          html += '<div class="notice-row"' + (order.read ? ' style="opacity:.68"' : '') + '>' + (!order.read ? '<button type="button" data-read-order="' + escapeHtml(order.id) + '">× Đã đọc</button>' : '') + '<strong>🔔 Đơn mới #' + escapeHtml(order.orderNumber) + '</strong><br><span class="muted">' + escapeHtml(formatDate(order.at)) + ' · ' + escapeHtml(order.customerName) + (order.read ? ' · Đã đọc' : '') + '</span></div>';
+          if (!showFullNoticeHistory && order.read) continue;
+          currentOrder = orderById[order.orderId] || {}; tableLabel = order.tableLabel || noticeTableLabel(currentOrder) || '';
+          if (orderFilter && text(order.orderNumber).toLowerCase().indexOf(orderFilter) < 0) continue;
+          if (tableFilter && text(tableLabel).toLowerCase().indexOf(tableFilter) < 0) continue;
+          entries.push({ type: 'order', data: order, group: tableLabel || 'Không có bàn / QR slip' });
         }
         for (i = 0; i < customerEditHistory.length; i += 1) {
           edit = customerEditHistory[i];
-          html += '<div class="notice-row"' + (edit.read ? ' style="opacity:.68"' : '') + '>' + (!edit.read ? '<button type="button" data-read-edit="' + escapeHtml(edit.id) + '">× Đã đọc</button>' : '') + '<strong>✏️ Khách sửa đơn #' + escapeHtml(edit.orderNumber) + '</strong><br><span class="muted">' + escapeHtml(formatDate(edit.at)) + ' · ' + escapeHtml(edit.customerName) + '</span></div>';
+          if (!showFullNoticeHistory && edit.read) continue;
+          currentOrder = orderById[edit.orderId] || {}; tableLabel = edit.tableLabel || noticeTableLabel(currentOrder) || '';
+          if (orderFilter && text(edit.orderNumber).toLowerCase().indexOf(orderFilter) < 0) continue;
+          if (tableFilter && text(tableLabel).toLowerCase().indexOf(tableFilter) < 0) continue;
+          entries.push({ type: 'edit', data: edit, group: tableLabel || 'Không có bàn / QR slip' });
         }
-        if (!html) html = '<p>Chưa có thông báo đơn hàng.</p>';
+        entries.sort(function (a, b) { var groupCompare = a.group.localeCompare(b.group); return groupCompare || (new Date(b.data.at).getTime() - new Date(a.data.at).getTime()); });
+        for (i = 0; i < entries.length; i += 1) {
+          entry = entries[i];
+          if (entry.group !== lastGroup) { html += '<div class="notice-group">🪑 ' + escapeHtml(entry.group) + '</div>'; lastGroup = entry.group; }
+          if (entry.type === 'order') { order = entry.data; html += '<div class="notice-row"' + (order.read ? ' style="opacity:.68"' : '') + '>' + (!order.read ? '<button type="button" data-read-order="' + escapeHtml(order.id) + '">× Đã đọc</button>' : '') + '<strong>🔔 Đơn mới #' + escapeHtml(order.orderNumber) + '</strong><br><span class="muted">' + escapeHtml(formatDate(order.at)) + ' · ' + escapeHtml(order.customerName) + (order.read ? ' · Đã đọc' : '') + '</span></div>'; }
+          else { edit = entry.data; html += '<div class="notice-row"' + (edit.read ? ' style="opacity:.68"' : '') + '>' + (!edit.read ? '<button type="button" data-read-edit="' + escapeHtml(edit.id) + '">× Đã đọc</button>' : '') + '<strong>' + (edit.eventType === 'table_change' ? '🪑 Khách đổi bàn đơn #' : '✏️ Khách sửa đơn #') + escapeHtml(edit.orderNumber) + '</strong>' + (edit.detail ? '<br><strong>' + escapeHtml(edit.detail) + '</strong>' : '') + '<br><span class="muted">' + escapeHtml(formatDate(edit.at)) + ' · ' + escapeHtml(edit.customerName) + (edit.read ? ' · Đã đọc' : '') + '</span></div>'; }
+        }
+        if (!html) html = '<p>' + (showFullNoticeHistory ? 'Không tìm thấy lịch sử phù hợp.' : 'Không có thông báo chưa đọc.') + '</p>';
       } else {
+        byId('noticeHistoryControls').style.display = 'none';
         byId('noticeTitle').innerHTML = 'Khách gọi nhân viên'; byId('readAllButton').style.display = staffCalls.length ? 'block' : 'none';
         for (i = 0; i < staffCalls.length; i += 1) {
           call = staffCalls[i];
@@ -803,6 +851,21 @@
     function normalizePhone(value) { return text(value).replace(/[^0-9+]/g, '').replace(/^\+84/, '0'); }
     function isFullPhone(value) { return /^0[0-9]{9}$/.test(normalizePhone(value)); }
     function generateCustomerCode() { return Math.random().toString(36).slice(2, 8).toUpperCase(); }
+    function renderTableOptions(query, selectedId) {
+      var clean = text(query).toLowerCase().replace(/^\s+|\s+$/g, ''), html = '<option value="">-- Chưa chọn bàn --</option>', i, table, label;
+      for (i = 0; i < shopTables.length; i += 1) {
+        table = shopTables[i]; if (table.isActive === false) continue; label = text(table.tableName || ('Bàn ' + (i + 1)));
+        if (clean && label.toLowerCase().indexOf(clean) < 0) continue;
+        html += '<option value="' + escapeHtml(table.id) + '"' + (text(table.id) === text(selectedId) ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
+      }
+      byId('orderTableId').innerHTML = html;
+    }
+    function loadShopTables(selectedId) {
+      request('GET', '/sapi/shop/staff/tables', null, function (status, data) {
+        shopTables = status >= 200 && status < 300 && data instanceof Array ? data : [];
+        renderTableOptions(byId('tableFilter').value, selectedId);
+      });
+    }
     function openNewCustomer() {
       selectedCustomer = null;
       byId('memberResult').innerHTML = '';
@@ -876,10 +939,13 @@
         html += '<div class="config-group"><strong>' + escapeHtml(group.groupName) + (group.required ? ' *' : '') + '</strong>';
         for (j = 0; j < choices.length; j += 1) {
           choice = choices[j];
-          html += '<div class="config-choice"><input class="option-input" type="' + (priced ? 'number' : (group.multiSelect ? 'checkbox' : 'radio')) + '" ';
-          if (priced) html += 'min="0" value="0" ';
+          html += '<div class="config-choice">';
+          if (priced) html += '<span class="quantity-stepper"><button type="button" data-step="-1" data-step-target="option_qty_' + i + '_' + j + '">−</button>';
+          html += '<input id="option_qty_' + i + '_' + j + '" class="option-input" type="' + (priced ? 'number' : (group.multiSelect ? 'checkbox' : 'radio')) + '" ';
+          if (priced) html += 'min="0" value="0" readonly inputmode="none" ';
           else html += 'value="1" name="option_' + i + '" ';
           html += 'data-group="' + escapeHtml(group.groupName) + '" data-label="' + escapeHtml(choiceLabel(choice)) + '" data-price="' + escapeHtml(choicePrice(choice)) + '" data-priced="' + (priced ? '1' : '0') + '" data-multi="' + (group.multiSelect ? '1' : '0') + '">';
+          if (priced) html += '<button type="button" data-step="1" data-step-target="option_qty_' + i + '_' + j + '">＋</button></span>';
           html += escapeHtml(choiceLabel(choice)) + (choicePrice(choice) ? ' <span class="item-money">+' + escapeHtml(formatMoney(choicePrice(choice))) + '</span>' : '') + '</div>';
         }
         html += '</div>';
@@ -888,7 +954,7 @@
       if (side.length) sidesHtml = '<div class="config-group"><h3>Món ăn kèm / topping</h3>';
       for (i = 0; i < side.length; i += 1) {
         model = side[i].model;
-        sidesHtml += '<div class="config-choice"><input class="side-input" type="number" min="0" ' + (side[i].maxQty ? 'max="' + side[i].maxQty + '" ' : '') + 'value="0" data-model-id="' + escapeHtml(model.id) + '" data-price="' + escapeHtml(model.sellingPrice || 0) + '">';
+        sidesHtml += '<div class="config-choice"><span class="quantity-stepper"><button type="button" data-step="-1" data-step-target="side_qty_' + i + '">−</button><input id="side_qty_' + i + '" class="side-input" type="number" min="0" readonly inputmode="none" ' + (side[i].maxQty ? 'max="' + side[i].maxQty + '" ' : '') + 'value="0" data-model-id="' + escapeHtml(model.id) + '" data-price="' + escapeHtml(model.sellingPrice || 0) + '"><button type="button" data-step="1" data-step-target="side_qty_' + i + '">＋</button></span>';
         sidesHtml += escapeHtml(model.modelName || model.name) + ' <span class="item-money">+' + escapeHtml(formatMoney(model.sellingPrice)) + '</span></div>';
       }
       if (side.length) sidesHtml += '</div>';
@@ -994,6 +1060,8 @@
       if (pendingVoucherDetail) {
         var discount = Math.min(total, Number(pendingVoucherDetail.faceValue || 0));
         byId('orderVoucherSummary').innerHTML = '<div class="voucher-summary"><strong>Voucher ID: ' + escapeHtml(pendingVoucherDetail.id || pendingVoucherDetail.code || pendingVoucherCode) + '</strong><br><span class="before-discount">Trước giảm: ' + escapeHtml(formatMoney(total)) + '</span><br><span>Giảm dự kiến: -' + escapeHtml(formatMoney(discount)) + '</span><br><span class="after-discount">Còn lại dự kiến: ' + escapeHtml(formatMoney(Math.max(0, total - discount))) + '</span></div>';
+      } else if (editingOrder && (editingOrder.voucherCode || Number(editingOrder.discountAmount || 0) > 0)) {
+        byId('orderVoucherSummary').innerHTML = '<div class="voucher-summary"><strong>Voucher: ' + escapeHtml(editingOrder.voucherCode || '—') + '</strong><br><span class="before-discount">Trước giảm: ' + escapeHtml(formatMoney(editingOrder.totalAmount)) + '</span><br><span>Giảm: -' + escapeHtml(formatMoney(editingOrder.discountAmount)) + '</span><br><span class="after-discount">Còn lại: ' + escapeHtml(formatMoney(Math.max(0, Number(editingOrder.totalAmount || 0) - Number(editingOrder.discountAmount || 0)))) + '</span></div>';
       } else byId('orderVoucherSummary').innerHTML = '';
     }
     function openOrderForm() {
@@ -1001,7 +1069,7 @@
       pendingVoucherCode = ''; checkedVoucherCode = ''; checkedVoucherDetail = null; pendingVoucherDetail = null; byId('orderVoucherButton').innerHTML = '🎟 Kiểm tra voucher'; byId('orderVoucherSummary').innerHTML = '';
       byId('menuFilter').value = ''; byId('menuFilterResult').innerHTML = '';
       byId('orderFormTitle').innerHTML = 'Tạo đơn tại quầy'; byId('editOrderNotice').style.display = 'none'; byId('submitOrderButton').innerHTML = 'Tạo đơn';
-      byId('customerPhone').value = ''; byId('customerName').value = ''; byId('newCustomerPhone').value = ''; byId('newCustomerCode').value = ''; byId('orderNotes').value = ''; byId('fulfillmentType').value = 'PICKUP'; byId('orderTableId').value = ''; byId('customerTableTag').value = ''; byId('dineInFields').style.display = 'none';
+      byId('customerPhone').value = ''; byId('customerName').value = ''; byId('newCustomerPhone').value = ''; byId('newCustomerCode').value = ''; byId('orderNotes').value = ''; byId('fulfillmentType').value = 'PICKUP'; byId('tableFilter').value = ''; byId('orderTableId').value = ''; byId('customerTableTag').value = ''; byId('dineInFields').style.display = 'none';
       byId('memberResult').innerHTML = ''; byId('newMemberFields').style.display = 'none';
       message('formError', '', false); renderCart();
       byId('orderModal').style.display = 'block'; document.body.style.overflow = 'hidden';
@@ -1011,12 +1079,7 @@
         menuModels = allModels.filter(function (m) { return m.sellingPrice !== null && m.sellingPrice !== undefined && m.isActive !== false; });
         renderMenu();
       });
-      request('GET', '/sapi/shop/staff/tables', null, function (status, data) {
-        var html = '<option value="">-- Chưa chọn bàn --</option>', i;
-        shopTables = status >= 200 && status < 300 && data instanceof Array ? data : [];
-        for (i = 0; i < shopTables.length; i += 1) if (shopTables[i].isActive !== false) html += '<option value="' + escapeHtml(shopTables[i].id) + '">' + escapeHtml(shopTables[i].tableName || ('Bàn ' + (i + 1))) + '</option>';
-        byId('orderTableId').innerHTML = html;
-      });
+      loadShopTables('');
     }
     function openEditOrder(order) {
       var existing = order.items || [], roots, i;
@@ -1025,6 +1088,7 @@
       byId('menuFilter').value = ''; byId('menuFilterResult').innerHTML = '';
       byId('orderFormTitle').innerHTML = 'Sửa đơn #' + escapeHtml(order.orderNumber || order.orderCode);
       byId('editOrderNotice').style.display = 'block'; byId('submitOrderButton').innerHTML = 'Lưu thay đổi';
+      byId('fulfillmentType').value = order.fulfillmentType || 'PICKUP'; byId('tableFilter').value = ''; byId('customerTableTag').value = order.customerTableTag || ''; byId('dineInFields').style.display = order.fulfillmentType === 'DINE_IN' ? 'block' : 'none'; loadShopTables(order.tableId || '');
       byId('memberResult').innerHTML = ''; byId('newMemberFields').style.display = 'none'; message('formError', '', false);
       byId('orderModal').style.display = 'block'; document.body.style.overflow = 'hidden';
       request('GET', '/sapi/bom/models', null, function (status, data) {
@@ -1068,7 +1132,15 @@
         if (!list.length && isFullPhone(keyword)) { openNewCustomer(); byId('newCustomerPhone').value = normalizePhone(keyword); }
       });
     }
-    function openVoucher(forOrder) { voucherForOrder = !!forOrder; checkedVoucherCode = ''; checkedVoucherDetail = null; byId('voucherCode').value = pendingVoucherCode && voucherForOrder ? pendingVoucherCode : ''; byId('voucherResult').innerHTML = ''; byId('applyVoucherButton').style.display = 'none'; message('voucherError', '', false); byId('voucherModal').style.display = 'block'; }
+    function openVoucher(forOrder) {
+      voucherForOrder = !!forOrder; checkedVoucherCode = ''; checkedVoucherDetail = null;
+      byId('voucherCode').value = pendingVoucherCode && voucherForOrder ? pendingVoucherCode : '';
+      byId('voucherResult').innerHTML = editingOrder && editingOrder.voucherCode ? '<div class="voucher-summary"><strong>Đang dùng: ' + escapeHtml(editingOrder.voucherCode) + '</strong><br><span class="before-discount">Trước giảm: ' + escapeHtml(formatMoney(editingOrder.totalAmount)) + '</span><br><span>Giảm: -' + escapeHtml(formatMoney(editingOrder.discountAmount)) + '</span><br><span class="after-discount">Còn lại: ' + escapeHtml(formatMoney(Math.max(0, Number(editingOrder.totalAmount || 0) - Number(editingOrder.discountAmount || 0)))) + '</span></div>' : '';
+      byId('applyVoucherButton').style.display = 'none';
+      byId('applyVoucherButton').innerHTML = editingOrder && editingOrder.voucherCode ? '＋ Thêm voucher nữa' : '✓ Áp dụng voucher';
+      byId('removeVoucherButton').style.display = voucherForOrder && editingOrder && editingOrder.voucherCode ? 'block' : 'none';
+      message('voucherError', '', false); byId('voucherModal').style.display = 'block';
+    }
     function closeVoucher() { byId('voucherModal').style.display = 'none'; }
     function checkVoucher() {
       var code = byId('voucherCode').value.replace(/^\s+|\s+$/g, '');
@@ -1091,7 +1163,8 @@
         request('POST', '/sapi/shop/staff/vouchers/redeem', { code: checkedVoucherCode, orderId: editingOrder.id, billId: null }, function (status, data) {
           setBusy('applyVoucherButton', false, '✓ Áp dụng voucher');
           if (status < 200 || status >= 300) { message('voucherError', errorText(status, data), false); return; }
-          pendingVoucherCode = ''; closeVoucher(); message('formError', 'Đã áp dụng voucher ' + checkedVoucherCode + ' cho đơn.', true); loadOrders();
+          if (data && data.order) editingOrder = data.order;
+          pendingVoucherCode = ''; closeVoucher(); renderCart(); message('formError', 'Đã thêm voucher ' + checkedVoucherCode + ' vào đơn.', true); loadOrders();
         });
         return;
       }
@@ -1099,6 +1172,17 @@
       byId('orderVoucherButton').innerHTML = '✓ Voucher ' + escapeHtml(pendingVoucherCode) + ' đã chọn · Nhấn để đổi';
       renderCart();
       message('formError', 'Voucher sẽ được áp dụng ngay sau khi tạo đơn.', true);
+    }
+    function removeOrderVouchers() {
+      if (!editingOrder || !editingOrder.id || !editingOrder.voucherCode) return;
+      if (!window.confirm('Gỡ tất cả voucher ' + editingOrder.voucherCode + ' khỏi đơn? Các voucher sẽ được mở lại để dùng sau.')) return;
+      setBusy('removeVoucherButton', true, 'Gỡ tất cả voucher để dùng sau');
+      request('DELETE', '/sapi/shop/staff/orders/' + encodeURIComponent(editingOrder.id) + '/voucher', null, function (status, data) {
+        setBusy('removeVoucherButton', false, 'Gỡ tất cả voucher để dùng sau');
+        if (status < 200 || status >= 300) { message('voucherError', errorText(status, data), false); return; }
+        if (data && data.id) editingOrder = data;
+        closeVoucher(); renderCart(); message('formError', 'Đã gỡ voucher. Voucher có thể dùng lại sau.', true); loadOrders();
+      });
     }
     function submitOrder() {
       var phone = selectedCustomer ? normalizePhone(selectedCustomer.phone) : normalizePhone(byId('customerPhone').value), name, body;
@@ -1108,9 +1192,18 @@
         setBusy('submitOrderButton', true, 'Lưu thay đổi');
         body = cart.map(function (item) { return { modelId: item.id, quantity: item.quantity, selectedOptions: Object.keys(item.selectedOptions || {}).length ? JSON.stringify(item.selectedOptions) : null, itemNotes: item.itemNotes || null, unitPriceOverride: Number(item.sellingPrice) || null, sideItems: (item.sideItems || []).map(function (side) { return { modelId: side.modelId, quantity: side.quantity * item.quantity, selectedOptions: null, itemNotes: null, unitPriceOverride: Number(side.sellingPrice) || null, sideItems: [] }; }) }; });
         request('PUT', '/sapi/shop/staff/orders/' + encodeURIComponent(editingOrder.id) + '/items', body, function (status, data) {
+          var savedRoots;
           setBusy('submitOrderButton', false, 'Lưu thay đổi');
           if (status < 200 || status >= 300) { message('formError', errorText(status, data), false); return; }
-          closeOrderForm(); editingOrder = null; loadOrders();
+          savedRoots = data && data.items instanceof Array ? data.items.filter(function (item) { return !item.parentItemId; }) : [];
+          if (!data || !data.id || savedRoots.length < cart.length) { message('formError', 'Máy chủ chưa lưu đủ món mới. Đơn vẫn đang mở để bạn thử lại.', false); return; }
+          editingOrder = data;
+          if (byId('fulfillmentType').value === 'DINE_IN') {
+            request('PATCH', '/sapi/shop/staff/orders/' + encodeURIComponent(editingOrder.id) + '/seat', { tableId: byId('orderTableId').value || null, customerTableTag: byId('customerTableTag').value.replace(/^\s+|\s+$/g, '') || null }, function (seatStatus, seatData) {
+              if (seatStatus < 200 || seatStatus >= 300) { message('formError', 'Món đã lưu nhưng chưa đổi được bàn: ' + errorText(seatStatus, seatData), false); return; }
+              closeOrderForm(); editingOrder = null; loadOrders();
+            });
+          } else { closeOrderForm(); editingOrder = null; loadOrders(); }
         });
         return;
       }
@@ -1226,6 +1319,7 @@
     byId('closeVoucherButton').onclick = closeVoucher;
     byId('checkVoucherButton').onclick = checkVoucher;
     byId('applyVoucherButton').onclick = applyCheckedVoucher;
+    byId('removeVoucherButton').onclick = removeOrderVouchers;
     byId('voucherCode').onkeyup = function (event) { if ((event || window.event).keyCode === 13) checkVoucher(); };
     byId('notifyButton').onclick = function () {
       unlockOrderSound();
@@ -1233,9 +1327,12 @@
     };
     document.addEventListener('touchstart', unlockOrderSound, false);
     document.addEventListener('click', unlockOrderSound, false);
-    byId('newOrderBell').onclick = function () { renderNoticeModal('orders'); };
+    byId('newOrderBell').onclick = function () { showFullNoticeHistory = false; byId('noticeOrderFilter').value = ''; byId('noticeTableFilter').value = ''; renderNoticeModal('orders'); };
     byId('staffCallBell').onclick = function () { loadStaffCalls(); renderNoticeModal('calls'); };
     byId('closeNoticeButton').onclick = closeNoticeModal;
+    byId('toggleHistoryButton').onclick = function () { showFullNoticeHistory = !showFullNoticeHistory; renderNoticeModal('orders'); };
+    byId('noticeOrderFilter').oninput = function () { renderNoticeModal('orders'); };
+    byId('noticeTableFilter').oninput = function () { renderNoticeModal('orders'); };
     byId('readAllButton').onclick = function () {
       var type = byId('noticeList').getAttribute('data-type'), calls, i;
       if (type === 'orders') { unreadOrderIds = []; orderNoticeHistory = orderNoticeHistory.map(function (entry) { entry.read = true; return entry; }); customerEditHistory = customerEditHistory.map(function (entry) { entry.read = true; return entry; }); saveUnreadOrders(); saveOrderHistory(); saveEditHistory(); renderNoticeModal('orders'); return; }
@@ -1267,6 +1364,16 @@
     byId('confirmItemButton').onclick = confirmItemConfig;
     byId('itemModal').onchange = updateItemConfigTotal;
     byId('itemModal').onkeyup = updateItemConfigTotal;
+    byId('itemModal').onclick = function (event) {
+      var target = event.target || event.srcElement, input, value, min, max, stepTarget;
+      if (!target || target.tagName !== 'BUTTON') return;
+      stepTarget = target.getAttribute('data-step-target'); if (!stepTarget) return;
+      input = byId(stepTarget); if (!input) return;
+      value = Number(input.value || 0) + Number(target.getAttribute('data-step') || 0);
+      min = input.getAttribute('min') !== null ? Number(input.getAttribute('min')) : 0;
+      max = input.getAttribute('max') !== null ? Number(input.getAttribute('max')) : 999;
+      input.value = Math.max(min, Math.min(max, value)); updateItemConfigTotal();
+    };
     byId('findCustomerButton').onclick = findCustomer;
     byId('addCustomerButton').onclick = openNewCustomer;
     byId('saveCustomerButton').onclick = saveNewCustomer;
@@ -1289,6 +1396,7 @@
       byId('newMemberFields').style.display = 'none'; message('formError', '', false);
     };
     byId('fulfillmentType').onchange = function () { byId('dineInFields').style.display = this.value === 'DINE_IN' ? 'block' : 'none'; };
+    byId('tableFilter').oninput = function () { renderTableOptions(this.value, byId('orderTableId').value); };
     byId('submitOrderButton').onclick = submitOrder;
     byId('menuChoices').onclick = function (event) {
       var target = event.target || event.srcElement, id, i, found = null;

@@ -9,6 +9,7 @@ import java.util.UUID;
 
 public interface ShopStaffCallRepository extends JpaRepository<ShopStaffCall, UUID> {
     List<ShopStaffCall> findAllByTenantIdAndCompanyIdAndStatusOrderByCreatedAtDesc(UUID tenantId, UUID companyId, String status);
+    List<ShopStaffCall> findAllByTenantIdAndCompanyIdOrderByCreatedAtDesc(UUID tenantId, UUID companyId);
     Optional<ShopStaffCall> findFirstByTokenAndStatusOrderByCreatedAtDesc(String token, String status);
     Optional<ShopStaffCall> findFirstByTenantIdAndCompanyIdAndTableIdAndStatusOrderByCreatedAtDesc(UUID tenantId, UUID companyId, UUID tableId, String status);
 }
