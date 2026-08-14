@@ -361,6 +361,7 @@
     var knownEditingByOrderId = {};
     var firstOrderLoad = true;
     var unreadOrderIds = [];
+    var orderNoticeHistory = [];
     var customerEditHistory = [];
     var staffCalls = [];
     var editingOrder = null;
@@ -471,13 +472,16 @@
       } catch (ignore) {}
     }
     function unreadStorageKey() { return 'bom_ipad_unread_orders_' + tenantId + '_' + companyId; }
+    function orderHistoryStorageKey() { return 'bom_ipad_order_notice_history_' + tenantId + '_' + companyId; }
     function editHistoryStorageKey() { return 'bom_ipad_customer_edit_history_' + tenantId + '_' + companyId; }
     function saveUnreadOrders() { try { localStorage.setItem(unreadStorageKey(), JSON.stringify(unreadOrderIds)); } catch (ignore) {} updateBadges(); }
     function restoreUnreadOrders() { try { unreadOrderIds = JSON.parse(localStorage.getItem(unreadStorageKey()) || '[]'); } catch (ignore) { unreadOrderIds = []; } updateBadges(); }
+    function saveOrderHistory() { try { localStorage.setItem(orderHistoryStorageKey(), JSON.stringify(orderNoticeHistory)); } catch (ignore) {} updateBadges(); }
+    function restoreOrderHistory() { try { orderNoticeHistory = JSON.parse(localStorage.getItem(orderHistoryStorageKey()) || '[]'); if (!(orderNoticeHistory instanceof Array)) orderNoticeHistory = []; } catch (ignore) { orderNoticeHistory = []; } }
     function saveEditHistory() { try { localStorage.setItem(editHistoryStorageKey(), JSON.stringify(customerEditHistory)); } catch (ignore) {} updateBadges(); }
     function restoreEditHistory() { try { customerEditHistory = JSON.parse(localStorage.getItem(editHistoryStorageKey()) || '[]'); if (!(customerEditHistory instanceof Array)) customerEditHistory = []; } catch (ignore) { customerEditHistory = []; } updateBadges(); }
     function updateBadge(id, count) { var badge = byId(id); badge.innerHTML = count; badge.style.display = count > 0 ? 'block' : 'none'; }
-    function updateBadges() { updateBadge('newOrderBadge', unreadOrderIds.length + customerEditHistory.filter(function (entry) { return !entry.read; }).length); updateBadge('staffCallBadge', staffCalls.length); }
+    function updateBadges() { updateBadge('newOrderBadge', orderNoticeHistory.filter(function (entry) { return !entry.read; }).length + customerEditHistory.filter(function (entry) { return !entry.read; }).length); updateBadge('staffCallBadge', staffCalls.length); }
     function detectNewOrders(rows) {
       var next = {}, nextEditing = {}, fresh = [], editingStarted = [], i, order;
       for (i = 0; i < rows.length; i += 1) {
@@ -489,6 +493,8 @@
       }
       knownOrderIds = next; knownEditingByOrderId = nextEditing; firstOrderLoad = false;
       if (fresh.length) {
+        for (i = 0; i < fresh.length; i += 1) { order = fresh[i]; orderNoticeHistory.unshift({ id: 'order_' + text(order.id) + '_' + Date.now() + '_' + i, orderId: order.id, orderNumber: order.orderNumber || order.orderCode || '', customerName: order.customerName || 'Khách lẻ', at: order.createdAt || new Date().toISOString(), read: false }); }
+        orderNoticeHistory = orderNoticeHistory.slice(0, 50); saveOrderHistory();
         saveUnreadOrders();
         playNewOrderSound();
         message('ordersMessage', fresh.length === 1 ? 'Có đơn mới #' + (fresh[0].orderNumber || fresh[0].orderCode) : 'Có ' + fresh.length + ' đơn mới', true);
@@ -509,11 +515,10 @@
       var html = '', i, order, call, edit;
       byId('noticeModal').style.display = 'block'; document.body.style.overflow = 'hidden';
       if (type === 'orders') {
-        byId('noticeTitle').innerHTML = 'Thông báo đơn hàng'; byId('readAllButton').style.display = (unreadOrderIds.length || customerEditHistory.some(function (entry) { return !entry.read; })) ? 'block' : 'none';
-        for (i = 0; i < unreadOrderIds.length; i += 1) {
-          order = null;
-          for (var j = 0; j < loadedOrders.length; j += 1) if (loadedOrders[j].id === unreadOrderIds[i]) { order = loadedOrders[j]; break; }
-          html += '<div class="notice-row"><button type="button" data-read-order="' + escapeHtml(unreadOrderIds[i]) + '">× Đã đọc</button><strong>🔔 Đơn #' + escapeHtml(order ? (order.orderNumber || order.orderCode) : '') + '</strong>' + (order ? '<br><span class="muted">' + escapeHtml(formatDate(order.createdAt)) + ' · ' + escapeHtml(order.customerName || 'Khách lẻ') + '</span>' : '') + '</div>';
+        byId('noticeTitle').innerHTML = 'Lịch sử thông báo đơn hàng'; byId('readAllButton').style.display = (orderNoticeHistory.some(function (entry) { return !entry.read; }) || customerEditHistory.some(function (entry) { return !entry.read; })) ? 'block' : 'none';
+        for (i = 0; i < orderNoticeHistory.length; i += 1) {
+          order = orderNoticeHistory[i];
+          html += '<div class="notice-row"' + (order.read ? ' style="opacity:.68"' : '') + '>' + (!order.read ? '<button type="button" data-read-order="' + escapeHtml(order.id) + '">× Đã đọc</button>' : '') + '<strong>🔔 Đơn mới #' + escapeHtml(order.orderNumber) + '</strong><br><span class="muted">' + escapeHtml(formatDate(order.at)) + ' · ' + escapeHtml(order.customerName) + (order.read ? ' · Đã đọc' : '') + '</span></div>';
         }
         for (i = 0; i < customerEditHistory.length; i += 1) {
           edit = customerEditHistory[i];
@@ -561,6 +566,7 @@
       byId('tenantId').value = tenantId;
       byId('companyId').value = companyId;
       restoreUnreadOrders();
+      restoreOrderHistory();
       restoreEditHistory();
     }
     function showLogin() {
@@ -1203,7 +1209,7 @@
     byId('closeNoticeButton').onclick = closeNoticeModal;
     byId('readAllButton').onclick = function () {
       var type = byId('noticeList').getAttribute('data-type'), calls, i;
-      if (type === 'orders') { unreadOrderIds = []; customerEditHistory = customerEditHistory.map(function (entry) { entry.read = true; return entry; }); saveUnreadOrders(); saveEditHistory(); renderNoticeModal('orders'); return; }
+      if (type === 'orders') { unreadOrderIds = []; orderNoticeHistory = orderNoticeHistory.map(function (entry) { entry.read = true; return entry; }); customerEditHistory = customerEditHistory.map(function (entry) { entry.read = true; return entry; }); saveUnreadOrders(); saveOrderHistory(); saveEditHistory(); renderNoticeModal('orders'); return; }
       calls = staffCalls.slice(0);
       if (!calls.length) return;
       for (i = 0; i < calls.length; i += 1) dismissStaffCall(calls[i].id, i === calls.length - 1 ? function () { renderNoticeModal('calls'); } : null);
@@ -1212,7 +1218,7 @@
       var target = event.target || event.srcElement, id;
       if (!target || target.tagName !== 'BUTTON') return;
       id = target.getAttribute('data-read-order');
-      if (id) { unreadOrderIds = unreadOrderIds.filter(function (value) { return value !== id; }); saveUnreadOrders(); renderNoticeModal('orders'); return; }
+      if (id) { orderNoticeHistory = orderNoticeHistory.map(function (entry) { if (entry.id === id) entry.read = true; return entry; }); saveOrderHistory(); renderNoticeModal('orders'); return; }
       id = target.getAttribute('data-read-edit');
       if (id) { customerEditHistory = customerEditHistory.map(function (entry) { if (entry.id === id) entry.read = true; return entry; }); saveEditHistory(); renderNoticeModal('orders'); return; }
       id = target.getAttribute('data-dismiss-call');

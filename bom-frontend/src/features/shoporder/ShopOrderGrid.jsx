@@ -1451,11 +1451,13 @@ export default function ShopOrderGrid() {
       playNewOrderSound()
       const first = fresh[0]
       setNewOrderNotice({ count: fresh.length, orderNumber: first.orderNumber ?? null, orderCode: first.orderCode || '', at: Date.now() })
+      const now = Date.now()
+      setCustomerEditHistory(prev => [...fresh.map((order, index) => ({ id: `order_${order.id}_${now}_${index}`, type: 'new_order', orderId: order.id, orderNumber: order.orderNumber ?? order.orderCode ?? '', customerName: order.customerName || 'Walk-in', at: now })), ...prev].slice(0, 50))
     }
     if (editingStarted.length) {
       playNewOrderSound()
       const now = Date.now()
-      const entries = editingStarted.map((order, index) => ({ id: `${order.id}_${now}_${index}`, orderId: order.id, orderNumber: order.orderNumber ?? order.orderCode ?? '', customerName: order.customerName || 'Khách lẻ', at: now }))
+      const entries = editingStarted.map((order, index) => ({ id: `edit_${order.id}_${now}_${index}`, type: 'customer_edit', orderId: order.id, orderNumber: order.orderNumber ?? order.orderCode ?? '', customerName: order.customerName || 'Khách lẻ', at: now }))
       setCustomerEditHistory(prev => [...entries, ...prev].slice(0, 50))
       setCustomerEditNotice({ count: entries.length, ...entries[0] })
     }
@@ -1586,6 +1588,10 @@ export default function ShopOrderGrid() {
 
         const newOrderCalls = unseen.filter(c => c.reason === STAFF_CALL_REASON_NEW_ORDER)
         const serviceCalls = unseen.filter(c => c.reason !== STAFF_CALL_REASON_NEW_ORDER)
+        if (serviceCalls.length) {
+          const now = Date.now()
+          setCustomerEditHistory(prev => [...serviceCalls.map((call, index) => ({ id: `call_${call.id}_${now}_${index}`, type: 'shop_qr', orderId: call.orderId || null, orderNumber: call.orderNumber ?? '', customerName: call.tableName ? `Table ${call.tableName}` : 'Customer', detail: staffCallReasonLabel(call.reason), at: call.createdAt || now })), ...prev].slice(0, 50))
+        }
 
         if (newOrderCalls.length) {
           const notifyCalls = newOrderCalls.filter(c => orderPollReadyRef.current && (!c.orderId || !knownOrderIdsRef.current.has(c.orderId)))
@@ -2021,7 +2027,7 @@ export default function ShopOrderGrid() {
             variant="contained" size="small" color="primary" sx={{ textTransform: 'none', fontWeight: 800 }}>Scan customer orders</Button>
           <Badge badgeContent={customerEditHistory.length} color="warning" max={99}>
             <Button startIcon={<NotificationsActiveIcon />} onClick={() => setCustomerEditHistoryOpen(true)}
-              variant="outlined" size="small" color="warning" sx={{ textTransform: 'none', fontWeight: 800 }}>Customer edits</Button>
+              variant="outlined" size="small" color="warning" sx={{ textTransform: 'none', fontWeight: 800 }}>Notification history</Button>
           </Badge>
           <Button startIcon={<QrCode2Icon />} onClick={() => { setQuickLoginData(null); setQuickLoginError(''); setQuickLoginHours(12); setQuickLoginOpen(true) }}
             variant="outlined" size="small" color="secondary" sx={{ textTransform: 'none', fontWeight: 800 }}>Đăng nhập iPad</Button>
@@ -2108,14 +2114,16 @@ export default function ShopOrderGrid() {
 
       {/* Dialogs */}
       <Dialog open={customerEditHistoryOpen} onClose={() => setCustomerEditHistoryOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>Customer edit notifications</DialogTitle>
+        <DialogTitle>Notification history</DialogTitle>
         <DialogContent dividers>
-          {!customerEditHistory.length && <Typography color="text.secondary">No customer edit history yet.</Typography>}
+          {!customerEditHistory.length && <Typography color="text.secondary">No notification history yet.</Typography>}
           <Stack spacing={1}>
             {customerEditHistory.map(entry => (
               <Box key={entry.id} sx={{ p: 1.25, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                <Typography fontWeight={800}>Customer editing order #{entry.orderNumber}</Typography>
-                <Typography variant="body2" color="text.secondary">{entry.customerName} · {dateFmt(entry.at)}</Typography>
+                <Typography fontWeight={800}>
+                  {entry.type === 'new_order' ? `New order #${entry.orderNumber}` : entry.type === 'shop_qr' ? `Shop QR notification${entry.orderNumber ? ` · Order #${entry.orderNumber}` : ''}` : `Customer editing order #${entry.orderNumber}`}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">{entry.customerName}{entry.detail ? ` · ${entry.detail}` : ''} · {dateFmt(entry.at)} · Read</Typography>
               </Box>
             ))}
           </Stack>
