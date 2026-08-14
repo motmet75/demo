@@ -342,6 +342,7 @@
     var knownEditingByOrderId = {};
     var firstOrderLoad = true;
     var unreadOrderIds = [];
+    var customerEditHistory = [];
     var staffCalls = [];
     var editingOrder = null;
     var refreshStateTimer = null;
@@ -422,9 +423,11 @@
         played = audio.play();
         if (played && played.then) played.then(function () {
           audio.pause(); audio.currentTime = 0; audio.volume = 1; orderSoundReady = true;
-        }).catch(function () { audio.volume = 1; });
-        else { audio.pause(); audio.currentTime = 0; audio.volume = 1; orderSoundReady = true; }
-      } catch (ignore) { audio.volume = 1; }
+          byId('notifyButton').title = 'Âm thanh đã sẵn sàng · Nhấn để thử';
+          byId('notifyButton').style.background = '#dff3e5';
+        }).catch(function () { audio.volume = 1; byId('notifyButton').title = 'Safari đang chặn âm thanh · Chạm nút loa để thử lại'; byId('notifyButton').style.background = '#ffe0dc'; });
+        else { audio.pause(); audio.currentTime = 0; audio.volume = 1; orderSoundReady = true; byId('notifyButton').title = 'Âm thanh đã sẵn sàng · Nhấn để thử'; byId('notifyButton').style.background = '#dff3e5'; }
+      } catch (ignore) { audio.volume = 1; byId('notifyButton').title = 'Không mở được âm thanh · Kiểm tra âm lượng và Safari'; byId('notifyButton').style.background = '#ffe0dc'; }
     }
     function playNewOrderSound() {
       var audio = byId('newOrderSound'), played;
@@ -449,10 +452,13 @@
       } catch (ignore) {}
     }
     function unreadStorageKey() { return 'bom_ipad_unread_orders_' + tenantId + '_' + companyId; }
+    function editHistoryStorageKey() { return 'bom_ipad_customer_edit_history_' + tenantId + '_' + companyId; }
     function saveUnreadOrders() { try { localStorage.setItem(unreadStorageKey(), JSON.stringify(unreadOrderIds)); } catch (ignore) {} updateBadges(); }
     function restoreUnreadOrders() { try { unreadOrderIds = JSON.parse(localStorage.getItem(unreadStorageKey()) || '[]'); } catch (ignore) { unreadOrderIds = []; } updateBadges(); }
+    function saveEditHistory() { try { localStorage.setItem(editHistoryStorageKey(), JSON.stringify(customerEditHistory)); } catch (ignore) {} updateBadges(); }
+    function restoreEditHistory() { try { customerEditHistory = JSON.parse(localStorage.getItem(editHistoryStorageKey()) || '[]'); if (!(customerEditHistory instanceof Array)) customerEditHistory = []; } catch (ignore) { customerEditHistory = []; } updateBadges(); }
     function updateBadge(id, count) { var badge = byId(id); badge.innerHTML = count; badge.style.display = count > 0 ? 'block' : 'none'; }
-    function updateBadges() { updateBadge('newOrderBadge', unreadOrderIds.length); updateBadge('staffCallBadge', staffCalls.length); }
+    function updateBadges() { updateBadge('newOrderBadge', unreadOrderIds.length + customerEditHistory.filter(function (entry) { return !entry.read; }).length); updateBadge('staffCallBadge', staffCalls.length); }
     function detectNewOrders(rows) {
       var next = {}, nextEditing = {}, fresh = [], editingStarted = [], i, order;
       for (i = 0; i < rows.length; i += 1) {
@@ -469,6 +475,11 @@
         message('ordersMessage', fresh.length === 1 ? 'Có đơn mới #' + (fresh[0].orderNumber || fresh[0].orderCode) : 'Có ' + fresh.length + ' đơn mới', true);
       }
       if (editingStarted.length) {
+        for (i = 0; i < editingStarted.length; i += 1) {
+          order = editingStarted[i];
+          customerEditHistory.unshift({ id: text(order.id) + '_' + Date.now() + '_' + i, orderId: order.id, orderNumber: order.orderNumber || order.orderCode || '', customerName: order.customerName || 'Khách lẻ', at: new Date().toISOString(), read: false });
+        }
+        customerEditHistory = customerEditHistory.slice(0, 50); saveEditHistory();
         playNewOrderSound();
         message('ordersMessage', editingStarted.length === 1
           ? 'Khách đang sửa đơn #' + (editingStarted[0].orderNumber || editingStarted[0].orderCode) + (editingStarted[0].customerName ? ' · ' + editingStarted[0].customerName : '')
@@ -476,16 +487,20 @@
       }
     }
     function renderNoticeModal(type) {
-      var html = '', i, order, call;
+      var html = '', i, order, call, edit;
       byId('noticeModal').style.display = 'block'; document.body.style.overflow = 'hidden';
       if (type === 'orders') {
-        byId('noticeTitle').innerHTML = 'Đơn hàng mới'; byId('readAllButton').style.display = 'block';
+        byId('noticeTitle').innerHTML = 'Thông báo đơn hàng'; byId('readAllButton').style.display = (unreadOrderIds.length || customerEditHistory.some(function (entry) { return !entry.read; })) ? 'block' : 'none';
         for (i = 0; i < unreadOrderIds.length; i += 1) {
           order = null;
           for (var j = 0; j < loadedOrders.length; j += 1) if (loadedOrders[j].id === unreadOrderIds[i]) { order = loadedOrders[j]; break; }
           html += '<div class="notice-row"><button type="button" data-read-order="' + escapeHtml(unreadOrderIds[i]) + '">× Đã đọc</button><strong>🔔 Đơn #' + escapeHtml(order ? (order.orderNumber || order.orderCode) : '') + '</strong>' + (order ? '<br><span class="muted">' + escapeHtml(formatDate(order.createdAt)) + ' · ' + escapeHtml(order.customerName || 'Khách lẻ') + '</span>' : '') + '</div>';
         }
-        if (!html) html = '<p>Không có đơn mới chưa đọc.</p>';
+        for (i = 0; i < customerEditHistory.length; i += 1) {
+          edit = customerEditHistory[i];
+          html += '<div class="notice-row"' + (edit.read ? ' style="opacity:.68"' : '') + '>' + (!edit.read ? '<button type="button" data-read-edit="' + escapeHtml(edit.id) + '">× Đã đọc</button>' : '') + '<strong>✏️ Khách sửa đơn #' + escapeHtml(edit.orderNumber) + '</strong><br><span class="muted">' + escapeHtml(formatDate(edit.at)) + ' · ' + escapeHtml(edit.customerName) + '</span></div>';
+        }
+        if (!html) html = '<p>Chưa có thông báo đơn hàng.</p>';
       } else {
         byId('noticeTitle').innerHTML = 'Khách gọi nhân viên'; byId('readAllButton').style.display = staffCalls.length ? 'block' : 'none';
         for (i = 0; i < staffCalls.length; i += 1) {
@@ -527,6 +542,7 @@
       byId('tenantId').value = tenantId;
       byId('companyId').value = companyId;
       restoreUnreadOrders();
+      restoreEditHistory();
     }
     function showLogin() {
       byId('ordersView').style.display = 'none';
@@ -1073,7 +1089,6 @@
     byId('notifyButton').onclick = function () {
       unlockOrderSound();
       playNewOrderSound();
-      byId('notifyButton').title = 'Âm thanh đơn mới đã bật · Nhấn để thử lại';
     };
     document.addEventListener('touchstart', unlockOrderSound, false);
     document.addEventListener('click', unlockOrderSound, false);
@@ -1082,7 +1097,7 @@
     byId('closeNoticeButton').onclick = closeNoticeModal;
     byId('readAllButton').onclick = function () {
       var type = byId('noticeList').getAttribute('data-type'), calls, i;
-      if (type === 'orders') { unreadOrderIds = []; saveUnreadOrders(); renderNoticeModal('orders'); return; }
+      if (type === 'orders') { unreadOrderIds = []; customerEditHistory = customerEditHistory.map(function (entry) { entry.read = true; return entry; }); saveUnreadOrders(); saveEditHistory(); renderNoticeModal('orders'); return; }
       calls = staffCalls.slice(0);
       if (!calls.length) return;
       for (i = 0; i < calls.length; i += 1) dismissStaffCall(calls[i].id, i === calls.length - 1 ? function () { renderNoticeModal('calls'); } : null);
@@ -1092,6 +1107,8 @@
       if (!target || target.tagName !== 'BUTTON') return;
       id = target.getAttribute('data-read-order');
       if (id) { unreadOrderIds = unreadOrderIds.filter(function (value) { return value !== id; }); saveUnreadOrders(); renderNoticeModal('orders'); return; }
+      id = target.getAttribute('data-read-edit');
+      if (id) { customerEditHistory = customerEditHistory.map(function (entry) { if (entry.id === id) entry.read = true; return entry; }); saveEditHistory(); renderNoticeModal('orders'); return; }
       id = target.getAttribute('data-dismiss-call');
       if (id) dismissStaffCall(id, function () { renderNoticeModal('calls'); });
     };
@@ -1204,7 +1221,7 @@
     }());
     window.setInterval(function () {
       if (byId('ordersView').style.display !== 'none' && tenantId && companyId) loadOrders();
-    }, 15000);
+    }, 5000);
   }());
   </script>
 </body>

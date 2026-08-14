@@ -76,13 +76,14 @@ import { fetchModels } from '../../api/modelApi'
 import { apiFetchJson } from '../../api/client'
 
 const BOARD_CHANNEL = 'shop_display_board'
-const ORDER_POLL_MS = 30000
+const ORDER_POLL_MS = 5000
 const STAFF_CALL_REASON_NEW_ORDER = 'new_order'
 const BOARD_VISIBLE_STATUSES = new Set(['CONFIRMED', 'PREPARING', 'READY', 'PICKED_UP'])
 const SHOP_ORDER_VIEW_PREF = 'shop.orders.viewMode'
 const SHOP_ORDER_CARD_SIZE_PREF = 'shop.orders.cardSize'
 const SHOP_ORDER_CONTRAST_PREF = 'shop.orders.highContrast'
 const SHOP_ORDER_STATUS_FILTER_SESSION_KEY = 'shop.orders.statusFilter'
+const CUSTOMER_EDIT_HISTORY_KEY = 'shop.orders.customerEditHistory.v1'
 function readShopOrderPref(key, fallback) {
   try { return localStorage.getItem(key) || fallback } catch { return fallback }
 }
@@ -1411,6 +1412,11 @@ export default function ShopOrderGrid() {
   const [staffCalls, setStaffCalls]       = useState([])   // pending staff calls
   const [staffCallMobileOpen, setStaffCallMobileOpen] = useState(false)
   const [newOrderNotice, setNewOrderNotice] = useState(null)
+  const [customerEditNotice, setCustomerEditNotice] = useState(null)
+  const [customerEditHistoryOpen, setCustomerEditHistoryOpen] = useState(false)
+  const [customerEditHistory, setCustomerEditHistory] = useState(() => {
+    try { const value = JSON.parse(localStorage.getItem(CUSTOMER_EDIT_HISTORY_KEY) || '[]'); return Array.isArray(value) ? value : [] } catch { return [] }
+  })
   const [quickLoginOpen, setQuickLoginOpen] = useState(false)
   const [quickLoginHours, setQuickLoginHours] = useState(12)
   const [quickLoginData, setQuickLoginData] = useState(null)
@@ -1421,31 +1427,43 @@ export default function ShopOrderGrid() {
     : ''
   const seenCallIdsRef = React.useRef(new Set())
   const knownOrderIdsRef = React.useRef(new Set())
+  const knownEditingRef = React.useRef(new Map())
   const orderPollReadyRef = React.useRef(false)
   const rememberOrders = useCallback((orders) => {
     ;(Array.isArray(orders) ? orders : []).forEach(order => {
-      if (order?.id) knownOrderIdsRef.current.add(order.id)
+      if (order?.id) {
+        knownOrderIdsRef.current.add(order.id)
+        knownEditingRef.current.set(order.id, Boolean(order.customerEditing))
+      }
     })
   }, [])
 
   const notifyNewOrders = useCallback((orders) => {
     const list = Array.isArray(orders) ? orders : []
     const fresh = list.filter(order => order?.id && !knownOrderIdsRef.current.has(order.id))
+    const editingStarted = orderPollReadyRef.current ? list.filter(order => order?.id && knownOrderIdsRef.current.has(order.id) && !knownEditingRef.current.get(order.id) && order.customerEditing) : []
     rememberOrders(list)
     if (!orderPollReadyRef.current) {
       orderPollReadyRef.current = true
       return
     }
-    if (!fresh.length) return
-    playNewOrderSound()
-    const first = fresh[0]
-    setNewOrderNotice({
-      count: fresh.length,
-      orderNumber: first.orderNumber ?? null,
-      orderCode: first.orderCode || '',
-      at: Date.now(),
-    })
+    if (fresh.length) {
+      playNewOrderSound()
+      const first = fresh[0]
+      setNewOrderNotice({ count: fresh.length, orderNumber: first.orderNumber ?? null, orderCode: first.orderCode || '', at: Date.now() })
+    }
+    if (editingStarted.length) {
+      playNewOrderSound()
+      const now = Date.now()
+      const entries = editingStarted.map((order, index) => ({ id: `${order.id}_${now}_${index}`, orderId: order.id, orderNumber: order.orderNumber ?? order.orderCode ?? '', customerName: order.customerName || 'Khách lẻ', at: now }))
+      setCustomerEditHistory(prev => [...entries, ...prev].slice(0, 50))
+      setCustomerEditNotice({ count: entries.length, ...entries[0] })
+    }
   }, [rememberOrders])
+
+  useEffect(() => {
+    try { localStorage.setItem(CUSTOMER_EDIT_HISTORY_KEY, JSON.stringify(customerEditHistory)) } catch { /* storage may be blocked */ }
+  }, [customerEditHistory])
 
   const shouldShowInRows = useCallback((order) => statusFilters.length === 0 || statusFilters.includes(order?.status), [statusFilters])
 
@@ -2001,6 +2019,10 @@ export default function ShopOrderGrid() {
             variant="outlined" size="small" color="primary" sx={{ display: { xs: 'none', sm: 'inline-flex' }, textTransform: 'none', fontWeight: 700 }}>{t('shopOrder.grid.qrOrder')}</Button>
           <Button startIcon={<QrCodeScannerIcon />} onClick={() => { setScannedOrders([]); setOrderScannerOpen(true) }}
             variant="contained" size="small" color="primary" sx={{ textTransform: 'none', fontWeight: 800 }}>Scan customer orders</Button>
+          <Badge badgeContent={customerEditHistory.length} color="warning" max={99}>
+            <Button startIcon={<NotificationsActiveIcon />} onClick={() => setCustomerEditHistoryOpen(true)}
+              variant="outlined" size="small" color="warning" sx={{ textTransform: 'none', fontWeight: 800 }}>Customer edits</Button>
+          </Badge>
           <Button startIcon={<QrCode2Icon />} onClick={() => { setQuickLoginData(null); setQuickLoginError(''); setQuickLoginHours(12); setQuickLoginOpen(true) }}
             variant="outlined" size="small" color="secondary" sx={{ textTransform: 'none', fontWeight: 800 }}>Đăng nhập iPad</Button>
           {selectedRows.size > 0 && (
@@ -2035,6 +2057,14 @@ export default function ShopOrderGrid() {
             {newOrderNotice.count > 1
               ? t('shopOrder.grid.newOrdersReceived', { count: newOrderNotice.count })
               : t('shopOrder.grid.newOrderReceived', { number: newOrderNotice.orderNumber != null ? `#${newOrderNotice.orderNumber}` : newOrderNotice.orderCode || '' })}
+          </Alert>
+        )}
+        {customerEditNotice && (
+          <Alert severity="warning" onClose={() => setCustomerEditNotice(null)} sx={{ mx: 1.5, mt: 0.5 }}
+            action={<Button color="inherit" size="small" onClick={() => setCustomerEditHistoryOpen(true)}>History</Button>}>
+            {customerEditNotice.count > 1
+              ? `${customerEditNotice.count} customers started editing orders`
+              : `Customer ${customerEditNotice.customerName} started editing order #${customerEditNotice.orderNumber}`}
           </Alert>
         )}
 
@@ -2077,6 +2107,24 @@ export default function ShopOrderGrid() {
       </Box>
 
       {/* Dialogs */}
+      <Dialog open={customerEditHistoryOpen} onClose={() => setCustomerEditHistoryOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Customer edit notifications</DialogTitle>
+        <DialogContent dividers>
+          {!customerEditHistory.length && <Typography color="text.secondary">No customer edit history yet.</Typography>}
+          <Stack spacing={1}>
+            {customerEditHistory.map(entry => (
+              <Box key={entry.id} sx={{ p: 1.25, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                <Typography fontWeight={800}>Customer editing order #{entry.orderNumber}</Typography>
+                <Typography variant="body2" color="text.secondary">{entry.customerName} · {dateFmt(entry.at)}</Typography>
+              </Box>
+            ))}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button color="error" disabled={!customerEditHistory.length} onClick={() => setCustomerEditHistory([])}>Clear history</Button>
+          <Button onClick={() => setCustomerEditHistoryOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
       <Dialog open={quickLoginOpen} onClose={() => !quickLoginLoading && setQuickLoginOpen(false)} fullWidth maxWidth="xs">
         <DialogTitle>Đăng nhập nhanh cho iPad</DialogTitle>
         <DialogContent>
