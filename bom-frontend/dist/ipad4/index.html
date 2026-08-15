@@ -1043,7 +1043,7 @@
       }
     }
     function renderCart() {
-      var html = '', total = 0, i, j, line, sideTotal, optionsText, group, optionValue;
+      var html = '', total = 0, i, j, line, sideTotal, unitTotal, optionsText, group, optionValue;
       if (!cart.length) { byId('cartLines').innerHTML = '<p class="muted">Chưa chọn món.</p>'; byId('cartTotal').innerHTML = '0 đ'; return; }
       for (i = 0; i < cart.length; i += 1) {
         line = cart[i]; sideTotal = 0; optionsText = '';
@@ -1052,13 +1052,14 @@
           optionsText += (optionsText ? '; ' : '') + group + ': ' + (typeof optionValue === 'object' ? JSON.stringify(optionValue) : optionValue);
         }
         for (j = 0; j < line.sideItems.length; j += 1) sideTotal += line.sideItems[j].sellingPrice * line.sideItems[j].quantity;
-        total += (Number(line.sellingPrice || 0) + Number(line.optionAddOn || 0) + sideTotal) * line.quantity;
-        html += '<div class="cart-line"><button type="button" data-remove-id="' + escapeHtml(line.cartKey) + '">Xóa</button><button class="edit-cart-item" type="button" data-edit-id="' + escapeHtml(line.cartKey) + '">Sửa</button><strong>' + escapeHtml(line.quantity) + ' x ' + escapeHtml(line.modelName || line.name) + '</strong> <span class="price-line">' + escapeHtml(formatMoney(line.sellingPrice)) + '/món</span>';
+        unitTotal = Number(line.sellingPrice || 0) + Number(line.optionAddOn || 0) + sideTotal;
+        total += unitTotal * line.quantity;
+        html += '<div class="cart-line"><button type="button" data-remove-id="' + escapeHtml(line.cartKey) + '">Xóa</button><button class="edit-cart-item" type="button" data-edit-id="' + escapeHtml(line.cartKey) + '">Sửa</button><strong>' + escapeHtml(line.quantity) + ' x ' + escapeHtml(line.modelName || line.name) + '</strong> <span class="price-line">' + escapeHtml(formatMoney(unitTotal)) + '/món</span>';
         if (optionsText) html += '<br><strong>Cấu hình:</strong> ' + escapeHtml(optionsText);
         if (line.optionDetails && line.optionDetails.length) html += '<br><span class="muted">Phụ thu: ' + escapeHtml(line.optionDetails.filter(function (o) { return o.price > 0; }).map(function (o) { return o.label + ' +' + formatMoney(o.price * o.value); }).join(', ') || '0 đ') + '</span>';
         if (line.sideItems.length) html += '<br><strong>Ăn kèm:</strong> ' + escapeHtml(line.sideItems.map(function (s) { return s.quantity + ' x ' + s.modelName + ' (+' + formatMoney(s.sellingPrice * s.quantity) + ')'; }).join(', '));
         if (line.itemNotes) html += '<br><strong>Ghi chú:</strong> ' + escapeHtml(line.itemNotes);
-        html += '<br><span class="price-line">Thành tiền: ' + escapeHtml(formatMoney((Number(line.sellingPrice || 0) + Number(line.optionAddOn || 0) + sideTotal) * line.quantity)) + '</span></div>';
+        html += '<br><span class="price-line">Thành tiền: ' + escapeHtml(formatMoney(unitTotal * line.quantity)) + '</span></div>';
       }
       byId('cartLines').innerHTML = html;
       byId('cartTotal').innerHTML = formatMoney(total);
