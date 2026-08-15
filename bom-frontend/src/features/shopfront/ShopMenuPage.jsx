@@ -1856,7 +1856,6 @@ export default function ShopMenuPage() {
               <Typography sx={{
                 px: 2, py: 1, fontWeight: 700, fontSize: 13, color: '#888',
                 bgcolor: '#f5f5f5', letterSpacing: 0.8, textTransform: 'uppercase',
-                position: 'sticky', top: `${headerH}px`, zIndex: 50,
                 borderBottom: '1px solid #ebebeb',
               }}>
                 {cat}
