@@ -46,36 +46,36 @@ function notifyCustomer(title, body) {
 }
 
 const STEPS = [
-  { key: 'PENDING',   label: 'Placed',    emoji: '📋' },
-  { key: 'CONFIRMED', label: 'Confirmed', emoji: '✅' },
-  { key: 'PREPARING', label: 'Preparing', emoji: '👨‍🍳' },
-  { key: 'READY',     label: 'Ready',     emoji: '🔔' },
-  { key: 'COMPLETED', label: 'Done',      emoji: '🎉' },
+  { key: 'PENDING',   label: 'Đã đặt',    emoji: '📋' },
+  { key: 'CONFIRMED', label: 'Đã xác nhận', emoji: '✅' },
+  { key: 'PREPARING', label: 'Đang chuẩn bị', emoji: '👨‍🍳' },
+  { key: 'READY',     label: 'Sẵn sàng',     emoji: '🔔' },
+  { key: 'COMPLETED', label: 'Hoàn tất',      emoji: '🎉' },
 ]
 
 const STATUS_IDX = { PENDING: 0, CONFIRMED: 1, PREPARING: 2, READY: 3, PICKED_UP: 4, COMPLETED: 4 }
 
 const STATUS_STYLE = {
-  PENDING:   { color: '#78909c', bg: '#f5f5f5', label: 'Waiting for confirmation' },
-  CONFIRMED: { color: '#43a047', bg: '#f1f8e9', label: 'Order confirmed!' },
-  PREPARING: { color: '#fb8c00', bg: '#fff8e1', label: 'Being prepared…' },
-  READY:     { color: '#0288d1', bg: '#e1f5fe', label: '🔔 Ready to pick up!' },
-  PICKED_UP: { color: '#1b5e20', bg: '#e8f5e9', label: '✓ Picked up — enjoy!' },
-  COMPLETED: { color: '#2e7d32', bg: '#e8f5e9', label: 'Completed — thank you!' },
-  CANCELLED: { color: '#e53935', bg: '#fce4ec', label: 'Order cancelled' },
+  PENDING:   { color: '#78909c', bg: '#f5f5f5', label: 'Đang chờ xác nhận' },
+  CONFIRMED: { color: '#43a047', bg: '#f1f8e9', label: 'Đơn đã được xác nhận!' },
+  PREPARING: { color: '#fb8c00', bg: '#fff8e1', label: 'Đang chuẩn bị món…' },
+  READY:     { color: '#0288d1', bg: '#e1f5fe', label: '🔔 Món đã sẵn sàng!' },
+  PICKED_UP: { color: '#1b5e20', bg: '#e8f5e9', label: '✓ Đã nhận món — chúc ngon miệng!' },
+  COMPLETED: { color: '#2e7d32', bg: '#e8f5e9', label: 'Hoàn tất — cảm ơn quý khách!' },
+  CANCELLED: { color: '#e53935', bg: '#fce4ec', label: 'Đơn đã hủy' },
 }
 
 const STATUS_CHIP = {
-  PENDING:   { color: 'default',  label: 'Waiting Confirm' },
-  CONFIRMED: { color: 'success',  label: 'Confirmed' },
-  PREPARING: { color: 'warning',  label: 'Preparing' },
-  READY:     { color: 'info',     label: 'Ready!' },
-  PICKED_UP: { color: 'success',  label: 'Picked up' },
-  COMPLETED: { color: 'success',  label: 'Done' },
-  CANCELLED: { color: 'error',    label: 'Cancelled' },
+  PENDING:   { color: 'default',  label: 'Chờ xác nhận' },
+  CONFIRMED: { color: 'success',  label: 'Đã xác nhận' },
+  PREPARING: { color: 'warning',  label: 'Đang chuẩn bị' },
+  READY:     { color: 'info',     label: 'Sẵn sàng!' },
+  PICKED_UP: { color: 'success',  label: 'Đã nhận món' },
+  COMPLETED: { color: 'success',  label: 'Hoàn tất' },
+  CANCELLED: { color: 'error',    label: 'Đã hủy' },
 }
 
-function CounterQrButton({ orders, label = 'Show order QR' }) {
+function CounterQrButton({ orders, label = 'Hiện mã QR đơn hàng' }) {
   const [open, setOpen] = useState(false)
   const [slides, setSlides] = useState([])
   const [loading, setLoading] = useState(false)
@@ -95,7 +95,7 @@ function CounterQrButton({ orders, label = 'Show order QR' }) {
     <Button variant="contained" size="small" startIcon={<QrCode2Icon />} onClick={show}
       sx={{ textTransform: 'none', fontWeight: 800 }}>{label}</Button>
     <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="xs">
-      <DialogTitle>Order QR {slides.length > 1 ? `· ${slides.length} orders` : ''}</DialogTitle>
+      <DialogTitle>Mã QR đơn hàng {slides.length > 1 ? `· ${slides.length} đơn` : ''}</DialogTitle>
       <DialogContent sx={{ px: 0 }}>
         {loading ? <Box sx={{ py: 8, textAlign: 'center' }}><CircularProgress /></Box> : (
           <Box sx={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory', gap: 1, px: 2, pb: 2 }}>
@@ -104,8 +104,8 @@ function CounterQrButton({ orders, label = 'Show order QR' }) {
                 <Typography variant="h3" fontWeight={900}>#{order.orderNumber ?? order.dailySeq ?? index + 1}</Typography>
                 {qrBase64 && <img src={`data:image/png;base64,${qrBase64}`} alt={`Order ${order.orderCode} QR`}
                   style={{ width: 'min(78vw, 320px)', height: 'min(78vw, 320px)' }} />}
-                <Typography fontWeight={800}>Show this QR to the counter</Typography>
-                {slides.length > 1 && <Typography variant="body2" color="text.secondary">Swipe left/right for the next order · {index + 1}/{slides.length}</Typography>}
+                <Typography fontWeight={800}>Vui lòng đưa mã QR này cho nhân viên tại quầy</Typography>
+                {slides.length > 1 && <Typography variant="body2" color="text.secondary">Vuốt trái/phải để xem đơn tiếp theo · {index + 1}/{slides.length}</Typography>}
               </Box>
             ))}
           </Box>
@@ -234,12 +234,12 @@ function SingleOrderView({ order, onEdit, itemName, fmtLocal }) {
           <Button variant="contained" fullWidth startIcon={<QrCode2Icon />}
             onClick={() => setPaymentQrOpen(open => !open)}
             sx={{ borderRadius: 2, fontWeight: 900, textTransform: 'none', py: 1.25 }}>
-            {paymentQrOpen ? 'Hide payment QR' : 'Show payment QR'}
+            {paymentQrOpen ? 'Ẩn mã QR thanh toán' : 'Hiện mã QR thanh toán'}
           </Button>
         <Collapse in={paymentQrOpen}>
         <Box sx={{ textAlign: 'center', pt: 2, pb: 1 }}>
           {bankLogoUrl && <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1 }}><img src={bankLogoUrl} alt="Bank" style={{ height: 40, maxWidth: 140, objectFit: 'contain', borderRadius: 6 }} /></Box>}
-          <Typography variant="subtitle2" fontWeight={700} color="#0277bd" sx={{ mb: 1.5 }}>Scan to Pay</Typography>
+          <Typography variant="subtitle2" fontWeight={700} color="#0277bd" sx={{ mb: 1.5 }}>Quét mã để thanh toán</Typography>
           <img src={isQrUrl ? order.paymentQr : `data:image/png;base64,${order.paymentQr}`} alt="Payment QR"
             style={{ width: 200, height: 200, display: 'block', margin: '0 auto', borderRadius: 8 }} />
           <Typography variant="h6" fontWeight={800} color="primary" sx={{ mt: 1.25 }}>{fmtLocal(payableAmount(order))}</Typography>
@@ -247,7 +247,7 @@ function SingleOrderView({ order, onEdit, itemName, fmtLocal }) {
           <Button variant="outlined" size="small" startIcon={<DownloadIcon />}
             onClick={() => saveQrImage(order.paymentQr, order.orderCode)}
             sx={{ display: 'flex', mx: 'auto', mt: 1.25, textTransform: 'none', fontWeight: 700 }}>
-            Save QR to Photos
+            Lưu mã QR vào ảnh
           </Button>
         </Box>
         </Collapse>
@@ -256,7 +256,7 @@ function SingleOrderView({ order, onEdit, itemName, fmtLocal }) {
 
       {order.notes && (
         <Box sx={{ mx: { xs: 1.5, md: 4 }, mt: 2, p: 1.5, bgcolor: '#fafafa', borderRadius: 2, border: '1px solid #f0f0f0' }}>
-          <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ textTransform: 'uppercase', fontSize: 10, letterSpacing: 0.5 }}>Notes</Typography>
+          <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ textTransform: 'uppercase', fontSize: 10, letterSpacing: 0.5 }}>Ghi chú</Typography>
           <Typography variant="body2" sx={{ mt: 0.25 }}>{order.notes}</Typography>
         </Box>
       )}
@@ -266,7 +266,7 @@ function SingleOrderView({ order, onEdit, itemName, fmtLocal }) {
       <Box sx={{ mx: { xs: 1.5, md: 'auto' }, mt: 1, px: 2, py: 1.5, maxWidth: 560, width: { md: '100%' },
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         bgcolor: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 2 }}>
-        <Typography fontWeight={900} sx={{ fontSize: { xs: 17, md: 18 }, color: '#7c2d12' }}>Total</Typography>
+        <Typography fontWeight={900} sx={{ fontSize: { xs: 17, md: 18 }, color: '#7c2d12' }}>Tổng tiền</Typography>
         <Typography fontWeight={900} color="primary" sx={{ fontSize: { xs: 20, md: 22 }, lineHeight: 1.1 }}>
           {fmtLocal(payableAmount(order))}
         </Typography>
@@ -280,8 +280,8 @@ function SingleOrderView({ order, onEdit, itemName, fmtLocal }) {
       {isDone && (
         <Box sx={{ textAlign: 'center', pt: 3 }}>
           <Typography variant="h4">🎉</Typography>
-          <Typography fontWeight={700} color="#2e7d32">Thank you!</Typography>
-          <Typography variant="body2" color="text.secondary">See you next time.</Typography>
+          <Typography fontWeight={700} color="#2e7d32">Cảm ơn quý khách!</Typography>
+          <Typography variant="body2" color="text.secondary">Hẹn gặp lại.</Typography>
         </Box>
       )}
 
@@ -292,17 +292,17 @@ function SingleOrderView({ order, onEdit, itemName, fmtLocal }) {
           <Button variant="outlined" fullWidth startIcon={<EditIcon />}
             onClick={() => onEdit(order)}
             sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none' }}>
-            Edit Order
+            Sửa đơn hàng
           </Button>
         )}
         <CounterQrButton orders={[order]} />
         <Box sx={{ textAlign: 'center' }}>
           <Button size="small" startIcon={<PrintIcon />} onClick={() => printOrderReceipt(order)}
             sx={{ textTransform: 'none', color: 'text.disabled', fontSize: 12 }}>
-            Print Receipt
+            In hóa đơn
           </Button>
           <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 0.25 }}>
-            {order.orderCode} · refreshes every 5s
+            {order.orderCode} · cập nhật mỗi 5 giây
           </Typography>
         </Box>
       </Box>
@@ -511,7 +511,7 @@ function OrderCard({ order, highlighted, token, itemName, fmtLocal }) {
 
           <Box sx={{ mt: 1.5, pt: 1.25, borderTop: '2px solid #fed7aa', display: 'flex',
             alignItems: 'center', justifyContent: 'space-between' }}>
-            <Typography fontWeight={900} sx={{ fontSize: 17, color: '#7c2d12' }}>Total</Typography>
+            <Typography fontWeight={900} sx={{ fontSize: 17, color: '#7c2d12' }}>Tổng tiền</Typography>
             <Typography color="primary" fontWeight={900} sx={{ fontSize: { xs: 20, sm: 22 }, lineHeight: 1.1 }}>
               {fmtLocal(payableAmount(order))}
             </Typography>
@@ -523,16 +523,16 @@ function OrderCard({ order, highlighted, token, itemName, fmtLocal }) {
               <Button variant="contained" fullWidth startIcon={<QrCode2Icon />}
                 onClick={() => setPaymentQrOpen(open => !open)}
                 sx={{ mb: paymentQrOpen ? 1.5 : 0, borderRadius: 2, fontWeight: 900, textTransform: 'none' }}>
-                {paymentQrOpen ? 'Hide payment QR' : 'Show payment QR'}
+                {paymentQrOpen ? 'Ẩn mã QR thanh toán' : 'Hiện mã QR thanh toán'}
               </Button>
               <Collapse in={paymentQrOpen}>
-              <Typography variant="caption" fontWeight={700} color="#0277bd" sx={{ display: 'block', mb: 1 }}>Scan to Pay</Typography>
+              <Typography variant="caption" fontWeight={700} color="#0277bd" sx={{ display: 'block', mb: 1 }}>Quét mã để thanh toán</Typography>
               <img src={isQrUrl ? order.paymentQr : `data:image/png;base64,${order.paymentQr}`}
                 alt="Payment QR" style={{ width: 160, height: 160, borderRadius: 8 }} />
               <Button variant="outlined" size="small" startIcon={<DownloadIcon />}
                 onClick={() => saveQrImage(order.paymentQr, order.orderCode)}
                 sx={{ display: 'flex', mx: 'auto', mt: 1, textTransform: 'none', fontWeight: 700 }}>
-                Save QR to Photos
+                Lưu mã QR vào ảnh
               </Button>
               </Collapse>
             </Box>
@@ -540,7 +540,7 @@ function OrderCard({ order, highlighted, token, itemName, fmtLocal }) {
 
           {order.notes && (
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75, fontStyle: 'italic' }}>
-              Note: {order.notes}
+              Ghi chú: {order.notes}
             </Typography>
           )}
           <FinishEditingButton order={order} onFinished={() => window.location.reload()} />
@@ -555,12 +555,12 @@ function OrderCard({ order, highlighted, token, itemName, fmtLocal }) {
               <Button variant="outlined" size="small" startIcon={<EditIcon sx={{ fontSize: 14 }} />}
                 onClick={goEdit}
                 sx={{ fontWeight: 700, textTransform: 'none', flex: 1, borderRadius: 1.5 }}>
-                Edit this order
+                Sửa đơn hàng này
               </Button>
               <Button size="small" startIcon={<PrintIcon sx={{ fontSize: 14 }} />}
                 onClick={() => printOrderReceipt(order)}
                 sx={{ textTransform: 'none', color: 'text.secondary' }}>
-                Print
+                In đơn
               </Button>
             </Box>
           </>
@@ -570,7 +570,7 @@ function OrderCard({ order, highlighted, token, itemName, fmtLocal }) {
             <Button size="small" startIcon={<PrintIcon sx={{ fontSize: 14 }} />}
               onClick={() => printOrderReceipt(order)}
               sx={{ textTransform: 'none', color: 'text.secondary' }}>
-              Print Receipt
+              In hóa đơn
             </Button>
           </Box>
         )}
@@ -589,7 +589,7 @@ function TokenSessionView({ token, highlightCode, itemName, fmtLocal }) {
   const load = useCallback(() => {
     fetchTokenSession(token)
       .then(({ data }) => {
-        if (data?.orders == null) { setError('Session not found'); return }
+        if (data?.orders == null) { setError('Không tìm thấy phiên đặt hàng'); return }
         const previous = previousRef.current
         ;(data.orders || []).forEach(order => {
           const old = previous[order.id]
@@ -599,7 +599,7 @@ function TokenSessionView({ token, highlightCode, itemName, fmtLocal }) {
         previousRef.current = Object.fromEntries((data.orders || []).map(order => [order.id, order]))
         setSession(data)
       })
-      .catch(() => setError('Failed to load session'))
+      .catch(() => setError('Không thể tải phiên đặt hàng'))
   }, [token])
 
   useEffect(() => {
@@ -624,12 +624,12 @@ function TokenSessionView({ token, highlightCode, itemName, fmtLocal }) {
 
   const formatExpiry = () => {
     if (!expiresAt) return null
-    if (!isValid) return 'Session expired'
+    if (!isValid) return 'Phiên đặt hàng đã hết hạn'
     const mins = Math.floor(msLeft / 60000)
-    if (mins < 60) return `Expires in ${mins} min`
+    if (mins < 60) return `Hết hạn sau ${mins} phút`
     const hrs = Math.floor(mins / 60)
     const rem = mins % 60
-    return `Expires in ${hrs}h ${rem > 0 ? rem + 'm' : ''}`
+    return `Hết hạn sau ${hrs} giờ ${rem > 0 ? rem + ' phút' : ''}`
   }
 
   return (
@@ -637,10 +637,10 @@ function TokenSessionView({ token, highlightCode, itemName, fmtLocal }) {
       {/* Session header */}
       <Box sx={{ bgcolor: isValid ? '#0f172a' : '#374151', color: '#fff', px: 2, pt: 4, pb: 3, textAlign: 'center' }}>
         <Typography sx={{ fontSize: 13, color: '#94a3b8', letterSpacing: 1, textTransform: 'uppercase', mb: 0.5 }}>
-          Order Session
+          Phiên đặt hàng
         </Typography>
         <Typography sx={{ fontSize: 28, fontWeight: 900, letterSpacing: -1 }}>
-          {hasOrders ? `${session.orders.length} Order${session.orders.length > 1 ? 's' : ''}` : 'No Orders Yet'}
+          {hasOrders ? `${session.orders.length} đơn hàng` : 'Chưa có đơn hàng'}
         </Typography>
         {formatExpiry() && (
           <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, mt: 1, px: 2, py: 0.5,
@@ -660,7 +660,7 @@ function TokenSessionView({ token, highlightCode, itemName, fmtLocal }) {
         {!hasOrders && (
           <Box sx={{ textAlign: 'center', py: 6, color: '#94a3b8' }}>
             <Typography variant="h4" sx={{ mb: 1 }}>🛒</Typography>
-            <Typography>No orders placed yet in this session.</Typography>
+            <Typography>Chưa có đơn hàng nào trong phiên này.</Typography>
           </Box>
         )}
 
@@ -680,7 +680,7 @@ function TokenSessionView({ token, highlightCode, itemName, fmtLocal }) {
       {isValid && (
         <Box sx={{ px: 2, pt: 2, maxWidth: 560, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 1 }}>
           <Divider sx={{ mb: 0.5 }}>
-            <Typography variant="caption" color="text.disabled">Actions</Typography>
+            <Typography variant="caption" color="text.disabled">Thao tác</Typography>
           </Divider>
           <Button
             variant="contained"
@@ -688,15 +688,15 @@ function TokenSessionView({ token, highlightCode, itemName, fmtLocal }) {
             startIcon={<AddShoppingCartIcon />}
             onClick={() => { window.location.href = menuUrl({ t: token }) }}
             sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none', py: 1.25 }}>
-            {hasPending ? 'Order More' : 'New Order'}
+            {hasPending ? 'Đặt thêm món' : 'Đặt đơn mới'}
           </Button>
-          {hasOrders && <CounterQrButton orders={session.orders} label={session.orders.length > 1 ? `Show ${session.orders.length} order QRs` : 'Show order QR'} />}
+          {hasOrders && <CounterQrButton orders={session.orders} label={session.orders.length > 1 ? `Hiện ${session.orders.length} mã QR đơn hàng` : 'Hiện mã QR đơn hàng'} />}
           <CustomerNotificationsButton />
         </Box>
       )}
 
       <Typography variant="caption" color="text.disabled" sx={{ display: 'block', textAlign: 'center', mt: 2 }}>
-        refreshes every 5s
+        Tự động cập nhật mỗi 5 giây
       </Typography>
     </Box>
   )
@@ -721,14 +721,14 @@ export default function ShopOrderStatusPage() {
     if (token || !orderCode) return
     fetchPublicOrder(orderCode)
       .then(({ data }) => {
-        if (!data?.orderCode) { setError('Order not found'); return }
+        if (!data?.orderCode) { setError('Không tìm thấy đơn hàng'); return }
         const old = previousOrderRef.current
         if (old && old.status !== data.status) notifyCustomer(`Đơn #${data.orderNumber || data.orderCode}`, STATUS_STYLE[data.status]?.label || data.status)
         if (old && !old.paymentRequestedAt && data.paymentRequestedAt && data.paymentStatus !== 'PAID') notifyCustomer('Mời thanh toán', 'Vui lòng đến quầy thu ngân để thanh toán.')
         previousOrderRef.current = data
         setOrder(data)
       })
-      .catch(() => setError('Failed to load order'))
+      .catch(() => setError('Không thể tải đơn hàng'))
   }, [orderCode, token])
 
   useEffect(() => {

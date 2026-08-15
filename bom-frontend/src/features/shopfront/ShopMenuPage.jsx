@@ -624,6 +624,7 @@ export default function ShopMenuPage() {
   const [callStaffLoading, setCallStaffLoading] = useState(false)
   const [staffCallNow, setStaffCallNow]         = useState(Date.now())
   const headerRef    = useRef(null)
+  const tableTagInputRef = useRef(null)
   const [headerH, setHeaderH] = useState(165)
   const categoryRefs = useRef({})
   const staffCallKey = staffCallStorageKey(tokenParam, ctx)
@@ -1108,7 +1109,10 @@ export default function ShopMenuPage() {
       const name = form.customerName.trim()
       const phone = form.customerPhone.trim()
       if (form.fulfillmentType === 'DINE_IN' && !ctx?.tableId && !form.selectedTableId && !form.customerTableTag.trim()) {
-        setError('Hãy nhập số thẻ bàn hoặc chọn bàn.'); return
+        setError('')
+        window.alert('Vui lòng nhập số thẻ bàn hoặc chọn bàn trước khi đặt món.')
+        window.setTimeout(() => tableTagInputRef.current?.focus(), 0)
+        return
       }
       if (form.fulfillmentType === 'PICKUP' && !name) {
         setError('Hãy nhập tên người nhận món.'); return
@@ -2137,7 +2141,7 @@ export default function ShopMenuPage() {
               <Box sx={{ p: 1.5, borderRadius: 2.5, bgcolor: '#fff8f4', border: '1px solid #ffccbc' }}>
                 <Typography fontWeight={800} sx={{ mb: 1, fontSize: 14 }}>Nhập thẻ bàn hoặc chọn bàn</Typography>
                 <Stack spacing={1.25}>
-                  <TextField label="Số trên thẻ bàn" size="small" fullWidth
+                  <TextField inputRef={tableTagInputRef} label="Số trên thẻ bàn" size="small" fullWidth
                     placeholder="Ví dụ: A12" value={form.customerTableTag}
                     onChange={e => { setForm(f => ({ ...f, customerTableTag: e.target.value, selectedTableId: '' })); setError('') }}
                     helperText="Số này sẽ hiển thị trên bảng đơn tại quầy" />

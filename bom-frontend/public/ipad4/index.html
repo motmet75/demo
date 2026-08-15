@@ -1149,6 +1149,23 @@
       message('voucherError', '', false); byId('voucherModal').style.display = 'block';
     }
     function closeVoucher() { byId('voucherModal').style.display = 'none'; }
+    function voucherErrorText(status, data) {
+      var raw = text(data && (data.error || data.message || data.detail)).toLowerCase();
+      if (status === 404 || raw.indexOf('not found') >= 0) return 'Không tìm thấy voucher. Vui lòng kiểm tra lại mã.';
+      if (raw.indexOf('redeem') >= 0 || raw.indexOf('used') >= 0 || raw.indexOf('đã sử dụng') >= 0) return 'Voucher này đã được sử dụng.';
+      if (raw.indexOf('expir') >= 0 || raw.indexOf('hết hạn') >= 0) return 'Voucher này đã hết hạn.';
+      if (raw.indexOf('cancel') >= 0 || raw.indexOf('đã hủy') >= 0) return 'Voucher này đã bị hủy.';
+      if (status === 409) return 'Voucher không còn sử dụng được.';
+      return 'Không kiểm tra được voucher. Vui lòng thử lại.';
+    }
+    function voucherStatusText(status) {
+      status = text(status).toUpperCase();
+      if (status === 'ACTIVE' || status === 'ISSUED') return 'Có thể sử dụng';
+      if (status === 'REDEEMED' || status === 'USED') return 'Đã sử dụng';
+      if (status === 'EXPIRED') return 'Đã hết hạn';
+      if (status === 'CANCELLED') return 'Đã hủy';
+      return status || 'Không xác định';
+    }
     function checkVoucher() {
       var code = byId('voucherCode').value.replace(/^\s+|\s+$/g, '');
       if (!code) { message('voucherError', 'Vui lòng nhập mã voucher.', false); return; }
@@ -1156,11 +1173,14 @@
       setBusy('checkVoucherButton', true, 'Kiểm tra'); message('voucherError', '', false);
       request('POST', '/sapi/shop/staff/vouchers/detail', { code: code }, function (status, data) {
         setBusy('checkVoucherButton', false, 'Kiểm tra');
-        if (status < 200 || status >= 300 || !data) { byId('voucherResult').innerHTML = ''; message('voucherError', errorText(status, data), false); return; }
-        byId('voucherResult').innerHTML = '<div class="member-result"><strong>Voucher ' + escapeHtml(data.code || code) + '</strong><br>ID: <strong>' + escapeHtml(data.id || '—') + '</strong><br>Trạng thái: ' + escapeHtml(data.status || '—') + '<br>Giá trị: <span class="price-line">' + escapeHtml(formatMoney(data.faceValue)) + '</span>' + (data.expiryDate ? '<br>Hạn dùng: ' + escapeHtml(data.expiryDate) : '') + (data.expired ? '<br><strong style="color:#a33b35">ĐÃ HẾT HẠN</strong>' : '') + '</div>';
+        if (status < 200 || status >= 300 || !data) { byId('voucherResult').innerHTML = ''; message('voucherError', voucherErrorText(status, data), false); return; }
+        byId('voucherResult').innerHTML = '<div class="member-result"><strong>Voucher ' + escapeHtml(data.code || code) + '</strong><br>ID: <strong>' + escapeHtml(data.id || '—') + '</strong><br>Trạng thái: ' + escapeHtml(voucherStatusText(data.status)) + '<br>Giá trị: <span class="price-line">' + escapeHtml(formatMoney(data.faceValue)) + '</span>' + (data.expiryDate ? '<br>Hạn dùng: ' + escapeHtml(data.expiryDate) : '') + (data.expired ? '<br><strong style="color:#a33b35">ĐÃ HẾT HẠN</strong>' : '') + '</div>';
+        if (data.expired || text(data.status).toUpperCase() === 'EXPIRED') message('voucherError', 'Voucher này đã hết hạn.', false);
+        else if (text(data.status).toUpperCase() === 'REDEEMED' || text(data.status).toUpperCase() === 'USED') message('voucherError', 'Voucher này đã được sử dụng.', false);
+        else if (text(data.status).toUpperCase() === 'CANCELLED') message('voucherError', 'Voucher này đã bị hủy.', false);
         checkedVoucherCode = text(data.code || code);
         checkedVoucherDetail = data;
-        byId('applyVoucherButton').style.display = voucherForOrder && !data.expired && text(data.status).toUpperCase() !== 'REDEEMED' && text(data.status).toUpperCase() !== 'CANCELLED' ? 'block' : 'none';
+        byId('applyVoucherButton').style.display = voucherForOrder && !data.expired && text(data.status).toUpperCase() !== 'EXPIRED' && text(data.status).toUpperCase() !== 'REDEEMED' && text(data.status).toUpperCase() !== 'USED' && text(data.status).toUpperCase() !== 'CANCELLED' ? 'block' : 'none';
       });
     }
     function applyCheckedVoucher() {
@@ -1169,7 +1189,7 @@
         setBusy('applyVoucherButton', true, '✓ Áp dụng voucher');
         request('POST', '/sapi/shop/staff/vouchers/redeem', { code: checkedVoucherCode, orderId: editingOrder.id, billId: null }, function (status, data) {
           setBusy('applyVoucherButton', false, '✓ Áp dụng voucher');
-          if (status < 200 || status >= 300) { message('voucherError', errorText(status, data), false); return; }
+          if (status < 200 || status >= 300) { message('voucherError', voucherErrorText(status, data), false); return; }
           if (data && data.order) editingOrder = data.order;
           pendingVoucherCode = ''; closeVoucher(); renderCart(); message('formError', 'Đã thêm voucher ' + checkedVoucherCode + ' vào đơn.', true); loadOrders();
         });
