@@ -989,7 +989,8 @@
         if (inputs[i].className === 'option-input') unit += Number(inputs[i].getAttribute('data-price') || 0) * (inputs[i].type === 'number' ? Number(inputs[i].value || 0) : (inputs[i].checked ? 1 : 0));
         if (inputs[i].className === 'side-input') unit += Number(inputs[i].getAttribute('data-price') || 0) * Number(inputs[i].value || 0);
       }
-      byId('itemConfigTotal').innerHTML = formatMoney(unit * qty);
+      byId('itemConfigTitle').innerHTML = escapeHtml(configuringModel && (configuringModel.modelName || configuringModel.name) || 'Cấu hình món') + '<br><span class="price-line">' + escapeHtml(formatMoney(unit)) + ' / món (gồm topping)</span>';
+      byId('itemConfigTotal').innerHTML = 'Thành tiền: ' + escapeHtml(formatMoney(unit * qty));
     }
     function openItemConfig(model, cartLine, cartIndex) {
       configuringModel = model; configuringOptions = []; configuringCartLine = cartLine || null; configuringCartIndex = typeof cartIndex === 'number' ? cartIndex : -1;
