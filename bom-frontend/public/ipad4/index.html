@@ -70,8 +70,11 @@
     .order-summary { clear: both; padding-top: 10px; color: #525d66; font-size: 15px; font-weight: bold; }
     .money-summary { margin-top: 8px; overflow: hidden; }
     .money-summary-box { float: left; margin: 0 8px 8px 0; padding: 8px 10px; border: 2px solid #87b8dc; border-radius: 6px; background: #eef7ff; color: #123e60; }
+    button.money-summary-box { min-height: 0; font-size: 15px; font-weight: normal; text-align: left; }
+    .money-summary-box.selected { border-width: 4px; padding: 6px 8px; background: #cdeaff; }
     .money-summary-box.grand { border-color: #e1a54c; background: #fff5df; color: #754400; }
     .money-summary-box strong { display: block; margin-top: 3px; font-size: 18px; }
+    .filter-tag { float: left; min-height: 38px; margin: 0 8px 8px 0; padding: 5px 10px; border: 2px solid #65727e; border-radius: 18px; background: #fff; color: #26333d; font-size: 15px; }
     .plain-order { padding: 12px; border-left: 5px solid #1769aa; }
     .plain-order .order-title { font-size: 20px; }
     .plain-order .items { font-size: 16px; }
@@ -390,6 +393,7 @@
     var loadedOrders = [];
     var statusFilter = '';
     var paymentFilter = '';
+    var tableFilter = '';
     var orderSort = 'newest';
     var viewMode = 'cards';
     var knownOrderIds = {};
@@ -711,7 +715,7 @@
       return parts.join('; ');
     }
     function applyOrderView() {
-      var rows = loadedOrders.slice(0), visible = [], i, key, order, tableLabel, tableKey, tableTotals = {}, separateCount = 0, separateTotal = 0, summary, group;
+      var rows = loadedOrders.slice(0), visible = [], displayed = [], i, key, order, tableLabel, tableKey, tableTotals = {}, separateCount = 0, separateTotal = 0, summary, group;
       for (i = 0; i < rows.length; i += 1) {
         if (statusFilter && rows[i].status !== statusFilter) continue;
         if (paymentFilter === 'UNPAID' && rows[i].paymentStatus === 'PAID') continue;
@@ -738,15 +742,22 @@
           separateTotal += Math.max(0, Number(order.totalAmount || 0) - Number(order.discountAmount || 0));
         }
       }
-      summary += '<div class="money-summary">';
+      summary += '<div class="money-summary"><button type="button" class="filter-tag" data-filter-action="table" data-table-filter="">Tất cả</button>';
+      if (paymentFilter) summary += '<button type="button" class="filter-tag" data-filter-action="payment">' + (paymentFilter === 'UNPAID' ? 'Chưa thanh toán' : 'Đã thanh toán') + ' ×</button>';
       for (key in tableTotals) if (tableTotals.hasOwnProperty(key)) {
         group = tableTotals[key];
-        summary += '<div class="money-summary-box">Bàn ' + escapeHtml(group.label) + ' · ' + escapeHtml(group.count) + ' đơn<strong>Tổng bàn: ' + escapeHtml(formatMoney(group.total)) + '</strong></div>';
+        summary += '<button type="button" class="money-summary-box' + (tableFilter === key ? ' selected' : '') + '" data-filter-action="table" data-table-filter="' + escapeHtml(key) + '">Bàn ' + escapeHtml(group.label) + ' · ' + escapeHtml(group.count) + ' đơn<strong>Tổng bàn: ' + escapeHtml(formatMoney(group.total)) + '</strong></button>';
       }
-      if (separateCount) summary += '<div class="money-summary-box grand">Mang đi / đơn riêng · ' + escapeHtml(separateCount) + ' đơn<strong>Tổng cộng: ' + escapeHtml(formatMoney(separateTotal)) + '</strong></div>';
+      if (separateCount) summary += '<button type="button" class="money-summary-box grand' + (tableFilter === '__SEPARATE__' ? ' selected' : '') + '" data-filter-action="table" data-table-filter="__SEPARATE__">Mang đi / đơn riêng · ' + escapeHtml(separateCount) + ' đơn<strong>Tổng cộng: ' + escapeHtml(formatMoney(separateTotal)) + '</strong></button>';
       summary += '<div class="clear"></div></div>';
       byId('orderSummary').innerHTML = summary;
-      renderOrders(visible);
+      for (i = 0; i < visible.length; i += 1) {
+        order = visible[i] || {};
+        tableLabel = order.fulfillmentType === 'DINE_IN' ? (order.tableName || order.customerTableTag || order.tableId || '') : '';
+        tableKey = tableLabel ? String(order.tableId || tableLabel) : '__SEPARATE__';
+        if (!tableFilter || tableFilter === tableKey) displayed.push(order);
+      }
+      renderOrders(displayed);
     }
     function renderOrders(rows) {
       var html = '';
@@ -1425,6 +1436,14 @@
     };
     byId('statusFilter').onchange = function () { statusFilter = this.value; saveViewPrefs(); applyOrderView(); };
     byId('paymentFilter').onchange = function () { paymentFilter = this.value; saveViewPrefs(); applyOrderView(); };
+    byId('orderSummary').onclick = function (event) {
+      var target = event.target || event.srcElement;
+      while (target && target !== this && !target.getAttribute('data-filter-action')) target = target.parentNode;
+      if (!target || target === this) return;
+      if (target.getAttribute('data-filter-action') === 'payment') { paymentFilter = ''; byId('paymentFilter').value = ''; saveViewPrefs(); applyOrderView(); return; }
+      tableFilter = target.getAttribute('data-table-filter') || '';
+      applyOrderView();
+    };
     byId('orderSort').onchange = function () { orderSort = this.value; saveViewPrefs(); applyOrderView(); };
     byId('viewMode').onchange = function () { viewMode = this.value; saveViewPrefs(); applyOrderView(); };
     byId('closeQrButton').onclick = closeQr;

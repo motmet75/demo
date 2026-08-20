@@ -1374,6 +1374,7 @@ export default function ShopOrderGrid() {
   const [error, setError]               = useState('')
   const [statusFilters, setStatusFilters] = useState(readShopOrderStatusFilters)
   const [paymentFilter, setPaymentFilter] = useState(() => readShopOrderSessionValue(SHOP_ORDER_PAYMENT_FILTER_SESSION_KEY, ''))
+  const [tableFilter, setTableFilter]     = useState('')
   const [detailOrder, setDetailOrder]   = useState(null)
   const [resetOpen, setResetOpen]       = useState(false)
   const [resetTo, setResetTo]           = useState(0)
@@ -1682,13 +1683,21 @@ export default function ShopOrderGrid() {
         return
       }
       const tableKey = String(order.tableId || tableLabel)
-      const current = tableGroups.get(tableKey) || { label: tableLabel, count: 0, total: 0 }
+      const current = tableGroups.get(tableKey) || { key: tableKey, label: tableLabel, count: 0, total: 0 }
       current.count += 1
       current.total += payableAmount(order)
       tableGroups.set(tableKey, current)
     })
     return { tables: Array.from(tableGroups.values()), separateCount, separateTotal }
   }, [rows])
+  const displayedRows = useMemo(() => rows.filter(order => {
+    if (!tableFilter) return true
+    const tableLabel = order.fulfillmentType === 'DINE_IN'
+      ? (order.tableName || order.customerTableTag || order.tableId || '')
+      : ''
+    if (tableFilter === '__SEPARATE__') return !tableLabel
+    return String(order.tableId || tableLabel) === tableFilter
+  }), [rows, tableFilter])
 
   const act = async (fn, id, afterSuccess) => {
     try {
@@ -2140,14 +2149,16 @@ export default function ShopOrderGrid() {
             <>
             {(visibleOrderTotals.tables.length > 0 || visibleOrderTotals.separateCount > 0) && (
               <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', px: 1.5, pt: 1.25 }}>
-                {visibleOrderTotals.tables.map((table, index) => (
-                  <Box key={`${table.label}-${index}`} sx={{ px: 1.25, py: 0.75, border: '1px solid #90caf9', borderRadius: 1, bgcolor: '#e3f2fd' }}>
+                <Button size="small" variant={tableFilter ? 'outlined' : 'contained'} onClick={() => setTableFilter('')} sx={{ textTransform: 'none', fontWeight: 800 }}>Tất cả</Button>
+                {paymentFilter && <Chip label={`${paymentFilter === 'UNPAID' ? t('common.unpaid') : t('common.paid')} ×`} color={paymentFilter === 'UNPAID' ? 'warning' : 'success'} onClick={() => { setPaymentFilter(''); writeShopOrderSessionValue(SHOP_ORDER_PAYMENT_FILTER_SESSION_KEY, '') }} sx={{ fontWeight: 800 }} />}
+                {visibleOrderTotals.tables.map(table => (
+                  <Box component="button" type="button" onClick={() => setTableFilter(table.key)} key={table.key} sx={{ textAlign: 'left', cursor: 'pointer', px: 1.25, py: 0.75, border: '2px solid', borderColor: tableFilter === table.key ? 'primary.main' : '#90caf9', borderRadius: 1, bgcolor: tableFilter === table.key ? '#bbdefb' : '#e3f2fd' }}>
                     <Typography variant="caption" fontWeight={800}>Table {table.label} · {table.count} order{table.count === 1 ? '' : 's'}</Typography>
                     <Typography fontWeight={900} color="primary.dark">Table total: {fmt(table.total)}</Typography>
                   </Box>
                 ))}
                 {visibleOrderTotals.separateCount > 0 && (
-                  <Box sx={{ px: 1.25, py: 0.75, border: '1px solid #ffcc80', borderRadius: 1, bgcolor: '#fff3e0' }}>
+                  <Box component="button" type="button" onClick={() => setTableFilter('__SEPARATE__')} sx={{ textAlign: 'left', cursor: 'pointer', px: 1.25, py: 0.75, border: '2px solid', borderColor: tableFilter === '__SEPARATE__' ? 'warning.main' : '#ffcc80', borderRadius: 1, bgcolor: tableFilter === '__SEPARATE__' ? '#ffe0b2' : '#fff3e0' }}>
                     <Typography variant="caption" fontWeight={800}>Takeaway / separate · {visibleOrderTotals.separateCount} order{visibleOrderTotals.separateCount === 1 ? '' : 's'}</Typography>
                     <Typography fontWeight={900} color="warning.dark">Grand total: {fmt(visibleOrderTotals.separateTotal)}</Typography>
                   </Box>
@@ -2155,7 +2166,7 @@ export default function ShopOrderGrid() {
               </Box>
             )}
             <OrderCardGrid
-              rows={rows}
+              rows={displayedRows}
               loading={loading}
               tables={tables}
               actions={cardActions}
