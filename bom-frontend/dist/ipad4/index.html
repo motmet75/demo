@@ -64,6 +64,8 @@
     .close-button { width: 100%; margin-top: 15px; background: #4d5963; }
     .toolbar { display: none; }
     .view-controls { background: #fff; border: 1px solid #cbd2d9; border-radius: 7px; padding: 12px; margin-bottom: 14px; overflow: hidden; }
+    .order-search { margin-bottom: 10px; }
+    .order-search label { margin: 0 0 5px; font-size: 14px; }
     .view-control { float: left; width: 24%; margin-right: 1%; }
     .view-control label { margin: 0 0 5px; font-size: 14px; }
     .view-control select { height: 42px; font-size: 16px; }
@@ -238,6 +240,7 @@
         <button id="saveContextButton" class="wide" type="button">Mở đơn hàng</button>
       </div>
       <div class="view-controls">
+        <div class="order-search"><label for="orderSearch">Tìm đơn hàng</label><input id="orderSearch" type="search" autocomplete="off" autocapitalize="off" autocorrect="off" placeholder="Số đơn, tên khách hàng, bàn..."></div>
         <div class="view-control"><label for="statusFilter">Trạng thái</label><select id="statusFilter"><option value="">Tất cả</option><option value="PENDING">Chờ xác nhận</option><option value="CONFIRMED">Đã xác nhận</option><option value="PREPARING">Đang chế biến</option><option value="READY">Sẵn sàng</option><option value="PICKED_UP">Đã nhận</option><option value="COMPLETED">Hoàn tất</option><option value="CANCELLED">Đã hủy</option></select></div>
         <div class="view-control"><label for="paymentFilter">Thanh toán</label><select id="paymentFilter"><option value="">Tất cả</option><option value="UNPAID">Chưa thanh toán</option><option value="PAID">Đã thanh toán</option></select></div>
         <div class="view-control"><label for="orderSort">Sắp xếp</label><select id="orderSort"><option value="newest">Mới nhất trước</option><option value="oldest">FIFO - Cũ nhất trước</option></select></div>
@@ -394,6 +397,7 @@
     var statusFilter = '';
     var paymentFilter = '';
     var tableFilter = '';
+    var orderSearch = '';
     var orderSort = 'newest';
     var viewMode = 'cards';
     var knownOrderIds = {};
@@ -715,11 +719,16 @@
       return parts.join('; ');
     }
     function applyOrderView() {
-      var rows = loadedOrders.slice(0), visible = [], displayed = [], i, key, order, tableLabel, tableKey, tableTotals = {}, separateCount = 0, separateTotal = 0, summary, group;
+      var rows = loadedOrders.slice(0), visible = [], displayed = [], i, key, order, tableLabel, tableKey, tableTotals = {}, separateCount = 0, separateTotal = 0, summary, group, searchText, searchable;
+      searchText = orderSearch.replace(/^\s+|\s+$/g, '').toLowerCase();
       for (i = 0; i < rows.length; i += 1) {
         if (statusFilter && rows[i].status !== statusFilter) continue;
         if (paymentFilter === 'UNPAID' && rows[i].paymentStatus === 'PAID') continue;
         if (paymentFilter === 'PAID' && rows[i].paymentStatus !== 'PAID') continue;
+        if (searchText) {
+          searchable = [rows[i].orderNumber, rows[i].dailySeq, rows[i].orderCode, rows[i].customerName, rows[i].tableName, rows[i].customerTableTag, rows[i].tableId].join(' ').toLowerCase();
+          if (searchable.indexOf(searchText) < 0) continue;
+        }
         visible.push(rows[i]);
       }
       visible.sort(function (a, b) {
@@ -1435,6 +1444,7 @@
       if (id) dismissStaffCall(id, function () { renderNoticeModal('calls'); });
     };
     byId('statusFilter').onchange = function () { statusFilter = this.value; saveViewPrefs(); applyOrderView(); };
+    byId('orderSearch').oninput = function () { orderSearch = this.value || ''; applyOrderView(); };
     byId('paymentFilter').onchange = function () { paymentFilter = this.value; saveViewPrefs(); applyOrderView(); };
     byId('orderSummary').onclick = function (event) {
       var target = event.target || event.srcElement;
