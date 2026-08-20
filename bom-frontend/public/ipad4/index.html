@@ -37,6 +37,9 @@
     .top-queue { background: #7a4aa0; }
     .badge { display: none; position: absolute; right: -4px; top: -5px; min-width: 20px; height: 20px; padding: 2px 5px; border-radius: 10px; background: #e1261c; color: #fff; font: bold 12px Arial; border: 2px solid #174a75; }
     .wide { width: 100%; margin-top: 18px; }
+    .google-login { background: #fff; color: #3c4043; border: 1px solid #929ca6; }
+    .google-login:active { background: #eef1f4; }
+    .google-mark { display: inline-block; margin-right: 10px; color: #4285f4; font-size: 22px; vertical-align: -1px; }
     .message { display: none; padding: 11px; margin: 12px 0; border-radius: 5px; background: #ffe3e3; color: #8b1111; }
     .notice { background: #fff5c7; color: #574800; }
     .muted { color: #68727c; font-size: 15px; }
@@ -181,6 +184,9 @@
         <input id="password" name="password" type="password" autocomplete="current-password" required>
         <button id="loginButton" class="wide" type="submit">Đăng nhập</button>
       </form>
+      <div id="googleLoginBox">
+        <button id="googleLoginButton" class="wide google-login" type="button"><span class="google-mark">G</span>Tiếp tục với Google</button>
+      </div>
       <div style="margin:22px 0;border-top:1px solid #d5dce2"></div>
       <form id="quickLoginForm">
         <h3>Đăng nhập nhanh</h3>
@@ -640,6 +646,7 @@
       byId('ordersView').style.display = 'none';
       byId('loginView').style.display = 'block';
       byId('loginForm').style.display = 'block';
+      byId('googleLoginBox').style.display = 'block';
       byId('quickLoginForm').style.display = 'block';
       byId('otpBox').style.display = 'none';
       byId('password').value = '';
@@ -1302,6 +1309,7 @@
         if (status >= 200 && status < 300 && data && data.mfaRequired) {
           mfaMethod = data.mfaMethod || 'email';
           byId('loginForm').style.display = 'none';
+          byId('googleLoginBox').style.display = 'none';
           byId('quickLoginForm').style.display = 'none';
           byId('otpBox').style.display = 'block';
           message('loginMessage', data.message || 'Nhập mã xác minh.', true);
@@ -1311,6 +1319,9 @@
         message('loginMessage', errorText(status, data), false);
       });
       return false;
+    };
+    byId('googleLoginButton').onclick = function () {
+      window.location.href = '/sapi/auth/oauth2/google?destination=ipad4';
     };
     byId('quickLoginForm').onsubmit = function () {
       var code = byId('quickLoginCode').value.replace(/[^0-9]/g, '');

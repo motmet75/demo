@@ -47,6 +47,13 @@ public class SecurityConfig {
         return proto + "://" + host;
     }
 
+    private static String oauth2ReturnTo(HttpServletRequest req, String fallback) {
+        if (req.getSession(false) == null) return fallback;
+        Object stored = req.getSession(false).getAttribute(AuthController.OAUTH2_RETURN_TO_SESSION_KEY);
+        req.getSession(false).removeAttribute(AuthController.OAUTH2_RETURN_TO_SESSION_KEY);
+        return "/bom-inventory/ipad4/".equals(stored) ? stored.toString() : fallback;
+    }
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
@@ -89,10 +96,10 @@ public class SecurityConfig {
                     .userService(googleOAuth2UserService)
                 )
                 .successHandler((req, res, auth) ->
-                    res.sendRedirect(origin(req) + "/bom-inventory/profile")
+                    res.sendRedirect(origin(req) + oauth2ReturnTo(req, "/bom-inventory/profile"))
                 )
                 .failureHandler((req, res, ex) ->
-                    res.sendRedirect(origin(req) + "/bom-inventory/login?error=oauth2")
+                    res.sendRedirect(origin(req) + oauth2ReturnTo(req, "/bom-inventory/login") + "?error=oauth2")
                 )
             )
             .formLogin(form -> form.disable())

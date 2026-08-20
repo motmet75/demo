@@ -1,5 +1,6 @@
 package com.demo.security;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.ams.bomcore.domain.user.Authority;
@@ -50,6 +52,8 @@ import jakarta.validation.constraints.NotBlank;
 @RequestMapping("/auth")
 public class AuthController {
 
+    static final String OAUTH2_RETURN_TO_SESSION_KEY = "oauth2ReturnTo";
+
     private final AuthenticationManager authenticationManager;
     /**
      * Injected bean = BCryptPasswordEncoder(BCryptVersion.$2B, 13)
@@ -78,6 +82,18 @@ public AuthController(AuthenticationManager authenticationManager,
 
     public record QuickLoginCreateRequest(Integer hours) {}
     public record QuickLoginRedeemRequest(@NotBlank String token) {}
+
+    @GetMapping("/oauth2/google")
+    public void startGoogleLogin(@RequestParam(name = "destination", required = false) String destination,
+                                 HttpServletRequest request,
+                                 HttpServletResponse response) throws IOException {
+        // Only named, server-controlled destinations are accepted; never store a user-supplied URL.
+        String returnTo = "ipad4".equals(destination)
+                ? "/bom-inventory/ipad4/"
+                : "/bom-inventory/profile";
+        request.getSession(true).setAttribute(OAUTH2_RETURN_TO_SESSION_KEY, returnTo);
+        response.sendRedirect(request.getContextPath() + "/oauth2/authorization/google");
+    }
 
     @PostMapping("/quick-login/generate")
     public ResponseEntity<?> generateQuickLogin(@RequestBody(required = false) QuickLoginCreateRequest body,
