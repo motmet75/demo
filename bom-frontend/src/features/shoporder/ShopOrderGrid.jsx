@@ -83,6 +83,7 @@ const SHOP_ORDER_VIEW_PREF = 'shop.orders.viewMode'
 const SHOP_ORDER_CARD_SIZE_PREF = 'shop.orders.cardSize'
 const SHOP_ORDER_CONTRAST_PREF = 'shop.orders.highContrast'
 const SHOP_ORDER_STATUS_FILTER_SESSION_KEY = 'shop.orders.statusFilter'
+const SHOP_ORDER_PAYMENT_FILTER_SESSION_KEY = 'shop.orders.paymentFilter'
 const CUSTOMER_EDIT_HISTORY_KEY = 'shop.orders.customerEditHistory.v1'
 function readShopOrderPref(key, fallback) {
   try { return localStorage.getItem(key) || fallback } catch { return fallback }
@@ -1372,6 +1373,7 @@ export default function ShopOrderGrid() {
   const [loading, setLoading]           = useState(false)
   const [error, setError]               = useState('')
   const [statusFilters, setStatusFilters] = useState(readShopOrderStatusFilters)
+  const [paymentFilter, setPaymentFilter] = useState(() => readShopOrderSessionValue(SHOP_ORDER_PAYMENT_FILTER_SESSION_KEY, ''))
   const [detailOrder, setDetailOrder]   = useState(null)
   const [resetOpen, setResetOpen]       = useState(false)
   const [resetTo, setResetTo]           = useState(0)
@@ -1478,7 +1480,12 @@ export default function ShopOrderGrid() {
     try { localStorage.setItem(CUSTOMER_EDIT_HISTORY_KEY, JSON.stringify(customerEditHistory)) } catch { /* storage may be blocked */ }
   }, [customerEditHistory])
 
-  const shouldShowInRows = useCallback((order) => statusFilters.length === 0 || statusFilters.includes(order?.status), [statusFilters])
+  const shouldShowInRows = useCallback((order) => {
+    const statusMatches = statusFilters.length === 0 || statusFilters.includes(order?.status)
+    const paymentMatches = !paymentFilter
+      || (paymentFilter === 'UNPAID' ? order?.paymentStatus !== 'PAID' : order?.paymentStatus === 'PAID')
+    return statusMatches && paymentMatches
+  }, [paymentFilter, statusFilters])
 
   const mergeOrderIntoState = useCallback((order) => {
     if (!order?.id) return
@@ -1492,9 +1499,9 @@ export default function ShopOrderGrid() {
     const list = Array.isArray(orders) ? orders : []
     if (notify) notifyNewOrders(list)
     else rememberOrders(list)
-    setRows(statusFilters.length ? list.filter(order => statusFilters.includes(order?.status)) : list)
+    setRows(list.filter(shouldShowInRows))
     setBoardRows(list.filter(order => BOARD_VISIBLE_STATUSES.has(order?.status)))
-  }, [notifyNewOrders, rememberOrders, statusFilters])
+  }, [notifyNewOrders, rememberOrders, shouldShowInRows])
 
   const refreshOrderCard = useCallback(async (orderId) => {
     if (!orderId) return null
@@ -1545,12 +1552,12 @@ export default function ShopOrderGrid() {
       const result = await fetchShopOrders(null)
       const { data } = result
       const list = Array.isArray(data) ? data : []
-      setRows(statusFilters.length ? list.filter(order => statusFilters.includes(order?.status)) : list)
+      setRows(list.filter(shouldShowInRows))
       rememberOrders(list)
       orderPollReadyRef.current = true
     } catch { setError('Failed to load orders') }
     setLoading(false)
-  }, [rememberOrders, statusFilters])
+  }, [rememberOrders, shouldShowInRows])
 
   const loadBoard = useCallback(async () => {
     try {
@@ -1993,6 +2000,16 @@ export default function ShopOrderGrid() {
                 {localizedStatusLabel(status, t)}
               </MenuItem>
             ))}
+          </TextField>
+          <TextField select label={t('common.payment')} value={paymentFilter}
+            onChange={e => {
+              setPaymentFilter(e.target.value)
+              writeShopOrderSessionValue(SHOP_ORDER_PAYMENT_FILTER_SESSION_KEY, e.target.value)
+            }}
+            size="small" sx={{ width: { xs: 118, sm: 155 }, flexShrink: 0 }}>
+            <MenuItem value="">{t('common.all')}</MenuItem>
+            <MenuItem value="UNPAID">{t('common.unpaid')}</MenuItem>
+            <MenuItem value="PAID">{t('common.paid')}</MenuItem>
           </TextField>
           <Button startIcon={<RefreshIcon />} onClick={reload} variant="outlined" size="small"
             sx={{ minWidth: { xs: 40, sm: 64 }, px: { xs: 1, sm: 1.25 }, '& .MuiButton-startIcon': { mr: { xs: 0, sm: 1 } } }}>
