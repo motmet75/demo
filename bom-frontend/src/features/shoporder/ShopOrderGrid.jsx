@@ -1668,6 +1668,27 @@ export default function ShopOrderGrid() {
   const preparingOrders = boardRows.filter(r => r.status === 'PREPARING')
   const readyOrders     = boardRows.filter(r => r.status === 'READY')
   const pickedUpOrders  = boardRows.filter(r => r.status === 'PICKED_UP')
+  const visibleOrderTotals = useMemo(() => {
+    const tableGroups = new Map()
+    let separateTotal = 0
+    let separateCount = 0
+    rows.filter(order => order.status !== 'CANCELLED').forEach(order => {
+      const tableLabel = order.fulfillmentType === 'DINE_IN'
+        ? (order.tableName || order.customerTableTag || order.tableId || '')
+        : ''
+      if (!tableLabel) {
+        separateTotal += payableAmount(order)
+        separateCount += 1
+        return
+      }
+      const tableKey = String(order.tableId || tableLabel)
+      const current = tableGroups.get(tableKey) || { label: tableLabel, count: 0, total: 0 }
+      current.count += 1
+      current.total += payableAmount(order)
+      tableGroups.set(tableKey, current)
+    })
+    return { tables: Array.from(tableGroups.values()), separateCount, separateTotal }
+  }, [rows])
 
   const act = async (fn, id, afterSuccess) => {
     try {
@@ -2116,6 +2137,23 @@ export default function ShopOrderGrid() {
         {/* Tab content */}
         <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
           {tab === 0 && (
+            <>
+            {(visibleOrderTotals.tables.length > 0 || visibleOrderTotals.separateCount > 0) && (
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', px: 1.5, pt: 1.25 }}>
+                {visibleOrderTotals.tables.map((table, index) => (
+                  <Box key={`${table.label}-${index}`} sx={{ px: 1.25, py: 0.75, border: '1px solid #90caf9', borderRadius: 1, bgcolor: '#e3f2fd' }}>
+                    <Typography variant="caption" fontWeight={800}>Table {table.label} · {table.count} order{table.count === 1 ? '' : 's'}</Typography>
+                    <Typography fontWeight={900} color="primary.dark">Table total: {fmt(table.total)}</Typography>
+                  </Box>
+                ))}
+                {visibleOrderTotals.separateCount > 0 && (
+                  <Box sx={{ px: 1.25, py: 0.75, border: '1px solid #ffcc80', borderRadius: 1, bgcolor: '#fff3e0' }}>
+                    <Typography variant="caption" fontWeight={800}>Takeaway / separate · {visibleOrderTotals.separateCount} order{visibleOrderTotals.separateCount === 1 ? '' : 's'}</Typography>
+                    <Typography fontWeight={900} color="warning.dark">Grand total: {fmt(visibleOrderTotals.separateTotal)}</Typography>
+                  </Box>
+                )}
+              </Box>
+            )}
             <OrderCardGrid
               rows={rows}
               loading={loading}
@@ -2132,6 +2170,7 @@ export default function ShopOrderGrid() {
                 return next
               })}
             />
+            </>
           )}
           {tab === 1 && <StatusBoard status="CONFIRMED"  orders={confirmedOrders} modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} onShowTrackQr={handleShowTrackQr} onPrintTag={handlePrintTrack} onMergeBills={cardActions.mergeBills} onChangeSeat={handleChangeSeat} />}
           {tab === 2 && <StatusBoard status="PREPARING"  orders={preparingOrders} modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} onShowTrackQr={handleShowTrackQr} onPrintTag={handlePrintTrack} onMergeBills={cardActions.mergeBills} onChangeSeat={handleChangeSeat} />}
