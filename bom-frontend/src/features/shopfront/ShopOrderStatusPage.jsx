@@ -16,6 +16,7 @@ import EditIcon from '@mui/icons-material/Edit'
 import AddShoppingCartIcon from '@mui/icons-material/AddShoppingCart'
 import QrCode2Icon from '@mui/icons-material/QrCode2'
 import DownloadIcon from '@mui/icons-material/Download'
+import ShareIcon from '@mui/icons-material/Share'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import { fetchPublicOrder, fetchTokenSession, fetchCounterOrderQr, fetchPublicTables, changePublicOrderTable, cancelCustomerEdit } from '../../api/shopApi'
@@ -35,6 +36,34 @@ function CustomerNotificationsButton() {
   return (
     <Button variant="outlined" onClick={() => Notification.requestPermission().then(setPermission)} sx={{ textTransform: 'none' }}>
       Bật thông báo trạng thái
+    </Button>
+  )
+}
+
+function ShareTrackingButton({ orderNumber, fullWidth = true }) {
+  const [copied, setCopied] = useState(false)
+  const share = async () => {
+    const url = window.location.href
+    const title = orderNumber ? `Theo dõi đơn hàng #${orderNumber}` : 'Theo dõi đơn hàng SAN Coffee and Tea'
+    const text = `${title} — xem trạng thái và phản hồi mới nhất từ cửa hàng.`
+    try {
+      if (navigator.share) {
+        await navigator.share({ title, text, url })
+        return
+      }
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 2500)
+    } catch (error) {
+      if (error?.name !== 'AbortError') {
+        try { await navigator.clipboard.writeText(url); setCopied(true) } catch { /* clipboard unavailable */ }
+      }
+    }
+  }
+  return (
+    <Button variant="outlined" fullWidth={fullWidth} startIcon={<ShareIcon />} onClick={share}
+      sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none' }}>
+      {copied ? 'Đã sao chép link' : 'Chia sẻ link theo dõi'}
     </Button>
   )
 }
@@ -288,6 +317,7 @@ function SingleOrderView({ order, onEdit, itemName, fmtLocal }) {
       <Box sx={{ flex: 1 }} />
       <Box sx={{ px: 2, pb: 2, pt: 1, display: 'flex', flexDirection: 'column', gap: 1, maxWidth: 480, mx: 'auto', width: '100%' }}>
         <CustomerNotificationsButton />
+        <ShareTrackingButton orderNumber={order.orderNumber || order.dailySeq} />
         {order.status === 'PENDING' && (
           <Button variant="outlined" fullWidth startIcon={<EditIcon />}
             onClick={() => onEdit(order)}
@@ -691,6 +721,7 @@ function TokenSessionView({ token, highlightCode, itemName, fmtLocal }) {
             {hasPending ? 'Đặt thêm món' : 'Đặt đơn mới'}
           </Button>
           {hasOrders && <CounterQrButton orders={session.orders} label={session.orders.length > 1 ? `Hiện ${session.orders.length} mã QR đơn hàng` : 'Hiện mã QR đơn hàng'} />}
+          <ShareTrackingButton orderNumber={session.orders?.length === 1 ? (session.orders[0].orderNumber || session.orders[0].dailySeq) : null} />
           <CustomerNotificationsButton />
         </Box>
       )}
