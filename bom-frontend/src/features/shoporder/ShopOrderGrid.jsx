@@ -1222,11 +1222,11 @@ function OrderRowsGrid({ rows, tables, actions, selectedIds, onToggleSelect, dis
   )
 }
 const SORT_OPTIONS = [
-  { value: 'newest', label: 'Newest first' },
-  { value: 'oldest', label: 'FIFO – Oldest first' },
-  { value: 'status', label: 'By status' },
-  { value: 'number', label: 'By order #' },
-  { value: 'total',  label: 'By total ↓' },
+  { value: 'newest', labelKey: 'shopOrder.grid.sortNewest' },
+  { value: 'oldest', labelKey: 'shopOrder.grid.sortOldest' },
+  { value: 'status', labelKey: 'shopOrder.grid.sortStatus' },
+  { value: 'number', labelKey: 'shopOrder.grid.sortNumber' },
+  { value: 'total',  labelKey: 'shopOrder.grid.sortTotal' },
 ]
 const STATUS_SORT_ORDER = { PENDING: 0, CONFIRMED: 1, PREPARING: 2, READY: 3, PICKED_UP: 4, COMPLETED: 5, CANCELLED: 6 }
 
@@ -1324,8 +1324,8 @@ function OrderCardGrid({ rows, loading, tables, actions, modelImageMap = {}, sel
           <Button size="small" variant={sortBy === 'newest' ? 'contained' : 'outlined'} onClick={() => { setSortBy('newest'); try { localStorage.setItem('shop_orders_sort', 'newest') } catch {} }} sx={{ flex: 1, minHeight: 40, px: 0.75, fontSize: 11, fontWeight: 800 }}>Mới nhất</Button>
           <Button size="small" variant={sortBy === 'oldest' ? 'contained' : 'outlined'} color="warning" onClick={() => { setSortBy('oldest'); try { localStorage.setItem('shop_orders_sort', 'oldest') } catch {} }} sx={{ flex: 1, minHeight: 40, px: 0.75, fontSize: 11, fontWeight: 800 }}>FIFO</Button>
         </Box>
-        <TextField select size="small" label="Sort" value={sortBy} onChange={e => { setSortBy(e.target.value); try { localStorage.setItem('shop_orders_sort', e.target.value) } catch {} }} sx={{ width: 170, display: { xs: 'none', sm: 'inline-flex' } }}>
-          {SORT_OPTIONS.map(o => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
+        <TextField select size="small" label={t('shopOrder.grid.sort')} value={sortBy} onChange={e => { setSortBy(e.target.value); try { localStorage.setItem('shop_orders_sort', e.target.value) } catch {} }} sx={{ width: 190, display: { xs: 'none', sm: 'inline-flex' } }}>
+          {SORT_OPTIONS.map(o => <MenuItem key={o.value} value={o.value}>{t(o.labelKey)}</MenuItem>)}
         </TextField>
         <Typography sx={{ fontSize: 12, color: '#94a3b8', flexShrink: 0 }}>{filtered.length} / {rows.length} orders</Typography>
       </Box>
@@ -2084,10 +2084,10 @@ export default function ShopOrderGrid() {
           <Button startIcon={<QrCode2Icon />} onClick={() => setQrOrderOpen(true)}
             variant="outlined" size="small" color="primary" sx={{ display: { xs: 'none', sm: 'inline-flex' }, textTransform: 'none', fontWeight: 700 }}>{t('shopOrder.grid.qrOrder')}</Button>
           <Button startIcon={<QrCodeScannerIcon />} onClick={() => { setScannedOrders([]); setOrderScannerOpen(true) }}
-            variant="contained" size="small" color="primary" sx={{ textTransform: 'none', fontWeight: 800 }}>Scan customer orders</Button>
+            variant="contained" size="small" color="primary" sx={{ textTransform: 'none', fontWeight: 800 }}>{t('shopOrder.grid.scanCustomerOrders')}</Button>
           <Badge badgeContent={customerEditHistory.length} color="warning" max={99}>
             <Button startIcon={<NotificationsActiveIcon />} onClick={() => setCustomerEditHistoryOpen(true)}
-              variant="outlined" size="small" color="warning" sx={{ textTransform: 'none', fontWeight: 800 }}>Notification history</Button>
+              variant="outlined" size="small" color="warning" sx={{ textTransform: 'none', fontWeight: 800 }}>{t('shopOrder.grid.notificationHistory')}</Button>
           </Badge>
           <Button startIcon={<QrCode2Icon />} onClick={() => { setQuickLoginData(null); setQuickLoginError(''); setQuickLoginHours(12); setQuickLoginOpen(true) }}
             variant="outlined" size="small" color="secondary" sx={{ textTransform: 'none', fontWeight: 800 }}>Đăng nhập iPad</Button>
@@ -2194,7 +2194,7 @@ export default function ShopOrderGrid() {
 
       {/* Dialogs */}
       <Dialog open={customerEditHistoryOpen} onClose={() => setCustomerEditHistoryOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>Notification history</DialogTitle>
+        <DialogTitle>{t('shopOrder.grid.notificationHistory')}</DialogTitle>
         <DialogContent dividers>
           {!customerEditHistory.length && <Typography color="text.secondary">No notification history yet.</Typography>}
           <Stack spacing={1}>
@@ -2274,9 +2274,9 @@ export default function ShopOrderGrid() {
         onClose={() => setOrderScannerOpen(false)}
         onScan={handleScannedOrder}
         continuous
-        title="Scan customer order QRs"
-        manualLabel="Order QR or order code"
-        scannerLabel={scannedOrders.length ? `${scannedOrders.length} order(s) confirmed — keep scanning` : 'Scan orders one by one'}
+        title={t('shopOrder.grid.scanCustomerOrderQrs')}
+        manualLabel={t('shopOrder.grid.orderQrOrCode')}
+        scannerLabel={scannedOrders.length ? t('shopOrder.grid.ordersConfirmedKeepScanning', { count: scannedOrders.length }) : t('shopOrder.grid.scanOrdersOneByOne')}
       />
       <EodAuditDialog open={eodOpen} onClose={() => setEodOpen(false)} />
       <QrOrderDialog open={qrOrderOpen} onClose={() => setQrOrderOpen(false)} />
