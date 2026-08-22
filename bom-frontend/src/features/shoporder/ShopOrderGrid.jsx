@@ -1194,7 +1194,7 @@ function OrderRowsGrid({ rows, tables, actions, selectedIds, onToggleSelect, dis
                 </Box>
                 <Box component="td" sx={cellSx}>
                   <Chip label={order.paymentStatus === 'PAID' ? 'PAID' : 'UNPAID'} color={order.paymentStatus === 'PAID' ? 'success' : 'warning'} size="small" sx={{ fontWeight: 800, fontSize: large ? 12 : 10 }} />
-                  <Typography sx={{ fontSize: large ? 12 : 10, color: '#64748b', mt: 0.25 }}>{order.paymentMethod === 'BANK_QR' ? 'QR / Bank' : order.paymentMethod || 'Cash'}</Typography>
+                  <Typography sx={{ fontSize: large ? 12 : 10, color: '#64748b', mt: 0.25 }}>{order.paymentMethod === 'BANK_QR' ? 'QR / Bank' : order.paymentMethod === 'CASH' || !order.paymentMethod ? t('shopOrder.common.cash') : order.paymentMethod}</Typography>
                 </Box>
                 <Box component="td" sx={{ ...cellSx, textAlign: 'right' }}>
                   <Typography sx={{ fontSize: large ? 17 : 14, fontWeight: 900 }}>{fmt(payableAmount(order))}</Typography>

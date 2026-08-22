@@ -854,7 +854,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
             })() : (
               <Box sx={{ position: 'relative' }}>
                 {changingCustomer && linkedCustomer && (
-                  <Alert severity="info" sx={{ mb: 1 }} action={<Button size="small" onClick={() => { setChangingCustomer(false); setCustSearch(''); setCustResults([]) }}>Cancel</Button>}>
+                  <Alert severity="info" sx={{ mb: 1 }} action={<Button size="small" onClick={() => { setChangingCustomer(false); setCustSearch(''); setCustResults([]) }}>{t('common.cancel')}</Button>}>
                     Current member: <strong>{linkedCustomer.name}</strong>. Search and select a replacement below.
                   </Alert>
                 )}
