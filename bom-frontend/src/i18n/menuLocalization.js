@@ -39,7 +39,7 @@ export function stringifyTranslations(translations) {
 
 export function localizedValue(baseValue, translations, language) {
   const code = normalizeLanguage(language)
-  if (!code || code === 'en') return baseValue || ''
+  if (!code) return baseValue || ''
   const map = parseJsonObject(translations)
   return map[code] || baseValue || ''
 }
