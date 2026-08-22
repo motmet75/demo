@@ -528,7 +528,7 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
               {/* Header */}
               <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 0.75 }}>
                 <Box sx={{ width: numberSize, height: numberSize, borderRadius: '50%', bgcolor: style.numColor, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: numberFont, flexShrink: 0, mr: 1 }}>
-                  {order.orderNumber ?? '?'}
+                  {prefixedOrderNumber(order)}
                 </Box>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap', mb: 0.25 }}>
@@ -827,7 +827,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
               fontWeight: 900, fontSize: large ? 21 : 16, cursor: 'pointer',
               '&:hover': { filter: 'brightness(0.85)' },
             }}>
-              {order.orderNumber ?? '?'}
+              {prefixedOrderNumber(order)}
             </Box>
           </Tooltip>
         )}
@@ -1170,7 +1170,7 @@ function OrderRowsGrid({ rows, tables, actions, selectedIds, onToggleSelect, dis
                   <Checkbox size="small" checked={selectedIds.has(order.id)} onChange={() => onToggleSelect(order.id)} />
                 </Box>
                 <Box component="td" sx={cellSx}>
-                  <Typography sx={{ fontSize: large ? 20 : 16, fontWeight: 900, color: '#0f172a' }}>#{order.orderNumber ?? '?'}</Typography>
+                  <Typography sx={{ fontSize: large ? 20 : 16, fontWeight: 900, color: '#0f172a' }}>#{prefixedOrderNumber(order)}</Typography>
                   <Typography sx={{ fontSize: large ? 12 : 10, fontFamily: 'monospace', color: '#64748b' }}>{order.orderCode}</Typography>
                 </Box>
                 <Box component="td" sx={cellSx}>
@@ -1229,6 +1229,20 @@ const SORT_OPTIONS = [
   { value: 'total',  labelKey: 'shopOrder.grid.sortTotal' },
 ]
 const STATUS_SORT_ORDER = { PENDING: 0, CONFIRMED: 1, PREPARING: 2, READY: 3, PICKED_UP: 4, COMPLETED: 5, CANCELLED: 6 }
+
+function orderNumberPrefix(order) {
+  if (order?.fulfillmentType === 'DINE_IN') return 'T'
+  if (order?.fulfillmentType === 'DELIVERY') return 'D'
+  if (order?.fulfillmentType === 'PICKUP' && order?.staffName) return 'C'
+  if (order?.fulfillmentType === 'PICKUP') return 'A'
+  return ''
+}
+
+function prefixedOrderNumber(order) {
+  const number = order?.orderNumber ?? '?'
+  const prefix = orderNumberPrefix(order)
+  return prefix ? `${prefix}-${number}` : number
+}
 
 function OrderCardGrid({ rows, loading, tables, actions, modelImageMap = {}, selectedIds, onToggleSelect, viewMode = 'cards', displaySize = 'normal', highContrast = false }) {
   const { t } = useI18n()
