@@ -182,22 +182,27 @@ export default function QrOrderDialog({ open, onClose }) {
                 inputProps={{ min: 1, max: 366 }}
                 helperText={t('shopOrder.qr.validDaysHelp')}
               />
-              <TextField
-                select
-                label="Share QR Code language"
-                size="small"
-                fullWidth
-                value={queueLanguage}
-                onChange={e => setQueueLanguage(e.target.value)}
-                helperText="Customers who scan this QR Code will open the shop in this language."
-                sx={{ mt: 1.5 }}
-              >
-                {ORDERING_LANGUAGE_CODES.map(code => SUPPORTED_LANGUAGES.find(item => item.code === code)).filter(Boolean).map(item => (
-                  <MenuItem key={item.code} value={item.code}>
-                    {item.nativeLabel} ({item.code.toUpperCase()})
-                  </MenuItem>
-                ))}
-              </TextField>
+              <Box sx={{ mt: 1.5, p: 1.5, border: '2px solid #1976d2', borderRadius: 2, bgcolor: '#f5f9ff' }}>
+                <Typography fontWeight={800} color="primary" sx={{ mb: 1 }}>
+                  Select language before generating Queue QR
+                </Typography>
+                <TextField
+                  select
+                  required
+                  label="QR Code language"
+                  size="small"
+                  fullWidth
+                  value={queueLanguage}
+                  onChange={e => setQueueLanguage(e.target.value)}
+                  helperText="The ordering shop opens automatically in this language when the QR is scanned."
+                >
+                  {ORDERING_LANGUAGE_CODES.map(code => SUPPORTED_LANGUAGES.find(item => item.code === code)).filter(Boolean).map(item => (
+                    <MenuItem key={item.code} value={item.code}>
+                      {item.nativeLabel} ({item.code.toUpperCase()})
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Box>
             </Box>
           </Box>
         ) : (
@@ -280,7 +285,7 @@ export default function QrOrderDialog({ open, onClose }) {
               startIcon={loadingType === 'queue' ? <CircularProgress size={16} /> : <TableRestaurantIcon />}
               sx={{ fontWeight: 700, textTransform: 'none', flex: '1 1 140px' }}
             >
-              {loadingType === 'queue' ? t('shopOrder.qr.generating') : t('shopOrder.qr.queueTitle')}
+              {loadingType === 'queue' ? t('shopOrder.qr.generating') : `${t('shopOrder.qr.queueTitle')} · ${queueLanguage.toUpperCase()}`}
             </Button>
           </>
         ) : (
