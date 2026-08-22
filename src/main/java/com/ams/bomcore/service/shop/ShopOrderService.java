@@ -625,7 +625,7 @@ public class ShopOrderService {
                     .findFirst()
                     .orElse(null);
             if (current != null) {
-                String currentUrl = publicBaseUrl + "/shop/queue?t=" + current.getToken();
+                String currentUrl = publicBaseUrl + "/shop/menu?tenantId=" + tenantId + "&companyId=" + companyId;
                 return new QueueQrResult(QrCodeUtil.generateBase64Png(currentUrl, 400), currentUrl,
                         current.getToken(), current.getExpiresAt(), days);
             }
@@ -641,7 +641,7 @@ public class ShopOrderService {
         sat.setExpiresAt(expiresAt);
         shopAccessTokenRepository.save(sat);
 
-        String url = publicBaseUrl + "/shop/queue?t=" + sat.getToken();
+        String url = publicBaseUrl + "/shop/menu?tenantId=" + tenantId + "&companyId=" + companyId;
         return new QueueQrResult(QrCodeUtil.generateBase64Png(url, 400), url, sat.getToken(), expiresAt, days);
     }
 
@@ -760,12 +760,6 @@ public class ShopOrderService {
     }
 
     private void refreshPaymentQr(ShopOrder order, Company company) {
-        // Selecting BANK_QR at checkout records the intended method, but a payable
-        // QR is not issued until staff confirms the order.
-        if (ShopOrder.STATUS_PENDING.equals(order.getStatus())) {
-            order.setPaymentQr(null);
-            return;
-        }
         BigDecimal amount;
         if (ShopOrder.PAYMENT_BANK_QR.equals(order.getPaymentMethod())) {
             amount = payableAmount(order);
@@ -796,6 +790,29 @@ public class ShopOrderService {
         order.setPaymentMethod(ShopOrder.PAYMENT_BANK_QR);
         order.setSplitCashAmount(null);
         refreshPaymentQr(order, companyRepository.findById(companyId).orElse(null));
+        shopOrderRepository.save(order);
+        return dto(order);
+    }
+
+    @Transactional
+    public ShopOrderResponseDto switchToQrPaymentByCustomer(String orderCode) {
+        ShopOrder order = requireOrderByCode(orderCode);
+        if (isFinalStatus(order.getStatus())) {
+            throw new IllegalStateException("Cannot change payment method of a completed or cancelled order");
+        }
+        if (ShopOrder.PAY_STATUS_PAID.equals(order.getPaymentStatus())) {
+            throw new IllegalStateException("A paid order cannot change payment method");
+        }
+        if (!ShopOrder.PAYMENT_CASH.equals(order.getPaymentMethod())) {
+            throw new IllegalStateException("Only a cash order can be changed to bank payment");
+        }
+        Company company = companyRepository.findById(order.getCompanyId()).orElse(null);
+        if (!hasBankConfig(company)) {
+            throw new IllegalStateException("Bank payment is not configured for this shop");
+        }
+        order.setPaymentMethod(ShopOrder.PAYMENT_BANK_QR);
+        order.setSplitCashAmount(null);
+        refreshPaymentQr(order, company);
         shopOrderRepository.save(order);
         return dto(order);
     }

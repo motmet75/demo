@@ -171,6 +171,15 @@ public class ShopOrderController {
         return ResponseEntity.ok(shopOrderService.getOrderByCode(orderCode));
     }
 
+    @PatchMapping("/shop/public/orders/{orderCode}/bank-payment")
+    public ResponseEntity<?> switchPublicOrderToBankPayment(@PathVariable String orderCode) {
+        try {
+            return ResponseEntity.ok(shopOrderService.switchToQrPaymentByCustomer(orderCode));
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @GetMapping("/shop/public/orders/{orderCode}/counter-qr")
     public ResponseEntity<?> counterOrderQr(@PathVariable String orderCode) {
         return ResponseEntity.ok(Map.of("qrBase64", shopOrderService.generateCounterOrderQr(orderCode)));

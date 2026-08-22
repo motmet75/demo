@@ -53,17 +53,15 @@ export default function ShopQueuePage() {
           navigate(`/shop/menu?t=${encodeURIComponent(token)}`, { replace: true })
           return
         }
-        setCtx(data)
-        const tableRes = await fetchPublicTables(data.tenantId, data.companyId)
-        if (!alive) return
-        if (!tableRes.res.ok) {
-          setError(tableRes.data?.error || 'Cannot load tables. Please ask staff for help.')
-          setLoading(false)
-          return
-        }
-        const activeTables = Array.isArray(tableRes.data) ? tableRes.data : []
-        setTables(activeTables)
-        if (activeTables.length === 1) setTableId(activeTables[0].id)
+        // Queue QR is a public web-menu entry point, not a shared customer session.
+        // Dropping the shared token here prevents one scanner from seeing orders
+        // placed by other people who scanned the same printed QR.
+        const menuParams = new URLSearchParams({
+          tenantId: data.tenantId,
+          companyId: data.companyId,
+        })
+        navigate(`/shop/menu?${menuParams.toString()}`, { replace: true })
+        return
       } catch (e) {
         if (alive) setError(e.message || 'Cannot read this QR code.')
       } finally {

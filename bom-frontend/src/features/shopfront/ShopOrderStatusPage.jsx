@@ -19,7 +19,7 @@ import DownloadIcon from '@mui/icons-material/Download'
 import ShareIcon from '@mui/icons-material/Share'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
-import { fetchPublicOrder, fetchTokenSession, fetchCounterOrderQr, fetchPublicTables, changePublicOrderTable, cancelCustomerEdit } from '../../api/shopApi'
+import { fetchPublicOrder, fetchTokenSession, fetchCounterOrderQr, fetchPublicTables, changePublicOrderTable, cancelCustomerEdit, switchPublicOrderToBankPayment } from '../../api/shopApi'
 import { printOrderReceipt } from '../../utils/printOrderReceipt'
 import { useI18n } from '../../i18n/I18nContext'
 import { localizedModelName } from '../../i18n/menuLocalization'
@@ -65,6 +65,40 @@ function ShareTrackingButton({ orderNumber, fullWidth = true }) {
       sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none' }}>
       {copied ? 'Đã sao chép link' : 'Chia sẻ link theo dõi'}
     </Button>
+  )
+}
+
+function SwitchToBankPaymentButton({ order }) {
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const finalStatus = ['COMPLETED', 'PICKED_UP', 'CANCELLED'].includes(order.status)
+  if (order.paymentMethod !== 'CASH' || order.paymentStatus === 'PAID' || finalStatus) return null
+
+  const switchPayment = async () => {
+    setSaving(true); setError('')
+    try {
+      const { res, data } = await switchPublicOrderToBankPayment(order.orderCode)
+      if (!res.ok) {
+        setError(data?.error || 'Không thể đổi phương thức thanh toán.')
+        return
+      }
+      window.location.reload()
+    } catch {
+      setError('Không thể kết nối máy chủ.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Box sx={{ mt: 1.5 }}>
+      <Button variant="contained" color="success" fullWidth startIcon={<QrCode2Icon />}
+        disabled={saving} onClick={switchPayment}
+        sx={{ borderRadius: 2, fontWeight: 900, textTransform: 'none', py: 1.15 }}>
+        {saving ? <CircularProgress size={20} color="inherit" /> : 'Đổi sang thanh toán ngân hàng'}
+      </Button>
+      {error && <Alert severity="error" sx={{ mt: 1 }}>{error}</Alert>}
+    </Box>
   )
 }
 
@@ -258,7 +292,7 @@ function SingleOrderView({ order, onEdit, itemName, fmtLocal }) {
         </Alert>
       )}
 
-      {status !== 'PENDING' && order.paymentQr && order.paymentStatus !== 'PAID' && (
+      {order.paymentQr && order.paymentStatus !== 'PAID' && (
         <Box sx={{ px: 2, pt: 2, maxWidth: 560, width: '100%', mx: 'auto' }}>
           <Button variant="contained" fullWidth startIcon={<QrCode2Icon />}
             onClick={() => setPaymentQrOpen(open => !open)}
@@ -302,6 +336,7 @@ function SingleOrderView({ order, onEdit, itemName, fmtLocal }) {
       </Box>
 
       <Box sx={{ px: 2, maxWidth: 560, width: '100%', mx: 'auto' }}>
+        <SwitchToBankPaymentButton order={order} />
         <FinishEditingButton order={order} onFinished={() => window.location.reload()} />
         <CustomerTableChanger order={order} token={order.sourceToken || null} onChanged={() => window.location.reload()} />
       </Box>
@@ -325,7 +360,6 @@ function SingleOrderView({ order, onEdit, itemName, fmtLocal }) {
             Sửa đơn hàng
           </Button>
         )}
-        <CounterQrButton orders={[order]} />
         <Box sx={{ textAlign: 'center' }}>
           <Button size="small" startIcon={<PrintIcon />} onClick={() => printOrderReceipt(order)}
             sx={{ textTransform: 'none', color: 'text.disabled', fontSize: 12 }}>
@@ -548,7 +582,7 @@ function OrderCard({ order, highlighted, token, itemName, fmtLocal }) {
           </Box>
 
           {/* Payment QR if READY */}
-          {status !== 'PENDING' && order.paymentQr && order.paymentStatus !== 'PAID' && (
+          {order.paymentQr && order.paymentStatus !== 'PAID' && (
             <Box sx={{ textAlign: 'center', mt: 1.5, pb: 0.5 }}>
               <Button variant="contained" fullWidth startIcon={<QrCode2Icon />}
                 onClick={() => setPaymentQrOpen(open => !open)}
@@ -573,9 +607,9 @@ function OrderCard({ order, highlighted, token, itemName, fmtLocal }) {
               Ghi chú: {order.notes}
             </Typography>
           )}
+          <SwitchToBankPaymentButton order={order} />
           <FinishEditingButton order={order} onFinished={() => window.location.reload()} />
           <CustomerTableChanger order={order} token={token} onChanged={() => window.location.reload()} />
-          <Box sx={{ mt: 1 }}><CounterQrButton orders={[order]} /></Box>
         </Box>
 
         {isPending && (
@@ -720,7 +754,6 @@ function TokenSessionView({ token, highlightCode, itemName, fmtLocal }) {
             sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none', py: 1.25 }}>
             {hasPending ? 'Đặt thêm món' : 'Đặt đơn mới'}
           </Button>
-          {hasOrders && <CounterQrButton orders={session.orders} label={session.orders.length > 1 ? `Hiện ${session.orders.length} mã QR đơn hàng` : 'Hiện mã QR đơn hàng'} />}
           <ShareTrackingButton orderNumber={session.orders?.length === 1 ? (session.orders[0].orderNumber || session.orders[0].dailySeq) : null} />
           <CustomerNotificationsButton />
         </Box>

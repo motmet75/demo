@@ -636,11 +636,12 @@ export default function ShopMenuPage() {
 
   const openTrackingScreen = useCallback((order) => {
     if (!order?.orderCode) return
-    const query = tokenParam || order.sourceToken
-      ? `?t=${encodeURIComponent(tokenParam || order.sourceToken)}`
+    const sessionToken = ctx?.tokenType === 'QUEUE_QR' ? null : (tokenParam || order.sourceToken)
+    const query = sessionToken
+      ? `?t=${encodeURIComponent(sessionToken)}`
       : ''
     navigate(`/shop/order/${encodeURIComponent(order.orderCode)}${query}`)
-  }, [navigate, tokenParam])
+  }, [ctx?.tokenType, navigate, tokenParam])
 
   const formatSelectedOptions = useCallback((modelId, selectedOptions) => {
     if (!selectedOptions) return null

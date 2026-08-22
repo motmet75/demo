@@ -32,6 +32,12 @@ export function fetchPublicOrder(orderCode) {
   return apiFetchJsonNoContext(`/shop/public/orders/${encodeURIComponent(orderCode)}`)
 }
 
+export function switchPublicOrderToBankPayment(orderCode) {
+  return apiFetchJsonNoContext(`/shop/public/orders/${encodeURIComponent(orderCode)}/bank-payment`, {
+    method: 'PATCH'
+  })
+}
+
 export function fetchCounterOrderQr(orderCode) {
   return apiFetchJsonNoContext(`/shop/public/orders/${encodeURIComponent(orderCode)}/counter-qr`)
 }
