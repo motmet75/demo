@@ -8,6 +8,7 @@ pid_file=${DEMO_PID_FILE:-$demo_home/demo-live.pid}
 control_script="$demo_home/bin/demo-live.sh"
 shutdown_timeout=${DEMO_SHUTDOWN_TIMEOUT:-30}
 frontend_dir=${DEMO_FRONTEND_DIR:-$demo_home/bom-frontend}
+frontend_control_script="$demo_home/bin/bom-frontend-live.sh"
 
 if [[ ! $shutdown_timeout =~ ^[0-9]+$ ]] || (( shutdown_timeout < 1 )); then
     echo "DEMO_SHUTDOWN_TIMEOUT must be a positive integer." >&2
@@ -23,6 +24,10 @@ if [[ ! -x $demo_home/mvnw ]]; then
 fi
 if [[ ! -f $frontend_dir/package.json ]]; then
     echo "Frontend project is missing: $frontend_dir/package.json" >&2
+    exit 1
+fi
+if [[ ! -x $frontend_control_script ]]; then
+    echo "Frontend control script is missing or not executable: $frontend_control_script" >&2
     exit 1
 fi
 
@@ -84,8 +89,10 @@ fi
 rm -f -- "$pid_file"
 
 echo "Building frontend: $frontend_dir"
+"$frontend_control_script" stop
 cd "$frontend_dir"
 npm run build
+"$frontend_control_script" start
 
 echo "Building backend artifact: $artifact_name"
 cd "$demo_home"
