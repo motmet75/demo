@@ -42,7 +42,11 @@ drivers/
 error-screenshots/
 webpack.generated.js
 
-/bin/
+# Keep generated/legacy bin contents ignored, but version the live control scripts.
+!/bin/
+/bin/*
+!/bin/demo-live.sh
+!/bin/build-restart-live.sh
 tokens/StoredCredential
 tokens/StoredCredential
 *.txt
