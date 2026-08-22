@@ -10,6 +10,7 @@ import {
   getCurrentLanguage,
   getLanguageMeta,
   normalizeLanguage,
+  setLanguageCookie,
   tFor,
   translateRelativeTime,
   translateSource,
@@ -68,6 +69,7 @@ export function I18nProvider({ children }) {
     const normalized = normalizeLanguage(nextLanguage) || DEFAULT_LANGUAGE
     setLanguageState(normalized)
     try { localStorage.setItem(LANGUAGE_STORAGE_KEY, normalized) } catch { /* storage may be blocked */ }
+    setLanguageCookie(normalized)
   }, [])
 
   useEffect(() => {

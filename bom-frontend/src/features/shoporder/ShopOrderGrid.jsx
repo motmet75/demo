@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Checkbox from '@mui/material/Checkbox'
 import Button from '@mui/material/Button'
@@ -1231,7 +1232,8 @@ const STATUS_SORT_ORDER = { PENDING: 0, CONFIRMED: 1, PREPARING: 2, READY: 3, PI
 
 function OrderCardGrid({ rows, loading, tables, actions, modelImageMap = {}, selectedIds, onToggleSelect, viewMode = 'cards', displaySize = 'normal', highContrast = false }) {
   const { t } = useI18n()
-  const [search, setSearch] = useState('')
+  const [searchParams] = useSearchParams()
+  const [search, setSearch] = useState(() => searchParams.get('order') || '')
   const [sortBy, setSortBy] = useState(() => {
     try { return localStorage.getItem('shop_orders_sort') || 'oldest' } catch { return 'oldest' }
   })

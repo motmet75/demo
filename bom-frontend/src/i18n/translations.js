@@ -1,6 +1,8 @@
 import { VI_BOM_SOURCE_TRANSLATIONS } from './bomSourceVi'
 
 export const LANGUAGE_STORAGE_KEY = 'bom_language_v1'
+export const LANGUAGE_COOKIE_KEY = 'bom_language'
+export const LANGUAGE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365
 export const TIME_ZONE_STORAGE_KEY = 'bom_time_zone_v1'
 export const DEFAULT_TIME_ZONE = 'Asia/Ho_Chi_Minh'
 
@@ -17,6 +19,8 @@ export const SUPPORTED_LANGUAGES = [
   { code: 'vi', label: 'Vietnamese', nativeLabel: 'Tiếng Việt', locale: 'vi-VN', dir: 'ltr' },
   { code: 'th', label: 'Thai', nativeLabel: 'ไทย', locale: 'th-TH', dir: 'ltr' },
 ]
+
+export const ORDERING_LANGUAGE_CODES = ['vi', 'cn', 'en', 'ko', 'ja', 'es', 'th', 'ms', 'id', 'dv', 'tw']
 
 export const DEFAULT_LANGUAGE = 'en'
 
@@ -37,6 +41,20 @@ export function getLanguageMeta(language) {
   return languageByCode[normalizeLanguage(language)] || languageByCode[DEFAULT_LANGUAGE]
 }
 
+export function getLanguageCookie() {
+  if (typeof document === 'undefined') return ''
+  const prefix = `${LANGUAGE_COOKIE_KEY}=`
+  const value = document.cookie.split(';').map(part => part.trim()).find(part => part.startsWith(prefix))
+  if (!value) return ''
+  try { return normalizeLanguage(decodeURIComponent(value.slice(prefix.length))) } catch { return '' }
+}
+
+export function setLanguageCookie(language) {
+  if (typeof document === 'undefined') return
+  const normalized = normalizeLanguage(language) || DEFAULT_LANGUAGE
+  document.cookie = `${LANGUAGE_COOKIE_KEY}=${encodeURIComponent(normalized)}; Max-Age=${LANGUAGE_COOKIE_MAX_AGE}; Path=/; SameSite=Lax`
+}
+
 export function getCurrentLanguage() {
   if (typeof window === 'undefined') return DEFAULT_LANGUAGE
   try {
@@ -46,12 +64,16 @@ export function getCurrentLanguage() {
   } catch {
     // ignore invalid URL state
   }
+  const cookieLanguage = getLanguageCookie()
+  if (cookieLanguage) return cookieLanguage
   try {
     const stored = normalizeLanguage(localStorage.getItem(LANGUAGE_STORAGE_KEY))
     if (stored) return stored
   } catch {
     // ignore blocked storage
   }
+  const path = window.location.pathname
+  if (/\/shop\/(?:menu|queue|counter)(?:\/|$)/.test(path)) return 'vi'
   const browserLanguage = normalizeLanguage(navigator.language || navigator.languages?.[0])
   return browserLanguage || DEFAULT_LANGUAGE
 }

@@ -864,14 +864,16 @@ public class ShopOrderController {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
         Integer validDays = body != null ? integerValue(body.get("validDays")) : null;
+        String language = body != null ? stringValue(body.get("language")) : null;
         boolean forceNew = body != null && Boolean.TRUE.equals(body.get("forceNew"));
-        ShopOrderService.QueueQrResult qr = shopOrderService.generateQueueQr(validDays, forceNew, tId, cId);
+        ShopOrderService.QueueQrResult qr = shopOrderService.generateQueueQr(validDays, forceNew, language, tId, cId);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("qrBase64", qr.qrBase64());
         result.put("qrUrl", qr.qrUrl());
         result.put("token", qr.token());
         result.put("expiresAt", qr.expiresAt());
         result.put("validDays", qr.validDays());
+        result.put("language", qr.language());
         return ResponseEntity.ok(result);
     }
 

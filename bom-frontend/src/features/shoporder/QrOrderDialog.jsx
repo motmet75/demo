@@ -7,6 +7,7 @@ import Button from '@mui/material/Button'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import TextField from '@mui/material/TextField'
+import MenuItem from '@mui/material/MenuItem'
 import CircularProgress from '@mui/material/CircularProgress'
 import Alert from '@mui/material/Alert'
 import IconButton from '@mui/material/IconButton'
@@ -18,9 +19,11 @@ import PrintIcon from '@mui/icons-material/Print'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import CloseIcon from '@mui/icons-material/Close'
 import TableRestaurantIcon from '@mui/icons-material/TableRestaurant'
+import ShareIcon from '@mui/icons-material/Share'
 import { generateQueueQr, generateWalkUpQr } from '../../api/shopApi'
 import { printQueueQrTracked, printWalkUpQrTracked } from '../../utils/printWithHistory'
 import { useI18n } from '../../i18n/I18nContext'
+import { ORDERING_LANGUAGE_CODES, SUPPORTED_LANGUAGES } from '../../i18n/translations'
 
 function fmtDate(value) {
   if (!value) return ''
@@ -32,6 +35,8 @@ export default function QrOrderDialog({ open, onClose }) {
   const [seq, setSeq] = useState('')
   const [maxOrders, setMaxOrders] = useState('12')
   const [queueDays, setQueueDays] = useState('30')
+  const [queueLanguage, setQueueLanguage] = useState('vi')
+  const [shareDone, setShareDone] = useState(false)
   const [loadingType, setLoadingType] = useState('')
   const [error, setError] = useState('')
   const [result, setResult] = useState(null)
@@ -79,7 +84,7 @@ export default function QrOrderDialog({ open, onClose }) {
         return
       }
       const validDays = Math.min(Math.floor(daysRaw), 366)
-      const { res, data } = await generateQueueQr(validDays)
+      const { res, data } = await generateQueueQr(validDays, queueLanguage)
       if (!res.ok) { setError(data?.message || data?.error || t('shopOrder.qr.generateQueueFailed')); return }
       setResult({
         type: 'QUEUE',
@@ -88,6 +93,7 @@ export default function QrOrderDialog({ open, onClose }) {
         token: data.token,
         expiresAt: data.expiresAt,
         validDays: data.validDays ?? validDays,
+        language: data.language || queueLanguage,
       })
     } catch (e) {
       setError(e.message || t('shopOrder.common.networkError'))
@@ -98,6 +104,20 @@ export default function QrOrderDialog({ open, onClose }) {
 
   const handleReset = () => { setResult(null); setSeq(''); setMaxOrders('12'); setError('') }
   const handleClose = () => { handleReset(); onClose() }
+
+  const handleShare = async () => {
+    if (!result?.qrUrl) return
+    const selected = SUPPORTED_LANGUAGES.find(item => item.code === result.language)
+    const title = `Queue QR Code - ${selected?.nativeLabel || result.language?.toUpperCase() || 'Tiếng Việt'}`
+    try {
+      if (navigator.share) await navigator.share({ title, url: result.qrUrl })
+      else await navigator.clipboard.writeText(result.qrUrl)
+      setShareDone(true)
+      window.setTimeout(() => setShareDone(false), 2500)
+    } catch (e) {
+      if (e?.name !== 'AbortError') setError('Could not share QR Code link')
+    }
+  }
 
   return (
     <Dialog open={open} onClose={handleClose} fullWidth maxWidth="sm"
@@ -162,6 +182,22 @@ export default function QrOrderDialog({ open, onClose }) {
                 inputProps={{ min: 1, max: 366 }}
                 helperText={t('shopOrder.qr.validDaysHelp')}
               />
+              <TextField
+                select
+                label="Share QR Code language"
+                size="small"
+                fullWidth
+                value={queueLanguage}
+                onChange={e => setQueueLanguage(e.target.value)}
+                helperText="Customers who scan this QR Code will open the shop in this language."
+                sx={{ mt: 1.5 }}
+              >
+                {ORDERING_LANGUAGE_CODES.map(code => SUPPORTED_LANGUAGES.find(item => item.code === code)).filter(Boolean).map(item => (
+                  <MenuItem key={item.code} value={item.code}>
+                    {item.nativeLabel} ({item.code.toUpperCase()})
+                  </MenuItem>
+                ))}
+              </TextField>
             </Box>
           </Box>
         ) : (
@@ -176,6 +212,10 @@ export default function QrOrderDialog({ open, onClose }) {
                   {t('shopOrder.qr.seatOrder')}
                 </Typography>
                 <Chip icon={<TableRestaurantIcon />} label={t('shopOrder.qr.validForDays', { days: result.validDays || queueDays })} size="small" sx={{ mt: 1, fontWeight: 700 }} />
+                <Chip
+                  label={`Language: ${SUPPORTED_LANGUAGES.find(item => item.code === result.language)?.nativeLabel || result.language?.toUpperCase()}`}
+                  size="small" color="primary" variant="outlined" sx={{ mt: 1, ml: 1, fontWeight: 700 }}
+                />
               </Box>
             ) : result.seq != null && (
               <Box sx={{ mb: 1.5 }}>
@@ -251,6 +291,12 @@ export default function QrOrderDialog({ open, onClose }) {
                 {t('shopOrder.qr.new')}
               </Button>
             </Tooltip>
+            {isQueue && (
+              <Button variant="outlined" startIcon={<ShareIcon />} onClick={handleShare}
+                sx={{ fontWeight: 700, textTransform: 'none' }}>
+                {shareDone ? 'Link copied' : 'Share QR Code'}
+              </Button>
+            )}
             <Button
               variant="contained" startIcon={<PrintIcon />}
               onClick={() => isQueue ? printQueueQrTracked(result, setError) : printWalkUpQrTracked(result, setError)}

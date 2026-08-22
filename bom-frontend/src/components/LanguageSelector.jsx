@@ -49,8 +49,9 @@ export default function LanguageSelector({ size = 'small', compact = false, vari
   const { language, setLanguage, t } = useI18n()
   const languages = React.useMemo(() => {
     if (!Array.isArray(languageCodes) || languageCodes.length === 0) return SUPPORTED_LANGUAGES
-    const allowedCodes = new Set(languageCodes)
-    return SUPPORTED_LANGUAGES.filter((item) => allowedCodes.has(item.code))
+    return languageCodes
+      .map(code => SUPPORTED_LANGUAGES.find(item => item.code === code))
+      .filter(Boolean)
   }, [languageCodes])
 
   return (

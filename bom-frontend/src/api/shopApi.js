@@ -127,11 +127,11 @@ export function generateWalkUpQr(seq, maxOrders = 12) {
   })
 }
 
-export function generateQueueQr(validDays = 30) {
+export function generateQueueQr(validDays = 30, language = 'vi') {
   return apiFetchJson('/shop/staff/queue-qr', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ validDays })
+    body: JSON.stringify({ validDays, language })
   })
 }
 

@@ -56,6 +56,7 @@ import ItemOptionsDialog from './ItemOptionsDialog'
 import OrderReceiptDialog from './OrderReceiptDialog'
 import VoucherQrScanDialog from '../shoporder/VoucherQrScanDialog'
 import LanguageSelector from '../../components/LanguageSelector'
+import { ORDERING_LANGUAGE_CODES } from '../../i18n/translations'
 import { useI18n } from '../../i18n/I18nContext'
 import { localizedCategory, localizedChoiceLabel, localizedGroupName, localizedModelName, normalizeChoice, parseChoices as parseMenuChoices } from '../../i18n/menuLocalization'
 import { decorateAllowedSideOptions, getAllowedSideMax } from '../../utils/sideItemConfig'
@@ -1697,7 +1698,7 @@ export default function ShopMenuPage() {
             )}
           </Box>
 
-          <LanguageSelector compact />
+          <LanguageSelector compact languageCodes={ORDERING_LANGUAGE_CODES} />
 
           {/* Gọi nhân viên */}
           <Button size="small" variant="outlined" onClick={() => setCallStaffOpen(true)}

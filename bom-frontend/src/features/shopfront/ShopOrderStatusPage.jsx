@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import Alert from '@mui/material/Alert'
@@ -24,6 +24,8 @@ import { printOrderReceipt } from '../../utils/printOrderReceipt'
 import { useI18n } from '../../i18n/I18nContext'
 import { localizedModelName } from '../../i18n/menuLocalization'
 import { saveQrImage } from '../../utils/saveQrImage'
+import { useAuth } from '../../context/useAuth'
+import { useAppContext } from '../../context/AppContext'
 
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 const payableAmount = (order) => Math.max(0, Number(order?.totalAmount || 0) - Number(order?.discountAmount || 0))
@@ -769,6 +771,9 @@ function TokenSessionView({ token, highlightCode, itemName, fmtLocal }) {
 // ── Root component ────────────────────────────────────────────────────────────
 
 export default function ShopOrderStatusPage() {
+  const navigate = useNavigate()
+  const { user, loading: authLoading } = useAuth()
+  const { setTenantId, setCompanyId } = useAppContext()
   const { language, formatMoney } = useI18n()
   const fmtLocal = (n) => n != null ? formatMoney(n, 'VND') : ''
   const itemName = (item) => localizedModelName(item, language)
@@ -779,6 +784,23 @@ export default function ShopOrderStatusPage() {
   const [order, setOrder] = useState(null)
   const [error, setError] = useState('')
   const previousOrderRef = useRef(null)
+
+  // A shared confirmation link remains customer-facing for anonymous visitors.
+  // Signed-in shop users should work with the order in the BOM order grid.
+  useEffect(() => {
+    if (authLoading || !user || !orderCode) return
+    let cancelled = false
+    fetchPublicOrder(orderCode)
+      .then(({ data }) => {
+        if (cancelled || !data?.orderCode) return
+        if (data.tenantId) setTenantId(String(data.tenantId))
+        if (data.companyId) setCompanyId(String(data.companyId))
+        const orderFilter = data.orderNumber != null ? data.orderNumber : data.orderCode
+        navigate(`/shop-orders?order=${encodeURIComponent(orderFilter)}`, { replace: true })
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [authLoading, navigate, orderCode, setCompanyId, setTenantId, user])
 
   // Only load single order when there's no token
   const load = useCallback(() => {

@@ -608,13 +608,18 @@ public class ShopOrderService {
         return maxOrders;
     }
 
-    public record QueueQrResult(String qrBase64, String qrUrl, String token, Instant expiresAt, int validDays) {}
+    public record QueueQrResult(String qrBase64, String qrUrl, String token, Instant expiresAt, int validDays,
+                                String language) {}
 
     @Transactional
-    public QueueQrResult generateQueueQr(Integer validDays, boolean forceNew, UUID tenantId, UUID companyId) {
+    public QueueQrResult generateQueueQr(Integer validDays, boolean forceNew, String language,
+                                         UUID tenantId, UUID companyId) {
         int days = validDays != null ? validDays : 30;
         if (days < 1) days = 1;
         if (days > 366) days = 366;
+        Set<String> supportedLanguages = Set.of("en", "cn", "tw", "ja", "ko", "es", "dv", "ms", "id", "vi", "th");
+        String lang = language != null ? language.trim().toLowerCase(Locale.ROOT) : "vi";
+        if (!supportedLanguages.contains(lang)) lang = "vi";
 
         if (!forceNew) {
             ShopAccessToken current = shopAccessTokenRepository
@@ -625,9 +630,9 @@ public class ShopOrderService {
                     .findFirst()
                     .orElse(null);
             if (current != null) {
-                String currentUrl = publicBaseUrl + "/shop/menu?tenantId=" + tenantId + "&companyId=" + companyId;
+                String currentUrl = publicBaseUrl + "/shop/menu?tenantId=" + tenantId + "&companyId=" + companyId + "&lang=" + lang;
                 return new QueueQrResult(QrCodeUtil.generateBase64Png(currentUrl, 400), currentUrl,
-                        current.getToken(), current.getExpiresAt(), days);
+                        current.getToken(), current.getExpiresAt(), days, lang);
             }
         }
 
@@ -636,13 +641,13 @@ public class ShopOrderService {
         sat.setTenantId(tenantId);
         sat.setCompanyId(companyId);
         sat.setTokenType(ShopAccessToken.TYPE_QUEUE_QR);
-        sat.setDescription("Queue QR - customer chooses table and name");
+        sat.setDescription("Queue QR - web ordering - language " + lang);
         Instant expiresAt = Instant.now().plus(days, java.time.temporal.ChronoUnit.DAYS);
         sat.setExpiresAt(expiresAt);
         shopAccessTokenRepository.save(sat);
 
-        String url = publicBaseUrl + "/shop/menu?tenantId=" + tenantId + "&companyId=" + companyId;
-        return new QueueQrResult(QrCodeUtil.generateBase64Png(url, 400), url, sat.getToken(), expiresAt, days);
+        String url = publicBaseUrl + "/shop/menu?tenantId=" + tenantId + "&companyId=" + companyId + "&lang=" + lang;
+        return new QueueQrResult(QrCodeUtil.generateBase64Png(url, 400), url, sat.getToken(), expiresAt, days, lang);
     }
 
     // ── Display board ─────────────────────────────────────────────────

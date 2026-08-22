@@ -3,6 +3,8 @@ import { useSearchParams } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import { fetchActivePickup } from '../../api/shopApi'
+import LanguageSelector from '../../components/LanguageSelector'
+import { ORDERING_LANGUAGE_CODES } from '../../i18n/translations'
 
 export const COUNTER_CHANNEL = 'shop_counter_display'
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000
@@ -536,12 +538,15 @@ export default function CounterDisplayPage() {
         }}>
           {order ? '🧋 Your Order' : '🍵 Order Counter'}
         </Typography>
-        <Typography sx={{
-          fontWeight: 900, fontSize: { xs: 16, md: 22 },
-          color: '#475569', fontVariantNumeric: 'tabular-nums', letterSpacing: 1,
-        }}>
-          <Clock />
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <LanguageSelector compact languageCodes={ORDERING_LANGUAGE_CODES} />
+          <Typography sx={{
+            fontWeight: 900, fontSize: { xs: 16, md: 22 },
+            color: '#94a3b8', fontVariantNumeric: 'tabular-nums', letterSpacing: 1,
+          }}>
+            <Clock />
+          </Typography>
+        </Box>
       </Box>
 
       {order ? <ActiveOrder order={order} flash={flash} /> : <IdleScreen />}

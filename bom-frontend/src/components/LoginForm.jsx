@@ -24,7 +24,7 @@ import {
 import { LanguageFlag } from './LanguageSelector'
 
 const APP_BASE = '/bom-inventory'
-const LOGIN_LANGUAGE_CODES = ['vi', 'cn', 'tw', 'en']
+const LOGIN_LANGUAGE_CODES = ['vi', 'cn', 'en']
 const SHOP_TIME_ZONES = [
   'Asia/Ho_Chi_Minh',
   'Asia/Bangkok',
