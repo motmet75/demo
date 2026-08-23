@@ -1,0 +1,4 @@
+ALTER TABLE company
+    ADD COLUMN IF NOT EXISTS shop_logo_url TEXT,
+    ADD COLUMN IF NOT EXISTS shop_name TEXT,
+    ADD COLUMN IF NOT EXISTS shop_address TEXT;

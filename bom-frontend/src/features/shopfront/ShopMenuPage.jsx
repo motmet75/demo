@@ -630,7 +630,7 @@ export default function ShopMenuPage() {
   const [tableOrdersPromptOpen, setTableOrdersPromptOpen] = useState(false)
   const [tokenSession, setTokenSession]     = useState(null)
   const [sessionOpen, setSessionOpen]       = useState(false)
-  const [shopConfig, setShopConfig]         = useState({ prepaidMenu: false, bankBin: '', bankAccountNumber: '', bankAccountName: '' })
+  const [shopConfig, setShopConfig]         = useState({ prepaidMenu: false, bankBin: '', bankAccountNumber: '', bankAccountName: '', shopLogoUrl: '', shopName: '', shopAddress: '', companyName: '' })
   const [publicTables, setPublicTables]     = useState([])
   const [prepaidQrOrder, setPrepaidQrOrder] = useState(null)
   const [imagePreview, setImagePreview]     = useState(null)
@@ -1971,6 +1971,10 @@ export default function ShopMenuPage() {
     <Box sx={{ p: 3 }}><Alert severity="error">{error || cText('checkout.invalidShopQr')}</Alert></Box>
   )
 
+  const shopBrandName = String(shopConfig.shopName || shopConfig.companyName || '').trim()
+  const shopBrandAddress = String(shopConfig.shopAddress || '').trim()
+  const shopLogoUrl = String(shopConfig.shopLogoUrl || '').trim()
+
   return (
     <Box sx={{ bgcolor: highContrast ? '#eef2f7' : '#f5f5f5', minHeight: '100vh' }}>
 
@@ -1981,10 +1985,22 @@ export default function ShopMenuPage() {
       }}>
         {/* Row 1: Title + action buttons */}
         <Box sx={{ display: 'flex', alignItems: 'center', px: 1.5, pt: 1.25, pb: 0.5, gap: 0.75 }}>
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography fontWeight={900} sx={{ fontSize: large ? 22 : 18, color: '#1a1a1a', lineHeight: 1.2 }}>
-              {t('shop.placeOrder')}
-            </Typography>
+          <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 1 }}>
+            {shopLogoUrl && (
+              <Box component="img" src={shopLogoUrl} alt={shopBrandName || t('shop.placeOrder')}
+                sx={{ width: large ? 46 : 38, height: large ? 46 : 38, borderRadius: 1.5, objectFit: 'cover', border: '1px solid #e2e8f0', bgcolor: '#fff', flexShrink: 0 }}
+                onError={e => { e.currentTarget.style.display = 'none' }} />
+            )}
+            <Box sx={{ minWidth: 0 }}>
+              <Typography fontWeight={900} noWrap sx={{ fontSize: large ? 22 : 18, color: '#1a1a1a', lineHeight: 1.15 }}>
+                {shopBrandName || t('shop.placeOrder')}
+              </Typography>
+              {shopBrandAddress && (
+                <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block', lineHeight: 1.15, fontWeight: 700 }}>
+                  {shopBrandAddress}
+                </Typography>
+              )}
+            </Box>
             {ctx.tableId && (
               <Chip icon={<TableBarIcon sx={{ fontSize: '12px !important', color: '#1976d2 !important' }} />}
                 label={t('shop.dineIn')} size="small"

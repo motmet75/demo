@@ -1212,6 +1212,9 @@ public class ShopOrderController {
         if (body.containsKey("bankAccountNumber"))    company.setBankAccountNumber(String.valueOf(body.get("bankAccountNumber")));
         if (body.containsKey("bankAccountName"))      company.setBankAccountName(String.valueOf(body.get("bankAccountName")));
         if (body.containsKey("prepaidMenu"))          company.setPrepaidMenu(Boolean.TRUE.equals(body.get("prepaidMenu")));
+        if (body.containsKey("shopLogoUrl"))          company.setShopLogoUrl(stringValue(body.get("shopLogoUrl")));
+        if (body.containsKey("shopName"))             company.setShopName(stringValue(body.get("shopName")));
+        if (body.containsKey("shopAddress"))          company.setShopAddress(stringValue(body.get("shopAddress")));
         if (body.containsKey("realtimeInventory"))    company.setRealtimeInventory(Boolean.TRUE.equals(body.get("realtimeInventory")));
         if (body.containsKey("processingInventoryRecheck")) company.setShopProcessingInventoryRecheck(Boolean.TRUE.equals(body.get("processingInventoryRecheck")));
         if (body.containsKey("pointsConversionRate")) company.setPointsConversionRate(Integer.parseInt(String.valueOf(body.get("pointsConversionRate"))));
@@ -1331,6 +1334,10 @@ public class ShopOrderController {
         m.put("bankAccountNumber",    company.getBankAccountNumber() != null ? company.getBankAccountNumber() : "");
         m.put("bankAccountName",      company.getBankAccountName()   != null ? company.getBankAccountName()   : "");
         m.put("prepaidMenu",          Boolean.TRUE.equals(company.getPrepaidMenu()));
+        m.put("companyName",           company.getCompanyName()       != null ? company.getCompanyName()       : "");
+        m.put("shopLogoUrl",           company.getShopLogoUrl()       != null ? company.getShopLogoUrl()       : "");
+        m.put("shopName",              company.getShopName()          != null && !company.getShopName().isBlank() ? company.getShopName() : (company.getCompanyName() != null ? company.getCompanyName() : ""));
+        m.put("shopAddress",           company.getShopAddress()       != null ? company.getShopAddress()       : "");
         m.put("realtimeInventory",    Boolean.TRUE.equals(company.getRealtimeInventory()));
         m.put("processingInventoryRecheck", Boolean.TRUE.equals(company.getShopProcessingInventoryRecheck()));
         m.put("pointsConversionRate", company.getPointsConversionRate());

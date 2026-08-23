@@ -10,7 +10,6 @@ import Alert from '@mui/material/Alert'
 import Divider from '@mui/material/Divider'
 import CircularProgress from '@mui/material/CircularProgress'
 import Chip from '@mui/material/Chip'
-import AccountBalanceIcon from '@mui/icons-material/AccountBalance'
 import QrCode2Icon from '@mui/icons-material/QrCode2'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import Switch from '@mui/material/Switch'
@@ -19,6 +18,9 @@ import PaymentsIcon from '@mui/icons-material/Payments'
 import InputAdornment from '@mui/material/InputAdornment'
 import StarIcon from '@mui/icons-material/Star'
 import VpnKeyIcon from '@mui/icons-material/VpnKey'
+import StorefrontIcon from '@mui/icons-material/Storefront'
+import ImageIcon from '@mui/icons-material/Image'
+import LocationOnIcon from '@mui/icons-material/LocationOn'
 import { fetchBankConfig, updateBankConfig, rotateVoucherKey } from '../../api/shopApi'
 
 const POPULAR_BANKS = [
@@ -37,7 +39,7 @@ const POPULAR_BANKS = [
 ]
 
 export default function ShopBankConfigPage() {
-  const [form, setForm] = useState({ bankBin: '', bankAccountNumber: '', bankAccountName: '', prepaidMenu: false, realtimeInventory: false, processingInventoryRecheck: true, pointsConversionRate: 10000, pointsRoundUp: false, loyaltyDiscountPointThreshold: 0, loyaltyDiscountPercent: 0 })
+  const [form, setForm] = useState({ bankBin: '', bankAccountNumber: '', bankAccountName: '', prepaidMenu: false, shopLogoUrl: '', shopName: '', shopAddress: '', realtimeInventory: false, processingInventoryRecheck: true, pointsConversionRate: 10000, pointsRoundUp: false, loyaltyDiscountPointThreshold: 0, loyaltyDiscountPercent: 0 })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -50,7 +52,7 @@ export default function ShopBankConfigPage() {
     fetchBankConfig()
       .then(({ data }) => {
         if (data) {
-          setForm({ bankBin: data.bankBin || '', bankAccountNumber: data.bankAccountNumber || '', bankAccountName: data.bankAccountName || '', prepaidMenu: Boolean(data.prepaidMenu), realtimeInventory: Boolean(data.realtimeInventory), processingInventoryRecheck: data.processingInventoryRecheck !== false, pointsConversionRate: data.pointsConversionRate || 10000, pointsRoundUp: Boolean(data.pointsRoundUp), loyaltyDiscountPointThreshold: data.loyaltyDiscountPointThreshold || 0, loyaltyDiscountPercent: data.loyaltyDiscountPercent || 0 })
+          setForm({ bankBin: data.bankBin || '', bankAccountNumber: data.bankAccountNumber || '', bankAccountName: data.bankAccountName || '', prepaidMenu: Boolean(data.prepaidMenu), shopLogoUrl: data.shopLogoUrl || '', shopName: data.shopName || data.companyName || '', shopAddress: data.shopAddress || '', realtimeInventory: Boolean(data.realtimeInventory), processingInventoryRecheck: data.processingInventoryRecheck !== false, pointsConversionRate: data.pointsConversionRate || 10000, pointsRoundUp: Boolean(data.pointsRoundUp), loyaltyDiscountPointThreshold: data.loyaltyDiscountPointThreshold || 0, loyaltyDiscountPercent: data.loyaltyDiscountPercent || 0 })
           setVoucherKeySet(Boolean(data.voucherSecretSet))
         }
         setLoading(false)
@@ -103,8 +105,8 @@ export default function ShopBankConfigPage() {
   return (
     <Box sx={{ p: 3, maxWidth: 640, mx: 'auto' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}>
-        <AccountBalanceIcon color="primary" />
-        <Typography variant="h6" fontWeight={700}>Bank Account Setup</Typography>
+        <StorefrontIcon color="primary" />
+        <Typography variant="h6" fontWeight={700}>Shop Setup</Typography>
       </Box>
 
       {loading ? (
@@ -115,6 +117,56 @@ export default function ShopBankConfigPage() {
           {/* Status alerts */}
           {success && <Alert severity="success" icon={<CheckCircleIcon />}>Settings saved.</Alert>}
           {error && <Alert severity="error" onClose={() => setError('')}>{error}</Alert>}
+
+          {/* Shop branding */}
+          <Card variant="outlined" sx={{ borderRadius: 2 }}>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                <StorefrontIcon color="primary" />
+                <Typography variant="subtitle2" fontWeight={700}>Mobile ordering branding</Typography>
+              </Box>
+              <Stack spacing={2}>
+                <TextField
+                  label="Shop Name"
+                  size="small" fullWidth
+                  value={form.shopName}
+                  onChange={set('shopName')}
+                  placeholder="e.g. SAN Coffee and Tea"
+                  helperText="Shown at the top of the customer mobile ordering page"
+                />
+                <TextField
+                  label="Shop Address"
+                  size="small" fullWidth multiline minRows={2}
+                  value={form.shopAddress}
+                  onChange={set('shopAddress')}
+                  placeholder="e.g. 123 Main Street, District 1"
+                  InputProps={{ startAdornment: <InputAdornment position="start"><LocationOnIcon fontSize="small" /></InputAdornment> }}
+                />
+                <TextField
+                  label="Logo URL"
+                  size="small" fullWidth
+                  value={form.shopLogoUrl}
+                  onChange={set('shopLogoUrl')}
+                  placeholder="https://example.com/logo.png"
+                  helperText="Use a public image URL. PNG/JPG/WebP/SVG are supported by the browser."
+                  InputProps={{ startAdornment: <InputAdornment position="start"><ImageIcon fontSize="small" /></InputAdornment> }}
+                />
+                {(form.shopLogoUrl || form.shopName || form.shopAddress) && (
+                  <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', p: 1.5, bgcolor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 2 }}>
+                    {form.shopLogoUrl && (
+                      <Box component="img" src={form.shopLogoUrl} alt={form.shopName || 'Shop logo'}
+                        sx={{ width: 54, height: 54, borderRadius: 2, objectFit: 'cover', border: '1px solid #e2e8f0', bgcolor: '#fff' }}
+                        onError={e => { e.currentTarget.style.display = 'none' }} />
+                    )}
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography fontWeight={900} noWrap>{form.shopName || 'Shop name preview'}</Typography>
+                      {form.shopAddress && <Typography variant="body2" color="text.secondary" noWrap>{form.shopAddress}</Typography>}
+                    </Box>
+                  </Box>
+                )}
+              </Stack>
+            </CardContent>
+          </Card>
 
           {/* Bank selector */}
           <Card variant="outlined" sx={{ borderRadius: 2 }}>
@@ -294,7 +346,7 @@ export default function ShopBankConfigPage() {
           </Card>
 
           <Button
-            variant="contained" size="large" onClick={handleSave} disabled={saving || !form.bankBin || !form.bankAccountNumber}
+            variant="contained" size="large" onClick={handleSave} disabled={saving}
             sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none' }}
           >
             {saving ? <CircularProgress size={20} /> : 'Save Settings'}

@@ -54,6 +54,15 @@ public class Company {
     @Column(name = "prepaid_menu")
     private Boolean prepaidMenu = false;
 
+    @Column(name = "shop_logo_url", columnDefinition = "TEXT")
+    private String shopLogoUrl;
+
+    @Column(name = "shop_name", columnDefinition = "TEXT")
+    private String shopName;
+
+    @Column(name = "shop_address", columnDefinition = "TEXT")
+    private String shopAddress;
+
     @Column(name = "realtime_inventory")
     private Boolean realtimeInventory = false;
 
@@ -123,6 +132,12 @@ public class Company {
 
     public Boolean getPrepaidMenu() { return prepaidMenu; }
     public void setPrepaidMenu(Boolean prepaidMenu) { this.prepaidMenu = prepaidMenu; }
+    public String getShopLogoUrl() { return shopLogoUrl; }
+    public void setShopLogoUrl(String shopLogoUrl) { this.shopLogoUrl = shopLogoUrl; }
+    public String getShopName() { return shopName; }
+    public void setShopName(String shopName) { this.shopName = shopName; }
+    public String getShopAddress() { return shopAddress; }
+    public void setShopAddress(String shopAddress) { this.shopAddress = shopAddress; }
     public Boolean getRealtimeInventory() { return Boolean.TRUE.equals(realtimeInventory); }
     public void setRealtimeInventory(Boolean realtimeInventory) { this.realtimeInventory = realtimeInventory; }
     public Boolean getShopProcessingInventoryRecheck() { return !Boolean.FALSE.equals(shopProcessingInventoryRecheck); }
