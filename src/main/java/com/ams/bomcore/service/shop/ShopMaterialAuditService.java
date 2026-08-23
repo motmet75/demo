@@ -373,10 +373,7 @@ public class ShopMaterialAuditService {
                     requiredPerUnit, scale(available), possible));
         }
 
-        BigDecimal effective = calculated;
-        if (dailyLimit != null) {
-            effective = calculated != null ? calculated.min(remainingToday) : remainingToday;
-        }
+        BigDecimal effective = dailyLimit != null ? remainingToday : calculated;
         return new MenuAvailabilityRow(model.getId(), model.getModelCode(), model.getModelName(),
                 calculated, dailyLimit, effective, true, limits, dailyLimit, soldToday, remainingToday);
     }
