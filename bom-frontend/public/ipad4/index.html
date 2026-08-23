@@ -218,6 +218,7 @@
       <h1>Shop Orders</h1>
       <div class="right">
         <button id="newOrderButton" class="top-action" type="button">＋ <span class="top-label">Tạo đơn</span></button>
+        <button id="menuAdminButton" class="top-action" type="button">☰ <span class="top-label">Menu</span></button>
         <button id="queueQrButton" class="top-action top-queue" type="button">▦ <span class="top-label">QR xếp hàng</span></button>
         <button id="newOrderBell" class="icon-button" title="Đơn mới" type="button">🔔<span id="newOrderBadge" class="badge">0</span></button>
         <button id="staffCallBell" class="icon-button" title="Gọi nhân viên" type="button">🙋<span id="staffCallBadge" class="badge">0</span></button>
@@ -793,7 +794,7 @@
             (photo ? ' style="background-image:-webkit-linear-gradient(rgba(255,255,255,.18),rgba(255,255,255,.18)),url(&quot;' + photo + '&quot;);background-image:linear-gradient(rgba(255,255,255,.18),rgba(255,255,255,.18)),url(&quot;' + photo + '&quot;)"' : '') + '>' +
             (photo ? '' : '<span class="item-photo"></span>');
           html += '<div class="item-info"><span class="item-money">' + escapeHtml(formatMoney(item.lineTotal)) + '</span>';
-          html += '<span class="qty">' + escapeHtml(item.quantity) + ' x</span> ' + escapeHtml(item.modelName || 'Món');
+          html += '<span class="qty">' + escapeHtml(item.quantity) + ' x</span> ' + escapeHtml(item.modelName || 'Món') + (item.dailyLastOrder ? ' <strong style="color:#a33b35">[số cuối]</strong>' : '');
           html += '<br><span class="muted">' + escapeHtml(formatMoney(item.unitPrice)) + ' / món</span>';
           if (selectedOptionsText(item.selectedOptions)) html += '<br><strong>Chọn:</strong> ' + escapeHtml(selectedOptionsText(item.selectedOptions));
           if (item.itemNotes) html += '<br><span class="muted">' + escapeHtml(item.itemNotes) + '</span>';
@@ -1458,6 +1459,7 @@
     byId('viewMode').onchange = function () { viewMode = this.value; saveViewPrefs(); applyOrderView(); };
     byId('closeQrButton').onclick = closeQr;
     byId('newOrderButton').onclick = openOrderForm;
+    byId('menuAdminButton').onclick = function () { window.location.href = 'menu.html'; };
     byId('queueQrButton').onclick = function () { openQueueQr(false); };
     byId('newQueueQrButton').onclick = function () {
       if (window.confirm('Tạo Queue QR mới? Mã hiện tại sẽ không còn được hiển thị tại quầy.')) openQueueQr(true);

@@ -95,6 +95,10 @@ public class ShopOrderResponseDto {
         private UUID sourceOrderId;
         private Integer sourceOrderNumber;
         private String sourceOrderCode;
+        private BigDecimal dailyLimitUnits;
+        private BigDecimal dailySoldUnits;
+        private BigDecimal dailyRemainingUnits;
+        private Boolean dailyLastOrder;
 
         public static ItemDto from(ShopOrderItem item) {
             ItemDto dto = new ItemDto();
@@ -137,6 +141,14 @@ public class ShopOrderResponseDto {
         public UUID getSourceOrderId() { return sourceOrderId; }
         public Integer getSourceOrderNumber() { return sourceOrderNumber; }
         public String getSourceOrderCode() { return sourceOrderCode; }
+        public BigDecimal getDailyLimitUnits() { return dailyLimitUnits; }
+        public void setDailyLimitUnits(BigDecimal dailyLimitUnits) { this.dailyLimitUnits = dailyLimitUnits; }
+        public BigDecimal getDailySoldUnits() { return dailySoldUnits; }
+        public void setDailySoldUnits(BigDecimal dailySoldUnits) { this.dailySoldUnits = dailySoldUnits; }
+        public BigDecimal getDailyRemainingUnits() { return dailyRemainingUnits; }
+        public void setDailyRemainingUnits(BigDecimal dailyRemainingUnits) { this.dailyRemainingUnits = dailyRemainingUnits; }
+        public Boolean getDailyLastOrder() { return dailyLastOrder; }
+        public void setDailyLastOrder(Boolean dailyLastOrder) { this.dailyLastOrder = dailyLastOrder; }
     }
 
     public static class OrderLinkDto {

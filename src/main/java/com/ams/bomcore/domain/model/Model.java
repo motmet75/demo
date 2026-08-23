@@ -2,6 +2,7 @@ package com.ams.bomcore.domain.model;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -10,6 +11,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 
 /**
  * JPA entity mapping for table `model` (product models)
@@ -76,6 +78,18 @@ public class Model {
 
     @Column(name = "shop_available_units_override", columnDefinition = "numeric")
     private BigDecimal shopAvailableUnitsOverride;
+
+    @Column(name = "shop_available_units_override_date")
+    private LocalDate shopAvailableUnitsOverrideDate;
+
+    @Transient
+    private BigDecimal shopDailyLimitUnits;
+
+    @Transient
+    private BigDecimal shopDailySoldUnits;
+
+    @Transient
+    private BigDecimal shopDailyRemainingUnits;
 
     public Model() {
         // default constructor required by JPA
@@ -174,6 +188,14 @@ public class Model {
     public void setAllowedSideIds(String allowedSideIds) { this.allowedSideIds = allowedSideIds; }
     public BigDecimal getShopAvailableUnitsOverride() { return shopAvailableUnitsOverride; }
     public void setShopAvailableUnitsOverride(BigDecimal shopAvailableUnitsOverride) { this.shopAvailableUnitsOverride = shopAvailableUnitsOverride; }
+    public LocalDate getShopAvailableUnitsOverrideDate() { return shopAvailableUnitsOverrideDate; }
+    public void setShopAvailableUnitsOverrideDate(LocalDate shopAvailableUnitsOverrideDate) { this.shopAvailableUnitsOverrideDate = shopAvailableUnitsOverrideDate; }
+    public BigDecimal getShopDailyLimitUnits() { return shopDailyLimitUnits; }
+    public void setShopDailyLimitUnits(BigDecimal shopDailyLimitUnits) { this.shopDailyLimitUnits = shopDailyLimitUnits; }
+    public BigDecimal getShopDailySoldUnits() { return shopDailySoldUnits; }
+    public void setShopDailySoldUnits(BigDecimal shopDailySoldUnits) { this.shopDailySoldUnits = shopDailySoldUnits; }
+    public BigDecimal getShopDailyRemainingUnits() { return shopDailyRemainingUnits; }
+    public void setShopDailyRemainingUnits(BigDecimal shopDailyRemainingUnits) { this.shopDailyRemainingUnits = shopDailyRemainingUnits; }
 
     @PrePersist
     private void prePersist() {

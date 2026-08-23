@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -303,36 +304,59 @@ public class ShopMaterialAuditService {
 
     @Transactional(readOnly = true)
     public List<MenuAvailabilityRow> menuAvailability(UUID tenantId, UUID companyId) {
+        return menuAvailability(tenantId, companyId, LocalDate.now());
+    }
+
+    @Transactional(readOnly = true)
+    public List<MenuAvailabilityRow> menuAvailability(UUID tenantId, UUID companyId, LocalDate businessDate) {
         Map<UUID, BigDecimal> available = availableByMaterial(tenantId, companyId);
         subtractOpenDemand(available, tenantId, companyId, null);
+        LocalDate effectiveDate = businessDate != null ? businessDate : LocalDate.now();
 
         return modelRepository.findAllByTenantIdAndCompanyId(tenantId, companyId).stream()
                 .filter(model -> model.getSellingPrice() != null && Boolean.TRUE.equals(model.getIsActive()))
-                .map(model -> availabilityForModel(model, tenantId, companyId, available))
+                .map(model -> availabilityForModel(model, tenantId, companyId, available, effectiveDate))
                 .toList();
     }
 
     @Transactional
     public MenuAvailabilityRow updateAvailabilityOverride(UUID modelId, BigDecimal units, UUID tenantId, UUID companyId) {
+        return updateAvailabilityOverride(modelId, units, tenantId, companyId, LocalDate.now());
+    }
+
+    @Transactional
+    public MenuAvailabilityRow updateAvailabilityOverride(UUID modelId, BigDecimal units, UUID tenantId, UUID companyId, LocalDate businessDate) {
         Model model = modelRepository.findById(modelId)
                 .orElseThrow(() -> new IllegalArgumentException("Model not found: " + modelId));
         if (!tenantId.equals(model.getTenantId()) || !companyId.equals(model.getCompanyId())) {
             throw new IllegalArgumentException("Model does not belong to this company");
         }
+        LocalDate effectiveDate = businessDate != null ? businessDate : LocalDate.now();
         model.setShopAvailableUnitsOverride(units);
+        model.setShopAvailableUnitsOverrideDate(units != null ? effectiveDate : null);
         modelRepository.save(model);
         Map<UUID, BigDecimal> available = availableByMaterial(tenantId, companyId);
         subtractOpenDemand(available, tenantId, companyId, null);
-        return availabilityForModel(model, tenantId, companyId, available);
+        return availabilityForModel(model, tenantId, companyId, available, effectiveDate);
     }
 
     private MenuAvailabilityRow availabilityForModel(Model model, UUID tenantId, UUID companyId,
                                                      Map<UUID, BigDecimal> availableByMaterial) {
+        return availabilityForModel(model, tenantId, companyId, availableByMaterial, LocalDate.now());
+    }
+
+    private MenuAvailabilityRow availabilityForModel(Model model, UUID tenantId, UUID companyId,
+                                                     Map<UUID, BigDecimal> availableByMaterial,
+                                                     LocalDate businessDate) {
+        BigDecimal dailyLimit = todayOverride(model, businessDate);
+        BigDecimal soldToday = dailyLimit != null ? soldToday(model.getId(), tenantId, companyId, businessDate) : null;
+        BigDecimal remainingToday = dailyLimit != null ? dailyLimit.subtract(orZero(soldToday)).max(BigDecimal.ZERO) : null;
         Map<UUID, MaterialRequirement> perUnit = buildModelRequirements(model, tenantId, companyId);
         if (perUnit.isEmpty()) {
+            BigDecimal effective = dailyLimit != null ? remainingToday : null;
             return new MenuAvailabilityRow(model.getId(), model.getModelCode(), model.getModelName(),
-                    null, model.getShopAvailableUnitsOverride(), model.getShopAvailableUnitsOverride(),
-                    false, List.of());
+                    null, dailyLimit, effective,
+                    false, List.of(), dailyLimit, soldToday, remainingToday);
         }
 
         BigDecimal calculated = null;
@@ -349,11 +373,29 @@ public class ShopMaterialAuditService {
                     requiredPerUnit, scale(available), possible));
         }
 
-        BigDecimal effective = model.getShopAvailableUnitsOverride() != null
-                ? model.getShopAvailableUnitsOverride()
-                : calculated;
+        BigDecimal effective = calculated;
+        if (dailyLimit != null) {
+            effective = calculated != null ? calculated.min(remainingToday) : remainingToday;
+        }
         return new MenuAvailabilityRow(model.getId(), model.getModelCode(), model.getModelName(),
-                calculated, model.getShopAvailableUnitsOverride(), effective, true, limits);
+                calculated, dailyLimit, effective, true, limits, dailyLimit, soldToday, remainingToday);
+    }
+
+    private BigDecimal todayOverride(Model model, LocalDate businessDate) {
+        BigDecimal units = model.getShopAvailableUnitsOverride();
+        if (units == null) return null;
+        LocalDate date = model.getShopAvailableUnitsOverrideDate();
+        if (date == null) return null;
+        LocalDate effectiveDate = businessDate != null ? businessDate : LocalDate.now();
+        return date.equals(effectiveDate) ? units : null;
+    }
+
+    private BigDecimal soldToday(UUID modelId, UUID tenantId, UUID companyId, LocalDate businessDate) {
+        LocalDate effectiveDate = businessDate != null ? businessDate : LocalDate.now();
+        java.time.ZoneId zone = java.time.ZoneId.systemDefault();
+        Instant from = effectiveDate.atStartOfDay(zone).toInstant();
+        Instant to = effectiveDate.plusDays(1).atStartOfDay(zone).toInstant();
+        return orZero(shopOrderItemRepository.sumSoldQuantityForModelInDay(modelId, tenantId, companyId, from, to, null));
     }
 
     private List<MaterialRequirement> buildOrderRequirements(ShopOrder order) {
@@ -562,7 +604,10 @@ public class ShopMaterialAuditService {
                                       BigDecimal manualAvailableUnits,
                                       BigDecimal effectiveAvailableUnits,
                                       boolean hasBom,
-                                      List<MaterialLimitRow> materialLimits) {}
+                                      List<MaterialLimitRow> materialLimits,
+                                      BigDecimal dailyLimitUnits,
+                                      BigDecimal dailySoldUnits,
+                                      BigDecimal dailyRemainingUnits) {}
 
     public record MaterialLimitRow(UUID materialId, String materialCode, String materialName,
                                    String materialUnit,
@@ -628,4 +673,3 @@ public class ShopMaterialAuditService {
         }
     }
 }
-

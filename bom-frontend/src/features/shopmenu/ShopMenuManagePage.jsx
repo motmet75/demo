@@ -33,16 +33,26 @@ import IconButton from '@mui/material/IconButton'
 import Autocomplete from '@mui/material/Autocomplete'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import { fetchModels, updateModel, createModel } from '../../api/modelApi'
-import { fetchMenuOptions, createMenuOption, updateMenuOption, deleteMenuOption, translateMenuItem } from '../../api/shopApi'
+import { fetchMenuOptions, createMenuOption, updateMenuOption, deleteMenuOption, translateMenuItem, fetchMenuAvailability, updateMenuAvailabilityOverride } from '../../api/shopApi'
 import { MENU_TRANSLATION_LANGUAGES, compactTranslations, parseJsonObject, stringifyTranslations } from '../../i18n/menuLocalization'
 import { getLanguageMeta } from '../../i18n/translations'
 import { parseAllowedSideConfig, serializeAllowedSideConfig } from '../../utils/sideItemConfig'
 
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' d' : ''
+const fmtQty = (n) => n != null && n !== '' ? Number(n).toLocaleString('vi-VN', { maximumFractionDigits: 3 }) : '—'
+const localDateKey = () => {
+  const d = new Date()
+  const pad = value => String(value).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
 
-function ModelCard({ model, selected, onSelectedChange, onEdit, onClone, onToggle, saving }) {
+function ModelCard({ model, selected, availabilityRow, onSelectedChange, onEdit, onClone, onToggle, saving }) {
   const onMenu = Boolean(model.sellingPrice) && model.isActive !== false
   const hasImage = Boolean(model.imageUrl)
+  const manualUnits = availabilityRow?.manualAvailableUnits
+  const effectiveUnits = availabilityRow?.effectiveAvailableUnits
+  const numericEffective = Number(effectiveUnits)
+  const hasEffectiveUnits = effectiveUnits != null && !Number.isNaN(numericEffective)
 
   return (
     <Card variant="outlined" sx={{
@@ -103,6 +113,15 @@ function ModelCard({ model, selected, onSelectedChange, onEdit, onClone, onToggl
             <Typography variant="body2" color="primary" fontWeight={600}>{fmt(model.sellingPrice)}</Typography>
           ) : (
             <Typography variant="body2" color="text.disabled" sx={{ fontStyle: 'italic', fontSize: 12 }}>No price set</Typography>
+          )}
+          {(manualUnits != null || hasEffectiveUnits) && (
+            <Chip
+              label={manualUnits != null ? `Today limit: ${fmtQty(manualUnits)}` : `Today left: ${fmtQty(effectiveUnits)}`}
+              size="small"
+              color={hasEffectiveUnits && numericEffective <= 0 ? 'error' : (manualUnits != null ? 'warning' : 'success')}
+              variant={manualUnits != null ? 'filled' : 'outlined'}
+              sx={{ mt: 0.75, height: 20, fontSize: 10, fontWeight: 800 }}
+            />
           )}
         </Box>
       </CardContent>
@@ -296,7 +315,7 @@ function CloneDialog({ open, source, onClose, onCreated }) {
 
 // -- Edit dialog -------------------------------------------------------------
 
-const EMPTY_FORM   = { sellingPrice: '', category: '', ingredients: '', imageUrl: '', allowedSideIds: [], sideImageUrls: {}, modelNameTranslations: {}, categoryTranslations: {} }
+const EMPTY_FORM   = { modelName: '', sellingPrice: '', category: '', ingredients: '', imageUrl: '', allowedSideIds: [], sideImageUrls: {}, modelNameTranslations: {}, categoryTranslations: {}, shopAvailableUnitsOverride: '' }
 const EMPTY_CHOICE = { label: '', price: '', modelId: null, labelTranslations: {} }
 const EMPTY_OPT    = { groupName: '', groupNameTranslations: {}, choiceRows: [{ ...EMPTY_CHOICE }], required: false, multiSelect: false, isFree: false, defaultValue: '' }
 
@@ -465,7 +484,7 @@ function fmtChoiceSummary(choice, isFree) {
   return `${choice.label}${price}${bom}`
 }
 
-function EditDialog({ open, model, models, onClose, onSave }) {
+function EditDialog({ open, model, models, availabilityRow, onClose, onSave, onAvailabilitySave }) {
   const [form, setForm]           = useState(EMPTY_FORM)
   const [saving, setSaving]       = useState(false)
   const [error, setError]         = useState('')
@@ -479,7 +498,9 @@ function EditDialog({ open, model, models, onClose, onSave }) {
     if (!open || !model) return
     let parsedSideIds = []
     try { parsedSideIds = parseAllowedSideConfig(model.allowedSideIds) } catch { parsedSideIds = [] }
+    const manualAvailableUnits = availabilityRow?.manualAvailableUnits
     setForm({
+      modelName: model.modelName ?? '',
       sellingPrice: model.sellingPrice ?? '',
       category: model.category ?? '',
       ingredients: model.ingredients ?? '',
@@ -491,6 +512,7 @@ function EditDialog({ open, model, models, onClose, onSave }) {
       })),
       modelNameTranslations: parseJsonObject(model.modelNameTranslations),
       categoryTranslations: parseJsonObject(model.categoryTranslations),
+      shopAvailableUnitsOverride: manualAvailableUnits != null ? String(manualAvailableUnits) : '',
     })
     setError(''); setOptions([]); setShowAddOpt(false); setNewOpt(EMPTY_OPT)
     setOptLoading(true)
@@ -498,7 +520,7 @@ function EditDialog({ open, model, models, onClose, onSave }) {
       .then(({ data }) => setOptions(Array.isArray(data) ? data : []))
       .catch(() => {})
       .finally(() => setOptLoading(false))
-  }, [open, model?.id])
+  }, [open, model?.id, availabilityRow?.manualAvailableUnits])
 
   const set = (field) => (e) => setForm(f => ({ ...f, [field]: e.target.value }))
   const setTranslation = (field) => (language, value) => setForm(f => ({
@@ -556,6 +578,13 @@ function EditDialog({ open, model, models, onClose, onSave }) {
   const handleSave = async () => {
     setSaving(true); setError('')
     try {
+      const cleanedName = String(form.modelName || '').trim()
+      if (!cleanedName) throw new Error('Item name is required')
+      const rawTodayUnits = String(form.shopAvailableUnitsOverride ?? '').trim()
+      const todayUnits = rawTodayUnits === '' ? null : Number(rawTodayUnits)
+      if (todayUnits != null && (!Number.isFinite(todayUnits) || todayUnits < 0)) {
+        throw new Error('Today quantity must be 0 or more, or blank to auto reset')
+      }
       const changedSideImages = selectedSideModels.filter(side =>
         String(form.sideImageUrls?.[String(side.id)] || '') !== String(side.imageUrl || '')
       )
@@ -566,6 +595,7 @@ function EditDialog({ open, model, models, onClose, onSave }) {
 
       await onSave(model.id, {
         ...model,
+        modelName: cleanedName,
         sellingPrice: form.sellingPrice !== '' ? Number(form.sellingPrice) : null,
         category: form.category || null,
         ingredients: form.ingredients || null,
@@ -574,6 +604,7 @@ function EditDialog({ open, model, models, onClose, onSave }) {
         modelNameTranslations: stringifyTranslations(form.modelNameTranslations),
         categoryTranslations: stringifyTranslations(form.categoryTranslations),
       })
+      if (onAvailabilitySave) await onAvailabilitySave(model.id, todayUnits)
       onClose()
     } catch (e) {
       setError(e.message || 'Save failed')
@@ -683,10 +714,18 @@ function EditDialog({ open, model, models, onClose, onSave }) {
       <DialogContent>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
         <Stack spacing={2} sx={{ mt: 0.5 }}>
+          <TextField label="Item Name" size="small" fullWidth
+            value={form.modelName} onChange={set('modelName')}
+            helperText="This is the main customer-facing name before language overrides." />
           <TextField label="Selling Price" type="number" size="small" fullWidth
             value={form.sellingPrice} onChange={set('sellingPrice')}
             InputProps={{ endAdornment: <InputAdornment position="end">d</InputAdornment> }}
             helperText="Leave empty to hide from menu" />
+          <TextField label="Today default quantity / portion" type="number" size="small" fullWidth
+            value={form.shopAvailableUnitsOverride} onChange={set('shopAvailableUnitsOverride')}
+            inputProps={{ min: 0, step: '0.001' }}
+            InputProps={{ endAdornment: <InputAdornment position="end">unit</InputAdornment> }}
+            helperText="Blank = auto from inventory and reset by day. 0 = sold out for today only." />
           <TextField label="Category" size="small" fullWidth
             value={form.category} onChange={set('category')} placeholder="e.g. Coffee, Tea, Food" />
           <TextField label="Ingredients shown to customers" size="small" fullWidth multiline minRows={2}
@@ -1003,6 +1042,7 @@ function EditDialog({ open, model, models, onClose, onSave }) {
 
 export default function ShopMenuManagePage() {
   const [models, setModels] = useState([])
+  const [availabilityRows, setAvailabilityRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [savingId, setSavingId] = useState(null)
@@ -1018,10 +1058,24 @@ export default function ShopMenuManagePage() {
   const [catFilter, setCatFilter] = useState('')
   const [search, setSearch] = useState('')
 
+  const applyAvailabilityResponse = (result) => {
+    const rows = result?.data
+    setAvailabilityRows(Array.isArray(rows) ? rows : [])
+  }
+
+  const loadAvailability = async () => {
+    const result = await fetchMenuAvailability()
+    if (result?.res?.ok) applyAvailabilityResponse(result)
+  }
+
   const load = () => {
     setLoading(true)
     fetchModels()
-      .then(list => { setModels(list); setLoading(false) })
+      .then(async list => {
+        setModels(list)
+        try { await loadAvailability() } catch { setAvailabilityRows([]) }
+        setLoading(false)
+      })
       .catch(e => { setError(e.message); setLoading(false) })
   }
 
@@ -1032,16 +1086,24 @@ export default function ShopMenuManagePage() {
     return [...set].sort()
   }, [models])
 
+  const availabilityByModelId = useMemo(() => {
+    return new Map((availabilityRows || []).map(row => [String(row.modelId), row]))
+  }, [availabilityRows])
+
   const visible = useMemo(() => {
     return models.filter(m => {
       const onMenu = Boolean(m.sellingPrice) && m.isActive !== false
+      const availability = availabilityByModelId.get(String(m.id))
+      const effectiveUnits = Number(availability?.effectiveAvailableUnits)
+      const soldOutToday = onMenu && availability?.effectiveAvailableUnits != null && !Number.isNaN(effectiveUnits) && effectiveUnits <= 0
       if (filter === 'on' && !onMenu) return false
       if (filter === 'off' && onMenu) return false
+      if (filter === 'soldout' && !soldOutToday) return false
       if (catFilter && m.category !== catFilter) return false
       if (search && !m.modelName.toLowerCase().includes(search.toLowerCase())) return false
       return true
     })
-  }, [models, filter, catFilter, search])
+  }, [models, availabilityByModelId, filter, catFilter, search])
 
   const selectedModels = useMemo(
     () => selectedIds.map(id => models.find(model => model.id === id)).filter(Boolean),
@@ -1111,6 +1173,7 @@ export default function ShopMenuManagePage() {
     try {
       const updated = await updateModel(model.id, { ...model, isActive: !onMenu })
       setModels(prev => prev.map(m => m.id === model.id ? { ...m, ...updated } : m))
+      try { await loadAvailability() } catch { /* availability refresh is non-fatal */ }
     } catch (e) {
       setError(e.message)
     } finally {
@@ -1123,12 +1186,35 @@ export default function ShopMenuManagePage() {
     setModels(prev => prev.map(m => m.id === id ? { ...m, ...updated } : m))
   }
 
+  const handleAvailabilitySave = async (modelId, units) => {
+    const result = await updateMenuAvailabilityOverride(modelId, units)
+    if (!result?.res?.ok) {
+      const data = result?.data
+      throw new Error((data && (data.message || data.error)) || (typeof data === 'string' ? data : '') || 'Failed to save today quantity')
+    }
+    const updatedRow = result.data
+    setAvailabilityRows(prev => {
+      const byId = new Map((prev || []).map(row => [String(row.modelId), row]))
+      if (updatedRow?.modelId) byId.set(String(updatedRow.modelId), updatedRow)
+      return Array.from(byId.values())
+    })
+    setModels(prev => prev.map(model => String(model.id) === String(modelId)
+      ? { ...model, shopAvailableUnitsOverride: units, shopAvailableUnitsOverrideDate: units != null ? localDateKey() : null }
+      : model))
+  }
+
   const handleCloneCreated = (created) => {
     setModels(prev => [...prev, created])
   }
 
   const onCount = models.filter(m => Boolean(m.sellingPrice) && m.isActive !== false).length
   const offCount = models.length - onCount
+  const soldOutCount = models.filter(m => {
+    const onMenu = Boolean(m.sellingPrice) && m.isActive !== false
+    const row = availabilityByModelId.get(String(m.id))
+    const effective = Number(row?.effectiveAvailableUnits)
+    return onMenu && row?.effectiveAvailableUnits != null && !Number.isNaN(effective) && effective <= 0
+  }).length
 
   return (
     <Box sx={{ p: 3, maxWidth: 1100, mx: 'auto' }}>
@@ -1156,6 +1242,7 @@ export default function ShopMenuManagePage() {
           <ToggleButton value="all">All ({models.length})</ToggleButton>
           <ToggleButton value="on">On Menu ({onCount})</ToggleButton>
           <ToggleButton value="off">Off Menu ({offCount})</ToggleButton>
+          <ToggleButton value="soldout">Sold out today ({soldOutCount})</ToggleButton>
         </ToggleButtonGroup>
         <Box sx={{ flex: 1 }} />
         {selectedIds.length > 0 && (
@@ -1214,6 +1301,7 @@ export default function ShopMenuManagePage() {
               key={m.id}
               model={m}
               selected={selectedIds.includes(m.id)}
+              availabilityRow={availabilityByModelId.get(String(m.id))}
               onSelectedChange={handleSelectModel}
               onEdit={setEditModel}
               onClone={setCloneSource}
@@ -1228,8 +1316,10 @@ export default function ShopMenuManagePage() {
         open={Boolean(editModel)}
         model={editModel}
         models={models}
+        availabilityRow={editModel ? availabilityByModelId.get(String(editModel.id)) : null}
         onClose={() => setEditModel(null)}
         onSave={handleSave}
+        onAvailabilitySave={handleAvailabilitySave}
       />
 
       <CloneDialog

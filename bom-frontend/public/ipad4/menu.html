@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>BOM Menu Manager - iPad</title>
+  <style>
+    html, body { margin: 0; padding: 0; background: #eef1f4; color: #20252b; font: 18px Arial, sans-serif; }
+    * { -webkit-box-sizing: border-box; box-sizing: border-box; }
+    .bar { position: fixed; z-index: 80; left: 0; right: 0; top: 0; min-height: 58px; background: #174a75; color: #fff; padding: 8px 12px; box-shadow: 0 3px 10px rgba(0,0,0,.25); }
+    .bar h1 { float: left; margin: 8px 8px 0 0; font-size: 18px; }
+    .bar .right { float: right; }
+    .page { width: 97%; max-width: 1180px; margin: 0 auto; padding-top: 72px; }
+    .panel, .menu-card { background: #fff; border: 1px solid #cbd2d9; border-radius: 7px; padding: 14px; margin-bottom: 12px; }
+    h2, h3, p { margin-top: 0; }
+    label { display: block; margin: 10px 0 5px; font-weight: bold; }
+    input, select, textarea { display: block; width: 100%; min-height: 46px; padding: 8px 10px; border: 1px solid #929ca6; border-radius: 5px; font: 18px Arial, sans-serif; background: #fff; }
+    textarea { min-height: 78px; resize: vertical; }
+    button { min-height: 44px; padding: 7px 14px; border: 0; border-radius: 5px; background: #1769aa; color: #fff; font-size: 17px; font-weight: bold; }
+    button:active { background: #0d4775; }
+    button.secondary { background: #65727e; }
+    button.danger { background: #a33b35; }
+    button.success { background: #168447; }
+    button.small { min-height: 36px; padding: 4px 9px; font-size: 14px; }
+    .top-action { min-height: 40px; padding: 5px 9px; font-size: 14px; margin-left: 3px; }
+    .message { display: none; padding: 11px; margin: 12px 0; border-radius: 5px; background: #ffe3e3; color: #8b1111; }
+    .notice { background: #fff5c7; color: #574800; }
+    .muted { color: #68727c; font-size: 15px; }
+    .filters { overflow: hidden; }
+    .filter-box { float: left; width: 24%; margin-right: 1%; }
+    .summary { clear: both; padding-top: 10px; color: #525d66; font-size: 15px; font-weight: bold; }
+    .menu-card { border-left: 6px solid #1769aa; }
+    .menu-card.off { border-left-color: #929ca6; opacity: .86; }
+    .menu-card.soldout { border-left-color: #a33b35; }
+    .row { overflow: hidden; margin-left: -6px; margin-right: -6px; }
+    .col { float: left; padding: 0 6px; }
+    .col.name { width: 30%; }
+    .col.category { width: 18%; }
+    .col.price { width: 15%; }
+    .col.portion { width: 18%; }
+    .col.active { width: 9%; text-align: center; }
+    .col.actions { width: 10%; }
+    .active-box { width: 32px; height: 32px; margin: 13px auto 0; }
+    .item-meta { margin: 8px 0 0; color: #525d66; font-size: 14px; }
+    .pill { display: inline-block; padding: 4px 7px; margin: 3px 4px 0 0; border-radius: 12px; background: #e5eef7; color: #174a75; font-weight: bold; font-size: 13px; }
+    .pill.warn { background: #fff2c4; color: #835000; }
+    .pill.bad { background: #ffe1de; color: #9b1c16; }
+    .clear { clear: both; }
+    .modal { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background: rgba(10, 20, 30, .94); }
+    .modal-card { width: 92%; max-width: 880px; margin: 24px auto; padding: 18px; background: #fff; border-radius: 9px; }
+    .option-row { padding: 12px; margin-bottom: 10px; border: 1px solid #d5dce2; border-radius: 7px; background: #f9fbfc; }
+    .option-actions { margin-top: 8px; overflow: hidden; }
+    .option-actions button { float: left; margin-right: 8px; }
+    .checks label { display: inline-block; margin-right: 18px; font-size: 15px; }
+    .checks input { display: inline-block; width: 24px; height: 24px; vertical-align: -6px; }
+    @media (max-width: 760px) {
+      .bar h1 { display: none; }
+      .filter-box, .col { float: none !important; width: 100% !important; }
+      .col.active { text-align: left; }
+      .active-box { margin: 8px 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bar">
+    <h1>Menu Manager</h1>
+    <div class="right">
+      <button id="backButton" class="top-action secondary" type="button">← Orders</button>
+      <button id="refreshButton" class="top-action" type="button">↻ Refresh</button>
+    </div>
+    <div class="clear"></div>
+  </div>
+
+  <div class="page">
+    <div id="messageBox" class="message"></div>
+
+    <div id="contextBox" class="panel" style="display:none">
+      <h3>Chọn cửa hàng</h3>
+      <p class="muted">Không tìm thấy cửa hàng trong thiết bị này. Nhập ID hoặc đăng nhập ở trang Orders trước.</p>
+      <label for="tenantId">Tenant ID</label>
+      <input id="tenantId" type="text" autocapitalize="off">
+      <label for="companyId">Company ID</label>
+      <input id="companyId" type="text" autocapitalize="off">
+      <button id="saveContextButton" class="success" type="button">Mở menu</button>
+    </div>
+
+    <div id="loginBox" class="panel" style="display:none">
+      <h3>Cần đăng nhập</h3>
+      <p class="muted">Mở trang Orders trên iPad này, đăng nhập, sau đó quay lại Menu Manager.</p>
+      <button id="loginButton" type="button">Mở Orders để đăng nhập</button>
+    </div>
+
+    <div id="mainBox" style="display:none">
+      <div class="panel filters">
+        <div class="filter-box">
+          <label for="searchInput">Tìm món</label>
+          <input id="searchInput" type="search" autocomplete="off" placeholder="Tên, mã món...">
+        </div>
+        <div class="filter-box">
+          <label for="categoryFilter">Nhóm món</label>
+          <select id="categoryFilter"><option value="">Tất cả</option></select>
+        </div>
+        <div class="filter-box">
+          <label for="stateFilter">Trạng thái</label>
+          <select id="stateFilter">
+            <option value="">Tất cả</option>
+            <option value="on">Đang bán</option>
+            <option value="off">Tắt khỏi menu</option>
+            <option value="soldout">Hết hôm nay</option>
+          </select>
+        </div>
+        <div class="filter-box">
+          <label>&nbsp;</label>
+          <button id="clearFiltersButton" class="secondary" type="button">Xóa lọc</button>
+        </div>
+        <div id="summary" class="summary"></div>
+      </div>
+      <div id="menuList"><div class="panel">Đang tải menu...</div></div>
+    </div>
+  </div>
+
+  <div id="optionModal" class="modal">
+    <div class="modal-card">
+      <h2 id="optionTitle">Topping / Option</h2>
+      <p class="muted">Choices viết cách nhau bằng dấu phẩy. Có thể thêm giá kiểu: Ít đường:0, Trân châu:5000.</p>
+      <div id="optionMessage" class="message"></div>
+      <div id="optionList"></div>
+      <div class="option-row">
+        <h3>Thêm option group</h3>
+        <label for="newGroupName">Tên group</label>
+        <input id="newGroupName" type="text" placeholder="Ví dụ: Mức đường, Topping">
+        <label for="newChoices">Choices</label>
+        <textarea id="newChoices" placeholder="Không đường, Ít đường, Bình thường"></textarea>
+        <label for="newDefault">Mặc định</label>
+        <input id="newDefault" type="text" placeholder="Bình thường">
+        <div class="checks">
+          <label><input id="newRequired" type="checkbox"> Bắt buộc</label>
+          <label><input id="newMulti" type="checkbox"> Chọn nhiều</label>
+          <label><input id="newFree" type="checkbox"> Miễn phí</label>
+        </div>
+        <button id="addOptionButton" class="success" type="button">＋ Thêm option</button>
+      </div>
+      <button id="closeOptionButton" class="secondary" type="button">Đóng</button>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    'use strict';
+    var tenantId = '';
+    var companyId = '';
+    var user = null;
+    var models = [];
+    var availabilityRows = [];
+    var optionsByModel = {};
+    var selectedModel = null;
+
+    function byId(id) { return document.getElementById(id); }
+    function text(value) { return value === null || typeof value === 'undefined' ? '' : String(value); }
+    function escapeHtml(value) {
+      return text(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    function parseJson(value, fallback) { try { return value ? JSON.parse(value) : fallback; } catch (ignore) { return fallback; } }
+    function shallowCopy(source) {
+      var out = {}, key;
+      source = source || {};
+      for (key in source) if (source.hasOwnProperty(key)) out[key] = source[key];
+      return out;
+    }
+    function formatMoney(value) {
+      var n = Number(value || 0);
+      return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' đ';
+    }
+    function formatQty(value) {
+      if (value === null || typeof value === 'undefined' || value === '') return '—';
+      var n = Number(value);
+      if (isNaN(n)) return '—';
+      return String(Math.round(n * 1000) / 1000).replace('.', ',');
+    }
+    function message(id, value, notice) {
+      var box = byId(id);
+      box.className = notice ? 'message notice' : 'message';
+      box.innerHTML = escapeHtml(value);
+      box.style.display = value ? 'block' : 'none';
+    }
+    function request(method, url, body, callback) {
+      var xhr = new XMLHttpRequest();
+      xhr.open(method, url, true);
+      xhr.withCredentials = true;
+      xhr.setRequestHeader('Accept', 'application/json');
+      xhr.setRequestHeader('X-Time-Zone', 'Asia/Ho_Chi_Minh');
+      if (tenantId) xhr.setRequestHeader('X-Tenant-Id', tenantId);
+      if (companyId) xhr.setRequestHeader('X-Company-Id', companyId);
+      if (body !== null) xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.onreadystatechange = function () {
+        var data = null;
+        if (xhr.readyState !== 4) return;
+        try { data = xhr.responseText ? JSON.parse(xhr.responseText) : null; } catch (ignore) { data = xhr.responseText; }
+        callback(xhr.status, data);
+      };
+      xhr.onerror = function () { callback(0, null); };
+      xhr.send(body === null ? null : JSON.stringify(body));
+    }
+    function errorText(status, data) {
+      if (data && (data.message || data.error)) return text(data.message || data.error);
+      if (typeof data === 'string' && data) return data;
+      if (status === 0) return 'Không thể kết nối máy chủ.';
+      if (status === 401) return 'Phiên đăng nhập đã hết hạn.';
+      return 'Có lỗi xảy ra (' + status + ').';
+    }
+    function restoreContext() {
+      var saved;
+      try {
+        saved = JSON.parse(localStorage.getItem('bom_ipad_context_v1') || '{}');
+        tenantId = saved.tenantId || '';
+        companyId = saved.companyId || '';
+      } catch (ignore) {}
+      byId('tenantId').value = tenantId;
+      byId('companyId').value = companyId;
+    }
+    function saveContext() {
+      try { localStorage.setItem('bom_ipad_context_v1', JSON.stringify({ tenantId: tenantId, companyId: companyId })); } catch (ignore) {}
+    }
+    function chooseContext(authUser) {
+      user = authUser || {};
+      tenantId = user.assignedTenantId || user.lastTenantId || tenantId;
+      companyId = user.assignedCompanyId || user.lastCompanyId || companyId;
+      byId('tenantId').value = tenantId;
+      byId('companyId').value = companyId;
+      saveContext();
+    }
+    function availabilityFor(modelId) {
+      var i;
+      for (i = 0; i < availabilityRows.length; i += 1) {
+        if (text(availabilityRows[i].modelId) === text(modelId)) return availabilityRows[i];
+      }
+      return null;
+    }
+    function menuOn(model) { return model && model.sellingPrice !== null && typeof model.sellingPrice !== 'undefined' && model.isActive !== false; }
+    function soldOutToday(model) {
+      var row = availabilityFor(model.id), effective;
+      if (!menuOn(model) || !row) return false;
+      if (row.effectiveAvailableUnits === null || typeof row.effectiveAvailableUnits === 'undefined') return false;
+      effective = Number(row.effectiveAvailableUnits);
+      return !isNaN(effective) && effective <= 0;
+    }
+    function copyModel(model) {
+      var body = {}, key;
+      for (key in model) if (model.hasOwnProperty(key)) body[key] = model[key];
+      return body;
+    }
+    function renderCategoryFilter() {
+      var seen = {}, cats = [], i, cat, html = '<option value="">Tất cả</option>', selected = byId('categoryFilter').value;
+      for (i = 0; i < models.length; i += 1) {
+        cat = text(models[i].category);
+        if (cat && !seen[cat]) { seen[cat] = true; cats.push(cat); }
+      }
+      cats.sort();
+      for (i = 0; i < cats.length; i += 1) html += '<option value="' + escapeHtml(cats[i]) + '">' + escapeHtml(cats[i]) + '</option>';
+      byId('categoryFilter').innerHTML = html;
+      byId('categoryFilter').value = selected;
+    }
+    function renderMenu() {
+      var q = text(byId('searchInput').value).toLowerCase();
+      var cat = byId('categoryFilter').value;
+      var state = byId('stateFilter').value;
+      var html = '', shown = 0, onCount = 0, offCount = 0, soldOutCount = 0, i, m, row, cls, manual, effective, calculated, searchText;
+      for (i = 0; i < models.length; i += 1) {
+        m = models[i];
+        if (menuOn(m)) onCount += 1; else offCount += 1;
+        if (soldOutToday(m)) soldOutCount += 1;
+      }
+      for (i = 0; i < models.length; i += 1) {
+        m = models[i];
+        row = availabilityFor(m.id);
+        searchText = text(m.modelName + ' ' + m.modelCode + ' ' + m.category).toLowerCase();
+        if (q && searchText.indexOf(q) < 0) continue;
+        if (cat && text(m.category) !== cat) continue;
+        if (state === 'on' && !menuOn(m)) continue;
+        if (state === 'off' && menuOn(m)) continue;
+        if (state === 'soldout' && !soldOutToday(m)) continue;
+        shown += 1;
+        cls = 'menu-card' + (menuOn(m) ? '' : ' off') + (soldOutToday(m) ? ' soldout' : '');
+        manual = row && row.manualAvailableUnits !== null && typeof row.manualAvailableUnits !== 'undefined' ? row.manualAvailableUnits : '';
+        effective = row ? row.effectiveAvailableUnits : null;
+        calculated = row ? row.calculatedAvailableUnits : null;
+        html += '<div class="' + cls + '" data-model-id="' + escapeHtml(m.id) + '">';
+        html += '<div class="row">';
+        html += '<div class="col name"><label>Tên món</label><input id="name_' + escapeHtml(m.id) + '" value="' + escapeHtml(m.modelName) + '"></div>';
+        html += '<div class="col category"><label>Nhóm</label><input id="category_' + escapeHtml(m.id) + '" value="' + escapeHtml(m.category || '') + '"></div>';
+        html += '<div class="col price"><label>Giá bán</label><input id="price_' + escapeHtml(m.id) + '" type="number" inputmode="decimal" value="' + escapeHtml(m.sellingPrice !== null && typeof m.sellingPrice !== 'undefined' ? m.sellingPrice : '') + '"></div>';
+        html += '<div class="col portion"><label>SL hôm nay</label><input id="portion_' + escapeHtml(m.id) + '" type="number" inputmode="decimal" min="0" step="0.001" value="' + escapeHtml(manual) + '"></div>';
+        html += '<div class="col active"><label>Bán</label><input id="active_' + escapeHtml(m.id) + '" class="active-box" type="checkbox"' + (m.isActive !== false ? ' checked' : '') + '></div>';
+        html += '<div class="col actions"><label>&nbsp;</label><button class="success small" data-action="save" data-id="' + escapeHtml(m.id) + '" type="button">Lưu</button><button class="small" style="margin-top:5px" data-action="options" data-id="' + escapeHtml(m.id) + '" type="button">Option</button></div>';
+        html += '<div class="clear"></div></div>';
+        html += '<div class="item-meta"><span class="pill">' + escapeHtml(m.modelCode || m.id) + '</span>';
+        html += menuOn(m) ? '<span class="pill">Đang bán</span>' : '<span class="pill warn">Tắt khỏi menu</span>';
+        if (manual !== '') html += '<span class="pill warn">Giới hạn hôm nay: ' + escapeHtml(formatQty(manual)) + '</span>';
+        if (row) html += '<span class="pill' + (soldOutToday(m) ? ' bad' : '') + '">Còn hiệu lực: ' + escapeHtml(formatQty(effective)) + '</span><span class="pill">Tính từ kho: ' + escapeHtml(formatQty(calculated)) + '</span>';
+        html += '<span class="muted"> Để trống SL hôm nay = tự tính theo kho và tự reset ngày mới. Nhập 0 = hết món hôm nay.</span></div>';
+        html += '</div>';
+      }
+      byId('summary').innerHTML = shown + ' món đang hiển thị · ' + onCount + ' đang bán · ' + offCount + ' tắt · ' + soldOutCount + ' hết hôm nay';
+      byId('menuList').innerHTML = html || '<div class="panel">Không có món phù hợp bộ lọc.</div>';
+    }
+    function loadAvailability(done) {
+      request('GET', '/sapi/shop/staff/materials/menu-availability', null, function (status, data) {
+        if (status >= 200 && status < 300 && data instanceof Array) availabilityRows = data;
+        else availabilityRows = [];
+        if (done) done();
+      });
+    }
+    function loadModels() {
+      message('messageBox', 'Đang tải menu...', true);
+      request('GET', '/sapi/bom/models', null, function (status, data) {
+        var list;
+        if (status === 401) { byId('loginBox').style.display = 'block'; byId('mainBox').style.display = 'none'; message('messageBox', '', false); return; }
+        if (status < 200 || status >= 300) { message('messageBox', errorText(status, data), false); return; }
+        list = data instanceof Array ? data : data && (data.data || data.items || data.content);
+        models = list instanceof Array ? list : [];
+        loadAvailability(function () {
+          renderCategoryFilter();
+          renderMenu();
+          byId('mainBox').style.display = 'block';
+          byId('contextBox').style.display = 'none';
+          byId('loginBox').style.display = 'none';
+          message('messageBox', '', false);
+        });
+      });
+    }
+    function loadAll() {
+      if (!tenantId || !companyId) { byId('contextBox').style.display = 'block'; byId('mainBox').style.display = 'none'; return; }
+      loadModels();
+    }
+    function saveModel(id) {
+      var model = null, i, body, rawPrice, rawPortion, units;
+      for (i = 0; i < models.length; i += 1) if (text(models[i].id) === text(id)) { model = models[i]; break; }
+      if (!model) return;
+      body = copyModel(model);
+      body.modelName = text(byId('name_' + id).value).replace(/^\s+|\s+$/g, '');
+      if (!body.modelName) { message('messageBox', 'Tên món không được trống.', false); return; }
+      body.category = text(byId('category_' + id).value).replace(/^\s+|\s+$/g, '') || null;
+      rawPrice = text(byId('price_' + id).value).replace(/^\s+|\s+$/g, '');
+      body.sellingPrice = rawPrice === '' ? null : Number(rawPrice);
+      body.isActive = byId('active_' + id).checked;
+      if (rawPrice !== '' && (isNaN(body.sellingPrice) || body.sellingPrice < 0)) { message('messageBox', 'Giá bán không hợp lệ.', false); return; }
+      rawPortion = text(byId('portion_' + id).value).replace(/^\s+|\s+$/g, '');
+      units = rawPortion === '' ? null : Number(rawPortion);
+      if (rawPortion !== '' && (isNaN(units) || units < 0)) { message('messageBox', 'SL hôm nay phải >= 0 hoặc để trống.', false); return; }
+      message('messageBox', 'Đang lưu ' + body.modelName + '...', true);
+      request('PUT', '/sapi/bom/models/' + encodeURIComponent(id), body, function (status, data) {
+        if (status < 200 || status >= 300) { message('messageBox', errorText(status, data), false); return; }
+        request('PUT', '/sapi/shop/staff/materials/menu-availability/' + encodeURIComponent(id) + '/override', { units: units }, function (portionStatus, portionData) {
+          if (portionStatus < 200 || portionStatus >= 300) { message('messageBox', errorText(portionStatus, portionData), false); return; }
+          for (i = 0; i < models.length; i += 1) if (text(models[i].id) === text(id)) { models[i] = data; break; }
+          loadAvailability(function () {
+            renderCategoryFilter();
+            renderMenu();
+            message('messageBox', 'Đã lưu ' + body.modelName + '.', true);
+          });
+        });
+      });
+    }
+    function parseChoices(value) {
+      var parsed, pieces, out = [], i, s;
+      if (!value) return [];
+      try {
+        parsed = JSON.parse(value);
+        if (parsed instanceof Array) return parsed.map(function (choice) { return typeof choice === 'object' ? choice : { label: text(choice), price: 0 }; });
+      } catch (ignore) {}
+      pieces = text(value).split(',');
+      for (i = 0; i < pieces.length; i += 1) {
+        s = pieces[i].replace(/^\s+|\s+$/g, '');
+        if (s) out.push({ label: s, price: 0 });
+      }
+      return out;
+    }
+    function choicesToText(value) {
+      return parseChoices(value).map(function (choice) {
+        return text(choice.label) + (Number(choice.price || 0) ? ':' + Number(choice.price || 0) : '');
+      }).join(', ');
+    }
+    function choicesFromText(value, existing) {
+      var pieces = text(value).split(','), out = [], old = existing || [], i, s, idx, label, price, matched;
+      for (i = 0; i < pieces.length; i += 1) {
+        s = pieces[i].replace(/^\s+|\s+$/g, '');
+        if (!s) continue;
+        idx = s.lastIndexOf(':');
+        label = idx > -1 ? s.slice(0, idx).replace(/^\s+|\s+$/g, '') : s;
+        price = idx > -1 ? Number(s.slice(idx + 1).replace(/^\s+|\s+$/g, '')) : 0;
+        if (!label) continue;
+        matched = null;
+        for (var j = 0; j < old.length; j += 1) if (text(old[j].label) === label) { matched = old[j]; break; }
+        matched = shallowCopy(matched || {});
+        matched.label = label;
+        matched.price = isNaN(price) ? 0 : price;
+        out.push(matched);
+      }
+      return out;
+    }
+    function loadOptions(model, done) {
+      request('GET', '/sapi/shop/staff/menu-options?modelId=' + encodeURIComponent(model.id), null, function (status, data) {
+        if (status >= 200 && status < 300 && data instanceof Array) optionsByModel[model.id] = data;
+        else optionsByModel[model.id] = [];
+        if (done) done();
+      });
+    }
+    function renderOptions() {
+      var opts = selectedModel ? (optionsByModel[selectedModel.id] || []) : [], html = '', i, opt;
+      if (!selectedModel) return;
+      byId('optionTitle').innerHTML = 'Option: ' + escapeHtml(selectedModel.modelName);
+      for (i = 0; i < opts.length; i += 1) {
+        opt = opts[i];
+        html += '<div class="option-row">';
+        html += '<label>Tên group</label><input id="opt_group_' + escapeHtml(opt.id) + '" value="' + escapeHtml(opt.groupName || '') + '">';
+        html += '<label>Choices</label><textarea id="opt_choices_' + escapeHtml(opt.id) + '">' + escapeHtml(choicesToText(opt.choices)) + '</textarea>';
+        html += '<label>Mặc định</label><input id="opt_default_' + escapeHtml(opt.id) + '" value="' + escapeHtml(opt.defaultValue || '') + '">';
+        html += '<div class="checks">';
+        html += '<label><input id="opt_required_' + escapeHtml(opt.id) + '" type="checkbox"' + (opt.required ? ' checked' : '') + '> Bắt buộc</label>';
+        html += '<label><input id="opt_multi_' + escapeHtml(opt.id) + '" type="checkbox"' + (opt.multiSelect ? ' checked' : '') + '> Chọn nhiều</label>';
+        html += '<label><input id="opt_free_' + escapeHtml(opt.id) + '" type="checkbox"' + (opt.isFree ? ' checked' : '') + '> Miễn phí</label>';
+        html += '</div><div class="option-actions">';
+        html += '<button class="success small" data-option-action="save" data-id="' + escapeHtml(opt.id) + '" type="button">Lưu option</button>';
+        html += '<button class="danger small" data-option-action="delete" data-id="' + escapeHtml(opt.id) + '" type="button">Xóa</button>';
+        html += '</div><div class="clear"></div></div>';
+      }
+      byId('optionList').innerHTML = html || '<p class="muted">Chưa có option group.</p>';
+    }
+    function openOptions(id) {
+      var i;
+      selectedModel = null;
+      for (i = 0; i < models.length; i += 1) if (text(models[i].id) === text(id)) { selectedModel = models[i]; break; }
+      if (!selectedModel) return;
+      byId('optionModal').style.display = 'block';
+      document.body.style.overflow = 'hidden';
+      message('optionMessage', 'Đang tải option...', true);
+      loadOptions(selectedModel, function () {
+        message('optionMessage', '', false);
+        renderOptions();
+      });
+    }
+    function closeOptions() {
+      byId('optionModal').style.display = 'none';
+      document.body.style.overflow = '';
+      selectedModel = null;
+      message('optionMessage', '', false);
+    }
+    function addOption() {
+      var groupName = text(byId('newGroupName').value).replace(/^\s+|\s+$/g, ''), choices, body;
+      if (!selectedModel) return;
+      choices = choicesFromText(byId('newChoices').value, []);
+      if (!groupName || !choices.length) { message('optionMessage', 'Cần nhập group và ít nhất một choice.', false); return; }
+      body = {
+        modelId: selectedModel.id,
+        groupName: groupName,
+        choices: JSON.stringify(choices),
+        required: byId('newRequired').checked,
+        multiSelect: byId('newMulti').checked,
+        isFree: byId('newFree').checked,
+        defaultValue: text(byId('newDefault').value).replace(/^\s+|\s+$/g, '') || null,
+        displayOrder: (optionsByModel[selectedModel.id] || []).length
+      };
+      request('POST', '/sapi/shop/staff/menu-options', body, function (status, data) {
+        if (status < 200 || status >= 300) { message('optionMessage', errorText(status, data), false); return; }
+        byId('newGroupName').value = ''; byId('newChoices').value = ''; byId('newDefault').value = '';
+        byId('newRequired').checked = false; byId('newMulti').checked = false; byId('newFree').checked = false;
+        loadOptions(selectedModel, function () { renderOptions(); message('optionMessage', 'Đã thêm option.', true); });
+      });
+    }
+    function findOption(id) {
+      var opts = selectedModel ? (optionsByModel[selectedModel.id] || []) : [], i;
+      for (i = 0; i < opts.length; i += 1) if (text(opts[i].id) === text(id)) return opts[i];
+      return null;
+    }
+    function saveOption(id) {
+      var opt = findOption(id), existing, body;
+      if (!opt) return;
+      existing = parseChoices(opt.choices);
+      body = shallowCopy(opt);
+      body.groupName = text(byId('opt_group_' + id).value).replace(/^\s+|\s+$/g, '');
+      body.choices = JSON.stringify(choicesFromText(byId('opt_choices_' + id).value, existing));
+      body.required = byId('opt_required_' + id).checked;
+      body.multiSelect = byId('opt_multi_' + id).checked;
+      body.isFree = byId('opt_free_' + id).checked;
+      body.defaultValue = text(byId('opt_default_' + id).value).replace(/^\s+|\s+$/g, '') || null;
+      if (!body.groupName || !parseChoices(body.choices).length) { message('optionMessage', 'Option cần tên group và choices.', false); return; }
+      request('PUT', '/sapi/shop/staff/menu-options/' + encodeURIComponent(id), body, function (status, data) {
+        if (status < 200 || status >= 300) { message('optionMessage', errorText(status, data), false); return; }
+        loadOptions(selectedModel, function () { renderOptions(); message('optionMessage', 'Đã lưu option.', true); });
+      });
+    }
+    function deleteOption(id) {
+      if (!window.confirm('Xóa option này?')) return;
+      request('DELETE', '/sapi/shop/staff/menu-options/' + encodeURIComponent(id), null, function (status, data) {
+        if (status < 200 || status >= 300) { message('optionMessage', errorText(status, data), false); return; }
+        loadOptions(selectedModel, function () { renderOptions(); message('optionMessage', 'Đã xóa option.', true); });
+      });
+    }
+
+    byId('backButton').onclick = function () { window.location.href = 'index.html'; };
+    byId('loginButton').onclick = function () { window.location.href = 'index.html'; };
+    byId('refreshButton').onclick = loadAll;
+    byId('saveContextButton').onclick = function () {
+      tenantId = text(byId('tenantId').value).replace(/^\s+|\s+$/g, '');
+      companyId = text(byId('companyId').value).replace(/^\s+|\s+$/g, '');
+      if (!tenantId || !companyId) { message('messageBox', 'Cần nhập Tenant ID và Company ID.', false); return; }
+      saveContext();
+      loadAll();
+    };
+    byId('searchInput').oninput = renderMenu;
+    byId('categoryFilter').onchange = renderMenu;
+    byId('stateFilter').onchange = renderMenu;
+    byId('clearFiltersButton').onclick = function () {
+      byId('searchInput').value = ''; byId('categoryFilter').value = ''; byId('stateFilter').value = ''; renderMenu();
+    };
+    byId('menuList').onclick = function (event) {
+      var target = event.target || event.srcElement, action, id;
+      while (target && target !== byId('menuList') && !target.getAttribute('data-action')) target = target.parentNode;
+      if (!target || target === byId('menuList')) return;
+      action = target.getAttribute('data-action');
+      id = target.getAttribute('data-id');
+      if (action === 'save') saveModel(id);
+      if (action === 'options') openOptions(id);
+    };
+    byId('closeOptionButton').onclick = closeOptions;
+    byId('addOptionButton').onclick = addOption;
+    byId('optionList').onclick = function (event) {
+      var target = event.target || event.srcElement, action, id;
+      while (target && target !== byId('optionList') && !target.getAttribute('data-option-action')) target = target.parentNode;
+      if (!target || target === byId('optionList')) return;
+      action = target.getAttribute('data-option-action');
+      id = target.getAttribute('data-id');
+      if (action === 'save') saveOption(id);
+      if (action === 'delete') deleteOption(id);
+    };
+
+    restoreContext();
+    request('GET', '/sapi/auth/me', null, function (status, data) {
+      if (status >= 200 && status < 300 && data && data.authenticated) {
+        chooseContext(data.user);
+        loadAll();
+      } else {
+        byId('loginBox').style.display = 'block';
+      }
+    });
+  }());
+  </script>
+</body>
+</html>

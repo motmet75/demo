@@ -152,6 +152,11 @@ export default function ProfilePage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [passwordBusy, setPasswordBusy] = useState(false)
   const [passwordError, setPasswordError] = useState('')
+  const [emailOpen, setEmailOpen] = useState(false)
+  const [newEmail, setNewEmail] = useState('')
+  const [emailPassword, setEmailPassword] = useState('')
+  const [emailBusy, setEmailBusy] = useState(false)
+  const [emailError, setEmailError] = useState('')
 
   const loadProfile = useCallback(async () => {
     setLoadingProfile(true)
@@ -255,6 +260,45 @@ export default function ProfilePage() {
     closePasswordDialog()
     setSnack({ open: true, message: t('profile.password.changed'), severity: 'success' })
   }
+
+  const closeEmailDialog = () => {
+    if (emailBusy) return
+    setEmailOpen(false)
+    setNewEmail('')
+    setEmailPassword('')
+    setEmailError('')
+  }
+
+  const openEmailDialog = () => {
+    setNewEmail(profile?.user?.email || '')
+    setEmailPassword('')
+    setEmailError('')
+    setEmailOpen(true)
+  }
+
+  const confirmEmailChange = async () => {
+    const cleanEmail = newEmail.trim()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) { setEmailError(t('profile.email.invalid')); return }
+    if (!emailPassword) { setEmailError(t('profile.email.passwordRequired')); return }
+    setEmailBusy(true)
+    setEmailError('')
+    const { res, data } = await apiFetchJson('/auth/profile/email', {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: cleanEmail, password: emailPassword }),
+    })
+    setEmailBusy(false)
+    if (!res.ok) {
+      setEmailError(res.status === 401 ? t('profile.email.passwordWrong')
+        : res.status === 409 ? t('profile.email.exists')
+          : data?.message || t('profile.email.changeFailed'))
+      return
+    }
+    closeEmailDialog()
+    setSnack({ open: true, message: t('profile.email.changed'), severity: 'success' })
+    refreshMe().then(() => loadProfile())
+  }
   if (loadingProfile) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}>
@@ -305,7 +349,22 @@ export default function ProfilePage() {
         </Box>
       </Paper>
 
-            <Paper elevation={1} sx={{ p: 2.5, mb: 3 }}>
+      <Paper elevation={1} sx={{ p: 2.5, mb: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+          <EmailIcon color="primary" />
+          <Box sx={{ flex: 1, minWidth: 180 }}>
+            <Typography variant="subtitle1" fontWeight={700}>{t('profile.email.title')}</Typography>
+            <Typography variant="body2" color="text.secondary">
+              {t('profile.email.description', { email: p?.user?.email || t('profile.email.none') })}
+            </Typography>
+          </Box>
+          <Button variant="outlined" startIcon={<EmailIcon />} onClick={openEmailDialog}>
+            {p?.user?.email ? t('profile.email.action') : t('profile.email.linkAction')}
+          </Button>
+        </Box>
+      </Paper>
+
+      <Paper elevation={1} sx={{ p: 2.5, mb: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
           <LockResetIcon color="primary" />
           <Box sx={{ flex: 1, minWidth: 180 }}>
@@ -355,6 +414,27 @@ export default function ProfilePage() {
               {t('profile.password.update')}
             </Button>
           )}
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={emailOpen} onClose={closeEmailDialog} maxWidth="xs" fullWidth>
+        <DialogTitle fontWeight={700}>{t('profile.email.dialogTitle')}</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'grid', gap: 2, mt: 0.5 }}>
+            <Alert severity="info">{t('profile.email.help')}</Alert>
+            <TextField label={t('profile.email.new')} type="email" value={newEmail}
+              onChange={e => setNewEmail(e.target.value)} autoComplete="email" autoFocus fullWidth />
+            <TextField label={t('profile.email.password')} type="password" value={emailPassword}
+              onChange={e => setEmailPassword(e.target.value)} autoComplete="current-password" fullWidth />
+          </Box>
+          {emailError && <Alert severity="error" sx={{ mt: 2 }}>{emailError}</Alert>}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={closeEmailDialog} disabled={emailBusy}>{t('common.cancel')}</Button>
+          <Button variant="contained" onClick={confirmEmailChange} disabled={emailBusy}
+            startIcon={emailBusy ? <CircularProgress size={16} color="inherit" /> : <EmailIcon />}>
+            {t('profile.email.update')}
+          </Button>
         </DialogActions>
       </Dialog>
 

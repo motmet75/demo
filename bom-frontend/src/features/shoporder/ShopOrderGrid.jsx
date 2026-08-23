@@ -621,6 +621,9 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                           <Typography sx={{ fontSize: rootNameFont, fontWeight: 800, color: primaryTextColor, lineHeight: 1.2 }}>
                             {localizedModelName(root, language)}
                           </Typography>
+                          {root.dailyLastOrder && (
+                            <Chip label="số cuối" size="small" color="error" sx={{ height: 18, fontSize: 10, fontWeight: 900 }} />
+                          )}
                         </Box>
                         {optStr && <Typography sx={{ fontSize: detailFont, pl: 2, display: 'block', color: detailTextColor, lineHeight: 1.4, fontWeight: highContrast ? 700 : 500 }}>{optStr}</Typography>}
                         {root.itemNotes && <Typography sx={{ fontSize: detailFont, pl: 2, fontStyle: 'italic', display: 'block', color: '#c62828', fontWeight: 700 }}>⚠ {root.itemNotes}</Typography>}
@@ -643,7 +646,7 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                               </Typography>
                               <Typography onClick={() => img && setImagePreview({ imageUrl: img, modelName: localizedModelName(child, language) })}
                                 sx={{ fontSize: childNameFont, fontWeight: 900, color: childTextColor, lineHeight: 1.15, flex: 1, ...(img ? { cursor: 'pointer', '&:hover': { color: '#1976d2', textDecoration: 'underline dotted' } } : {}) }}>
-                                {localizedModelName(child, language)}
+                                {localizedModelName(child, language)}{child.dailyLastOrder ? ' [số cuối]' : ''}
                               </Typography>
                             </Box>
                           )
@@ -951,6 +954,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
                     <Typography sx={{ fontSize: large ? 14 : 12, color: mutedTextColor, fontWeight: 800, flexShrink: 0 }}>{rIdx + 1}.</Typography>
                     <Typography sx={{ fontSize: large ? 28 : 22, fontWeight: 900, color: s.num, lineHeight: 1, flexShrink: 0 }}>{Number(root.quantity)}×</Typography>
                     <Typography sx={{ fontSize: large ? 18 : 15, fontWeight: 800, color: primaryTextColor, lineHeight: 1.2, flex: 1 }}>{localizedModelName(root, language)}</Typography>
+                    {root.dailyLastOrder && <Chip label="số cuối" size="small" color="error" sx={{ height: 18, fontSize: 10, fontWeight: 900 }} />}
                     <Typography sx={{ fontSize: large ? 14 : 12, color: secondaryTextColor, flexShrink: 0, pl: 0.5 }}>{fmt(root.lineTotal)}</Typography>
                   </Box>
                   {optStr && <Typography sx={{ fontSize: optionFont, pl: 2.5, color: detailTextColor, display: 'block', lineHeight: 1.4, fontWeight: highContrast ? 700 : 500 }}>{optStr}</Typography>}
@@ -969,7 +973,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
                         <Typography sx={{ fontSize: childQtyFont, fontWeight: 900, color: primaryTextColor, lineHeight: 1, flexShrink: 0 }}>{Number(child.quantity)}×</Typography>
                         <Typography onClick={() => img && setImagePreview({ imageUrl: img, modelName: localizedModelName(child, language) })}
                           sx={{ fontSize: childNameFont, fontWeight: 900, color: childTextColor, lineHeight: 1.15, flex: 1, ...(img ? { cursor: 'pointer', '&:hover': { color: '#1976d2', textDecoration: 'underline dotted' } } : {}) }}>
-                          {localizedModelName(child, language)}
+                          {localizedModelName(child, language)}{child.dailyLastOrder ? ' [số cuối]' : ''}
                         </Typography>
                       </Box>
                     )
@@ -2931,7 +2935,7 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
                     <Box sx={{ px: 2, py: 0.75 }}>
                       {roots.slice(0, 4).map(item => (
                         <Typography key={item.id} variant="caption" color="text.secondary" sx={{ display: 'block' }} noWrap>
-                          {item.quantity}× {item.modelName}
+                          {item.quantity}× {item.modelName}{item.dailyLastOrder ? ' [số cuối]' : ''}
                         </Typography>
                       ))}
                       {roots.length > 4 && (

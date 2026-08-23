@@ -693,15 +693,39 @@ export default function ShopMenuPage() {
     if (rawLanguage) setLanguage(rawLanguage)
   }, [rawLanguage, setLanguage])
 
-  const openTrackingScreen = useCallback((order) => {
+  const trackingPathForOrder = useCallback((order) => {
     if (!order?.orderCode) return
     const sessionToken = ctx?.tokenType === 'QUEUE_QR' ? null : (tokenParam || order.sourceToken)
     const queryParams = new URLSearchParams()
     if (sessionToken) queryParams.set('t', sessionToken)
     if (language) queryParams.set('lang', language)
     const query = queryParams.toString() ? `?${queryParams.toString()}` : ''
-    navigate(`/shop/order/${encodeURIComponent(order.orderCode)}${query}`)
-  }, [ctx?.tokenType, language, navigate, tokenParam])
+    return `/shop/order/${encodeURIComponent(order.orderCode)}${query}`
+  }, [ctx?.tokenType, language, tokenParam])
+
+  const openTrackingScreen = useCallback((order, { newTab = false, targetWindow = null } = {}) => {
+    const path = trackingPathForOrder(order)
+    if (!path) return
+    if (newTab) {
+      const appBase = window.location.pathname.split('/shop/')[0] || '/bom-inventory'
+      const url = `${window.location.origin}${appBase}${path}`
+      const tab = targetWindow || window.open(url, '_blank')
+      if (tab) {
+        try { tab.location.href = url; tab.focus?.() } catch { /* browser may block tab access */ }
+        return
+      }
+    }
+    navigate(path)
+  }, [navigate, trackingPathForOrder])
+
+  const rememberVisibleOrder = useCallback((order) => {
+    if (!order?.orderCode) return
+    const upsert = (orders = []) => [order, ...orders.filter(item => item?.orderCode !== order.orderCode)]
+    setTokenSession(prev => ({ ...(prev || {}), orders: upsert(prev?.orders || []) }))
+    if (ctx?.tableId && order.tableId && String(order.tableId) === String(ctx.tableId)) {
+      setTableOrders(prev => upsert(prev || []))
+    }
+  }, [ctx?.tableId])
 
   const formatSelectedOptions = useCallback((modelId, selectedOptions) => {
     return localizedSelectedOptions(modelId, selectedOptions, optionsByModel, language)
@@ -747,6 +771,13 @@ export default function ShopMenuPage() {
       setLoading(false)
     }).catch(() => { setError(cText('checkout.cannotLoadMenu')); setLoading(false) })
   }, [cText, ctx])
+
+  const refreshMenu = useCallback(() => {
+    if (!ctx?.tenantId || !ctx?.companyId) return
+    fetchMenu(ctx.tenantId, ctx.companyId)
+      .then(menuRes => setMenu(Array.isArray(menuRes.data) ? menuRes.data : []))
+      .catch(() => {})
+  }, [ctx?.tenantId, ctx?.companyId])
 
   const loadTokenSession = useCallback(() => {
     if (!tokenParam) return
@@ -923,6 +954,36 @@ export default function ShopMenuPage() {
   const getModelQty = (modelId) =>
     cartEntries.reduce((n, e) => n + (e.modelId === modelId ? e.qty : 0), 0)
 
+  const getCartModelTotalQty = (modelId, entries = cartEntries) =>
+    entries.reduce((total, entry) => {
+      const mainQty = String(entry.modelId) === String(modelId) ? Number(entry.qty || 0) : 0
+      const sideQty = (entry.sideItems || []).reduce((sum, side) => (
+        String(side.modelId) === String(modelId)
+          ? sum + Number(side.qty || 0) * Number(entry.qty || 0)
+          : sum
+      ), 0)
+      return total + mainQty + sideQty
+    }, 0)
+
+  const dailyLimitFor = (model) => model?.shopDailyLimitUnits != null ? Number(model.shopDailyLimitUnits) : null
+  const dailyRemainingFor = (model) => {
+    if (dailyLimitFor(model) == null) return null
+    return Math.max(0, Math.floor(Number(model?.shopDailyRemainingUnits ?? 0)))
+  }
+  const availableToAddForModel = (model, entries = cartEntries) => {
+    const remaining = dailyRemainingFor(model)
+    if (remaining == null) return null
+    return Math.max(0, remaining - getCartModelTotalQty(model.id, entries))
+  }
+  const soldOutMessage = (model, available = 0) => {
+    const label = modelName(model)
+    return available <= 0
+      ? cText('daily.soldOutItem', { item: label })
+      : cText('daily.leftItem', { item: label, count: available })
+  }
+  const dailyAvailabilityLabel = (available) =>
+    available <= 0 ? cText('daily.soldOut') : cText('daily.left', { count: available })
+
   const grouped = menu.reduce((g, m) => {
     const cat = modelCategory(m) || t('shop.menu')
     if (!g[cat]) g[cat] = []
@@ -977,28 +1038,61 @@ export default function ShopMenuPage() {
 
   // ── Cart mutations ────────────────────────────────────────────────────
   const createEntry = (model, qty, selectedOptions, itemNotes, rawSides = []) => {
+    const available = availableToAddForModel(model)
+    const finalQty = available != null ? Math.min(Math.max(0, available), qty) : qty
+    if (finalQty <= 0) {
+      setError(soldOutMessage(model, 0))
+      return
+    }
     const id = genUid()
     const allowedSideIds = new Set(allowedSideOptionsFor(model).map(side => String(side.id)))
     const sideItems = rawSides
       .filter(side => allowedSideIds.has(String(side.modelId)))
-      .map(side => ({
-        ...side,
-        imageUrl: side.imageUrl || side.thumbnailUrl || null,
-        qty: clampAllowedSideQty(model.id, side.modelId, side.qty),
-        uid: genUid(),
-      }))
+      .map(side => {
+        const sideModel = menu.find(item => String(item.id) === String(side.modelId))
+        const sideAvailable = sideModel ? availableToAddForModel(sideModel) : null
+        const dailySideMaxPerMain = sideAvailable != null && finalQty > 0 ? Math.floor(sideAvailable / finalQty) : null
+        const requestedQty = clampAllowedSideQty(model.id, side.modelId, side.qty)
+        return {
+          ...side,
+          imageUrl: side.imageUrl || side.thumbnailUrl || null,
+          qty: dailySideMaxPerMain != null ? Math.min(requestedQty, dailySideMaxPerMain) : requestedQty,
+          uid: genUid(),
+        }
+      })
       .filter(side => side.qty > 0)
     setCart(prev => ({
       ...prev,
-      [id]: { uid: id, modelId: model.id, imageUrl: model.imageUrl || model.thumbnailUrl || null, qty, selectedOptions: selectedOptions || null, itemNotes: itemNotes || null, sideItems },
+      [id]: { uid: id, modelId: model.id, imageUrl: model.imageUrl || model.thumbnailUrl || null, qty: finalQty, selectedOptions: selectedOptions || null, itemNotes: itemNotes || null, sideItems },
     }))
+    if (available != null && finalQty < qty) setError(soldOutMessage(model, available))
   }
 
   const deleteEntry = (uid) =>
     setCart(prev => { const { [uid]: _, ...rest } = prev; return rest })
 
-  const incrementEntry = (uid) =>
+  const incrementEntry = (uid) => {
+    const entry = cart[uid]
+    const model = entry ? menu.find(item => String(item.id) === String(entry.modelId)) : null
+    const available = model ? availableToAddForModel(model) : null
+    if (available != null && available <= 0) {
+      setError(soldOutMessage(model, 0))
+      return
+    }
+    const blockingSide = (entry?.sideItems || []).map(side => {
+      const sideModel = menu.find(item => String(item.id) === String(side.modelId))
+      const sideAvailable = sideModel ? availableToAddForModel(sideModel) : null
+      const additionalQty = Math.max(0, Number(side.qty || 0))
+      return sideAvailable != null && additionalQty > sideAvailable
+        ? { sideModel, sideAvailable }
+        : null
+    }).find(Boolean)
+    if (blockingSide?.sideModel) {
+      setError(soldOutMessage(blockingSide.sideModel, blockingSide.sideAvailable))
+      return
+    }
     setCart(prev => { const e = prev[uid]; if (!e) return prev; return { ...prev, [uid]: { ...e, qty: e.qty + 1 } } })
+  }
 
   const decrementEntry = (uid) =>
     setCart(prev => {
@@ -1044,20 +1138,35 @@ export default function ShopMenuPage() {
   const addSideInline = (parentUid) => {
     const sf = sideForm[parentUid] || {}
     if (!sf.model) return
+    const parent = cart[parentUid]; if (!parent) return
+    const currentSides = parent.sideItems || []
+    const existing = currentSides.find(si => String(si.modelId) === String(sf.model.id))
+    const currentQty = existing?.qty || 0
+    const requestedQty = Math.max(1, sf.qty || 1)
+    const limit = maxAllowedSideQty(parent.modelId, sf.model.id)
+    const allowedByMenu = limit > 0 ? Math.max(0, limit - currentQty) : null
+    const sideAvailable = availableToAddForModel(sf.model)
+    const parentQty = Math.max(1, Number(parent.qty || 1))
+    const allowedByDaily = sideAvailable != null ? Math.floor(sideAvailable / parentQty) : null
+    const allowedAddQty = [allowedByMenu, allowedByDaily]
+      .filter(v => v != null)
+      .reduce((min, v) => Math.min(min, v), requestedQty)
+    const addQty = Math.max(0, Math.min(requestedQty, allowedAddQty))
+    if (addQty <= 0) {
+      if (sideAvailable != null) setError(soldOutMessage(sf.model, sideAvailable || 0))
+      return
+    }
+    const nextQty = currentQty + addQty
     setCart(prev => {
-      const parent = prev[parentUid]; if (!parent) return prev
-      const currentSides = parent.sideItems || []
-      const existing = currentSides.find(si => String(si.modelId) === String(sf.model.id))
-      const currentQty = existing?.qty || 0
-      const requestedQty = Math.max(1, sf.qty || 1)
-      const limit = maxAllowedSideQty(parent.modelId, sf.model.id)
-      const nextQty = limit > 0 ? Math.min(limit, currentQty + requestedQty) : currentQty + requestedQty
-      if (nextQty <= currentQty) return prev
-      const nextSideItems = existing
-        ? currentSides.map(si => si.uid === existing.uid ? { ...si, qty: nextQty } : si)
-        : [...currentSides, { uid: genUid(), modelId: sf.model.id, modelName: sf.model.modelName, imageUrl: sf.model.imageUrl || sf.model.thumbnailUrl || null, qty: nextQty }]
-      return { ...prev, [parentUid]: { ...parent, sideItems: nextSideItems } }
+      const currentParent = prev[parentUid]; if (!currentParent) return prev
+      const nextCurrentSides = currentParent.sideItems || []
+      const nextExisting = nextCurrentSides.find(si => String(si.modelId) === String(sf.model.id))
+      const nextSideItems = nextExisting
+        ? nextCurrentSides.map(si => si.uid === nextExisting.uid ? { ...si, qty: nextQty } : si)
+        : [...nextCurrentSides, { uid: genUid(), modelId: sf.model.id, modelName: sf.model.modelName, imageUrl: sf.model.imageUrl || sf.model.thumbnailUrl || null, qty: nextQty }]
+      return { ...prev, [parentUid]: { ...currentParent, sideItems: nextSideItems } }
     })
+    if (addQty < requestedQty && sideAvailable != null) setError(soldOutMessage(sf.model, sideAvailable))
     setSideForm(prev => ({ ...prev, [parentUid]: {} }))
   }
 
@@ -1069,8 +1178,14 @@ export default function ShopMenuPage() {
           .map(si => {
             if (si.uid !== sideUid) return si
             const limit = maxAllowedSideQty(parent.modelId, si.modelId)
+            const sideModel = menu.find(item => String(item.id) === String(si.modelId))
+            const sideAvailable = sideModel ? availableToAddForModel(sideModel, Object.values(prev)) : null
+            const dailyMax = sideAvailable != null
+              ? (si.qty || 0) + Math.floor(sideAvailable / Math.max(1, Number(parent.qty || 1)))
+              : null
             const requested = Math.max(0, (si.qty || 1) + delta)
-            return { ...si, qty: limit > 0 ? Math.min(limit, requested) : requested }
+            const cappedByMenu = limit > 0 ? Math.min(limit, requested) : requested
+            return { ...si, qty: dailyMax != null ? Math.min(dailyMax, cappedByMenu) : cappedByMenu }
           })
           .filter(si => si.qty > 0) } }
     })
@@ -1083,11 +1198,19 @@ export default function ShopMenuPage() {
 
   // ── Menu card click handlers ──────────────────────────────────────────
   const handleAddClick = (model) => {
+    const available = availableToAddForModel(model)
+    if (available != null && available <= 0) {
+      setError(soldOutMessage(model, 0))
+      return
+    }
     const hasOpts = (optionsByModel[model.id] || []).length > 0
-    const allowedSideOptions = allowedSideOptionsFor(model)
+    const allowedSideOptions = allowedSideOptionsFor(model).map(side => ({
+      ...side,
+      dailyRemainingForCart: availableToAddForModel(side),
+    }))
     const hasSides = allowedSideOptions.length > 0
     if (hasOpts || hasSides) {
-      setOptionsTarget({ model, allowedSideOptions })
+      setOptionsTarget({ model, allowedSideOptions, maxQty: available })
     } else {
       const existing = cartEntries.find(e => e.modelId === model.id && !e.selectedOptions)
       if (existing) incrementEntry(existing.uid)
@@ -1102,7 +1225,10 @@ export default function ShopMenuPage() {
   }
 
   const handleOptionsConfirm = ({ qty, selectedOptions, itemNotes, sideItems }) => {
-    if (qty > 0) createEntry(optionsTarget.model, qty, selectedOptions, itemNotes, sideItems || [])
+    const available = availableToAddForModel(optionsTarget.model)
+    const finalQty = available != null ? Math.min(qty, available) : qty
+    if (finalQty > 0) createEntry(optionsTarget.model, finalQty, selectedOptions, itemNotes, sideItems || [])
+    else setError(soldOutMessage(optionsTarget.model, 0))
     setOptionsTarget(null)
   }
 
@@ -1178,6 +1304,15 @@ export default function ShopMenuPage() {
       return order
     }
   }
+  const dailyLimitErrorText = (data, fallbackKey) => {
+    if (data?.code !== 'DAILY_MENU_LIMIT_EXCEEDED') {
+      return data?.message || data?.error || cText(fallbackKey)
+    }
+    const cappedModel = menu.find(item => String(item.id) === String(data.modelId))
+      || { id: data.modelId, modelName: data.modelName || 'Item' }
+    const remaining = Math.max(0, Math.floor(Number(data.remainingUnits ?? 0)))
+    return soldOutMessage(cappedModel, remaining)
+  }
   const handlePlaceOrder = async () => {
     if (!itemCount) return
     if (!editingOrderCode) {
@@ -1208,22 +1343,26 @@ export default function ShopMenuPage() {
         setError(cText('checkout.needDeliveryAddress')); return
       }
     }
+    const trackingTab = !editingOrderCode && form.paymentMethod !== 'BANK_QR'
+      ? window.open('about:blank', '_blank')
+      : null
+    const closeTrackingTab = () => {
+      try { trackingTab?.close?.() } catch { /* browser may block close */ }
+    }
     setSubmitting(true); setError('')
     const items = buildItemRequests()
     try {
       if (editingOrderCode) {
         const { res, data } = await updatePublicOrderItems(editingOrderCode, items)
-        if (!res.ok) { setError(data?.message || data?.error || cText('checkout.cannotUpdateOrder')); setSubmitting(false); return }
+        if (!res.ok) { setError(dailyLimitErrorText(data, 'checkout.cannotUpdateOrder')); setSubmitting(false); return }
         const updatedOrder = { ...data, customerEditing: false, customerEditingSince: null }
         const finalOrderRaw = await applyVoucherToOrder(updatedOrder)
         const finalOrder = { ...finalOrderRaw, customerEditing: false, customerEditingSince: null }
-        setTokenSession(prev => prev?.orders ? {
-          ...prev,
-          orders: prev.orders.map(order => order.orderCode === finalOrder.orderCode ? finalOrder : order),
-        } : prev)
+        rememberVisibleOrder(finalOrder)
         setCart({}); setSideForm({}); setCheckout(false); setCartOpen(false)
         setEditingOrderCode(null); setTrackingOrder(finalOrder)
         loadTokenSession()
+        refreshMenu()
       } else {
         const body = {
           fulfillmentType: form.fulfillmentType,
@@ -1237,16 +1376,19 @@ export default function ShopMenuPage() {
           manualOrderNumber: seqParam ? Number(seqParam) : null, token: tokenParam || null, items,
         }
         const { res, data } = await createOrder(ctx.tenantId, ctx.companyId, body)
-        if (!res.ok) { setError(data?.message || cText('checkout.cannotCreateOrder')); setSubmitting(false); return }
+        if (!res.ok) { closeTrackingTab(); setError(dailyLimitErrorText(data, 'checkout.cannotCreateOrder')); setSubmitting(false); return }
         const finalOrder = await applyVoucherToOrder(data)
+        rememberVisibleOrder(finalOrder)
         setCart({}); setSideForm({}); setNotes(''); setCheckout(false); setCartOpen(false)
+        refreshMenu()
         if (form.paymentMethod === 'BANK_QR' && finalOrder.paymentQr) {
           setPrepaidQrOrder(finalOrder)
         } else {
-          openTrackingScreen(finalOrder)
+          openTrackingScreen(finalOrder, { newTab: true, targetWindow: trackingTab })
+          setSessionOpen(true)
         }
       }
-    } catch { setError(cText('common.networkError')) } finally { setSubmitting(false) }
+    } catch { closeTrackingTab(); setError(cText('common.networkError')) } finally { setSubmitting(false) }
   }
 
   const handleEditOrder = async (order) => {
@@ -1336,10 +1478,18 @@ export default function ShopMenuPage() {
         const sideFormRemainingQty = sideFormMaxQty > 0
           ? Math.max(0, sideFormMaxQty - sideFormCurrentQty)
           : null
-        const sideFormQty = sideFormRemainingQty == null
+        const sideFormDailyAvailable = sf.model ? availableToAddForModel(sf.model) : null
+        const sideFormDailyRemainingQty = sideFormDailyAvailable != null
+          ? Math.floor(sideFormDailyAvailable / Math.max(1, Number(entry.qty || 1)))
+          : null
+        const sideFormEffectiveRemainingQty = [sideFormRemainingQty, sideFormDailyRemainingQty]
+          .filter(v => v != null)
+          .reduce((min, v) => Math.min(min, v), Number.POSITIVE_INFINITY)
+        const sideFormRemainingMax = Number.isFinite(sideFormEffectiveRemainingQty) ? Math.max(0, sideFormEffectiveRemainingQty) : null
+        const sideFormQty = sideFormRemainingMax == null
           ? Math.max(1, Number(sf.qty) || 1)
-          : Math.min(sideFormRemainingQty, Math.max(1, Number(sf.qty) || 1))
-        const sideFormAtMax = sideFormRemainingQty === 0
+          : Math.min(sideFormRemainingMax, Math.max(1, Number(sf.qty) || 1))
+        const sideFormAtMax = sideFormRemainingMax === 0
 
         return (
           <Box key={entry.uid} sx={{ border: highContrast ? '2px solid #111827' : '1.5px solid #e2e8f0', borderRadius: 2, overflow: 'hidden', bgcolor: '#fff' }}>
@@ -1472,6 +1622,11 @@ export default function ShopMenuPage() {
                     const sideMaxQty = maxAllowedSideQty(entry.modelId, si.modelId)
                     const perCup = si.qty || 1; const effectiveQty = perCup * entry.qty
                     const effectivePrice = sm ? effectiveQty * Number(sm.sellingPrice || 0) : 0
+                    const sideDailyAvailable = sm ? availableToAddForModel(sm) : null
+                    const sideDailyAddPerCup = sideDailyAvailable != null
+                      ? Math.floor(sideDailyAvailable / Math.max(1, Number(entry.qty || 1)))
+                      : null
+                    const sideDailyAtMax = sideDailyAddPerCup != null && sideDailyAddPerCup <= 0
                     return (
                       <Box key={si.uid} sx={{ px: 1, py: 1, borderBottom: '1px solid #e8eaf6' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -1487,6 +1642,7 @@ export default function ShopMenuPage() {
                             <Typography fontWeight={800} sx={{ fontSize: large ? 17 : 14, color: '#1e293b' }} noWrap>{modelName(si)}</Typography>
                             <Typography sx={{ color: '#6366f1', fontSize: large ? 15 : 13, fontWeight: 800 }}>{sm ? fmt(effectivePrice) : ''}</Typography>
                             {sideMaxQty > 0 && <Typography sx={{ color: '#64748b', fontSize: large ? 13 : 11 }}>Max {sideMaxQty}</Typography>}
+                            {sideDailyAvailable != null && <Typography sx={{ color: sideDailyAvailable <= 0 ? '#dc2626' : '#64748b', fontSize: large ? 13 : 11, fontWeight: 800 }}>{dailyAvailabilityLabel(sideDailyAvailable)}</Typography>}
                           </Box>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
                             <IconButton onClick={() => changeSideQty(entry.uid, si.uid, -1)}
@@ -1496,7 +1652,7 @@ export default function ShopMenuPage() {
                             <Typography fontWeight={800} sx={{ minWidth: large ? 34 : 28, textAlign: 'center', fontSize: large ? 22 : 18, color: '#4f46e5' }}>
                               {effectiveQty}
                             </Typography>
-                            <IconButton onClick={() => changeSideQty(entry.uid, si.uid, 1)} disabled={sideMaxQty > 0 && perCup >= sideMaxQty}
+                            <IconButton onClick={() => changeSideQty(entry.uid, si.uid, 1)} disabled={(sideMaxQty > 0 && perCup >= sideMaxQty) || sideDailyAtMax}
                               sx={{ p: 0.75, bgcolor: '#6366f1', color: '#fff', borderRadius: 1 }}>
                               <AddIcon sx={{ fontSize: large ? 24 : 20 }} />
                             </IconButton>
@@ -1548,7 +1704,7 @@ export default function ShopMenuPage() {
                           {sideFormQty}
                         </Typography>
                         <IconButton onClick={() => setSF(entry.uid, 'qty', sideFormQty + 1)}
-                          disabled={!sf.model || (sideFormRemainingQty != null && sideFormQty >= sideFormRemainingQty)}
+                          disabled={!sf.model || (sideFormRemainingMax != null && sideFormQty >= sideFormRemainingMax)}
                           sx={{ p: 0.75, bgcolor: '#6366f1', color: '#fff', borderRadius: 1 }}>
                           <AddIcon sx={{ fontSize: large ? 24 : 20 }} />
                         </IconButton>
@@ -1606,6 +1762,9 @@ export default function ShopMenuPage() {
     const hasOpts  = (optionsByModel[m.id] || []).length > 0
     const variants = cartEntries.filter(e => e.modelId === m.id)
     const optsStr  = variants.length === 1 ? formatSelectedOptions(m.id, variants[0]?.selectedOptions) : null
+    const available = availableToAddForModel(m)
+    const capped = available != null
+    const soldOutForCart = capped && available <= 0
     return (
       <Box sx={{
         display: 'flex', alignItems: 'stretch', bgcolor: '#fff', borderRadius: 2, overflow: 'hidden',
@@ -1648,6 +1807,14 @@ export default function ShopMenuPage() {
           <Typography fontWeight={800} sx={{ color: '#ff5722', fontSize: large ? 18 : 15, mt: 0.75 }}>
             {fmt(m.sellingPrice)}
           </Typography>
+          {capped && (
+            <Chip
+              label={dailyAvailabilityLabel(available)}
+              size="small"
+              color={available <= 0 ? 'error' : available <= 3 ? 'warning' : 'success'}
+              sx={{ mt: 0.75, height: large ? 24 : 20, fontSize: large ? 12 : 10, fontWeight: 900 }}
+            />
+          )}
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 1.25, flexShrink: 0, alignSelf: 'center' }}>
           {qty > 0 && (
@@ -1661,9 +1828,9 @@ export default function ShopMenuPage() {
               </Typography>
             </>
           )}
-          <IconButton size="small" onClick={() => handleAddClick(m)}
+          <IconButton size="small" onClick={() => handleAddClick(m)} disabled={soldOutForCart}
             sx={{ width: large ? 40 : 32, height: large ? 40 : 32, bgcolor: '#ff5722', color: '#fff', borderRadius: 1.5,
-              '&:hover': { bgcolor: '#e64a19' } }}>
+              '&:hover': { bgcolor: '#e64a19' }, '&.Mui-disabled': { bgcolor: '#cbd5e1', color: '#fff' } }}>
             <AddIcon sx={{ fontSize: large ? 22 : 18 }} />
           </IconButton>
         </Box>
@@ -1674,6 +1841,9 @@ export default function ShopMenuPage() {
   // ── MenuGridItem ──────────────────────────────────────────────────────
   const MenuGridItem = ({ m }) => {
     const qty = getModelQty(m.id)
+    const available = availableToAddForModel(m)
+    const capped = available != null
+    const soldOutForCart = capped && available <= 0
     return (
       <Box sx={{
         bgcolor: '#fff', borderRadius: 2, overflow: 'hidden', display: 'flex', flexDirection: 'column',
@@ -1716,22 +1886,30 @@ export default function ShopMenuPage() {
             <Typography fontWeight={800} sx={{ color: '#ff5722', fontSize: large ? 17 : 14 }}>
               {fmt(m.sellingPrice)}
             </Typography>
+            {capped && (
+              <Chip
+                label={available <= 0 ? '0 left' : `${available} left`}
+                size="small"
+                color={available <= 0 ? 'error' : available <= 3 ? 'warning' : 'success'}
+                sx={{ height: large ? 22 : 18, fontSize: large ? 11 : 9, fontWeight: 900, mx: 0.5 }}
+              />
+            )}
             {qty > 0 ? (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
                 <IconButton onClick={() => handleRemoveClick(m.id)}
                   sx={{ p: 0.25, width: large ? 32 : 26, height: large ? 32 : 26, bgcolor: '#f5f5f5', color: '#ff5722', borderRadius: 1 }}>
                   <RemoveIcon sx={{ fontSize: 15 }} />
                 </IconButton>
-                <IconButton onClick={() => handleAddClick(m)}
+                <IconButton onClick={() => handleAddClick(m)} disabled={soldOutForCart}
                   sx={{ p: 0.25, width: large ? 32 : 26, height: large ? 32 : 26, bgcolor: '#ff5722', color: '#fff', borderRadius: 1,
-                    '&:hover': { bgcolor: '#e64a19' } }}>
+                    '&:hover': { bgcolor: '#e64a19' }, '&.Mui-disabled': { bgcolor: '#cbd5e1', color: '#fff' } }}>
                   <AddIcon sx={{ fontSize: 15 }} />
                 </IconButton>
               </Box>
             ) : (
-              <IconButton onClick={() => handleAddClick(m)}
+              <IconButton onClick={() => handleAddClick(m)} disabled={soldOutForCart}
                 sx={{ p: 0.5, width: large ? 36 : 30, height: large ? 36 : 30, bgcolor: '#ff5722', color: '#fff', borderRadius: 1.5,
-                  '&:hover': { bgcolor: '#e64a19' } }}>
+                  '&:hover': { bgcolor: '#e64a19' }, '&.Mui-disabled': { bgcolor: '#cbd5e1', color: '#fff' } }}>
                 <AddIcon sx={{ fontSize: large ? 22 : 18 }} />
               </IconButton>
             )}
@@ -2137,12 +2315,12 @@ export default function ShopMenuPage() {
                 Save QR to Photos
               </Button>
               <Button variant="contained" fullWidth size="large"
-                onClick={() => { const order = prepaidQrOrder; setPrepaidQrOrder(null); openTrackingScreen(order) }}
+                onClick={() => { const order = prepaidQrOrder; setPrepaidQrOrder(null); openTrackingScreen(order, { newTab: true }); setSessionOpen(true) }}
                 sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 20 }}>
                 {t('shop.paidTrackOrder')}
               </Button>
               <Button fullWidth size="small" color="inherit"
-                onClick={() => { const order = prepaidQrOrder; setPrepaidQrOrder(null); openTrackingScreen(order) }}
+                onClick={() => { const order = prepaidQrOrder; setPrepaidQrOrder(null); openTrackingScreen(order, { newTab: true }); setSessionOpen(true) }}
                 sx={{ textTransform: 'none', color: 'text.secondary' }}>
                 {t('shop.payLaterClose')}
               </Button>
@@ -2429,6 +2607,7 @@ export default function ShopMenuPage() {
           model={optionsTarget.model}
           options={optionsByModel[optionsTarget.model?.id] || []}
           allowedSideOptions={optionsTarget.allowedSideOptions || []}
+          maxQty={optionsTarget.maxQty}
           initialCart={null}
           onConfirm={handleOptionsConfirm}
           onClose={() => setOptionsTarget(null)}

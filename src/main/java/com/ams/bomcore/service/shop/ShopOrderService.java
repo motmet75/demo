@@ -106,9 +106,17 @@ public class ShopOrderService {
 
     @Transactional(readOnly = true)
     public List<Model> getMenu(UUID tenantId, UUID companyId) {
+        return getMenu(tenantId, companyId, LocalDate.now());
+    }
+
+    @Transactional(readOnly = true)
+    public List<Model> getMenu(UUID tenantId, UUID companyId, LocalDate businessDate) {
+        LocalDate effectiveDate = businessDate != null ? businessDate : LocalDate.now();
         List<Model> all = modelRepository.findAllByTenantIdAndCompanyId(tenantId, companyId);
+        all.forEach(model -> applyDailyCapSnapshot(model, tenantId, companyId, effectiveDate, null));
         List<Model> active = all.stream()
                 .filter(m -> m.getSellingPrice() != null && Boolean.TRUE.equals(m.getIsActive()))
+                .filter(m -> !isSoldOutByDailyCap(m))
                 .toList();
 
         // Collect IDs referenced in allowedSideIds of any active menu item
@@ -142,13 +150,131 @@ public class ShopOrderService {
                 .filter(m -> m.getSellingPrice() != null
                         && !Boolean.TRUE.equals(m.getIsActive())
                         && neededSideIds.contains(m.getId().toString())
-                        && !activeIds.contains(m.getId().toString()))
+                        && !activeIds.contains(m.getId().toString())
+                        && !isSoldOutByDailyCap(m))
                 .toList();
         if (sideOnly.isEmpty()) return active;
 
         List<Model> result = new ArrayList<>(active);
         result.addAll(sideOnly);
         return result;
+    }
+
+    private boolean isSoldOutByDailyOverride(Model model, LocalDate businessDate) {
+        if (model.getShopAvailableUnitsOverride() == null || model.getShopAvailableUnitsOverrideDate() == null) {
+            return false;
+        }
+        LocalDate effectiveDate = businessDate != null ? businessDate : LocalDate.now();
+        return model.getShopAvailableUnitsOverrideDate().equals(effectiveDate)
+                && model.getShopAvailableUnitsOverride().compareTo(BigDecimal.ZERO) <= 0;
+    }
+
+    private boolean isSoldOutByDailyCap(Model model) {
+        return model.getShopDailyLimitUnits() != null
+                && model.getShopDailyRemainingUnits() != null
+                && model.getShopDailyRemainingUnits().compareTo(BigDecimal.ZERO) <= 0;
+    }
+
+    private BigDecimal activeDailyLimit(Model model, LocalDate businessDate) {
+        if (model.getShopAvailableUnitsOverride() == null || model.getShopAvailableUnitsOverrideDate() == null) {
+            return null;
+        }
+        LocalDate effectiveDate = businessDate != null ? businessDate : LocalDate.now();
+        return model.getShopAvailableUnitsOverrideDate().equals(effectiveDate)
+                ? model.getShopAvailableUnitsOverride()
+                : null;
+    }
+
+    private static BigDecimal orZero(BigDecimal value) {
+        return value != null ? value : BigDecimal.ZERO;
+    }
+
+    private void applyDailyCapSnapshot(Model model, UUID tenantId, UUID companyId, LocalDate businessDate, UUID excludeOrderId) {
+        BigDecimal limit = activeDailyLimit(model, businessDate);
+        model.setShopDailyLimitUnits(limit);
+        if (limit == null) {
+            model.setShopDailySoldUnits(null);
+            model.setShopDailyRemainingUnits(null);
+            return;
+        }
+        ZoneId zone = ZoneId.systemDefault();
+        LocalDate effectiveDate = businessDate != null ? businessDate : LocalDate.now(zone);
+        Instant from = effectiveDate.atStartOfDay(zone).toInstant();
+        Instant to = effectiveDate.plusDays(1).atStartOfDay(zone).toInstant();
+        BigDecimal sold = orZero(shopOrderItemRepository.sumSoldQuantityForModelInDay(
+                model.getId(), tenantId, companyId, from, to, excludeOrderId));
+        model.setShopDailySoldUnits(sold);
+        model.setShopDailyRemainingUnits(limit.subtract(sold).max(BigDecimal.ZERO));
+    }
+
+    public static class DailyMenuLimitExceededException extends IllegalArgumentException {
+        private final UUID modelId;
+        private final String modelName;
+        private final BigDecimal limitUnits;
+        private final BigDecimal soldUnits;
+        private final BigDecimal remainingUnits;
+        private final BigDecimal requestedUnits;
+
+        public DailyMenuLimitExceededException(UUID modelId, String modelName, BigDecimal limitUnits,
+                                               BigDecimal soldUnits, BigDecimal remainingUnits,
+                                               BigDecimal requestedUnits) {
+            super(modelName + " only has " + remainingUnits.stripTrailingZeros().toPlainString() + " left today");
+            this.modelId = modelId;
+            this.modelName = modelName;
+            this.limitUnits = limitUnits;
+            this.soldUnits = soldUnits;
+            this.remainingUnits = remainingUnits;
+            this.requestedUnits = requestedUnits;
+        }
+
+        public UUID getModelId() { return modelId; }
+        public String getModelName() { return modelName; }
+        public BigDecimal getLimitUnits() { return limitUnits; }
+        public BigDecimal getSoldUnits() { return soldUnits; }
+        public BigDecimal getRemainingUnits() { return remainingUnits; }
+        public BigDecimal getRequestedUnits() { return requestedUnits; }
+    }
+
+    private void validateDailyMenuCaps(ShopOrder order, List<ItemRequest> requests,
+                                       UUID tenantId, UUID companyId, ZoneId zone) {
+        Map<UUID, BigDecimal> requestedByModel = new LinkedHashMap<>();
+        collectRequestedQuantities(requests, requestedByModel);
+        if (requestedByModel.isEmpty()) return;
+
+        ZoneId effectiveZone = zone != null ? zone : ZoneId.systemDefault();
+        LocalDate businessDate = LocalDate.now(effectiveZone);
+        Instant from = businessDate.atStartOfDay(effectiveZone).toInstant();
+        Instant to = businessDate.plusDays(1).atStartOfDay(effectiveZone).toInstant();
+        UUID excludeOrderId = order != null ? order.getId() : null;
+
+        for (Map.Entry<UUID, BigDecimal> entry : requestedByModel.entrySet()) {
+            UUID modelId = entry.getKey();
+            BigDecimal requested = entry.getValue();
+            if (requested == null || requested.compareTo(BigDecimal.ZERO) <= 0) continue;
+            Model model = modelRepository.findById(modelId)
+                    .orElseThrow(() -> new IllegalArgumentException("Model not found: " + modelId));
+            if (!tenantId.equals(model.getTenantId()) || !companyId.equals(model.getCompanyId())) {
+                throw new IllegalArgumentException("Model not found: " + modelId);
+            }
+            BigDecimal limit = activeDailyLimit(model, businessDate);
+            if (limit == null) continue;
+            BigDecimal sold = orZero(shopOrderItemRepository.sumSoldQuantityForModelInDay(
+                    modelId, tenantId, companyId, from, to, excludeOrderId));
+            BigDecimal remaining = limit.subtract(sold).max(BigDecimal.ZERO);
+            if (requested.compareTo(remaining) > 0) {
+                throw new DailyMenuLimitExceededException(modelId, model.getModelName(), limit, sold, remaining, requested);
+            }
+        }
+    }
+
+    private void collectRequestedQuantities(List<ItemRequest> requests, Map<UUID, BigDecimal> totals) {
+        if (requests == null) return;
+        for (ItemRequest request : requests) {
+            if (request == null || request.modelId() == null) continue;
+            BigDecimal quantity = request.quantity() != null ? request.quantity() : BigDecimal.ZERO;
+            totals.merge(request.modelId(), quantity, BigDecimal::add);
+            collectRequestedQuantities(request.sideItems(), totals);
+        }
     }
 
     // ── Order creation ────────────────────────────────────────────────
@@ -217,6 +343,7 @@ public class ShopOrderService {
         }
 
         shopOrderRepository.save(order);
+        validateDailyMenuCaps(order, req.items(), tenantId, companyId, zone);
 
         List<ShopOrderItem> items = new ArrayList<>();
         BigDecimal[] totals = { BigDecimal.ZERO, BigDecimal.ZERO };
@@ -345,10 +472,17 @@ public class ShopOrderService {
 
     @Transactional
     public ShopOrderResponseDto updateOrderByCustomer(String orderCode, List<ItemRequest> newItems, UUID tenantId, UUID companyId) {
+        return updateOrderByCustomer(orderCode, newItems, tenantId, companyId, ZoneId.systemDefault());
+    }
+
+    @Transactional
+    public ShopOrderResponseDto updateOrderByCustomer(String orderCode, List<ItemRequest> newItems, UUID tenantId, UUID companyId, ZoneId zone) {
         ShopOrder order = shopOrderRepository.findByOrderCodeAndTenantIdAndCompanyId(orderCode, tenantId, companyId)
                 .orElseThrow(() -> new NoSuchElementException("Order not found"));
         if (!ShopOrder.STATUS_PENDING.equals(order.getStatus()))
             throw new IllegalStateException("Order can only be updated while PENDING");
+
+        validateDailyMenuCaps(order, newItems, tenantId, companyId, zone);
 
         BigDecimal[] totals = { BigDecimal.ZERO, BigDecimal.ZERO };
         List<ShopOrderItem> items = replaceOrderItems(order, newItems, totals, tenantId, companyId);
@@ -935,8 +1069,15 @@ public class ShopOrderService {
 
     @Transactional
     public ShopOrderResponseDto updateOrderItems(UUID orderId, List<ItemRequest> newItems, UUID tenantId, UUID companyId) {
+        return updateOrderItems(orderId, newItems, tenantId, companyId, ZoneId.systemDefault());
+    }
+
+    @Transactional
+    public ShopOrderResponseDto updateOrderItems(UUID orderId, List<ItemRequest> newItems, UUID tenantId, UUID companyId, ZoneId zone) {
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         requireStatus(order, ShopOrder.STATUS_PENDING);
+
+        validateDailyMenuCaps(order, newItems, tenantId, companyId, zone);
 
         BigDecimal[] totals = { BigDecimal.ZERO, BigDecimal.ZERO };
         List<ShopOrderItem> items = replaceOrderItems(order, newItems, totals, tenantId, companyId);
@@ -1927,7 +2068,9 @@ public class ShopOrderService {
         ShopOrderResponseDto response;
         List<ShopBill> ownedBills = shopBillRepository.findAllByOrder_IdOrderByCreatedAtAsc(order.getId());
         if (ownedBills.isEmpty()) {
-            response = ShopOrderResponseDto.from(order, shopOrderItemRepository.findAllByOrder_Id(order.getId()));
+            List<ShopOrderItem> items = shopOrderItemRepository.findAllByOrder_Id(order.getId());
+            response = ShopOrderResponseDto.from(order, items);
+            annotateDailyCapItems(response, order, items);
             return shopLocalizedLabelService.applyToOrder(response);
         }
 
@@ -1978,7 +2121,47 @@ public class ShopOrderService {
         }
 
         response = ShopOrderResponseDto.from(order, visibleItems, responseBills, itemBillMap, billItemsMap);
+        annotateDailyCapItems(response, order, shopOrderItemRepository.findAllByOrder_Id(order.getId()));
         return shopLocalizedLabelService.applyToOrder(response);
+    }
+
+    private void annotateDailyCapItems(ShopOrderResponseDto response, ShopOrder order, List<ShopOrderItem> allOrderItems) {
+        if (response == null || order == null || allOrderItems == null || allOrderItems.isEmpty()) return;
+        if (ShopOrder.STATUS_CANCELLED.equals(order.getStatus())) return;
+        ZoneId zone = ZoneId.systemDefault();
+        LocalDate businessDate = order.getCreatedAt() != null
+                ? LocalDate.ofInstant(order.getCreatedAt(), zone)
+                : LocalDate.now(zone);
+        Instant from = businessDate.atStartOfDay(zone).toInstant();
+        Instant to = businessDate.plusDays(1).atStartOfDay(zone).toInstant();
+
+        Map<UUID, BigDecimal> orderQtyByModel = new LinkedHashMap<>();
+        Map<UUID, Model> modelById = new LinkedHashMap<>();
+        for (ShopOrderItem item : allOrderItems) {
+            if (item.getModel() == null || item.getModel().getId() == null) continue;
+            UUID modelId = item.getModel().getId();
+            orderQtyByModel.merge(modelId, orZero(item.getQuantity()), BigDecimal::add);
+            modelById.putIfAbsent(modelId, item.getModel());
+        }
+
+        for (ShopOrderResponseDto.ItemDto item : response.getItems()) {
+            UUID modelId = item.getModelId();
+            if (modelId == null) continue;
+            Model model = modelById.get(modelId);
+            if (model == null) continue;
+            BigDecimal limit = activeDailyLimit(model, businessDate);
+            if (limit == null) continue;
+            BigDecimal soldExcludingOrder = orZero(shopOrderItemRepository.sumSoldQuantityForModelInDay(
+                    modelId, order.getTenantId(), order.getCompanyId(), from, to, order.getId()));
+            BigDecimal orderQty = orderQtyByModel.getOrDefault(modelId, BigDecimal.ZERO);
+            BigDecimal soldAfterOrder = soldExcludingOrder.add(orderQty);
+            BigDecimal remainingAfterOrder = limit.subtract(soldAfterOrder).max(BigDecimal.ZERO);
+            boolean lastOrder = soldExcludingOrder.compareTo(limit) < 0 && soldAfterOrder.compareTo(limit) >= 0;
+            item.setDailyLimitUnits(limit);
+            item.setDailySoldUnits(soldAfterOrder);
+            item.setDailyRemainingUnits(remainingAfterOrder);
+            item.setDailyLastOrder(lastOrder);
+        }
     }
 
     // ── Request DTOs ──────────────────────────────────────────────────
@@ -2228,11 +2411,17 @@ public class ShopOrderService {
 
     @Transactional
     public ShopOrderResponseDto updateOrderByCustomer(String orderCode, List<ItemRequest> newItems) {
+        return updateOrderByCustomer(orderCode, newItems, ZoneId.systemDefault());
+    }
+
+    @Transactional
+    public ShopOrderResponseDto updateOrderByCustomer(String orderCode, List<ItemRequest> newItems, ZoneId zone) {
         ShopOrder order = requireOrderByCode(orderCode);
         if (!ShopOrder.STATUS_PENDING.equals(order.getStatus()))
             throw new IllegalStateException("Order can only be updated while PENDING");
         UUID tenantId  = order.getTenantId();
         UUID companyId = order.getCompanyId();
+        validateDailyMenuCaps(order, newItems, tenantId, companyId, zone);
         BigDecimal[] totals = { BigDecimal.ZERO, BigDecimal.ZERO };
         List<ShopOrderItem> items = replaceOrderItems(order, newItems, totals, tenantId, companyId);
         BigDecimal fee = order.getDeliveryFee() != null ? order.getDeliveryFee() : BigDecimal.ZERO;

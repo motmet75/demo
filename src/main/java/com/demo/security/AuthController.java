@@ -2,7 +2,10 @@ package com.demo.security;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
+import java.util.regex.Pattern;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -53,6 +56,7 @@ import jakarta.validation.constraints.NotBlank;
 public class AuthController {
 
     static final String OAUTH2_RETURN_TO_SESSION_KEY = "oauth2ReturnTo";
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
 
     private final AuthenticationManager authenticationManager;
     /**
@@ -305,6 +309,9 @@ public AuthController(AuthenticationManager authenticationManager,
     public record ChangePasswordRequest(
             @NotBlank String currentPassword,
             @NotBlank String newPassword) {}
+    public record UpdateProfileEmailRequest(
+            @NotBlank String email,
+            @NotBlank String password) {}
 
     public record PasswordOtpResponse(boolean success, String message, String email, Long expiresInSeconds) {}
     public record ConfirmPasswordOtpRequest(
@@ -351,6 +358,39 @@ public AuthController(AuthenticationManager authenticationManager,
         userRepository.save(user);
         return ResponseEntity.ok(new AuthResponse(true, null, "Password changed successfully"));
     }
+
+    @PatchMapping("/profile/email")
+    public ResponseEntity<AuthResponse> updateProfileEmail(
+            @Valid @RequestBody UpdateProfileEmailRequest request,
+            Authentication authentication) {
+        User user = currentDbUser(authentication);
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new AuthResponse(false, null, "Not authenticated"));
+        }
+        String nextEmail = request.email() != null
+                ? request.email().trim().toLowerCase(Locale.ROOT)
+                : "";
+        if (!StringUtils.hasText(nextEmail) || !EMAIL_PATTERN.matcher(nextEmail).matches()) {
+            return ResponseEntity.badRequest().body(new AuthResponse(false, null, "Enter a valid email address"));
+        }
+        if (!StringUtils.hasText(request.password()) || !passwordEncoder.matches(request.password(), user.getPassword())) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new AuthResponse(false, null, "Password is incorrect"));
+        }
+        Optional<User> existing = userRepository.findByEmailIgnoreCase(nextEmail);
+        if (existing.isPresent() && !existing.get().getId().equals(user.getId())) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(new AuthResponse(false, null, "This email is already linked to another account"));
+        }
+        user.setEmail(nextEmail);
+        userRepository.save(user);
+        if (authentication != null && authentication.getPrincipal() instanceof User sessionUser) {
+            sessionUser.setEmail(nextEmail);
+        }
+        return ResponseEntity.ok(new AuthResponse(true, toView(user), "Email updated successfully"));
+    }
+
     @PostMapping("/change-password")
     public ResponseEntity<AuthResponse> changePassword(
             @Valid @RequestBody ChangePasswordRequest request,

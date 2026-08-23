@@ -20,7 +20,7 @@ export const SUPPORTED_LANGUAGES = [
   { code: 'th', label: 'Thai', nativeLabel: 'ไทย', locale: 'th-TH', dir: 'ltr' },
 ]
 
-export const ORDERING_LANGUAGE_CODES = ['vi', 'cn', 'en', 'ko', 'ja', 'es', 'th', 'ms', 'id', 'dv', 'tw']
+export const ORDERING_LANGUAGE_CODES = ['cn', 'dv', 'en', 'id', 'ja', 'ko', 'ms', 'es', 'th', 'tw', 'vi']
 
 export const DEFAULT_LANGUAGE = 'en'
 
@@ -624,6 +624,22 @@ const EN = {
   'profile.password.wait': 'Please wait before requesting another OTP.',
   'profile.password.invalidOtp': 'OTP is incorrect or has expired.',
   'profile.password.tooMany': 'Too many incorrect attempts. Request a new OTP.',
+  'profile.email.title': 'Linked email',
+  'profile.email.description': 'Current email: {email}',
+  'profile.email.none': 'not linked',
+  'profile.email.action': 'Change email',
+  'profile.email.linkAction': 'Link email',
+  'profile.email.dialogTitle': 'Link or change email',
+  'profile.email.help': 'Confirm your current password before linking a new email.',
+  'profile.email.new': 'New email',
+  'profile.email.password': 'Current password',
+  'profile.email.update': 'Update email',
+  'profile.email.invalid': 'Enter a valid email address.',
+  'profile.email.passwordRequired': 'Enter your current password.',
+  'profile.email.passwordWrong': 'Current password is incorrect.',
+  'profile.email.exists': 'This email is already linked to another account.',
+  'profile.email.changeFailed': 'Could not update email.',
+  'profile.email.changed': 'Email updated successfully.',
 
   'admin.accessNotice': 'Signed in as {username}. Only users with ROLE_ADMIN can access this page.',
   'admin.users.title': 'Users',
@@ -2423,6 +2439,22 @@ const VI = {
   'profile.password.wait': 'Vui lòng chờ trước khi yêu cầu OTP mới.',
   'profile.password.invalidOtp': 'OTP không đúng hoặc đã hết hạn.',
   'profile.password.tooMany': 'Bạn đã nhập sai quá nhiều lần. Hãy yêu cầu OTP mới.',
+  'profile.email.title': 'Email liên kết',
+  'profile.email.description': 'Email hiện tại: {email}',
+  'profile.email.none': 'chưa liên kết',
+  'profile.email.action': 'Đổi email',
+  'profile.email.linkAction': 'Liên kết email',
+  'profile.email.dialogTitle': 'Liên kết hoặc đổi email',
+  'profile.email.help': 'Xác nhận mật khẩu hiện tại trước khi liên kết email mới.',
+  'profile.email.new': 'Email mới',
+  'profile.email.password': 'Mật khẩu hiện tại',
+  'profile.email.update': 'Cập nhật email',
+  'profile.email.invalid': 'Nhập địa chỉ email hợp lệ.',
+  'profile.email.passwordRequired': 'Nhập mật khẩu hiện tại.',
+  'profile.email.passwordWrong': 'Mật khẩu hiện tại không đúng.',
+  'profile.email.exists': 'Email này đã được liên kết với tài khoản khác.',
+  'profile.email.changeFailed': 'Không thể cập nhật email.',
+  'profile.email.changed': 'Cập nhật email thành công.',
 
   'admin.accessNotice': 'Đã đăng nhập với tên {username}. Chỉ người dùng có ROLE_ADMIN mới truy cập được trang này.',
   'admin.users.title': 'Người dùng',

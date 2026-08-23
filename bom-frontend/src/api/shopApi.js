@@ -15,6 +15,15 @@ function withCounterIpMeta(result) {
     allowAllNetworks: result?.res?.headers?.get('X-Shop-Allow-All-Networks') === 'true',
   }
 }
+
+function browserTimeZone() {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || '' } catch { return '' }
+}
+
+function timeZoneHeaders(extra = {}) {
+  const timeZone = browserTimeZone()
+  return timeZone ? { ...extra, 'X-Time-Zone': timeZone } : extra
+}
 // ── Public (no auth) ───────────────────────────────────────────────
 
 export function resolveToken(token) {
@@ -22,7 +31,9 @@ export function resolveToken(token) {
 }
 
 export function fetchMenu(tenantId, companyId) {
-  return apiFetchJsonNoContext('/shop/public/menu' + qs({ tenantId, companyId }))
+  return apiFetchJsonNoContext('/shop/public/menu' + qs({ tenantId, companyId }), {
+    headers: timeZoneHeaders(),
+  })
 }
 
 export function fetchShopConfig(tenantId, companyId) {
@@ -50,7 +61,7 @@ export function fetchCounterOrderQr(orderCode) {
 export function createOrder(tenantId, companyId, body) {
   return apiFetchJsonNoContext('/shop/public/orders' + qs({ tenantId, companyId }), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: timeZoneHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(body)
   })
 }
@@ -94,7 +105,7 @@ export function cancelCustomerEdit(orderCode) {
 export function updatePublicOrderItems(orderCode, items) {
   return apiFetchJsonNoContext(`/shop/public/orders/${encodeURIComponent(orderCode)}/items`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: timeZoneHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(items)
   })
 }
@@ -112,7 +123,7 @@ export function redeemPublicVoucher(code, orderCode) {
 export function createStaffOrder(body) {
   return apiFetchJson('/shop/staff/orders', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: timeZoneHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(body)
   })
 }
@@ -273,7 +284,7 @@ export function revertToCash(orderId) {
 export function updateOrderItems(orderId, items) {
   return apiFetchJson(`/shop/staff/orders/${orderId}/items`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: timeZoneHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(items)
   })
 }
@@ -518,13 +529,15 @@ export function fetchSalesIncomeReport(params = {}) {
 }
 
 export function fetchMenuAvailability() {
-  return apiFetchJson('/shop/staff/materials/menu-availability')
+  return apiFetchJson('/shop/staff/materials/menu-availability', {
+    headers: timeZoneHeaders(),
+  })
 }
 
 export function updateMenuAvailabilityOverride(modelId, units) {
   return apiFetchJson(`/shop/staff/materials/menu-availability/${modelId}/override`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: timeZoneHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ units })
   })
 }

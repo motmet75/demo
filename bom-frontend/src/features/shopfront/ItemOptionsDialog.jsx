@@ -18,6 +18,7 @@ import IconButton from '@mui/material/IconButton'
 import CloseIcon from '@mui/icons-material/Close'
 import { useI18n } from '../../i18n/I18nContext'
 import { localizedChoiceLabel, localizedGroupName, localizedModelName } from '../../i18n/menuLocalization'
+import { shopCustomerText } from '../../i18n/shopCustomerText'
 
 function parseChoices(str) {
   if (!str) return []
@@ -42,17 +43,32 @@ function getChoiceQty(val, label) {
   return 0
 }
 
-export default function ItemOptionsDialog({ open, model, options = [], allowedSideOptions = [], initialCart, onConfirm, onClose }) {
+export default function ItemOptionsDialog({ open, model, options = [], allowedSideOptions = [], initialCart, maxQty = null, onConfirm, onClose }) {
   const { language, formatMoney, t } = useI18n()
   const fmtLocal = (n) => n != null ? formatMoney(n, 'VND') : ''
   const modelLabel = (item) => localizedModelName(item, language)
   const groupLabel = (group) => localizedGroupName(group, language)
   const choiceLabel = (choice) => localizedChoiceLabel(choice, language)
+  const cText = (key, vars) => shopCustomerText(language, key, vars)
+  const dailyLimitLabel = (count) => count <= 0 ? cText('daily.soldOut') : cText('daily.left', { count })
   const [qty, setQty]           = useState(1)
   const [selected, setSelected] = useState({})
   const [note, setNote]         = useState('')
   const [sides, setSides]       = useState({})  // { [modelId]: qty }
   const [imagePreview, setImagePreview] = useState(null)
+  const effectiveMaxQty = maxQty != null ? Math.max(0, Math.floor(Number(maxQty) || 0)) : null
+  const sideEffectiveMaxForQty = (side, mainQty = qty) => {
+    if (!side) return null
+    const sideMaxQty = Number(side.maxQty || 0)
+    const dailyRemaining = side.dailyRemainingForCart != null
+      ? Math.max(0, Math.floor(Number(side.dailyRemainingForCart) || 0))
+      : null
+    const dailyPerMain = dailyRemaining != null && mainQty > 0 ? Math.floor(dailyRemaining / mainQty) : null
+    const max = [sideMaxQty > 0 ? sideMaxQty : null, dailyPerMain]
+      .filter(v => v != null)
+      .reduce((min, v) => Math.min(min, v), Number.POSITIVE_INFINITY)
+    return Number.isFinite(max) ? Math.max(0, max) : null
+  }
 
   useEffect(() => {
     if (!open) return
@@ -63,11 +79,12 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
       : {}
     )
     if (initialCart) {
-      setQty(initialCart.qty || 1)
+      const initialQty = initialCart.qty || 1
+      setQty(effectiveMaxQty != null ? Math.max(1, Math.min(effectiveMaxQty || 1, initialQty)) : initialQty)
       try { setSelected(initialCart.selectedOptions ? JSON.parse(initialCart.selectedOptions) : {}) } catch { setSelected({}) }
       setNote(initialCart.itemNotes || '')
     } else {
-      setQty(1)
+      setQty(effectiveMaxQty === 0 ? 0 : 1)
       const defaults = {}
       options.forEach(g => {
         if (g.defaultValue) {
@@ -77,7 +94,25 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
       setSelected(defaults)
       setNote('')
     }
-  }, [open, model?.id]) // eslint-disable-line
+  }, [open, model?.id, effectiveMaxQty]) // eslint-disable-line
+
+  useEffect(() => {
+    if (!open) return
+    setSides(prev => {
+      let changed = false
+      const next = {}
+      Object.entries(prev || {}).forEach(([modelId, rawQty]) => {
+        const side = allowedSideOptions.find(x => String(x.id) === String(modelId))
+        if (!side) { changed = true; return }
+        const max = sideEffectiveMaxForQty(side, qty)
+        const current = Math.max(0, Math.floor(Number(rawQty) || 0))
+        const capped = max != null ? Math.min(current, max) : current
+        if (capped > 0) next[modelId] = capped
+        if (capped !== current) changed = true
+      })
+      return changed ? next : prev
+    })
+  }, [open, qty, allowedSideOptions]) // eslint-disable-line
 
   // ── Chip toggle (for non-priced groups) ──────────────────────────────
   const handleSelect = (groupName, value, multiSelect) => {
@@ -111,15 +146,21 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
   const changeSideQty = (modelId, delta) =>
     setSides(prev => {
       const current = prev[modelId] || 0
-      const limit = Number(allowedSideOptions.find(x => String(x.id) === String(modelId))?.maxQty || 0)
-      const capped = limit > 0 ? Math.min(limit, current + delta) : current + delta
+      const side = allowedSideOptions.find(x => String(x.id) === String(modelId))
+      const max = sideEffectiveMaxForQty(side, qty)
+      const capped = max != null ? Math.min(max, current + delta) : current + delta
       const next = Math.max(0, capped)
       if (next === 0) { const { [modelId]: _, ...rest } = prev; return rest }
       return { ...prev, [modelId]: next }
     })
 
   // ── Validation ────────────────────────────────────────────────────────
-  const canConfirm = options.filter(g => g.required).every(g => {
+  const sideQtyValid = Object.entries(sides || {}).every(([modelId, sideQty]) => {
+    const side = allowedSideOptions.find(x => String(x.id) === String(modelId))
+    const max = sideEffectiveMaxForQty(side, qty)
+    return max == null || Number(sideQty || 0) <= max
+  })
+  const canConfirm = sideQtyValid && (effectiveMaxQty == null || qty <= effectiveMaxQty) && qty > 0 && options.filter(g => g.required).every(g => {
     const val = selected[g.groupName]
     if (isPricedGroup(g)) {
       return val && typeof val === 'object' && !Array.isArray(val) && Object.values(val).some(q => q > 0)
@@ -295,9 +336,11 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
               {allowedSideOptions.map(side => {
                 const sideKey = String(side.id)
                 const sideQty = sides[sideKey] || 0
+                const dailyRemaining = side.dailyRemainingForCart != null ? Math.max(0, Math.floor(Number(side.dailyRemainingForCart) || 0)) : null
                 const sideMaxQty = Number(side.maxQty || 0)
+                const effectiveSideMaxQty = sideEffectiveMaxForQty(side, qty)
                 const sideImage = side.imageUrl || side.thumbnailUrl || ''
-                const atMax = sideMaxQty > 0 && sideQty >= sideMaxQty
+                const atMax = effectiveSideMaxQty != null && sideQty >= effectiveSideMaxQty
                 return (
                   <Box key={side.id} sx={{
                     display: 'flex', alignItems: 'center', gap: 1,
@@ -314,6 +357,7 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
                       <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.75, mt: 0.35 }}>
                         <Typography sx={{ fontSize: 13, fontWeight: 800, color: '#4f46e5' }}>+{fmtLocal(side.sellingPrice)}</Typography>
                         {sideMaxQty > 0 && <Typography sx={{ fontSize: 11, color: '#64748b' }}>Max {sideMaxQty} per item</Typography>}
+                        {dailyRemaining != null && <Typography sx={{ fontSize: 11, color: dailyRemaining <= 0 ? '#dc2626' : '#64748b', fontWeight: 800 }}>{dailyLimitLabel(dailyRemaining)}</Typography>}
                         {qty > 1 && sideQty > 0 && <Typography sx={{ fontSize: 11, color: '#64748b' }}>{sideQty * qty} total</Typography>}
                       </Box>
                     </Box>
@@ -365,10 +409,17 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
             <RemoveIcon />
           </IconButton>
           <Typography variant="h6" fontWeight={800} sx={{ minWidth: 32, textAlign: 'center' }}>{qty}</Typography>
-          <IconButton onClick={() => setQty(q => q + 1)} sx={{ bgcolor: '#1976d2', color: '#fff', '&:hover': { bgcolor: '#1565c0' } }}>
+          <IconButton onClick={() => setQty(q => effectiveMaxQty != null ? Math.min(effectiveMaxQty, q + 1) : q + 1)}
+            disabled={effectiveMaxQty != null && qty >= effectiveMaxQty}
+            sx={{ bgcolor: '#1976d2', color: '#fff', '&:hover': { bgcolor: '#1565c0' }, '&.Mui-disabled': { bgcolor: '#cbd5e1', color: '#fff' } }}>
             <AddIcon />
           </IconButton>
         </Box>
+        {effectiveMaxQty != null && (
+          <Typography variant="caption" color={effectiveMaxQty <= 0 ? 'error' : 'text.secondary'} sx={{ display: 'block', textAlign: 'center', mt: 1, fontWeight: 800 }}>
+            {dailyLimitLabel(effectiveMaxQty)}
+          </Typography>
+        )}
       </DialogContent>
 
       <DialogActions sx={{ px: 2, pb: 2 }}>
@@ -404,4 +455,3 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
     </>
   )
 }
-

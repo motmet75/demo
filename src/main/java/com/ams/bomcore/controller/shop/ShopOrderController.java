@@ -63,6 +63,20 @@ public class ShopOrderController {
 
     private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
 
+    private ResponseEntity<?> dailyLimitResponse(ShopOrderService.DailyMenuLimitExceededException e) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("error", e.getMessage());
+        body.put("message", e.getMessage());
+        body.put("code", "DAILY_MENU_LIMIT_EXCEEDED");
+        body.put("modelId", e.getModelId());
+        body.put("modelName", e.getModelName());
+        body.put("limitUnits", e.getLimitUnits());
+        body.put("soldUnits", e.getSoldUnits());
+        body.put("remainingUnits", e.getRemainingUnits());
+        body.put("requestedUnits", e.getRequestedUnits());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
     private record CounterIpSnapshot(String publicIp, Instant updatedAt, List<String> allowedPublicIps, boolean allowAllNetworks) {}
     private record CounterNetworkRule(String counterPublicIp, List<String> allowedPublicIps, boolean allowAllNetworks) {}
 
@@ -125,9 +139,11 @@ public class ShopOrderController {
     }
 
     @GetMapping("/shop/public/menu")
-    public ResponseEntity<?> getMenu(@RequestParam UUID tenantId, @RequestParam UUID companyId) {
+    public ResponseEntity<?> getMenu(@RequestParam UUID tenantId, @RequestParam UUID companyId,
+                                     @RequestHeader(value = "X-Time-Zone", required = false) String timeZone) {
         validateScope(tenantId, companyId);
-        return ResponseEntity.ok(shopOrderService.getMenu(tenantId, companyId));
+        java.time.LocalDate businessDate = java.time.LocalDate.now(RequestTimeZone.resolve(timeZone));
+        return ResponseEntity.ok(shopOrderService.getMenu(tenantId, companyId, businessDate));
     }
 
     @GetMapping("/shop/public/localized-labels")
@@ -170,6 +186,8 @@ public class ShopOrderController {
             ShopOrderResponseDto dto = shopOrderService.createOrder(req, tenantId, companyId, RequestTimeZone.resolve(timeZone));
             createNewOrderStaffCall(dto);
             return ResponseEntity.status(HttpStatus.CREATED).body(dto);
+        } catch (ShopOrderService.DailyMenuLimitExceededException e) {
+            return dailyLimitResponse(e);
         } catch (IllegalArgumentException e) {
             String message = e.getMessage() != null ? e.getMessage() : "Cannot create order";
             return ResponseEntity.badRequest().body(Map.of("error", message, "message", message));
@@ -500,8 +518,12 @@ public class ShopOrderController {
                                                @RequestHeader(value = "X-Time-Zone", required = false) String timeZone) {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
-        ShopOrderResponseDto dto = shopOrderService.createCounterOrder(req, tId, cId, RequestTimeZone.resolve(timeZone));
-        return ResponseEntity.status(HttpStatus.CREATED).body(dto);
+        try {
+            ShopOrderResponseDto dto = shopOrderService.createCounterOrder(req, tId, cId, RequestTimeZone.resolve(timeZone));
+            return ResponseEntity.status(HttpStatus.CREATED).body(dto);
+        } catch (ShopOrderService.DailyMenuLimitExceededException e) {
+            return dailyLimitResponse(e);
+        }
     }
 
     @PostMapping("/shop/staff/orders/scan-confirm")
@@ -786,10 +808,15 @@ public class ShopOrderController {
                                                @RequestParam(required = false) UUID tenantId,
                                                @RequestParam(required = false) UUID companyId,
                                                @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
-                                               @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+                                               @RequestHeader(value = "X-Company-Id", required = false) String hCompany,
+                                               @RequestHeader(value = "X-Time-Zone", required = false) String timeZone) {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
-        return ResponseEntity.ok(shopOrderService.updateOrderItems(orderId, items, tId, cId));
+        try {
+            return ResponseEntity.ok(shopOrderService.updateOrderItems(orderId, items, tId, cId, RequestTimeZone.resolve(timeZone)));
+        } catch (ShopOrderService.DailyMenuLimitExceededException e) {
+            return dailyLimitResponse(e);
+        }
     }
 
     @PatchMapping("/shop/staff/orders/{orderId}/cancel")
@@ -958,6 +985,7 @@ public class ShopOrderController {
     @PutMapping("/shop/public/orders/{orderCode}/items")
     public ResponseEntity<?> updateOrderByCustomer(@PathVariable String orderCode,
                                                     @RequestBody List<ShopOrderService.ItemRequest> items,
+                                                    @RequestHeader(value = "X-Time-Zone", required = false) String timeZone,
                                                     HttpServletRequest request) {
         ShopOrder order = shopOrderRepository.findByOrderCode(orderCode).orElse(null);
         if (order == null) {
@@ -969,9 +997,11 @@ public class ShopOrderController {
         rejected = rejectPublicTokenLock(order.getSourceToken());
         if (rejected != null) return rejected;
         try {
-            ShopOrderResponseDto updated = shopOrderService.updateOrderByCustomer(orderCode, items);
+            ShopOrderResponseDto updated = shopOrderService.updateOrderByCustomer(orderCode, items, RequestTimeZone.resolve(timeZone));
             createOrderEvent(updated, "customer_edit_saved", "Customer saved edited order items");
             return ResponseEntity.ok(updated);
+        } catch (ShopOrderService.DailyMenuLimitExceededException e) {
+            return dailyLimitResponse(e);
         } catch (IllegalStateException e) {
             return ResponseEntity.status(409).body(Map.of("error", e.getMessage(), "message", e.getMessage()));
         }
@@ -1468,10 +1498,12 @@ public class ShopOrderController {
     public ResponseEntity<?> menuAvailability(@RequestParam(required = false) UUID tenantId,
                                               @RequestParam(required = false) UUID companyId,
                                               @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
-                                              @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+                                              @RequestHeader(value = "X-Company-Id", required = false) String hCompany,
+                                              @RequestHeader(value = "X-Time-Zone", required = false) String timeZone) {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
-        return ResponseEntity.ok(shopMaterialAuditService.menuAvailability(tId, cId));
+        java.time.LocalDate businessDate = java.time.LocalDate.now(RequestTimeZone.resolve(timeZone));
+        return ResponseEntity.ok(shopMaterialAuditService.menuAvailability(tId, cId, businessDate));
     }
 
     @PutMapping("/shop/staff/materials/menu-availability/{modelId}/override")
@@ -1480,13 +1512,15 @@ public class ShopOrderController {
                                                          @RequestParam(required = false) UUID tenantId,
                                                          @RequestParam(required = false) UUID companyId,
                                                          @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
-                                                         @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+                                                         @RequestHeader(value = "X-Company-Id", required = false) String hCompany,
+                                                         @RequestHeader(value = "X-Time-Zone", required = false) String timeZone) {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
         BigDecimal units = body != null && body.get("units") != null && !String.valueOf(body.get("units")).isBlank()
                 ? new BigDecimal(String.valueOf(body.get("units")))
                 : null;
-        return ResponseEntity.ok(shopMaterialAuditService.updateAvailabilityOverride(modelId, units, tId, cId));
+        java.time.LocalDate businessDate = java.time.LocalDate.now(RequestTimeZone.resolve(timeZone));
+        return ResponseEntity.ok(shopMaterialAuditService.updateAvailabilityOverride(modelId, units, tId, cId, businessDate));
     }
 
     @GetMapping("/shop/staff/orders/{orderId}/material-audit")

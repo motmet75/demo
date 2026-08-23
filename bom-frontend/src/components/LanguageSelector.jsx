@@ -48,10 +48,12 @@ export function LanguageFlag({ code, label, sx }) {
 export default function LanguageSelector({ size = 'small', compact = false, variant = 'outlined', languageCodes }) {
   const { language, setLanguage, t } = useI18n()
   const languages = React.useMemo(() => {
-    if (!Array.isArray(languageCodes) || languageCodes.length === 0) return SUPPORTED_LANGUAGES
-    return languageCodes
+    const source = (!Array.isArray(languageCodes) || languageCodes.length === 0)
+      ? SUPPORTED_LANGUAGES
+      : languageCodes
       .map(code => SUPPORTED_LANGUAGES.find(item => item.code === code))
       .filter(Boolean)
+    return [...source].sort((a, b) => a.label.localeCompare(b.label, 'en'))
   }, [languageCodes])
 
   return (
@@ -62,6 +64,23 @@ export default function LanguageSelector({ size = 'small', compact = false, vari
         value={language}
         label={compact ? undefined : t('language.label')}
         onChange={(event) => setLanguage(event.target.value)}
+        MenuProps={{
+          PaperProps: {
+            sx: compact
+              ? { mt: 1, p: 1, borderRadius: 2, maxWidth: 292 }
+              : { mt: 1, borderRadius: 2 },
+          },
+          MenuListProps: compact
+            ? {
+                sx: {
+                  p: 0,
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(4, 62px)',
+                  gap: 0.75,
+                },
+              }
+            : undefined,
+        }}
         sx={compact ? { '& .MuiSelect-select': { display: 'flex', justifyContent: 'center', alignItems: 'center', py: 0.75, px: 1 } } : undefined}
         renderValue={(value) => {
           const selected = languages.find((item) => item.code === value)
@@ -83,8 +102,28 @@ export default function LanguageSelector({ size = 'small', compact = false, vari
         }}
       >
         {languages.map((item) => (
-          <MenuItem key={item.code} value={item.code} aria-label={item.label} sx={compact ? { justifyContent: 'center', minWidth: 54 } : undefined}>
-            {compact ? <LanguageFlag code={item.code} label={item.label} sx={{ width: 28, height: 20 }} /> : `${item.nativeLabel} (${item.code.toUpperCase()})`}
+          <MenuItem key={item.code} value={item.code} aria-label={item.label} sx={compact ? {
+            width: 62,
+            height: 62,
+            minHeight: 62,
+            p: 0.5,
+            borderRadius: 1.5,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            gap: 0.35,
+            border: '1px solid #e2e8f0',
+            '&.Mui-selected': { bgcolor: '#e0f2fe', borderColor: '#0284c7' },
+            '&.Mui-selected:hover': { bgcolor: '#bae6fd' },
+          } : undefined}>
+            {compact ? (
+              <>
+                <LanguageFlag code={item.code} label={item.label} sx={{ width: 30, height: 22 }} />
+                <Box component="span" sx={{ fontSize: 10, fontWeight: 900, lineHeight: 1, color: 'text.secondary' }}>
+                  {item.code.toUpperCase()}
+                </Box>
+              </>
+            ) : `${item.nativeLabel} (${item.code.toUpperCase()})`}
           </MenuItem>
         ))}
       </Select>
