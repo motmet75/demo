@@ -116,7 +116,6 @@ public class ShopOrderService {
         all.forEach(model -> applyDailyCapSnapshot(model, tenantId, companyId, effectiveDate, null));
         List<Model> active = all.stream()
                 .filter(m -> m.getSellingPrice() != null && Boolean.TRUE.equals(m.getIsActive()))
-                .filter(m -> !isSoldOutByDailyCap(m))
                 .toList();
 
         // Collect IDs referenced in allowedSideIds of any active menu item
@@ -150,29 +149,13 @@ public class ShopOrderService {
                 .filter(m -> m.getSellingPrice() != null
                         && !Boolean.TRUE.equals(m.getIsActive())
                         && neededSideIds.contains(m.getId().toString())
-                        && !activeIds.contains(m.getId().toString())
-                        && !isSoldOutByDailyCap(m))
+                        && !activeIds.contains(m.getId().toString()))
                 .toList();
         if (sideOnly.isEmpty()) return active;
 
         List<Model> result = new ArrayList<>(active);
         result.addAll(sideOnly);
         return result;
-    }
-
-    private boolean isSoldOutByDailyOverride(Model model, LocalDate businessDate) {
-        if (model.getShopAvailableUnitsOverride() == null || model.getShopAvailableUnitsOverrideDate() == null) {
-            return false;
-        }
-        LocalDate effectiveDate = businessDate != null ? businessDate : LocalDate.now();
-        return model.getShopAvailableUnitsOverrideDate().equals(effectiveDate)
-                && model.getShopAvailableUnitsOverride().compareTo(BigDecimal.ZERO) <= 0;
-    }
-
-    private boolean isSoldOutByDailyCap(Model model) {
-        return model.getShopDailyLimitUnits() != null
-                && model.getShopDailyRemainingUnits() != null
-                && model.getShopDailyRemainingUnits().compareTo(BigDecimal.ZERO) <= 0;
     }
 
     private BigDecimal activeDailyLimit(Model model, LocalDate businessDate) {

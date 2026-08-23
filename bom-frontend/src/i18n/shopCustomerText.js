@@ -912,7 +912,7 @@ const DAILY_LIMIT_TEXT = {
     'daily.leftItem': '{item} only has {count} left today.',
   },
   vi: {
-    'daily.soldOut': 'Hết món hôm nay',
+    'daily.soldOut': 'Đã hết hôm nay',
     'daily.left': 'Còn {count} hôm nay',
     'daily.soldOutItem': '{item} đã hết hôm nay.',
     'daily.leftItem': '{item} chỉ còn {count} hôm nay.',

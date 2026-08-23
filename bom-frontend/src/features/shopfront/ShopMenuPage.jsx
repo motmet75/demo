@@ -1918,7 +1918,7 @@ export default function ShopMenuPage() {
             </Typography>
             {capped && (
               <Chip
-                label={available <= 0 ? '0 left' : `${available} left`}
+                label={dailyAvailabilityLabel(available)}
                 size="small"
                 color={available <= 0 ? 'error' : available <= 3 ? 'warning' : 'success'}
                 sx={{ height: large ? 22 : 18, fontSize: large ? 11 : 9, fontWeight: 900, mx: 0.5 }}
