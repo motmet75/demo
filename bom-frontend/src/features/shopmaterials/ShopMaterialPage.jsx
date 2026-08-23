@@ -170,6 +170,8 @@ export default function ShopMaterialPage() {
   const [importOrders, setImportOrders] = useState([])
   const [importIssues, setImportIssues] = useState([])
   const [importing, setImporting] = useState(false)
+  const [availabilityQuery, setAvailabilityQuery] = useState('')
+  const [availabilityFilter, setAvailabilityFilter] = useState('all')
 
   const readOrderExcel = async (file) => {
     setError(''); setSuccess(''); setImportOrders([]); setImportIssues([])
@@ -266,6 +268,36 @@ export default function ShopMaterialPage() {
     const deductedQty = reportRows.reduce((sum, row) => sum + Number(row.deductedQty || 0), 0)
     return { waitingMaterials, waitingQty, blockedItems, requiredQty, deductedQty }
   }, [availability, openRows, reportRows])
+
+  const filteredAvailability = useMemo(() => {
+    const query = availabilityQuery.trim().toLowerCase()
+    return availability.filter(row => {
+      const effective = row.effectiveAvailableUnits == null ? null : Number(row.effectiveAvailableUnits)
+      const calculated = row.calculatedAvailableUnits == null ? null : Number(row.calculatedAvailableUnits)
+      const hasManual = row.manualAvailableUnits != null
+      const hasBom = Boolean(row.hasBom)
+      const soldOut = effective != null && effective <= 0
+      const availableNow = effective == null || effective > 0
+      const materialLimited = hasBom && calculated != null && calculated <= 0
+
+      if (availabilityFilter === 'available' && !availableNow) return false
+      if (availabilityFilter === 'soldout' && !soldOut) return false
+      if (availabilityFilter === 'manual' && !hasManual) return false
+      if (availabilityFilter === 'materialLimited' && !materialLimited) return false
+      if (availabilityFilter === 'bom' && !hasBom) return false
+      if (availabilityFilter === 'noBom' && hasBom) return false
+
+      if (!query) return true
+      const limits = Array.isArray(row.materialLimits) ? row.materialLimits : []
+      const searchable = [
+        row.modelName,
+        row.modelCode,
+        row.modelId,
+        ...limits.flatMap(limit => [limit.materialName, limit.materialCode, limit.materialUnit]),
+      ].filter(Boolean).join(' ').toLowerCase()
+      return searchable.includes(query)
+    })
+  }, [availability, availabilityFilter, availabilityQuery])
 
   const saveOverride = async (row) => {
     setSavingModelId(row.modelId)
@@ -369,6 +401,43 @@ export default function ShopMaterialPage() {
               </IconButton>
             </Tooltip>
           </Box>
+          <Box sx={{ px: 1.5, pb: 1.25, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+            <TextField
+              size="small"
+              label="Search menu or material"
+              value={availabilityQuery}
+              onChange={e => setAvailabilityQuery(e.target.value)}
+              sx={{ minWidth: { xs: '100%', sm: 260 }, flex: { xs: '1 1 100%', sm: '0 1 320px' } }}
+            />
+            <TextField
+              select
+              size="small"
+              label="Filter"
+              value={availabilityFilter}
+              onChange={e => setAvailabilityFilter(e.target.value)}
+              sx={{ minWidth: 190 }}
+            >
+              <MenuItem value="all">All items</MenuItem>
+              <MenuItem value="available">Can sell / unlimited</MenuItem>
+              <MenuItem value="soldout">Sold out / zero</MenuItem>
+              <MenuItem value="manual">Manual left units set</MenuItem>
+              <MenuItem value="materialLimited">Material limited</MenuItem>
+              <MenuItem value="bom">Uses BOM</MenuItem>
+              <MenuItem value="noBom">No BOM</MenuItem>
+            </TextField>
+            <Chip
+              label={`${filteredAvailability.length} / ${availability.length}`}
+              size="small"
+              color={filteredAvailability.length === availability.length ? 'default' : 'primary'}
+              variant="outlined"
+              sx={{ fontWeight: 800 }}
+            />
+            {(availabilityQuery || availabilityFilter !== 'all') && (
+              <Button size="small" startIcon={<RestartAltIcon />} onClick={() => { setAvailabilityQuery(''); setAvailabilityFilter('all') }}>
+                Clear filter
+              </Button>
+            )}
+          </Box>
           <Divider />
           <TableContainer sx={{ maxHeight: 420 }}>
             <Table stickyHeader size="small">
@@ -389,7 +458,10 @@ export default function ShopMaterialPage() {
                 {!loading && availability.length === 0 && (
                   <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4, color: 'text.secondary' }}>No active menu items found</TableCell></TableRow>
                 )}
-                {availability.map(row => {
+                {!loading && availability.length > 0 && filteredAvailability.length === 0 && (
+                  <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4, color: 'text.secondary' }}>No menu items match the current filter</TableCell></TableRow>
+                )}
+                {filteredAvailability.map(row => {
                   const limits = Array.isArray(row.materialLimits) ? row.materialLimits : []
                   const sortedLimits = [...limits].sort((a, b) => Number(a.possibleUnits || 0) - Number(b.possibleUnits || 0))
                   const effective = Number(row.effectiveAvailableUnits ?? row.calculatedAvailableUnits ?? 0)
