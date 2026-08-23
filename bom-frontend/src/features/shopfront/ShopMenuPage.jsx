@@ -58,7 +58,7 @@ import VoucherQrScanDialog from '../shoporder/VoucherQrScanDialog'
 import LanguageSelector from '../../components/LanguageSelector'
 import { ORDERING_LANGUAGE_CODES } from '../../i18n/translations'
 import { useI18n } from '../../i18n/I18nContext'
-import { localizedCategory, localizedChoiceLabel, localizedGroupName, localizedModelName, normalizeChoice, parseChoices as parseMenuChoices } from '../../i18n/menuLocalization'
+import { localizedCategory, localizedChoiceLabel, localizedGroupName, localizedLabel, localizedModelName, normalizeChoice, parseChoices as parseMenuChoices } from '../../i18n/menuLocalization'
 import { decorateAllowedSideOptions, getAllowedSideMax } from '../../utils/sideItemConfig'
 import { saveQrImage } from '../../utils/saveQrImage'
 
@@ -132,6 +132,11 @@ const STATUS_TRANSLATION_KEYS = {
   CANCELLED: 'shopOrder.status.cancelled',
 }
 
+function orderStatusLabel(order, language, translate) {
+  const status = order?.status || 'PENDING'
+  return localizedLabel(order?.statusLabels, language, translate(STATUS_TRANSLATION_KEYS[status] || status))
+}
+
 function buildChildMap(items) {
   const map = {}
   ;(items || []).forEach(it => {
@@ -154,7 +159,7 @@ const STATUS_CHIP_MAP = {
   CANCELLED: { label: 'Đã huỷ',       color: 'error'   },
 }
 
-function SessionOrderList({ session, token, onEdit, onView, t, formatAmount, itemName }) {
+function SessionOrderList({ session, token, onEdit, onView, t, language, formatAmount, itemName }) {
   const [cancelTarget, setCancelTarget] = useState(null)
   const [cancelNote, setCancelNote]     = useState('')
   const [cancelling, setCancelling]     = useState(false)
@@ -162,7 +167,7 @@ function SessionOrderList({ session, token, onEdit, onView, t, formatAmount, ite
   const translate = t || ((key, vars = {}) => String(key).replace(/\{(\w+)\}/g, (_, name) => vars[name] ?? ''))
   const money = formatAmount || fmt
   const displayItemName = itemName || ((item) => item?.modelName || '')
-  const statusLabel = (status) => translate(STATUS_TRANSLATION_KEYS[status] || status)
+  const statusLabel = (order) => orderStatusLabel(order, language, translate)
 
   const orders = (session?.orders || []).filter(o => o.status !== 'CANCELLED')
 
@@ -207,7 +212,7 @@ function SessionOrderList({ session, token, onEdit, onView, t, formatAmount, ite
                 <Typography fontWeight={900} sx={{ fontSize: 18, color: editing ? '#b45309' : '#1a1a1a' }}>
                   {displayNum}
                 </Typography>
-                <Chip label={statusLabel(status)} color={chip.color} size="small" sx={{ fontWeight: 700, fontSize: 11 }} />
+                <Chip label={statusLabel(order)} color={chip.color} size="small" sx={{ fontWeight: 700, fontSize: 11 }} />
                 {editing && (
                   <Chip label={translate('status.editing')} size="small"
                     sx={{ bgcolor: '#f59e0b', color: '#fff', fontWeight: 700, fontSize: 10 }} />
@@ -238,7 +243,7 @@ function SessionOrderList({ session, token, onEdit, onView, t, formatAmount, ite
                     <Typography variant="caption" sx={{ flex: 1, color: '#333' }} noWrap>
                       {displayItemName(item)}
                     </Typography>
-                    <Chip label={statusLabel(status)} color={chip.color} size="small"
+                    <Chip label={statusLabel(order)} color={chip.color} size="small"
                       sx={{ height: 16, fontSize: 10, fontWeight: 600 }} />
                   </Box>
                 ))}
@@ -306,7 +311,7 @@ function SessionOrderList({ session, token, onEdit, onView, t, formatAmount, ite
   )
 }
 
-function TrackingOverlay({ order: initialOrder, ctx, token, tables = [], onEdit, onOrderMore, onUpdated }) {
+function TrackingOverlay({ order: initialOrder, ctx, token, tables = [], onEdit, onOrderMore, onUpdated, formatSelectedOptions }) {
   const [order, setOrder] = React.useState(initialOrder)
   const [imagePreview, setImagePreview] = React.useState(null)
   const [finishingEdit, setFinishingEdit] = React.useState(false)
@@ -356,7 +361,7 @@ function TrackingOverlay({ order: initialOrder, ctx, token, tables = [], onEdit,
   const isPending  = status === 'PENDING'
   const isDone     = status === 'COMPLETED' || status === 'PICKED_UP'
   const isCancelled = status === 'CANCELLED'
-  const statusLabel = t(STATUS_TRANSLATION_KEYS[status] || status)
+  const statusLabel = orderStatusLabel(order, language, t)
   const displayNum = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
   const heroNum = order.orderNumber ? `#${order.orderNumber}` : order.dailySeq ? `#${order.dailySeq}` : '—'
   const allItems   = order.items || []
@@ -445,7 +450,7 @@ function TrackingOverlay({ order: initialOrder, ctx, token, tables = [], onEdit,
               </Box>
               {item.selectedOptions && (
                 <Typography variant="caption" color="text.secondary" sx={{ pl: 1.5, display: 'block' }}>
-                  {fmtOpts(item.selectedOptions)}
+                  {formatSelectedOptions ? formatSelectedOptions(item.modelId, item.selectedOptions) : fmtOpts(item.selectedOptions)}
                 </Typography>
               )}
               {item.itemNotes && (
@@ -634,6 +639,10 @@ export default function ShopMenuPage() {
   const [sideForm, setSideForm] = useState({})
   const [optionsTarget, setOptionsTarget] = useState(null)
   const large = displaySize === 'large'
+
+  useEffect(() => {
+    setActiveCategory(null)
+  }, [language])
 
   const openTrackingScreen = useCallback((order) => {
     if (!order?.orderCode) return
@@ -2097,6 +2106,7 @@ export default function ShopMenuPage() {
           <SessionOrderList
             session={tokenSession}
             t={t}
+            language={language}
             formatAmount={fmt}
             itemName={modelName}
             token={tokenParam}
@@ -2304,6 +2314,7 @@ export default function ShopMenuPage() {
           onEdit={handleEditOrder}
           onOrderMore={() => setTrackingOrder(null)}
           onUpdated={setTrackingOrder}
+          formatSelectedOptions={formatSelectedOptions}
         />
       )}
 
@@ -2325,7 +2336,7 @@ export default function ShopMenuPage() {
               <Typography variant="body2" fontWeight={700}>
                 {o.orderNumber ? `#${o.orderNumber}` : o.orderCode}
               </Typography>
-              <Chip label={t(STATUS_TRANSLATION_KEYS[o.status] || o.status)} size="small"
+              <Chip label={orderStatusLabel(o, language, t)} size="small"
                 color={o.status === 'READY' ? 'success' : o.status === 'PREPARING' ? 'warning' : 'default'} />
             </Box>
           ))}

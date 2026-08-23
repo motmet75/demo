@@ -40,7 +40,7 @@ import { parseAllowedSideConfig, serializeAllowedSideConfig } from '../../utils/
 
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' d' : ''
 
-function ModelCard({ model, onEdit, onClone, onToggle, saving }) {
+function ModelCard({ model, selected, onSelectedChange, onEdit, onClone, onToggle, saving }) {
   const onMenu = Boolean(model.sellingPrice) && model.isActive !== false
   const hasImage = Boolean(model.imageUrl)
 
@@ -54,6 +54,22 @@ function ModelCard({ model, onEdit, onClone, onToggle, saving }) {
     }}>
       {/* Image */}
       <Box sx={{ position: 'relative', height: 130, background: '#f5f5f5', overflow: 'hidden', flexShrink: 0 }}>
+        <Checkbox
+          checked={selected}
+          onChange={event => onSelectedChange?.(model.id, event.target.checked)}
+          size="small"
+          sx={{
+            position: 'absolute',
+            top: 4,
+            left: 4,
+            zIndex: 2,
+            bgcolor: '#ffffffe6',
+            borderRadius: 1,
+            p: 0.25,
+            '&:hover': { bgcolor: '#fff' },
+          }}
+          inputProps={{ 'aria-label': `Select ${model.modelName}` }}
+        />
         {hasImage ? (
           <CardMedia component="img" image={model.imageUrl} alt={model.modelName}
             sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -373,6 +389,71 @@ function TranslationFields({ label, values, onChange }) {
     </Box>
   )
 }
+
+function BulkTranslateDialog({ open, selectedCount, onClose, onConfirm, translating, progress, notice, error }) {
+  const [source, setSource] = useState('vi')
+  const [targets, setTargets] = useState(['cn'])
+
+  const selectedSourceOption = translationLanguageOptions.find(option => option.language === source) || translationLanguageOptions[0]
+  const availableTargetOptions = translationTargetOptions.filter(option => option.language !== source)
+  const selectedTargetOptions = availableTargetOptions.filter(option => targets.includes(option.language))
+  const canTranslate = selectedCount > 0 && targets.some(language => language !== source)
+
+  return (
+    <Dialog open={open} onClose={translating ? undefined : onClose} fullWidth maxWidth="sm">
+      <DialogTitle sx={{ pb: 1 }}>
+        <Typography fontWeight={800}>Translate selected menu items</Typography>
+        <Typography variant="caption" color="text.secondary">
+          Includes each selected item, its option groups, choices, and linked side / topping products.
+        </Typography>
+      </DialogTitle>
+      <DialogContent>
+        <Stack spacing={1.5} sx={{ mt: 1 }}>
+          {error && <Alert severity="error">{error}</Alert>}
+          {notice && <Alert severity="success">{notice}</Alert>}
+          {progress && <Alert severity="info">{progress}</Alert>}
+          <Chip label={`${selectedCount} selected item${selectedCount === 1 ? '' : 's'}`} color="primary" variant="outlined" sx={{ alignSelf: 'flex-start', fontWeight: 800 }} />
+          <Autocomplete
+            size="small"
+            disableClearable
+            options={translationLanguageOptions}
+            value={selectedSourceOption}
+            getOptionLabel={option => option.label}
+            isOptionEqualToValue={(a, b) => a.language === b.language}
+            onChange={(_, option) => {
+              const next = option?.language || 'vi'
+              setSource(next)
+              setTargets(prev => prev.filter(language => language !== next))
+            }}
+            renderInput={params => <TextField {...params} label="Source language" size="small" />}
+          />
+          <Autocomplete
+            multiple
+            size="small"
+            options={availableTargetOptions}
+            value={selectedTargetOptions}
+            getOptionLabel={option => option.label}
+            isOptionEqualToValue={(a, b) => a.language === b.language}
+            onChange={(_, value) => setTargets(value.map(option => option.language))}
+            renderInput={params => <TextField {...params} label="Target language" size="small" />}
+          />
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} disabled={translating}>Cancel</Button>
+        <Button
+          variant="contained"
+          startIcon={translating ? <CircularProgress size={16} color="inherit" /> : <TranslateIcon />}
+          onClick={() => onConfirm({ sourceLanguage: source, targetLanguages: targets.filter(language => language !== source) })}
+          disabled={translating || !canTranslate}
+          sx={{ textTransform: 'none', fontWeight: 800 }}
+        >
+          Translate item + toppings
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
 function fmtChoicePrice(price, isFree) {
   if (isFree || !price) return ''
   return ` +${Number(price).toLocaleString('vi-VN')}d`
@@ -384,7 +465,7 @@ function fmtChoiceSummary(choice, isFree) {
   return `${choice.label}${price}${bom}`
 }
 
-function EditDialog({ open, model, models, onClose, onSave, onTranslated }) {
+function EditDialog({ open, model, models, onClose, onSave }) {
   const [form, setForm]           = useState(EMPTY_FORM)
   const [saving, setSaving]       = useState(false)
   const [error, setError]         = useState('')
@@ -393,10 +474,6 @@ function EditDialog({ open, model, models, onClose, onSave, onTranslated }) {
   const [showAddOpt, setShowAddOpt] = useState(false)
   const [newOpt, setNewOpt]       = useState(EMPTY_OPT)
   const [optSaving, setOptSaving] = useState(false)
-  const [translationSource, setTranslationSource] = useState('en')
-  const [translationTargets, setTranslationTargets] = useState(MENU_TRANSLATION_LANGUAGES)
-  const [translating, setTranslating] = useState(false)
-  const [translationNotice, setTranslationNotice] = useState('')
 
   useEffect(() => {
     if (!open || !model) return
@@ -416,7 +493,6 @@ function EditDialog({ open, model, models, onClose, onSave, onTranslated }) {
       categoryTranslations: parseJsonObject(model.categoryTranslations),
     })
     setError(''); setOptions([]); setShowAddOpt(false); setNewOpt(EMPTY_OPT)
-    setTranslationSource('en'); setTranslationTargets(MENU_TRANSLATION_LANGUAGES); setTranslationNotice('')
     setOptLoading(true)
     fetchMenuOptions(model.id)
       .then(({ data }) => setOptions(Array.isArray(data) ? data : []))
@@ -477,35 +553,6 @@ function EditDialog({ open, model, models, onClose, onSave, onTranslated }) {
       sideImageUrls,
     }
   })
-  const selectedSourceOption = translationLanguageOptions.find(option => option.language === translationSource) || translationLanguageOptions[0]
-  const availableTargetOptions = translationTargetOptions.filter(option => option.language !== translationSource)
-  const selectedTargetOptions = availableTargetOptions.filter(option => translationTargets.includes(option.language))
-
-  const handleQuickTranslate = async () => {
-    const targets = translationTargets.filter(language => language !== translationSource)
-    if (!targets.length) { setError('Select at least one target language'); return }
-    setTranslating(true); setError(''); setTranslationNotice('')
-    try {
-      const { res, data } = await translateMenuItem(model.id, { sourceLanguage: translationSource, targetLanguages: targets })
-      if (!res.ok) throw new Error((typeof data === 'string' ? data : data?.message || data?.error) || 'Translation failed')
-      if (data?.model) {
-        setForm(f => ({
-          ...f,
-          modelNameTranslations: parseJsonObject(data.model.modelNameTranslations),
-          categoryTranslations: parseJsonObject(data.model.categoryTranslations),
-        }))
-        onTranslated?.(data.model)
-      }
-      if (Array.isArray(data?.options)) setOptions(data.options)
-      const completed = Array.isArray(data?.translatedLanguages) && data.translatedLanguages.length ? data.translatedLanguages : targets
-      setTranslationNotice(`Translated to ${completed.map(translationLabel).join(', ')}`)
-    } catch (e) {
-      setError(e.message || 'Translation failed')
-    } finally {
-      setTranslating(false)
-    }
-  }
-
   const handleSave = async () => {
     setSaving(true); setError('')
     try {
@@ -645,48 +692,6 @@ function EditDialog({ open, model, models, onClose, onSave, onTranslated }) {
           <TextField label="Ingredients shown to customers" size="small" fullWidth multiline minRows={2}
             value={form.ingredients} onChange={set('ingredients')}
             placeholder="e.g. chicken feet, mango, ambarella, Vietnamese coriander, lemongrass" />
-          <Box sx={{ border: '1px solid #dbeafe', borderRadius: 1.5, p: 1.25, bgcolor: '#f8fbff' }}>
-            <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ display: 'block', mb: 1 }}>
-              Quick translate menu item
-            </Typography>
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '180px 1fr auto' }, gap: 1, alignItems: 'start' }}>
-              <Autocomplete
-                size="small"
-                disableClearable
-                options={translationLanguageOptions}
-                value={selectedSourceOption}
-                getOptionLabel={option => option.label}
-                isOptionEqualToValue={(a, b) => a.language === b.language}
-                onChange={(_, option) => {
-                  const next = option?.language || 'en'
-                  setTranslationSource(next)
-                  setTranslationTargets(prev => prev.filter(language => language !== next))
-                }}
-                renderInput={params => <TextField {...params} label="Source" size="small" />}
-              />
-              <Autocomplete
-                multiple
-                size="small"
-                options={availableTargetOptions}
-                value={selectedTargetOptions}
-                getOptionLabel={option => option.label}
-                isOptionEqualToValue={(a, b) => a.language === b.language}
-                onChange={(_, value) => setTranslationTargets(value.map(option => option.language))}
-                renderInput={params => <TextField {...params} label="Target languages" size="small" />}
-              />
-              <Button
-                variant="contained"
-                size="small"
-                startIcon={translating ? <CircularProgress size={14} color="inherit" /> : <TranslateIcon />}
-                onClick={handleQuickTranslate}
-                disabled={translating || !translationTargets.some(language => language !== translationSource)}
-                sx={{ textTransform: 'none', minHeight: 40 }}
-              >
-                Translate
-              </Button>
-            </Box>
-            {translationNotice && <Alert severity="success" sx={{ mt: 1 }}>{translationNotice}</Alert>}
-          </Box>
           <TranslationFields
             label="Customer item name translations"
             values={form.modelNameTranslations}
@@ -1003,6 +1008,12 @@ export default function ShopMenuManagePage() {
   const [savingId, setSavingId] = useState(null)
   const [editModel,  setEditModel]  = useState(null)
   const [cloneSource, setCloneSource] = useState(null)
+  const [selectedIds, setSelectedIds] = useState([])
+  const [bulkTranslateOpen, setBulkTranslateOpen] = useState(false)
+  const [bulkTranslating, setBulkTranslating] = useState(false)
+  const [bulkProgress, setBulkProgress] = useState('')
+  const [bulkError, setBulkError] = useState('')
+  const [bulkNotice, setBulkNotice] = useState('')
   const [filter, setFilter] = useState('all')      // all | on | off
   const [catFilter, setCatFilter] = useState('')
   const [search, setSearch] = useState('')
@@ -1032,6 +1043,68 @@ export default function ShopMenuManagePage() {
     })
   }, [models, filter, catFilter, search])
 
+  const selectedModels = useMemo(
+    () => selectedIds.map(id => models.find(model => model.id === id)).filter(Boolean),
+    [models, selectedIds]
+  )
+
+  const handleSelectModel = (id, checked) => {
+    setSelectedIds(prev => {
+      if (checked) return prev.includes(id) ? prev : [...prev, id]
+      return prev.filter(item => item !== id)
+    })
+  }
+
+  const handleBulkTranslate = async ({ sourceLanguage, targetLanguages }) => {
+    const targets = (targetLanguages || []).filter(Boolean)
+    if (!selectedModels.length || !targets.length) return
+    setBulkTranslating(true)
+    setBulkError('')
+    setBulkNotice('')
+    const updates = []
+    const failures = []
+    try {
+      for (let index = 0; index < selectedModels.length; index += 1) {
+        const model = selectedModels[index]
+        setBulkProgress(`Translating ${index + 1}/${selectedModels.length}: ${model.modelName}`)
+        try {
+          const { res, data } = await translateMenuItem(model.id, {
+            sourceLanguage,
+            targetLanguages: targets,
+            includeSideItems: true,
+          })
+          if (!res.ok) {
+            throw new Error((typeof data === 'string' ? data : data?.message || data?.error) || 'Translation failed')
+          }
+          if (Array.isArray(data?.translatedModels)) updates.push(...data.translatedModels)
+          else if (data?.model) updates.push(data.model)
+        } catch (err) {
+          failures.push(`${model.modelName}: ${err.message || 'Translation failed'}`)
+          break
+        }
+      }
+
+      if (updates.length) {
+        setModels(prev => {
+          const byId = new Map(prev.map(model => [model.id, model]))
+          updates.forEach(updated => {
+            const existing = byId.get(updated.id)
+            byId.set(updated.id, existing ? { ...existing, ...updated } : updated)
+          })
+          return Array.from(byId.values())
+        })
+      }
+      if (failures.length) {
+        setBulkError(failures.join('\n'))
+      } else {
+        setBulkNotice(`Translated ${selectedModels.length} selected item${selectedModels.length === 1 ? '' : 's'} to ${targets.map(translationLabel).join(', ')}`)
+      }
+    } finally {
+      setBulkProgress('')
+      setBulkTranslating(false)
+    }
+  }
+
   const handleToggle = async (model) => {
     const onMenu = Boolean(model.sellingPrice) && model.isActive !== false
     setSavingId(model.id)
@@ -1048,11 +1121,6 @@ export default function ShopMenuManagePage() {
   const handleSave = async (id, payload) => {
     const updated = await updateModel(id, payload)
     setModels(prev => prev.map(m => m.id === id ? { ...m, ...updated } : m))
-  }
-
-  const handleTranslated = (updated) => {
-    if (!updated?.id) return
-    setModels(prev => prev.map(m => m.id === updated.id ? { ...m, ...updated } : m))
   }
 
   const handleCloneCreated = (created) => {
@@ -1089,6 +1157,27 @@ export default function ShopMenuManagePage() {
           <ToggleButton value="on">On Menu ({onCount})</ToggleButton>
           <ToggleButton value="off">Off Menu ({offCount})</ToggleButton>
         </ToggleButtonGroup>
+        <Box sx={{ flex: 1 }} />
+        {selectedIds.length > 0 && (
+          <Button size="small" onClick={() => setSelectedIds([])} sx={{ textTransform: 'none' }}>
+            Clear {selectedIds.length}
+          </Button>
+        )}
+        <Button
+          size="small"
+          variant="contained"
+          startIcon={<TranslateIcon />}
+          disabled={!selectedIds.length}
+          onClick={() => {
+            setBulkError('')
+            setBulkNotice('')
+            setBulkProgress('')
+            setBulkTranslateOpen(true)
+          }}
+          sx={{ textTransform: 'none', fontWeight: 800 }}
+        >
+          Translate selected
+        </Button>
       </Box>
 
       {/* Category chips */}
@@ -1124,6 +1213,8 @@ export default function ShopMenuManagePage() {
             <ModelCard
               key={m.id}
               model={m}
+              selected={selectedIds.includes(m.id)}
+              onSelectedChange={handleSelectModel}
               onEdit={setEditModel}
               onClone={setCloneSource}
               onToggle={handleToggle}
@@ -1139,7 +1230,6 @@ export default function ShopMenuManagePage() {
         models={models}
         onClose={() => setEditModel(null)}
         onSave={handleSave}
-        onTranslated={handleTranslated}
       />
 
       <CloneDialog
@@ -1147,6 +1237,17 @@ export default function ShopMenuManagePage() {
         source={cloneSource}
         onClose={() => setCloneSource(null)}
         onCreated={handleCloneCreated}
+      />
+
+      <BulkTranslateDialog
+        open={bulkTranslateOpen}
+        selectedCount={selectedModels.length}
+        onClose={() => setBulkTranslateOpen(false)}
+        onConfirm={handleBulkTranslate}
+        translating={bulkTranslating}
+        progress={bulkProgress}
+        notice={bulkNotice}
+        error={bulkError}
       />
     </Box>
   )

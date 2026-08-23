@@ -24,6 +24,7 @@ public class ShopOrderResponseDto {
     private String tableName;
     private String fulfillmentType;
     private String status;
+    private Map<String, String> statusLabels = Collections.emptyMap();
     private String customerName;
     private String customerPhone;
     private String deliveryProvider;
@@ -34,7 +35,10 @@ public class ShopOrderResponseDto {
     private BigDecimal totalRawCost;
     private BigDecimal totalAmount;
     private String paymentMethod;
+    private Map<String, String> paymentMethodLabels = Collections.emptyMap();
     private String paymentStatus;
+    private Map<String, String> paymentStatusLabels = Collections.emptyMap();
+    private Map<String, String> fulfillmentTypeLabels = Collections.emptyMap();
     private Instant paymentRequestedAt;
     private String paymentQr;
     private BigDecimal splitCashAmount;
@@ -75,6 +79,7 @@ public class ShopOrderResponseDto {
         private UUID id;
         private UUID modelId;
         private String modelName;
+        private String modelNameTranslations;
         private String imageUrl;
         private BigDecimal quantity;
         private BigDecimal unitPrice;
@@ -95,6 +100,7 @@ public class ShopOrderResponseDto {
             dto.id = item.getId();
             dto.modelId = item.getModel() != null ? item.getModel().getId() : null;
             dto.modelName = item.getModelName();
+            dto.modelNameTranslations = item.getModel() != null ? item.getModel().getModelNameTranslations() : null;
             dto.imageUrl = item.getModel() != null ? item.getModel().getImageUrl() : null;
             dto.quantity = item.getQuantity();
             dto.unitPrice = item.getUnitPrice();
@@ -115,6 +121,7 @@ public class ShopOrderResponseDto {
         public UUID getId() { return id; }
         public UUID getModelId() { return modelId; }
         public String getModelName() { return modelName; }
+        public String getModelNameTranslations() { return modelNameTranslations; }
         public String getImageUrl() { return imageUrl; }
         public BigDecimal getQuantity() { return quantity; }
         public BigDecimal getUnitPrice() { return unitPrice; }
@@ -314,6 +321,8 @@ public class ShopOrderResponseDto {
     public String getTableName() { return tableName; }
     public String getFulfillmentType() { return fulfillmentType; }
     public String getStatus() { return status; }
+    public Map<String, String> getStatusLabels() { return statusLabels; }
+    public void setStatusLabels(Map<String, String> statusLabels) { this.statusLabels = statusLabels != null ? statusLabels : Collections.emptyMap(); }
     public String getCustomerName() { return customerName; }
     public String getCustomerPhone() { return customerPhone; }
     public String getDeliveryProvider() { return deliveryProvider; }
@@ -324,7 +333,13 @@ public class ShopOrderResponseDto {
     public BigDecimal getTotalRawCost() { return totalRawCost; }
     public BigDecimal getTotalAmount() { return totalAmount; }
     public String getPaymentMethod() { return paymentMethod; }
+    public Map<String, String> getPaymentMethodLabels() { return paymentMethodLabels; }
+    public void setPaymentMethodLabels(Map<String, String> paymentMethodLabels) { this.paymentMethodLabels = paymentMethodLabels != null ? paymentMethodLabels : Collections.emptyMap(); }
     public String getPaymentStatus() { return paymentStatus; }
+    public Map<String, String> getPaymentStatusLabels() { return paymentStatusLabels; }
+    public void setPaymentStatusLabels(Map<String, String> paymentStatusLabels) { this.paymentStatusLabels = paymentStatusLabels != null ? paymentStatusLabels : Collections.emptyMap(); }
+    public Map<String, String> getFulfillmentTypeLabels() { return fulfillmentTypeLabels; }
+    public void setFulfillmentTypeLabels(Map<String, String> fulfillmentTypeLabels) { this.fulfillmentTypeLabels = fulfillmentTypeLabels != null ? fulfillmentTypeLabels : Collections.emptyMap(); }
     public Instant getPaymentRequestedAt() { return paymentRequestedAt; }
     public String getPaymentQr() { return paymentQr; }
     public BigDecimal getSplitCashAmount() { return splitCashAmount; }

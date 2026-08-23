@@ -28,6 +28,10 @@ export function fetchShopConfig(tenantId, companyId) {
   return apiFetchJsonNoContext('/shop/public/shop-config' + qs({ tenantId, companyId }))
 }
 
+export function fetchPublicLocalizedLabels(tenantId, companyId) {
+  return apiFetchJsonNoContext('/shop/public/localized-labels' + qs({ tenantId, companyId }))
+}
+
 export function fetchPublicOrder(orderCode) {
   return apiFetchJsonNoContext(`/shop/public/orders/${encodeURIComponent(orderCode)}`)
 }
@@ -141,6 +145,10 @@ export async function fetchShopOrders(status) {
 
 export function fetchAllowedPublicIps() {
   return apiFetchJson('/shop/staff/allowed-public-ips')
+}
+
+export function fetchStaffLocalizedLabels() {
+  return apiFetchJson('/shop/staff/localized-labels')
 }
 
 export function updateAllowedPublicIps(allowedPublicIps, allowAllNetworks = false, counterNetworkRules = null, counterPublicIp = null) {

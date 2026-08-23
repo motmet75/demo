@@ -61,6 +61,7 @@ public class ShopOrderService {
     private final ShopVoucherRepository shopVoucherRepository;
     private final ShopBillRepository shopBillRepository;
     private final ShopBillItemRepository shopBillItemRepository;
+    private final ShopLocalizedLabelService shopLocalizedLabelService;
 
     @Value("${app.shop.public-base-url:http://localhost:5173/bom-inventory}")
     private String publicBaseUrl;
@@ -80,7 +81,8 @@ public class ShopOrderService {
                             ShopCustomerRepository shopCustomerRepository,
                             ShopVoucherRepository shopVoucherRepository,
                             ShopBillRepository shopBillRepository,
-                            ShopBillItemRepository shopBillItemRepository) {
+                            ShopBillItemRepository shopBillItemRepository,
+                            ShopLocalizedLabelService shopLocalizedLabelService) {
         this.shopOrderRepository = shopOrderRepository;
         this.shopOrderItemRepository = shopOrderItemRepository;
         this.shopTableRepository = shopTableRepository;
@@ -97,6 +99,7 @@ public class ShopOrderService {
         this.shopVoucherRepository = shopVoucherRepository;
         this.shopBillRepository = shopBillRepository;
         this.shopBillItemRepository = shopBillItemRepository;
+        this.shopLocalizedLabelService = shopLocalizedLabelService;
     }
 
     // ── Menu ─────────────────────────────────────────────────────────
@@ -1915,9 +1918,11 @@ public class ShopOrderService {
     }
 
     private ShopOrderResponseDto dto(ShopOrder order) {
+        ShopOrderResponseDto response;
         List<ShopBill> ownedBills = shopBillRepository.findAllByOrder_IdOrderByCreatedAtAsc(order.getId());
         if (ownedBills.isEmpty()) {
-            return ShopOrderResponseDto.from(order, shopOrderItemRepository.findAllByOrder_Id(order.getId()));
+            response = ShopOrderResponseDto.from(order, shopOrderItemRepository.findAllByOrder_Id(order.getId()));
+            return shopLocalizedLabelService.applyToOrder(response);
         }
 
         List<ShopBillItem> currentAssignments = activeAssignmentsForOrder(order);
@@ -1966,7 +1971,8 @@ public class ShopOrderService {
             }
         }
 
-        return ShopOrderResponseDto.from(order, visibleItems, responseBills, itemBillMap, billItemsMap);
+        response = ShopOrderResponseDto.from(order, visibleItems, responseBills, itemBillMap, billItemsMap);
+        return shopLocalizedLabelService.applyToOrder(response);
     }
 
     // ── Request DTOs ──────────────────────────────────────────────────

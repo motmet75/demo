@@ -47,6 +47,7 @@ webpack.generated.js
 /bin/*
 !/bin/demo-live.sh
 !/bin/build-restart-live.sh
+!/bin/bom-frontend-live.sh
 tokens/StoredCredential
 tokens/StoredCredential
 *.txt
@@ -106,3 +107,5 @@ QR1.jpeg
 
 # Server secrets
 /secrets/application-secrets.properties
+/bom-frontend-live.log
+/bom-frontend-live.pid

@@ -22,7 +22,9 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import { fetchPublicOrder, fetchTokenSession, fetchCounterOrderQr, fetchPublicTables, changePublicOrderTable, cancelCustomerEdit, switchPublicOrderToBankPayment } from '../../api/shopApi'
 import { printOrderReceipt } from '../../utils/printOrderReceipt'
 import { useI18n } from '../../i18n/I18nContext'
-import { localizedModelName } from '../../i18n/menuLocalization'
+import { ORDERING_LANGUAGE_CODES } from '../../i18n/translations'
+import { localizedLabel, localizedModelName } from '../../i18n/menuLocalization'
+import LanguageSelector from '../../components/LanguageSelector'
 import { saveQrImage } from '../../utils/saveQrImage'
 import { useAuth } from '../../context/useAuth'
 import { useAppContext } from '../../context/AppContext'
@@ -140,6 +142,21 @@ const STATUS_CHIP = {
   CANCELLED: { color: 'error',    label: 'Đã hủy' },
 }
 
+const STATUS_TRANSLATION_KEYS = {
+  PENDING: 'shopOrder.status.pending',
+  CONFIRMED: 'shopOrder.status.confirmed',
+  PREPARING: 'shopOrder.status.preparing',
+  READY: 'shopOrder.status.ready',
+  PICKED_UP: 'shopOrder.status.pickedUp',
+  COMPLETED: 'shopOrder.status.completed',
+  CANCELLED: 'shopOrder.status.cancelled',
+}
+
+function orderStatusLabel(order, language, t) {
+  const status = order?.status || 'PENDING'
+  return localizedLabel(order?.statusLabels, language, t(STATUS_TRANSLATION_KEYS[status] || status))
+}
+
 function CounterQrButton({ orders, label = 'Hiện mã QR đơn hàng' }) {
   const [open, setOpen] = useState(false)
   const [slides, setSlides] = useState([])
@@ -180,7 +197,7 @@ function CounterQrButton({ orders, label = 'Hiện mã QR đơn hàng' }) {
   </>
 }
 
-function StepDot({ step, activeIdx, idx }) {
+function StepDot({ step, activeIdx, idx, label }) {
   const done   = idx < activeIdx
   const active = idx === activeIdx
   return (
@@ -202,7 +219,7 @@ function StepDot({ step, activeIdx, idx }) {
         color: active ? '#0277bd' : done ? '#43a047' : '#bdbdbd',
         fontSize: 10, textAlign: 'center', lineHeight: 1.2,
       }}>
-        {step.label}
+        {label || step.label}
       </Typography>
     </Box>
   )
@@ -245,11 +262,13 @@ function OrderItems({ order, itemName, fmtLocal }) {
 
 function SingleOrderView({ order, onEdit, itemName, fmtLocal }) {
   const [paymentQrOpen, setPaymentQrOpen] = useState(false)
+  const { language, t } = useI18n()
   const status    = order.status || 'PENDING'
   const cancelled = status === 'CANCELLED'
   const isDone    = status === 'COMPLETED' || status === 'PICKED_UP'
   const activeIdx = cancelled ? -1 : (STATUS_IDX[status] ?? 0)
   const style     = STATUS_STYLE[status] || STATUS_STYLE.PENDING
+  const statusLabel = orderStatusLabel(order, language, t)
   const isQrUrl    = order.paymentQr?.startsWith('https://')
   const bankCode   = isQrUrl ? order.paymentQr.split('/image/')[1]?.split('-')[0] : null
   const bankLogoUrl = bankCode ? `https://img.vietqr.io/img/${bankCode}.png` : null
@@ -258,7 +277,10 @@ function SingleOrderView({ order, onEdit, itemName, fmtLocal }) {
 
   return (
     <Box sx={{ bgcolor: '#fff', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{ bgcolor: style.bg, textAlign: 'center', px: 2, pt: { xs: 5, md: 6 }, pb: { xs: 3, md: 4 } }}>
+      <Box sx={{ bgcolor: style.bg, textAlign: 'center', px: 2, pt: { xs: 5, md: 6 }, pb: { xs: 3, md: 4 }, position: 'relative' }}>
+        <Box sx={{ position: 'absolute', top: 12, right: 12 }}>
+          <LanguageSelector compact languageCodes={ORDERING_LANGUAGE_CODES} />
+        </Box>
         <Typography sx={{ fontSize: { xs: 80, md: 110 }, fontWeight: 900, lineHeight: 1, color: style.color, letterSpacing: 0 }}>
           {heroNum}
         </Typography>
@@ -269,7 +291,7 @@ function SingleOrderView({ order, onEdit, itemName, fmtLocal }) {
           {status === 'PREPARING' && (
             <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: style.color, flexShrink: 0, animation: 'blink 1.4s infinite', '@keyframes blink': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0.2 } } }} />
           )}
-          <Typography fontWeight={700} sx={{ color: style.color, fontSize: { xs: 15, md: 17 } }}>{style.label}</Typography>
+          <Typography fontWeight={700} sx={{ color: style.color, fontSize: { xs: 15, md: 17 } }}>{statusLabel}</Typography>
         </Box>
       </Box>
 
@@ -278,7 +300,7 @@ function SingleOrderView({ order, onEdit, itemName, fmtLocal }) {
           <Box sx={{ display: 'flex', alignItems: 'flex-start', maxWidth: 560, mx: 'auto' }}>
             {STEPS.map((step, idx) => (
               <React.Fragment key={step.key}>
-                <StepDot step={step} activeIdx={activeIdx} idx={idx} />
+                <StepDot step={step} activeIdx={activeIdx} idx={idx} label={t(STATUS_TRANSLATION_KEYS[step.key] || step.label)} />
                 {idx < STEPS.length - 1 && (
                   <Box sx={{ height: 2, flex: 1, mt: '13px', mb: 'auto', bgcolor: idx < activeIdx ? '#a5d6a7' : '#eeeeee', borderRadius: 2 }} />
                 )}
@@ -451,9 +473,11 @@ function FinishEditingButton({ order, onFinished }) {
 function OrderCard({ order, highlighted, token, itemName, fmtLocal }) {
   const [expanded, setExpanded] = useState(highlighted)
   const [paymentQrOpen, setPaymentQrOpen] = useState(false)
+  const { language, t } = useI18n()
   const status   = order.status || 'PENDING'
   const chip     = STATUS_CHIP[status] || STATUS_CHIP.PENDING
   const style    = STATUS_STYLE[status] || STATUS_STYLE.PENDING
+  const statusLabel = orderStatusLabel(order, language, t)
   const displayNum = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
   const isPending = status === 'PENDING'
   const isQrUrl   = order.paymentQr?.startsWith('https://')
@@ -488,7 +512,7 @@ function OrderCard({ order, highlighted, token, itemName, fmtLocal }) {
               {order.customerName || 'Khách'}{order.customerPhone ? ` · ***${String(order.customerPhone).replace(/\D/g, '').slice(-3)}` : ''}
             </Typography>
           )}
-          <Chip label={chip.label} color={chip.color} size="small" sx={{ fontWeight: 700, fontSize: 11 }} />
+          <Chip label={statusLabel} color={chip.color} size="small" sx={{ fontWeight: 700, fontSize: 11 }} />
           {status === 'PREPARING' && (
             <Box component="span" sx={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%',
               bgcolor: style.color, ml: 1, mb: '1px',
@@ -515,7 +539,7 @@ function OrderCard({ order, highlighted, token, itemName, fmtLocal }) {
                 const activeIdx = STATUS_IDX[status] ?? 0
                 return (
                   <React.Fragment key={step.key}>
-                    <StepDot step={step} activeIdx={activeIdx} idx={idx} />
+                    <StepDot step={step} activeIdx={activeIdx} idx={idx} label={t(STATUS_TRANSLATION_KEYS[step.key] || step.label)} />
                     {idx < STEPS.length - 1 && (
                       <Box sx={{ height: 2, flex: 1, mt: '13px', bgcolor: idx < activeIdx ? '#a5d6a7' : '#eeeeee', borderRadius: 2 }} />
                     )}
@@ -651,6 +675,7 @@ function TokenSessionView({ token, highlightCode, itemName, fmtLocal }) {
   const [session, setSession] = useState(null)
   const [error, setError]     = useState('')
   const previousRef = useRef({})
+  const { language, t } = useI18n()
 
   const load = useCallback(() => {
     fetchTokenSession(token)
@@ -659,14 +684,14 @@ function TokenSessionView({ token, highlightCode, itemName, fmtLocal }) {
         const previous = previousRef.current
         ;(data.orders || []).forEach(order => {
           const old = previous[order.id]
-          if (old && old.status !== order.status) notifyCustomer(`Đơn #${order.orderNumber || order.orderCode}`, STATUS_STYLE[order.status]?.label || order.status)
+          if (old && old.status !== order.status) notifyCustomer(`Đơn #${order.orderNumber || order.orderCode}`, orderStatusLabel(order, language, t))
           if (old && !old.paymentRequestedAt && order.paymentRequestedAt && order.paymentStatus !== 'PAID') notifyCustomer('Mời thanh toán', 'Vui lòng đến quầy thu ngân để thanh toán.')
         })
         previousRef.current = Object.fromEntries((data.orders || []).map(order => [order.id, order]))
         setSession(data)
       })
       .catch(() => setError('Không thể tải phiên đặt hàng'))
-  }, [token])
+  }, [language, t, token])
 
   useEffect(() => {
     load()
@@ -701,7 +726,10 @@ function TokenSessionView({ token, highlightCode, itemName, fmtLocal }) {
   return (
     <Box sx={{ bgcolor: '#f8fafc', minHeight: '100vh', pb: 4 }}>
       {/* Session header */}
-      <Box sx={{ bgcolor: isValid ? '#0f172a' : '#374151', color: '#fff', px: 2, pt: 4, pb: 3, textAlign: 'center' }}>
+      <Box sx={{ bgcolor: isValid ? '#0f172a' : '#374151', color: '#fff', px: 2, pt: 4, pb: 3, textAlign: 'center', position: 'relative' }}>
+        <Box sx={{ position: 'absolute', top: 12, right: 12 }}>
+          <LanguageSelector compact languageCodes={ORDERING_LANGUAGE_CODES} />
+        </Box>
         <Typography sx={{ fontSize: 13, color: '#94a3b8', letterSpacing: 1, textTransform: 'uppercase', mb: 0.5 }}>
           Phiên đặt hàng
         </Typography>
@@ -774,7 +802,7 @@ export default function ShopOrderStatusPage() {
   const navigate = useNavigate()
   const { user, loading: authLoading } = useAuth()
   const { setTenantId, setCompanyId } = useAppContext()
-  const { language, formatMoney } = useI18n()
+  const { language, t, formatMoney } = useI18n()
   const fmtLocal = (n) => n != null ? formatMoney(n, 'VND') : ''
   const itemName = (item) => localizedModelName(item, language)
   const { orderCode } = useParams()
@@ -809,13 +837,13 @@ export default function ShopOrderStatusPage() {
       .then(({ data }) => {
         if (!data?.orderCode) { setError('Không tìm thấy đơn hàng'); return }
         const old = previousOrderRef.current
-        if (old && old.status !== data.status) notifyCustomer(`Đơn #${data.orderNumber || data.orderCode}`, STATUS_STYLE[data.status]?.label || data.status)
+        if (old && old.status !== data.status) notifyCustomer(`Đơn #${data.orderNumber || data.orderCode}`, orderStatusLabel(data, language, t))
         if (old && !old.paymentRequestedAt && data.paymentRequestedAt && data.paymentStatus !== 'PAID') notifyCustomer('Mời thanh toán', 'Vui lòng đến quầy thu ngân để thanh toán.')
         previousOrderRef.current = data
         setOrder(data)
       })
       .catch(() => setError('Không thể tải đơn hàng'))
-  }, [orderCode, token])
+  }, [language, orderCode, t, token])
 
   useEffect(() => {
     load()

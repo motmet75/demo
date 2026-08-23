@@ -11,7 +11,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -65,9 +67,20 @@ public class ShopMenuTranslationService {
             throw new IllegalArgumentException("Select at least one target language");
         }
 
-        List<ModelMenuOption> options = menuOptionRepository
-                .findAllByModelIdAndTenantIdAndCompanyIdOrderByDisplayOrderAsc(modelId, tenantId, companyId);
-        Map<String, String> sourceValues = collectSourceValues(model, options, sourceLanguage);
+        boolean includeSideItems = request == null || request.includeSideItems() == null || Boolean.TRUE.equals(request.includeSideItems());
+        List<Model> models = new ArrayList<>();
+        models.add(model);
+        if (includeSideItems) {
+            models.addAll(collectLinkedSideModels(model, tenantId, companyId));
+        }
+
+        Map<UUID, List<ModelMenuOption>> optionsByModel = new LinkedHashMap<>();
+        for (Model item : models) {
+            optionsByModel.put(item.getId(), menuOptionRepository
+                    .findAllByModelIdAndTenantIdAndCompanyIdOrderByDisplayOrderAsc(item.getId(), tenantId, companyId));
+        }
+
+        Map<String, String> sourceValues = collectSourceValues(models, optionsByModel, sourceLanguage);
         if (sourceValues.isEmpty()) {
             throw new IllegalArgumentException("Menu item has no text to translate");
         }
@@ -82,62 +95,146 @@ public class ShopMenuTranslationService {
                         languageName(sourceLanguage),
                         languageName(targetLanguage)
                 );
-                applyTranslations(model, options, targetLanguage, translated);
+                applyTranslations(models, optionsByModel, targetLanguage, translated);
                 translatedLanguages.add(targetLanguage);
             }
         }
 
-        Model savedModel = modelRepository.save(model);
-        List<ModelMenuOption> savedOptions = menuOptionRepository.saveAll(options);
-        return new MenuTranslationResult(savedModel, savedOptions, translatedLanguages);
+        List<Model> savedModels = modelRepository.saveAll(models);
+        List<ModelMenuOption> allOptions = optionsByModel.values().stream().flatMap(List::stream).toList();
+        List<ModelMenuOption> savedOptions = menuOptionRepository.saveAll(allOptions);
+        Model savedModel = savedModels.stream()
+                .filter(item -> modelId.equals(item.getId()))
+                .findFirst()
+                .orElse(model);
+        List<ModelMenuOption> savedRootOptions = savedOptions.stream()
+                .filter(option -> modelId.equals(option.getModelId()))
+                .toList();
+        return new MenuTranslationResult(savedModel, savedRootOptions, translatedLanguages, savedModels, savedOptions);
     }
 
-    private Map<String, String> collectSourceValues(Model model, List<ModelMenuOption> options, String sourceLanguage) {
+    private Map<String, String> collectSourceValues(List<Model> models, Map<UUID, List<ModelMenuOption>> optionsByModel,
+                                                    String sourceLanguage) {
         Map<String, String> values = new LinkedHashMap<>();
-        putSource(values, "model.name", sourceValue(model.getModelName(), model.getModelNameTranslations(), sourceLanguage));
-        putSource(values, "model.category", sourceValue(model.getCategory(), model.getCategoryTranslations(), sourceLanguage));
+        for (Model model : models) {
+            String modelKey = modelKey(model.getId());
+            putSource(values, modelKey + ".name", sourceValue(model.getModelName(), model.getModelNameTranslations(), sourceLanguage));
+            putSource(values, modelKey + ".category", sourceValue(model.getCategory(), model.getCategoryTranslations(), sourceLanguage));
 
-        for (ModelMenuOption option : options) {
-            String optionId = option.getId() == null ? "" : option.getId().toString();
-            putSource(values, optionGroupKey(optionId), sourceValue(option.getGroupName(), option.getGroupNameTranslations(), sourceLanguage));
+            List<ModelMenuOption> options = optionsByModel.getOrDefault(model.getId(), List.of());
+            for (ModelMenuOption option : options) {
+                String optionId = option.getId() == null ? "" : option.getId().toString();
+                putSource(values, optionGroupKey(optionId), sourceValue(option.getGroupName(), option.getGroupNameTranslations(), sourceLanguage));
 
-            List<Map<String, Object>> choices = readChoiceObjects(option.getChoices());
-            for (int i = 0; i < choices.size(); i++) {
-                Map<String, Object> choice = choices.get(i);
-                putSource(values,
-                        optionChoiceKey(optionId, i),
-                        sourceValue(asText(choice.get("label")), choice.get("labelTranslations"), sourceLanguage));
+                List<Map<String, Object>> choices = readChoiceObjects(option.getChoices());
+                for (int i = 0; i < choices.size(); i++) {
+                    Map<String, Object> choice = choices.get(i);
+                    putSource(values,
+                            optionChoiceKey(optionId, i),
+                            sourceValue(asText(choice.get("label")), choice.get("labelTranslations"), sourceLanguage));
+                }
             }
         }
         return values;
     }
 
-    private void applyTranslations(Model model, List<ModelMenuOption> options, String targetLanguage, Map<String, String> translated) {
-        model.setModelNameTranslations(stringifyWithTranslation(model.getModelNameTranslations(), targetLanguage, translated.get("model.name")));
-        model.setCategoryTranslations(stringifyWithTranslation(model.getCategoryTranslations(), targetLanguage, translated.get("model.category")));
+    private void applyTranslations(List<Model> models, Map<UUID, List<ModelMenuOption>> optionsByModel,
+                                   String targetLanguage, Map<String, String> translated) {
+        for (Model model : models) {
+            String modelKey = modelKey(model.getId());
+            model.setModelNameTranslations(stringifyWithTranslation(model.getModelNameTranslations(), targetLanguage, translated.get(modelKey + ".name")));
+            model.setCategoryTranslations(stringifyWithTranslation(model.getCategoryTranslations(), targetLanguage, translated.get(modelKey + ".category")));
 
+            List<ModelMenuOption> options = optionsByModel.getOrDefault(model.getId(), List.of());
+            for (ModelMenuOption option : options) {
+                String optionId = option.getId() == null ? "" : option.getId().toString();
+                option.setGroupNameTranslations(stringifyWithTranslation(
+                        option.getGroupNameTranslations(),
+                        targetLanguage,
+                        translated.get(optionGroupKey(optionId))
+                ));
+
+                List<Map<String, Object>> choices = readChoiceObjects(option.getChoices());
+                boolean choicesChanged = false;
+                for (int i = 0; i < choices.size(); i++) {
+                    String label = translated.get(optionChoiceKey(optionId, i));
+                    if (isBlank(label)) continue;
+
+                    Map<String, String> labelTranslations = parseTranslationMap(choices.get(i).get("labelTranslations"));
+                    labelTranslations.put(targetLanguage, label.trim());
+                    choices.get(i).put("labelTranslations", labelTranslations);
+                    choicesChanged = true;
+                }
+                if (choicesChanged) {
+                    option.setChoices(writeJson(choices));
+                }
+            }
+        }
+    }
+
+    private List<Model> collectLinkedSideModels(Model root, UUID tenantId, UUID companyId) {
+        Map<UUID, Model> linked = new LinkedHashMap<>();
+        Set<UUID> visited = new LinkedHashSet<>();
+        Deque<Model> queue = new ArrayDeque<>();
+        visited.add(root.getId());
+        queue.add(root);
+
+        int guard = 0;
+        while (!queue.isEmpty() && guard++ < 50) {
+            Model current = queue.removeFirst();
+            List<UUID> linkedIds = new ArrayList<>(readAllowedSideModelIds(current.getAllowedSideIds()));
+            List<ModelMenuOption> currentOptions = menuOptionRepository
+                    .findAllByModelIdAndTenantIdAndCompanyIdOrderByDisplayOrderAsc(current.getId(), tenantId, companyId);
+            linkedIds.addAll(readLinkedChoiceModelIds(currentOptions));
+
+            for (UUID linkedId : linkedIds) {
+                if (linkedId == null || !visited.add(linkedId)) continue;
+                Model linkedModel = modelRepository.findById(linkedId)
+                        .filter(candidate -> tenantId.equals(candidate.getTenantId()) && companyId.equals(candidate.getCompanyId()))
+                        .orElse(null);
+                if (linkedModel == null) continue;
+                linked.put(linkedId, linkedModel);
+                queue.add(linkedModel);
+            }
+        }
+        return new ArrayList<>(linked.values());
+    }
+
+    private List<UUID> readAllowedSideModelIds(String raw) {
+        List<UUID> ids = new ArrayList<>();
+        if (isBlank(raw)) return ids;
+        try {
+            JsonNode root = objectMapper.readTree(raw);
+            if (!root.isArray()) return ids;
+            for (JsonNode entry : root) {
+                String rawId = entry.isTextual()
+                        ? entry.asText()
+                        : entry.isObject() && entry.hasNonNull("modelId") ? entry.get("modelId").asText() : null;
+                UUID id = parseUuid(rawId);
+                if (id != null) ids.add(id);
+            }
+        } catch (Exception ignored) {
+        }
+        return ids;
+    }
+
+    private List<UUID> readLinkedChoiceModelIds(List<ModelMenuOption> options) {
+        List<UUID> ids = new ArrayList<>();
         for (ModelMenuOption option : options) {
-            String optionId = option.getId() == null ? "" : option.getId().toString();
-            option.setGroupNameTranslations(stringifyWithTranslation(
-                    option.getGroupNameTranslations(),
-                    targetLanguage,
-                    translated.get(optionGroupKey(optionId))
-            ));
-
-            List<Map<String, Object>> choices = readChoiceObjects(option.getChoices());
-            boolean choicesChanged = false;
-            for (int i = 0; i < choices.size(); i++) {
-                String label = translated.get(optionChoiceKey(optionId, i));
-                if (isBlank(label)) continue;
-
-                Map<String, String> labelTranslations = parseTranslationMap(choices.get(i).get("labelTranslations"));
-                labelTranslations.put(targetLanguage, label.trim());
-                choices.get(i).put("labelTranslations", labelTranslations);
-                choicesChanged = true;
+            for (Map<String, Object> choice : readChoiceObjects(option.getChoices())) {
+                UUID id = parseUuid(asText(choice.get("modelId")));
+                if (id != null) ids.add(id);
             }
-            if (choicesChanged) {
-                option.setChoices(writeJson(choices));
-            }
+        }
+        return ids;
+    }
+
+    private UUID parseUuid(String value) {
+        if (isBlank(value)) return null;
+        try {
+            return UUID.fromString(value.trim());
+        } catch (IllegalArgumentException ignored) {
+            return null;
         }
     }
 
@@ -217,6 +314,10 @@ public class ShopMenuTranslationService {
         return "option." + optionId + ".group";
     }
 
+    private String modelKey(UUID modelId) {
+        return "model." + modelId;
+    }
+
     private String optionChoiceKey(String optionId, int index) {
         return "option." + optionId + ".choice." + index;
     }
@@ -287,9 +388,10 @@ public class ShopMenuTranslationService {
         return value == null || value.trim().isEmpty();
     }
 
-    public record MenuTranslationRequest(String sourceLanguage, List<String> targetLanguages) {
+    public record MenuTranslationRequest(String sourceLanguage, List<String> targetLanguages, Boolean includeSideItems) {
     }
 
-    public record MenuTranslationResult(Model model, List<ModelMenuOption> options, List<String> translatedLanguages) {
+    public record MenuTranslationResult(Model model, List<ModelMenuOption> options, List<String> translatedLanguages,
+                                        List<Model> translatedModels, List<ModelMenuOption> translatedOptions) {
     }
 }

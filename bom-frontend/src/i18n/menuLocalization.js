@@ -44,6 +44,12 @@ export function localizedValue(baseValue, translations, language) {
   return map[code] || baseValue || ''
 }
 
+export function localizedLabel(translations, language, fallback = '') {
+  const code = normalizeLanguage(language)
+  const map = parseJsonObject(translations)
+  return (code && map[code]) || map.en || fallback || ''
+}
+
 export function localizedModelName(model, language) {
   return localizedValue(model?.modelName, model?.modelNameTranslations, language)
 }

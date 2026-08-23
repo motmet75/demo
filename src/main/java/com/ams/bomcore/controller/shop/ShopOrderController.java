@@ -15,6 +15,7 @@ import com.ams.bomcore.repository.ShopStaffCallRepository;
 import com.ams.bomcore.repository.ShopTableRepository;
 import com.ams.bomcore.repository.TenantRepository;
 import com.ams.bomcore.service.shop.ShopOrderService;
+import com.ams.bomcore.service.shop.ShopLocalizedLabelService;
 import com.ams.bomcore.service.shop.ShopMaterialAuditService;
 import com.ams.bomcore.service.shop.ShopMenuTranslationService;
 import com.ams.bomcore.service.shop.ShopPricingService;
@@ -47,6 +48,7 @@ public class ShopOrderController {
     private static final String STAFF_CALL_REASON_NEW_ORDER = "new_order";
 
     private final ShopOrderService shopOrderService;
+    private final ShopLocalizedLabelService shopLocalizedLabelService;
     private final ShopPricingService shopPricingService;
     private final ShopMaterialAuditService shopMaterialAuditService;
     private final ShopMenuTranslationService shopMenuTranslationService;
@@ -65,6 +67,7 @@ public class ShopOrderController {
     private record CounterNetworkRule(String counterPublicIp, List<String> allowedPublicIps, boolean allowAllNetworks) {}
 
     public ShopOrderController(ShopOrderService shopOrderService,
+                               ShopLocalizedLabelService shopLocalizedLabelService,
                                ShopPricingService shopPricingService,
                                ShopMaterialAuditService shopMaterialAuditService,
                                ShopMenuTranslationService shopMenuTranslationService,
@@ -77,6 +80,7 @@ public class ShopOrderController {
                                ShopPrintHistoryRepository shopPrintHistoryRepository,
                                ShopTableRepository shopTableRepository) {
         this.shopOrderService = shopOrderService;
+        this.shopLocalizedLabelService = shopLocalizedLabelService;
         this.shopPricingService = shopPricingService;
         this.shopMaterialAuditService = shopMaterialAuditService;
         this.shopMenuTranslationService = shopMenuTranslationService;
@@ -124,6 +128,12 @@ public class ShopOrderController {
     public ResponseEntity<?> getMenu(@RequestParam UUID tenantId, @RequestParam UUID companyId) {
         validateScope(tenantId, companyId);
         return ResponseEntity.ok(shopOrderService.getMenu(tenantId, companyId));
+    }
+
+    @GetMapping("/shop/public/localized-labels")
+    public ResponseEntity<?> getPublicLocalizedLabels(@RequestParam UUID tenantId, @RequestParam UUID companyId) {
+        validateScope(tenantId, companyId);
+        return ResponseEntity.ok(shopLocalizedLabelService.labelMap(tenantId, companyId));
     }
 
     @GetMapping("/shop/public/tables")
@@ -380,6 +390,16 @@ public class ShopOrderController {
                 .filter(p -> sourceType == null || sourceType.isBlank() || sourceType.equals(p.getSourceType()))
                 .map(this::printHistoryMap)
                 .toList());
+    }
+
+    @GetMapping("/shop/staff/localized-labels")
+    public ResponseEntity<?> getStaffLocalizedLabels(@RequestParam(required = false) UUID tenantId,
+                                                     @RequestParam(required = false) UUID companyId,
+                                                     @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                                     @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        return ResponseEntity.ok(shopLocalizedLabelService.labelMap(tId, cId));
     }
 
     @Transactional
