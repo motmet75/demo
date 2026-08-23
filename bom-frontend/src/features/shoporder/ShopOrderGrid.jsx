@@ -116,12 +116,15 @@ function datetimeLocalToIso(value) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString()
 }
 function readShopOrderStatusFilters() {
-  const fallback = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY']
+  const fallback = []
   try {
     const stored = sessionStorage.getItem(SHOP_ORDER_STATUS_FILTER_SESSION_KEY)
     if (!stored) return fallback
     const parsed = JSON.parse(stored)
-    if (Array.isArray(parsed)) return parsed.filter(status => ORDER_STATUSES.includes(status))
+    if (Array.isArray(parsed)) {
+      const selected = parsed.filter(status => ORDER_STATUSES.includes(status))
+      return selected.length === ORDER_STATUSES.length ? [] : selected
+    }
   } catch {
     const legacy = readShopOrderSessionValue(SHOP_ORDER_STATUS_FILTER_SESSION_KEY, '')
     if (ORDER_STATUSES.includes(legacy)) return [legacy]
@@ -2048,8 +2051,11 @@ export default function ShopOrderGrid() {
         <Box sx={{ px: { xs: 1, sm: 1.5 }, py: { xs: 0.5, sm: 1 }, display: 'flex', gap: { xs: 0.75, sm: 1 }, alignItems: 'center', flexWrap: 'wrap', borderBottom: '1px solid #e0e0e0', flexShrink: 0 }}>
           <TextField select label={t('common.status')} value={statusFilters}
             onChange={e => {
-              const values = typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value
-              const next = values.includes('__ALL__') ? [] : values
+              const values = typeof e.target.value === 'string'
+                ? e.target.value.split(',').filter(Boolean)
+                : e.target.value
+              const selected = Array.isArray(values) ? values.filter(status => ORDER_STATUSES.includes(status)) : []
+              const next = values.includes('__ALL__') || selected.length === ORDER_STATUSES.length ? [] : selected
               setStatusFilters(next)
               writeShopOrderSessionValue(SHOP_ORDER_STATUS_FILTER_SESSION_KEY, JSON.stringify(next))
             }}

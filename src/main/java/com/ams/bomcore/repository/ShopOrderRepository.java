@@ -15,6 +15,16 @@ public interface ShopOrderRepository extends JpaRepository<ShopOrder, UUID> {
     List<ShopOrder> findAllByTenantIdAndCompanyIdAndStatusOrderByCreatedAtDesc(UUID tenantId, UUID companyId, String status);
     List<ShopOrder> findAllByTenantIdAndCompanyIdAndCreatedAtGreaterThanEqualAndCreatedAtLessThanOrderByCreatedAtDesc(
             UUID tenantId, UUID companyId, Instant from, Instant to);
+    List<ShopOrder> findAllByTenantIdAndCompanyIdAndCreatedAtGreaterThanEqualOrderByCreatedAtDesc(
+            UUID tenantId, UUID companyId, Instant from);
+    List<ShopOrder> findAllByTenantIdAndCompanyIdAndCreatedAtLessThanOrderByCreatedAtDesc(
+            UUID tenantId, UUID companyId, Instant to);
+    List<ShopOrder> findAllByTenantIdAndCompanyIdAndStatusAndCreatedAtGreaterThanEqualAndCreatedAtLessThanOrderByCreatedAtDesc(
+            UUID tenantId, UUID companyId, String status, Instant from, Instant to);
+    List<ShopOrder> findAllByTenantIdAndCompanyIdAndStatusAndCreatedAtGreaterThanEqualOrderByCreatedAtDesc(
+            UUID tenantId, UUID companyId, String status, Instant from);
+    List<ShopOrder> findAllByTenantIdAndCompanyIdAndStatusAndCreatedAtLessThanOrderByCreatedAtDesc(
+            UUID tenantId, UUID companyId, String status, Instant to);
     @Query("""
             SELECT o FROM ShopOrder o
             WHERE o.tenantId = :tenantId

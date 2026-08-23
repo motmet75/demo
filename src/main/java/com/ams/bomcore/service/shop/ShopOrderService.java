@@ -644,7 +644,33 @@ public class ShopOrderService {
     @Transactional(readOnly = true)
     public List<ShopOrderResponseDto> listOrders(UUID tenantId, UUID companyId, String status, Instant fromTime, Instant toTime) {
         String normalizedStatus = status != null && !status.isBlank() ? status : null;
-        List<ShopOrder> orders = shopOrderRepository.searchStaffOrders(tenantId, companyId, normalizedStatus, fromTime, toTime);
+        List<ShopOrder> orders;
+        if (normalizedStatus != null) {
+            if (fromTime != null && toTime != null) {
+                orders = shopOrderRepository.findAllByTenantIdAndCompanyIdAndStatusAndCreatedAtGreaterThanEqualAndCreatedAtLessThanOrderByCreatedAtDesc(
+                        tenantId, companyId, normalizedStatus, fromTime, toTime);
+            } else if (fromTime != null) {
+                orders = shopOrderRepository.findAllByTenantIdAndCompanyIdAndStatusAndCreatedAtGreaterThanEqualOrderByCreatedAtDesc(
+                        tenantId, companyId, normalizedStatus, fromTime);
+            } else if (toTime != null) {
+                orders = shopOrderRepository.findAllByTenantIdAndCompanyIdAndStatusAndCreatedAtLessThanOrderByCreatedAtDesc(
+                        tenantId, companyId, normalizedStatus, toTime);
+            } else {
+                orders = shopOrderRepository.findAllByTenantIdAndCompanyIdAndStatusOrderByCreatedAtDesc(
+                        tenantId, companyId, normalizedStatus);
+            }
+        } else if (fromTime != null && toTime != null) {
+            orders = shopOrderRepository.findAllByTenantIdAndCompanyIdAndCreatedAtGreaterThanEqualAndCreatedAtLessThanOrderByCreatedAtDesc(
+                    tenantId, companyId, fromTime, toTime);
+        } else if (fromTime != null) {
+            orders = shopOrderRepository.findAllByTenantIdAndCompanyIdAndCreatedAtGreaterThanEqualOrderByCreatedAtDesc(
+                    tenantId, companyId, fromTime);
+        } else if (toTime != null) {
+            orders = shopOrderRepository.findAllByTenantIdAndCompanyIdAndCreatedAtLessThanOrderByCreatedAtDesc(
+                    tenantId, companyId, toTime);
+        } else {
+            orders = shopOrderRepository.findAllByTenantIdAndCompanyIdOrderByCreatedAtDesc(tenantId, companyId);
+        }
         return orders.stream().map(this::dto).toList();
     }
 
