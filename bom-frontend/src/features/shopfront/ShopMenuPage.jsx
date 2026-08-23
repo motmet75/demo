@@ -760,6 +760,19 @@ export default function ShopMenuPage() {
       } catch { /* keep search usable if viewport APIs are blocked */ }
     }, 60)
   }, [])
+
+  const handleOrderingLanguageChange = useCallback((nextLanguage) => {
+    setSearchQuery('')
+    setActiveCategory(null)
+    resetMobileSearchZoom()
+    const nextParams = new URLSearchParams(window.location.search)
+    nextParams.delete('search')
+    nextParams.delete('q')
+    nextParams.delete('item')
+    if (nextLanguage) nextParams.set('lang', nextLanguage)
+    navigate({ search: nextParams.toString() }, { replace: true })
+  }, [navigate, resetMobileSearchZoom])
+
   // ── Data loading ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!tokenParam) return
@@ -1979,7 +1992,7 @@ export default function ShopMenuPage() {
             )}
           </Box>
 
-          <LanguageSelector compact languageCodes={ORDERING_LANGUAGE_CODES} />
+          <LanguageSelector compact languageCodes={ORDERING_LANGUAGE_CODES} onLanguageChange={handleOrderingLanguageChange} />
 
           {/* Gọi nhân viên */}
           <Button size="small" variant="outlined" onClick={() => setCallStaffOpen(true)}

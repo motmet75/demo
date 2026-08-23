@@ -279,7 +279,7 @@ function OrderItems({ order, itemName, fmtLocal, optionText }) {
   )
 }
 
-function SingleOrderView({ order, onEdit, itemName, fmtLocal, optionText }) {
+function SingleOrderView({ order, onEdit, onOrderMore, itemName, fmtLocal, optionText }) {
   const [paymentQrOpen, setPaymentQrOpen] = useState(false)
   const { language, t } = useI18n()
   const ct = (key, vars) => shopCustomerText(language, key, vars)
@@ -395,6 +395,11 @@ function SingleOrderView({ order, onEdit, itemName, fmtLocal, optionText }) {
 
       <Box sx={{ flex: 1 }} />
       <Box sx={{ px: 2, pb: 2, pt: 1, display: 'flex', flexDirection: 'column', gap: 1, maxWidth: 480, mx: 'auto', width: '100%' }}>
+        <Button variant="contained" fullWidth startIcon={<AddShoppingCartIcon />}
+          onClick={() => onOrderMore?.(order)}
+          sx={{ borderRadius: 2, fontWeight: 900, textTransform: 'none', py: 1.15 }}>
+          {ct('tracking.addMore')}
+        </Button>
         <CustomerNotificationsButton />
         <ShareTrackingButton orderNumber={order.orderNumber || order.dailySeq} />
         {order.status === 'PENDING' && (
@@ -925,18 +930,22 @@ export default function ShopOrderStatusPage() {
   )
   if (error && !order) return <Alert severity="error" sx={{ m: 2 }}>{error}</Alert>
 
-  const goEditNoToken = (ord) => {
-    const parts = { editOrder: ord.orderCode, lang: language }
+  const openMenuForOrder = (ord, extra = {}) => {
+    const parts = { lang: language, ...extra }
     if (ord.sourceToken) {
       parts.t = ord.sourceToken
     } else {
       if (ord.tenantId)  parts.tenantId  = String(ord.tenantId)
       if (ord.companyId) parts.companyId = String(ord.companyId)
+      if (ord.tableId)   parts.tableId   = String(ord.tableId)
     }
     // Derive app base from current pathname (/bom-inventory/shop/order/…) → /bom-inventory
     const appBase = window.location.pathname.split('/shop/')[0]
     window.location.href = window.location.origin + appBase + '/shop/menu?' + new URLSearchParams(parts)
   }
 
-  return <SingleOrderView order={order} onEdit={goEditNoToken} itemName={itemName} fmtLocal={fmtLocal} optionText={optionText} />
+  const goEditNoToken = (ord) => openMenuForOrder(ord, { editOrder: ord.orderCode })
+  const goOrderMoreNoToken = (ord) => openMenuForOrder(ord)
+
+  return <SingleOrderView order={order} onEdit={goEditNoToken} onOrderMore={goOrderMoreNoToken} itemName={itemName} fmtLocal={fmtLocal} optionText={optionText} />
 }

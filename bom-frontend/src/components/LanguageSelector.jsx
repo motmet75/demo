@@ -45,7 +45,7 @@ export function LanguageFlag({ code, label, sx }) {
   )
 }
 
-export default function LanguageSelector({ size = 'small', compact = false, variant = 'outlined', languageCodes }) {
+export default function LanguageSelector({ size = 'small', compact = false, variant = 'outlined', languageCodes, onLanguageChange }) {
   const { language, setLanguage, t } = useI18n()
   const languages = React.useMemo(() => {
     const source = (!Array.isArray(languageCodes) || languageCodes.length === 0)
@@ -56,6 +56,12 @@ export default function LanguageSelector({ size = 'small', compact = false, vari
     return [...source].sort((a, b) => a.label.localeCompare(b.label, 'en'))
   }, [languageCodes])
 
+  const handleChange = React.useCallback((event) => {
+    const nextLanguage = event.target.value
+    setLanguage(nextLanguage)
+    onLanguageChange?.(nextLanguage)
+  }, [onLanguageChange, setLanguage])
+
   return (
     <FormControl size={size} variant={variant} sx={{ minWidth: compact ? 54 : 150 }}>
       {!compact && <InputLabel id="language-select-label">{t('language.label')}</InputLabel>}
@@ -63,7 +69,7 @@ export default function LanguageSelector({ size = 'small', compact = false, vari
         labelId="language-select-label"
         value={language}
         label={compact ? undefined : t('language.label')}
-        onChange={(event) => setLanguage(event.target.value)}
+        onChange={handleChange}
         MenuProps={{
           PaperProps: {
             sx: compact
