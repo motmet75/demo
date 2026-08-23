@@ -219,6 +219,7 @@
       <div class="right">
         <button id="newOrderButton" class="top-action" type="button">＋ <span class="top-label">Tạo đơn</span></button>
         <button id="menuAdminButton" class="top-action" type="button">☰ <span class="top-label">Menu</span></button>
+        <button id="materialsAdminButton" class="top-action" type="button">📦 <span class="top-label">Vật tư</span></button>
         <button id="queueQrButton" class="top-action top-queue" type="button">▦ <span class="top-label">QR xếp hàng</span></button>
         <button id="newOrderBell" class="icon-button" title="Đơn mới" type="button">🔔<span id="newOrderBadge" class="badge">0</span></button>
         <button id="staffCallBell" class="icon-button" title="Gọi nhân viên" type="button">🙋<span id="staffCallBadge" class="badge">0</span></button>
@@ -1460,6 +1461,7 @@
     byId('closeQrButton').onclick = closeQr;
     byId('newOrderButton').onclick = openOrderForm;
     byId('menuAdminButton').onclick = function () { window.location.href = 'menu.html'; };
+    byId('materialsAdminButton').onclick = function () { window.location.href = 'materials.html'; };
     byId('queueQrButton').onclick = function () { openQueueQr(false); };
     byId('newQueueQrButton').onclick = function () {
       if (window.confirm('Tạo Queue QR mới? Mã hiện tại sẽ không còn được hiển thị tại quầy.')) openQueueQr(true);

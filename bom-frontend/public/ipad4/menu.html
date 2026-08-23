@@ -67,6 +67,7 @@
     <h1>Menu Manager</h1>
     <div class="right">
       <button id="backButton" class="top-action secondary" type="button">← Orders</button>
+      <button id="materialsButton" class="top-action" type="button">📦 Vật tư</button>
       <button id="refreshButton" class="top-action" type="button">↻ Refresh</button>
     </div>
     <div class="clear"></div>
@@ -500,6 +501,7 @@
 
     byId('backButton').onclick = function () { window.location.href = 'index.html'; };
     byId('loginButton').onclick = function () { window.location.href = 'index.html'; };
+    byId('materialsButton').onclick = function () { window.location.href = 'materials.html'; };
     byId('refreshButton').onclick = loadAll;
     byId('saveContextButton').onclick = function () {
       tenantId = text(byId('tenantId').value).replace(/^\s+|\s+$/g, '');
