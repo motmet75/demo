@@ -4,17 +4,11 @@ import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import CircularProgress from '@mui/material/CircularProgress'
 import { fetchDisplayBoard } from '../../api/shopApi'
+import { useI18n } from '../../i18n/I18nContext'
+import { localizedModelName, localizedSelectedOptions } from '../../i18n/menuLocalization'
 
 const POLL_MS = 4000
 const BOARD_CHANNEL = 'shop_display_board'
-
-function parseOpts(str) {
-  if (!str) return []
-  try {
-    const obj = JSON.parse(str)
-    return Object.entries(obj).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
-  } catch { return [] }
-}
 
 function buildChildMap(items) {
   const map = {}
@@ -29,6 +23,7 @@ function buildChildMap(items) {
 }
 
 function OrderCard({ order, colStyle }) {
+  const { language } = useI18n()
   const num = order.orderNumber ?? order.orderCode ?? '?'
   const label = order.tableName
     ? `Table ${order.tableName}`
@@ -97,7 +92,7 @@ function OrderCard({ order, colStyle }) {
         ) : (
           rootItems.map((item, idx) => {
             const children = childMap[String(item.id)] || []
-            const opts = parseOpts(item.selectedOptions)
+            const optsText = localizedSelectedOptions(item.modelId, item.selectedOptions, {}, language)
             const rowNum = idx + 1
             return (
               <Box key={item.id || idx} sx={{ mb: children.length > 0 ? 0.75 : 0.5 }}>
@@ -129,12 +124,12 @@ function OrderCard({ order, colStyle }) {
                     lineHeight: 1.2,
                     wordBreak: 'break-word',
                   }}>
-                    {item.modelName}
+                    {localizedModelName(item, language)}
                   </Typography>
                 </Box>
 
                 {/* Options inline */}
-                {opts.length > 0 && (
+                {optsText && (
                   <Typography sx={{
                     fontSize: { xs: 9, md: 10 },
                     fontWeight: 600,
@@ -143,7 +138,7 @@ function OrderCard({ order, colStyle }) {
                     pl: 2,
                     wordBreak: 'break-word',
                   }}>
-                    {opts.join(' · ')}
+                    {optsText}
                   </Typography>
                 )}
 
@@ -191,7 +186,7 @@ function OrderCard({ order, colStyle }) {
                       lineHeight: 1.2,
                       wordBreak: 'break-word',
                     }}>
-                      {child.modelName}
+                      {localizedModelName(child, language)}
                     </Typography>
                     {child.itemNotes && (
                       <Typography sx={{ fontSize: 9, color: '#f59e0b', fontStyle: 'italic' }}>

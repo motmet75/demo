@@ -73,6 +73,7 @@ import MergeBillsDialog from './MergeBillsDialog'
 import VoucherQrScanDialog from './VoucherQrScanDialog'
 import { useAppContext } from '../../context/AppContext'
 import { useI18n } from '../../i18n/I18nContext'
+import { localizedModelName, localizedSelectedOptions } from '../../i18n/menuLocalization'
 import { fetchModels } from '../../api/modelApi'
 import { apiFetchJson } from '../../api/client'
 
@@ -180,6 +181,9 @@ function materialAuditChip(order) {
 function parseOpts(str) {
   if (!str) return {}
   try { return JSON.parse(str) } catch { return {} }
+}
+function optionRemark(item, language) {
+  return localizedSelectedOptions(item?.modelId, item?.selectedOptions, {}, language)
 }
 function replaceOrderInList(list, order, include) {
   if (!order?.id) return list
@@ -472,7 +476,7 @@ const BOARD_HIGH_CONTRAST_STYLE = {
 }
 
 function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, onPayQr, onPickupQr, onSwitchQr, onRevertCash, onShowTrackQr, onPrintTag, onMergeBills, onChangeSeat, displaySize = 'normal', highContrast = false }) {
-  const { t } = useI18n()
+  const { language, t } = useI18n()
   // onAction(type, orderId, orderNumber)
   const large = displaySize === 'large'
   const style = highContrast
@@ -587,9 +591,7 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                   const roots = allItems.filter(it => !it.parentItemId)
                   return roots.map((root, rIdx) => {
                     const children = allItems.filter(it => it.parentItemId === root.id)
-                    const opts = parseOpts(root.selectedOptions)
-                    const fmtV = v => Array.isArray(v) ? v.join('+') : (typeof v === 'object' && v !== null ? Object.entries(v).map(([lbl, qty]) => qty > 1 ? `${lbl}×${qty}` : lbl).join('+') : v)
-                    const optStr = Object.entries(opts).map(([k, v]) => `${k}: ${fmtV(v)}`).join(' · ')
+                    const optStr = optionRemark(root, language)
                     return (
                       <Box key={root.id || rIdx} sx={{ mb: 0.5 }}>
                         {/* Root item */}
@@ -601,7 +603,7 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                             {Number(root.quantity)}×
                           </Typography>
                           <Typography sx={{ fontSize: rootNameFont, fontWeight: 800, color: primaryTextColor, lineHeight: 1.2 }}>
-                            {root.modelName}
+                            {localizedModelName(root, language)}
                           </Typography>
                         </Box>
                         {optStr && <Typography sx={{ fontSize: detailFont, pl: 2, display: 'block', color: detailTextColor, lineHeight: 1.4, fontWeight: highContrast ? 700 : 500 }}>{optStr}</Typography>}
@@ -615,17 +617,17 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                                 {rIdx + 1}.{ci + 1}
                               </Typography>
                               {img && (
-                                <Box component="img" src={img} alt={child.modelName}
-                                  onClick={() => setImagePreview({ imageUrl: img, modelName: child.modelName })}
+                                <Box component="img" src={img} alt={localizedModelName(child, language)}
+                                  onClick={() => setImagePreview({ imageUrl: img, modelName: localizedModelName(child, language) })}
                                   onError={e => { e.target.style.display = 'none' }}
                                   sx={{ width: large ? 38 : 30, height: large ? 38 : 30, objectFit: 'cover', borderRadius: 1, flexShrink: 0, cursor: 'pointer', border: '1px solid #e2e8f0' }} />
                               )}
                               <Typography sx={{ fontSize: childQtyFont, fontWeight: 900, color: primaryTextColor, lineHeight: 1, flexShrink: 0 }}>
                                 {Number(child.quantity)}×
                               </Typography>
-                              <Typography onClick={() => img && setImagePreview({ imageUrl: img, modelName: child.modelName })}
+                              <Typography onClick={() => img && setImagePreview({ imageUrl: img, modelName: localizedModelName(child, language) })}
                                 sx={{ fontSize: childNameFont, fontWeight: 900, color: childTextColor, lineHeight: 1.15, flex: 1, ...(img ? { cursor: 'pointer', '&:hover': { color: '#1976d2', textDecoration: 'underline dotted' } } : {}) }}>
-                                {child.modelName}
+                                {localizedModelName(child, language)}
                               </Typography>
                             </Box>
                           )
@@ -748,7 +750,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
   const [editNum, setEditNum]       = useState(false)
   const [numVal, setNumVal]         = useState(String(order.orderNumber ?? ''))
   const [imagePreview, setImagePreview] = useState(null)
-  const { t } = useI18n()
+  const { language, t } = useI18n()
 
   const large = displaySize === 'large'
   const baseStyle = CARD_STYLE[order.status] || CARD_STYLE.CONFIRMED
@@ -926,15 +928,13 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
           ? <Typography sx={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>{t('shopOrder.edit.noItems')}</Typography>
           : roots.slice(0, 7).map((root, rIdx) => {
               const children = childMap[String(root.id)] || []
-              const opts = parseOpts(root.selectedOptions)
-              const fmtV = v => Array.isArray(v) ? v.join('+') : (typeof v === 'object' && v !== null ? Object.entries(v).map(([lbl, qty]) => qty > 1 ? `${lbl}×${qty}` : lbl).join('+') : v)
-              const optStr = Object.entries(opts).map(([k, v]) => `${k}: ${fmtV(v)}`).join(' · ')
+              const optStr = optionRemark(root, language)
               return (
                 <Box key={root.id || rIdx} sx={{ mb: 0.6 }}>
                   <Box sx={{ display: 'flex', gap: 0.4, alignItems: 'baseline' }}>
                     <Typography sx={{ fontSize: large ? 14 : 12, color: mutedTextColor, fontWeight: 800, flexShrink: 0 }}>{rIdx + 1}.</Typography>
                     <Typography sx={{ fontSize: large ? 28 : 22, fontWeight: 900, color: s.num, lineHeight: 1, flexShrink: 0 }}>{Number(root.quantity)}×</Typography>
-                    <Typography sx={{ fontSize: large ? 18 : 15, fontWeight: 800, color: primaryTextColor, lineHeight: 1.2, flex: 1 }}>{root.modelName}</Typography>
+                    <Typography sx={{ fontSize: large ? 18 : 15, fontWeight: 800, color: primaryTextColor, lineHeight: 1.2, flex: 1 }}>{localizedModelName(root, language)}</Typography>
                     <Typography sx={{ fontSize: large ? 14 : 12, color: secondaryTextColor, flexShrink: 0, pl: 0.5 }}>{fmt(root.lineTotal)}</Typography>
                   </Box>
                   {optStr && <Typography sx={{ fontSize: optionFont, pl: 2.5, color: detailTextColor, display: 'block', lineHeight: 1.4, fontWeight: highContrast ? 700 : 500 }}>{optStr}</Typography>}
@@ -945,15 +945,15 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
                       <Box key={child.id || ci} sx={{ display: 'flex', gap: 0.5, alignItems: 'center', ml: 2.5, pl: 0.75, mt: 0.3, borderLeft: `2px solid ${s.border}` }}>
                         <Typography sx={{ fontSize: 12, color: mutedTextColor, fontWeight: 800, flexShrink: 0, minWidth: 24 }}>{rIdx+1}.{ci+1}</Typography>
                         {img && (
-                          <Box component="img" src={img} alt={child.modelName}
-                            onClick={() => setImagePreview({ imageUrl: img, modelName: child.modelName })}
+                          <Box component="img" src={img} alt={localizedModelName(child, language)}
+                            onClick={() => setImagePreview({ imageUrl: img, modelName: localizedModelName(child, language) })}
                             onError={e => { e.target.style.display = 'none' }}
                             sx={{ width: large ? 38 : 30, height: large ? 38 : 30, objectFit: 'cover', borderRadius: 1, flexShrink: 0, cursor: 'pointer', border: '1px solid #e2e8f0' }} />
                         )}
                         <Typography sx={{ fontSize: childQtyFont, fontWeight: 900, color: primaryTextColor, lineHeight: 1, flexShrink: 0 }}>{Number(child.quantity)}×</Typography>
-                        <Typography onClick={() => img && setImagePreview({ imageUrl: img, modelName: child.modelName })}
+                        <Typography onClick={() => img && setImagePreview({ imageUrl: img, modelName: localizedModelName(child, language) })}
                           sx={{ fontSize: childNameFont, fontWeight: 900, color: childTextColor, lineHeight: 1.15, flex: 1, ...(img ? { cursor: 'pointer', '&:hover': { color: '#1976d2', textDecoration: 'underline dotted' } } : {}) }}>
-                          {child.modelName}
+                          {localizedModelName(child, language)}
                         </Typography>
                       </Box>
                     )

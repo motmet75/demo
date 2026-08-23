@@ -11,19 +11,14 @@ import Chip from '@mui/material/Chip'
 import PrintIcon from '@mui/icons-material/Print'
 import TrackChangesIcon from '@mui/icons-material/TrackChanges'
 import { printOrderReceipt } from '../../utils/printOrderReceipt'
+import { useI18n } from '../../i18n/I18nContext'
+import { localizedModelName, localizedSelectedOptions } from '../../i18n/menuLocalization'
 
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 const payableAmount = (order) => Math.max(0, Number(order?.totalAmount || 0) - Number(order?.discountAmount || 0))
 
-function parseOpts(str) {
-  if (!str) return null
-  try {
-    const obj = JSON.parse(str)
-    return Object.entries(obj).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join(' · ')
-  } catch { return null }
-}
-
 export default function OrderReceiptDialog({ open, order, onClose, onTrack }) {
+  const { language } = useI18n()
   if (!order) return null
 
   const isBankQr   = order.paymentMethod === 'BANK_QR'
@@ -96,13 +91,13 @@ export default function OrderReceiptDialog({ open, order, onClose, onTrack }) {
           </Typography>
 
           {(order.items || []).map(item => {
-            const optsStr = parseOpts(item.selectedOptions)
+            const optsStr = localizedSelectedOptions(item.modelId, item.selectedOptions, {}, language)
             const noteStr = item.itemNotes
             return (
               <Box key={item.id} sx={{ mb: 0.75 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                   <Typography variant="body2" fontWeight={600}>
-                    {Number(item.quantity)}× {item.modelName}
+                    {Number(item.quantity)}× {localizedModelName(item, language)}
                   </Typography>
                   <Typography variant="body2" color="primary" fontWeight={600}>
                     {fmt(item.lineTotal)}

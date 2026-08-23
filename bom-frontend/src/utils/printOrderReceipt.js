@@ -1,4 +1,19 @@
+import { localizedModelName, localizedSelectedOptions } from '../i18n/menuLocalization'
+import { getCurrentLanguage } from '../i18n/translations'
+
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : '0 đ'
+
+function currentLanguage() {
+  return getCurrentLanguage()
+}
+
+function itemDisplayName(item, language = currentLanguage()) {
+  return localizedModelName(item, language) || item?.modelName || ''
+}
+
+function selectedOptionSummary(item, language = currentLanguage()) {
+  return localizedSelectedOptions(item?.modelId, item?.selectedOptions, {}, language)
+}
 
 function fmtPrintTime(value) {
   if (!value) return ''
@@ -163,31 +178,6 @@ export function printOrderTag(order, qrBase64, printMeta = null) {
   win.onload = () => { win.focus(); win.print(); setTimeout(() => win.close(), 800) }
 }
 
-function formatOptValue(v) {
-  if (Array.isArray(v)) return v.join(', ')
-  if (v && typeof v === 'object') {
-    return Object.entries(v)
-      .map(([lbl, qty]) => Number(qty) > 1 ? `${lbl}×${qty}` : lbl)
-      .join(', ')
-  }
-  return v == null ? '' : String(v)
-}
-
-function parseOpts(str) {
-  const obj = parseOptsObj(str)
-  const entries = Object.entries(obj)
-  if (!entries.length) return null
-  return entries.map(([k, v]) => `${k}: ${formatOptValue(v)}`).join(' · ')
-}
-
-function parseOptsObj(str) {
-  if (!str) return {}
-  try {
-    const obj = typeof str === 'string' ? JSON.parse(str) : str
-    return obj && typeof obj === 'object' && !Array.isArray(obj) ? obj : {}
-  } catch { return {} }
-}
-
 // Build a map: parentId (string) -> [child items]
 function buildChildMap(items) {
   const map = {}
@@ -212,12 +202,9 @@ export function printCupLabels(order, printMeta = null) {
 
   const labelHtml = rootItems.flatMap(item => {
     const qty = Number(item.quantity) || 1
-    const opts = parseOptsObj(item.selectedOptions)
-    const fmtOptV = formatOptValue
-    const optParts = Object.entries(opts)
-      .map(([k, v]) => `<span class="opt-key">${k}:</span> <span class="opt-val">${fmtOptV(v)}</span>`)
-    const optLine = optParts.length > 0
-      ? `<div class="opt-line">${optParts.join('<span class="opt-sep"> · </span>')}</div>`
+    const optText = selectedOptionSummary(item)
+    const optLine = optText
+      ? `<div class="opt-line">${optText}</div>`
       : ''
     const noteHtml = item.itemNotes
       ? `<div class="note">&#9888; ${item.itemNotes}</div>`
@@ -236,7 +223,7 @@ export function printCupLabels(order, printMeta = null) {
            return `<div class="side-row">
              <span class="side-num">${ci + 1}.</span>
              <span class="side-qty">${childQty}×</span>
-             <span class="side-name">${child.modelName}</span>
+             <span class="side-name">${itemDisplayName(child)}</span>
            </div>${childNote}`
          }).join('')}`
       : ''
@@ -247,7 +234,7 @@ export function printCupLabels(order, printMeta = null) {
           <span class="order-num">${num}</span>
           ${qty > 1 ? `<span class="counter">${i + 1} / ${qty}</span>` : ''}
         </div>
-        <div class="item-name">${item.modelName}</div>
+        <div class="item-name">${itemDisplayName(item)}</div>
         ${optLine}
         ${noteHtml}
         ${sidesHtml}
@@ -439,13 +426,12 @@ export function printCombinedReceipt(orders, opts = {}) {
 
     const itemsHtml = roots.map((item, idx) => {
       const children     = childMap[String(item.id)] || []
-      const opts = parseOptsObj(item.selectedOptions)
-      const opts_ = Object.entries(opts).map(([k, v]) => `${k}: ${formatOptValue(v)}`).join(' · ')
+      const opts_ = selectedOptionSummary(item)
       const childrenHtml = children.map(child => {
         const effectiveQty = Number(child.quantity || 1)
         return `<div class="row side-row">
           <span class="side-qty">${effectiveQty}&#215;</span>
-          <span class="side-name">${child.modelName}</span>
+          <span class="side-name">${itemDisplayName(child)}</span>
           <span class="item-price">${fmt(Number(child.lineTotal || 0))}</span>
         </div>`
       }).join('')
@@ -453,7 +439,7 @@ export function printCombinedReceipt(orders, opts = {}) {
         <div class="row item-row">
           <span class="row-num">${idx + 1}.</span>
           <span class="item-qty">${item.quantity}&#215;</span>
-          <span class="item-name">${item.modelName}</span>
+          <span class="item-name">${itemDisplayName(item)}</span>
           <span class="item-price">${fmt(item.lineTotal)}</span>
         </div>
         ${opts_ ? `<div class="opts-inline grey">${opts_}</div>` : ''}
@@ -602,16 +588,14 @@ function billSectionHtml(order, bill, idx, count) {
 
   const itemsHtml = roots.map((item, itemIdx) => {
     const children = childMap[String(item.id)] || []
-    const opts = parseOptsObj(item.selectedOptions)
-    const optsInline = Object.entries(opts).map(([k, v]) => `${k}: ${formatOptValue(v)}`).join(' · ')
+    const optsInline = selectedOptionSummary(item)
     const childrenHtml = children.map((child, childIdx) => {
-      const childOpts = parseOptsObj(child.selectedOptions)
-      const childOptsInline = Object.entries(childOpts).map(([k, v]) => `${k}: ${formatOptValue(v)}`).join(' · ')
+      const childOptsInline = selectedOptionSummary(child)
       return `
         <div class="row side-row">
           <span class="side-num">${itemIdx + 1}.${childIdx + 1}</span>
           <span class="side-qty">${Number(child.quantity || 1)}&#215;</span>
-          <span class="side-name">${child.modelName}</span>
+          <span class="side-name">${itemDisplayName(child)}</span>
           <span class="item-price">${fmt(child.lineTotal)}</span>
         </div>
         ${childOptsInline ? `<div class="child-opts grey">${childOptsInline}</div>` : ''}
@@ -621,7 +605,7 @@ function billSectionHtml(order, bill, idx, count) {
       <div class="row item-row">
         <span class="row-num">${itemIdx + 1}.</span>
         <span class="item-qty">${item.quantity}&#215;</span>
-        <span class="item-name">${item.modelName}</span>
+        <span class="item-name">${itemDisplayName(item)}</span>
         <span class="item-price">${fmt(item.lineTotal)}</span>
       </div>
       ${optsInline ? `<div class="opts-inline grey">${optsInline}</div>` : ''}
@@ -734,24 +718,17 @@ export function printOrderReceipt(order, trackingQrBase64 = null, printMeta = nu
 
   const itemsHtml = rootItems.map((item, idx) => {
     const rowNum = idx + 1
-    const opts = parseOptsObj(item.selectedOptions)
-    const fmtOptV2 = formatOptValue
-    const optsInline = Object.entries(opts)
-      .map(([k, v]) => `${k}: ${fmtOptV2(v)}`)
-      .join(' · ')
+    const optsInline = selectedOptionSummary(item)
     const children = childMap[String(item.id)] || []
     const childrenHtml = children.map((child, ci) => {
-      const childOpts = parseOptsObj(child.selectedOptions)
-      const childOptsInline = Object.entries(childOpts)
-        .map(([k, v]) => `${k}: ${fmtOptV2(v)}`)
-        .join(' · ')
+      const childOptsInline = selectedOptionSummary(child)
       const effectiveQty   = Number(child.quantity || 1)
       const effectiveTotal = Number(child.lineTotal || 0)
       return `
         <div class="row side-row">
           <span class="side-num">${rowNum}.${ci + 1}</span>
           <span class="side-qty">${effectiveQty}&#215;</span>
-          <span class="side-name">${child.modelName}</span>
+          <span class="side-name">${itemDisplayName(child)}</span>
           <span class="item-price">${fmt(effectiveTotal)}</span>
         </div>
         ${childOptsInline ? `<div class="child-opts grey">${childOptsInline}</div>` : ''}
@@ -769,7 +746,7 @@ export function printOrderReceipt(order, trackingQrBase64 = null, printMeta = nu
       <div class="row item-row">
         <span class="row-num">${rowNum}.</span>
         <span class="item-qty">${item.quantity}&#215;</span>
-        <span class="item-name">${item.modelName}</span>
+        <span class="item-name">${itemDisplayName(item)}</span>
         <span class="item-price">${fmt(item.lineTotal)}</span>
       </div>
       ${optsInline ? `<div class="opts-inline grey">${optsInline}</div>` : ''}

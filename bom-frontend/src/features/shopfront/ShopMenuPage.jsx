@@ -58,7 +58,7 @@ import VoucherQrScanDialog from '../shoporder/VoucherQrScanDialog'
 import LanguageSelector from '../../components/LanguageSelector'
 import { ORDERING_LANGUAGE_CODES } from '../../i18n/translations'
 import { useI18n } from '../../i18n/I18nContext'
-import { localizedCategory, localizedChoiceLabel, localizedGroupName, localizedLabel, localizedModelName, localizedSelectedOptions, localizedTableName, normalizeChoice, parseChoices as parseMenuChoices } from '../../i18n/menuLocalization'
+import { localizedCategory, localizedChoiceLabel, localizedGroupName, localizedLabel, localizedModelName, localizedSelectedOptions, localizedTableName } from '../../i18n/menuLocalization'
 import { shopCustomerText, shopStatusText } from '../../i18n/shopCustomerText'
 import { decorateAllowedSideOptions, getAllowedSideMax } from '../../utils/sideItemConfig'
 import { saveQrImage } from '../../utils/saveQrImage'
@@ -226,12 +226,12 @@ function SessionOrderList({ session, token, onEdit, onView, t, language, formatA
 
               {(order.customerName || order.customerPhone) && (
                 <Box sx={{ px: 2, pt: 1, fontWeight: 800, fontSize: 14 }}>
-                  {order.customerName || 'Khách'}{order.customerPhone ? ` · ***${String(order.customerPhone).replace(/\D/g, '').slice(-3)}` : ''}
+                  {order.customerName || shopCustomerText(language, 'tracking.customer')}{order.customerPhone ? ` · ***${String(order.customerPhone).replace(/\D/g, '').slice(-3)}` : ''}
                 </Box>
               )}
               {order.paymentRequestedAt && order.paymentStatus !== 'PAID' && (
                 <Alert severity="warning" sx={{ mx: 2, mt: 1, fontWeight: 800 }}>
-                  Vui lòng đến quầy thu ngân để thanh toán đơn hàng.
+                  {shopCustomerText(language, 'tracking.payAtCounterShort')}
                 </Alert>
               )}
 
@@ -1936,7 +1936,7 @@ export default function ShopMenuPage() {
             {editingOrderCode && (
               <Button variant="text" size="small" onClick={handleCancelEdit}
                 sx={{ textTransform: 'none', color: '#9a3412', flexShrink: 0, fontSize: 12, px: 0.5, fontWeight: 800 }}>
-                Hoàn tất sửa
+                {cText('tracking.finishEdit')}
               </Button>
             )}
           </Box>
@@ -2257,7 +2257,7 @@ export default function ShopMenuPage() {
                           )
                         })}
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 0.5, borderTop: '1px dotted #c7d2fe' }}>
-                          <Typography sx={{ color: '#64748b', fontSize: 15, fontWeight: 800 }}>With topping</Typography>
+                          <Typography sx={{ color: '#64748b', fontSize: 15, fontWeight: 800 }}>{cText('checkout.withTopping')}</Typography>
                           <Typography fontWeight={900} sx={{ color: '#ff5722', fontSize: 18 }}>{fmt(mainTotal + sideTotal)}</Typography>
                         </Box>
                       </Box>

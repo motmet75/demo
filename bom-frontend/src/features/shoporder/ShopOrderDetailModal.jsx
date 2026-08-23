@@ -35,6 +35,7 @@ import ConfirmActionDialog from './ConfirmActionDialog'
 import SplitBillDialog from './SplitBillDialog'
 import VoucherQrScanDialog from './VoucherQrScanDialog'
 import { useI18n } from '../../i18n/I18nContext'
+import { localizedModelName, localizedSelectedOptions } from '../../i18n/menuLocalization'
 
 const fmt     = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : '—'
 const payableAmount = (order) => Math.max(0, Number(order?.totalAmount || 0) - Number(order?.discountAmount || 0))
@@ -77,35 +78,13 @@ function customerDiscountAmount(order, percent) {
 }
 const STATUS_COLOR = { PENDING: 'default', CONFIRMED: 'primary', PREPARING: 'warning', READY: 'success', PICKED_UP: 'success', COMPLETED: 'success', CANCELLED: 'error' }
 
-function parseOpts(str) {
-  if (!str) return {}
-  try { return JSON.parse(str) } catch { return {} }
-}
-
-function OptionsDisplay({ selectedOptions }) {
-  const opts = parseOpts(selectedOptions)
-  const entries = Object.entries(opts)
-  if (!entries.length) return null
+function OptionsDisplay({ item, language }) {
+  const text = localizedSelectedOptions(item?.modelId, item?.selectedOptions, {}, language)
+  if (!text) return null
   return (
     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
-      {entries.map(([group, val]) => {
-        let chips
-        if (Array.isArray(val)) {
-          chips = val.map(v => ({ key: `${group}:${v}`, label: `${group}: ${v}` }))
-        } else if (typeof val === 'object' && val !== null) {
-          // priced option: {label: qty}
-          chips = Object.entries(val).map(([lbl, qty]) => ({
-            key: `${group}:${lbl}`,
-            label: `${group}: ${qty > 1 ? `${lbl}×${qty}` : lbl}`,
-          }))
-        } else {
-          chips = [{ key: `${group}:${val}`, label: `${group}: ${val}` }]
-        }
-        return chips.map(c => (
-          <Chip key={c.key} label={c.label} size="small" color="primary" variant="outlined"
-            sx={{ height: 20, fontSize: 10, fontWeight: 600 }} />
-        ))
-      })}
+      <Chip label={text} size="small" color="primary" variant="outlined"
+        sx={{ height: 20, fontSize: 10, fontWeight: 600 }} />
     </Box>
   )
 }
@@ -171,7 +150,7 @@ function buildItemGroups(items) {
 }
 
 export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, displaySize = 'normal' }) {
-  const { t } = useI18n()
+  const { language, t } = useI18n()
   const large = displaySize === 'large'
   const [tagQr, setTagQr]           = useState(null)
   const [qrLoading, setQrLoading]   = useState(false)
@@ -614,7 +593,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <Typography variant="caption" sx={{ color: '#94a3b8', fontWeight: 700, fontSize: 10, flexShrink: 0 }}>{root._label}</Typography>
                       <Box>
-                        <Typography variant="body2" fontWeight={700} fontSize={large ? 17 : 14}>{root.modelName}</Typography>
+                        <Typography variant="body2" fontWeight={700} fontSize={large ? 17 : 14}>{localizedModelName(root, language)}</Typography>
                         {(root.billNumber || (root.sourceOrderId && String(root.sourceOrderId) !== String(order.id))) && (
                           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.35 }}>
                             {root.billNumber && <Chip size="small" label={`Bill #${root.billNumber}`} sx={{ height: 18, fontSize: 10, fontWeight: 700 }} />}
@@ -623,7 +602,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
                             )}
                           </Box>
                         )}
-                        <OptionsDisplay selectedOptions={root.selectedOptions} />
+                        <OptionsDisplay item={root} language={language} />
                         {root.itemNotes && (
                           <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', display: 'block', mt: 0.25 }}>{root.itemNotes}</Typography>
                         )}
@@ -647,7 +626,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 1, pl: 1.5, borderLeft: '2px solid #c7d2fe' }}>
                           <Typography variant="caption" sx={{ color: '#94a3b8', fontWeight: 700, fontSize: 10, flexShrink: 0 }}>{child._label}</Typography>
                           <Box>
-                            <Typography variant="body2" fontWeight={600} fontSize={large ? 16 : 13} color="#4338ca">{child.modelName}</Typography>
+                            <Typography variant="body2" fontWeight={600} fontSize={large ? 16 : 13} color="#4338ca">{localizedModelName(child, language)}</Typography>
                             {child.itemNotes && (
                               <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', display: 'block' }}>{child.itemNotes}</Typography>
                             )}
@@ -668,7 +647,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
                   <TableRow key={`sub-${root.id}`} sx={{ bgcolor: '#f0f4ff' }}>
                     <TableCell colSpan={5} align="right">
                       <Typography variant="caption" sx={{ color: '#64748b', fontStyle: 'italic' }}>
-                        subtotal ({root._label.replace('.', '')} {root.modelName})
+                        subtotal ({root._label.replace('.', '')} {localizedModelName(root, language)})
                       </Typography>
                     </TableCell>
                     <TableCell align="right">

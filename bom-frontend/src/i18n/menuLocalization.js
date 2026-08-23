@@ -65,13 +65,35 @@ const TABLE_PREFIX = {
 }
 
 const LOOSE_OPTION_LABELS = {
+  vi: {
+    'Mức đường': 'Mức đường',
+    'Mức đá': 'Mức đá',
+    'Topping': 'Topping',
+    'Đường': 'Đường',
+    'Đá': 'Đá',
+    'Đá bình thường': 'Đá bình thường',
+    'Bình thường': 'Bình thường',
+    'Ít đá': 'Ít đá',
+    'Không đá': 'Không đá',
+    'Nhiều đá': 'Nhiều đá',
+    'Ít đường': 'Ít đường',
+    'Không đường': 'Không đường',
+    'Trân châu đen': 'Trân châu đen',
+    'Thạch dừa sợi': 'Thạch dừa sợi',
+  },
   en: {
     'Mức đường': 'Sugar',
     'Mức đá': 'Ice',
     'Topping': 'Topping',
+    'Đường': 'Sugar',
+    'Đá': 'Ice',
     'Đá bình thường': 'Regular ice',
+    'Bình thường': 'Regular',
     'Ít đá': 'Less ice',
     'Không đá': 'No ice',
+    'Nhiều đá': 'Extra ice',
+    'Ít đường': 'Less sugar',
+    'Không đường': 'No sugar',
     'Trân châu đen': 'Black pearls',
     'Thạch dừa sợi': 'Coconut jelly strips',
   },
@@ -79,9 +101,15 @@ const LOOSE_OPTION_LABELS = {
     'Mức đường': '糖度',
     'Mức đá': '冰量',
     'Topping': '配料',
+    'Đường': '糖度',
+    'Đá': '冰量',
     'Đá bình thường': '正常冰',
+    'Bình thường': '正常',
     'Ít đá': '少冰',
     'Không đá': '去冰',
+    'Nhiều đá': '多冰',
+    'Ít đường': '少糖',
+    'Không đường': '无糖',
     'Trân châu đen': '黑珍珠',
     'Thạch dừa sợi': '椰果丝',
   },
@@ -89,9 +117,15 @@ const LOOSE_OPTION_LABELS = {
     'Mức đường': '糖度',
     'Mức đá': '冰量',
     'Topping': '配料',
+    'Đường': '糖度',
+    'Đá': '冰量',
     'Đá bình thường': '正常冰',
+    'Bình thường': '正常',
     'Ít đá': '少冰',
     'Không đá': '去冰',
+    'Nhiều đá': '多冰',
+    'Ít đường': '少糖',
+    'Không đường': '無糖',
     'Trân châu đen': '黑珍珠',
     'Thạch dừa sợi': '椰果絲',
   },
@@ -100,7 +134,7 @@ const LOOSE_OPTION_LABELS = {
 export function localizedLooseLabel(value, language) {
   const text = String(value || '')
   const code = normalizeLanguage(language)
-  return LOOSE_OPTION_LABELS[code]?.[text] || LOOSE_OPTION_LABELS.en[text] || text
+  return LOOSE_OPTION_LABELS[code]?.[text] || (code === 'vi' ? text : LOOSE_OPTION_LABELS.en[text]) || text
 }
 
 export function localizedTableName(table, language) {
@@ -153,6 +187,10 @@ export function getChoiceLabelTranslations(choice) {
 export function localizedSelectedOptions(modelId, selectedOptions, optionsByModel, language) {
   if (!selectedOptions) return null
   const selected = parseJsonObject(selectedOptions)
+  if (Object.keys(selected).length === 0) {
+    const raw = String(selectedOptions || '').trim()
+    return raw === '{}' ? null : raw
+  }
   const groups = optionsByModel?.[modelId] || optionsByModel?.[String(modelId)] || []
   const hasDefinitions = groups.length > 0
 

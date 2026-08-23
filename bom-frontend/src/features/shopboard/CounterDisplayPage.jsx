@@ -5,6 +5,8 @@ import Typography from '@mui/material/Typography'
 import { fetchActivePickup } from '../../api/shopApi'
 import LanguageSelector from '../../components/LanguageSelector'
 import { ORDERING_LANGUAGE_CODES } from '../../i18n/translations'
+import { useI18n } from '../../i18n/I18nContext'
+import { localizedModelName, localizedSelectedOptions } from '../../i18n/menuLocalization'
 
 export const COUNTER_CHANNEL = 'shop_counter_display'
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000
@@ -20,14 +22,6 @@ export function broadcastToCounter(order, tagQrBase64 = null) {
     if (payload) localStorage.setItem('shop_counter_order', JSON.stringify(payload))
     else localStorage.removeItem('shop_counter_order')
   } catch { /* non-fatal */ }
-}
-
-function parseOpts(str) {
-  if (!str) return []
-  try {
-    const obj = JSON.parse(str)
-    return Object.entries(obj).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
-  } catch { return [] }
 }
 
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : '0 đ'
@@ -65,7 +59,8 @@ function IdleScreen() {
 }
 
 function ItemRow({ item, number, isChild }) {
-  const opts = parseOpts(item.selectedOptions)
+  const { language } = useI18n()
+  const optsText = localizedSelectedOptions(item.modelId, item.selectedOptions, {}, language)
   return (
     <Box sx={{
       bgcolor: isChild ? '#162032' : '#1e293b',
@@ -93,7 +88,7 @@ function ItemRow({ item, number, isChild }) {
               {Number(item.quantity)}×
             </Box>
           )}
-          {item.modelName}
+          {localizedModelName(item, language)}
         </Typography>
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0, gap: 0.25 }}>
           <Typography sx={{
@@ -111,16 +106,14 @@ function ItemRow({ item, number, isChild }) {
         </Box>
       </Box>
 
-      {opts.length > 0 && (
+      {optsText && (
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 0.75 }}>
-          {opts.map((o, i) => (
-            <Box key={i} sx={{
+          <Box sx={{
               bgcolor: '#334155', color: '#94a3b8', borderRadius: 99,
               px: 1.25, py: 0.25, fontSize: { xs: 11, md: 13 }, fontWeight: 600,
             }}>
-              {o}
-            </Box>
-          ))}
+            {optsText}
+          </Box>
         </Box>
       )}
 
