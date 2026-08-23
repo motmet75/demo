@@ -655,6 +655,7 @@ export default function ShopMenuPage() {
   const [callStaffLoading, setCallStaffLoading] = useState(false)
   const [staffCallNow, setStaffCallNow]         = useState(Date.now())
   const headerRef    = useRef(null)
+  const searchInputRef = useRef(null)
   const tableTagInputRef = useRef(null)
   const tableOrdersPromptedRef = useRef(false)
   const [headerH, setHeaderH] = useState(165)
@@ -730,6 +731,27 @@ export default function ShopMenuPage() {
   const formatSelectedOptions = useCallback((modelId, selectedOptions) => {
     return localizedSelectedOptions(modelId, selectedOptions, optionsByModel, language)
   }, [language, optionsByModel])
+
+  const resetMobileSearchZoom = useCallback((input = searchInputRef.current) => {
+    input?.blur?.()
+    if (typeof window === 'undefined' || typeof document === 'undefined') return
+    const isTouchScreen = window.matchMedia?.('(pointer: coarse)')?.matches
+    if (!isTouchScreen) return
+    window.setTimeout(() => {
+      try {
+        const meta = document.querySelector('meta[name="viewport"]')
+        const originalViewport = meta?.getAttribute('content') || ''
+        if (meta && originalViewport) {
+          const resetViewport = originalViewport.includes('maximum-scale')
+            ? originalViewport.replace(/maximum-scale\s*=\s*[^,\s]+/i, 'maximum-scale=1.0')
+            : `${originalViewport}, maximum-scale=1.0`
+          meta.setAttribute('content', resetViewport)
+          window.setTimeout(() => meta.setAttribute('content', originalViewport), 300)
+        }
+        window.scrollTo({ left: window.scrollX, top: window.scrollY, behavior: 'auto' })
+      } catch { /* keep search usable if viewport APIs are blocked */ }
+    }, 60)
+  }, [])
   // ── Data loading ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!tokenParam) return
@@ -1986,7 +2008,7 @@ export default function ShopMenuPage() {
           '&::-webkit-scrollbar': { display: 'none' }, scrollbarWidth: 'none',
         }}>
           <Chip key="__all" label={t('common.all') || 'All'} size="small"
-            onClick={() => { setActiveCategory(null); setSearchQuery('') }}
+            onClick={() => { setActiveCategory(null); setSearchQuery(''); resetMobileSearchZoom() }}
             sx={{
               flexShrink: 0, cursor: 'pointer', height: large ? 34 : 28, fontSize: large ? 14 : 12, fontWeight: 700,
               bgcolor: !activeCategory && !searchQuery ? '#ff5722' : '#f0f0f0',
@@ -2007,15 +2029,28 @@ export default function ShopMenuPage() {
 
         {/* Row 3: Search + view toggle */}
         <Box sx={{ display: 'flex', alignItems: 'center', px: 1.5, pb: 1.25, gap: 1 }}>
-          <TextField size="small" fullWidth variant="outlined"
+          <TextField size="small" fullWidth variant="outlined" type="search"
+            inputRef={searchInputRef}
             placeholder={t('shop.searchMenu')}
             value={searchQuery}
             onChange={e => { setSearchQuery(e.target.value); setActiveCategory(null) }}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                resetMobileSearchZoom(e.currentTarget)
+              }
+            }}
+            onBlur={e => resetMobileSearchZoom(e.currentTarget)}
+            inputProps={{
+              enterKeyHint: 'search',
+              style: { fontSize: 16 },
+              'aria-label': t('shop.searchMenu'),
+            }}
             InputProps={{
               startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: large ? 24 : 20, color: '#bbb' }} /></InputAdornment>,
               endAdornment: searchQuery ? (
                 <InputAdornment position="end">
-                  <IconButton size="small" edge="end" onClick={() => setSearchQuery('')}>
+                  <IconButton size="small" edge="end" onClick={() => { setSearchQuery(''); resetMobileSearchZoom() }}>
                     <CloseIcon sx={{ fontSize: large ? 20 : 16 }} />
                   </IconButton>
                 </InputAdornment>
