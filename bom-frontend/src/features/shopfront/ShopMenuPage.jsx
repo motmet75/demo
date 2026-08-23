@@ -203,6 +203,7 @@ function SessionOrderList({ session, token, onEdit, onView, t, language, formatA
           const isPaid    = order.paymentStatus === 'PAID'
           const displayNum = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
           const roots      = (order.items || []).filter(i => !i.parentItemId)
+          const childMap   = buildChildMap(order.items)
           return (
             <Box key={order.orderCode} sx={{
               border: editing ? '2px solid #f59e0b' : '1px solid #e8e8e8',
@@ -236,18 +237,37 @@ function SessionOrderList({ session, token, onEdit, onView, t, language, formatA
               )}
 
               <Box sx={{ px: 2, py: 1 }}>
-                {roots.slice(0, 4).map((item) => (
-                  <Box key={item.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
-                    <Typography variant="caption" sx={{ color: '#ff5722', fontWeight: 700, flexShrink: 0 }}>
-                      x{item.quantity}
-                    </Typography>
-                    <Typography variant="caption" sx={{ flex: 1, color: '#333' }} noWrap>
-                      {displayItemName(item)}
-                    </Typography>
-                    <Chip label={statusLabel(order)} color={chip.color} size="small"
-                      sx={{ height: 16, fontSize: 10, fontWeight: 600 }} />
-                  </Box>
-                ))}
+                {roots.slice(0, 4).map((item) => {
+                  const optsText = localizedSelectedOptions(item.modelId, item.selectedOptions, {}, language)
+                  const children = childMap[String(item.id)] || []
+                  return (
+                    <Box key={item.id} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, py: 0.4 }}>
+                      <Typography variant="caption" sx={{ color: '#ff5722', fontWeight: 700, flexShrink: 0, pt: 0.15 }}>
+                        x{item.quantity}
+                      </Typography>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography variant="caption" sx={{ display: 'block', color: '#333' }} noWrap>
+                          {displayItemName(item)}
+                        </Typography>
+                        {optsText && (
+                          <Typography variant="caption" sx={{ display: 'block', color: '#64748b' }} noWrap>
+                            {optsText}
+                          </Typography>
+                        )}
+                        {children.slice(0, 3).map(child => {
+                          const childOpts = localizedSelectedOptions(child.modelId, child.selectedOptions, {}, language)
+                          return (
+                            <Typography key={child.id} variant="caption" sx={{ display: 'block', color: '#64748b' }} noWrap>
+                              + x{child.quantity} {displayItemName(child)}{childOpts ? ` · ${childOpts}` : ''}
+                            </Typography>
+                          )
+                        })}
+                      </Box>
+                      <Chip label={statusLabel(order)} color={chip.color} size="small"
+                        sx={{ height: 16, fontSize: 10, fontWeight: 600, mt: 0.1 }} />
+                    </Box>
+                  )
+                })}
                 {roots.length > 4 && (
                   <Typography variant="caption" color="text.secondary">+{roots.length - 4} {translate('shop.otherItems')}...</Typography>
                 )}
@@ -604,7 +624,8 @@ export default function ShopMenuPage() {
   const [placedOrder, setPlacedOrder]       = useState(null)
   const [trackingOrder, setTrackingOrder]   = useState(null)
   const [editingOrderCode, setEditingOrderCode] = useState(null)
-  const [tableOrders, setTableOrders]       = useState(null)
+  const [tableOrders, setTableOrders]       = useState([])
+  const [tableOrdersPromptOpen, setTableOrdersPromptOpen] = useState(false)
   const [tokenSession, setTokenSession]     = useState(null)
   const [sessionOpen, setSessionOpen]       = useState(false)
   const [shopConfig, setShopConfig]         = useState({ prepaidMenu: false, bankBin: '', bankAccountNumber: '', bankAccountName: '' })
@@ -634,6 +655,7 @@ export default function ShopMenuPage() {
   const [staffCallNow, setStaffCallNow]         = useState(Date.now())
   const headerRef    = useRef(null)
   const tableTagInputRef = useRef(null)
+  const tableOrdersPromptedRef = useRef(false)
   const [headerH, setHeaderH] = useState(165)
   const categoryRefs = useRef({})
   const staffCallKey = staffCallStorageKey(tokenParam, ctx)
@@ -642,6 +664,25 @@ export default function ShopMenuPage() {
   const [sideForm, setSideForm] = useState({})
   const [optionsTarget, setOptionsTarget] = useState(null)
   const large = displaySize === 'large'
+  const visibleOrders = React.useMemo(() => {
+    const byCode = new Map()
+    ;[...(tokenSession?.orders || []), ...(tableOrders || [])].forEach(order => {
+      if (order?.orderCode) byCode.set(order.orderCode, order)
+    })
+    return [...byCode.values()]
+  }, [tableOrders, tokenSession?.orders])
+  const activeVisibleOrders = React.useMemo(
+    () => visibleOrders.filter(order => order.status !== 'CANCELLED'),
+    [visibleOrders]
+  )
+  const activeTableOrders = React.useMemo(
+    () => (tableOrders || []).filter(order => order.status !== 'CANCELLED'),
+    [tableOrders]
+  )
+  const visibleOrderSession = React.useMemo(
+    () => ({ ...(tokenSession || {}), orders: visibleOrders }),
+    [tokenSession, visibleOrders]
+  )
 
   useEffect(() => {
     setActiveCategory(null)
@@ -675,11 +716,6 @@ export default function ShopMenuPage() {
             ...(rawCustomerName ? { customerName: rawCustomerName } : {}),
           }))
         }
-        if (resolved.tableId) {
-          fetchActiveTableOrders(resolved.tableId, resolved.tenantId, resolved.companyId)
-            .then(({ data: orders }) => { if (Array.isArray(orders) && orders.length > 0) setTableOrders(orders) })
-            .catch(() => {})
-        }
       })
       .catch(() => { setError(cText('checkout.cannotReadQr')); setLoading(false) })
   }, [cText, tokenParam, rawTableId, rawCustomerName])
@@ -712,6 +748,41 @@ export default function ShopMenuPage() {
       .then(({ data }) => { if (data?.orders != null) setTokenSession(data) })
       .catch(() => {})
   }, [tokenParam])
+
+  const loadActiveTableOrders = useCallback(() => {
+    if (!ctx?.tableId || !ctx?.tenantId || !ctx?.companyId) {
+      setTableOrders([])
+      return
+    }
+    fetchActiveTableOrders(ctx.tableId, ctx.tenantId, ctx.companyId)
+      .then(({ res, data }) => {
+        if (!res.ok) {
+          setTableOrders([])
+          return
+        }
+        const orders = Array.isArray(data) ? data : []
+        const activeOrders = orders.filter(order => order?.status !== 'CANCELLED')
+        setTableOrders(orders)
+        if (activeOrders.length > 0 && !tableOrdersPromptedRef.current) {
+          tableOrdersPromptedRef.current = true
+          setTableOrdersPromptOpen(true)
+        }
+      })
+      .catch(() => {})
+  }, [ctx?.tableId, ctx?.tenantId, ctx?.companyId])
+
+  useEffect(() => {
+    tableOrdersPromptedRef.current = false
+    setTableOrders([])
+    setTableOrdersPromptOpen(false)
+  }, [ctx?.tableId])
+
+  useEffect(() => {
+    loadActiveTableOrders()
+    if (!ctx?.tableId) return undefined
+    const id = setInterval(loadActiveTableOrders, 5000)
+    return () => clearInterval(id)
+  }, [ctx?.tableId, loadActiveTableOrders])
 
   useEffect(() => {
     const id = setInterval(() => setStaffCallNow(Date.now()), 60000)
@@ -1708,16 +1779,16 @@ export default function ShopMenuPage() {
 
           {/* Món đã gọi */}
           <Badge
-            badgeContent={tokenSession?.orders?.filter(o => o.status !== 'CANCELLED').length || null}
+            badgeContent={activeVisibleOrders.length || null}
             color="error"
             sx={{ '& .MuiBadge-badge': { fontSize: 10, fontWeight: 900, minWidth: 16, height: 16 } }}>
             <Button size="small"
-              variant={tokenSession?.orders?.length > 0 ? 'contained' : 'outlined'}
+              variant={activeVisibleOrders.length > 0 ? 'contained' : 'outlined'}
               onClick={() => setSessionOpen(true)}
               startIcon={<ReceiptLongIcon sx={{ fontSize: '16px !important' }} />}
               sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 20, fontSize: 12,
                 px: 1.25, py: 0.4, flexShrink: 0,
-                ...(tokenSession?.orders?.length > 0
+                ...(activeVisibleOrders.length > 0
                   ? { bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' } }
                   : {}) }}>
               {t('shop.orders')}
@@ -2084,14 +2155,14 @@ export default function ShopMenuPage() {
           <Box sx={{ flex: 1 }}>
             <Typography fontWeight={900} variant="h6">{t('shop.orders')}</Typography>
             <Typography variant="caption" color="text.secondary">
-              {t('shop.needPayment', { count: tokenSession?.orders?.filter(o => o.status !== 'CANCELLED').length ?? 0 })}
+              {t('shop.needPayment', { count: activeVisibleOrders.length })}
             </Typography>
           </Box>
           <IconButton size="small" onClick={() => setSessionOpen(false)}><CloseIcon /></IconButton>
         </DialogTitle>
         <DialogContent sx={{ overflowY: 'auto', px: 2, pb: 3 }}>
           <SessionOrderList
-            session={tokenSession}
+            session={visibleOrderSession}
             t={t}
             language={language}
             formatAmount={fmt}
@@ -2306,7 +2377,7 @@ export default function ShopMenuPage() {
       )}
 
       {/* ── Table occupied dialog ──────────────────────────────── */}
-      <Dialog open={Boolean(tableOrders)} onClose={() => setTableOrders(null)} maxWidth="xs" fullWidth>
+      <Dialog open={tableOrdersPromptOpen && activeTableOrders.length > 0} onClose={() => setTableOrdersPromptOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ pb: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <TableRestaurantIcon color="warning" />
@@ -2315,9 +2386,9 @@ export default function ShopMenuPage() {
         </DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-            {t('shop.tableOccupiedMessage', { count: tableOrders?.length || 0 })}
+            {t('shop.tableOccupiedMessage', { count: activeTableOrders.length })}
           </Typography>
-          {(tableOrders || []).slice(0, 3).map(o => (
+          {activeTableOrders.slice(0, 3).map(o => (
             <Box key={o.id} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
               px: 1.25, py: 0.75, mb: 0.5, bgcolor: '#f8fafc', borderRadius: 1.5, border: '1px solid #e2e8f0' }}>
               <Typography variant="body2" fontWeight={700}>
@@ -2329,15 +2400,15 @@ export default function ShopMenuPage() {
           ))}
         </DialogContent>
         <DialogActions sx={{ px: 2, pb: 2, gap: 1 }}>
-          <Button onClick={() => setTableOrders(null)} variant="outlined"
+          <Button onClick={() => setTableOrdersPromptOpen(false)} variant="outlined"
             sx={{ flex: 1, textTransform: 'none', borderRadius: 20 }}>
             {t('shop.placeOrder')}
           </Button>
           <Button variant="contained" color="warning"
             onClick={() => {
-              const latest = tableOrders?.[tableOrders.length - 1]
+              const latest = activeTableOrders[activeTableOrders.length - 1]
               if (latest) setTrackingOrder(latest)
-              setTableOrders(null)
+              setTableOrdersPromptOpen(false)
             }}
             sx={{ flex: 1, textTransform: 'none', borderRadius: 20 }}>
             {t('shop.viewOrder')}

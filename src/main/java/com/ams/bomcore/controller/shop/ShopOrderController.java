@@ -918,8 +918,11 @@ public class ShopOrderController {
 
     @GetMapping("/shop/public/table-orders")
     public ResponseEntity<?> getActiveTableOrders(@RequestParam UUID tableId,
-                                                   @RequestParam UUID tenantId, @RequestParam UUID companyId) {
+                                                   @RequestParam UUID tenantId, @RequestParam UUID companyId,
+                                                   HttpServletRequest request) {
         validateScope(tenantId, companyId);
+        ResponseEntity<?> rejected = rejectPublicOrderingIfIpMismatch(tenantId, companyId, clientPublicIp(request));
+        if (rejected != null) return rejected;
         return ResponseEntity.ok(shopOrderService.getActiveTableOrders(tableId, tenantId, companyId));
     }
 
