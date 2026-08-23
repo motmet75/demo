@@ -823,7 +823,7 @@ public class ShopOrderController {
                                           @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
-        ShopTable table = shopOrderService.createTable(body.get("tableName"), tId, cId);
+        ShopTable table = shopOrderService.createTable(body.get("tableName"), body.get("tableNameTranslations"), tId, cId);
         return ResponseEntity.status(HttpStatus.CREATED).body(table);
     }
 
@@ -837,8 +837,9 @@ public class ShopOrderController {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
         String name = (String) body.get("tableName");
+        String translations = (String) body.get("tableNameTranslations");
         Boolean active = body.get("isActive") != null ? (Boolean) body.get("isActive") : null;
-        return ResponseEntity.ok(shopOrderService.updateTable(tableId, name, active, tId, cId));
+        return ResponseEntity.ok(shopOrderService.updateTable(tableId, name, translations, active, tId, cId));
     }
 
     @DeleteMapping("/shop/staff/tables/{tableId}")
@@ -2023,6 +2024,7 @@ public class ShopOrderController {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", table.getId());
         m.put("tableName", table.getTableName());
+        m.put("tableNameTranslations", table.getTableNameTranslations());
         m.put("isActive", table.getIsActive());
         return m;
     }

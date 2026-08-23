@@ -513,22 +513,24 @@ public class ShopOrderService {
     // ── Table management ──────────────────────────────────────────────
 
     @Transactional
-    public ShopTable createTable(String tableName, UUID tenantId, UUID companyId) {
+    public ShopTable createTable(String tableName, String tableNameTranslations, UUID tenantId, UUID companyId) {
         ShopTable table = new ShopTable();
         table.setTenantId(tenantId);
         table.setCompanyId(companyId);
         table.setTableName(tableName);
+        table.setTableNameTranslations(tableNameTranslations);
         return shopTableRepository.save(table);
     }
 
     @Transactional
-    public ShopTable updateTable(UUID tableId, String tableName, Boolean isActive, UUID tenantId, UUID companyId) {
+    public ShopTable updateTable(UUID tableId, String tableName, String tableNameTranslations, Boolean isActive, UUID tenantId, UUID companyId) {
         ShopTable table = shopTableRepository.findById(tableId)
                 .orElseThrow(() -> new NoSuchElementException("Table not found"));
         if (!table.getTenantId().equals(tenantId) || !table.getCompanyId().equals(companyId)) {
             throw new IllegalArgumentException("Table does not belong to this company");
         }
         if (tableName != null) table.setTableName(tableName);
+        if (tableNameTranslations != null) table.setTableNameTranslations(tableNameTranslations);
         if (isActive != null) table.setIsActive(isActive);
         return shopTableRepository.save(table);
     }

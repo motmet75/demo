@@ -21,6 +21,9 @@ public class ShopTable {
     @Column(name = "table_name", nullable = false, length = 100)
     private String tableName;
 
+    @Column(name = "table_name_translations", columnDefinition = "TEXT")
+    private String tableNameTranslations;
+
     @Column(name = "is_active")
     private Boolean isActive;
 
@@ -44,6 +47,8 @@ public class ShopTable {
     public void setCompanyId(UUID companyId) { this.companyId = companyId; }
     public String getTableName() { return tableName; }
     public void setTableName(String tableName) { this.tableName = tableName; }
+    public String getTableNameTranslations() { return tableNameTranslations; }
+    public void setTableNameTranslations(String tableNameTranslations) { this.tableNameTranslations = tableNameTranslations; }
     public Boolean getIsActive() { return isActive; }
     public void setIsActive(Boolean isActive) { this.isActive = isActive; }
     public Instant getCreatedAt() { return createdAt; }

@@ -22,6 +22,7 @@ public class ShopOrderResponseDto {
     private UUID companyId;
     private String tableId;
     private String tableName;
+    private String tableNameTranslations;
     private String fulfillmentType;
     private String status;
     private Map<String, String> statusLabels = Collections.emptyMap();
@@ -249,6 +250,7 @@ public class ShopOrderResponseDto {
         if (order.getTable() != null) {
             dto.tableId = order.getTable().getId().toString();
             dto.tableName = order.getTable().getTableName();
+            dto.tableNameTranslations = order.getTable().getTableNameTranslations();
         }
         dto.fulfillmentType = order.getFulfillmentType();
         dto.status = order.getStatus();
@@ -319,6 +321,7 @@ public class ShopOrderResponseDto {
     public UUID getCompanyId() { return companyId; }
     public String getTableId() { return tableId; }
     public String getTableName() { return tableName; }
+    public String getTableNameTranslations() { return tableNameTranslations; }
     public String getFulfillmentType() { return fulfillmentType; }
     public String getStatus() { return status; }
     public Map<String, String> getStatusLabels() { return statusLabels; }
