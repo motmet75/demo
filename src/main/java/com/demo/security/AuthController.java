@@ -17,6 +17,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -29,6 +30,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.ams.bomcore.domain.user.Authority;
 import com.ams.bomcore.domain.user.User;
+import com.ams.bomcore.repository.AuthorityRepository;
 import com.ams.bomcore.repository.UserRepository;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -66,6 +68,7 @@ public class AuthController {
      */
     private final PasswordEncoder passwordEncoder;
     private final UserRepository userRepository;
+    private final AuthorityRepository authorityRepository;
     private final PasswordChangeOtpService passwordChangeOtpService;
     private final LoginOtpService loginOtpService;
     private final QuickLoginService quickLoginService;
@@ -73,12 +76,14 @@ public class AuthController {
 public AuthController(AuthenticationManager authenticationManager,
                           PasswordEncoder passwordEncoder,
                           UserRepository userRepository,
+                          AuthorityRepository authorityRepository,
                           PasswordChangeOtpService passwordChangeOtpService,
                           LoginOtpService loginOtpService,
                           QuickLoginService quickLoginService) {
         this.authenticationManager = authenticationManager;
         this.passwordEncoder = passwordEncoder;
         this.userRepository = userRepository;
+        this.authorityRepository = authorityRepository;
         this.passwordChangeOtpService = passwordChangeOtpService;
         this.loginOtpService = loginOtpService;
         this.quickLoginService = quickLoginService;
@@ -360,6 +365,7 @@ public AuthController(AuthenticationManager authenticationManager,
     }
 
     @PatchMapping("/profile/email")
+    @Transactional
     public ResponseEntity<AuthResponse> updateProfileEmail(
             @Valid @RequestBody UpdateProfileEmailRequest request,
             Authentication authentication) {
@@ -383,12 +389,43 @@ public AuthController(AuthenticationManager authenticationManager,
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(new AuthResponse(false, null, "This email is already linked to another account"));
         }
+
+        String previousUsername = user.getUsername();
+        String previousEmail = user.getEmail();
+        boolean usernameTracksEmail = StringUtils.hasText(previousUsername)
+                && StringUtils.hasText(previousEmail)
+                && previousUsername.equalsIgnoreCase(previousEmail);
+        boolean shouldUpdateUsername = usernameTracksEmail
+                && !previousUsername.equalsIgnoreCase(nextEmail);
+
+        if (shouldUpdateUsername) {
+            Optional<User> existingUsername = userRepository.findByUsernameIgnoreCase(nextEmail);
+            if (existingUsername.isPresent() && !existingUsername.get().getId().equals(user.getId())) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(new AuthResponse(false, null, "This email is already used as another login username"));
+            }
+        }
+
+        if (shouldUpdateUsername) {
+            user.setUsername(nextEmail);
+            List<Authority> authorities = authorityRepository.findByUsername(previousUsername);
+            for (Authority authority : authorities) {
+                authority.setUsername(nextEmail);
+            }
+            authorityRepository.saveAll(authorities);
+            user.setAuthorities(authorities);
+        }
+
         user.setEmail(nextEmail);
-        userRepository.save(user);
+        User saved = userRepository.save(user);
         if (authentication != null && authentication.getPrincipal() instanceof User sessionUser) {
+            if (shouldUpdateUsername) {
+                sessionUser.setUsername(nextEmail);
+                sessionUser.setAuthorities(saved.getAuthorities());
+            }
             sessionUser.setEmail(nextEmail);
         }
-        return ResponseEntity.ok(new AuthResponse(true, toView(user), "Email updated successfully"));
+        return ResponseEntity.ok(new AuthResponse(true, toView(saved), "Email updated successfully"));
     }
 
     @PostMapping("/change-password")

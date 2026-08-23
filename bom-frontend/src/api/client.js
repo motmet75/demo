@@ -118,6 +118,7 @@ function isProtectedApiPath(path) {
   if (path.startsWith('/admin/')) return true
   return [
     '/auth/profile',
+    '/auth/profile/email',
     '/auth/shop/reset',
     '/auth/shop/setup',
     '/auth/change-password',

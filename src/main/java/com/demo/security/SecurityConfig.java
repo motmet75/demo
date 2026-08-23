@@ -80,6 +80,7 @@ public class SecurityConfig {
                 .requestMatchers("/oauth2/**").permitAll()
                 .requestMatchers("/dang-nhap/oauth2/**").permitAll()
                 .requestMatchers("/bom/**").authenticated()
+                .requestMatchers(HttpMethod.PATCH, "/auth/profile/email").authenticated()
                 .requestMatchers("/auth/password-otp/**").authenticated()
                 .requestMatchers("/auth/login", "/auth/login-otp/**", "/auth/login-totp/**", "/auth/logout", "/auth/me", "/auth/change-password", "/auth/last-context", "/auth/profile", "/error").permitAll()
                 .requestMatchers("/bom/etl/**").authenticated()
