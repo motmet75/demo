@@ -1031,11 +1031,11 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
 
         {order.status === 'PENDING' && order.customerEditing && (
           <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', alignItems: 'center' }}>
-            <Chip label={`✏ Editing${order.customerEditingSince ? ' · ' + editingElapsed(order.customerEditingSince) : '…'}`}
+            <Chip label={t('shopOrder.grid.editingChip', { time: order.customerEditingSince ? ` · ${editingElapsed(order.customerEditingSince)}` : '…' })}
               size="small" color="warning" sx={{ fontWeight: 700, fontSize: 10 }} />
             <Button size="small" variant="outlined" color="error" onClick={() => actions.forceConfirm(order)}
               sx={{ textTransform: 'none', fontSize: 10, px: 0.75, py: 0.25, lineHeight: 1.4, fontWeight: 700 }}>
-              ⚡ Force Confirm
+              {t('shopOrder.grid.forceConfirm')}
             </Button>
           </Box>
         )}
@@ -1047,21 +1047,21 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
               disabled={Boolean(order.customerEditing)}
               onClick={() => actions.confirm(order)}
               sx={{ textTransform: 'none', fontWeight: 800, fontSize: 12 }}>
-              Confirm Order
+              {t('shopOrder.grid.confirmOrder')}
             </Button>
           )}
           {order.status === 'CONFIRMED' && (
             <Button size="small" variant="contained" color="warning" fullWidth
               onClick={() => actions.prepare(order)}
               sx={{ textTransform: 'none', fontWeight: 800, fontSize: 12 }}>
-              Start Preparing
+              {t('shopOrder.grid.startPreparing')}
             </Button>
           )}
           {order.status === 'PREPARING' && (
             <Button size="small" variant="contained" color="success" fullWidth
               onClick={() => actions.ready(order)}
               sx={{ textTransform: 'none', fontWeight: 800, fontSize: 12 }}>
-              Mark Ready ✓
+              {t('shopOrder.grid.readyCheck')}
             </Button>
           )}
           {order.status === 'READY' && (
@@ -1761,12 +1761,12 @@ export default function ShopOrderGrid() {
 
   const handleBoardAction = (type, id, orderNum) => {
     const configs = {
-      'prepare':               { title: 'Start Preparing?',     message: `Start preparing order #${orderNum}?`,              confirmLabel: 'Start Preparing', confirmColor: 'warning' },
-      'revert':                { title: 'Revert to Waiting Confirm?',   message: 'Revert this confirmed order back to waiting confirm?',      confirmLabel: 'Revert',          confirmColor: 'error'   },
-      'revert-from-preparing': { title: 'Revert to Waiting Confirm?',   message: 'Stop preparing and revert this order to waiting confirm?',  confirmLabel: 'Revert',          confirmColor: 'error'   },
-      'ready':                 { title: 'Mark as Ready?',       message: `Mark order #${orderNum} as ready for pickup?`,      confirmLabel: 'Mark Ready',      confirmColor: 'success' },
-      'complete':              { title: 'Complete Order?',      message: `Complete order #${orderNum}?`,                     confirmLabel: 'Complete',        confirmColor: 'success' },
-      'pickup':                { title: 'Mark as Picked Up?',   message: 'Confirm customer has picked up this order?',        confirmLabel: 'Picked Up',       confirmColor: 'primary' },
+      'prepare':               { title: t('shopOrder.confirm.prepareTitle'), message: t('shopOrder.confirm.prepareMessage', { order: orderNum }), confirmLabel: t('shopOrder.confirm.startPreparingLabel'), confirmColor: 'warning' },
+      'revert':                { title: t('shopOrder.confirm.revertWaitingTitle'), message: t('shopOrder.confirm.revertWaitingMessage'), confirmLabel: t('shopOrder.confirm.revertLabel'), confirmColor: 'error' },
+      'revert-from-preparing': { title: t('shopOrder.confirm.revertWaitingTitle'), message: t('shopOrder.confirm.revertPreparingMessage'), confirmLabel: t('shopOrder.confirm.revertLabel'), confirmColor: 'error' },
+      'ready':                 { title: t('shopOrder.confirm.readyTitle'), message: t('shopOrder.confirm.readyPickupMessage', { order: orderNum }), confirmLabel: t('shopOrder.confirm.markReadyLabel'), confirmColor: 'success' },
+      'complete':              { title: t('shopOrder.confirm.completeTitle'), message: t('shopOrder.confirm.completeMessage', { order: orderNum }), confirmLabel: t('shopOrder.confirm.completeLabel'), confirmColor: 'success' },
+      'pickup':                { title: t('shopOrder.confirm.pickupTitle'), message: t('shopOrder.confirm.pickupMessage'), confirmLabel: t('shopOrder.confirm.pickedUpLabel'), confirmColor: 'primary' },
       'pay':                   { title: t('shopOrder.grid.markAsPaidConfirmTitle'), message: t('shopOrder.grid.markAsPaidConfirmMessage', { order: orderNum }), confirmLabel: t('shopOrder.grid.markPaid'), confirmColor: 'success' },
     }
     const cfg = configs[type]
@@ -1813,12 +1813,12 @@ export default function ShopOrderGrid() {
   }
 
   const handleCancel = (row) => askConfirm({
-    title: `Cancel Order #${row.orderNumber ?? row.orderCode}?`,
-    message: 'This will permanently cancel the order. Items will be moved to the stock panel.',
-    confirmLabel: 'Cancel Order',
+    title: t('shopOrder.confirm.cancelTitle', { order: row.orderNumber ?? row.orderCode }),
+    message: t('shopOrder.confirm.cancelMessage'),
+    confirmLabel: t('shopOrder.confirm.cancelLabel'),
     confirmColor: 'error',
     requireReason: true,
-    reasonLabel: 'Reason for cancellation',
+    reasonLabel: t('shopOrder.confirm.reasonLabel'),
   }, (reason) => doCancelOrder(row, reason))
 
   const handleOpenBoard = async () => {
@@ -1940,23 +1940,23 @@ export default function ShopOrderGrid() {
       try { await applyOrderResult(await setShopOrderNumber(id, n), id, 'Failed to update number') }
       catch (e) { setError(e.message || 'Failed to update number') }
     },
-    confirm:    (row) => askConfirm({ title: 'Confirm Order?', message: `Confirm order #${row.orderNumber ?? row.orderCode}?`, confirmLabel: 'Confirm', confirmColor: 'primary' }, () => act(confirmShopOrder, row.id)),
-    prepare:    (row) => askConfirm({ title: 'Start Preparing?', message: `Start preparing order #${row.orderNumber ?? row.orderCode}?`, confirmLabel: 'Start', confirmColor: 'warning' }, () => act(prepareShopOrder, row.id)),
-    ready:      (row) => askConfirm({ title: 'Mark as Ready?', message: `Mark order #${row.orderNumber ?? row.orderCode} as ready?`, confirmLabel: 'Mark Ready', confirmColor: 'success' }, () => act(readyShopOrder, row.id, () => broadcastReady())),
-    complete:   (row) => askConfirm({ title: 'Complete Order?', message: `Complete order #${row.orderNumber ?? row.orderCode}?`, confirmLabel: 'Complete', confirmColor: 'success' }, () => act(completeShopOrder, row.id)),
-    pickup:     (row) => askConfirm({ title: 'Mark as Picked Up?', message: 'Confirm customer has picked up this order?', confirmLabel: 'Picked Up', confirmColor: 'primary' }, () => act(pickupShopOrder, row.id)),
+    confirm:    (row) => askConfirm({ title: t('shopOrder.confirm.confirmTitle'), message: t('shopOrder.confirm.confirmMessage', { order: row.orderNumber ?? row.orderCode }), confirmLabel: t('shopOrder.grid.confirm'), confirmColor: 'primary' }, () => act(confirmShopOrder, row.id)),
+    prepare:    (row) => askConfirm({ title: t('shopOrder.confirm.prepareTitle'), message: t('shopOrder.confirm.prepareMessage', { order: row.orderNumber ?? row.orderCode }), confirmLabel: t('shopOrder.confirm.startLabel'), confirmColor: 'warning' }, () => act(prepareShopOrder, row.id)),
+    ready:      (row) => askConfirm({ title: t('shopOrder.confirm.readyTitle'), message: t('shopOrder.confirm.readyMessage', { order: row.orderNumber ?? row.orderCode }), confirmLabel: t('shopOrder.confirm.markReadyLabel'), confirmColor: 'success' }, () => act(readyShopOrder, row.id, () => broadcastReady())),
+    complete:   (row) => askConfirm({ title: t('shopOrder.confirm.completeTitle'), message: t('shopOrder.confirm.completeMessage', { order: row.orderNumber ?? row.orderCode }), confirmLabel: t('shopOrder.confirm.completeLabel'), confirmColor: 'success' }, () => act(completeShopOrder, row.id)),
+    pickup:     (row) => askConfirm({ title: t('shopOrder.confirm.pickupTitle'), message: t('shopOrder.confirm.pickupMessage'), confirmLabel: t('shopOrder.confirm.pickedUpLabel'), confirmColor: 'primary' }, () => act(pickupShopOrder, row.id)),
     markPaid:   (row) => askConfirm({ title: t('shopOrder.grid.markAsPaidConfirmTitle'), message: t('shopOrder.grid.markAsPaidConfirmMessage', { order: row.orderNumber ?? row.orderCode }), confirmLabel: t('shopOrder.grid.markPaid'), confirmColor: 'success' }, () => act(markOrderPaid, row.id)),
     cancel:     handleCancel,
-    revert:     (row) => askConfirm({ title: 'Hoàn tác đơn?', message: `Đưa đơn #${row.orderNumber ?? row.orderCode} về bước trước?`, confirmLabel: 'Hoàn tác', confirmColor: 'warning' }, () => act(revertShopOrder, row.id)),
+    revert:     (row) => askConfirm({ title: t('shopOrder.confirm.revertOrderTitle'), message: t('shopOrder.confirm.revertOrderMessage', { order: row.orderNumber ?? row.orderCode }), confirmLabel: t('shopOrder.confirm.revertLabel'), confirmColor: 'warning' }, () => act(revertShopOrder, row.id)),
     switchToQr: (row) => askConfirm({ title: t('shopOrder.grid.switchQrConfirmTitle'), message: t('shopOrder.grid.switchQrConfirmMessage'), confirmLabel: t('shopOrder.grid.switchPrint'), confirmColor: 'success' }, () => handleSwitchAndPrint(row)),
     revertCash: (row) => askConfirm({ title: t('shopOrder.grid.revertCashConfirmTitle'), message: t('shopOrder.grid.revertCashConfirmMessage'), confirmLabel: t('shopOrder.grid.switchToCash'), confirmColor: 'warning' }, () => handleRevertToCash(row)),
     pickupQr:    handlePickupQr,
     showTrackQr: handleShowTrackQr,
     mergeBills:  (row) => setMergeOrder(row),
     forceConfirm: (row) => askConfirm({
-      title: 'Force Confirm Order?',
-      message: `Override customer editing lock and confirm order #${row.orderNumber ?? row.orderCode}? Use this if the customer verbally confirmed or has been editing too long.`,
-      confirmLabel: '⚡ Force Confirm', confirmColor: 'error'
+      title: t('shopOrder.confirm.forceTitle'),
+      message: t('shopOrder.confirm.forceMessage', { order: row.orderNumber ?? row.orderCode }),
+      confirmLabel: t('shopOrder.confirm.forceLabel'), confirmColor: 'error'
     }, () => act(forceConfirmOrder, row.id)),
   }
 

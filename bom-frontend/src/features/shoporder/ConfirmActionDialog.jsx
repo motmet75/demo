@@ -18,10 +18,10 @@ import { useI18n } from '../../i18n/I18nContext'
  *   open          boolean
  *   title         string
  *   message       string
- *   confirmLabel  string  (default "Confirm")
+ *   confirmLabel  string  (default localized "Confirm")
  *   confirmColor  "error"|"warning"|"primary"|"success"
  *   requireReason boolean — shows a required text field; confirm is blocked until filled
- *   reasonLabel   string  (default "Reason for cancellation")
+ *   reasonLabel   string  (default localized "Reason for cancellation")
  *   onConfirm(reason?: string) — called with reason string (or undefined if !requireReason)
  *   onCancel()
  */
@@ -29,10 +29,10 @@ export default function ConfirmActionDialog({
   open,
   title,
   message,
-  confirmLabel = 'Confirm',
+  confirmLabel,
   confirmColor = 'primary',
   requireReason = false,
-  reasonLabel = 'Reason for cancellation',
+  reasonLabel,
   onConfirm,
   onCancel,
 }) {
@@ -59,6 +59,8 @@ export default function ConfirmActionDialog({
   const isDestructive = confirmColor === 'error'
   const Icon = isDestructive ? ErrorOutlineIcon : WarningAmberIcon
   const iconColor = { error: '#c62828', warning: '#e65100', primary: '#1565c0', success: '#2e7d32' }[confirmColor] || '#1565c0'
+  const resolvedConfirmLabel = confirmLabel || t('common.confirm')
+  const resolvedReasonLabel = reasonLabel || t('shopOrder.confirm.reasonLabel')
 
   return (
     <Dialog open={open} onClose={busy ? undefined : onCancel} maxWidth="xs" fullWidth
@@ -79,8 +81,8 @@ export default function ConfirmActionDialog({
             fullWidth
             multiline
             minRows={2}
-            label={reasonLabel}
-            placeholder="Required — describe why this order is being cancelled…"
+            label={resolvedReasonLabel}
+            placeholder={t('shopOrder.confirm.reasonPlaceholder')}
             value={reason}
             onChange={e => setReason(e.target.value)}
             size="small"
@@ -92,7 +94,7 @@ export default function ConfirmActionDialog({
       </DialogContent>
       <DialogActions sx={{ px: 2, pb: 2, gap: 1 }}>
         <Button onClick={onCancel} disabled={busy} sx={{ textTransform: 'none' }}>
-          Cancel
+          {t('common.cancel')}
         </Button>
         <Button
           variant="contained"
@@ -102,7 +104,7 @@ export default function ConfirmActionDialog({
           startIcon={busy ? <CircularProgress size={14} sx={{ color: 'inherit' }} /> : null}
           sx={{ textTransform: 'none', fontWeight: 700, minWidth: 100 }}
         >
-          {busy ? 'Please wait…' : confirmLabel}
+          {busy ? t('shopOrder.confirm.pleaseWait') : resolvedConfirmLabel}
         </Button>
       </DialogActions>
     </Dialog>
