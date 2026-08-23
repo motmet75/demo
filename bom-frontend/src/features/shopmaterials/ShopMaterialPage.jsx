@@ -393,7 +393,7 @@ export default function ShopMaterialPage() {
           <Box sx={{ px: 1.5, py: 1.25, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
             <Box>
               <Typography fontWeight={900}>Processing Unit Availability</Typography>
-              <Typography variant="caption" color="text.secondary">Calculated from real inventory minus open shop demand; manual left units override calculated units.</Typography>
+              <Typography variant="caption" color="text.secondary">Calculated from real inventory minus open shop demand; manual left units mean remaining units from now and count down as new orders are placed.</Typography>
             </Box>
             <Tooltip title="Refresh availability">
               <IconButton onClick={async () => { try { await loadAvailability() } catch (e) { setError(e.message || 'Failed to refresh availability') } }}>
@@ -445,7 +445,7 @@ export default function ShopMaterialPage() {
                 <TableRow>
                   <TableCell sx={{ fontWeight: 900 }}>Menu item</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 900 }}>Calculated</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 900 }}>Left units</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 900 }}>Left today</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 900 }}>Effective</TableCell>
                   <TableCell sx={{ fontWeight: 900 }}>Limiting material</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 900 }}>Action</TableCell>

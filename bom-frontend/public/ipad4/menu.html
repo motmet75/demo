@@ -290,15 +290,15 @@
         html += '<div class="col name"><label>Tên món</label><input id="name_' + escapeHtml(m.id) + '" value="' + escapeHtml(m.modelName) + '"></div>';
         html += '<div class="col category"><label>Nhóm</label><input id="category_' + escapeHtml(m.id) + '" value="' + escapeHtml(m.category || '') + '"></div>';
         html += '<div class="col price"><label>Giá bán</label><input id="price_' + escapeHtml(m.id) + '" type="number" inputmode="decimal" value="' + escapeHtml(m.sellingPrice !== null && typeof m.sellingPrice !== 'undefined' ? m.sellingPrice : '') + '"></div>';
-        html += '<div class="col portion"><label>SL hôm nay</label><input id="portion_' + escapeHtml(m.id) + '" type="number" inputmode="decimal" min="0" step="0.001" value="' + escapeHtml(manual) + '"></div>';
+        html += '<div class="col portion"><label>Còn bán hôm nay</label><input id="portion_' + escapeHtml(m.id) + '" type="number" inputmode="decimal" min="0" step="0.001" value="' + escapeHtml(manual) + '"></div>';
         html += '<div class="col active"><label>Bán</label><input id="active_' + escapeHtml(m.id) + '" class="active-box" type="checkbox"' + (m.isActive !== false ? ' checked' : '') + '></div>';
         html += '<div class="col actions"><label>&nbsp;</label><button class="success small" data-action="save" data-id="' + escapeHtml(m.id) + '" type="button">Lưu</button><button class="small" style="margin-top:5px" data-action="options" data-id="' + escapeHtml(m.id) + '" type="button">Option</button></div>';
         html += '<div class="clear"></div></div>';
         html += '<div class="item-meta"><span class="pill">' + escapeHtml(m.modelCode || m.id) + '</span>';
         html += menuOn(m) ? '<span class="pill">Đang bán</span>' : '<span class="pill warn">Tắt khỏi menu</span>';
-        if (manual !== '') html += '<span class="pill warn">Giới hạn hôm nay: ' + escapeHtml(formatQty(manual)) + '</span>';
+        if (manual !== '') html += '<span class="pill warn">Còn bán hôm nay: ' + escapeHtml(formatQty(manual)) + '</span>';
         if (row) html += '<span class="pill' + (soldOutToday(m) ? ' bad' : '') + '">Còn hiệu lực: ' + escapeHtml(formatQty(effective)) + '</span><span class="pill">Tính từ kho: ' + escapeHtml(formatQty(calculated)) + '</span>';
-        html += '<span class="muted"> Để trống SL hôm nay = tự tính theo kho và tự reset ngày mới. Nhập 0 = hết món hôm nay.</span></div>';
+        html += '<span class="muted"> Nhập số còn bán từ lúc lưu. Để trống = tự tính theo kho / không giới hạn thủ công và tự reset ngày mới. Nhập 0 = hết món hôm nay.</span></div>';
         html += '</div>';
       }
       byId('summary').innerHTML = shown + ' món đang hiển thị · ' + onCount + ' đang bán · ' + offCount + ' tắt · ' + soldOutCount + ' hết hôm nay';
@@ -347,7 +347,7 @@
       if (rawPrice !== '' && (isNaN(body.sellingPrice) || body.sellingPrice < 0)) { message('messageBox', 'Giá bán không hợp lệ.', false); return; }
       rawPortion = text(byId('portion_' + id).value).replace(/^\s+|\s+$/g, '');
       units = rawPortion === '' ? null : Number(rawPortion);
-      if (rawPortion !== '' && (isNaN(units) || units < 0)) { message('messageBox', 'SL hôm nay phải >= 0 hoặc để trống.', false); return; }
+      if (rawPortion !== '' && (isNaN(units) || units < 0)) { message('messageBox', 'Số còn bán hôm nay phải >= 0 hoặc để trống.', false); return; }
       message('messageBox', 'Đang lưu ' + body.modelName + '...', true);
       request('PUT', '/sapi/bom/models/' + encodeURIComponent(id), body, function (status, data) {
         if (status < 200 || status >= 300) { message('messageBox', errorText(status, data), false); return; }

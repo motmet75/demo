@@ -332,7 +332,17 @@ public class ShopMaterialAuditService {
             throw new IllegalArgumentException("Model does not belong to this company");
         }
         LocalDate effectiveDate = businessDate != null ? businessDate : LocalDate.now();
-        model.setShopAvailableUnitsOverride(units);
+        BigDecimal storedDailyCap = null;
+        if (units != null) {
+            /*
+             * Counter/iPad screens collect "left units" for the rest of today.
+             * The order validator works from a daily cap and subtracts already-sold
+             * quantity, so persist sold-so-far + requested remaining. This keeps
+             * the UI intuitive while preserving automatic countdown after orders.
+             */
+            storedDailyCap = orZero(soldToday(modelId, tenantId, companyId, effectiveDate)).add(units);
+        }
+        model.setShopAvailableUnitsOverride(storedDailyCap);
         model.setShopAvailableUnitsOverrideDate(units != null ? effectiveDate : null);
         modelRepository.save(model);
         Map<UUID, BigDecimal> available = availableByMaterial(tenantId, companyId);
@@ -351,11 +361,12 @@ public class ShopMaterialAuditService {
         BigDecimal dailyLimit = todayOverride(model, businessDate);
         BigDecimal soldToday = dailyLimit != null ? soldToday(model.getId(), tenantId, companyId, businessDate) : null;
         BigDecimal remainingToday = dailyLimit != null ? dailyLimit.subtract(orZero(soldToday)).max(BigDecimal.ZERO) : null;
+        BigDecimal manualRemainingUnits = dailyLimit != null ? remainingToday : null;
         Map<UUID, MaterialRequirement> perUnit = buildModelRequirements(model, tenantId, companyId);
         if (perUnit.isEmpty()) {
             BigDecimal effective = dailyLimit != null ? remainingToday : null;
             return new MenuAvailabilityRow(model.getId(), model.getModelCode(), model.getModelName(),
-                    null, dailyLimit, effective,
+                    null, manualRemainingUnits, effective,
                     false, List.of(), dailyLimit, soldToday, remainingToday);
         }
 
@@ -375,7 +386,7 @@ public class ShopMaterialAuditService {
 
         BigDecimal effective = dailyLimit != null ? remainingToday : calculated;
         return new MenuAvailabilityRow(model.getId(), model.getModelCode(), model.getModelName(),
-                calculated, dailyLimit, effective, true, limits, dailyLimit, soldToday, remainingToday);
+                calculated, manualRemainingUnits, effective, true, limits, dailyLimit, soldToday, remainingToday);
     }
 
     private BigDecimal todayOverride(Model model, LocalDate businessDate) {

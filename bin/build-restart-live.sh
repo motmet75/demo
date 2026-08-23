@@ -92,6 +92,9 @@ echo "Building frontend: $frontend_dir"
 "$frontend_control_script" stop
 cd "$frontend_dir"
 npm run build
+mkdir -p /var/www/html/bom-inventory/ipad4
+cp -a /opt/tuonghoa/demo/bom-frontend/dist/. /var/www/html/bom-inventory/
+cp /opt/tuonghoa/demo/bom-frontend/dist/ipad4/index.html /var/www/html/bom-inventory/ipad4/index.html
 "$frontend_control_script" start
 
 echo "Building backend artifact: $artifact_name"
