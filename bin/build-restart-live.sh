@@ -9,6 +9,8 @@ control_script="$demo_home/bin/demo-live.sh"
 shutdown_timeout=${DEMO_SHUTDOWN_TIMEOUT:-30}
 frontend_dir=${DEMO_FRONTEND_DIR:-$demo_home/bom-frontend}
 frontend_control_script="$demo_home/bin/bom-frontend-live.sh"
+frontend_dist_dir="$frontend_dir/dist"
+frontend_live_dir=/var/www/html/bom-inventory
 
 if [[ ! $shutdown_timeout =~ ^[0-9]+$ ]] || (( shutdown_timeout < 1 )); then
     echo "DEMO_SHUTDOWN_TIMEOUT must be a positive integer." >&2
@@ -92,9 +94,9 @@ echo "Building frontend: $frontend_dir"
 "$frontend_control_script" stop
 cd "$frontend_dir"
 npm run build
-mkdir -p /var/www/html/bom-inventory/ipad4
-cp -a /opt/tuonghoa/demo/bom-frontend/dist/. /var/www/html/bom-inventory/
-cp /opt/tuonghoa/demo/bom-frontend/dist/ipad4/index.html /var/www/html/bom-inventory/ipad4/index.html
+mkdir -p "$frontend_live_dir/ipad4"
+cp -a "$frontend_dist_dir/." "$frontend_live_dir/"
+cp -a "$frontend_dist_dir/ipad4/." "$frontend_live_dir/ipad4/"
 "$frontend_control_script" start
 
 echo "Building backend artifact: $artifact_name"
