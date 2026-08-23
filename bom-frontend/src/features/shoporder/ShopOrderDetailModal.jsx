@@ -905,7 +905,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
               <Box sx={{ flex: 1, minWidth: 260, bgcolor: '#fff8e1', border: '2px solid #f59e0b', borderRadius: 2, p: 1.5 }}>
                 <Typography variant="caption" fontWeight={800} color="#e65100"
                   sx={{ display: 'block', textTransform: 'uppercase', letterSpacing: 0.5, mb: 0.5 }}>
-                  💵 Cash Payment
+                  💵 {t('shopOrder.detail.cashPayment')}
                 </Typography>
                 <Typography fontWeight={900} sx={{ fontSize: 32, color: '#e65100', lineHeight: 1.1, mb: 1 }}>
                   {fmt(total)}
@@ -934,7 +934,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
                 <Box sx={{ bgcolor: '#f0fdf4', border: '2px solid #22c55e', borderRadius: 2, p: 1.5, textAlign: 'center' }}>
                   <Typography variant="caption" fontWeight={800} color="#15803d"
                     sx={{ display: 'block', textTransform: 'uppercase', letterSpacing: 0.5, mb: 0.5 }}>
-                    💳 Scan to Pay
+                    💳 {t('shopOrder.common.scanToPay')}
                   </Typography>
                   <img src={payQrSrc} alt="Payment QR"
                     style={{ width: 180, height: 180, borderRadius: 10, border: '2px solid #bbf7d0', display: 'block' }} />
@@ -985,7 +985,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
               <Box sx={{ flex: 1, minWidth: 220, bgcolor: '#fff8e1', border: '2px solid #f59e0b', borderRadius: 2, p: 1.5 }}>
                 <Typography variant="caption" fontWeight={800} color="#e65100"
                   sx={{ display: 'block', textTransform: 'uppercase', letterSpacing: 0.5, mb: 0.5 }}>
-                  💵 Cash Portion
+                  💵 {t('shopOrder.detail.cashPortion')}
                 </Typography>
                 <Typography fontWeight={900} sx={{ fontSize: 32, color: '#e65100', lineHeight: 1.1, mb: 1.25 }}>
                   {fmt(splitCash)}
@@ -1041,9 +1041,9 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
             {canSwitchToQr && (
               <Tooltip title={t('shopOrder.detail.switchQrTooltip')}>
                 <Button variant="contained" color="success" startIcon={<QrCode2Icon />}
-                  onClick={() => askConfirm({ title: 'Switch to QR Payment?', message: 'Switch this order to Bank QR payment and print the receipt?', confirmLabel: 'Switch & Print', confirmColor: 'success' }, handleSwitchAndPrint)}
+                  onClick={() => askConfirm({ title: t('shopOrder.grid.switchQrConfirmTitle'), message: t('shopOrder.grid.switchQrConfirmMessage'), confirmLabel: t('shopOrder.grid.switchPrint'), confirmColor: 'success' }, handleSwitchAndPrint)}
                   sx={{ textTransform: 'none', fontWeight: 700 }}>
-                  QR + Print
+                  {t('shopOrder.detail.qrPrint')}
                 </Button>
               </Tooltip>
             )}
@@ -1059,9 +1059,9 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
             {canRevertCash && (
               <Tooltip title={t('shopOrder.detail.revertCashTooltip')}>
                 <Button variant="outlined" color="warning" startIcon={<CurrencyExchangeIcon />}
-                  onClick={() => askConfirm({ title: 'Revert to Cash?', message: 'Change this order\'s payment method back to cash?', confirmLabel: '→ Cash', confirmColor: 'warning' }, handleRevertToCash)}
+                  onClick={() => askConfirm({ title: t('shopOrder.grid.revertCashConfirmTitle'), message: t('shopOrder.grid.revertCashConfirmMessage'), confirmLabel: t('shopOrder.grid.switchToCash'), confirmColor: 'warning' }, handleRevertToCash)}
                   sx={{ textTransform: 'none' }}>
-                  → Cash
+                  {t('shopOrder.grid.switchToCash')}
                 </Button>
               </Tooltip>
             )}

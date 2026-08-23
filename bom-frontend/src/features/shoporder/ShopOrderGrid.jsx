@@ -180,6 +180,13 @@ const STATUS_COLOR  = { PENDING: 'default', CONFIRMED: 'primary', PREPARING: 'wa
 const STATUS_LABEL  = { PENDING: 'Placed', CONFIRMED: 'Confirmed', PREPARING: 'Preparing', READY: 'Ready ✓', PICKED_UP: 'Picked Up ✓', COMPLETED: 'Done', CANCELLED: 'Cancelled' }
 const STATUS_I18N_KEY = { PENDING: 'shopOrder.status.pending', CONFIRMED: 'shopOrder.status.confirmed', PREPARING: 'shopOrder.status.preparing', READY: 'shopOrder.status.ready', PICKED_UP: 'shopOrder.status.pickedUp', COMPLETED: 'shopOrder.status.completed', CANCELLED: 'shopOrder.status.cancelled' }
 const localizedStatusLabel = (status, t) => STATUS_I18N_KEY[status] ? t(STATUS_I18N_KEY[status]) : (STATUS_LABEL[status] || status)
+const localizedPaymentStatusLabel = (status, t) => status === 'PAID' ? t('shopOrder.status.paid') : t('shopOrder.status.unpaid')
+const localizedPaymentMethodLabel = (method, t) => {
+  if (method === 'BANK_QR') return t('shopOrder.grid.qrBank')
+  if (method === 'CASH' || !method) return t('shopOrder.common.cash')
+  if (method === 'SPLIT') return t('shopOrder.grid.splitPayment')
+  return method
+}
 const ORDER_STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'PICKED_UP', 'COMPLETED', 'CANCELLED']
 const fmt           = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 const payableAmount = (order) => Math.max(0, Number(order?.totalAmount || 0) - Number(order?.discountAmount || 0))
@@ -555,10 +562,10 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                 </Box>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap', mb: 0.25 }}>
-                    {order.fulfillmentType === 'DINE_IN' && <Tooltip title="Click to change table or tag"><Chip clickable onClick={() => onChangeSeat?.(order)} icon={<TableBarIcon sx={{ fontSize: large ? 17 : 15 }} />} label={order.tableName || order.customerTableTag || '?'} size="small" color="info" variant="outlined" sx={{ height: large ? 30 : 26, fontSize: large ? 15 : 13, fontWeight: 900, '& .MuiChip-label': { px: 1 } }} /></Tooltip>}
+                    {order.fulfillmentType === 'DINE_IN' && <Tooltip title={t('shopOrder.grid.changeSeatTooltip')}><Chip clickable onClick={() => onChangeSeat?.(order)} icon={<TableBarIcon sx={{ fontSize: large ? 17 : 15 }} />} label={order.tableName || order.customerTableTag || '?'} size="small" color="info" variant="outlined" sx={{ height: large ? 30 : 26, fontSize: large ? 15 : 13, fontWeight: 900, '& .MuiChip-label': { px: 1 } }} /></Tooltip>}
                     {order.paymentStatus === 'PAID'
-                      ? <Chip icon={<PaidIcon sx={{ fontSize: 12 }} />} label="PAID" size="small" color="success" sx={{ height: 20, fontSize: 11, fontWeight: 800 }} />
-                      : <Chip label="UNPAID" size="small" color="warning" variant="outlined" sx={{ height: 20, fontSize: 10, fontWeight: 700 }} />
+                      ? <Chip icon={<PaidIcon sx={{ fontSize: 12 }} />} label={localizedPaymentStatusLabel(order.paymentStatus, t)} size="small" color="success" sx={{ height: 20, fontSize: 11, fontWeight: 800 }} />
+                      : <Chip label={localizedPaymentStatusLabel(order.paymentStatus, t)} size="small" color="warning" variant="outlined" sx={{ height: 20, fontSize: 10, fontWeight: 700 }} />
                     }
                     {(() => {
                       const chip = materialAuditChip(order)
@@ -672,14 +679,14 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                         startIcon={<QrCode2Icon sx={{ fontSize: 12 }} />}
                         onClick={() => onSwitchQr(order)}
                         sx={{ textTransform: 'none', fontWeight: 700, fontSize: 11 }}>
-                        → QR Pay
+                        {t('shopOrder.grid.switchToQr')}
                       </Button>
                     )}
                     {(order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT') && (
                       <Button size="small" variant="outlined" color="warning" fullWidth
                         onClick={() => onRevertCash(order)}
                         sx={{ textTransform: 'none', fontWeight: 700, fontSize: 11 }}>
-                        → Cash
+                        {t('shopOrder.grid.switchToCash')}
                       </Button>
                     )}
                   </Box>
@@ -689,7 +696,7 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                     startIcon={<PaidIcon sx={{ fontSize: 14 }} />}
                     onClick={() => onAction('pay', order.id, order.orderNumber)}
                     sx={{ textTransform: 'none', fontWeight: 800, fontSize: 12, bgcolor: '#2e7d32', '&:hover': { bgcolor: '#1b5e20' } }}>
-                    Mark as Paid
+                    {t('shopOrder.grid.markAsPaid')}
                   </Button>
                 )}
                 {status === 'CONFIRMED' && (
@@ -704,7 +711,7 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                       startIcon={<QrCode2Icon sx={{ fontSize: large ? 17 : 13 }} />}
                       onClick={() => onPickupQr(order)}
                       sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>
-                      Pickup QR
+                      {t('shopOrder.grid.pickupQr')}
                     </Button>
                     <Box sx={{ display: 'flex', gap: 0.75 }}>
                       {(order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT')
@@ -716,7 +723,7 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                 )}
                 {status === 'PICKED_UP' && (
                   <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11, textAlign: 'center', display: 'block' }}>
-                    Picked up {order.completedAt ? dateFmt(order.completedAt) : ''}
+                    {t('shopOrder.grid.pickedUpAt', { time: order.completedAt ? dateFmt(order.completedAt) : '' })}
                   </Typography>
                 )}
               </Stack>
@@ -862,14 +869,14 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
             <Chip label={localizedStatusLabel(order.status, t)} color={STATUS_COLOR[order.status] || 'default'} size="small"
               sx={{ height: large ? 24 : 20, fontSize: large ? 12 : 10, fontWeight: 800 }} />
             {order.fulfillmentType && (() => { const m = { DINE_IN: '🪑', PICKUP: '🥡', DELIVERY: '🛵' }; return <Typography sx={{ fontSize: large ? 17 : 13 }}>{m[order.fulfillmentType] || ''}</Typography> })()}
-            {order.fulfillmentType === 'DINE_IN' && <Tooltip title="Bấm để đổi bàn hoặc số tag"><Chip clickable onClick={() => actions.changeSeat(order)} icon={<TableBarIcon sx={{ fontSize: large ? 18 : 16 }} />} label={order.tableName || '?'} size="small" color="info" variant="outlined" sx={{ height: large ? 32 : 28, fontSize: large ? 16 : 14, fontWeight: 900, '& .MuiChip-label': { px: 1 } }} /></Tooltip>}
-            {order.customerTableTag && <Tooltip title="Bấm để đổi bàn hoặc số tag"><Chip clickable onClick={() => actions.changeSeat(order)} icon={<TableBarIcon sx={{ fontSize: large ? 19 : 17 }} />} label={`THẺ ${order.customerTableTag}`} size="small" color="error" sx={{ height: large ? 34 : 29, fontSize: large ? 17 : 14, fontWeight: 900, '& .MuiChip-label': { px: 1 } }} /></Tooltip>}
+            {order.fulfillmentType === 'DINE_IN' && <Tooltip title={t('shopOrder.grid.changeSeatTooltip')}><Chip clickable onClick={() => actions.changeSeat(order)} icon={<TableBarIcon sx={{ fontSize: large ? 18 : 16 }} />} label={order.tableName || '?'} size="small" color="info" variant="outlined" sx={{ height: large ? 32 : 28, fontSize: large ? 16 : 14, fontWeight: 900, '& .MuiChip-label': { px: 1 } }} /></Tooltip>}
+            {order.customerTableTag && <Tooltip title={t('shopOrder.grid.changeSeatTooltip')}><Chip clickable onClick={() => actions.changeSeat(order)} icon={<TableBarIcon sx={{ fontSize: large ? 19 : 17 }} />} label={`THẺ ${order.customerTableTag}`} size="small" color="error" sx={{ height: large ? 34 : 29, fontSize: large ? 17 : 14, fontWeight: 900, '& .MuiChip-label': { px: 1 } }} /></Tooltip>}
             {order.paymentStatus === 'PAID'
-              ? <Chip icon={<PaidIcon sx={{ fontSize: 11, ml: '4px !important' }} />} label="PAID" size="small" color="success" sx={{ height: large ? 24 : 20, fontSize: large ? 12 : 10, fontWeight: 800 }} />
-              : <Chip label="UNPAID" size="small" color="warning" variant="outlined" sx={{ height: large ? 24 : 20, fontSize: large ? 12 : 10 }} />
+              ? <Chip icon={<PaidIcon sx={{ fontSize: 11, ml: '4px !important' }} />} label={localizedPaymentStatusLabel(order.paymentStatus, t)} size="small" color="success" sx={{ height: large ? 24 : 20, fontSize: large ? 12 : 10, fontWeight: 800 }} />
+              : <Chip label={localizedPaymentStatusLabel(order.paymentStatus, t)} size="small" color="warning" variant="outlined" sx={{ height: large ? 24 : 20, fontSize: large ? 12 : 10 }} />
             }
             {order.paymentMethod === 'BANK_QR' && <Chip label="QR" size="small" color="info" sx={{ height: large ? 22 : 18, fontSize: large ? 12 : 10 }} />}
-            {order.paymentMethod === 'SPLIT' && <Chip label="Split" size="small" color="secondary" sx={{ height: large ? 22 : 18, fontSize: large ? 12 : 10 }} />}
+            {order.paymentMethod === 'SPLIT' && <Chip label={t('shopOrder.grid.splitPayment')} size="small" color="secondary" sx={{ height: large ? 22 : 18, fontSize: large ? 12 : 10 }} />}
             {(() => {
               const chip = materialAuditChip(order)
               return chip ? <Chip label={chip.label} size="small" color={chip.color} sx={{ height: large ? 22 : 18, fontSize: large ? 12 : 10, fontWeight: 800 }} /> : null
@@ -1009,14 +1016,14 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
               <Button size="small" variant="outlined" color="success" startIcon={<QrCode2Icon sx={{ fontSize: 12 }} />}
                 onClick={() => actions.switchToQr(order)}
                 sx={{ textTransform: 'none', fontWeight: 700, fontSize: 11, flex: 1, py: 0.25 }}>
-                → QR Pay
+                {t('shopOrder.grid.switchToQr')}
               </Button>
             )}
             {isQr && (
               <Button size="small" variant="outlined" color="warning"
                 onClick={() => actions.revertCash(order)}
                 sx={{ textTransform: 'none', fontSize: 11, flex: isQr && order.paymentMethod !== 'CASH' ? 1 : 0, py: 0.25, px: 1 }}>
-                → Cash
+                {t('shopOrder.grid.switchToCash')}
               </Button>
             )}
           </Box>
@@ -1063,7 +1070,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
                 startIcon={<QrCode2Icon sx={{ fontSize: 12 }} />}
                 onClick={() => actions.pickupQr(order)}
                 sx={{ textTransform: 'none', fontWeight: 700, fontSize: 11, flex: 1, py: 0.5 }}>
-                Pickup QR
+                {t('shopOrder.grid.pickupQr')}
               </Button>
               {isQr
                 ? <Button size="small" variant="contained" color="info" onClick={() => actions.pickup(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: 12, flex: 1 }}>{t('shopOrder.grid.pickedUpCheck')}</Button>
@@ -1089,7 +1096,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
             <Button size="small" variant="outlined" color="success" startIcon={<PaidIcon sx={{ fontSize: 12 }} />}
               onClick={() => actions.markPaid(order)}
               sx={{ textTransform: 'none', fontWeight: 700, fontSize: 11, flex: 1, py: 0.25 }}>
-              Mark Paid
+              {t('shopOrder.grid.markPaid')}
             </Button>
           )}
           {isActive && (
@@ -1216,8 +1223,8 @@ function OrderRowsGrid({ rows, tables, actions, selectedIds, onToggleSelect, dis
                   {order.staffName && <Typography sx={{ fontSize: large ? 12 : 10, color: '#64748b' }} noWrap>by {order.staffName}</Typography>}
                 </Box>
                 <Box component="td" sx={cellSx}>
-                  <Chip label={order.paymentStatus === 'PAID' ? 'PAID' : 'UNPAID'} color={order.paymentStatus === 'PAID' ? 'success' : 'warning'} size="small" sx={{ fontWeight: 800, fontSize: large ? 12 : 10 }} />
-                  <Typography sx={{ fontSize: large ? 12 : 10, color: '#64748b', mt: 0.25 }}>{order.paymentMethod === 'BANK_QR' ? 'QR / Bank' : order.paymentMethod === 'CASH' || !order.paymentMethod ? t('shopOrder.common.cash') : order.paymentMethod}</Typography>
+                  <Chip label={localizedPaymentStatusLabel(order.paymentStatus, t)} color={order.paymentStatus === 'PAID' ? 'success' : 'warning'} size="small" sx={{ fontWeight: 800, fontSize: large ? 12 : 10 }} />
+                  <Typography sx={{ fontSize: large ? 12 : 10, color: '#64748b', mt: 0.25 }}>{localizedPaymentMethodLabel(order.paymentMethod, t)}</Typography>
                 </Box>
                 <Box component="td" sx={{ ...cellSx, textAlign: 'right' }}>
                   <Typography sx={{ fontSize: large ? 17 : 14, fontWeight: 900 }}>{fmt(payableAmount(order))}</Typography>
@@ -1231,7 +1238,7 @@ function OrderRowsGrid({ rows, tables, actions, selectedIds, onToggleSelect, dis
                     {renderPrimaryAction(order)}
                     <Tooltip title={t('shopOrder.grid.viewDetail')}><IconButton size="small" onClick={() => actions.detail(order)}><VisibilityIcon sx={{ fontSize: large ? 20 : 17 }} /></IconButton></Tooltip>
                     <Tooltip title={t('shopOrder.grid.printReceipt')}><IconButton size="small" color="primary" onClick={() => printOrderReceiptTracked(order)}><PrintIcon sx={{ fontSize: large ? 20 : 17 }} /></IconButton></Tooltip>
-                    {order.paymentStatus !== 'PAID' && isActive && <Button size="small" variant="outlined" color="success" onClick={() => actions.markPaid(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 12 : 10 }}>{t('shopOrder.status.paid')}</Button>}
+                    {order.paymentStatus !== 'PAID' && isActive && <Button size="small" variant="outlined" color="success" onClick={() => actions.markPaid(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 12 : 10 }}>{t('shopOrder.grid.markPaid')}</Button>}
                     {order.paymentStatus !== 'PAID' && order.status !== 'CANCELLED' && <Tooltip title={t('shopOrder.grid.paymentQr')}><IconButton size="small" color="primary" onClick={() => actions.payQr(order)}><QrCode2Icon sx={{ fontSize: large ? 20 : 17 }} /></IconButton></Tooltip>}
                     {isActive && <Button size="small" color="error" onClick={() => actions.cancel(order)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: large ? 12 : 10 }}>{t('shopOrder.edit.cancel')}</Button>}
                   </Box>
@@ -1653,7 +1660,7 @@ export default function ShopOrderGrid() {
         const serviceCalls = unseen.filter(c => c.reason !== STAFF_CALL_REASON_NEW_ORDER)
         if (serviceCalls.length) {
           const now = Date.now()
-          setCustomerEditHistory(prev => [...serviceCalls.map((call, index) => ({ id: `call_${call.id}_${now}_${index}`, type: 'shop_qr', orderId: call.orderId || null, orderNumber: call.orderNumber ?? '', customerName: call.tableName ? `Table ${call.tableName}` : 'Customer', detail: staffCallReasonLabel(call.reason), at: call.createdAt || now })), ...prev].slice(0, 50))
+          setCustomerEditHistory(prev => [...serviceCalls.map((call, index) => ({ id: `call_${call.id}_${now}_${index}`, type: 'shop_qr', orderId: call.orderId || null, orderNumber: call.orderNumber ?? '', customerName: call.tableName ? t('shopOrder.common.tableValue', { value: call.tableName }) : t('common.customer'), detail: staffCallReasonLabel(call.reason), at: call.createdAt || now })), ...prev].slice(0, 50))
         }
 
         if (newOrderCalls.length) {
@@ -1760,7 +1767,7 @@ export default function ShopOrderGrid() {
       'ready':                 { title: 'Mark as Ready?',       message: `Mark order #${orderNum} as ready for pickup?`,      confirmLabel: 'Mark Ready',      confirmColor: 'success' },
       'complete':              { title: 'Complete Order?',      message: `Complete order #${orderNum}?`,                     confirmLabel: 'Complete',        confirmColor: 'success' },
       'pickup':                { title: 'Mark as Picked Up?',   message: 'Confirm customer has picked up this order?',        confirmLabel: 'Picked Up',       confirmColor: 'primary' },
-      'pay':                   { title: 'Mark as Paid?',        message: `Mark order #${orderNum} as paid?`,                 confirmLabel: 'Mark Paid',       confirmColor: 'success' },
+      'pay':                   { title: t('shopOrder.grid.markAsPaidConfirmTitle'), message: t('shopOrder.grid.markAsPaidConfirmMessage', { order: orderNum }), confirmLabel: t('shopOrder.grid.markPaid'), confirmColor: 'success' },
     }
     const cfg = configs[type]
     if (!cfg) return
@@ -1880,7 +1887,7 @@ export default function ShopOrderGrid() {
     const tableId = fulfillmentType === 'DINE_IN' && !noTable ? (match?.id || order.tableId || null) : null
     const tag = fulfillmentType === 'DINE_IN' && !noTable ? (clean || null) : null
     try { await applyOrderResult(await setOrderSeat(order.id, tableId, tag, fulfillmentType), order.id, 'Failed to change fulfillment/table/tag') }
-    catch (e) { setError(e.message || 'Failed to change table/tag') }
+    catch (e) { setError(e.message || t('shopOrder.grid.changeSeatFailed')) }
   }
 
   const handlePrintTrack = async (row) => {
@@ -1938,11 +1945,11 @@ export default function ShopOrderGrid() {
     ready:      (row) => askConfirm({ title: 'Mark as Ready?', message: `Mark order #${row.orderNumber ?? row.orderCode} as ready?`, confirmLabel: 'Mark Ready', confirmColor: 'success' }, () => act(readyShopOrder, row.id, () => broadcastReady())),
     complete:   (row) => askConfirm({ title: 'Complete Order?', message: `Complete order #${row.orderNumber ?? row.orderCode}?`, confirmLabel: 'Complete', confirmColor: 'success' }, () => act(completeShopOrder, row.id)),
     pickup:     (row) => askConfirm({ title: 'Mark as Picked Up?', message: 'Confirm customer has picked up this order?', confirmLabel: 'Picked Up', confirmColor: 'primary' }, () => act(pickupShopOrder, row.id)),
-    markPaid:   (row) => askConfirm({ title: 'Mark as Paid?', message: `Mark order #${row.orderNumber ?? row.orderCode} as paid?`, confirmLabel: 'Mark Paid', confirmColor: 'success' }, () => act(markOrderPaid, row.id)),
+    markPaid:   (row) => askConfirm({ title: t('shopOrder.grid.markAsPaidConfirmTitle'), message: t('shopOrder.grid.markAsPaidConfirmMessage', { order: row.orderNumber ?? row.orderCode }), confirmLabel: t('shopOrder.grid.markPaid'), confirmColor: 'success' }, () => act(markOrderPaid, row.id)),
     cancel:     handleCancel,
     revert:     (row) => askConfirm({ title: 'Hoàn tác đơn?', message: `Đưa đơn #${row.orderNumber ?? row.orderCode} về bước trước?`, confirmLabel: 'Hoàn tác', confirmColor: 'warning' }, () => act(revertShopOrder, row.id)),
-    switchToQr: (row) => askConfirm({ title: 'Switch to QR payment?', message: 'Switch this order to Bank QR and print receipt?', confirmLabel: 'Switch & Print', confirmColor: 'success' }, () => handleSwitchAndPrint(row)),
-    revertCash: (row) => askConfirm({ title: 'Revert to Cash?', message: 'Change payment method back to cash?', confirmLabel: '→ Cash', confirmColor: 'warning' }, () => handleRevertToCash(row)),
+    switchToQr: (row) => askConfirm({ title: t('shopOrder.grid.switchQrConfirmTitle'), message: t('shopOrder.grid.switchQrConfirmMessage'), confirmLabel: t('shopOrder.grid.switchPrint'), confirmColor: 'success' }, () => handleSwitchAndPrint(row)),
+    revertCash: (row) => askConfirm({ title: t('shopOrder.grid.revertCashConfirmTitle'), message: t('shopOrder.grid.revertCashConfirmMessage'), confirmLabel: t('shopOrder.grid.switchToCash'), confirmColor: 'warning' }, () => handleRevertToCash(row)),
     pickupQr:    handlePickupQr,
     showTrackQr: handleShowTrackQr,
     mergeBills:  (row) => setMergeOrder(row),
@@ -2212,18 +2219,18 @@ export default function ShopOrderGrid() {
             <>
             {(visibleOrderTotals.tables.length > 0 || visibleOrderTotals.separateCount > 0) && (
               <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', px: 1.5, pt: 1.25 }}>
-                <Button size="small" variant={tableFilter ? 'outlined' : 'contained'} onClick={() => setTableFilter('')} sx={{ textTransform: 'none', fontWeight: 800 }}>Tất cả</Button>
+                <Button size="small" variant={tableFilter ? 'outlined' : 'contained'} onClick={() => setTableFilter('')} sx={{ textTransform: 'none', fontWeight: 800 }}>{t('common.all')}</Button>
                 {paymentFilter && <Chip label={`${paymentFilter === 'UNPAID' ? t('common.unpaid') : t('common.paid')} ×`} color={paymentFilter === 'UNPAID' ? 'warning' : 'success'} onClick={() => { setPaymentFilter(''); writeShopOrderSessionValue(SHOP_ORDER_PAYMENT_FILTER_SESSION_KEY, '') }} sx={{ fontWeight: 800 }} />}
                 {visibleOrderTotals.tables.map(table => (
                   <Box component="button" type="button" onClick={() => setTableFilter(table.key)} key={table.key} sx={{ textAlign: 'left', cursor: 'pointer', px: 1.25, py: 0.75, border: '2px solid', borderColor: tableFilter === table.key ? 'primary.main' : '#90caf9', borderRadius: 1, bgcolor: tableFilter === table.key ? '#bbdefb' : '#e3f2fd' }}>
-                    <Typography variant="caption" fontWeight={800}>Table {table.label} · {table.count} order{table.count === 1 ? '' : 's'}</Typography>
-                    <Typography fontWeight={900} color="primary.dark">Table total: {fmt(table.total)}</Typography>
+                    <Typography variant="caption" fontWeight={800}>{t('shopOrder.grid.tableOrderSummary', { table: table.label, count: table.count })}</Typography>
+                    <Typography fontWeight={900} color="primary.dark">{t('shopOrder.grid.tableTotal')}: {fmt(table.total)}</Typography>
                   </Box>
                 ))}
                 {visibleOrderTotals.separateCount > 0 && (
                   <Box component="button" type="button" onClick={() => setTableFilter('__SEPARATE__')} sx={{ textAlign: 'left', cursor: 'pointer', px: 1.25, py: 0.75, border: '2px solid', borderColor: tableFilter === '__SEPARATE__' ? 'warning.main' : '#ffcc80', borderRadius: 1, bgcolor: tableFilter === '__SEPARATE__' ? '#ffe0b2' : '#fff3e0' }}>
-                    <Typography variant="caption" fontWeight={800}>Takeaway / separate · {visibleOrderTotals.separateCount} order{visibleOrderTotals.separateCount === 1 ? '' : 's'}</Typography>
-                    <Typography fontWeight={900} color="warning.dark">Grand total: {fmt(visibleOrderTotals.separateTotal)}</Typography>
+                    <Typography variant="caption" fontWeight={800}>{t('shopOrder.grid.takeawaySeparateSummary', { count: visibleOrderTotals.separateCount })}</Typography>
+                    <Typography fontWeight={900} color="warning.dark">{t('shopOrder.grid.grandTotal')}: {fmt(visibleOrderTotals.separateTotal)}</Typography>
                   </Box>
                 )}
               </Box>
@@ -2381,7 +2388,7 @@ export default function ShopOrderGrid() {
                   </IconButton>
                 </Box>
                 <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 0.75 }}>
-                  {(call.tableName || call.tableId) && <Chip label={`Table ${call.tableName || call.tableId}`} size="small" color="warning" sx={{ fontWeight: 700, height: 20, fontSize: 11 }} />}
+                  {(call.tableName || call.tableId) && <Chip label={t('shopOrder.common.tableValue', { value: call.tableName || call.tableId })} size="small" color="warning" sx={{ fontWeight: 700, height: 20, fontSize: 11 }} />}
                   {call.dailySeq != null && <Chip label={`STT ${call.dailySeq}`} size="small" color="info" sx={{ fontWeight: 700, height: 20, fontSize: 11 }} />}
                   {(call.orderNumber != null || call.orderCode) && <Chip label={call.orderNumber != null ? `Order #${call.orderNumber}` : call.orderCode} size="small" color="primary" sx={{ fontWeight: 700, height: 20, fontSize: 11 }} />}
                   <Chip label={staffCallReasonLabel(call.reason)} size="small" sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: '#ff5722', color: '#fff' }} />
@@ -2538,7 +2545,7 @@ export default function ShopOrderGrid() {
               {qrUrl ? (
                 <Box sx={{ textAlign: 'center' }}>
                   <Typography variant="subtitle2" fontWeight={700} color="#15803d" sx={{ mb: 1 }}>
-                    Scan to Pay · VietQR
+                    {t('shopOrder.grid.scanToPayVietQr')}
                   </Typography>
                   <Box sx={{ display: 'inline-block', p: 1.5, bgcolor: '#fff', borderRadius: 2, border: '2px solid #e3f2fd', boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }}>
                     <img src={qrUrl} alt="VietQR payment"
@@ -2549,7 +2556,7 @@ export default function ShopOrderGrid() {
                   </Typography>
                   {payQrOrder.orderNumber && (
                     <Typography variant="body2" fontWeight={700} color="text.secondary">
-                      Order #{payQrOrder.orderNumber}
+                      {t('shopOrder.grid.orderNumber', { number: payQrOrder.orderNumber })}
                     </Typography>
                   )}
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
@@ -2614,15 +2621,15 @@ export default function ShopOrderGrid() {
         return (
           <Dialog open onClose={() => setPickupQrOrder(null)} maxWidth="xs" fullWidth>
             <DialogTitle sx={{ fontWeight: 800 }}>
-              Pickup QR — Order #{orderNumber ?? orderCode}
+              {t('shopOrder.grid.pickupQrTitle', { order: orderNumber ?? orderCode })}
             </DialogTitle>
             <DialogContent sx={{ textAlign: 'center', pb: 1 }}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Customer scans this QR → counter screen shows payment QR automatically
+                {t('shopOrder.grid.pickupQrHelp')}
               </Typography>
               {qrBase64 && (
                 <Box sx={{ bgcolor: '#fff', display: 'inline-block', p: 1, borderRadius: 2, border: '2px solid #e0e0e0', mb: 2 }}>
-                  <img src={`data:image/png;base64,${qrBase64}`} alt="Pickup QR" style={{ width: 220, height: 220, display: 'block' }} />
+                  <img src={`data:image/png;base64,${qrBase64}`} alt={t('shopOrder.grid.pickupQr')} style={{ width: 220, height: 220, display: 'block' }} />
                 </Box>
               )}
               <TextField
@@ -2633,7 +2640,7 @@ export default function ShopOrderGrid() {
                 sx={{ mb: 1 }}
               />
               <Button variant="outlined" size="small" onClick={() => navigator.clipboard.writeText(pickupUrl)} startIcon={<ContentCopyIcon />}>
-                Copy Link
+                {t('shopOrder.grid.copyLink')}
               </Button>
             </DialogContent>
             <DialogActions>
@@ -2885,7 +2892,7 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
                     onClick={handleSwitchAllToQr}
                     disabled={!!switching}
                     sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>
-                    → QR Pay ({switchableToQr.length})
+                    {t('shopOrder.grid.switchToQrCount', { count: switchableToQr.length })}
                   </Button>
                 )}
                 {switchableToCash.length > 0 && (
@@ -2894,7 +2901,7 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
                     onClick={handleSwitchAllToCash}
                     disabled={!!switching}
                     sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>
-                    → Cash ({switchableToCash.length})
+                    {t('shopOrder.grid.switchToCashCount', { count: switchableToCash.length })}
                   </Button>
                 )}
               </Box>
@@ -2921,10 +2928,10 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
                         textDecoration: isCancelled ? 'line-through' : 'none', color: '#334155' }}>
                         {num}
                       </Typography>
-                      <Chip label={order.status} color={STATUS_CHIP[order.status] || 'default'}
+                      <Chip label={localizedStatusLabel(order.status, t)} color={STATUS_CHIP[order.status] || 'default'}
                         size="small" sx={{ fontWeight: 700, fontSize: 10 }} />
                       {order.tableName && (
-                        <Chip label={`Table ${order.tableName}`} size="small" variant="outlined" sx={{ fontSize: 10 }} />
+                        <Chip label={t('shopOrder.common.tableValue', { value: order.tableName })} size="small" variant="outlined" sx={{ fontSize: 10 }} />
                       )}
                       {isQr && !isCancelled && (
                         <Chip label="💳 QR" size="small" color="success" sx={{ fontWeight: 800, fontSize: 10 }} />
@@ -2935,7 +2942,7 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
                         {fmtAmt(payableAmount(order))}
                       </Typography>
                       {order.paymentStatus === 'PAID' && (
-                        <Chip label="Paid" color="success" size="small" sx={{ fontWeight: 700, fontSize: 10 }} />
+                        <Chip label={t('shopOrder.status.paid')} color="success" size="small" sx={{ fontWeight: 700, fontSize: 10 }} />
                       )}
                     </Box>
                     <Box sx={{ px: 2, py: 0.75 }}>
@@ -2986,12 +2993,12 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
       </DialogContent>
 
       <DialogActions sx={{ px: 3, pb: 2, gap: 1, flexWrap: 'wrap' }}>
-        <Button onClick={handleClose} disabled={closing} sx={{ textTransform: 'none' }}>{closing ? 'Closing...' : 'Close'}</Button>
+        <Button onClick={handleClose} disabled={closing} sx={{ textTransform: 'none' }}>{closing ? t('shopOrder.grid.closing') : t('common.close')}</Button>
         <Button variant="outlined" startIcon={<PrintIcon />}
           onClick={() => printCombinedReceiptTracked(orders)}
           disabled={loading || !orders.length}
           sx={{ textTransform: 'none', fontWeight: 700 }}>
-          Print
+          {t('common.print')}
         </Button>
         {/* Print receipt + QR together — only when there's a QR pay URL */}
         {payQrUrl && (
@@ -3000,7 +3007,7 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
             onClick={handlePrintWithQr}
             disabled={loading || !orders.length}
             sx={{ textTransform: 'none', fontWeight: 700 }}>
-            Print + QR
+            {t('shopOrder.grid.printPlusQr')}
           </Button>
         )}
         {unpaidOrders.length > 0 && (
@@ -3008,7 +3015,7 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
             startIcon={paying ? <CircularProgress size={16} color="inherit" /> : <PaidIcon />}
             onClick={handleMarkAllPaid} disabled={paying}
             sx={{ textTransform: 'none', fontWeight: 700 }}>
-            Mark All Paid ({unpaidOrders.length})
+            {t('shopOrder.grid.markAllPaid', { count: unpaidOrders.length })}
           </Button>
         )}
       </DialogActions>
