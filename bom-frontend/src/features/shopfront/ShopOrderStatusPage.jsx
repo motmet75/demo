@@ -52,7 +52,7 @@ function ShareTrackingButton({ orderNumber, fullWidth = true }) {
   const ct = (key, vars) => shopCustomerText(language, key, vars)
   const [copied, setCopied] = useState(false)
   const share = async () => {
-    const url = window.location.href
+    const url = languageAwareCurrentUrl(language)
     const title = orderNumber ? `${ct('tracking.order')} #${orderNumber}` : 'SAN Coffee and Tea'
     const text = `${ct('tracking.share')}: ${title}`
     try {
@@ -75,6 +75,16 @@ function ShareTrackingButton({ orderNumber, fullWidth = true }) {
       {copied ? ct('tracking.copied') : ct('tracking.share')}
     </Button>
   )
+}
+
+function languageAwareCurrentUrl(language) {
+  try {
+    const url = new URL(window.location.href)
+    if (language) url.searchParams.set('lang', language)
+    return url.toString()
+  } catch {
+    return window.location.href
+  }
 }
 
 function SwitchToBankPaymentButton({ order }) {
@@ -498,7 +508,7 @@ function OrderCard({ order, highlighted, token, itemName, fmtLocal, optionText }
   const isQrUrl   = order.paymentQr?.startsWith('https://')
 
   const goEdit = () => {
-    window.location.href = menuUrl({ t: token, editOrder: order.orderCode })
+    window.location.href = menuUrl({ t: token, editOrder: order.orderCode, lang: language })
   }
 
   // Group items: roots + children
@@ -818,7 +828,7 @@ function TokenSessionView({ token, highlightCode, itemName, fmtLocal }) {
             variant="contained"
             fullWidth
             startIcon={<AddShoppingCartIcon />}
-            onClick={() => { window.location.href = menuUrl({ t: token }) }}
+            onClick={() => { window.location.href = menuUrl({ t: token, lang: language }) }}
             sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none', py: 1.25 }}>
             {hasPending ? ct('tracking.addMore') : ct('tracking.newOrder')}
           </Button>
@@ -840,19 +850,24 @@ export default function ShopOrderStatusPage() {
   const navigate = useNavigate()
   const { user, loading: authLoading } = useAuth()
   const { setTenantId, setCompanyId } = useAppContext()
-  const { language, t, formatMoney } = useI18n()
+  const { language, setLanguage, t, formatMoney } = useI18n()
   const fmtLocal = (n) => n != null ? formatMoney(n, 'VND') : ''
   const itemName = (item) => localizedModelName(item, language)
   const ct = useCallback((key, vars) => shopCustomerText(language, key, vars), [language])
   const { orderCode } = useParams()
   const [searchParams] = useSearchParams()
   const token = searchParams.get('t')
+  const rawLanguage = searchParams.get('lang') || searchParams.get('language') || ''
 
   const [order, setOrder] = useState(null)
   const [error, setError] = useState('')
   const [optionsByModel, setOptionsByModel] = useState({})
   const previousOrderRef = useRef(null)
   const optionText = useCallback((item) => localizedSelectedOptions(item.modelId, item.selectedOptions, optionsByModel, language), [language, optionsByModel])
+
+  useEffect(() => {
+    if (rawLanguage) setLanguage(rawLanguage)
+  }, [rawLanguage, setLanguage])
 
   // A shared confirmation link remains customer-facing for anonymous visitors.
   // Signed-in shop users should work with the order in the BOM order grid.
@@ -911,7 +926,7 @@ export default function ShopOrderStatusPage() {
   if (error && !order) return <Alert severity="error" sx={{ m: 2 }}>{error}</Alert>
 
   const goEditNoToken = (ord) => {
-    const parts = { editOrder: ord.orderCode }
+    const parts = { editOrder: ord.orderCode, lang: language }
     if (ord.sourceToken) {
       parts.t = ord.sourceToken
     } else {

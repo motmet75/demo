@@ -456,13 +456,15 @@ public class ShopOrderController {
                                          @RequestHeader(value = "X-Company-Id", required = false) String hCompany,
                                          @RequestParam(required = false) String status,
                                          @RequestParam(required = false) Boolean active,
+                                         @RequestParam(required = false) Instant from,
+                                         @RequestParam(required = false) Instant to,
                                          HttpServletRequest request) {
         UUID tId = resolve(tenantId, hTenant);
         UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
         Object orders = Boolean.TRUE.equals(active)
                 ? shopOrderService.listActiveOrders(tId, cId)
-                : shopOrderService.listOrders(tId, cId, status);
+                : shopOrderService.listOrders(tId, cId, status, from, to);
         return staffOrdersResponse(orders, recordCounterPublicIp(cId, request));
     }
     @GetMapping("/shop/staff/orders/by-token")

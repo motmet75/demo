@@ -1,7 +1,8 @@
 import { apiFetchJson, apiFetchJsonNoContext } from './client'
 
 function qs(params) {
-  return '?' + new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v != null))).toString()
+  const search = new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''))).toString()
+  return search ? `?${search}` : ''
 }
 
 function withCounterIpMeta(result) {
@@ -139,8 +140,12 @@ export function generateQueueQr(validDays = 30, language = 'vi') {
   })
 }
 
-export async function fetchShopOrders(status) {
-  return withCounterIpMeta(await apiFetchJson('/shop/staff/orders' + (status ? qs({ status }) : '')))
+export async function fetchShopOrders(status, range = {}) {
+  return withCounterIpMeta(await apiFetchJson('/shop/staff/orders' + qs({
+    status,
+    from: range?.from || null,
+    to: range?.to || null,
+  })))
 }
 
 export function fetchAllowedPublicIps() {

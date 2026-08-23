@@ -99,6 +99,22 @@ function readShopOrderSessionValue(key, fallback) {
 function writeShopOrderSessionValue(key, value) {
   try { sessionStorage.setItem(key, value) } catch { /* browser storage may be blocked */ }
 }
+function localDateTimeInputValue(date) {
+  const p = value => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}T${p(date.getHours())}:${p(date.getMinutes())}`
+}
+function todayOrderRange() {
+  const from = new Date()
+  from.setHours(0, 0, 0, 0)
+  const to = new Date(from)
+  to.setDate(to.getDate() + 1)
+  return { from: localDateTimeInputValue(from), to: localDateTimeInputValue(to) }
+}
+function datetimeLocalToIso(value) {
+  if (!value) return null
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date.toISOString()
+}
 function readShopOrderStatusFilters() {
   const fallback = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY']
   try {
@@ -1390,6 +1406,7 @@ export default function ShopOrderGrid() {
   const [error, setError]               = useState('')
   const [statusFilters, setStatusFilters] = useState(readShopOrderStatusFilters)
   const [paymentFilter, setPaymentFilter] = useState(() => readShopOrderSessionValue(SHOP_ORDER_PAYMENT_FILTER_SESSION_KEY, ''))
+  const [{ from: orderFrom, to: orderTo }, setOrderRange] = useState(todayOrderRange)
   const [tableFilter, setTableFilter]     = useState('')
   const [detailOrder, setDetailOrder]   = useState(null)
   const [resetOpen, setResetOpen]       = useState(false)
@@ -1449,6 +1466,10 @@ export default function ShopOrderGrid() {
   const knownEditingRef = React.useRef(new Map())
   const knownSeatRef = React.useRef(new Map())
   const orderPollReadyRef = React.useRef(false)
+  const orderRangeParams = useMemo(() => ({
+    from: datetimeLocalToIso(orderFrom),
+    to: datetimeLocalToIso(orderTo),
+  }), [orderFrom, orderTo])
   const rememberOrders = useCallback((orders) => {
     ;(Array.isArray(orders) ? orders : []).forEach(order => {
       if (order?.id) {
@@ -1566,7 +1587,7 @@ export default function ShopOrderGrid() {
   const load = useCallback(async () => {
     setLoading(true); setError('')
     try {
-      const result = await fetchShopOrders(null)
+      const result = await fetchShopOrders(null, orderRangeParams)
       const { data } = result
       const list = Array.isArray(data) ? data : []
       setRows(list.filter(shouldShowInRows))
@@ -1574,13 +1595,13 @@ export default function ShopOrderGrid() {
       orderPollReadyRef.current = true
     } catch { setError('Failed to load orders') }
     setLoading(false)
-  }, [rememberOrders, shouldShowInRows])
+  }, [orderRangeParams, rememberOrders, shouldShowInRows])
 
   const loadBoard = useCallback(async () => {
     try {
       const [activeRes, pickedRes] = await Promise.all([
         fetchActiveOrders(),
-        fetchShopOrders('PICKED_UP'),
+        fetchShopOrders('PICKED_UP', orderRangeParams),
       ])
       const all = [
         ...(Array.isArray(activeRes.data) ? activeRes.data : []),
@@ -1589,7 +1610,7 @@ export default function ShopOrderGrid() {
       setBoardRows(all)
       rememberOrders(all)
     } catch { /* silent */ }
-  }, [rememberOrders])
+  }, [orderRangeParams, rememberOrders])
 
   useEffect(() => { load() }, [load])
   useEffect(() => { loadBoard() }, [loadBoard])
@@ -1658,7 +1679,7 @@ export default function ShopOrderGrid() {
     let cancelled = false
     const pollOrders = async () => {
       try {
-        const { res, data } = await fetchShopOrders(null)
+        const { res, data } = await fetchShopOrders(null, orderRangeParams)
         if (cancelled || !res.ok) return
         applyOrderSnapshot(data, { notify: true })
       } catch { /* silent */ }
@@ -1666,7 +1687,7 @@ export default function ShopOrderGrid() {
     pollOrders()
     const id = setInterval(pollOrders, ORDER_POLL_MS)
     return () => { cancelled = true; clearInterval(id) }
-  }, [applyOrderSnapshot])
+  }, [applyOrderSnapshot, orderRangeParams])
 
   useEffect(() => {
     if (!newOrderNotice) return undefined
@@ -2020,7 +2041,7 @@ export default function ShopOrderGrid() {
 
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {/* Toolbar */}
-        <Box sx={{ px: { xs: 1, sm: 1.5 }, py: { xs: 0.5, sm: 1 }, display: 'flex', gap: { xs: 0.75, sm: 1 }, alignItems: 'center', flexWrap: { xs: 'nowrap', sm: 'wrap' }, borderBottom: '1px solid #e0e0e0', flexShrink: 0 }}>
+        <Box sx={{ px: { xs: 1, sm: 1.5 }, py: { xs: 0.5, sm: 1 }, display: 'flex', gap: { xs: 0.75, sm: 1 }, alignItems: 'center', flexWrap: 'wrap', borderBottom: '1px solid #e0e0e0', flexShrink: 0 }}>
           <TextField select label={t('common.status')} value={statusFilters}
             onChange={e => {
               const values = typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value
@@ -2057,6 +2078,22 @@ export default function ShopOrderGrid() {
             <MenuItem value="UNPAID">{t('common.unpaid')}</MenuItem>
             <MenuItem value="PAID">{t('common.paid')}</MenuItem>
           </TextField>
+          <TextField label={t('shopOrder.grid.fromTime')} type="datetime-local" value={orderFrom}
+            onChange={e => setOrderRange(prev => ({ ...prev, from: e.target.value }))}
+            size="small" InputLabelProps={{ shrink: true }}
+            sx={{ width: { xs: 162, sm: 205 }, flexShrink: 0 }} />
+          <TextField label={t('shopOrder.grid.toTime')} type="datetime-local" value={orderTo}
+            onChange={e => setOrderRange(prev => ({ ...prev, to: e.target.value }))}
+            size="small" InputLabelProps={{ shrink: true }}
+            sx={{ width: { xs: 162, sm: 205 }, flexShrink: 0 }} />
+          <Button onClick={() => setOrderRange(todayOrderRange())} variant="outlined" size="small"
+            sx={{ textTransform: 'none', fontWeight: 800, minWidth: 70 }}>
+            {t('shopOrder.grid.today')}
+          </Button>
+          <Button onClick={() => setOrderRange({ from: '', to: '' })} variant="text" size="small"
+            sx={{ textTransform: 'none', fontWeight: 800, minWidth: 82 }}>
+            {t('shopOrder.grid.allTime')}
+          </Button>
           <Button startIcon={<RefreshIcon />} onClick={reload} variant="outlined" size="small"
             sx={{ minWidth: { xs: 40, sm: 64 }, px: { xs: 1, sm: 1.25 }, '& .MuiButton-startIcon': { mr: { xs: 0, sm: 1 } } }}>
             <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>{t('shopOrder.grid.refresh')}</Box>

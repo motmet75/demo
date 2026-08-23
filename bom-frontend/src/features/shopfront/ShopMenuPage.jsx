@@ -594,7 +594,7 @@ function parseOpts(selectedOptions) {
 export default function ShopMenuPage() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
-  const { language, t, formatMoney } = useI18n()
+  const { language, setLanguage, t, formatMoney } = useI18n()
   const fmt = useCallback((n) => n != null ? formatMoney(n, 'VND') : '', [formatMoney])
   const cText = useCallback((key, vars) => shopCustomerText(language, key, vars), [language])
   const modelName = useCallback((model) => localizedModelName(model, language), [language])
@@ -607,6 +607,7 @@ export default function ShopMenuPage() {
   const rawCompanyId  = params.get('companyId')
   const rawTableId    = params.get('tableId')
   const rawCustomerName = params.get('customerName') || ''
+  const rawLanguage   = params.get('lang') || params.get('language') || ''
   const seqParam      = params.get('seq')
   const editOrderCode = params.get('editOrder')
 
@@ -688,14 +689,19 @@ export default function ShopMenuPage() {
     setActiveCategory(null)
   }, [language])
 
+  useEffect(() => {
+    if (rawLanguage) setLanguage(rawLanguage)
+  }, [rawLanguage, setLanguage])
+
   const openTrackingScreen = useCallback((order) => {
     if (!order?.orderCode) return
     const sessionToken = ctx?.tokenType === 'QUEUE_QR' ? null : (tokenParam || order.sourceToken)
-    const query = sessionToken
-      ? `?t=${encodeURIComponent(sessionToken)}`
-      : ''
+    const queryParams = new URLSearchParams()
+    if (sessionToken) queryParams.set('t', sessionToken)
+    if (language) queryParams.set('lang', language)
+    const query = queryParams.toString() ? `?${queryParams.toString()}` : ''
     navigate(`/shop/order/${encodeURIComponent(order.orderCode)}${query}`)
-  }, [ctx?.tokenType, navigate, tokenParam])
+  }, [ctx?.tokenType, language, navigate, tokenParam])
 
   const formatSelectedOptions = useCallback((modelId, selectedOptions) => {
     return localizedSelectedOptions(modelId, selectedOptions, optionsByModel, language)

@@ -504,9 +504,13 @@ public class ShopOrderService {
 
     @Transactional(readOnly = true)
     public List<ShopOrderResponseDto> listOrders(UUID tenantId, UUID companyId, String status) {
-        List<ShopOrder> orders = status != null && !status.isBlank()
-                ? shopOrderRepository.findAllByTenantIdAndCompanyIdAndStatusOrderByCreatedAtDesc(tenantId, companyId, status)
-                : shopOrderRepository.findAllByTenantIdAndCompanyIdOrderByCreatedAtDesc(tenantId, companyId);
+        return listOrders(tenantId, companyId, status, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ShopOrderResponseDto> listOrders(UUID tenantId, UUID companyId, String status, Instant fromTime, Instant toTime) {
+        String normalizedStatus = status != null && !status.isBlank() ? status : null;
+        List<ShopOrder> orders = shopOrderRepository.searchStaffOrders(tenantId, companyId, normalizedStatus, fromTime, toTime);
         return orders.stream().map(this::dto).toList();
     }
 

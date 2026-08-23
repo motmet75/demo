@@ -134,7 +134,23 @@ const LOOSE_OPTION_LABELS = {
 export function localizedLooseLabel(value, language) {
   const text = String(value || '')
   const code = normalizeLanguage(language)
-  return LOOSE_OPTION_LABELS[code]?.[text] || (code === 'vi' ? text : LOOSE_OPTION_LABELS.en[text]) || text
+  const normalizedText = normalizeLooseOptionKey(text)
+  const lookup = (labels) => {
+    if (!labels) return null
+    if (labels[text]) return labels[text]
+    const found = Object.entries(labels).find(([key]) => normalizeLooseOptionKey(key) === normalizedText)
+    return found ? found[1] : null
+  }
+  return lookup(LOOSE_OPTION_LABELS[code]) || (code === 'vi' ? text : lookup(LOOSE_OPTION_LABELS.en)) || text
+}
+
+function normalizeLooseOptionKey(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 export function localizedTableName(table, language) {
