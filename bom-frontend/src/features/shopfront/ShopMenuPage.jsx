@@ -608,6 +608,7 @@ export default function ShopMenuPage() {
   const rawTableId    = params.get('tableId')
   const rawCustomerName = params.get('customerName') || ''
   const rawLanguage   = params.get('lang') || params.get('language') || ''
+  const rawSearchQuery = params.get('search') || params.get('q') || params.get('item') || ''
   const seqParam      = params.get('seq')
   const editOrderCode = params.get('editOrder')
 
@@ -642,7 +643,7 @@ export default function ShopMenuPage() {
   })
 
   // ── New UI state ───────────────────────────────────────────────────────
-  const [searchQuery, setSearchQuery]         = useState('')
+  const [searchQuery, setSearchQuery]         = useState(rawSearchQuery)
   const [gridView, setGridView]               = useState(false)
   const [displaySize, setDisplaySize]         = useState(() => readShopMenuPref(SHOP_MENU_DISPLAY_SIZE_PREF, 'normal'))
   const [highContrast, setHighContrast]       = useState(() => readShopMenuPref(SHOP_MENU_CONTRAST_PREF, 'false') === 'true')
@@ -661,6 +662,13 @@ export default function ShopMenuPage() {
   const [headerH, setHeaderH] = useState(165)
   const categoryRefs = useRef({})
   const staffCallKey = staffCallStorageKey(tokenParam, ctx)
+
+  useEffect(() => {
+    if (!rawSearchQuery) return
+    setSearchQuery(rawSearchQuery)
+    setActiveCategory(null)
+    window.setTimeout(() => searchInputRef.current?.focus?.(), 150)
+  }, [rawSearchQuery])
 
   const [cart, setCart] = useState({})
   const [sideForm, setSideForm] = useState({})
