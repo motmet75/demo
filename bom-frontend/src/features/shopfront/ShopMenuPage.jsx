@@ -58,7 +58,8 @@ import VoucherQrScanDialog from '../shoporder/VoucherQrScanDialog'
 import LanguageSelector from '../../components/LanguageSelector'
 import { ORDERING_LANGUAGE_CODES } from '../../i18n/translations'
 import { useI18n } from '../../i18n/I18nContext'
-import { localizedCategory, localizedChoiceLabel, localizedGroupName, localizedLabel, localizedModelName, normalizeChoice, parseChoices as parseMenuChoices } from '../../i18n/menuLocalization'
+import { localizedCategory, localizedChoiceLabel, localizedGroupName, localizedLabel, localizedModelName, localizedSelectedOptions, localizedTableName, normalizeChoice, parseChoices as parseMenuChoices } from '../../i18n/menuLocalization'
+import { shopCustomerText, shopStatusText } from '../../i18n/shopCustomerText'
 import { decorateAllowedSideOptions, getAllowedSideMax } from '../../utils/sideItemConfig'
 import { saveQrImage } from '../../utils/saveQrImage'
 
@@ -134,7 +135,7 @@ const STATUS_TRANSLATION_KEYS = {
 
 function orderStatusLabel(order, language, translate) {
   const status = order?.status || 'PENDING'
-  return localizedLabel(order?.statusLabels, language, translate(STATUS_TRANSLATION_KEYS[status] || status))
+  return localizedLabel(order?.statusLabels, language, shopStatusText(language, status) || translate(STATUS_TRANSLATION_KEYS[status] || status))
 }
 
 function buildChildMap(items) {
@@ -319,6 +320,7 @@ function TrackingOverlay({ order: initialOrder, ctx, token, tables = [], onEdit,
   const [selectedTableId, setSelectedTableId] = React.useState(initialOrder?.tableId || '')
   const [actionMessage, setActionMessage] = React.useState('')
   const { language, t, formatMoney } = useI18n()
+  const ct = React.useCallback((key, vars) => shopCustomerText(language, key, vars), [language])
   const fmtLocal = React.useCallback((n) => n != null ? formatMoney(n, 'VND') : '', [formatMoney])
   const displayItemName = React.useCallback((item) => localizedModelName(item, language), [language])
 
@@ -328,9 +330,9 @@ function TrackingOverlay({ order: initialOrder, ctx, token, tables = [], onEdit,
     setFinishingEdit(true); setActionMessage('')
     try {
       const { res, data } = await cancelCustomerEdit(order.orderCode)
-      if (!res.ok) setActionMessage(data?.error || data?.message || 'Không thể hoàn tất sửa đơn')
-      else { setOrder(data); onUpdated?.(data); setActionMessage('Đã hoàn tất sửa đơn') }
-    } catch { setActionMessage('Không thể kết nối máy chủ') }
+      if (!res.ok) setActionMessage(data?.error || data?.message || ct('tracking.cannotFinishEdit'))
+      else { setOrder(data); onUpdated?.(data); setActionMessage(ct('tracking.finishEditDone')) }
+    } catch { setActionMessage(ct('common.networkError')) }
     setFinishingEdit(false)
   }
 
@@ -339,9 +341,9 @@ function TrackingOverlay({ order: initialOrder, ctx, token, tables = [], onEdit,
     setChangingTable(true); setActionMessage('')
     try {
       const { res, data } = await changePublicOrderTable(order.orderCode, selectedTableId, token)
-      if (!res.ok) setActionMessage(data?.error || data?.message || 'Không thể đổi bàn')
-      else { setOrder(data); onUpdated?.(data); setActionMessage('Đã đổi bàn thành công') }
-    } catch { setActionMessage('Không thể kết nối máy chủ') }
+      if (!res.ok) setActionMessage(data?.error || data?.message || ct('tracking.cannotChangeTable'))
+      else { setOrder(data); onUpdated?.(data); setActionMessage(ct('tracking.tableChangedDone')) }
+    } catch { setActionMessage(ct('common.networkError')) }
     setChangingTable(false)
   }
 
@@ -375,7 +377,7 @@ function TrackingOverlay({ order: initialOrder, ctx, token, tables = [], onEdit,
           {heroNum}
         </Typography>
         <Typography sx={{ fontSize: 12, color: style.color, opacity: 0.55, mt: 0.75 }}>
-          {order.orderNumber ? `${t('shop.order')} #${order.orderNumber}` : ''}{order.orderCode ? ` - ${order.orderCode}` : ''}
+          {order.orderNumber ? `${ct('tracking.order')} #${order.orderNumber}` : ''}{order.orderCode ? ` - ${order.orderCode}` : ''}
         </Typography>
         <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, mt: 1.5, px: 2.5, py: 0.75,
           bgcolor: '#fff', borderRadius: 99, border: `1.5px solid ${style.color}22` }}>
@@ -412,7 +414,7 @@ function TrackingOverlay({ order: initialOrder, ctx, token, tables = [], onEdit,
                     <Typography variant="caption" sx={{ fontWeight: active ? 700 : 400,
                       color: active ? '#0277bd' : done ? '#43a047' : '#bdbdbd',
                       fontSize: 10, textAlign: 'center', lineHeight: 1.2 }}>
-                      {t(STATUS_TRANSLATION_KEYS[step.key] || step.label)}
+                      {shopStatusText(language, step.key) || t(STATUS_TRANSLATION_KEYS[step.key] || step.label)}
                     </Typography>
                   </Box>
                   {idx < TRACKING_STEPS.length - 1 && (
@@ -427,7 +429,7 @@ function TrackingOverlay({ order: initialOrder, ctx, token, tables = [], onEdit,
 
       {order.paymentRequestedAt && order.paymentStatus !== 'PAID' && (
         <Alert severity="warning" sx={{ mx: 'auto', mt: 1.5, width: 'calc(100% - 32px)', maxWidth: 520, fontWeight: 800, flexShrink: 0 }}>
-          Đơn đã được xác nhận. Vui lòng đến quầy thu ngân để thanh toán.
+          {ct('tracking.payAtCounter')}
         </Alert>
       )}
 
@@ -478,25 +480,25 @@ function TrackingOverlay({ order: initialOrder, ctx, token, tables = [], onEdit,
 
       <Box sx={{ px: 2, pb: 3, pt: 1.5, display: 'flex', flexDirection: 'column', gap: 1, flexShrink: 0, borderTop: '1px solid #f0f0f0' }}>
         {actionMessage && (
-          <Alert severity={actionMessage.startsWith('Đã ') ? 'success' : 'error'}>{actionMessage}</Alert>
+          <Alert severity={[ct('tracking.finishEditDone'), ct('tracking.tableChangedDone')].includes(actionMessage) ? 'success' : 'error'}>{actionMessage}</Alert>
         )}
         {order.customerEditing && (
           <Button variant="contained" color="warning" fullWidth onClick={finishEditing} disabled={finishingEdit}
             sx={{ borderRadius: 20, fontWeight: 800, textTransform: 'none' }}>
-            {finishingEdit ? <CircularProgress size={20} color="inherit" /> : 'Hoàn tất sửa đơn'}
+            {finishingEdit ? <CircularProgress size={20} color="inherit" /> : ct('tracking.finishEdit')}
           </Button>
         )}
         {tables.length > 0 && !isDone && !isCancelled && (
           <Box sx={{ display: 'flex', gap: 1 }}>
             <Box component="select" value={selectedTableId} onChange={e => setSelectedTableId(e.target.value)}
               sx={{ flex: 1, minHeight: 44, px: 1, border: '1px solid #93c5fd', borderRadius: 2, bgcolor: '#fff', fontSize: 16 }}>
-              <option value="">Chọn bàn</option>
-              {tables.map(table => <option key={table.id} value={table.id}>{table.tableName}</option>)}
+              <option value="">{ct('tracking.chooseTable')}</option>
+              {tables.map(table => <option key={table.id} value={table.id}>{localizedTableName(table, language)}</option>)}
             </Box>
             <Button variant="outlined" onClick={changeTable}
               disabled={changingTable || !selectedTableId || selectedTableId === order.tableId}
               sx={{ borderRadius: 2, fontWeight: 800, textTransform: 'none' }}>
-              {changingTable ? <CircularProgress size={18} /> : 'Đổi bàn'}
+              {changingTable ? <CircularProgress size={18} /> : ct('tracking.changeTable')}
             </Button>
           </Box>
         )}
@@ -574,6 +576,7 @@ export default function ShopMenuPage() {
   const navigate = useNavigate()
   const { language, t, formatMoney } = useI18n()
   const fmt = useCallback((n) => n != null ? formatMoney(n, 'VND') : '', [formatMoney])
+  const cText = useCallback((key, vars) => shopCustomerText(language, key, vars), [language])
   const modelName = useCallback((model) => localizedModelName(model, language), [language])
   const modelCategory = useCallback((model) => localizedCategory(model, language), [language])
   const optionGroupName = useCallback((group) => localizedGroupName(group, language), [language])
@@ -654,30 +657,14 @@ export default function ShopMenuPage() {
   }, [ctx?.tokenType, navigate, tokenParam])
 
   const formatSelectedOptions = useCallback((modelId, selectedOptions) => {
-    if (!selectedOptions) return null
-    const selected = parseOpts(selectedOptions)
-    const groups = optionsByModel[modelId] || []
-    return Object.entries(selected).map(([groupKey, value]) => {
-      const group = groups.find(item => item.groupName === groupKey)
-      const choices = group ? parseMenuChoices(group.choices) : []
-      const displayGroup = group ? optionGroupName(group) : groupKey
-      const displayChoice = (label) => {
-        const choice = choices.map(normalizeChoice).find(item => item.label === label)
-        return choice ? choiceName(choice) : label
-      }
-      if (Array.isArray(value)) return `${displayGroup}: ${value.map(displayChoice).join(', ')}`
-      if (value && typeof value === 'object') {
-        return `${displayGroup}: ${Object.entries(value).map(([label, qty]) => `${displayChoice(label)} x${qty}`).join(', ')}`
-      }
-      return `${displayGroup}: ${displayChoice(String(value))}`
-    }).join(' - ')
-  }, [choiceName, optionGroupName, optionsByModel])
+    return localizedSelectedOptions(modelId, selectedOptions, optionsByModel, language)
+  }, [language, optionsByModel])
   // ── Data loading ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!tokenParam) return
     resolveToken(tokenParam)
       .then(({ res, data }) => {
-        if (!res.ok) { setError('QR code không hợp lệ hoặc đã hết hạn.'); setLoading(false); return }
+        if (!res.ok) { setError(cText('checkout.invalidQr')); setLoading(false); return }
         const tableId = data.tableId || (data.tokenType === 'QUEUE_QR' ? rawTableId : null)
         const resolved = { tenantId: data.tenantId, companyId: data.companyId, tableId, tokenType: data.tokenType }
         setCtx(resolved)
@@ -694,12 +681,12 @@ export default function ShopMenuPage() {
             .catch(() => {})
         }
       })
-      .catch(() => { setError('Không đọc được QR code.'); setLoading(false) })
-  }, [tokenParam, rawTableId, rawCustomerName])
+      .catch(() => { setError(cText('checkout.cannotReadQr')); setLoading(false) })
+  }, [cText, tokenParam, rawTableId, rawCustomerName])
 
   useEffect(() => {
     if (!ctx) return
-    if (!ctx.tenantId || !ctx.companyId) { setError('Thiếu thông tin cửa hàng.'); setLoading(false); return }
+    if (!ctx.tenantId || !ctx.companyId) { setError(cText('checkout.missingShop')); setLoading(false); return }
     Promise.all([
       fetchMenu(ctx.tenantId, ctx.companyId),
       fetchPublicMenuOptions(ctx.tenantId, ctx.companyId),
@@ -716,8 +703,8 @@ export default function ShopMenuPage() {
       if (cfgRes.data) setShopConfig(cfgRes.data)
       setPublicTables(Array.isArray(tablesRes.data) ? tablesRes.data : [])
       setLoading(false)
-    }).catch(() => { setError('Không tải được thực đơn.'); setLoading(false) })
-  }, [ctx])
+    }).catch(() => { setError(cText('checkout.cannotLoadMenu')); setLoading(false) })
+  }, [cText, ctx])
 
   const loadTokenSession = useCallback(() => {
     if (!tokenParam) return
@@ -1107,10 +1094,10 @@ export default function ShopMenuPage() {
       }
       const nextOrder = data?.order || order
       setVoucherPayload('')
-      showVoucherSnack(`Đã áp dụng voucher ${data?.voucher?.code || ''}`.trim())
+      showVoucherSnack(cText('checkout.voucherApplied', { code: data?.voucher?.code || '' }).trim())
       return nextOrder
     } catch {
-      showVoucherSnack('Không áp dụng được voucher. Đơn vẫn được tạo.', 'error')
+      showVoucherSnack(cText('checkout.voucherFailed'), 'error')
       return order
     }
   }
@@ -1121,27 +1108,27 @@ export default function ShopMenuPage() {
       const phone = form.customerPhone.trim()
       if (form.fulfillmentType === 'DINE_IN' && !ctx?.tableId && !form.selectedTableId && !form.customerTableTag.trim()) {
         setError('')
-        window.alert('Vui lòng nhập số thẻ bàn hoặc chọn bàn trước khi đặt món.')
+        window.alert(cText('checkout.needTable'))
         window.setTimeout(() => tableTagInputRef.current?.focus(), 0)
         return
       }
       if (form.fulfillmentType === 'PICKUP' && !name) {
-        setError('Hãy nhập tên người nhận món.'); return
+        setError(cText('checkout.needPickupName')); return
       }
       if (form.fulfillmentType === 'PICKUP' && !phone) {
-        setError('Hãy nhập số điện thoại người nhận món.'); return
+        setError(cText('checkout.needPickupPhone')); return
       }
       if (form.fulfillmentType === 'DELIVERY' && !name) {
-        setError('Hãy nhập tên người nhận hàng.'); return
+        setError(cText('checkout.needDeliveryName')); return
       }
       if (form.fulfillmentType === 'DELIVERY' && !phone) {
-        setError('Hãy nhập số điện thoại người nhận hàng.'); return
+        setError(cText('checkout.needDeliveryPhone')); return
       }
       if (form.fulfillmentType === 'DELIVERY' && !form.requestedFulfillmentAt) {
-        setError('Hãy chọn thời gian nhận hàng.'); return
+        setError(cText('checkout.needDeliveryTime')); return
       }
       if (form.fulfillmentType === 'DELIVERY' && !form.deliveryAddress.trim()) {
-        setError('Hãy nhập địa chỉ giao hàng.'); return
+        setError(cText('checkout.needDeliveryAddress')); return
       }
     }
     setSubmitting(true); setError('')
@@ -1149,7 +1136,7 @@ export default function ShopMenuPage() {
     try {
       if (editingOrderCode) {
         const { res, data } = await updatePublicOrderItems(editingOrderCode, items)
-        if (!res.ok) { setError(data?.message || data?.error || 'Không thể cập nhật đơn'); setSubmitting(false); return }
+        if (!res.ok) { setError(data?.message || data?.error || cText('checkout.cannotUpdateOrder')); setSubmitting(false); return }
         const updatedOrder = { ...data, customerEditing: false, customerEditingSince: null }
         const finalOrderRaw = await applyVoucherToOrder(updatedOrder)
         const finalOrder = { ...finalOrderRaw, customerEditing: false, customerEditingSince: null }
@@ -1173,7 +1160,7 @@ export default function ShopMenuPage() {
           manualOrderNumber: seqParam ? Number(seqParam) : null, token: tokenParam || null, items,
         }
         const { res, data } = await createOrder(ctx.tenantId, ctx.companyId, body)
-        if (!res.ok) { setError(data?.message || 'Không thể đặt đơn'); setSubmitting(false); return }
+        if (!res.ok) { setError(data?.message || cText('checkout.cannotCreateOrder')); setSubmitting(false); return }
         const finalOrder = await applyVoucherToOrder(data)
         setCart({}); setSideForm({}); setNotes(''); setCheckout(false); setCartOpen(false)
         if (form.paymentMethod === 'BANK_QR' && finalOrder.paymentQr) {
@@ -1182,7 +1169,7 @@ export default function ShopMenuPage() {
           openTrackingScreen(finalOrder)
         }
       }
-    } catch { setError('Lỗi mạng') } finally { setSubmitting(false) }
+    } catch { setError(cText('common.networkError')) } finally { setSubmitting(false) }
   }
 
   const handleEditOrder = async (order) => {
@@ -1683,7 +1670,7 @@ export default function ShopMenuPage() {
     </Box>
   )
   if (!ctx?.tenantId || !ctx?.companyId) return (
-    <Box sx={{ p: 3 }}><Alert severity="error">{error || 'QR code không hợp lệ — thiếu thông tin cửa hàng.'}</Alert></Box>
+    <Box sx={{ p: 3 }}><Alert severity="error">{error || cText('checkout.invalidShopQr')}</Alert></Box>
   )
 
   return (
@@ -2120,14 +2107,14 @@ export default function ShopMenuPage() {
       <Dialog open={checkout} onClose={() => setCheckout(false)} fullWidth maxWidth="xs">
         <DialogTitle sx={{ pb: 1 }}>
           <Typography fontWeight={700} variant="h6">
-            {editingOrderCode ? 'Cập nhật đơn' : 'Xác nhận đặt món'}
+            {editingOrderCode ? cText('checkout.updateTitle') : cText('checkout.createTitle')}
           </Typography>
         </DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 0.5 }}>
             <Box>
               <Typography variant="caption" color="text.secondary" sx={{ mb: 0.75, display: 'block' }}>
-                Hình thức
+                {cText('checkout.fulfillmentType')}
               </Typography>
               <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1 }}>
                 {FULFILLMENT_OPTIONS.map(opt => (
@@ -2150,18 +2137,18 @@ export default function ShopMenuPage() {
 
             {form.fulfillmentType === 'DINE_IN' && !ctx?.tableId && (
               <Box sx={{ p: 1.5, borderRadius: 2.5, bgcolor: '#fff8f4', border: '1px solid #ffccbc' }}>
-                <Typography fontWeight={800} sx={{ mb: 1, fontSize: 14 }}>Nhập thẻ bàn hoặc chọn bàn</Typography>
+                <Typography fontWeight={800} sx={{ mb: 1, fontSize: 14 }}>{cText('checkout.tablePromptTitle')}</Typography>
                 <Stack spacing={1.25}>
-                  <TextField inputRef={tableTagInputRef} label="Số trên thẻ bàn" size="small" fullWidth
-                    placeholder="Ví dụ: A12" value={form.customerTableTag}
+                  <TextField inputRef={tableTagInputRef} label={cText('checkout.tableTagLabel')} size="small" fullWidth
+                    placeholder={cText('checkout.tableTagPlaceholder')} value={form.customerTableTag}
                     onChange={e => { setForm(f => ({ ...f, customerTableTag: e.target.value, selectedTableId: '' })); setError('') }}
-                    helperText="Số này sẽ hiển thị trên bảng đơn tại quầy" />
+                    helperText={cText('checkout.tableTagHelp')} />
                   {publicTables.length > 0 && (
                     <>
-                      <Divider><Typography variant="caption" color="text.secondary">HOẶC</Typography></Divider>
-                      <TextField select label="Chọn số bàn" size="small" fullWidth value={form.selectedTableId}
+                      <Divider><Typography variant="caption" color="text.secondary">{cText('checkout.or')}</Typography></Divider>
+                      <TextField select label={cText('checkout.chooseTable')} size="small" fullWidth value={form.selectedTableId}
                         onChange={e => { setForm(f => ({ ...f, selectedTableId: e.target.value, customerTableTag: '' })); setError('') }}>
-                        {publicTables.map(table => <MenuItem key={table.id} value={table.id}>{table.tableName}</MenuItem>)}
+                        {publicTables.map(table => <MenuItem key={table.id} value={table.id}>{localizedTableName(table, language)}</MenuItem>)}
                       </TextField>
                     </>
                   )}
@@ -2169,7 +2156,7 @@ export default function ShopMenuPage() {
               </Box>
             )}
             {form.fulfillmentType === 'DINE_IN' && ctx?.tableId && (
-              <Alert severity="info" icon={<TableBarIcon />}>Đơn sẽ được gửi đến bàn đã quét QR.</Alert>
+              <Alert severity="info" icon={<TableBarIcon />}>{cText('checkout.scannedTableInfo')}</Alert>
             )}
             {form.fulfillmentType !== 'DINE_IN' && <>
               <TextField label={t('shop.customerName')} size="small" fullWidth required value={form.customerName}
@@ -2179,7 +2166,7 @@ export default function ShopMenuPage() {
             </>}
             {form.fulfillmentType === 'DELIVERY' && (
               <>
-                <TextField label="Thời gian nhận" type="datetime-local" size="small" fullWidth required
+                <TextField label={cText('checkout.receiveTime')} type="datetime-local" size="small" fullWidth required
                   value={form.requestedFulfillmentAt} onChange={e => { setForm(f => ({ ...f, requestedFulfillmentAt: e.target.value })); setError('') }}
                   InputLabelProps={{ shrink: true }} />
                 <TextField label={t('shop.deliveryAddress')} size="small" fullWidth required multiline rows={2}
@@ -2221,7 +2208,7 @@ export default function ShopMenuPage() {
             <Divider />
             <Box>
               <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
-                Đơn hàng của bạn
+                {cText('checkout.yourOrder')}
               </Typography>
               {cartEntries.map((entry, idx) => {
                 const m = menu.find(x => x.id === entry.modelId)
@@ -2246,7 +2233,7 @@ export default function ShopMenuPage() {
                       <Box sx={{ flex: 1, minWidth: 0 }}>
                         <Typography fontWeight={900} sx={{ fontSize: 20, color: '#0f172a', lineHeight: 1.18 }}>{idx + 1}. {entry.qty}x {modelName(m)}</Typography>
                         {optsStr && <Typography sx={{ color: '#64748b', fontSize: 15, lineHeight: 1.25 }}>{optsStr}</Typography>}
-                        {entry.itemNotes && <Typography sx={{ color: '#64748b', fontSize: 14, fontStyle: 'italic' }}>Note: {entry.itemNotes}</Typography>}
+                        {entry.itemNotes && <Typography sx={{ color: '#64748b', fontSize: 14, fontStyle: 'italic' }}>{cText('tracking.note')}: {entry.itemNotes}</Typography>}
                       </Box>
                       <Typography sx={{ color: '#ff5722', fontSize: 18, fontWeight: 900, flexShrink: 0 }}>{fmt(mainTotal)}</Typography>
                     </Box>
@@ -2288,12 +2275,12 @@ export default function ShopMenuPage() {
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 2, pb: 2 }}>
-          <Button onClick={() => setCheckout(false)} disabled={submitting}>Quay lại</Button>
+          <Button onClick={() => setCheckout(false)} disabled={submitting}>{cText('common.back')}</Button>
           <Button variant="contained" fullWidth onClick={handlePlaceOrder} disabled={submitting}
             sx={{ borderRadius: 20, fontWeight: 700, textTransform: 'none',
               bgcolor: '#ff5722', '&:hover': { bgcolor: '#e64a19' } }}>
             {submitting ? <CircularProgress size={20} color="inherit" /> :
-              editingOrderCode ? `Cập nhật · ${fmt(totalAmount)}` : `Đặt món · ${fmt(totalAmount)}`}
+              editingOrderCode ? cText('checkout.updateAmount', { amount: fmt(totalAmount) }) : cText('checkout.placeAmount', { amount: fmt(totalAmount) })}
           </Button>
         </DialogActions>
       </Dialog>
