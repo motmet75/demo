@@ -1001,8 +1001,18 @@ public class ShopOrderService {
             order.setPaymentQr(null);
             return;
         }
+// prefer "dailySeq orderNumber" (with a space) when available, otherwise fall back to orderNumber or orderCode
+        StringBuilder refBuilder = new StringBuilder();
+        if (order.getDailySeq() != null) {
+            refBuilder.append(order.getDailySeq()).append(' ');
+        }
+        if (order.getOrderNumber() != null) {
+            refBuilder.append(order.getOrderNumber());
+        } else {
+            refBuilder.append(order.getOrderCode() != null ? order.getOrderCode() : "");
+        }
+        String orderRef = refBuilder.toString();
 
-        String orderRef = order.getOrderNumber() != null ? String.valueOf(order.getOrderNumber()) : order.getOrderCode();
         order.setPaymentQr(VietQrBuilder.buildUrl(
                 company.getBankBin(), company.getBankAccountNumber(),
                 company.getBankAccountName(), amount, orderRef));
