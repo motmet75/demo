@@ -1002,9 +1002,10 @@ public class ShopOrderService {
             return;
         }
 
+        String orderRef = order.getOrderNumber() != null ? String.valueOf(order.getOrderNumber()) : order.getOrderCode();
         order.setPaymentQr(VietQrBuilder.buildUrl(
                 company.getBankBin(), company.getBankAccountNumber(),
-                company.getBankAccountName(), amount, order.getOrderCode()));
+                company.getBankAccountName(), amount, orderRef));
     }
     @Transactional
     public ShopOrderResponseDto switchToQrPayment(UUID orderId, UUID tenantId, UUID companyId) {
