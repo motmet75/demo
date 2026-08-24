@@ -17,9 +17,10 @@ import AddShoppingCartIcon from '@mui/icons-material/AddShoppingCart'
 import QrCode2Icon from '@mui/icons-material/QrCode2'
 import DownloadIcon from '@mui/icons-material/Download'
 import ShareIcon from '@mui/icons-material/Share'
+import PhoneIcon from '@mui/icons-material/Phone'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
-import { fetchPublicOrder, fetchTokenSession, fetchCounterOrderQr, fetchPublicTables, fetchPublicMenuOptions, changePublicOrderTable, cancelCustomerEdit, switchPublicOrderToBankPayment } from '../../api/shopApi'
+import { resolveToken, fetchShopConfig, fetchPublicOrder, fetchTokenSession, fetchCounterOrderQr, fetchPublicTables, fetchPublicMenuOptions, changePublicOrderTable, cancelCustomerEdit, switchPublicOrderToBankPayment } from '../../api/shopApi'
 import { printOrderReceipt } from '../../utils/printOrderReceipt'
 import { useI18n } from '../../i18n/I18nContext'
 import { ORDERING_LANGUAGE_CODES } from '../../i18n/translations'
@@ -32,6 +33,79 @@ import { useAppContext } from '../../context/AppContext'
 
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 const payableAmount = (order) => Math.max(0, Number(order?.totalAmount || 0) - Number(order?.discountAmount || 0))
+
+const textValue = (value) => String(value ?? '').trim()
+
+function shopContactFromConfig(config) {
+  return {
+    name: textValue(config?.shopName || config?.companyName || config?.name),
+    phone: textValue(config?.shopPhone || config?.companyPhoneNumber || config?.phoneNumber || config?.phone),
+    address: textValue(config?.shopAddress || config?.companyAddress || config?.address),
+  }
+}
+
+function phoneHref(phone) {
+  const normalized = textValue(phone).replace(/[^\d+]/g, '').replace(/(?!^)\+/g, '')
+  return `tel:${normalized || textValue(phone)}`
+}
+
+function ShopContactCard({ shopConfig }) {
+  const { t } = useI18n()
+  const contact = shopContactFromConfig(shopConfig)
+  if (!contact.name && !contact.phone && !contact.address) return null
+  return (
+    <Box sx={{
+      mx: { xs: 1.5, md: 'auto' },
+      mt: 2,
+      px: 2,
+      py: 1.5,
+      maxWidth: 560,
+      width: { md: '100%' },
+      border: '1px solid #dbeafe',
+      borderRadius: 2,
+      bgcolor: '#f8fbff',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 0.75,
+    }}>
+      {(contact.name || contact.phone) && (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.25, alignItems: 'center', justifyContent: 'space-between' }}>
+          {contact.name && (
+            <Typography fontWeight={900} sx={{ color: '#0f172a', fontSize: { xs: 16, md: 17 }, minWidth: 0, flex: '1 1 180px', overflowWrap: 'anywhere' }}>
+              {contact.name}
+            </Typography>
+          )}
+          {contact.phone && (
+            <Button
+              component="a"
+              href={phoneHref(contact.phone)}
+              variant="contained"
+              size="small"
+              startIcon={<PhoneIcon />}
+              sx={{ borderRadius: 1.5, fontWeight: 800, textTransform: 'none', flexShrink: 0, maxWidth: '100%', whiteSpace: 'normal', textAlign: 'center' }}>
+              {contact.phone}
+            </Button>
+          )}
+        </Box>
+      )}
+      {contact.address && (
+        <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.35 }}>
+          <Box component="span" fontWeight={800}>{t('common.address')}: </Box>{contact.address}
+        </Typography>
+      )}
+    </Box>
+  )
+}
+
+function loadShopConfigForScope(tenantId, companyId, keyRef, setShopConfig) {
+  if (!tenantId || !companyId) return
+  const key = `${tenantId}:${companyId}`
+  if (keyRef.current === key) return
+  keyRef.current = key
+  fetchShopConfig(tenantId, companyId)
+    .then(({ data }) => setShopConfig(data || null))
+    .catch(() => { keyRef.current = '' })
+}
 
 function CustomerNotificationsButton() {
   const { language } = useI18n()
@@ -279,7 +353,7 @@ function OrderItems({ order, itemName, fmtLocal, optionText }) {
   )
 }
 
-function SingleOrderView({ order, onEdit, onOrderMore, itemName, fmtLocal, optionText }) {
+function SingleOrderView({ order, shopConfig, onEdit, onOrderMore, itemName, fmtLocal, optionText }) {
   const [paymentQrOpen, setPaymentQrOpen] = useState(false)
   const { language, t } = useI18n()
   const ct = (key, vars) => shopCustomerText(language, key, vars)
@@ -329,6 +403,8 @@ function SingleOrderView({ order, onEdit, onOrderMore, itemName, fmtLocal, optio
           </Box>
         </Box>
       )}
+
+      <ShopContactCard shopConfig={shopConfig} />
 
       {order.paymentRequestedAt && order.paymentStatus !== 'PAID' && (
         <Alert severity="warning" sx={{ mx: 'auto', mt: 2, width: 'calc(100% - 32px)', maxWidth: 560, fontWeight: 800 }}>
@@ -714,11 +790,24 @@ function groupOptionsByModel(rows) {
 function TokenSessionView({ token, highlightCode, itemName, fmtLocal }) {
   const [session, setSession] = useState(null)
   const [error, setError]     = useState('')
+  const [shopConfig, setShopConfig] = useState(null)
   const [optionsByModel, setOptionsByModel] = useState({})
   const previousRef = useRef({})
+  const shopConfigKeyRef = useRef('')
   const { language, t } = useI18n()
   const ct = useCallback((key, vars) => shopCustomerText(language, key, vars), [language])
   const optionText = useCallback((item) => localizedSelectedOptions(item.modelId, item.selectedOptions, optionsByModel, language), [language, optionsByModel])
+
+  useEffect(() => {
+    let cancelled = false
+    resolveToken(token)
+      .then(({ data }) => {
+        if (cancelled) return
+        loadShopConfigForScope(data?.tenantId, data?.companyId, shopConfigKeyRef, setShopConfig)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [token])
 
   const load = useCallback(() => {
     fetchTokenSession(token)
@@ -736,6 +825,7 @@ function TokenSessionView({ token, highlightCode, itemName, fmtLocal }) {
             .then(({ data: rows }) => setOptionsByModel(groupOptionsByModel(rows)))
             .catch(() => {})
         }
+        loadShopConfigForScope(data.tenantId || firstOrder?.tenantId, data.companyId || firstOrder?.companyId, shopConfigKeyRef, setShopConfig)
         previousRef.current = Object.fromEntries((data.orders || []).map(order => [order.id, order]))
         setSession(data)
       })
@@ -800,6 +890,8 @@ function TokenSessionView({ token, highlightCode, itemName, fmtLocal }) {
           </Box>
         )}
       </Box>
+
+      <ShopContactCard shopConfig={shopConfig} />
 
       {/* Order list */}
       <Box sx={{ px: 2, pt: 2, maxWidth: 560, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -866,8 +958,10 @@ export default function ShopOrderStatusPage() {
 
   const [order, setOrder] = useState(null)
   const [error, setError] = useState('')
+  const [shopConfig, setShopConfig] = useState(null)
   const [optionsByModel, setOptionsByModel] = useState({})
   const previousOrderRef = useRef(null)
+  const shopConfigKeyRef = useRef('')
   const optionText = useCallback((item) => localizedSelectedOptions(item.modelId, item.selectedOptions, optionsByModel, language), [language, optionsByModel])
 
   useEffect(() => {
@@ -905,6 +999,7 @@ export default function ShopOrderStatusPage() {
             .then(({ data: rows }) => setOptionsByModel(groupOptionsByModel(rows)))
             .catch(() => {})
         }
+        loadShopConfigForScope(data.tenantId, data.companyId, shopConfigKeyRef, setShopConfig)
         previousOrderRef.current = data
         setOrder(data)
       })
@@ -947,5 +1042,5 @@ export default function ShopOrderStatusPage() {
   const goEditNoToken = (ord) => openMenuForOrder(ord, { editOrder: ord.orderCode })
   const goOrderMoreNoToken = (ord) => openMenuForOrder(ord)
 
-  return <SingleOrderView order={order} onEdit={goEditNoToken} onOrderMore={goOrderMoreNoToken} itemName={itemName} fmtLocal={fmtLocal} optionText={optionText} />
+  return <SingleOrderView order={order} shopConfig={shopConfig} onEdit={goEditNoToken} onOrderMore={goOrderMoreNoToken} itemName={itemName} fmtLocal={fmtLocal} optionText={optionText} />
 }
