@@ -1767,14 +1767,15 @@ export default function ShopOrderGrid() {
         }
       })
   }, [orderLocalRange, rows, t])
-  useEffect(() => {
-    if (slipFilter && !slipOptions.some(slip => slip.token === slipFilter)) setSlipFilter('')
-  }, [slipFilter, slipOptions])
+  const selectedSlipFilter = useMemo(
+    () => (slipFilter && slipOptions.some(slip => slip.token === slipFilter) ? slipFilter : ''),
+    [slipFilter, slipOptions]
+  )
   const visibleOrderTotals = useMemo(() => {
     const tableGroups = new Map()
     let separateTotal = 0
     let separateCount = 0
-    rows.filter(order => order.status !== 'CANCELLED').forEach(order => {
+    rows.filter(order => order.status !== 'CANCELLED' && orderInTimeRange(order, orderLocalRange)).forEach(order => {
       const tableLabel = order.fulfillmentType === 'DINE_IN'
         ? (order.tableName || order.customerTableTag || order.tableId || '')
         : ''
@@ -1790,17 +1791,17 @@ export default function ShopOrderGrid() {
       tableGroups.set(tableKey, current)
     })
     return { tables: Array.from(tableGroups.values()), separateCount, separateTotal }
-  }, [rows])
+  }, [orderLocalRange, rows])
   const displayedRows = useMemo(() => rows.filter(order => {
     if (!orderInTimeRange(order, orderLocalRange)) return false
-    if (slipFilter && String(order.sourceToken || '') !== slipFilter) return false
+    if (selectedSlipFilter && String(order.sourceToken || '') !== selectedSlipFilter) return false
     if (!tableFilter) return true
     const tableLabel = order.fulfillmentType === 'DINE_IN'
       ? (order.tableName || order.customerTableTag || order.tableId || '')
       : ''
     if (tableFilter === '__SEPARATE__') return !tableLabel
     return String(order.tableId || tableLabel) === tableFilter
-  }), [orderLocalRange, rows, tableFilter, slipFilter])
+  }), [orderLocalRange, rows, tableFilter, selectedSlipFilter])
 
   const act = async (fn, id, afterSuccess) => {
     try {
@@ -2217,13 +2218,13 @@ export default function ShopOrderGrid() {
             <MenuItem value="__SEPARATE__">{t('shopOrder.grid.noTable')}</MenuItem>
             {tables.map(table => <MenuItem key={table.id} value={String(table.id)}>{table.tableName}</MenuItem>)}
           </TextField>
-          <TextField select size="small" label={t('shopOrder.grid.scanSlipNumber')} value={slipFilter} onChange={e => setSlipFilter(e.target.value)}
+          <TextField select size="small" label={t('shopOrder.grid.scanSlipNumber')} value={selectedSlipFilter} onChange={e => setSlipFilter(e.target.value)}
             sx={{ width: { xs: 136, sm: 176 }, '& .MuiInputBase-input': { fontSize: 13, fontWeight: 800 } }}>
             <MenuItem value="">{t('shopOrder.grid.allSlips')}</MenuItem>
             {slipOptions.map(slip => <MenuItem key={slip.token} value={slip.token}>{slip.label}</MenuItem>)}
           </TextField>
-          {slipFilter && (
-            <Button size="small" variant="contained" color="success" onClick={() => setCombinedToken(slipFilter)}
+          {selectedSlipFilter && (
+            <Button size="small" variant="contained" color="success" onClick={() => setCombinedToken(selectedSlipFilter)}
               sx={{ textTransform: 'none', fontWeight: 900, minWidth: { xs: 92, sm: 96 }, px: 1 }}>
               {t('shopOrder.grid.paySlip')}
             </Button>
