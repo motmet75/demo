@@ -49,6 +49,8 @@ export default function CompanyGrid() {
           uuid: r.id != null ? String(r.id) : '',
           code: r.companyCode ?? r.code ?? '',
           name: r.companyName ?? r.name ?? '',
+          phoneNumber: r.phoneNumber ?? r.phone ?? '',
+          address: r.address ?? '',
           createdAt: r.createdAt ?? null,
           __raw: r
         })))
@@ -84,6 +86,8 @@ export default function CompanyGrid() {
         id: generatedId, uuid: generatedId,
         code: res && (res.companyCode || res.code) ? (res.companyCode || res.code) : payload.code,
         name: res && (res.companyName || res.name) ? (res.companyName || res.name) : payload.name,
+        phoneNumber: res?.phoneNumber ?? payload.phoneNumber ?? '',
+        address: res?.address ?? payload.address ?? '',
         createdAt: res?.createdAt ?? payload.createdAt ?? null
       }
       setRows(prev => {
@@ -118,6 +122,8 @@ export default function CompanyGrid() {
     { field: 'uuid', headerName: 'UUID', width: 220, hide: true, flex: 1 },
     { field: 'code', headerName: 'Code', width: 150 },
     { field: 'name', headerName: 'Name', flex: 1 },
+    { field: 'phoneNumber', headerName: 'Phone Number', width: 170 },
+    { field: 'address', headerName: 'Address', flex: 1, minWidth: 220 },
     {
       field: 'actions', type: 'actions', headerName: 'Actions', width: 140,
       getActions: (params) => [

@@ -1310,6 +1310,21 @@ function OrderCardGrid({ rows, loading, tables, actions, modelImageMap = {}, sel
         return { token: info.token, label: `${numLabel} (${info.count})` }
       })
   }, [rows])
+  const selectedSlipRows = useMemo(() => (
+    slipFilter ? rows.filter(r => String(r.sourceToken || '') === slipFilter) : []
+  ), [rows, slipFilter])
+  const selectedSlipSummary = useMemo(() => {
+    if (!slipFilter) return null
+    const active = selectedSlipRows.filter(r => r.status !== 'CANCELLED')
+    const unpaid = active.filter(r => r.paymentStatus !== 'PAID')
+    return {
+      activeCount: active.length,
+      unpaidCount: unpaid.length,
+      total: active.reduce((sum, order) => sum + payableAmount(order), 0),
+      unpaidTotal: unpaid.reduce((sum, order) => sum + payableAmount(order), 0),
+      label: slipOptions.find(slip => slip.token === slipFilter)?.label || slipFilter.slice(0, 8),
+    }
+  }, [selectedSlipRows, slipFilter, slipOptions])
 
   const filtered = useMemo(() => {
     let list = rows
@@ -1364,6 +1379,11 @@ function OrderCardGrid({ rows, loading, tables, actions, modelImageMap = {}, sel
           <MenuItem value="">{t('shopOrder.grid.allSlips')}</MenuItem>
           {slipOptions.map(slip => <MenuItem key={slip.token} value={slip.token}>{slip.label}</MenuItem>)}
         </TextField>
+        <TextField select size="small" label="Scan slip" value={slipFilter} onChange={e => setSlipFilter(e.target.value)}
+          sx={{ display: { xs: 'inline-flex', sm: 'none' }, flex: '1 1 100%' }}>
+          <MenuItem value="">{t('shopOrder.grid.allSlips')}</MenuItem>
+          {slipOptions.map(slip => <MenuItem key={slip.token} value={slip.token}>{slip.label}</MenuItem>)}
+        </TextField>
         <Box sx={{ display: { xs: 'flex', sm: 'none' }, gap: 0.5, flex: 1 }}>
           <Button size="small" variant={sortBy === 'newest' ? 'contained' : 'outlined'} onClick={() => { setSortBy('newest'); try { localStorage.setItem('shop_orders_sort', 'newest') } catch {} }} sx={{ flex: 1, minHeight: 40, px: 0.75, fontSize: 11, fontWeight: 800 }}>Mới nhất</Button>
           <Button size="small" variant={sortBy === 'oldest' ? 'contained' : 'outlined'} color="warning" onClick={() => { setSortBy('oldest'); try { localStorage.setItem('shop_orders_sort', 'oldest') } catch {} }} sx={{ flex: 1, minHeight: 40, px: 0.75, fontSize: 11, fontWeight: 800 }}>FIFO</Button>
@@ -1373,6 +1393,34 @@ function OrderCardGrid({ rows, loading, tables, actions, modelImageMap = {}, sel
         </TextField>
         <Typography sx={{ fontSize: 12, color: '#94a3b8', flexShrink: 0 }}>{filtered.length} / {rows.length} orders</Typography>
       </Box>
+      {selectedSlipSummary && (
+        <Box sx={{
+          mx: { xs: 1, sm: 1.5 }, mt: 1, px: 1.25, py: 1,
+          display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap',
+          border: '1px solid #bbf7d0', borderRadius: 1, bgcolor: '#f0fdf4', flexShrink: 0,
+        }}>
+          <Box sx={{ minWidth: { xs: '100%', sm: 180 }, flex: 1 }}>
+            <Typography variant="caption" color="success.dark" fontWeight={900}>Scan slip {selectedSlipSummary.label}</Typography>
+            <Typography sx={{ fontSize: { xs: 13, sm: 14 }, color: '#166534', fontWeight: 800 }}>
+              {selectedSlipSummary.activeCount} order{selectedSlipSummary.activeCount !== 1 ? 's' : ''} · {selectedSlipSummary.unpaidCount} {t('common.unpaid').toLowerCase()}
+            </Typography>
+          </Box>
+          <Box sx={{ minWidth: 118 }}>
+            <Typography variant="caption" color="text.secondary" fontWeight={800}>{t('shopOrder.grid.unpaidScan')}</Typography>
+            <Typography fontWeight={900} color="success.dark">{fmt(selectedSlipSummary.unpaidTotal)}</Typography>
+          </Box>
+          <Box sx={{ minWidth: 104 }}>
+            <Typography variant="caption" color="text.secondary" fontWeight={800}>{t('common.total')}</Typography>
+            <Typography fontWeight={900}>{fmt(selectedSlipSummary.total)}</Typography>
+          </Box>
+          <Button startIcon={<QrCode2Icon />} variant="contained" color="success" size="small"
+            onClick={() => actions.combinedReceipt(slipFilter)}
+            disabled={!selectedSlipSummary.activeCount}
+            sx={{ textTransform: 'none', fontWeight: 900, minHeight: 40, ml: { sm: 'auto' } }}>
+            {t('shopOrder.grid.qrPayment')}
+          </Button>
+        </Box>
+      )}
       <Box sx={{ flex: 1, overflow: 'auto', p: viewMode === 'grid' ? 0 : (displaySize === 'large' ? 2 : 1.5) }}>
         {filtered.length === 0
           ? <Box sx={{ textAlign: 'center', py: 8 }}><Typography color="text.secondary">{t('shopOrder.grid.noOrders')}</Typography></Box>

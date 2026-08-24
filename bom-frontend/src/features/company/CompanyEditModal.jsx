@@ -11,7 +11,9 @@ import PropTypes from 'prop-types'
 export default function CompanyEditModal({ open, company, onClose, onSave, saving }) {
   const makeInitial = (s) => ({
     code: s?.code ?? s?.companyCode ?? '',
-    name: s?.name ?? s?.companyName ?? ''
+    name: s?.name ?? s?.companyName ?? '',
+    phoneNumber: s?.phoneNumber ?? s?.phone ?? '',
+    address: s?.address ?? ''
   })
 
   const [form, setForm] = useState(() => makeInitial(company))
@@ -31,7 +33,9 @@ export default function CompanyEditModal({ open, company, onClose, onSave, savin
       code: form.code,
       name: form.name,
       companyCode: form.code,
-      companyName: form.name
+      companyName: form.name,
+      phoneNumber: form.phoneNumber,
+      address: form.address
     }
 
     try {
@@ -57,6 +61,8 @@ export default function CompanyEditModal({ open, company, onClose, onSave, savin
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
             <TextField label="Code" value={form.code} onChange={handleChange('code')} disabled={isSubmitting} required />
             <TextField label="Name" value={form.name} onChange={handleChange('name')} disabled={isSubmitting} required />
+            <TextField label="Phone Number" value={form.phoneNumber} onChange={handleChange('phoneNumber')} disabled={isSubmitting} />
+            <TextField label="Address" value={form.address} onChange={handleChange('address')} disabled={isSubmitting} multiline minRows={2} />
             {errorMessage ? <div style={{ color: 'red' }}>{errorMessage}</div> : null}
           </Box>
         </DialogContent>

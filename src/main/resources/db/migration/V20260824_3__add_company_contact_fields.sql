@@ -1,0 +1,3 @@
+ALTER TABLE company
+    ADD COLUMN IF NOT EXISTS phone_number VARCHAR(60),
+    ADD COLUMN IF NOT EXISTS address TEXT;

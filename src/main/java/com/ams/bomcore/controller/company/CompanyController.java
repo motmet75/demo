@@ -112,6 +112,8 @@ public class CompanyController {
         c.setTenant(tenant);
         c.setCompanyCode(dto.companyCode);
         c.setCompanyName(dto.companyName);
+        c.setPhoneNumber(dto.phoneNumber);
+        c.setAddress(dto.address);
         companyRepository.save(c);
         return ResponseEntity.status(HttpStatus.CREATED).body(new CompanyDto(c, (int)(current + 1), max));
     }
@@ -135,6 +137,12 @@ public class CompanyController {
         if (dto.companyName != null) {
 			c.setCompanyName(dto.companyName);
 		}
+        if (dto.phoneNumber != null) {
+            c.setPhoneNumber(dto.phoneNumber);
+        }
+        if (dto.address != null) {
+            c.setAddress(dto.address);
+        }
         // allow changing tenant if provided
         if (dto.tenantId != null) {
             Tenant t = tenantRepository.findById(dto.tenantId).orElseThrow(() -> new IllegalArgumentException("tenant not found"));
@@ -161,6 +169,8 @@ public class CompanyController {
         public final UUID id;
         public final String code;
         public final String name;
+        public final String phoneNumber;
+        public final String address;
         public final Instant createdAt;
         public final Instant validUntil;
         public final boolean expired;
@@ -171,6 +181,8 @@ public class CompanyController {
             this.id = company.getId();
             this.code = company.getCompanyCode();
             this.name = company.getCompanyName();
+            this.phoneNumber = company.getPhoneNumber();
+            this.address = company.getAddress();
             this.createdAt = company.getCreatedAt();
             this.validUntil = company.getValidUntil();
             this.expired = validUntil != null && !validUntil.isAfter(Instant.now());
@@ -183,6 +195,8 @@ public class CompanyController {
         public UUID tenantId;
         public String companyCode;
         public String companyName;
+        public String phoneNumber;
+        public String address;
     }
 
     public static class ErrorDto {
@@ -190,5 +204,4 @@ public class CompanyController {
         public ErrorDto(String message) { this.message = message; }
     }
 }
-
 

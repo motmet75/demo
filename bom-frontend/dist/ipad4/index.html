@@ -77,6 +77,10 @@
     .money-summary-box.grand { border-color: #e1a54c; background: #fff5df; color: #754400; }
     .money-summary-box strong { display: block; margin-top: 3px; font-size: 18px; }
     .filter-tag { float: left; min-height: 38px; margin: 0 8px 8px 0; padding: 5px 10px; border: 2px solid #65727e; border-radius: 18px; background: #fff; color: #26333d; font-size: 15px; }
+    .slip-summary { clear: both; margin: 8px 0; padding: 10px; border: 2px solid #67b782; border-radius: 7px; background: #f0fff4; color: #0d5a2b; overflow: hidden; }
+    .slip-summary strong { display: block; font-size: 19px; margin-top: 3px; }
+    .slip-summary button { float: right; min-height: 40px; margin-left: 8px; background: #168447; font-size: 15px; }
+    .date-buttons button { min-height: 42px; width: 48%; margin-right: 2%; padding: 5px; font-size: 14px; }
     .plain-order { padding: 12px; border-left: 5px solid #1769aa; }
     .plain-order .order-title { font-size: 20px; }
     .plain-order .items { font-size: 16px; }
@@ -245,6 +249,10 @@
         <div class="order-search"><label for="orderSearch">Tìm đơn hàng</label><input id="orderSearch" type="search" autocomplete="off" autocapitalize="off" autocorrect="off" placeholder="Số đơn, tên khách hàng, bàn..."></div>
         <div class="view-control"><label for="statusFilter">Trạng thái</label><select id="statusFilter"><option value="">Tất cả</option><option value="PENDING">Chờ xác nhận</option><option value="CONFIRMED">Đã xác nhận</option><option value="PREPARING">Đang chế biến</option><option value="READY">Sẵn sàng</option><option value="PICKED_UP">Đã nhận</option><option value="COMPLETED">Hoàn tất</option><option value="CANCELLED">Đã hủy</option></select></div>
         <div class="view-control"><label for="paymentFilter">Thanh toán</label><select id="paymentFilter"><option value="">Tất cả</option><option value="UNPAID">Chưa thanh toán</option><option value="PAID">Đã thanh toán</option></select></div>
+        <div class="view-control"><label for="slipFilter">Scan slip</label><select id="slipFilter"><option value="">Tất cả phiếu</option></select></div>
+        <div class="view-control"><label for="orderDateFrom">Từ ngày</label><input id="orderDateFrom" type="date"></div>
+        <div class="view-control"><label for="orderDateTo">Đến ngày</label><input id="orderDateTo" type="date"></div>
+        <div class="view-control date-buttons"><label>Lọc ngày</label><button id="todayOrdersButton" type="button">Hôm nay</button><button id="allDatesButton" class="secondary" type="button">Tất cả</button></div>
         <div class="view-control"><label for="orderSort">Sắp xếp</label><select id="orderSort"><option value="newest">Mới nhất trước</option><option value="oldest">FIFO - Cũ nhất trước</option></select></div>
         <div class="view-control"><label for="viewMode">Kiểu xem</label><select id="viewMode"><option value="cards">Thẻ có hình</option><option value="plain">Chữ gọn, không hình</option></select></div>
         <div id="orderSummary" class="order-summary"></div>
@@ -398,6 +406,9 @@
     var loadedOrders = [];
     var statusFilter = '';
     var paymentFilter = '';
+    var slipFilter = '';
+    var orderDateFrom = '';
+    var orderDateTo = '';
     var tableFilter = '';
     var orderSearch = '';
     var orderSort = 'newest';
@@ -695,6 +706,35 @@
       if (!value || isNaN(d.getTime())) return '';
       return ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + ' ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
     }
+    function dateInputValue(date) {
+      return date.getFullYear() + '-' + ('0' + (date.getMonth() + 1)).slice(-2) + '-' + ('0' + date.getDate()).slice(-2);
+    }
+    function setTodayOrderDateInputs() {
+      var today = dateInputValue(new Date());
+      orderDateFrom = today;
+      orderDateTo = today;
+      byId('orderDateFrom').value = orderDateFrom;
+      byId('orderDateTo').value = orderDateTo;
+    }
+    function dateStartIso(value) {
+      if (!value) return '';
+      var d = new Date(value + 'T00:00:00');
+      return isNaN(d.getTime()) ? '' : d.toISOString();
+    }
+    function dateEndIso(value) {
+      if (!value) return '';
+      var d = new Date(value + 'T23:59:59.999');
+      return isNaN(d.getTime()) ? '' : d.toISOString();
+    }
+    function ordersUrl() {
+      var params = [], from = dateStartIso(orderDateFrom), to = dateEndIso(orderDateTo);
+      if (from) params.push('from=' + encodeURIComponent(from));
+      if (to) params.push('to=' + encodeURIComponent(to));
+      return '/sapi/shop/staff/orders' + (params.length ? '?' + params.join('&') : '');
+    }
+    function activeAmount(order) {
+      return Math.max(0, Number(order.totalAmount || 0) - Number(order.discountAmount || 0));
+    }
     function statusText(status) {
       var labels = { PENDING: 'Chờ xác nhận', CONFIRMED: 'Đã xác nhận', PREPARING: 'Đang chế biến', READY: 'Sẵn sàng', PICKED_UP: 'Đã nhận', COMPLETED: 'Hoàn tất', CANCELLED: 'Đã hủy' };
       return labels[status] || status || '';
@@ -720,13 +760,57 @@
       }
       return parts.join('; ');
     }
+    function buildSlipOptions(rows) {
+      var map = {}, list = [], i, order, token, info, nums, label;
+      for (i = 0; i < rows.length; i += 1) {
+        order = rows[i] || {};
+        token = text(order.sourceToken).replace(/^\s+|\s+$/g, '');
+        if (!token) continue;
+        info = map[token] || { token: token, count: 0, numbers: [], createdAt: order.createdAt || '' };
+        info.count += 1;
+        if (order.orderNumber !== null && typeof order.orderNumber !== 'undefined') info.numbers.push(Number(order.orderNumber));
+        if (order.createdAt && (!info.createdAt || new Date(order.createdAt).getTime() < new Date(info.createdAt).getTime())) info.createdAt = order.createdAt;
+        map[token] = info;
+      }
+      for (token in map) if (map.hasOwnProperty(token)) {
+        info = map[token];
+        nums = info.numbers.sort(function (a, b) { return a - b; });
+        label = nums.length === 1 ? '#' + nums[0] : (nums.length > 1 ? '#' + nums[0] + '-' + nums[nums.length - 1] : token.slice(0, 8));
+        list.push({ token: token, label: label + ' (' + info.count + ')', createdAt: info.createdAt });
+      }
+      list.sort(function (a, b) { return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime(); });
+      return list;
+    }
+    function renderSlipFilterOptions() {
+      var options = buildSlipOptions(loadedOrders), html = '<option value="">Tất cả phiếu</option>', found = !slipFilter, i;
+      for (i = 0; i < options.length; i += 1) {
+        if (options[i].token === slipFilter) found = true;
+        html += '<option value="' + escapeHtml(options[i].token) + '">' + escapeHtml(options[i].label) + '</option>';
+      }
+      if (!found) slipFilter = '';
+      byId('slipFilter').innerHTML = html;
+      byId('slipFilter').value = slipFilter;
+    }
+    function slipSummaryFor(rows) {
+      var active = 0, unpaid = 0, total = 0, unpaidTotal = 0, i, order, amount;
+      for (i = 0; i < rows.length; i += 1) {
+        order = rows[i] || {};
+        if (order.status === 'CANCELLED') continue;
+        amount = activeAmount(order);
+        active += 1;
+        total += amount;
+        if (order.paymentStatus !== 'PAID') { unpaid += 1; unpaidTotal += amount; }
+      }
+      return { active: active, unpaid: unpaid, total: total, unpaidTotal: unpaidTotal };
+    }
     function applyOrderView() {
-      var rows = loadedOrders.slice(0), visible = [], displayed = [], i, key, order, tableLabel, tableKey, tableTotals = {}, separateCount = 0, separateTotal = 0, summary, group, searchText, searchable;
+      var rows = loadedOrders.slice(0), visible = [], displayed = [], i, key, order, tableLabel, tableKey, tableTotals = {}, separateCount = 0, separateTotal = 0, summary, group, searchText, searchable, slipSummary;
       searchText = orderSearch.replace(/^\s+|\s+$/g, '').toLowerCase();
       for (i = 0; i < rows.length; i += 1) {
         if (statusFilter && rows[i].status !== statusFilter) continue;
         if (paymentFilter === 'UNPAID' && rows[i].paymentStatus === 'PAID') continue;
         if (paymentFilter === 'PAID' && rows[i].paymentStatus !== 'PAID') continue;
+        if (slipFilter && text(rows[i].sourceToken) !== slipFilter) continue;
         if (searchText) {
           searchable = [rows[i].orderNumber, rows[i].dailySeq, rows[i].orderCode, rows[i].customerName, rows[i].tableName, rows[i].customerTableTag, rows[i].tableId].join(' ').toLowerCase();
           if (searchable.indexOf(searchText) < 0) continue;
@@ -737,7 +821,11 @@
         var left = new Date(a.createdAt || 0).getTime(), right = new Date(b.createdAt || 0).getTime();
         return orderSort === 'oldest' ? left - right : right - left;
       });
-      summary = escapeHtml(visible.length + ' đơn' + (statusFilter ? ' · ' + statusText(statusFilter) : '') + (paymentFilter === 'UNPAID' ? ' · Chưa thanh toán' : (paymentFilter === 'PAID' ? ' · Đã thanh toán' : '')) + (orderSort === 'oldest' ? ' · FIFO' : ' · Mới nhất'));
+      summary = escapeHtml(visible.length + ' đơn' + (statusFilter ? ' · ' + statusText(statusFilter) : '') + (paymentFilter === 'UNPAID' ? ' · Chưa thanh toán' : (paymentFilter === 'PAID' ? ' · Đã thanh toán' : '')) + (slipFilter ? ' · Scan slip' : '') + (orderSort === 'oldest' ? ' · FIFO' : ' · Mới nhất'));
+      if (slipFilter) {
+        slipSummary = slipSummaryFor(visible);
+        summary += '<div class="slip-summary"><button type="button" data-filter-action="slip-pay">Hiện QR thanh toán</button><button type="button" class="secondary" data-filter-action="slip-clear">Bỏ lọc phiếu</button>Scan slip · ' + escapeHtml(slipSummary.active) + ' đơn · ' + escapeHtml(slipSummary.unpaid) + ' chưa thanh toán<strong>Cần thu: ' + escapeHtml(formatMoney(slipSummary.unpaidTotal)) + ' · Tổng đơn: ' + escapeHtml(formatMoney(slipSummary.total)) + '</strong><div class="clear"></div></div>';
+      }
       for (i = 0; i < visible.length; i += 1) {
         order = visible[i] || {};
         if (order.status === 'CANCELLED') continue;
@@ -746,11 +834,11 @@
           tableKey = String(order.tableId || tableLabel);
           group = tableTotals[tableKey] || { label: tableLabel, count: 0, total: 0 };
           group.count += 1;
-          group.total += Math.max(0, Number(order.totalAmount || 0) - Number(order.discountAmount || 0));
+          group.total += activeAmount(order);
           tableTotals[tableKey] = group;
         } else {
           separateCount += 1;
-          separateTotal += Math.max(0, Number(order.totalAmount || 0) - Number(order.discountAmount || 0));
+          separateTotal += activeAmount(order);
         }
       }
       summary += '<div class="money-summary"><button type="button" class="filter-tag" data-filter-action="table" data-table-filter="">Tất cả</button>';
@@ -880,6 +968,34 @@
         url = 'https://img.vietqr.io/image/' + encodeURIComponent(data.bankBin) + '-' + encodeURIComponent(data.bankAccountNumber) + '-qr_only.png';
         url += '?amount=' + Math.round(amount) + '&addInfo=' + encodeURIComponent(order.orderCode || '') + '&accountName=' + encodeURIComponent(data.bankAccountName || '');
         byId('qrFrame').innerHTML = qrImage(url, 'VietQR thanh toán');
+      });
+    }
+    function showSlipPayment(token) {
+      var rows = [], summary, label = 'Phiếu', i, order, amount;
+      if (!token) return;
+      for (i = 0; i < loadedOrders.length; i += 1) {
+        order = loadedOrders[i] || {};
+        if (text(order.sourceToken) === token) rows.push(order);
+      }
+      summary = slipSummaryFor(rows);
+      for (i = 0; i < rows.length; i += 1) {
+        if (rows[i].orderNumber !== null && typeof rows[i].orderNumber !== 'undefined') { label = 'Phiếu #' + rows[i].orderNumber; break; }
+      }
+      amount = summary.unpaidTotal;
+      openQr('Thanh toán scan slip', { orderCode: label }, 'Khách hàng mở ứng dụng ngân hàng và quét mã để thanh toán nhóm');
+      byId('qrOrder').innerHTML = escapeHtml(label);
+      byId('qrAmount').innerHTML = escapeHtml(formatMoney(amount));
+      byId('qrReference').innerHTML = 'Nội dung: ' + escapeHtml(token.slice(0, 12));
+      request('GET', '/sapi/shop/staff/bank-config', null, function (status, data) {
+        var url;
+        if (status < 200 || status >= 300 || !data || !data.bankBin || !data.bankAccountNumber) {
+          byId('qrFrame').innerHTML = '';
+          message('qrError', status >= 200 && status < 300 ? 'Chưa cấu hình tài khoản ngân hàng.' : errorText(status, data), false);
+          return;
+        }
+        url = 'https://img.vietqr.io/image/' + encodeURIComponent(data.bankBin) + '-' + encodeURIComponent(data.bankAccountNumber) + '-qr_only.png';
+        url += '?amount=' + Math.round(amount) + '&addInfo=' + encodeURIComponent(token.slice(0, 12) || 'scan-slip') + '&accountName=' + encodeURIComponent(data.bankAccountName || '');
+        byId('qrFrame').innerHTML = qrImage(url, 'VietQR thanh toán scan slip');
       });
     }
     function queueStorageKey() { return 'bom_ipad_queue_qr_' + tenantId + '_' + companyId; }
@@ -1344,12 +1460,13 @@
     }
     function loadOrders() {
       setRefreshState('refreshing');
-      request('GET', '/sapi/shop/staff/orders', null, function (status, data) {
+      request('GET', ordersUrl(), null, function (status, data) {
         if (status === 401) { setRefreshState('error'); showLogin(); message('loginMessage', 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.', false); return; }
         if (status < 200 || status >= 300) { setRefreshState('error'); message('ordersMessage', errorText(status, data), false); return; }
         setRefreshState('ok');
         message('ordersMessage', '', false);
         loadedOrders = data instanceof Array ? data : [];
+        renderSlipFilterOptions();
         detectNewOrders(loadedOrders);
         applyOrderView();
         loadStaffCalls();
@@ -1448,11 +1565,18 @@
     byId('statusFilter').onchange = function () { statusFilter = this.value; saveViewPrefs(); applyOrderView(); };
     byId('orderSearch').oninput = function () { orderSearch = this.value || ''; applyOrderView(); };
     byId('paymentFilter').onchange = function () { paymentFilter = this.value; saveViewPrefs(); applyOrderView(); };
+    byId('slipFilter').onchange = function () { slipFilter = this.value; tableFilter = ''; applyOrderView(); };
+    byId('orderDateFrom').onchange = function () { orderDateFrom = this.value || ''; tableFilter = ''; slipFilter = ''; loadOrders(); };
+    byId('orderDateTo').onchange = function () { orderDateTo = this.value || ''; tableFilter = ''; slipFilter = ''; loadOrders(); };
+    byId('todayOrdersButton').onclick = function () { setTodayOrderDateInputs(); tableFilter = ''; slipFilter = ''; loadOrders(); };
+    byId('allDatesButton').onclick = function () { orderDateFrom = ''; orderDateTo = ''; byId('orderDateFrom').value = ''; byId('orderDateTo').value = ''; tableFilter = ''; slipFilter = ''; loadOrders(); };
     byId('orderSummary').onclick = function (event) {
       var target = event.target || event.srcElement;
       while (target && target !== this && !target.getAttribute('data-filter-action')) target = target.parentNode;
       if (!target || target === this) return;
       if (target.getAttribute('data-filter-action') === 'payment') { paymentFilter = ''; byId('paymentFilter').value = ''; saveViewPrefs(); applyOrderView(); return; }
+      if (target.getAttribute('data-filter-action') === 'slip-clear') { slipFilter = ''; byId('slipFilter').value = ''; applyOrderView(); return; }
+      if (target.getAttribute('data-filter-action') === 'slip-pay') { showSlipPayment(slipFilter); return; }
       tableFilter = target.getAttribute('data-table-filter') || '';
       applyOrderView();
     };
@@ -1575,6 +1699,8 @@
       try { prefs = JSON.parse(localStorage.getItem('bom_ipad_order_view_v1') || 'null'); } catch (ignore) {}
       if (prefs) { statusFilter = prefs.statusFilter || ''; paymentFilter = prefs.paymentFilter || ''; orderSort = prefs.orderSort || 'newest'; viewMode = prefs.viewMode || 'cards'; }
       byId('statusFilter').value = statusFilter; byId('paymentFilter').value = paymentFilter; byId('orderSort').value = orderSort; byId('viewMode').value = viewMode;
+      setTodayOrderDateInputs();
+      renderSlipFilterOptions();
     }());
     (function start() {
       var quickToken = queryParam('loginToken');
