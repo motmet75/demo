@@ -197,8 +197,12 @@ export function createPrintHistory(body) {
     body: JSON.stringify(body || {})
   })
 }
-export function fetchOrdersByToken(token) {
-  return apiFetchJson('/shop/staff/orders/by-token' + qs({ token }))
+export function fetchOrdersByToken(token, range = {}) {
+  return apiFetchJson('/shop/staff/orders/by-token' + qs({
+    token,
+    from: range?.from || null,
+    to: range?.to || null,
+  }))
 }
 
 export function lockTokenSession(token) {

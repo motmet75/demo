@@ -115,6 +115,20 @@ function datetimeLocalToIso(value) {
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? null : date.toISOString()
 }
+function parseDateTime(value) {
+  if (!value) return null
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+function orderInTimeRange(order, range) {
+  const createdAt = parseDateTime(order?.createdAt)
+  if (!createdAt) return true
+  const from = parseDateTime(range?.from)
+  const to = parseDateTime(range?.to)
+  if (from && createdAt < from) return false
+  if (to && createdAt >= to) return false
+  return true
+}
 function readShopOrderStatusFilters() {
   const fallback = []
   try {
@@ -1469,6 +1483,10 @@ export default function ShopOrderGrid() {
     from: datetimeLocalToIso(orderFrom),
     to: datetimeLocalToIso(orderTo),
   }), [orderFrom, orderTo])
+  const orderLocalRange = useMemo(() => ({
+    from: orderFrom,
+    to: orderTo,
+  }), [orderFrom, orderTo])
   const rememberOrders = useCallback((orders) => {
     ;(Array.isArray(orders) ? orders : []).forEach(order => {
       if (order?.id) {
@@ -1518,11 +1536,12 @@ export default function ShopOrderGrid() {
   }, [customerEditHistory])
 
   const shouldShowInRows = useCallback((order) => {
+    const timeMatches = orderInTimeRange(order, orderLocalRange)
     const statusMatches = statusFilters.length === 0 || statusFilters.includes(order?.status)
     const paymentMatches = !paymentFilter
       || (paymentFilter === 'UNPAID' ? order?.paymentStatus !== 'PAID' : order?.paymentStatus === 'PAID')
-    return statusMatches && paymentMatches
-  }, [paymentFilter, statusFilters])
+    return timeMatches && statusMatches && paymentMatches
+  }, [orderLocalRange, paymentFilter, statusFilters])
 
   const mergeOrderIntoState = useCallback((order) => {
     if (!order?.id) return
@@ -1718,7 +1737,7 @@ export default function ShopOrderGrid() {
   const pickedUpOrders  = boardRows.filter(r => r.status === 'PICKED_UP')
   const slipOptions = useMemo(() => {
     const byToken = new Map()
-    rows.forEach(order => {
+    rows.filter(order => orderInTimeRange(order, orderLocalRange)).forEach(order => {
       const token = String(order.sourceToken || '').trim()
       if (!token) return
       const existing = byToken.get(token) || {
@@ -1747,7 +1766,10 @@ export default function ShopOrderGrid() {
           label: `${t('shopOrder.grid.slipNumber', { number: info.slipNumber })}${orderHint} (${info.count})`,
         }
       })
-  }, [rows, t])
+  }, [orderLocalRange, rows, t])
+  useEffect(() => {
+    if (slipFilter && !slipOptions.some(slip => slip.token === slipFilter)) setSlipFilter('')
+  }, [slipFilter, slipOptions])
   const visibleOrderTotals = useMemo(() => {
     const tableGroups = new Map()
     let separateTotal = 0
@@ -1770,6 +1792,7 @@ export default function ShopOrderGrid() {
     return { tables: Array.from(tableGroups.values()), separateCount, separateTotal }
   }, [rows])
   const displayedRows = useMemo(() => rows.filter(order => {
+    if (!orderInTimeRange(order, orderLocalRange)) return false
     if (slipFilter && String(order.sourceToken || '') !== slipFilter) return false
     if (!tableFilter) return true
     const tableLabel = order.fulfillmentType === 'DINE_IN'
@@ -1777,7 +1800,7 @@ export default function ShopOrderGrid() {
       : ''
     if (tableFilter === '__SEPARATE__') return !tableLabel
     return String(order.tableId || tableLabel) === tableFilter
-  }), [rows, tableFilter, slipFilter])
+  }), [orderLocalRange, rows, tableFilter, slipFilter])
 
   const act = async (fn, id, afterSuccess) => {
     try {
@@ -2874,6 +2897,7 @@ export default function ShopOrderGrid() {
       {combinedToken && (
         <CombinedReceiptDialog
           token={combinedToken}
+          orderRangeParams={orderRangeParams}
           modelMetaMap={modelMetaMap}
           onClose={() => setCombinedToken(null)}
           onRefresh={reload}
@@ -2885,7 +2909,7 @@ export default function ShopOrderGrid() {
 }
 
 // ── Combined Receipt Dialog ──────────────────────────────────────────
-function CombinedReceiptDialog({ token, modelMetaMap = {}, onClose, onRefresh }) {
+function CombinedReceiptDialog({ token, orderRangeParams = {}, modelMetaMap = {}, onClose, onRefresh }) {
   const { t, language } = useI18n()
   const [orders, setOrders]       = useState([])
   const [loading, setLoading]     = useState(true)
@@ -2902,16 +2926,17 @@ function CombinedReceiptDialog({ token, modelMetaMap = {}, onClose, onRefresh })
 
   const reload = () => {
     setLoading(true)
-    fetchOrdersByToken(token)
+    fetchOrdersByToken(token, orderRangeParams)
       .then(({ res, data }) => {
         if (!res.ok) { setError(data?.error || t('shopOrder.grid.slipLoadFailed')); return }
-        setOrders(data || [])
+        const list = Array.isArray(data) ? data : []
+        setOrders(list.filter(order => orderInTimeRange(order, orderRangeParams)))
       })
       .catch(() => setError(t('shopOrder.grid.slipReloadFailed')))
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { reload() }, [token])
+  useEffect(() => { reload() }, [token, orderRangeParams])
   useEffect(() => {
     let active = true
     setSessionLocked(false)
