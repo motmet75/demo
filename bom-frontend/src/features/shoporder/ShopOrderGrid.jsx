@@ -73,7 +73,7 @@ import MergeBillsDialog from './MergeBillsDialog'
 import VoucherQrScanDialog from './VoucherQrScanDialog'
 import { useAppContext } from '../../context/AppContext'
 import { useI18n } from '../../i18n/I18nContext'
-import { localizedModelName, localizedSelectedOptions } from '../../i18n/menuLocalization'
+import { localizedCategory, localizedModelName, localizedSelectedOptions } from '../../i18n/menuLocalization'
 import { fetchModels } from '../../api/modelApi'
 import { apiFetchJson } from '../../api/client'
 
@@ -526,10 +526,11 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
 
   if (!orders.length) {
     const icons = { CONFIRMED: <KitchenIcon sx={{ fontSize: 44, opacity: 0.18 }} />, PREPARING: <HourglassTopIcon sx={{ fontSize: 44, opacity: 0.18 }} />, READY: <CheckCircleIcon sx={{ fontSize: 44, opacity: 0.18 }} />, PICKED_UP: <LocalShippingIcon sx={{ fontSize: 44, opacity: 0.18 }} /> }
+    const statusLabel = localizedStatusLabel(status, t).toLowerCase()
     return (
       <Box sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}>
         {icons[status]}
-        <Typography variant="body2" sx={{ mt: 1 }}>No {status.toLowerCase().replace('_', ' ')} orders</Typography>
+        <Typography variant="body2" sx={{ mt: 1 }}>{t('shopOrder.grid.emptyStatusOrders', { status: statusLabel })}</Typography>
       </Box>
     )
   }
@@ -574,13 +575,13 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                   </Box>
                   {order.customerName && <Typography variant="caption" display="block" noWrap>{order.customerName}</Typography>}
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                    <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', sm: 'block' }, fontSize: metaFont }}>{since} ago</Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', sm: 'block' }, fontSize: metaFont }}>{t('shopOrder.grid.elapsedAgo', { time: since })}</Typography>
                     {(() => {
                       const roots = (order.items || []).filter(it => !it.parentItemId)
                       const totalQty = roots.reduce((s, it) => s + Number(it.quantity || 1), 0)
                       return totalQty > 0 ? (
                         <Box sx={{ bgcolor: style.numColor, color: '#fff', fontWeight: 900, fontSize: badgeFont, borderRadius: 99, px: large ? 1 : 0.75, py: 0.1, lineHeight: 1.6 }}>
-                          {totalQty} item{totalQty > 1 ? 's' : ''}
+                          {t('shopOrder.grid.orderItemsCount', { count: totalQty })}
                         </Box>
                       ) : null
                     })()}
@@ -632,7 +633,7 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                             {localizedModelName(root, language)}
                           </Typography>
                           {root.dailyLastOrder && (
-                            <Chip label="số cuối" size="small" color="error" sx={{ height: 18, fontSize: 10, fontWeight: 900 }} />
+                            <Chip label={t('shopOrder.grid.dailyLastOrder')} size="small" color="error" sx={{ height: 18, fontSize: 10, fontWeight: 900 }} />
                           )}
                         </Box>
                         {optStr && <Typography sx={{ fontSize: detailFont, pl: 2, display: 'block', color: detailTextColor, lineHeight: 1.4, fontWeight: highContrast ? 700 : 500 }}>{optStr}</Typography>}
@@ -656,7 +657,7 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                               </Typography>
                               <Typography onClick={() => img && setImagePreview({ imageUrl: img, modelName: localizedModelName(child, language) })}
                                 sx={{ fontSize: childNameFont, fontWeight: 900, color: childTextColor, lineHeight: 1.15, flex: 1, ...(img ? { cursor: 'pointer', '&:hover': { color: '#1976d2', textDecoration: 'underline dotted' } } : {}) }}>
-                                {localizedModelName(child, language)}{child.dailyLastOrder ? ' [số cuối]' : ''}
+                                {localizedModelName(child, language)}{child.dailyLastOrder ? ` [${t('shopOrder.grid.dailyLastOrder')}]` : ''}
                               </Typography>
                             </Box>
                           )
@@ -667,7 +668,7 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                 })()}
               </Stack>
 
-              {order.notes && <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11, fontStyle: 'italic', display: 'block', mb: 0.75 }}>Note: {order.notes}</Typography>}
+              {order.notes && <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11, fontStyle: 'italic', display: 'block', mb: 0.75 }}>{t('common.notes')}: {order.notes}</Typography>}
 
               {/* Action buttons per status */}
               <Stack spacing={0.5}>
@@ -964,7 +965,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
                     <Typography sx={{ fontSize: large ? 14 : 12, color: mutedTextColor, fontWeight: 800, flexShrink: 0 }}>{rIdx + 1}.</Typography>
                     <Typography sx={{ fontSize: large ? 28 : 22, fontWeight: 900, color: s.num, lineHeight: 1, flexShrink: 0 }}>{Number(root.quantity)}×</Typography>
                     <Typography sx={{ fontSize: large ? 18 : 15, fontWeight: 800, color: primaryTextColor, lineHeight: 1.2, flex: 1 }}>{localizedModelName(root, language)}</Typography>
-                    {root.dailyLastOrder && <Chip label="số cuối" size="small" color="error" sx={{ height: 18, fontSize: 10, fontWeight: 900 }} />}
+                    {root.dailyLastOrder && <Chip label={t('shopOrder.grid.dailyLastOrder')} size="small" color="error" sx={{ height: 18, fontSize: 10, fontWeight: 900 }} />}
                     <Typography sx={{ fontSize: large ? 14 : 12, color: secondaryTextColor, flexShrink: 0, pl: 0.5 }}>{fmt(root.lineTotal)}</Typography>
                   </Box>
                   {optStr && <Typography sx={{ fontSize: optionFont, pl: 2.5, color: detailTextColor, display: 'block', lineHeight: 1.4, fontWeight: highContrast ? 700 : 500 }}>{optStr}</Typography>}
@@ -983,7 +984,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
                         <Typography sx={{ fontSize: childQtyFont, fontWeight: 900, color: primaryTextColor, lineHeight: 1, flexShrink: 0 }}>{Number(child.quantity)}×</Typography>
                         <Typography onClick={() => img && setImagePreview({ imageUrl: img, modelName: localizedModelName(child, language) })}
                           sx={{ fontSize: childNameFont, fontWeight: 900, color: childTextColor, lineHeight: 1.15, flex: 1, ...(img ? { cursor: 'pointer', '&:hover': { color: '#1976d2', textDecoration: 'underline dotted' } } : {}) }}>
-                          {localizedModelName(child, language)}{child.dailyLastOrder ? ' [số cuối]' : ''}
+                          {localizedModelName(child, language)}{child.dailyLastOrder ? ` [${t('shopOrder.grid.dailyLastOrder')}]` : ''}
                         </Typography>
                       </Box>
                     )
@@ -992,7 +993,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
               )
             })
         }
-        {roots.length > 7 && <Typography sx={{ fontSize: 11, color: '#64748b', fontStyle: 'italic' }}>+{roots.length - 7} more…</Typography>}
+        {roots.length > 7 && <Typography sx={{ fontSize: 11, color: '#64748b', fontStyle: 'italic' }}>{t('shopOrder.grid.moreItemsCount', { count: roots.length - 7 })}</Typography>}
       </Box>
 
       {/* ── Notes + total ── */}
@@ -1274,6 +1275,33 @@ function prefixedOrderNumber(order) {
   return prefix ? `${prefix}-${number}` : number
 }
 
+function javaStringHash(value) {
+  let hash = 0
+  String(value || '').split('').forEach(char => {
+    hash = Math.imul(31, hash) + char.charCodeAt(0)
+    hash |= 0
+  })
+  return hash
+}
+
+function groupSlipNumber(token) {
+  const mod = ((javaStringHash(token) % 900000) + 900000) % 900000
+  return String(mod + 100000).padStart(6, '0')
+}
+
+function rootOrderItems(order) {
+  return (order?.items || []).filter(item => !item.parentItemId)
+}
+
+function orderItemQuantity(order) {
+  return rootOrderItems(order).reduce((sum, item) => sum + Number(item.quantity || 0), 0)
+}
+
+function itemCategoryLabel(item, modelMetaMap, language, fallback = '') {
+  const model = modelMetaMap?.[item?.modelId] || {}
+  return localizedCategory(model, language) || item?.category || item?.modelCategory || fallback
+}
+
 function OrderCardGrid({ rows, loading, tables, actions, modelImageMap = {}, selectedIds, onToggleSelect, viewMode = 'cards', displaySize = 'normal', highContrast = false }) {
   const { t } = useI18n()
   const [searchParams] = useSearchParams()
@@ -1281,61 +1309,9 @@ function OrderCardGrid({ rows, loading, tables, actions, modelImageMap = {}, sel
   const [sortBy, setSortBy] = useState(() => {
     try { return localStorage.getItem('shop_orders_sort') || 'oldest' } catch { return 'oldest' }
   })
-  const [tableFilter, setTableFilter] = useState('')
-  const [slipFilter, setSlipFilter] = useState('')
-
-  const slipOptions = useMemo(() => {
-    const byToken = new Map()
-    rows.forEach(order => {
-      const token = String(order.sourceToken || '').trim()
-      if (!token) return
-      const existing = byToken.get(token) || {
-        token,
-        count: 0,
-        orderNumbers: new Set(),
-        createdAt: order.createdAt || '',
-      }
-      existing.count += 1
-      if (order.orderNumber != null) existing.orderNumbers.add(order.orderNumber)
-      if (order.createdAt && (!existing.createdAt || new Date(order.createdAt) < new Date(existing.createdAt))) {
-        existing.createdAt = order.createdAt
-      }
-      byToken.set(token, existing)
-    })
-    return Array.from(byToken.values())
-      .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
-      .map(info => {
-        const nums = Array.from(info.orderNumbers).sort((a, b) => a - b)
-        const numLabel = nums.length === 1 ? `#${nums[0]}` : nums.length > 1 ? `#${nums[0]}-${nums[nums.length - 1]}` : info.token.slice(0, 8)
-        return { token: info.token, label: `${numLabel} (${info.count})` }
-      })
-  }, [rows])
-  const selectedSlipRows = useMemo(() => (
-    slipFilter ? rows.filter(r => String(r.sourceToken || '') === slipFilter) : []
-  ), [rows, slipFilter])
-  const selectedSlipSummary = useMemo(() => {
-    if (!slipFilter) return null
-    const active = selectedSlipRows.filter(r => r.status !== 'CANCELLED')
-    const unpaid = active.filter(r => r.paymentStatus !== 'PAID')
-    return {
-      activeCount: active.length,
-      unpaidCount: unpaid.length,
-      total: active.reduce((sum, order) => sum + payableAmount(order), 0),
-      unpaidTotal: unpaid.reduce((sum, order) => sum + payableAmount(order), 0),
-      label: slipOptions.find(slip => slip.token === slipFilter)?.label || slipFilter.slice(0, 8),
-    }
-  }, [selectedSlipRows, slipFilter, slipOptions])
 
   const filtered = useMemo(() => {
     let list = rows
-    if (tableFilter) {
-      list = tableFilter === '__NONE__'
-        ? list.filter(r => !r.tableId)
-        : list.filter(r => String(r.tableId || '') === tableFilter)
-    }
-    if (slipFilter) {
-      list = list.filter(r => String(r.sourceToken || '') === slipFilter)
-    }
     if (search.trim()) {
       const q = search.toLowerCase()
       list = list.filter(r =>
@@ -1356,7 +1332,7 @@ function OrderCardGrid({ rows, loading, tables, actions, modelImageMap = {}, sel
       if (sortBy === 'total')  return Number(b.totalAmount || 0) - Number(a.totalAmount || 0)
       return 0
     })
-  }, [rows, search, sortBy, tableFilter, slipFilter])
+  }, [rows, search, sortBy])
 
   if (loading) return (
     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
@@ -1367,60 +1343,18 @@ function OrderCardGrid({ rows, loading, tables, actions, modelImageMap = {}, sel
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ px: { xs: 1, sm: 1.5 }, py: { xs: 0.5, sm: 0.75 }, display: 'flex', gap: { xs: 0.75, sm: 1 }, alignItems: 'center', borderBottom: '1px solid #e0e0e0', flexShrink: 0, flexWrap: 'wrap' }}>
-        <TextField size="small" placeholder="Search order #, customer, item, table..."
+        <TextField size="small" placeholder={t('shopOrder.grid.searchOrdersPlaceholder')}
           value={search} onChange={e => setSearch(e.target.value)}
           sx={{ flex: 1, display: { xs: 'none', sm: 'inline-flex' } }} inputProps={{ style: { fontSize: 13 } }} />
-        <TextField select size="small" label="Table" value={tableFilter} onChange={e => setTableFilter(e.target.value)} sx={{ width: { xs: 150, sm: 150 }, flex: { xs: 1, sm: '0 0 auto' } }}>
-          <MenuItem value="">{t('shopOrder.grid.allTables')}</MenuItem>
-          <MenuItem value="__NONE__">{t('shopOrder.grid.noTable')}</MenuItem>
-          {tables.map(t => <MenuItem key={t.id} value={String(t.id)}>{t.tableName}</MenuItem>)}
-        </TextField>
-        <TextField select size="small" label="Scan slip" value={slipFilter} onChange={e => setSlipFilter(e.target.value)} sx={{ width: 170, display: { xs: 'none', sm: 'inline-flex' } }}>
-          <MenuItem value="">{t('shopOrder.grid.allSlips')}</MenuItem>
-          {slipOptions.map(slip => <MenuItem key={slip.token} value={slip.token}>{slip.label}</MenuItem>)}
-        </TextField>
-        <TextField select size="small" label="Scan slip" value={slipFilter} onChange={e => setSlipFilter(e.target.value)}
-          sx={{ display: { xs: 'inline-flex', sm: 'none' }, flex: '1 1 100%' }}>
-          <MenuItem value="">{t('shopOrder.grid.allSlips')}</MenuItem>
-          {slipOptions.map(slip => <MenuItem key={slip.token} value={slip.token}>{slip.label}</MenuItem>)}
-        </TextField>
         <Box sx={{ display: { xs: 'flex', sm: 'none' }, gap: 0.5, flex: 1 }}>
-          <Button size="small" variant={sortBy === 'newest' ? 'contained' : 'outlined'} onClick={() => { setSortBy('newest'); try { localStorage.setItem('shop_orders_sort', 'newest') } catch {} }} sx={{ flex: 1, minHeight: 40, px: 0.75, fontSize: 11, fontWeight: 800 }}>Mới nhất</Button>
-          <Button size="small" variant={sortBy === 'oldest' ? 'contained' : 'outlined'} color="warning" onClick={() => { setSortBy('oldest'); try { localStorage.setItem('shop_orders_sort', 'oldest') } catch {} }} sx={{ flex: 1, minHeight: 40, px: 0.75, fontSize: 11, fontWeight: 800 }}>FIFO</Button>
+          <Button size="small" variant={sortBy === 'newest' ? 'contained' : 'outlined'} onClick={() => { setSortBy('newest'); try { localStorage.setItem('shop_orders_sort', 'newest') } catch {} }} sx={{ flex: 1, minHeight: 40, px: 0.75, fontSize: 11, fontWeight: 800 }}>{t('shopOrder.grid.sortNewest')}</Button>
+          <Button size="small" variant={sortBy === 'oldest' ? 'contained' : 'outlined'} color="warning" onClick={() => { setSortBy('oldest'); try { localStorage.setItem('shop_orders_sort', 'oldest') } catch {} }} sx={{ flex: 1, minHeight: 40, px: 0.75, fontSize: 11, fontWeight: 800 }}>{t('shopOrder.grid.sortOldest')}</Button>
         </Box>
         <TextField select size="small" label={t('shopOrder.grid.sort')} value={sortBy} onChange={e => { setSortBy(e.target.value); try { localStorage.setItem('shop_orders_sort', e.target.value) } catch {} }} sx={{ width: 190, display: { xs: 'none', sm: 'inline-flex' } }}>
           {SORT_OPTIONS.map(o => <MenuItem key={o.value} value={o.value}>{t(o.labelKey)}</MenuItem>)}
         </TextField>
-        <Typography sx={{ fontSize: 12, color: '#94a3b8', flexShrink: 0 }}>{filtered.length} / {rows.length} orders</Typography>
+        <Typography sx={{ fontSize: 12, color: '#94a3b8', flexShrink: 0 }}>{t('shopOrder.grid.filteredOrdersCount', { shown: filtered.length, total: rows.length })}</Typography>
       </Box>
-      {selectedSlipSummary && (
-        <Box sx={{
-          mx: { xs: 1, sm: 1.5 }, mt: 1, px: 1.25, py: 1,
-          display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap',
-          border: '1px solid #bbf7d0', borderRadius: 1, bgcolor: '#f0fdf4', flexShrink: 0,
-        }}>
-          <Box sx={{ minWidth: { xs: '100%', sm: 180 }, flex: 1 }}>
-            <Typography variant="caption" color="success.dark" fontWeight={900}>Scan slip {selectedSlipSummary.label}</Typography>
-            <Typography sx={{ fontSize: { xs: 13, sm: 14 }, color: '#166534', fontWeight: 800 }}>
-              {selectedSlipSummary.activeCount} order{selectedSlipSummary.activeCount !== 1 ? 's' : ''} · {selectedSlipSummary.unpaidCount} {t('common.unpaid').toLowerCase()}
-            </Typography>
-          </Box>
-          <Box sx={{ minWidth: 118 }}>
-            <Typography variant="caption" color="text.secondary" fontWeight={800}>{t('shopOrder.grid.unpaidScan')}</Typography>
-            <Typography fontWeight={900} color="success.dark">{fmt(selectedSlipSummary.unpaidTotal)}</Typography>
-          </Box>
-          <Box sx={{ minWidth: 104 }}>
-            <Typography variant="caption" color="text.secondary" fontWeight={800}>{t('common.total')}</Typography>
-            <Typography fontWeight={900}>{fmt(selectedSlipSummary.total)}</Typography>
-          </Box>
-          <Button startIcon={<QrCode2Icon />} variant="contained" color="success" size="small"
-            onClick={() => actions.combinedReceipt(slipFilter)}
-            disabled={!selectedSlipSummary.activeCount}
-            sx={{ textTransform: 'none', fontWeight: 900, minHeight: 40, ml: { sm: 'auto' } }}>
-            {t('shopOrder.grid.qrPayment')}
-          </Button>
-        </Box>
-      )}
       <Box sx={{ flex: 1, overflow: 'auto', p: viewMode === 'grid' ? 0 : (displaySize === 'large' ? 2 : 1.5) }}>
         {filtered.length === 0
           ? <Box sx={{ textAlign: 'center', py: 8 }}><Typography color="text.secondary">{t('shopOrder.grid.noOrders')}</Typography></Box>
@@ -1498,6 +1432,7 @@ export default function ShopOrderGrid() {
   const [orderViewMode, setOrderViewMode] = useState(() => readShopOrderPref(SHOP_ORDER_VIEW_PREF, 'cards'))
   const [cardDisplaySize, setCardDisplaySize] = useState(() => readShopOrderPref(SHOP_ORDER_CARD_SIZE_PREF, 'normal'))
   const [highContrastCards, setHighContrastCards] = useState(() => readShopOrderPref(SHOP_ORDER_CONTRAST_PREF, 'false') === 'true')
+  const [slipFilter, setSlipFilter]     = useState('')
   const [confirmDlg, setConfirmDlg]     = useState(null)
   const [orderScannerOpen, setOrderScannerOpen] = useState(false)
   const [scannedOrders, setScannedOrders] = useState([])
@@ -1507,6 +1442,7 @@ export default function ShopOrderGrid() {
   const [combinedToken, setCombinedToken] = useState(null)  // token string — opens CombinedReceiptDialog
   const [mergeOrder, setMergeOrder]       = useState(null)  // order to merge others into
   const [modelImageMap, setModelImageMap] = useState({})   // { [modelId]: imageUrl }
+  const [modelMetaMap, setModelMetaMap]   = useState({})   // { [modelId]: model }
   const [staffCalls, setStaffCalls]       = useState([])   // pending staff calls
   const [staffCallMobileOpen, setStaffCallMobileOpen] = useState(false)
   const [newOrderNotice, setNewOrderNotice] = useState(null)
@@ -1656,9 +1592,9 @@ export default function ShopOrderGrid() {
       setRows(list.filter(shouldShowInRows))
       rememberOrders(list)
       orderPollReadyRef.current = true
-    } catch { setError('Failed to load orders') }
+    } catch { setError(t('shopOrder.grid.loadOrdersFailed')) }
     setLoading(false)
-  }, [orderRangeParams, rememberOrders, shouldShowInRows])
+  }, [orderRangeParams, rememberOrders, shouldShowInRows, t])
 
   const loadBoard = useCallback(async () => {
     try {
@@ -1682,9 +1618,15 @@ export default function ShopOrderGrid() {
   }, [])
   useEffect(() => {
     fetchModels().then(list => {
-      const map = {}
-      ;(Array.isArray(list) ? list : []).forEach(m => { if (m.imageUrl) map[m.id] = m.imageUrl })
-      setModelImageMap(map)
+      const imageMap = {}
+      const metaMap = {}
+      ;(Array.isArray(list) ? list : []).forEach(m => {
+        if (!m?.id) return
+        metaMap[m.id] = m
+        if (m.imageUrl) imageMap[m.id] = m.imageUrl
+      })
+      setModelImageMap(imageMap)
+      setModelMetaMap(metaMap)
     }).catch(() => {})
   }, [])
 
@@ -1774,6 +1716,38 @@ export default function ShopOrderGrid() {
   const preparingOrders = boardRows.filter(r => r.status === 'PREPARING')
   const readyOrders     = boardRows.filter(r => r.status === 'READY')
   const pickedUpOrders  = boardRows.filter(r => r.status === 'PICKED_UP')
+  const slipOptions = useMemo(() => {
+    const byToken = new Map()
+    rows.forEach(order => {
+      const token = String(order.sourceToken || '').trim()
+      if (!token) return
+      const existing = byToken.get(token) || {
+        token,
+        slipNumber: groupSlipNumber(token),
+        count: 0,
+        activeCount: 0,
+        orderNumbers: new Set(),
+        createdAt: order.createdAt || '',
+      }
+      existing.count += 1
+      if (order.status !== 'CANCELLED') existing.activeCount += 1
+      if (order.orderNumber != null) existing.orderNumbers.add(order.orderNumber)
+      if (order.createdAt && (!existing.createdAt || new Date(order.createdAt) < new Date(existing.createdAt))) {
+        existing.createdAt = order.createdAt
+      }
+      byToken.set(token, existing)
+    })
+    return Array.from(byToken.values())
+      .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+      .map(info => {
+        const nums = Array.from(info.orderNumbers).sort((a, b) => a - b)
+        const orderHint = nums.length === 1 ? ` · #${nums[0]}` : nums.length > 1 ? ` · #${nums[0]}-${nums[nums.length - 1]}` : ''
+        return {
+          ...info,
+          label: `${t('shopOrder.grid.slipNumber', { number: info.slipNumber })}${orderHint} (${info.count})`,
+        }
+      })
+  }, [rows, t])
   const visibleOrderTotals = useMemo(() => {
     const tableGroups = new Map()
     let separateTotal = 0
@@ -1796,13 +1770,14 @@ export default function ShopOrderGrid() {
     return { tables: Array.from(tableGroups.values()), separateCount, separateTotal }
   }, [rows])
   const displayedRows = useMemo(() => rows.filter(order => {
+    if (slipFilter && String(order.sourceToken || '') !== slipFilter) return false
     if (!tableFilter) return true
     const tableLabel = order.fulfillmentType === 'DINE_IN'
       ? (order.tableName || order.customerTableTag || order.tableId || '')
       : ''
     if (tableFilter === '__SEPARATE__') return !tableLabel
     return String(order.tableId || tableLabel) === tableFilter
-  }), [rows, tableFilter])
+  }), [rows, tableFilter, slipFilter])
 
   const act = async (fn, id, afterSuccess) => {
     try {
@@ -1882,28 +1857,28 @@ export default function ShopOrderGrid() {
       const base = `${window.location.origin}/bom-inventory`
       setBoardUrl(`${base}/shop/board?t=${data.token}`)
       setCustomerBoardUrl(`${base}/shop/customer-board?t=${data.token}`)
-    } catch (e) { setError(e.message || 'Failed to generate board URL') }
+    } catch (e) { setError(e.message || t('shopOrder.grid.generateBoardUrlFailed')) }
     setBoardLoading(false)
   }
 
   const handleReset = async () => {
     setResetting(true)
     try { await resetOrderSequence(Number(resetTo)); setResetOpen(false); setResetTo(0) }
-    catch (e) { setError(e.message || 'Reset failed') }
+    catch (e) { setError(e.message || t('shopOrder.grid.resetFailed')) }
     setResetting(false)
   }
 
   const handleSwitchAndPrint = async (row) => {
     try {
-      const updated = await applyOrderResult(await switchToQrPayment(row.id), row.id, 'Failed to switch payment method')
+      const updated = await applyOrderResult(await switchToQrPayment(row.id), row.id, t('shopOrder.grid.switchPaymentMethodFailed'))
       if (updated) printOrderReceiptTracked(updated)
-    } catch (e) { setError(e.message || 'Failed to switch payment method') }
+    } catch (e) { setError(e.message || t('shopOrder.grid.switchPaymentMethodFailed')) }
   }
 
   const handleRevertToCash = async (row) => {
     try {
-      await applyOrderResult(await revertToCash(row.id), row.id, 'Failed to revert payment')
-    } catch (e) { setError(e.message || 'Failed to revert payment') }
+      await applyOrderResult(await revertToCash(row.id), row.id, t('shopOrder.grid.revertPaymentFailed'))
+    } catch (e) { setError(e.message || t('shopOrder.grid.revertPaymentFailed')) }
   }
 
   const handleMoveTable = async () => {
@@ -1911,20 +1886,20 @@ export default function ShopOrderGrid() {
     setMoving(true)
     try {
       await Promise.all(Array.from(selectedRows).map(async id =>
-        applyOrderResult(await setOrderTable(id, moveTableTarget || null), id, 'Failed to move orders')
+        applyOrderResult(await setOrderTable(id, moveTableTarget || null), id, t('shopOrder.grid.moveOrdersFailed'))
       ))
       setMoveTableOpen(false); setMoveTableTarget(''); setSelectedRows(new Set())
-    } catch (e) { setError(e.message || 'Failed to move orders') }
+    } catch (e) { setError(e.message || t('shopOrder.grid.moveOrdersFailed')) }
     setMoving(false)
   }
 
   const handleInlineTableChange = async (orderId, tableId) => {
-    try { await applyOrderResult(await setOrderTable(orderId, tableId || null), orderId, 'Failed to set table') }
-    catch (e) { setError(e.message || 'Failed to set table') }
+    try { await applyOrderResult(await setOrderTable(orderId, tableId || null), orderId, t('shopOrder.grid.setTableFailed')) }
+    catch (e) { setError(e.message || t('shopOrder.grid.setTableFailed')) }
   }
 
   const handleChangeSeat = async (order) => {
-    const entered = window.prompt('Nhập số bàn/tag, hoặc nhập:\nPICKUP = Mang đi\nDELIVERY = Giao hàng\nNONE = Dùng tại quán, không bàn', order.customerTableTag || order.tableName || '')
+    const entered = window.prompt(t('shopOrder.grid.changeSeatPrompt'), order.customerTableTag || order.tableName || '')
     if (entered === null) return
     const clean = entered.trim()
     const command = clean.toUpperCase()
@@ -1940,7 +1915,7 @@ export default function ShopOrderGrid() {
     }) : null
     const tableId = fulfillmentType === 'DINE_IN' && !noTable ? (match?.id || order.tableId || null) : null
     const tag = fulfillmentType === 'DINE_IN' && !noTable ? (clean || null) : null
-    try { await applyOrderResult(await setOrderSeat(order.id, tableId, tag, fulfillmentType), order.id, 'Failed to change fulfillment/table/tag') }
+    try { await applyOrderResult(await setOrderSeat(order.id, tableId, tag, fulfillmentType), order.id, t('shopOrder.grid.changeSeatFailed')) }
     catch (e) { setError(e.message || t('shopOrder.grid.changeSeatFailed')) }
   }
 
@@ -1948,7 +1923,7 @@ export default function ShopOrderGrid() {
     try {
       const { data } = await fetchOrderTagQr(row.id)
       printOrderTagTracked(row, data?.qrBase64 || null)
-    } catch (e) { setError(e.message || 'Failed to fetch tracking QR') }
+    } catch (e) { setError(e.message || t('shopOrder.grid.trackingQrFailed')) }
   }
 
   const handlePayQr = async (order) => {
@@ -1958,7 +1933,7 @@ export default function ShopOrderGrid() {
         const { data } = await fetchBankConfig()
         setBankConfig(data || {})
         config = data || {}
-      } catch { setError('Failed to load bank config'); return }
+      } catch { setError(t('shopOrder.grid.loadBankConfigFailed')); return }
     }
     setPayQrOrder(order)
   }
@@ -1967,7 +1942,7 @@ export default function ShopOrderGrid() {
     try {
       const { data } = await fetchPickupQr(row.id)
       setPickupQrOrder({ id: row.id, orderNumber: row.orderNumber, orderCode: row.orderCode, qrBase64: data.qrBase64 })
-    } catch (e) { setError('Failed to generate pickup QR: ' + (e.message || e)) }
+    } catch (e) { setError(t('shopOrder.grid.generatePickupQrFailed', { error: e.message || e })) }
   }
 
   const handleShowTrackQr = async (row) => {
@@ -1977,7 +1952,7 @@ export default function ShopOrderGrid() {
       setTrackQrOrder({ order: row, qrBase64: data?.qrBase64 || null, loading: false })
     } catch {
       setTrackQrOrder(prev => prev ? { ...prev, loading: false } : null)
-      setError('Failed to fetch tracking QR')
+      setError(t('shopOrder.grid.trackingQrFailed'))
     }
   }
 
@@ -1991,8 +1966,8 @@ export default function ShopOrderGrid() {
     setOrderNumber:  async (id, num) => {
       const n = parseInt(num, 10)
       if (isNaN(n) || n < 1) return
-      try { await applyOrderResult(await setShopOrderNumber(id, n), id, 'Failed to update number') }
-      catch (e) { setError(e.message || 'Failed to update number') }
+      try { await applyOrderResult(await setShopOrderNumber(id, n), id, t('shopOrder.grid.updateNumberFailed')) }
+      catch (e) { setError(e.message || t('shopOrder.grid.updateNumberFailed')) }
     },
     confirm:    (row) => askConfirm({ title: t('shopOrder.confirm.confirmTitle'), message: t('shopOrder.confirm.confirmMessage', { order: row.orderNumber ?? row.orderCode }), confirmLabel: t('shopOrder.grid.confirm'), confirmColor: 'primary' }, () => act(confirmShopOrder, row.id)),
     prepare:    (row) => askConfirm({ title: t('shopOrder.confirm.prepareTitle'), message: t('shopOrder.confirm.prepareMessage', { order: row.orderNumber ?? row.orderCode }), confirmLabel: t('shopOrder.confirm.startLabel'), confirmColor: 'warning' }, () => act(prepareShopOrder, row.id)),
@@ -2213,6 +2188,23 @@ export default function ShopOrderGrid() {
             variant="outlined" size="small" color="primary" sx={{ display: { xs: 'none', sm: 'inline-flex' }, textTransform: 'none', fontWeight: 700 }}>{t('shopOrder.grid.qrOrder')}</Button>
           <Button startIcon={<QrCodeScannerIcon />} onClick={() => { setScannedOrders([]); setOrderScannerOpen(true) }}
             variant="contained" size="small" color="primary" sx={{ textTransform: 'none', fontWeight: 800 }}>{t('shopOrder.grid.scanCustomerOrders')}</Button>
+          <TextField select size="small" label={t('shopOrder.grid.tableNumber')} value={tableFilter} onChange={e => setTableFilter(e.target.value)}
+            sx={{ width: { xs: 112, sm: 122 }, '& .MuiInputBase-input': { fontSize: 13, fontWeight: 800 } }}>
+            <MenuItem value="">{t('shopOrder.grid.allTables')}</MenuItem>
+            <MenuItem value="__SEPARATE__">{t('shopOrder.grid.noTable')}</MenuItem>
+            {tables.map(table => <MenuItem key={table.id} value={String(table.id)}>{table.tableName}</MenuItem>)}
+          </TextField>
+          <TextField select size="small" label={t('shopOrder.grid.scanSlipNumber')} value={slipFilter} onChange={e => setSlipFilter(e.target.value)}
+            sx={{ width: { xs: 136, sm: 176 }, '& .MuiInputBase-input': { fontSize: 13, fontWeight: 800 } }}>
+            <MenuItem value="">{t('shopOrder.grid.allSlips')}</MenuItem>
+            {slipOptions.map(slip => <MenuItem key={slip.token} value={slip.token}>{slip.label}</MenuItem>)}
+          </TextField>
+          {slipFilter && (
+            <Button size="small" variant="contained" color="success" onClick={() => setCombinedToken(slipFilter)}
+              sx={{ textTransform: 'none', fontWeight: 900, minWidth: { xs: 92, sm: 96 }, px: 1 }}>
+              {t('shopOrder.grid.paySlip')}
+            </Button>
+          )}
           <Badge badgeContent={customerEditHistory.length} color="warning" max={99} sx={{ display: { xs: 'none', sm: 'inline-flex' } }}>
             <Button startIcon={<NotificationsActiveIcon />} onClick={() => setCustomerEditHistoryOpen(true)}
               variant="outlined" size="small" color="warning" sx={{ textTransform: 'none', fontWeight: 800 }}>{t('shopOrder.grid.notificationHistory')}</Button>
@@ -2882,6 +2874,7 @@ export default function ShopOrderGrid() {
       {combinedToken && (
         <CombinedReceiptDialog
           token={combinedToken}
+          modelMetaMap={modelMetaMap}
           onClose={() => setCombinedToken(null)}
           onRefresh={reload}
         />
@@ -2892,8 +2885,8 @@ export default function ShopOrderGrid() {
 }
 
 // ── Combined Receipt Dialog ──────────────────────────────────────────
-function CombinedReceiptDialog({ token, onClose, onRefresh }) {
-  const { t } = useI18n()
+function CombinedReceiptDialog({ token, modelMetaMap = {}, onClose, onRefresh }) {
+  const { t, language } = useI18n()
   const [orders, setOrders]       = useState([])
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState('')
@@ -2903,6 +2896,7 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
   const [sessionLocked, setSessionLocked] = useState(false)
   const [lockError, setLockError] = useState('')
   const [closing, setClosing] = useState(false)
+  const [cancelTarget, setCancelTarget] = useState(null)
 
   const fmtAmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : '—'
 
@@ -2910,10 +2904,10 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
     setLoading(true)
     fetchOrdersByToken(token)
       .then(({ res, data }) => {
-        if (!res.ok) { setError(data?.error || 'Failed to load'); return }
+        if (!res.ok) { setError(data?.error || t('shopOrder.grid.slipLoadFailed')); return }
         setOrders(data || [])
       })
-      .catch(() => setError('Network error'))
+      .catch(() => setError(t('shopOrder.grid.slipReloadFailed')))
       .finally(() => setLoading(false))
   }
 
@@ -2926,9 +2920,9 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
       .then(({ res, data }) => {
         if (!active) return
         if (res.ok) setSessionLocked(true)
-        else setLockError(data?.message || data?.error || 'Could not pause customer ordering for this QR session')
+        else setLockError(data?.message || data?.error || t('shopOrder.grid.slipSessionLockFailed'))
       })
-      .catch(() => { if (active) setLockError('Could not pause customer ordering for this QR session') })
+      .catch(() => { if (active) setLockError(t('shopOrder.grid.slipSessionLockFailed')) })
     return () => {
       active = false
       unlockTokenSession(token).catch(() => {})
@@ -2940,6 +2934,7 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
   }, [])
 
   const activeOrders  = orders.filter(o => o.status !== 'CANCELLED')
+  const cancelledOrders = orders.filter(o => o.status === 'CANCELLED')
   const unpaidOrders  = activeOrders.filter(o => o.paymentStatus !== 'PAID')
   const switchableToQr = activeOrders.filter(o =>
     o.paymentStatus !== 'PAID' && o.paymentMethod === 'CASH' &&
@@ -2952,6 +2947,31 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
   )
   const grandTotal    = activeOrders.reduce((s, o) => s + payableAmount(o), 0)
   const unpaidTotal   = unpaidOrders.reduce((s, o) => s + payableAmount(o), 0)
+  const totalItems    = activeOrders.reduce((s, o) => s + orderItemQuantity(o), 0)
+  const slipNumber    = groupSlipNumber(token)
+  const categorySummary = useMemo(() => {
+    const groups = new Map()
+    activeOrders.forEach(order => {
+      rootOrderItems(order).forEach(item => {
+        const category = itemCategoryLabel(item, modelMetaMap, language, t('shopOrder.grid.uncategorized'))
+        const group = groups.get(category) || { category, quantity: 0, total: 0, items: new Map() }
+        const qty = Number(item.quantity || 0)
+        const lineTotal = Number(item.lineTotal || 0)
+        group.quantity += qty
+        group.total += lineTotal
+        const name = localizedModelName(item, language) || item.modelName || '-'
+        const itemSummary = group.items.get(name) || { name, quantity: 0, total: 0, orders: new Set() }
+        itemSummary.quantity += qty
+        itemSummary.total += lineTotal
+        itemSummary.orders.add(order.orderNumber ?? order.orderCode)
+        group.items.set(name, itemSummary)
+        groups.set(category, group)
+      })
+    })
+    return Array.from(groups.values())
+      .map(group => ({ ...group, items: Array.from(group.items.values()).sort((a, b) => b.quantity - a.quantity || a.name.localeCompare(b.name)) }))
+      .sort((a, b) => b.quantity - a.quantity || a.category.localeCompare(b.category))
+  }, [activeOrders, language, modelMetaMap, t])
 
   // After switching to QR, show the combined QR for the unpaid total
   const anyQrPay = activeOrders.some(o =>
@@ -2977,7 +2997,7 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
     try {
       for (const o of unpaidOrders) await markOrderPaid(o.id)
       onRefresh(); await handleClose(); return
-    } catch { setError('Failed to mark orders paid') }
+    } catch { setError(t('shopOrder.grid.markOrdersPaidFailed')) }
     setPaying(false)
   }
 
@@ -2987,11 +3007,11 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
     try {
       for (const o of switchableToQr) {
         const { res, data } = await switchToQrPayment(o.id)
-        if (!res.ok) throw new Error(data?.message || `Failed for order #${o.orderNumber}`)
+        if (!res.ok) throw new Error(data?.message || t('shopOrder.grid.orderActionFailed', { order: o.orderNumber }))
       }
       reload()
       onRefresh()
-    } catch (e) { setError(e.message || 'Failed to switch to QR') }
+    } catch (e) { setError(e.message || t('shopOrder.grid.switchToQrFailed')) }
     setSwitching(false)
   }
 
@@ -3001,11 +3021,11 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
     try {
       for (const o of switchableToCash) {
         const { res, data } = await revertToCash(o.id)
-        if (!res.ok) throw new Error(data?.message || `Failed for order #${o.orderNumber}`)
+        if (!res.ok) throw new Error(data?.message || t('shopOrder.grid.orderActionFailed', { order: o.orderNumber }))
       }
       reload()
       onRefresh()
-    } catch (e) { setError(e.message || 'Failed to switch to cash') }
+    } catch (e) { setError(e.message || t('shopOrder.grid.switchToCashFailed')) }
     setSwitching(false)
   }
 
@@ -3017,14 +3037,41 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
     })
   }
 
+  const handleCancelSlipOrder = async (reason) => {
+    if (!cancelTarget?.id) return
+    try {
+      const { res, data } = await cancelShopOrder(cancelTarget.id, reason)
+      if (!res.ok) throw new Error(data?.message || data?.error || t('shopOrder.grid.cancelSlipOrderFailed'))
+      if (data?.id) setOrders(prev => replaceOrderInList(prev, data, true))
+      else reload()
+      onRefresh?.()
+      setCancelTarget(null)
+    } catch (e) {
+      setError(e.message || t('shopOrder.grid.cancelSlipOrderFailed'))
+    }
+  }
+
+  const openTracking = (order) => {
+    if (!order?.orderCode) return
+    const base = `${window.location.origin}/bom-inventory/shop/order/${encodeURIComponent(order.orderCode)}`
+    const query = token ? `?t=${encodeURIComponent(token)}` : ''
+    window.open(base + query, '_blank')
+  }
+
   const STATUS_CHIP = { PENDING: 'default', CONFIRMED: 'primary', PREPARING: 'warning', READY: 'success', PICKED_UP: 'success', COMPLETED: 'success', CANCELLED: 'error' }
 
   return (
-    <Dialog open onClose={handleClose} maxWidth="sm" fullWidth>
+    <>
+    <Dialog open onClose={handleClose} maxWidth="md" fullWidth>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <PeopleAltIcon color="secondary" />
-          <Typography fontWeight={800}>{t('shopOrder.grid.combinedReceipt')}</Typography>
+          <Box>
+            <Typography fontWeight={900}>{t('shopOrder.grid.paySlip')}</Typography>
+            <Typography variant="caption" color="text.secondary" fontWeight={800}>
+              {t('shopOrder.grid.slipNumber', { number: slipNumber })}
+            </Typography>
+          </Box>
         </Box>
         <IconButton size="small" onClick={handleClose} disabled={closing}><CloseIcon fontSize="small" /></IconButton>
       </DialogTitle>
@@ -3035,8 +3082,30 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
         {lockError && <Alert severity="warning" sx={{ mb: 2 }}>{lockError}</Alert>}
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-        {!loading && !error && (
+        {!loading && (!error || orders.length > 0) && (
           <>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: 'repeat(5, 1fr)' }, gap: 1, mb: 2 }}>
+              {[
+                { label: t('shopOrder.grid.totalOrders'), value: orders.length },
+                { label: t('shopOrder.grid.activeOrders'), value: activeOrders.length },
+                { label: t('shopOrder.grid.cancelledOrders'), value: cancelledOrders.length },
+                { label: t('shopOrder.grid.totalItems'), value: totalItems },
+                { label: t('shopOrder.grid.totalAmount'), value: fmtAmt(grandTotal), wide: true },
+              ].map(stat => (
+                <Box key={stat.label} sx={{
+                  p: 1,
+                  minHeight: 62,
+                  border: '1px solid #e2e8f0',
+                  borderRadius: 1.5,
+                  bgcolor: '#f8fafc',
+                  gridColumn: { xs: stat.wide ? 'span 2' : 'auto', sm: 'auto' },
+                }}>
+                  <Typography variant="caption" color="text.secondary" fontWeight={900}>{stat.label}</Typography>
+                  <Typography fontWeight={900} sx={{ fontSize: stat.wide ? 17 : 20, lineHeight: 1.15 }}>{stat.value}</Typography>
+                </Box>
+              ))}
+            </Box>
+
             {/* Payment method switch bar */}
             {(switchableToQr.length > 0 || switchableToCash.length > 0) && (
               <Box sx={{ display: 'flex', gap: 1, mb: 2, p: 1.5, bgcolor: '#f8fafc', borderRadius: 2, border: '1px solid #e2e8f0' }}>
@@ -3061,6 +3130,32 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
               </Box>
             )}
 
+            {categorySummary.length > 0 && (
+              <Box sx={{ mb: 2 }}>
+                <Typography fontWeight={900} sx={{ mb: 1 }}>{t('shopOrder.grid.categorySummary')}</Typography>
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1 }}>
+                  {categorySummary.map(group => (
+                    <Box key={group.category} sx={{ p: 1.25, border: '1px solid #dbeafe', borderRadius: 1.5, bgcolor: '#f8fbff' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
+                        <Typography fontWeight={900} sx={{ flex: 1, minWidth: 0 }}>{group.category}</Typography>
+                        <Chip size="small" color="primary" label={t('shopOrder.grid.orderItemsCount', { count: group.quantity })} sx={{ fontWeight: 800 }} />
+                      </Box>
+                      <Typography variant="caption" color="text.secondary" fontWeight={900}>{fmtAmt(group.total)}</Typography>
+                      <Stack spacing={0.35} sx={{ mt: 0.75 }}>
+                        {group.items.slice(0, 6).map(item => (
+                          <Box key={item.name} sx={{ display: 'flex', gap: 1, alignItems: 'baseline' }}>
+                            <Typography fontWeight={900} color="primary" sx={{ minWidth: 34 }}>{item.quantity}×</Typography>
+                            <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }} noWrap>{item.name}</Typography>
+                            <Typography variant="caption" color="text.secondary">{fmtAmt(item.total)}</Typography>
+                          </Box>
+                        ))}
+                      </Stack>
+                    </Box>
+                  ))}
+                </Box>
+              </Box>
+            )}
+
             {/* Order list */}
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
               {orders.map((order) => {
@@ -3068,6 +3163,7 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
                 const roots       = (order.items || []).filter(i => !i.parentItemId)
                 const isCancelled = order.status === 'CANCELLED'
                 const isQr        = order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT'
+                const itemCount   = orderItemQuantity(order)
                 return (
                   <Box key={order.id} sx={{
                     border: `1px solid ${isQr && !isCancelled ? '#bbf7d0' : '#e2e8f0'}`,
@@ -3087,10 +3183,26 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
                       {order.tableName && (
                         <Chip label={t('shopOrder.common.tableValue', { value: order.tableName })} size="small" variant="outlined" sx={{ fontSize: 10 }} />
                       )}
+                      <Chip label={t('shopOrder.grid.orderItemsCount', { count: itemCount })} size="small" variant="outlined" sx={{ fontSize: 10, fontWeight: 800 }} />
                       {isQr && !isCancelled && (
                         <Chip label="💳 QR" size="small" color="success" sx={{ fontWeight: 800, fontSize: 10 }} />
                       )}
                       <Box sx={{ flex: 1 }} />
+                      {!isCancelled && (
+                        <>
+                          <Button size="small" variant="text" onClick={() => openTracking(order)}
+                            sx={{ textTransform: 'none', fontWeight: 800, minWidth: 0, px: 0.75 }}>
+                            {t('shopOrder.grid.trackOrder')}
+                          </Button>
+                          <Button size="small" variant="outlined" color="error" onClick={() => setCancelTarget(order)}
+                            sx={{ textTransform: 'none', fontWeight: 800, minWidth: 0, px: 0.75 }}>
+                            {t('shopOrder.grid.cancelSlipOrder')}
+                          </Button>
+                        </>
+                      )}
+                      {isCancelled && (
+                        <Chip label={t('shopOrder.grid.cancelledMarked')} color="error" size="small" variant="outlined" sx={{ fontWeight: 800, fontSize: 10 }} />
+                      )}
                       <Typography fontWeight={800} color={isCancelled ? 'text.disabled' : 'primary'}
                         sx={{ textDecoration: isCancelled ? 'line-through' : 'none' }}>
                         {fmtAmt(payableAmount(order))}
@@ -3102,11 +3214,11 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
                     <Box sx={{ px: 2, py: 0.75 }}>
                       {roots.slice(0, 4).map(item => (
                         <Typography key={item.id} variant="caption" color="text.secondary" sx={{ display: 'block' }} noWrap>
-                          {item.quantity}× {item.modelName}{item.dailyLastOrder ? ' [số cuối]' : ''}
+                          {item.quantity}× {localizedModelName(item, language) || item.modelName}{item.dailyLastOrder ? ` [${t('shopOrder.grid.dailyLastOrder')}]` : ''}
                         </Typography>
                       ))}
                       {roots.length > 4 && (
-                        <Typography variant="caption" color="text.secondary">+{roots.length - 4} more…</Typography>
+                        <Typography variant="caption" color="text.secondary">{t('shopOrder.grid.moreItemsCount', { count: roots.length - 4 })}</Typography>
                       )}
                     </Box>
                   </Box>
@@ -3120,7 +3232,7 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
             {payQrUrl && (
               <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2, p: 1.5, bgcolor: '#f0fdf4', borderRadius: 2, border: '1px solid #bbf7d0' }}>
                 <Box sx={{ bgcolor: '#fff', borderRadius: 1.5, p: 0.75, border: '2px solid #4ade80', flexShrink: 0 }}>
-                  <img src={payQrUrl} alt="QR Pay" style={{ width: 100, height: 100, display: 'block' }} />
+                  <img src={payQrUrl} alt={t('shopOrder.grid.qrPayment')} style={{ width: 100, height: 100, display: 'block' }} />
                 </Box>
                 <Box>
                   <Typography sx={{ fontWeight: 800, color: '#15803d', fontSize: 13 }}>💳 {t('shopOrder.grid.qrPayment')}</Typography>
@@ -3135,8 +3247,8 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
             {/* Grand total */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <Typography variant="body2" color="text.secondary">
-                {activeOrders.length} order{activeOrders.length !== 1 ? 's' : ''}
-                {orders.length > activeOrders.length ? ` (${orders.length - activeOrders.length} cancelled)` : ''}
+                {t('shopOrder.grid.activeOrders')}: {activeOrders.length}
+                {cancelledOrders.length ? ` · ${t('shopOrder.grid.cancelledOrders')}: ${cancelledOrders.length}` : ''}
               </Typography>
               <Typography fontWeight={900} sx={{ fontSize: 20 }} color="primary">
                 {fmtAmt(grandTotal)}
@@ -3174,5 +3286,17 @@ function CombinedReceiptDialog({ token, onClose, onRefresh }) {
         )}
       </DialogActions>
     </Dialog>
+    <ConfirmActionDialog
+      open={Boolean(cancelTarget)}
+      title={t('shopOrder.grid.cancelSlipOrderTitle', { order: cancelTarget?.orderNumber ?? cancelTarget?.orderCode ?? '' })}
+      message={t('shopOrder.grid.cancelSlipOrderMessage')}
+      confirmLabel={t('shopOrder.confirm.cancelLabel')}
+      confirmColor="error"
+      requireReason
+      reasonLabel={t('shopOrder.confirm.reasonLabel')}
+      onConfirm={handleCancelSlipOrder}
+      onCancel={() => setCancelTarget(null)}
+    />
+    </>
   )
 }
