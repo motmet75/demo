@@ -528,8 +528,8 @@ export function fetchSalesIncomeReport(params = {}) {
   return apiFetchJson('/shop/staff/sales-report' + qs(params))
 }
 
-export function fetchMenuAvailability() {
-  return apiFetchJson('/shop/staff/materials/menu-availability', {
+export function fetchMenuAvailability(params = {}) {
+  return apiFetchJson('/shop/staff/materials/menu-availability' + qs(params), {
     headers: timeZoneHeaders(),
   })
 }

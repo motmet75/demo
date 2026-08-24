@@ -736,6 +736,10 @@ public class ShopOrderService {
 
     public record WalkUpQrResult(String qrBase64, String qrUrl, String token, Integer seq, Integer maxOrders) {}
 
+    public record GroupOrderSlipResult(String qrBase64, String qrUrl, String token, String slipNumber,
+                                       Integer maxOrders, String language, Instant expiresAt,
+                                       String name, String phone, String address) {}
+
     @Transactional
     public WalkUpQrResult generateWalkUpQr(Integer seq, Integer maxOrders, UUID tenantId, UUID companyId) {
         int limit = normalizeMaxOrders(maxOrders);
@@ -743,6 +747,23 @@ public class ShopOrderService {
         String url = publicBaseUrl + "/shop/menu?t=" + sat.getToken()
                    + (seq != null ? "&seq=" + seq : "");
         return new WalkUpQrResult(QrCodeUtil.generateBase64Png(url, 400), url, sat.getToken(), seq, limit);
+    }
+
+    @Transactional
+    public GroupOrderSlipResult generateGroupOrderSlip(String name, String phone, String address, Integer maxOrders,
+                                                       String language, UUID tenantId, UUID companyId) {
+        String cleanName = requireGroupField(name, "name");
+        String cleanPhone = requireGroupField(phone, "phone");
+        String cleanAddress = requireGroupField(address, "address");
+        int limit = normalizeGroupMaxOrders(maxOrders);
+        String lang = normalizeOrderingLanguage(language);
+        ShopAccessToken sat = createWalkUpToken(null, limit, tenantId, companyId, "Group order slip");
+        String slipNumber = groupSlipNumber(sat.getToken());
+        sat.setDescription(groupOrderDescription(slipNumber, cleanName, cleanPhone, cleanAddress, limit, lang));
+        shopAccessTokenRepository.save(sat);
+        String url = publicBaseUrl + "/shop/menu?t=" + sat.getToken() + "&lang=" + lang + "&group=1";
+        return new GroupOrderSlipResult(QrCodeUtil.generateBase64Png(url, 400), url, sat.getToken(), slipNumber,
+                limit, lang, sat.getExpiresAt(), cleanName, cleanPhone, cleanAddress);
     }
 
     private ShopAccessToken createWalkUpToken(Integer seq, int maxOrders, UUID tenantId, UUID companyId,
@@ -763,6 +784,48 @@ public class ShopOrderService {
         if (maxOrders < 1) return 1;
         if (maxOrders > 500) return 500;
         return maxOrders;
+    }
+
+    private int normalizeGroupMaxOrders(Integer maxOrders) {
+        if (maxOrders == null) return DEFAULT_WALK_UP_MAX_ORDERS;
+        if (maxOrders < 1) return 1;
+        if (maxOrders > 99) return 99;
+        return maxOrders;
+    }
+
+    private String requireGroupField(String value, String field) {
+        String clean = boundedGroupField(value);
+        if (clean == null) throw new IllegalArgumentException(field + " is required");
+        return clean;
+    }
+
+    private String boundedGroupField(String value) {
+        if (value == null) return null;
+        String clean = value.trim().replaceAll("\\s+", " ");
+        if (clean.isBlank()) return null;
+        return clean.length() <= 300 ? clean : clean.substring(0, 300);
+    }
+
+    private String normalizeOrderingLanguage(String language) {
+        String lang = language != null ? language.trim().toLowerCase(Locale.ROOT).replace('_', '-') : "vi";
+        if (lang.equals("zh") || lang.equals("zh-cn") || lang.startsWith("zh-hans")) return "cn";
+        if (lang.equals("zh-tw") || lang.equals("zh-hant") || lang.startsWith("zh-hant")) return "tw";
+        if (lang.equals("thai") || lang.equals("thailand")) return "th";
+        lang = lang.split("-", 2)[0];
+        return Set.of("vi", "en", "cn", "tw", "ja", "ko", "th", "es", "ms", "id", "dv").contains(lang) ? lang : "vi";
+    }
+
+    private String groupOrderDescription(String slipNumber, String name, String phone, String address, int maxOrders, String language) {
+        return "Group order slip #" + slipNumber
+                + " | name=" + name
+                + " | phone=" + phone
+                + " | address=" + address
+                + " | maxOrders=" + maxOrders
+                + " | language=" + language;
+    }
+
+    private String groupSlipNumber(String token) {
+        return String.format(Locale.ROOT, "%06d", Math.floorMod(String.valueOf(token).hashCode(), 900000) + 100000);
     }
 
     public record QueueQrResult(String qrBase64, String qrUrl, String token, Instant expiresAt, int validDays,

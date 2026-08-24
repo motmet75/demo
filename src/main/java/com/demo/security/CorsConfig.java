@@ -25,10 +25,16 @@ public class CorsConfig {
 		"https://anhmedia.vn:5173"
 	);
 
+	private static final List<String> ALLOWED_ORIGIN_PATTERNS = List.of(
+		"https://*.anhmedia.vn",
+		"http://*.anhmedia.vn"
+	);
+
 	@Bean
 	public CorsConfigurationSource corsConfigurationSource() {
 		CorsConfiguration config = new CorsConfiguration();
 		config.setAllowedOrigins(ALLOWED_ORIGINS);
+		config.setAllowedOriginPatterns(ALLOWED_ORIGIN_PATTERNS);
 		config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
 		config.setAllowedHeaders(List.of("*"));
 		config.setAllowCredentials(true);
@@ -47,6 +53,7 @@ public class CorsConfig {
 			public void addCorsMappings(CorsRegistry registry) {
 				registry.addMapping("/**")
 					.allowedOrigins(ALLOWED_ORIGINS.toArray(new String[0]))
+					.allowedOriginPatterns(ALLOWED_ORIGIN_PATTERNS.toArray(new String[0]))
 					.allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
 					.allowedHeaders("*")
 					.allowCredentials(true)

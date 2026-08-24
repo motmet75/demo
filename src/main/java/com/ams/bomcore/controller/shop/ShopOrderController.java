@@ -164,6 +164,47 @@ public class ShopOrderController {
                 .toList());
     }
 
+    @PostMapping("/shop/public/group-order-slip")
+    public ResponseEntity<?> generatePublicGroupOrderSlip(@RequestBody(required = false) Map<String, Object> body,
+                                                          @RequestParam UUID tenantId,
+                                                          @RequestParam UUID companyId) {
+        try {
+            validateScope(tenantId, companyId);
+            Map<String, Object> requestBody = body != null ? body : Collections.emptyMap();
+            Integer maxOrders = integerValue(requestBody.get("maxOrders"));
+            if (maxOrders == null || maxOrders < 1 || maxOrders >= 100) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "error", "maxOrders must be from 1 to 99",
+                        "message", "maxOrders must be from 1 to 99"
+                ));
+            }
+            ShopOrderService.GroupOrderSlipResult slip = shopOrderService.generateGroupOrderSlip(
+                    stringValue(requestBody.get("name")),
+                    stringValue(requestBody.get("phone")),
+                    stringValue(requestBody.get("address")),
+                    maxOrders,
+                    stringValue(requestBody.get("language")),
+                    tenantId,
+                    companyId
+            );
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("qrBase64", slip.qrBase64());
+            result.put("qrUrl", slip.qrUrl());
+            result.put("token", slip.token());
+            result.put("slipNumber", slip.slipNumber());
+            result.put("maxOrders", slip.maxOrders());
+            result.put("language", slip.language());
+            result.put("expiresAt", slip.expiresAt());
+            result.put("name", slip.name());
+            result.put("phone", slip.phone());
+            result.put("address", slip.address());
+            return ResponseEntity.status(HttpStatus.CREATED).body(result);
+        } catch (IllegalArgumentException e) {
+            String message = e.getMessage() != null ? e.getMessage() : "Cannot create group order slip";
+            return ResponseEntity.badRequest().body(Map.of("error", message, "message", message));
+        }
+    }
+
     @GetMapping("/shop/public/tables/{tableId}")
     public ResponseEntity<?> getTable(@PathVariable UUID tableId,
                                        @RequestParam UUID tenantId, @RequestParam UUID companyId) {
@@ -1535,12 +1576,13 @@ public class ShopOrderController {
     @GetMapping("/shop/staff/materials/menu-availability")
     public ResponseEntity<?> menuAvailability(@RequestParam(required = false) UUID tenantId,
                                               @RequestParam(required = false) UUID companyId,
+                                              @RequestParam(required = false) java.time.LocalDate date,
                                               @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
                                               @RequestHeader(value = "X-Company-Id", required = false) String hCompany,
                                               @RequestHeader(value = "X-Time-Zone", required = false) String timeZone) {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
-        java.time.LocalDate businessDate = java.time.LocalDate.now(RequestTimeZone.resolve(timeZone));
+        java.time.LocalDate businessDate = date != null ? date : java.time.LocalDate.now(RequestTimeZone.resolve(timeZone));
         return ResponseEntity.ok(shopMaterialAuditService.menuAvailability(tId, cId, businessDate));
     }
 

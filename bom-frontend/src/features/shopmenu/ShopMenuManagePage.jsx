@@ -41,9 +41,18 @@ import { parseAllowedSideConfig, serializeAllowedSideConfig } from '../../utils/
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' d' : ''
 const fmtQty = (n) => n != null && n !== '' ? Number(n).toLocaleString('vi-VN', { maximumFractionDigits: 3 }) : '—'
 const localDateKey = () => {
+  return localDateKeyFor(new Date())
+}
+const localDateKeyFor = (date) => {
   const d = new Date()
+  d.setTime(date.getTime())
   const pad = value => String(value).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+const yesterdayDateKey = () => {
+  const d = new Date()
+  d.setDate(d.getDate() - 1)
+  return localDateKeyFor(d)
 }
 
 function ModelCard({ model, selected, availabilityRow, onSelectedChange, onEdit, onClone, onToggle, saving }) {
@@ -1054,6 +1063,9 @@ export default function ShopMenuManagePage() {
   const [bulkProgress, setBulkProgress] = useState('')
   const [bulkError, setBulkError] = useState('')
   const [bulkNotice, setBulkNotice] = useState('')
+  const [applyingYesterday, setApplyingYesterday] = useState(false)
+  const [yesterdayNotice, setYesterdayNotice] = useState('')
+  const [yesterdayError, setYesterdayError] = useState('')
   const [filter, setFilter] = useState('all')      // all | on | off
   const [catFilter, setCatFilter] = useState('')
   const [search, setSearch] = useState('')
@@ -1061,6 +1073,17 @@ export default function ShopMenuManagePage() {
   const applyAvailabilityResponse = (result) => {
     const rows = result?.data
     setAvailabilityRows(Array.isArray(rows) ? rows : [])
+  }
+
+  const mergeAvailabilityRows = (rows) => {
+    setAvailabilityRows(prev => {
+      const byId = new Map((prev || []).map(row => [String(row.modelId), row]))
+      const nextRows = rows || []
+      nextRows.forEach(row => {
+        if (row?.modelId) byId.set(String(row.modelId), row)
+      })
+      return Array.from(byId.values())
+    })
   }
 
   const loadAvailability = async () => {
@@ -1193,14 +1216,71 @@ export default function ShopMenuManagePage() {
       throw new Error((data && (data.message || data.error)) || (typeof data === 'string' ? data : '') || 'Failed to save today quantity')
     }
     const updatedRow = result.data
-    setAvailabilityRows(prev => {
-      const byId = new Map((prev || []).map(row => [String(row.modelId), row]))
-      if (updatedRow?.modelId) byId.set(String(updatedRow.modelId), updatedRow)
-      return Array.from(byId.values())
-    })
+    mergeAvailabilityRows(updatedRow ? [updatedRow] : [])
     setModels(prev => prev.map(model => String(model.id) === String(modelId)
       ? { ...model, shopAvailableUnitsOverride: units, shopAvailableUnitsOverrideDate: units != null ? localDateKey() : null }
       : model))
+  }
+
+  const suggestedYesterdayUnits = (row) => {
+    const raw = row?.dailyLimitUnits ?? row?.manualAvailableUnits
+    if (raw == null || raw === '') return null
+    const units = Number(raw)
+    return Number.isFinite(units) && units >= 0 ? units : null
+  }
+
+  const handleApplyYesterdayQuantities = async (scope) => {
+    const targetIds = scope === 'selected' ? selectedIds : models.map(model => model.id)
+    if (!targetIds.length) return
+    setApplyingYesterday(true)
+    setYesterdayError('')
+    setYesterdayNotice('')
+    try {
+      const date = yesterdayDateKey()
+      const result = await fetchMenuAvailability({ date })
+      if (!result?.res?.ok) {
+        const data = result?.data
+        throw new Error((data && (data.message || data.error)) || (typeof data === 'string' ? data : '') || 'Failed to load yesterday quantities')
+      }
+      const targetSet = new Set(targetIds.map(id => String(id)))
+      const candidates = (Array.isArray(result.data) ? result.data : [])
+        .filter(row => targetSet.has(String(row.modelId)))
+        .map(row => ({ row, units: suggestedYesterdayUnits(row) }))
+        .filter(item => item.units != null)
+
+      if (!candidates.length) {
+        setYesterdayNotice(scope === 'selected'
+          ? 'No yesterday quantity found for the selected items.'
+          : 'No yesterday quantities found to apply.')
+        return
+      }
+
+      const updatedRows = await Promise.all(candidates.map(async ({ row, units }) => {
+        const update = await updateMenuAvailabilityOverride(row.modelId, units)
+        if (!update?.res?.ok) {
+          const data = update?.data
+          throw new Error(`${row.modelName || row.modelCode || row.modelId}: ${
+            (data && (data.message || data.error)) || (typeof data === 'string' ? data : '') || 'Failed to save today quantity'
+          }`)
+        }
+        return update.data
+      }))
+
+      const unitsById = new Map(candidates.map(({ row, units }) => [String(row.modelId), units]))
+      mergeAvailabilityRows(updatedRows)
+      setModels(prev => prev.map(model => unitsById.has(String(model.id))
+        ? {
+            ...model,
+            shopAvailableUnitsOverride: unitsById.get(String(model.id)),
+            shopAvailableUnitsOverrideDate: localDateKey(),
+          }
+        : model))
+      setYesterdayNotice(`Applied yesterday quantities to ${updatedRows.length} item${updatedRows.length === 1 ? '' : 's'}.`)
+    } catch (e) {
+      setYesterdayError(e.message || 'Failed to apply yesterday quantities')
+    } finally {
+      setApplyingYesterday(false)
+    }
   }
 
   const handleCloneCreated = (created) => {
@@ -1227,6 +1307,8 @@ export default function ShopMenuManagePage() {
       </Box>
 
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
+      {yesterdayError && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setYesterdayError('')}>{yesterdayError}</Alert>}
+      {yesterdayNotice && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setYesterdayNotice('')}>{yesterdayNotice}</Alert>}
 
       {/* Filter bar */}
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mb: 2, alignItems: 'center' }}>
@@ -1250,6 +1332,34 @@ export default function ShopMenuManagePage() {
             Clear {selectedIds.length}
           </Button>
         )}
+        <Tooltip title="Copy yesterday's saved daily quantity to the selected menu items. Items without a yesterday value are skipped.">
+          <span>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={applyingYesterday ? <CircularProgress size={14} /> : <ContentCopyIcon />}
+              disabled={applyingYesterday || !selectedIds.length}
+              onClick={() => handleApplyYesterdayQuantities('selected')}
+              sx={{ textTransform: 'none', fontWeight: 800 }}
+            >
+              Yesterday selected
+            </Button>
+          </span>
+        </Tooltip>
+        <Tooltip title="Copy yesterday's saved daily quantity to all menu items with a yesterday value.">
+          <span>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={applyingYesterday ? <CircularProgress size={14} /> : <ContentCopyIcon />}
+              disabled={applyingYesterday || !models.length}
+              onClick={() => handleApplyYesterdayQuantities('all')}
+              sx={{ textTransform: 'none', fontWeight: 800 }}
+            >
+              Yesterday all
+            </Button>
+          </span>
+        </Tooltip>
         <Button
           size="small"
           variant="contained"
