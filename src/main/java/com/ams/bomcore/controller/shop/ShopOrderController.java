@@ -1401,6 +1401,12 @@ public class ShopOrderController {
     }
     private Map<String, Object> bankConfigMap(com.ams.bomcore.domain.company.Company company) {
         Map<String, Object> m = new java.util.LinkedHashMap<>();
+        String shopAddress = company.getShopAddress() != null && !company.getShopAddress().isBlank()
+                ? company.getShopAddress()
+                : (company.getAddress() != null ? company.getAddress() : "");
+        String shopPhone = company.getShopPhone() != null && !company.getShopPhone().isBlank()
+                ? company.getShopPhone()
+                : (company.getPhoneNumber() != null ? company.getPhoneNumber() : "");
         m.put("bankBin",              company.getBankBin()           != null ? company.getBankBin()           : "");
         m.put("bankAccountNumber",    company.getBankAccountNumber() != null ? company.getBankAccountNumber() : "");
         m.put("bankAccountName",      company.getBankAccountName()   != null ? company.getBankAccountName()   : "");
@@ -1408,8 +1414,10 @@ public class ShopOrderController {
         m.put("companyName",           company.getCompanyName()       != null ? company.getCompanyName()       : "");
         m.put("shopLogoUrl",           company.getShopLogoUrl()       != null ? company.getShopLogoUrl()       : "");
         m.put("shopName",              company.getShopName()          != null && !company.getShopName().isBlank() ? company.getShopName() : (company.getCompanyName() != null ? company.getCompanyName() : ""));
-        m.put("shopAddress",           company.getShopAddress()       != null ? company.getShopAddress()       : "");
-        m.put("shopPhone",             company.getShopPhone()         != null ? company.getShopPhone()         : "");
+        m.put("shopAddress",           shopAddress);
+        m.put("shopPhone",             shopPhone);
+        m.put("companyAddress",        company.getAddress()           != null ? company.getAddress()           : "");
+        m.put("companyPhoneNumber",    company.getPhoneNumber()       != null ? company.getPhoneNumber()       : "");
         m.put("realtimeInventory",    Boolean.TRUE.equals(company.getRealtimeInventory()));
         m.put("processingInventoryRecheck", Boolean.TRUE.equals(company.getShopProcessingInventoryRecheck()));
         m.put("pointsConversionRate", company.getPointsConversionRate());

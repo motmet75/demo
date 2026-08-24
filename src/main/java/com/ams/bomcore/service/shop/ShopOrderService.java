@@ -166,7 +166,7 @@ public class ShopOrderService {
             return null;
         }
         LocalDate effectiveDate = businessDate != null ? businessDate : LocalDate.now();
-        return model.getShopAvailableUnitsOverrideDate().equals(effectiveDate)
+        return !model.getShopAvailableUnitsOverrideDate().isAfter(effectiveDate)
                 ? model.getShopAvailableUnitsOverride()
                 : null;
     }

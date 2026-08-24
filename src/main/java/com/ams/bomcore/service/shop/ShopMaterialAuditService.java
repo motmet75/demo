@@ -395,7 +395,7 @@ public class ShopMaterialAuditService {
         LocalDate date = model.getShopAvailableUnitsOverrideDate();
         if (date == null) return null;
         LocalDate effectiveDate = businessDate != null ? businessDate : LocalDate.now();
-        return date.equals(effectiveDate) ? units : null;
+        return !date.isAfter(effectiveDate) ? units : null;
     }
 
     private BigDecimal soldToday(UUID modelId, UUID tenantId, UUID companyId, LocalDate businessDate) {

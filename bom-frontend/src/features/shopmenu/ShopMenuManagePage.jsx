@@ -125,7 +125,7 @@ function ModelCard({ model, selected, availabilityRow, onSelectedChange, onEdit,
           )}
           {(manualUnits != null || hasEffectiveUnits) && (
             <Chip
-              label={manualUnits != null ? `Today limit: ${fmtQty(manualUnits)}` : `Today left: ${fmtQty(effectiveUnits)}`}
+              label={manualUnits != null ? `Daily limit: ${fmtQty(manualUnits)}` : `Today left: ${fmtQty(effectiveUnits)}`}
               size="small"
               color={hasEffectiveUnits && numericEffective <= 0 ? 'error' : (manualUnits != null ? 'warning' : 'success')}
               variant={manualUnits != null ? 'filled' : 'outlined'}
@@ -730,11 +730,11 @@ function EditDialog({ open, model, models, availabilityRow, onClose, onSave, onA
             value={form.sellingPrice} onChange={set('sellingPrice')}
             InputProps={{ endAdornment: <InputAdornment position="end">d</InputAdornment> }}
             helperText="Leave empty to hide from menu" />
-          <TextField label="Today default quantity / portion" type="number" size="small" fullWidth
+          <TextField label="Daily default quantity / portion" type="number" size="small" fullWidth
             value={form.shopAvailableUnitsOverride} onChange={set('shopAvailableUnitsOverride')}
             inputProps={{ min: 0, step: '0.001' }}
             InputProps={{ endAdornment: <InputAdornment position="end">unit</InputAdornment> }}
-            helperText="Blank = auto from inventory and reset by day. 0 = sold out for today only." />
+            helperText="If unchanged, the latest saved quota is reused each new day. Blank = auto from inventory. 0 = sold out." />
           <TextField label="Category" size="small" fullWidth
             value={form.category} onChange={set('category')} placeholder="e.g. Coffee, Tea, Food" />
           <TextField label="Ingredients shown to customers" size="small" fullWidth multiline minRows={2}
@@ -1309,6 +1309,9 @@ export default function ShopMenuManagePage() {
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
       {yesterdayError && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setYesterdayError('')}>{yesterdayError}</Alert>}
       {yesterdayNotice && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setYesterdayNotice('')}>{yesterdayNotice}</Alert>}
+      <Alert severity="info" sx={{ mb: 2 }}>
+        Daily quantities carry forward from the latest saved day. If vật tư is almost unchanged, edit only the changed items; leave the rest as-is.
+      </Alert>
 
       {/* Filter bar */}
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mb: 2, alignItems: 'center' }}>
