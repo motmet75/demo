@@ -102,6 +102,12 @@ public class Company {
     @Column(name = "shop_counter_network_rules", columnDefinition = "TEXT")
     private String shopCounterNetworkRules;
 
+    @Column(name = "new_order_notification_emails", columnDefinition = "TEXT")
+    private String newOrderNotificationEmails;
+
+    @Column(name = "new_order_notification_enabled")
+    private Boolean newOrderNotificationEnabled = false;
+
     public Company() {}
 
     public UUID getId() { return id; }
@@ -165,6 +171,10 @@ public class Company {
     public void setShopAllowAllNetworks(Boolean shopAllowAllNetworks) { this.shopAllowAllNetworks = shopAllowAllNetworks; }
     public String getShopCounterNetworkRules() { return shopCounterNetworkRules; }
     public void setShopCounterNetworkRules(String shopCounterNetworkRules) { this.shopCounterNetworkRules = shopCounterNetworkRules; }
+    public String getNewOrderNotificationEmails() { return newOrderNotificationEmails; }
+    public void setNewOrderNotificationEmails(String newOrderNotificationEmails) { this.newOrderNotificationEmails = newOrderNotificationEmails; }
+    public Boolean getNewOrderNotificationEnabled() { return Boolean.TRUE.equals(newOrderNotificationEnabled); }
+    public void setNewOrderNotificationEnabled(Boolean newOrderNotificationEnabled) { this.newOrderNotificationEnabled = newOrderNotificationEnabled; }
 
     @PrePersist
     private void prePersist() {

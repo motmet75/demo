@@ -62,6 +62,7 @@ public class ShopOrderService {
     private final ShopBillRepository shopBillRepository;
     private final ShopBillItemRepository shopBillItemRepository;
     private final ShopLocalizedLabelService shopLocalizedLabelService;
+    private final ShopNewOrderNotificationService newOrderNotificationService;
 
     @Value("${app.shop.public-base-url:http://localhost:5173/bom-inventory}")
     private String publicBaseUrl;
@@ -82,7 +83,8 @@ public class ShopOrderService {
                             ShopVoucherRepository shopVoucherRepository,
                             ShopBillRepository shopBillRepository,
                             ShopBillItemRepository shopBillItemRepository,
-                            ShopLocalizedLabelService shopLocalizedLabelService) {
+                            ShopLocalizedLabelService shopLocalizedLabelService,
+                            ShopNewOrderNotificationService newOrderNotificationService) {
         this.shopOrderRepository = shopOrderRepository;
         this.shopOrderItemRepository = shopOrderItemRepository;
         this.shopTableRepository = shopTableRepository;
@@ -100,6 +102,7 @@ public class ShopOrderService {
         this.shopBillRepository = shopBillRepository;
         this.shopBillItemRepository = shopBillItemRepository;
         this.shopLocalizedLabelService = shopLocalizedLabelService;
+        this.newOrderNotificationService = newOrderNotificationService;
     }
 
     // ── Menu ─────────────────────────────────────────────────────────
@@ -342,7 +345,9 @@ public class ShopOrderService {
         shopOrderRepository.save(order);
         resetOrderBills(order, items);
 
-        return dto(order);
+        ShopOrderResponseDto response = dto(order);
+        newOrderNotificationService.notifyOrderCreated(response);
+        return response;
     }
 
     private boolean isQueueQrToken(String token, UUID tenantId, UUID companyId) {

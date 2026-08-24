@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Alert, Avatar, Box, Button, Card, CardContent,
   Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
-  Divider, Paper, Snackbar, TextField, Typography
+  Divider, FormControlLabel, Paper, Snackbar, Switch, TextField, Typography
 } from '@mui/material'
 import StoreIcon from '@mui/icons-material/Store'
 import QrCodeIcon from '@mui/icons-material/QrCode'
@@ -18,6 +18,24 @@ import { apiFetchJson } from '../../api/client'
 import { useAuth } from '../../context/useAuth'
 import { extendShopValidity } from '../../api/authApi'
 import { useI18n } from '../../i18n/I18nContext'
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+function normalizeNotificationEmails(value) {
+  const unique = new Map()
+  let invalid = ''
+  String(value || '').split(/[\s,;]+/).forEach(part => {
+    const email = part.trim()
+    if (!email) return
+    if (!EMAIL_PATTERN.test(email)) {
+      if (!invalid) invalid = email
+      return
+    }
+    const key = email.toLowerCase()
+    if (!unique.has(key)) unique.set(key, email)
+  })
+  return { emails: Array.from(unique.values()), invalid }
+}
 
 function ValidityCard({ company, user, isAdmin, onExtended }) {
   const [extendOpen, setExtendOpen]   = useState(false)
@@ -157,11 +175,22 @@ export default function ProfilePage() {
   const [emailPassword, setEmailPassword] = useState('')
   const [emailBusy, setEmailBusy] = useState(false)
   const [emailError, setEmailError] = useState('')
+  const [orderNotifyEnabled, setOrderNotifyEnabled] = useState(false)
+  const [orderNotifyEmails, setOrderNotifyEmails] = useState('')
+  const [orderNotifyBusy, setOrderNotifyBusy] = useState(false)
+  const [orderNotifyError, setOrderNotifyError] = useState('')
+  const [orderNotifyDirty, setOrderNotifyDirty] = useState(false)
 
   const loadProfile = useCallback(async () => {
     setLoadingProfile(true)
     const { res, data } = await apiFetchJson('/auth/profile', { credentials: 'include' })
-    if (res.ok) setProfile(data)
+    if (res.ok) {
+      setProfile(data)
+      setOrderNotifyEnabled(Boolean(data?.company?.newOrderNotificationEnabled))
+      setOrderNotifyEmails(data?.company?.newOrderNotificationEmails || data?.company?.newOrderNotificationEmail || '')
+      setOrderNotifyError('')
+      setOrderNotifyDirty(false)
+    }
     setLoadingProfile(false)
   }, [])
 
@@ -299,6 +328,55 @@ export default function ProfilePage() {
     setSnack({ open: true, message: t('profile.email.changed'), severity: 'success' })
     refreshMe().then(() => loadProfile())
   }
+
+  const handleOrderNotifyToggle = (checked) => {
+    setOrderNotifyEnabled(checked)
+    if (checked && !orderNotifyEmails.trim() && p?.user?.email) {
+      setOrderNotifyEmails(p.user.email)
+    }
+    setOrderNotifyError('')
+    setOrderNotifyDirty(true)
+  }
+
+  const saveOrderNotification = async () => {
+    const parsed = normalizeNotificationEmails(orderNotifyEmails)
+    if (parsed.invalid) {
+      setOrderNotifyError(t('profile.orderNotify.invalid', { email: parsed.invalid }))
+      return
+    }
+    if (orderNotifyEnabled && parsed.emails.length === 0) {
+      setOrderNotifyError(t('profile.orderNotify.required'))
+      return
+    }
+    const normalizedEmails = parsed.emails.join('\n')
+    setOrderNotifyBusy(true)
+    setOrderNotifyError('')
+    const { res, data } = await apiFetchJson('/auth/profile/order-notification', {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: orderNotifyEnabled, emails: normalizedEmails }),
+    })
+    setOrderNotifyBusy(false)
+    if (!res.ok || data?.success === false) {
+      setOrderNotifyError(data?.message || t('profile.orderNotify.saveFailed'))
+      return
+    }
+    const savedEmails = data?.newOrderNotificationEmails || normalizedEmails
+    const savedEnabled = Boolean(data?.newOrderNotificationEnabled)
+    setOrderNotifyEnabled(savedEnabled)
+    setOrderNotifyEmails(savedEmails)
+    setOrderNotifyDirty(false)
+    setProfile(current => current ? ({
+      ...current,
+      company: current.company ? {
+        ...current.company,
+        newOrderNotificationEnabled: savedEnabled,
+        newOrderNotificationEmails: savedEmails,
+      } : current.company,
+    }) : current)
+    setSnack({ open: true, message: t('profile.orderNotify.saved'), severity: 'success' })
+  }
   if (loadingProfile) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}>
@@ -363,6 +441,58 @@ export default function ProfilePage() {
           </Button>
         </Box>
       </Paper>
+
+      {p?.company && (
+        <Paper elevation={1} sx={{ p: 2.5, mb: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, flexWrap: 'wrap' }}>
+            <EmailIcon color={orderNotifyEnabled ? 'success' : 'primary'} sx={{ mt: 0.5 }} />
+            <Box sx={{ flex: 1, minWidth: 220 }}>
+              <Typography variant="subtitle1" fontWeight={700}>{t('profile.orderNotify.title')}</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                {t('profile.orderNotify.description')}
+              </Typography>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={orderNotifyEnabled}
+                    onChange={e => handleOrderNotifyToggle(e.target.checked)}
+                    disabled={orderNotifyBusy}
+                    color="success"
+                  />
+                }
+                label={t('profile.orderNotify.enabled')}
+                sx={{ mb: 1 }}
+              />
+              <TextField
+                label={t('profile.orderNotify.recipients')}
+                value={orderNotifyEmails}
+                onChange={e => {
+                  setOrderNotifyEmails(e.target.value)
+                  setOrderNotifyError('')
+                  setOrderNotifyDirty(true)
+                }}
+                placeholder={p?.user?.email || 'owner@example.com'}
+                helperText={t('profile.orderNotify.recipientsHelp')}
+                disabled={orderNotifyBusy}
+                multiline
+                minRows={2}
+                fullWidth
+              />
+              {orderNotifyError && <Alert severity="error" sx={{ mt: 1.5 }}>{orderNotifyError}</Alert>}
+            </Box>
+            <Button
+              variant="contained"
+              color="success"
+              onClick={saveOrderNotification}
+              disabled={orderNotifyBusy || !orderNotifyDirty}
+              startIcon={orderNotifyBusy ? <CircularProgress size={16} color="inherit" /> : <EmailIcon />}
+              sx={{ alignSelf: 'flex-end', textTransform: 'none', fontWeight: 700, whiteSpace: 'nowrap' }}
+            >
+              {t('common.save')}
+            </Button>
+          </Box>
+        </Paper>
+      )}
 
       <Paper elevation={1} sx={{ p: 2.5, mb: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>

@@ -42,10 +42,12 @@ import java.math.BigDecimal;
 import java.net.InetAddress;
 import java.time.Instant;
 import java.util.*;
+import java.util.regex.Pattern;
 
 @RestController
 public class ShopOrderController {
     private static final String STAFF_CALL_REASON_NEW_ORDER = "new_order";
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
 
     private final ShopOrderService shopOrderService;
     private final ShopLocalizedLabelService shopLocalizedLabelService;
@@ -79,6 +81,7 @@ public class ShopOrderController {
 
     private record CounterIpSnapshot(String publicIp, Instant updatedAt, List<String> allowedPublicIps, boolean allowAllNetworks) {}
     private record CounterNetworkRule(String counterPublicIp, List<String> allowedPublicIps, boolean allowAllNetworks) {}
+    private record EmailList(List<String> emails, String invalid) {}
 
     public ShopOrderController(ShopOrderService shopOrderService,
                                ShopLocalizedLabelService shopLocalizedLabelService,
@@ -1217,6 +1220,26 @@ public class ShopOrderController {
         if (body.containsKey("shopAddress"))          company.setShopAddress(stringValue(body.get("shopAddress")));
         if (body.containsKey("realtimeInventory"))    company.setRealtimeInventory(Boolean.TRUE.equals(body.get("realtimeInventory")));
         if (body.containsKey("processingInventoryRecheck")) company.setShopProcessingInventoryRecheck(Boolean.TRUE.equals(body.get("processingInventoryRecheck")));
+        if (body.containsKey("newOrderNotificationEnabled")) {
+            company.setNewOrderNotificationEnabled(Boolean.TRUE.equals(body.get("newOrderNotificationEnabled")));
+        }
+        if (body.containsKey("newOrderNotificationEmails") || body.containsKey("newOrderNotificationEmail")) {
+            Object raw = body.containsKey("newOrderNotificationEmails")
+                    ? body.get("newOrderNotificationEmails")
+                    : body.get("newOrderNotificationEmail");
+            EmailList emailList = normalizeEmails(stringValue(raw));
+            if (emailList.invalid() != null) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "error", "Invalid notification email: " + emailList.invalid(),
+                        "message", "Invalid notification email: " + emailList.invalid()));
+            }
+            if (Boolean.TRUE.equals(company.getNewOrderNotificationEnabled()) && emailList.emails().isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "error", "At least one notification email is required",
+                        "message", "At least one notification email is required"));
+            }
+            company.setNewOrderNotificationEmails(String.join("\n", emailList.emails()));
+        }
         if (body.containsKey("pointsConversionRate")) company.setPointsConversionRate(Integer.parseInt(String.valueOf(body.get("pointsConversionRate"))));
         if (body.containsKey("pointsRoundUp"))        company.setPointsRoundUp(Boolean.TRUE.equals(body.get("pointsRoundUp")));
         if (body.containsKey("loyaltyDiscountPointThreshold")) {
@@ -1228,6 +1251,12 @@ public class ShopOrderController {
             if (percent == null || percent.compareTo(BigDecimal.ZERO) < 0) percent = BigDecimal.ZERO;
             if (percent.compareTo(BigDecimal.valueOf(100)) > 0) percent = BigDecimal.valueOf(100);
             company.setLoyaltyDiscountPercent(percent);
+        }
+        if (Boolean.TRUE.equals(company.getNewOrderNotificationEnabled())
+                && normalizeEmails(company.getNewOrderNotificationEmails()).emails().isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "At least one notification email is required",
+                    "message", "At least one notification email is required"));
         }
         companyRepository.save(company);
         return ResponseEntity.ok(bankConfigMap(company));
@@ -1344,6 +1373,8 @@ public class ShopOrderController {
         m.put("pointsRoundUp",        company.getPointsRoundUp());
         m.put("loyaltyDiscountPointThreshold", company.getLoyaltyDiscountPointThreshold());
         m.put("loyaltyDiscountPercent", company.getLoyaltyDiscountPercent());
+        m.put("newOrderNotificationEnabled", Boolean.TRUE.equals(company.getNewOrderNotificationEnabled()));
+        m.put("newOrderNotificationEmails", company.getNewOrderNotificationEmails() != null ? company.getNewOrderNotificationEmails() : "");
         m.put("voucherSecretSet",     company.getVoucherSecret() != null && !company.getVoucherSecret().isBlank());
         return m;
     }
@@ -1900,6 +1931,21 @@ public class ShopOrderController {
         String value = String.valueOf(raw).trim();
         return "true".equalsIgnoreCase(value) || "1".equals(value) || "yes".equalsIgnoreCase(value) || "on".equalsIgnoreCase(value);
     }
+
+    private EmailList normalizeEmails(String raw) {
+        if (raw == null || raw.isBlank()) return new EmailList(List.of(), null);
+        LinkedHashMap<String, String> unique = new LinkedHashMap<>();
+        for (String part : raw.split("[\\s,;]+")) {
+            String email = part != null ? part.trim() : "";
+            if (email.isEmpty()) continue;
+            if (!EMAIL_PATTERN.matcher(email).matches()) {
+                return new EmailList(List.of(), email);
+            }
+            unique.putIfAbsent(email.toLowerCase(Locale.ROOT), email);
+        }
+        return new EmailList(List.copyOf(unique.values()), null);
+    }
+
     private List<String> allowedPublicIpsValue(Object raw) {
         List<String> ips = new ArrayList<>();
         if (raw instanceof Collection<?> values) {
