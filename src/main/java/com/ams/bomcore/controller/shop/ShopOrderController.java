@@ -1259,6 +1259,7 @@ public class ShopOrderController {
         if (body.containsKey("shopLogoUrl"))          company.setShopLogoUrl(stringValue(body.get("shopLogoUrl")));
         if (body.containsKey("shopName"))             company.setShopName(stringValue(body.get("shopName")));
         if (body.containsKey("shopAddress"))          company.setShopAddress(stringValue(body.get("shopAddress")));
+        if (body.containsKey("shopPhone"))            company.setShopPhone(stringValue(body.get("shopPhone")));
         if (body.containsKey("realtimeInventory"))    company.setRealtimeInventory(Boolean.TRUE.equals(body.get("realtimeInventory")));
         if (body.containsKey("processingInventoryRecheck")) company.setShopProcessingInventoryRecheck(Boolean.TRUE.equals(body.get("processingInventoryRecheck")));
         if (body.containsKey("newOrderNotificationEnabled")) {
@@ -1408,6 +1409,7 @@ public class ShopOrderController {
         m.put("shopLogoUrl",           company.getShopLogoUrl()       != null ? company.getShopLogoUrl()       : "");
         m.put("shopName",              company.getShopName()          != null && !company.getShopName().isBlank() ? company.getShopName() : (company.getCompanyName() != null ? company.getCompanyName() : ""));
         m.put("shopAddress",           company.getShopAddress()       != null ? company.getShopAddress()       : "");
+        m.put("shopPhone",             company.getShopPhone()         != null ? company.getShopPhone()         : "");
         m.put("realtimeInventory",    Boolean.TRUE.equals(company.getRealtimeInventory()));
         m.put("processingInventoryRecheck", Boolean.TRUE.equals(company.getShopProcessingInventoryRecheck()));
         m.put("pointsConversionRate", company.getPointsConversionRate());

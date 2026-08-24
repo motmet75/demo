@@ -1,0 +1,2 @@
+ALTER TABLE company
+    ADD COLUMN IF NOT EXISTS shop_phone VARCHAR(60);

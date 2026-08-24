@@ -630,7 +630,8 @@ export default function ShopMenuPage() {
   const [tableOrdersPromptOpen, setTableOrdersPromptOpen] = useState(false)
   const [tokenSession, setTokenSession]     = useState(null)
   const [sessionOpen, setSessionOpen]       = useState(false)
-  const [shopConfig, setShopConfig]         = useState({ prepaidMenu: false, bankBin: '', bankAccountNumber: '', bankAccountName: '', shopLogoUrl: '', shopName: '', shopAddress: '', companyName: '' })
+  const [shopConfig, setShopConfig]         = useState({ prepaidMenu: false, bankBin: '', bankAccountNumber: '', bankAccountName: '', shopLogoUrl: '', shopName: '', shopAddress: '', shopPhone: '', companyName: '' })
+  const [shopInfoOpen, setShopInfoOpen]     = useState(false)
   const [publicTables, setPublicTables]     = useState([])
   const [prepaidQrOrder, setPrepaidQrOrder] = useState(null)
   const [imagePreview, setImagePreview]     = useState(null)
@@ -1973,6 +1974,7 @@ export default function ShopMenuPage() {
 
   const shopBrandName = String(shopConfig.shopName || shopConfig.companyName || '').trim()
   const shopBrandAddress = String(shopConfig.shopAddress || '').trim()
+  const shopBrandPhone = String(shopConfig.shopPhone || '').trim()
   const shopLogoUrl = String(shopConfig.shopLogoUrl || '').trim()
 
   return (
@@ -1986,20 +1988,28 @@ export default function ShopMenuPage() {
         {/* Row 1: Title + action buttons */}
         <Box sx={{ display: 'flex', alignItems: 'center', px: 1.5, pt: 1.25, pb: 0.5, gap: 0.75 }}>
           <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 1 }}>
-            {shopLogoUrl && (
-              <Box component="img" src={shopLogoUrl} alt={shopBrandName || t('shop.placeOrder')}
-                sx={{ width: large ? 46 : 38, height: large ? 46 : 38, borderRadius: 1.5, objectFit: 'cover', border: '1px solid #e2e8f0', bgcolor: '#fff', flexShrink: 0 }}
-                onError={e => { e.currentTarget.style.display = 'none' }} />
-            )}
-            <Box sx={{ minWidth: 0 }}>
-              <Typography fontWeight={900} noWrap sx={{ fontSize: large ? 22 : 18, color: '#1a1a1a', lineHeight: 1.15 }}>
-                {shopBrandName || t('shop.placeOrder')}
-              </Typography>
-              {shopBrandAddress && (
-                <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block', lineHeight: 1.15, fontWeight: 700 }}>
-                  {shopBrandAddress}
-                </Typography>
+            <Box component="button" type="button" onClick={() => setShopInfoOpen(true)}
+              aria-label={shopBrandName || t('shop.placeOrder')}
+              sx={{
+                flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 1,
+                border: 0, bgcolor: 'transparent', p: 0, textAlign: 'left',
+                cursor: 'pointer', font: 'inherit',
+              }}>
+              {shopLogoUrl && (
+                <Box component="img" src={shopLogoUrl} alt={shopBrandName || t('shop.placeOrder')}
+                  sx={{ width: large ? 46 : 38, height: large ? 46 : 38, borderRadius: 1.5, objectFit: 'cover', border: '1px solid #e2e8f0', bgcolor: '#fff', flexShrink: 0 }}
+                  onError={e => { e.currentTarget.style.display = 'none' }} />
               )}
+              <Box sx={{ minWidth: 0 }}>
+                <Typography fontWeight={900} noWrap sx={{ fontSize: large ? 22 : 18, color: '#1a1a1a', lineHeight: 1.15 }}>
+                  {shopBrandName || t('shop.placeOrder')}
+                </Typography>
+                {shopBrandAddress && (
+                  <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block', lineHeight: 1.15, fontWeight: 700 }}>
+                    {shopBrandAddress}
+                  </Typography>
+                )}
+              </Box>
             </Box>
             {ctx.tableId && (
               <Chip icon={<TableBarIcon sx={{ fontSize: '12px !important', color: '#1976d2 !important' }} />}
@@ -2269,6 +2279,38 @@ export default function ShopMenuPage() {
           </Box>
         </Box>
       )}
+
+      <Dialog open={shopInfoOpen} onClose={() => setShopInfoOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, pb: 1 }}>
+          <Box sx={{ minWidth: 0, flex: 1 }}>
+            <Typography fontWeight={900} noWrap>{shopBrandName || t('shop.placeOrder')}</Typography>
+          </Box>
+          <IconButton size="small" onClick={() => setShopInfoOpen(false)} aria-label={t('common.close')}>
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 0, pb: 2.5 }}>
+          <Stack spacing={1.25}>
+            <Box>
+              <Typography variant="caption" color="text.secondary" fontWeight={800}>{t('common.phone')}</Typography>
+              {shopBrandPhone ? (
+                <Typography component="a" href={`tel:${shopBrandPhone}`} sx={{ display: 'block', color: '#1976d2', fontWeight: 900, textDecoration: 'none', overflowWrap: 'anywhere' }}>
+                  {shopBrandPhone}
+                </Typography>
+              ) : (
+                <Typography color="text.secondary" fontWeight={700}>-</Typography>
+              )}
+            </Box>
+            <Divider />
+            <Box>
+              <Typography variant="caption" color="text.secondary" fontWeight={800}>{t('common.address')}</Typography>
+              <Typography fontWeight={800} sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                {shopBrandAddress || '-'}
+              </Typography>
+            </Box>
+          </Stack>
+        </DialogContent>
+      </Dialog>
 
       {/* ── "Gọi nhân viên" modal ──────────────────────────────── */}
       <Dialog open={callStaffOpen} onClose={() => { if (!callStaffLoading) setCallStaffOpen(false) }}

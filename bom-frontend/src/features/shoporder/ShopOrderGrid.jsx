@@ -1472,6 +1472,7 @@ export default function ShopOrderGrid() {
   const [quickLoginData, setQuickLoginData] = useState(null)
   const [quickLoginLoading, setQuickLoginLoading] = useState(false)
   const [quickLoginError, setQuickLoginError] = useState('')
+  const [mobileToolsOpen, setMobileToolsOpen] = useState(false)
   const customerBoardDisplayUrl = customerBoardUrl
     ? `${customerBoardUrl}${separateCustomerConfirmed ? '&separateConfirmed=1' : ''}`
     : ''
@@ -1714,6 +1715,11 @@ export default function ShopOrderGrid() {
   }, [staffCalls.length])
 
   const reload = () => { load(); loadBoard() }
+  const openCounterDisplay = () => {
+    const base = window.location.origin + '/bom-inventory/shop/counter'
+    const q = ctxTenantId && ctxCompanyId ? `?tenantId=${ctxTenantId}&companyId=${ctxCompanyId}` : ''
+    window.open(base + q, '_blank')
+  }
 
   // Derived per-status slices for board tabs
   const confirmedOrders = boardRows.filter(r => r.status === 'CONFIRMED')
@@ -2098,22 +2104,28 @@ export default function ShopOrderGrid() {
           <TextField label={t('shopOrder.grid.fromTime')} type="datetime-local" value={orderFrom}
             onChange={e => setOrderRange(prev => ({ ...prev, from: e.target.value }))}
             size="small" InputLabelProps={{ shrink: true }}
-            sx={{ width: { xs: 162, sm: 205 }, flexShrink: 0 }} />
+            sx={{ width: { sm: 205 }, flexShrink: 0, display: { xs: 'none', sm: 'inline-flex' } }} />
           <TextField label={t('shopOrder.grid.toTime')} type="datetime-local" value={orderTo}
             onChange={e => setOrderRange(prev => ({ ...prev, to: e.target.value }))}
             size="small" InputLabelProps={{ shrink: true }}
-            sx={{ width: { xs: 162, sm: 205 }, flexShrink: 0 }} />
+            sx={{ width: { sm: 205 }, flexShrink: 0, display: { xs: 'none', sm: 'inline-flex' } }} />
           <Button onClick={() => setOrderRange(todayOrderRange())} variant="outlined" size="small"
-            sx={{ textTransform: 'none', fontWeight: 800, minWidth: 70 }}>
+            sx={{ display: { xs: 'none', sm: 'inline-flex' }, textTransform: 'none', fontWeight: 800, minWidth: 70 }}>
             {t('shopOrder.grid.today')}
           </Button>
           <Button onClick={() => setOrderRange({ from: '', to: '' })} variant="text" size="small"
-            sx={{ textTransform: 'none', fontWeight: 800, minWidth: 82 }}>
+            sx={{ display: { xs: 'none', sm: 'inline-flex' }, textTransform: 'none', fontWeight: 800, minWidth: 82 }}>
             {t('shopOrder.grid.allTime')}
           </Button>
           <Button startIcon={<RefreshIcon />} onClick={reload} variant="outlined" size="small"
             sx={{ minWidth: { xs: 40, sm: 64 }, px: { xs: 1, sm: 1.25 }, '& .MuiButton-startIcon': { mr: { xs: 0, sm: 1 } } }}>
             <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>{t('shopOrder.grid.refresh')}</Box>
+          </Button>
+          <Button startIcon={<MoreHorizIcon />} onClick={() => setMobileToolsOpen(true)}
+            variant="outlined" size="small"
+            sx={{ display: { xs: 'inline-flex', sm: 'none' }, textTransform: 'none', fontWeight: 900, minWidth: 40, px: 1, '& .MuiButton-startIcon': { mr: 0 } }}
+            aria-label={t('shop.orderAction.more')}>
+            <Box component="span" sx={{ display: 'none' }}>{t('shop.orderAction.more')}</Box>
           </Button>
           <Box sx={{ display: { xs: 'none', sm: 'flex' }, border: '1px solid #cbd5e1', borderRadius: 1, overflow: 'hidden', bgcolor: '#fff' }}>
             <Button startIcon={<TvIcon />} size="small" variant={orderViewMode === 'cards' ? 'contained' : 'text'} onClick={() => { setOrderViewMode('cards'); writeShopOrderPref(SHOP_ORDER_VIEW_PREF, 'cards') }} sx={{ borderRadius: 0, textTransform: 'none', fontWeight: 800 }}>{t('shopOrder.grid.cards')}</Button>
@@ -2153,12 +2165,12 @@ export default function ShopOrderGrid() {
             variant="outlined" size="small" color="primary" sx={{ display: { xs: 'none', sm: 'inline-flex' }, textTransform: 'none', fontWeight: 700 }}>{t('shopOrder.grid.qrOrder')}</Button>
           <Button startIcon={<QrCodeScannerIcon />} onClick={() => { setScannedOrders([]); setOrderScannerOpen(true) }}
             variant="contained" size="small" color="primary" sx={{ textTransform: 'none', fontWeight: 800 }}>{t('shopOrder.grid.scanCustomerOrders')}</Button>
-          <Badge badgeContent={customerEditHistory.length} color="warning" max={99}>
+          <Badge badgeContent={customerEditHistory.length} color="warning" max={99} sx={{ display: { xs: 'none', sm: 'inline-flex' } }}>
             <Button startIcon={<NotificationsActiveIcon />} onClick={() => setCustomerEditHistoryOpen(true)}
               variant="outlined" size="small" color="warning" sx={{ textTransform: 'none', fontWeight: 800 }}>{t('shopOrder.grid.notificationHistory')}</Button>
           </Badge>
           <Button startIcon={<QrCode2Icon />} onClick={() => { setQuickLoginData(null); setQuickLoginError(''); setQuickLoginHours(12); setQuickLoginOpen(true) }}
-            variant="outlined" size="small" color="secondary" sx={{ textTransform: 'none', fontWeight: 800 }}>Đăng nhập iPad</Button>
+            variant="outlined" size="small" color="secondary" sx={{ display: { xs: 'none', sm: 'inline-flex' }, textTransform: 'none', fontWeight: 800 }}>Đăng nhập iPad</Button>
           {selectedRows.size > 0 && (
             <Button
               startIcon={<DriveFileMoveIcon />}
@@ -2172,11 +2184,7 @@ export default function ShopOrderGrid() {
           <Button startIcon={<TvIcon />} onClick={handleOpenBoard} variant="outlined" size="small" color="info" sx={{ display: { xs: 'none', sm: 'inline-flex' } }}>{t('shopOrder.grid.displayBoard')}</Button>
           <Tooltip title={t('shopOrder.grid.openCounterDisplay')}>
             <Button startIcon={<MonitorIcon />}
-              onClick={() => {
-                const base = window.location.origin + '/bom-inventory/shop/counter'
-                const q = ctxTenantId && ctxCompanyId ? `?tenantId=${ctxTenantId}&companyId=${ctxCompanyId}` : ''
-                window.open(base + q, '_blank')
-              }}
+              onClick={openCounterDisplay}
               variant="outlined" size="small" color="secondary" sx={{ display: { xs: 'none', sm: 'inline-flex' }, textTransform: 'none' }}>
               Counter
             </Button>
@@ -2184,6 +2192,104 @@ export default function ShopOrderGrid() {
           <Button startIcon={<AssessmentIcon />} onClick={() => setEodOpen(true)} variant="outlined" size="small" color="secondary" sx={{ display: { xs: 'none', sm: 'inline-flex' }, textTransform: 'none', fontWeight: 700 }}>{t('shopOrder.grid.shiftAudit')}</Button>
           <Button startIcon={<RestartAltIcon />} onClick={() => setResetOpen(true)} variant="outlined" size="small" color="warning" sx={{ display: { xs: 'none', sm: 'inline-flex' } }}>{t('shopOrder.grid.resetCounter')}</Button>
         </Box>
+
+        <Dialog open={mobileToolsOpen} onClose={() => setMobileToolsOpen(false)} fullWidth maxWidth="xs">
+          <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, pb: 1 }}>
+            <MoreHorizIcon color="primary" />
+            <Typography fontWeight={900} sx={{ flex: 1 }}>{t('shop.orderAction.more')}</Typography>
+            <IconButton size="small" onClick={() => setMobileToolsOpen(false)} aria-label={t('shopOrder.grid.close')}>
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </DialogTitle>
+          <DialogContent sx={{ pt: 0 }}>
+            <Stack spacing={2}>
+              <Stack spacing={1.25}>
+                <Typography variant="caption" color="text.secondary" fontWeight={900}>{t('shopOrder.grid.fromTime')} / {t('shopOrder.grid.toTime')}</Typography>
+                <TextField label={t('shopOrder.grid.fromTime')} type="datetime-local" value={orderFrom}
+                  onChange={e => setOrderRange(prev => ({ ...prev, from: e.target.value }))}
+                  size="small" fullWidth InputLabelProps={{ shrink: true }} />
+                <TextField label={t('shopOrder.grid.toTime')} type="datetime-local" value={orderTo}
+                  onChange={e => setOrderRange(prev => ({ ...prev, to: e.target.value }))}
+                  size="small" fullWidth InputLabelProps={{ shrink: true }} />
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <Button fullWidth onClick={() => setOrderRange(todayOrderRange())} variant="outlined" size="small"
+                    sx={{ textTransform: 'none', fontWeight: 900 }}>
+                    {t('shopOrder.grid.today')}
+                  </Button>
+                  <Button fullWidth onClick={() => setOrderRange({ from: '', to: '' })} variant="text" size="small"
+                    sx={{ textTransform: 'none', fontWeight: 900 }}>
+                    {t('shopOrder.grid.allTime')}
+                  </Button>
+                </Box>
+              </Stack>
+
+              <Divider />
+
+              <Stack spacing={1.25}>
+                <Box sx={{ display: 'flex', border: '1px solid #cbd5e1', borderRadius: 1, overflow: 'hidden', bgcolor: '#fff' }}>
+                  <Button fullWidth startIcon={<TvIcon />} size="small" variant={orderViewMode === 'cards' ? 'contained' : 'text'}
+                    onClick={() => { setOrderViewMode('cards'); writeShopOrderPref(SHOP_ORDER_VIEW_PREF, 'cards') }}
+                    sx={{ borderRadius: 0, textTransform: 'none', fontWeight: 900 }}>
+                    {t('shopOrder.grid.cards')}
+                  </Button>
+                  <Button fullWidth startIcon={<TableBarIcon />} size="small" variant={orderViewMode === 'grid' ? 'contained' : 'text'}
+                    onClick={() => { setOrderViewMode('grid'); writeShopOrderPref(SHOP_ORDER_VIEW_PREF, 'grid') }}
+                    sx={{ borderRadius: 0, textTransform: 'none', fontWeight: 900 }}>
+                    {t('shopOrder.grid.grid')}
+                  </Button>
+                </Box>
+                <TextField select label={t('shopOrder.grid.cardSize')} value={cardDisplaySize}
+                  onChange={e => { setCardDisplaySize(e.target.value); writeShopOrderPref(SHOP_ORDER_CARD_SIZE_PREF, e.target.value) }}
+                  size="small" fullWidth>
+                  <MenuItem value="normal">{t('shopOrder.grid.normal')}</MenuItem>
+                  <MenuItem value="large">{t('shopOrder.grid.large')}</MenuItem>
+                </TextField>
+                <Button fullWidth startIcon={<MonitorIcon />} aria-pressed={highContrastCards}
+                  onClick={() => { const next = !highContrastCards; setHighContrastCards(next); writeShopOrderPref(SHOP_ORDER_CONTRAST_PREF, String(next)) }}
+                  variant={highContrastCards ? 'contained' : 'outlined'} size="small" color="secondary"
+                  sx={{ justifyContent: 'flex-start', textTransform: 'none', fontWeight: 900 }}>
+                  {t('shopOrder.grid.contrast')}
+                </Button>
+              </Stack>
+
+              <Divider />
+
+              <Stack spacing={1}>
+                <Button fullWidth startIcon={<QrCode2Icon />} onClick={() => { setQrOrderOpen(true); setMobileToolsOpen(false) }}
+                  variant="outlined" size="small" color="primary" sx={{ justifyContent: 'flex-start', textTransform: 'none', fontWeight: 900 }}>
+                  {t('shopOrder.grid.qrOrder')}
+                </Button>
+                <Button fullWidth startIcon={<NotificationsActiveIcon />} onClick={() => { setCustomerEditHistoryOpen(true); setMobileToolsOpen(false) }}
+                  variant="outlined" size="small" color="warning" sx={{ justifyContent: 'flex-start', textTransform: 'none', fontWeight: 900 }}>
+                  {customerEditHistory.length ? `${t('shopOrder.grid.notificationHistory')} (${customerEditHistory.length})` : t('shopOrder.grid.notificationHistory')}
+                </Button>
+                <Button fullWidth startIcon={<QrCode2Icon />} onClick={() => { setQuickLoginData(null); setQuickLoginError(''); setQuickLoginHours(12); setQuickLoginOpen(true); setMobileToolsOpen(false) }}
+                  variant="outlined" size="small" color="secondary" sx={{ justifyContent: 'flex-start', textTransform: 'none', fontWeight: 900 }}>
+                  Đăng nhập iPad
+                </Button>
+                <Button fullWidth startIcon={<TvIcon />} onClick={() => { setMobileToolsOpen(false); handleOpenBoard() }}
+                  variant="outlined" size="small" color="info" sx={{ justifyContent: 'flex-start', textTransform: 'none', fontWeight: 900 }}>
+                  {t('shopOrder.grid.displayBoard')}
+                </Button>
+                <Button fullWidth startIcon={<MonitorIcon />} onClick={() => { setMobileToolsOpen(false); openCounterDisplay() }}
+                  variant="outlined" size="small" color="secondary" sx={{ justifyContent: 'flex-start', textTransform: 'none', fontWeight: 900 }}>
+                  {t('shopOrder.grid.counterDisplay')}
+                </Button>
+                <Button fullWidth startIcon={<AssessmentIcon />} onClick={() => { setEodOpen(true); setMobileToolsOpen(false) }}
+                  variant="outlined" size="small" color="secondary" sx={{ justifyContent: 'flex-start', textTransform: 'none', fontWeight: 900 }}>
+                  {t('shopOrder.grid.shiftAudit')}
+                </Button>
+                <Button fullWidth startIcon={<RestartAltIcon />} onClick={() => { setResetOpen(true); setMobileToolsOpen(false) }}
+                  variant="outlined" size="small" color="warning" sx={{ justifyContent: 'flex-start', textTransform: 'none', fontWeight: 900 }}>
+                  {t('shopOrder.grid.resetCounter')}
+                </Button>
+              </Stack>
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setMobileToolsOpen(false)}>{t('shopOrder.grid.close')}</Button>
+          </DialogActions>
+        </Dialog>
 
         {error && <Alert severity="error" onClose={() => setError('')} sx={{ mx: 1.5, mt: 0.5 }}>{error}</Alert>}
         {newOrderNotice && (

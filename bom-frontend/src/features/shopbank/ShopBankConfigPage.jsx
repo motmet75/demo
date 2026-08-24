@@ -21,6 +21,7 @@ import VpnKeyIcon from '@mui/icons-material/VpnKey'
 import StorefrontIcon from '@mui/icons-material/Storefront'
 import ImageIcon from '@mui/icons-material/Image'
 import LocationOnIcon from '@mui/icons-material/LocationOn'
+import LocalPhoneIcon from '@mui/icons-material/LocalPhone'
 import { fetchBankConfig, updateBankConfig, rotateVoucherKey } from '../../api/shopApi'
 
 const POPULAR_BANKS = [
@@ -39,7 +40,7 @@ const POPULAR_BANKS = [
 ]
 
 export default function ShopBankConfigPage() {
-  const [form, setForm] = useState({ bankBin: '', bankAccountNumber: '', bankAccountName: '', prepaidMenu: false, shopLogoUrl: '', shopName: '', shopAddress: '', realtimeInventory: false, processingInventoryRecheck: true, pointsConversionRate: 10000, pointsRoundUp: false, loyaltyDiscountPointThreshold: 0, loyaltyDiscountPercent: 0 })
+  const [form, setForm] = useState({ bankBin: '', bankAccountNumber: '', bankAccountName: '', prepaidMenu: false, shopLogoUrl: '', shopName: '', shopAddress: '', shopPhone: '', realtimeInventory: false, processingInventoryRecheck: true, pointsConversionRate: 10000, pointsRoundUp: false, loyaltyDiscountPointThreshold: 0, loyaltyDiscountPercent: 0 })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -52,7 +53,7 @@ export default function ShopBankConfigPage() {
     fetchBankConfig()
       .then(({ data }) => {
         if (data) {
-          setForm({ bankBin: data.bankBin || '', bankAccountNumber: data.bankAccountNumber || '', bankAccountName: data.bankAccountName || '', prepaidMenu: Boolean(data.prepaidMenu), shopLogoUrl: data.shopLogoUrl || '', shopName: data.shopName || data.companyName || '', shopAddress: data.shopAddress || '', realtimeInventory: Boolean(data.realtimeInventory), processingInventoryRecheck: data.processingInventoryRecheck !== false, pointsConversionRate: data.pointsConversionRate || 10000, pointsRoundUp: Boolean(data.pointsRoundUp), loyaltyDiscountPointThreshold: data.loyaltyDiscountPointThreshold || 0, loyaltyDiscountPercent: data.loyaltyDiscountPercent || 0 })
+          setForm({ bankBin: data.bankBin || '', bankAccountNumber: data.bankAccountNumber || '', bankAccountName: data.bankAccountName || '', prepaidMenu: Boolean(data.prepaidMenu), shopLogoUrl: data.shopLogoUrl || '', shopName: data.shopName || data.companyName || '', shopAddress: data.shopAddress || '', shopPhone: data.shopPhone || '', realtimeInventory: Boolean(data.realtimeInventory), processingInventoryRecheck: data.processingInventoryRecheck !== false, pointsConversionRate: data.pointsConversionRate || 10000, pointsRoundUp: Boolean(data.pointsRoundUp), loyaltyDiscountPointThreshold: data.loyaltyDiscountPointThreshold || 0, loyaltyDiscountPercent: data.loyaltyDiscountPercent || 0 })
           setVoucherKeySet(Boolean(data.voucherSecretSet))
         }
         setLoading(false)
@@ -135,6 +136,14 @@ export default function ShopBankConfigPage() {
                   helperText="Shown at the top of the customer mobile ordering page"
                 />
                 <TextField
+                  label="Shop Phone"
+                  size="small" fullWidth
+                  value={form.shopPhone}
+                  onChange={set('shopPhone')}
+                  placeholder="e.g. 0901234567"
+                  InputProps={{ startAdornment: <InputAdornment position="start"><LocalPhoneIcon fontSize="small" /></InputAdornment> }}
+                />
+                <TextField
                   label="Shop Address"
                   size="small" fullWidth multiline minRows={2}
                   value={form.shopAddress}
@@ -151,7 +160,7 @@ export default function ShopBankConfigPage() {
                   helperText="Use a public image URL. PNG/JPG/WebP/SVG are supported by the browser."
                   InputProps={{ startAdornment: <InputAdornment position="start"><ImageIcon fontSize="small" /></InputAdornment> }}
                 />
-                {(form.shopLogoUrl || form.shopName || form.shopAddress) && (
+                {(form.shopLogoUrl || form.shopName || form.shopPhone || form.shopAddress) && (
                   <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', p: 1.5, bgcolor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 2 }}>
                     {form.shopLogoUrl && (
                       <Box component="img" src={form.shopLogoUrl} alt={form.shopName || 'Shop logo'}
@@ -160,6 +169,7 @@ export default function ShopBankConfigPage() {
                     )}
                     <Box sx={{ minWidth: 0 }}>
                       <Typography fontWeight={900} noWrap>{form.shopName || 'Shop name preview'}</Typography>
+                      {form.shopPhone && <Typography variant="body2" color="text.secondary" noWrap>{form.shopPhone}</Typography>}
                       {form.shopAddress && <Typography variant="body2" color="text.secondary" noWrap>{form.shopAddress}</Typography>}
                     </Box>
                   </Box>

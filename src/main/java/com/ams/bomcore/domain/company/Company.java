@@ -63,6 +63,9 @@ public class Company {
     @Column(name = "shop_address", columnDefinition = "TEXT")
     private String shopAddress;
 
+    @Column(name = "shop_phone", length = 60)
+    private String shopPhone;
+
     @Column(name = "realtime_inventory")
     private Boolean realtimeInventory = false;
 
@@ -144,6 +147,8 @@ public class Company {
     public void setShopName(String shopName) { this.shopName = shopName; }
     public String getShopAddress() { return shopAddress; }
     public void setShopAddress(String shopAddress) { this.shopAddress = shopAddress; }
+    public String getShopPhone() { return shopPhone; }
+    public void setShopPhone(String shopPhone) { this.shopPhone = shopPhone; }
     public Boolean getRealtimeInventory() { return Boolean.TRUE.equals(realtimeInventory); }
     public void setRealtimeInventory(Boolean realtimeInventory) { this.realtimeInventory = realtimeInventory; }
     public Boolean getShopProcessingInventoryRecheck() { return !Boolean.FALSE.equals(shopProcessingInventoryRecheck); }
