@@ -1023,7 +1023,7 @@ public class ShopOrderService {
             if (sat != null && sat.getDescription() != null && sat.getDescription().contains("Group order slip")) {
                 String slipNumber = extractSlipNumberFromDescription(sat.getDescription());
                 if (slipNumber != null) {
-                    slipRef = " | Phiếu #" + slipNumber;  // Add to payment note
+                    slipRef = " Phieu " + slipNumber;  // Add to payment note
                 }
             }
         }
