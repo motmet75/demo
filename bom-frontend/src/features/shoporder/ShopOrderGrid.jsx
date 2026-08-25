@@ -3006,7 +3006,9 @@ function CombinedReceiptDialog({ token, orderRangeParams = {}, modelMetaMap = {}
   const payQrUrl = bankConfig?.bankBin && bankConfig?.bankAccountNumber && anyQrPay
     ? `https://img.vietqr.io/image/${bankConfig.bankBin}-${bankConfig.bankAccountNumber}-qr_only.png`
       + `?amount=${Math.round(unpaidTotal)}`
-      + `&addInfo=${encodeURIComponent(token?.substring(0, 12) || 'combined')}`
+      + `&addInfo=${encodeURIComponent(
+          slipNumber ? `PHIEU ${slipNumber}` : (token?.substring(0, 12) || 'combined')
+      )}`
       + `&accountName=${encodeURIComponent(bankConfig.bankAccountName || '')}`
     : null
 
