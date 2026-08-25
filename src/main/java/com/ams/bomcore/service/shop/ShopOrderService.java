@@ -1004,10 +1004,10 @@ public class ShopOrderService {
 // prefer "dailySeq orderNumber" (with a space) when available, otherwise fall back to orderNumber or orderCode
         StringBuilder refBuilder = new StringBuilder();
         if (order.getDailySeq() != null) {
-            refBuilder.append(order.getDailySeq()).append(' ');
+            refBuilder.append(order.getOrderNumber()).append(' ');
         }
-        if (order.getOrderNumber() != null) {
-            refBuilder.append(order.getOrderNumber());
+        if (order.getOrderCode() != null) {
+            refBuilder.append(order.getOrderCode() != null ? order.getOrderCode() : "");
         } else {
             refBuilder.append(order.getOrderCode() != null ? order.getOrderCode() : "");
         }
