@@ -746,7 +746,7 @@ public class ShopOrderService {
         ShopAccessToken sat = createWalkUpToken(seq, limit, tenantId, companyId, null);
         String url = publicBaseUrl + "/shop/menu?t=" + sat.getToken()
                    + (seq != null ? "&seq=" + seq : "");
-        return new WalkUpQrResult(QrCodeUtil.generateBase64Png(url, 400), url, sat.getToken() + sat.get, seq, limit);
+        return new WalkUpQrResult(QrCodeUtil.generateBase64Png(url, 400), url, sat.getToken() , seq, limit);
     }
 
     private String extractSlipNumberFromDescription(String description) {
