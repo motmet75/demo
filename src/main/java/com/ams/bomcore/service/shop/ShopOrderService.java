@@ -999,6 +999,7 @@ public class ShopOrderService {
 
     private void refreshPaymentQr(ShopOrder order, Company company) {
         BigDecimal amount;
+
         if (ShopOrder.PAYMENT_BANK_QR.equals(order.getPaymentMethod())) {
             amount = payableAmount(order);
         } else if (ShopOrder.PAYMENT_SPLIT.equals(order.getPaymentMethod())) {
@@ -1014,34 +1015,55 @@ public class ShopOrderService {
             order.setPaymentQr(null);
             return;
         }
-// prefer "dailySeq orderNumber" (with a space) when available, otherwise fall back to orderNumber or orderCode
+
+        // ------------------------------------------
+        // Build payment reference
+        // ------------------------------------------
         StringBuilder refBuilder = new StringBuilder();
-
-        String slipRef = "";
-        if (order.getSourceToken() != null && !order.getSourceToken().isBlank()) {
-            ShopAccessToken sat = shopAccessTokenRepository.findByToken(order.getSourceToken()).orElse(null);
-            if (sat != null && sat.getDescription() != null && sat.getDescription().contains("Group order slip")) {
-                String slipNumber = extractSlipNumberFromDescription(sat.getDescription());
-                if (slipNumber != null) {
-                    slipRef = " Phieu " + slipNumber;  // Add to payment note
-                }
-            }
-        }
-
 
         if (order.getDailySeq() != null) {
             refBuilder.append(order.getOrderNumber()).append(' ');
         }
-        if (order.getOrderCode() != null) {
-            refBuilder.append(order.getOrderCode() != null ? order.getOrderCode() : "");
-        } else {
-            refBuilder.append(order.getOrderCode() != null ? order.getOrderCode() : "");
-        }
-        String orderRef = refBuilder.toString() + slipRef;
 
+        if (order.getOrderCode() != null) {
+            refBuilder.append(order.getOrderCode());
+        }
+
+        // ------------------------------------------
+        // GROUP ORDER:
+        // retrieve slip number from token description
+        // ------------------------------------------
+        if (order.getSourceToken() != null
+                && !order.getSourceToken().isBlank()) {
+
+            ShopAccessToken sat = shopAccessTokenRepository
+                    .findByToken(order.getSourceToken())
+                    .orElse(null);
+
+            if (sat != null && sat.getDescription() != null) {
+
+                String slipNumber =
+                        extractSlipNumberFromDescription(sat.getDescription());
+
+                if (slipNumber != null && !slipNumber.isBlank()) {
+                    refBuilder.append(" PHIEU ")
+                            .append(slipNumber);
+                }
+            }
+        }
+
+        String orderRef = refBuilder.toString().trim();
+
+        // ------------------------------------------
+        // Generate VietQR
+        // ------------------------------------------
         order.setPaymentQr(VietQrBuilder.buildUrl(
-                company.getBankBin(), company.getBankAccountNumber(),
-                company.getBankAccountName(), amount, orderRef));
+                company.getBankBin(),
+                company.getBankAccountNumber(),
+                company.getBankAccountName(),
+                amount,
+                orderRef
+        ));
     }
     @Transactional
     public ShopOrderResponseDto switchToQrPayment(UUID orderId, UUID tenantId, UUID companyId) {
