@@ -37,7 +37,10 @@ public class ShopNewOrderNotificationService {
                                            Environment environment) {
         this.mailSenderProvider = mailSenderProvider;
         this.companyRepository = companyRepository;
-        this.from = environment.getProperty("spring.mail.username", "");
+        this.from = environment.getProperty(
+                "MAIL_FROM",
+                "services@anhmedia.vn"
+        );
         this.publicBaseUrl = environment.getProperty("app.shop.public-base-url",
                 environment.getProperty("hostbaseurl", ""));
     }
