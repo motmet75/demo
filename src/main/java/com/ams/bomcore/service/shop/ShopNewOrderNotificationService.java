@@ -43,48 +43,189 @@ public class ShopNewOrderNotificationService {
     }
 
     public void notifyOrderCreated(ShopOrderResponseDto order) {
-        if (order == null || order.getCompanyId() == null || order.getId() == null) return;
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    send(order);
-                }
-            });
+
+        if (order == null) {
+            log.warn("NEW ORDER EMAIL: order is NULL");
             return;
         }
+
+        log.info(
+                "NEW ORDER EMAIL: notifyOrderCreated() called. orderId={}, orderNumber={}, companyId={}",
+                order.getId(),
+                order.getOrderNumber(),
+                order.getCompanyId()
+        );
+
+        if (order.getCompanyId() == null) {
+            log.warn(
+                    "NEW ORDER EMAIL: SKIP - companyId is NULL. orderId={}",
+                    order.getId()
+            );
+            return;
+        }
+
+        if (order.getId() == null) {
+            log.warn("NEW ORDER EMAIL: SKIP - orderId is NULL");
+            return;
+        }
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+
+            log.info(
+                    "NEW ORDER EMAIL: transaction active. Registering afterCommit callback. orderId={}",
+                    order.getId()
+            );
+
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+
+                        @Override
+                        public void afterCommit() {
+                            log.info(
+                                    "NEW ORDER EMAIL: transaction committed. Calling send(). orderId={}",
+                                    order.getId()
+                            );
+
+                            send(order);
+                        }
+                    }
+            );
+
+            return;
+        }
+
+        log.info(
+                "NEW ORDER EMAIL: no transaction synchronization. Calling send() immediately. orderId={}",
+                order.getId()
+        );
+
         send(order);
     }
 
     private void send(ShopOrderResponseDto order) {
-        Company company = companyRepository.findById(order.getCompanyId()).orElse(null);
-        if (company == null || !Boolean.TRUE.equals(company.getNewOrderNotificationEnabled())) return;
 
-        List<String> recipients = normalizeEmails(company.getNewOrderNotificationEmails());
+        log.info(
+                "NEW ORDER EMAIL: send() START. orderId={}, orderNumber={}, companyId={}",
+                order.getId(),
+                order.getOrderNumber(),
+                order.getCompanyId()
+        );
+
+        Company company =
+                companyRepository.findById(order.getCompanyId()).orElse(null);
+
+        if (company == null) {
+
+            log.warn(
+                    "NEW ORDER EMAIL: SKIP - company not found. companyId={}, orderId={}",
+                    order.getCompanyId(),
+                    order.getId()
+            );
+
+            return;
+        }
+
+        log.info(
+                "NEW ORDER EMAIL: company found. companyId={}, companyName={}, enabled={}, configuredEmails={}",
+                company.getId(),
+                company.getCompanyName(),
+                company.getNewOrderNotificationEnabled(),
+                company.getNewOrderNotificationEmails()
+        );
+
+        if (!Boolean.TRUE.equals(company.getNewOrderNotificationEnabled())) {
+
+            log.warn(
+                    "NEW ORDER EMAIL: SKIP - notification is DISABLED. companyId={}, orderId={}",
+                    company.getId(),
+                    order.getId()
+            );
+
+            return;
+        }
+
+        List<String> recipients =
+                normalizeEmails(company.getNewOrderNotificationEmails());
+
+        log.info(
+                "NEW ORDER EMAIL: normalized recipients={}",
+                recipients
+        );
+
         if (recipients.isEmpty()) {
-            log.warn("New order notification skipped for company {} because no valid recipient email is configured",
-                    order.getCompanyId());
+
+            log.warn(
+                    "NEW ORDER EMAIL: SKIP - no valid recipient email. companyId={}, rawEmails={}",
+                    company.getId(),
+                    company.getNewOrderNotificationEmails()
+            );
+
             return;
         }
 
-        JavaMailSender mailSender = mailSenderProvider.getIfAvailable();
+        JavaMailSender mailSender =
+                mailSenderProvider.getIfAvailable();
+
         if (mailSender == null) {
-            log.warn("New order notification skipped for order {} because no JavaMailSender is configured", order.getId());
+
+            log.error(
+                    "NEW ORDER EMAIL: SKIP - JavaMailSender is NOT available. Check spring.mail configuration."
+            );
+
             return;
         }
+
+        log.info(
+                "NEW ORDER EMAIL: JavaMailSender available. from={}, recipients={}",
+                from,
+                recipients
+        );
 
         SimpleMailMessage message = new SimpleMailMessage();
+
         if (StringUtils.hasText(from)) {
             message.setFrom(from);
         }
+
         message.setTo(recipients.toArray(String[]::new));
         message.setSubject(subject(company, order));
         message.setText(body(company, order, recipients.size()));
 
+        log.info(
+                "NEW ORDER EMAIL: attempting send. orderId={}, subject={}, from={}, to={}",
+                order.getId(),
+                message.getSubject(),
+                from,
+                recipients
+        );
+
         try {
+
             mailSender.send(message);
+
+            log.info(
+                    "NEW ORDER EMAIL: SEND SUCCESS. orderId={}, recipients={}",
+                    order.getId(),
+                    recipients
+            );
+
         } catch (MailException ex) {
-            log.warn("Failed to send new order notification email for order {}", order.getId(), ex);
+
+            log.error(
+                    "NEW ORDER EMAIL: SEND FAILED. orderId={}, recipients={}, from={}",
+                    order.getId(),
+                    recipients,
+                    from,
+                    ex
+            );
+
+        } catch (Exception ex) {
+
+            log.error(
+                    "NEW ORDER EMAIL: UNEXPECTED ERROR. orderId={}",
+                    order.getId(),
+                    ex
+            );
         }
     }
 
