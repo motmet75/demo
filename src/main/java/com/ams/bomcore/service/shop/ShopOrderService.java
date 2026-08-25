@@ -746,7 +746,20 @@ public class ShopOrderService {
         ShopAccessToken sat = createWalkUpToken(seq, limit, tenantId, companyId, null);
         String url = publicBaseUrl + "/shop/menu?t=" + sat.getToken()
                    + (seq != null ? "&seq=" + seq : "");
-        return new WalkUpQrResult(QrCodeUtil.generateBase64Png(url, 400), url, sat.getToken(), seq, limit);
+        return new WalkUpQrResult(QrCodeUtil.generateBase64Png(url, 400), url, sat.getToken() + sat.get, seq, limit);
+    }
+
+    private String extractSlipNumberFromDescription(String description) {
+        if (description == null || !description.contains("Group order slip #")) {
+            return null;
+        }
+        // Extract: "Group order slip #701938 | name=..."
+        String prefix = "Group order slip #";
+        int start = description.indexOf(prefix);
+        if (start == -1) return null;
+        int end = description.indexOf(" |", start);
+        if (end == -1) end = description.length();
+        return description.substring(start + prefix.length(), end);
     }
 
     @Transactional
@@ -1003,6 +1016,19 @@ public class ShopOrderService {
         }
 // prefer "dailySeq orderNumber" (with a space) when available, otherwise fall back to orderNumber or orderCode
         StringBuilder refBuilder = new StringBuilder();
+
+        String slipRef = "";
+        if (order.getSourceToken() != null && !order.getSourceToken().isBlank()) {
+            ShopAccessToken sat = shopAccessTokenRepository.findByToken(order.getSourceToken()).orElse(null);
+            if (sat != null && sat.getDescription() != null && sat.getDescription().contains("Group order slip")) {
+                String slipNumber = extractSlipNumberFromDescription(sat.getDescription());
+                if (slipNumber != null) {
+                    slipRef = " | Phiếu #" + slipNumber;  // Add to payment note
+                }
+            }
+        }
+
+
         if (order.getDailySeq() != null) {
             refBuilder.append(order.getOrderNumber()).append(' ');
         }
@@ -1011,7 +1037,7 @@ public class ShopOrderService {
         } else {
             refBuilder.append(order.getOrderCode() != null ? order.getOrderCode() : "");
         }
-        String orderRef = refBuilder.toString();
+        String orderRef = refBuilder.toString() + slipRef;
 
         order.setPaymentQr(VietQrBuilder.buildUrl(
                 company.getBankBin(), company.getBankAccountNumber(),
