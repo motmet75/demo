@@ -272,25 +272,66 @@ public class ShopNewOrderNotificationService {
         if (StringUtils.hasText(order.getNotes())) appendLine(body, "Notes", order.getNotes());
 
         if (order.getItems() != null && !order.getItems().isEmpty()) {
-            body.append(System.lineSeparator()).append("Items:").append(System.lineSeparator());
+            body.append(System.lineSeparator())
+                    .append("Items:")
+                    .append(System.lineSeparator());
+
             for (ShopOrderResponseDto.ItemDto item : order.getItems()) {
-                if (item.getParentItemId() != null) continue;
+
+                // Main menu item only
+                if (item.getParentItemId() != null) {
+                    continue;
+                }
+
                 body.append("- ")
                         .append(quantity(item.getQuantity()))
                         .append(" x ")
                         .append(firstText(item.getModelName(), "Item"));
+
                 if (item.getLineTotal() != null) {
-                    body.append(" = ").append(money(item.getLineTotal()));
+                    body.append(" = ")
+                            .append(money(item.getLineTotal()));
                 }
+
                 body.append(System.lineSeparator());
+
+                // Toppings / side dishes
+                for (ShopOrderResponseDto.ItemDto child : order.getItems()) {
+
+                    if (!item.getId().equals(child.getParentItemId())) {
+                        continue;
+                    }
+
+                    body.append("    + ")
+                            .append(quantity(child.getQuantity()))
+                            .append(" x ")
+                            .append(firstText(child.getModelName(), "Item"));
+
+                    if (child.getLineTotal() != null) {
+                        body.append(" = ")
+                                .append(money(child.getLineTotal()));
+                    }
+
+                    body.append(System.lineSeparator());
+                }
             }
+        }
+
+        /* Bill summary */
+        body.append(System.lineSeparator());
+
+        if (order.getSubtotal() != null) {
+            appendLine(body, "Subtotal", money(order.getSubtotal()));
+        }
+
+        if (order.getTotalAmount() != null) {
+            appendLine(body, "TOTAL BILL", money(order.getTotalAmount()));
         }
 
         body.append(System.lineSeparator())
                 .append("Notification time: ")
                 .append(Instant.now())
                 .append(System.lineSeparator());
-        return body.toString();
     }
 
     private String orderNumber(ShopOrderResponseDto order) {
