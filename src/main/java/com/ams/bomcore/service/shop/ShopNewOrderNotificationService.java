@@ -255,30 +255,27 @@ public class ShopNewOrderNotificationService {
 
     private String body(Company company, ShopOrderResponseDto order, int recipientCount) {
         StringBuilder body = new StringBuilder();
-        appendLine(body, "Shop", firstText(company.getShopName(), company.getCompanyName(), ""));
+
+        appendLine(body, "Shop",
+                firstText(company.getShopName(), company.getCompanyName(), ""));
         appendLine(body, "Order", orderNumber(order));
         appendLine(body, "Order code", order.getOrderCode());
         appendLine(body, "Status", order.getStatus());
         appendLine(body, "Fulfillment", order.getFulfillmentType());
-        appendLine(body, "Table", firstText(order.getTableName(), order.getCustomerTableTag(), ""));
+        appendLine(body, "Table",
+                firstText(order.getTableName(), order.getCustomerTableTag(), ""));
         appendLine(body, "Customer", order.getCustomerName());
         appendLine(body, "Phone", order.getCustomerPhone());
-        appendLine(body, "Total", money(order.getTotalAmount()));
-        appendLine(body, "Payment", firstText(order.getPaymentMethod(), "") + " / " + firstText(order.getPaymentStatus(), ""));
-        appendLine(body, "Created at", order.getCreatedAt());
-        appendLine(body, "Recipients", recipientCount);
-        String link = orderLink(order);
-        if (StringUtils.hasText(link)) appendLine(body, "Track", link);
-        if (StringUtils.hasText(order.getNotes())) appendLine(body, "Notes", order.getNotes());
 
         if (order.getItems() != null && !order.getItems().isEmpty()) {
+
             body.append(System.lineSeparator())
                     .append("Items:")
                     .append(System.lineSeparator());
 
             for (ShopOrderResponseDto.ItemDto item : order.getItems()) {
 
-                // Main menu item only
+                // Main menu item
                 if (item.getParentItemId() != null) {
                     continue;
                 }
@@ -317,21 +314,82 @@ public class ShopNewOrderNotificationService {
             }
         }
 
-        /* Bill summary */
+        // ==========================
+        // BILL SUMMARY
+        // ==========================
+
         body.append(System.lineSeparator());
 
-        if (order.getSubtotal() != null) {
-            appendLine(body, "Subtotal", money(order.getSubtotal()));
+        // Calculate subtotal from MAIN items only.
+        // Child items are displayed above but are not added again
+        // to avoid double-counting if their amount is included in parent.
+        BigDecimal subtotal = BigDecimal.ZERO;
+
+        if (order.getItems() != null) {
+            for (ShopOrderResponseDto.ItemDto item : order.getItems()) {
+
+                if (item.getParentItemId() != null) {
+                    continue;
+                }
+
+                if (item.getLineTotal() != null) {
+                    subtotal = subtotal.add(item.getLineTotal());
+                }
+            }
         }
 
-        if (order.getTotalAmount() != null) {
-            appendLine(body, "TOTAL BILL", money(order.getTotalAmount()));
+        appendLine(body, "Subtotal", money(subtotal));
+
+        if (order.getDeliveryFee() != null
+                && order.getDeliveryFee().compareTo(BigDecimal.ZERO) > 0) {
+
+            appendLine(body,
+                    "Delivery fee",
+                    money(order.getDeliveryFee()));
+        }
+
+        if (order.getDiscountAmount() != null
+                && order.getDiscountAmount().compareTo(BigDecimal.ZERO) > 0) {
+
+            appendLine(body,
+                    "Discount",
+                    money(order.getDiscountAmount()));
+        }
+
+        appendLine(body,
+                "TOTAL BILL",
+                money(order.getTotalAmount()));
+
+        appendLine(body,
+                "Payment",
+                firstText(order.getPaymentMethod(), "")
+                        + " / "
+                        + firstText(order.getPaymentStatus(), ""));
+
+        appendLine(body,
+                "Created at",
+                order.getCreatedAt());
+
+        appendLine(body,
+                "Recipients",
+                recipientCount);
+
+        String link = orderLink(order);
+
+        if (StringUtils.hasText(link)) {
+            appendLine(body, "Track", link);
+        }
+
+        if (StringUtils.hasText(order.getNotes())) {
+            appendLine(body, "Notes", order.getNotes());
         }
 
         body.append(System.lineSeparator())
                 .append("Notification time: ")
                 .append(Instant.now())
                 .append(System.lineSeparator());
+
+        return body.toString();
     }
 
     private String orderNumber(ShopOrderResponseDto order) {
