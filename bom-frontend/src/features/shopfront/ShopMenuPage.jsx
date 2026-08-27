@@ -653,7 +653,8 @@ export default function ShopMenuPage() {
   const [callStaffReason, setCallStaffReason]   = useState('payment')
   const [callStaffNote, setCallStaffNote]       = useState('')
   const [callStaffDone, setCallStaffDone]       = useState(false)
-  const [activeStaffCall, setActiveStaffCall]   = useState(null)
+  const [callStaffName, setCallStaffName]       = useState('')
+  const [callStaffTableId, setCallStaffTableId] = useState('')
   const [callStaffLoading, setCallStaffLoading] = useState(false)
   const [staffCallNow, setStaffCallNow]         = useState(Date.now())
   const headerRef    = useRef(null)
@@ -1457,8 +1458,9 @@ export default function ShopMenuPage() {
     setSearchQuery('')
     setActiveCategory(prev => prev === cat ? null : cat)
   }
+  const hasAnyOrder = () => [...(tokenSession?.orders || []), ...(tableOrders || [])].some(Boolean)
 
-  const pickCallStaffOrder = () => {
+   const pickCallStaffOrder = () => {
     const activeStatuses = new Set(['PENDING', 'CONFIRMED', 'PREPARING', 'READY'])
     const timestamp = order => Number(new Date(order?.createdAt || 0)) || 0
     const candidates = [...(tokenSession?.orders || []), ...(tableOrders || [])].filter(Boolean)
@@ -1474,7 +1476,8 @@ export default function ShopMenuPage() {
     setCallStaffLoading(true); setError('')
     try {
       const callOrder = pickCallStaffOrder()
-      const { res, data } = await callStaff(ctx.tenantId, ctx.companyId, ctx.tableId, callStaffReason, callStaffNote, tokenParam, callOrder)
+      const effectiveTableId = callOrder ? ctx.tableId : callStaffTableId
+      const { res, data } = await callStaff(ctx.tenantId, ctx.companyId, effectiveTableId, callStaffReason, callStaffNote, tokenParam, callOrder, callOrder ? null : callStaffName.trim())
       if (!res.ok) {
         setError(data?.error || 'Không gọi được nhân viên. Vui lòng báo trực tiếp.')
         setCallStaffLoading(false)
@@ -1490,6 +1493,8 @@ export default function ShopMenuPage() {
       setCallStaffOpen(false)
       setCallStaffReason('payment')
       setCallStaffNote('')
+      setCallStaffName('')
+      setCallStaffTableId('')
       setCallStaffDone(true)
     } catch {
       setError('Lỗi mạng khi gọi nhân viên. Vui lòng thử lại.')
@@ -2021,7 +2026,7 @@ export default function ShopMenuPage() {
           <LanguageSelector compact languageCodes={ORDERING_LANGUAGE_CODES} onLanguageChange={handleOrderingLanguageChange} />
 
           {/* Gọi nhân viên */}
-          <Button size="small" variant="outlined" onClick={() => setCallStaffOpen(true)}
+          <Button size="small" variant="outlined" onClick={() => { setCallStaffName(''); setCallStaffTableId(ctx.tableId || ''); setCallStaffOpen(true) }}
             startIcon={<SupportAgentIcon sx={{ fontSize: '16px !important' }} />}
             sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 20, fontSize: 12,
               px: 1.25, py: 0.4, flexShrink: 0,
@@ -2337,6 +2342,28 @@ export default function ShopMenuPage() {
                 }} />
             ))}
           </RadioGroup>
+
+          {!hasAnyOrder() && (
+              <>
+                <TextField fullWidth size="small" required
+                           label={t('shop.customerName')}
+                           value={callStaffName}
+                           onChange={e => setCallStaffName(e.target.value)}
+                           disabled={callStaffLoading}
+                           sx={{ mt: 1, '& .MuiOutlinedInput-root': { borderRadius: 2 } }} />
+                <FormControl fullWidth size="small" required disabled={callStaffLoading}
+                             sx={{ mt: 1.5, '& .MuiOutlinedInput-root': { borderRadius: 2 } }}>
+                  <InputLabel>{t('shop.selectTable')}</InputLabel>
+                  <Select value={callStaffTableId} label={t('shop.selectTable')}
+                          onChange={e => setCallStaffTableId(e.target.value)}>
+                    {publicTables.map(table => (
+                        <MenuItem key={table.id} value={table.id}>{localizedTableName(table, language)}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </>
+          )}
+
           <TextField fullWidth multiline rows={3} size="small"
             placeholder={t('shop.specialRequest')}
             value={callStaffNote}
@@ -2346,10 +2373,10 @@ export default function ShopMenuPage() {
         </DialogContent>
         <DialogActions sx={{ px: 2.5, pb: 3.5, pt: 1.5, flexDirection: 'column', gap: 1 }}>
           <Button variant="contained" fullWidth size="large" onClick={handleCallStaff}
-            disabled={callStaffLoading}
-            startIcon={callStaffLoading ? <CircularProgress size={18} color="inherit" /> : null}
-            sx={{ bgcolor: '#ff5722', '&:hover': { bgcolor: '#e64a19' },
-              borderRadius: 20, fontWeight: 700, textTransform: 'none', fontSize: 15 }}>
+                  disabled={callStaffLoading || (!hasAnyOrder() && (!callStaffName.trim() || !callStaffTableId))}
+                  startIcon={callStaffLoading ? <CircularProgress size={18} color="inherit" /> : null}
+                  sx={{ bgcolor: '#ff5722', '&:hover': { bgcolor: '#e64a19' },
+                    borderRadius: 20, fontWeight: 700, textTransform: 'none', fontSize: 15 }}>
             {callStaffLoading ? t('common.loading') : t('shop.callStaff')}
           </Button>
           <Button fullWidth onClick={() => setCallStaffOpen(false)}

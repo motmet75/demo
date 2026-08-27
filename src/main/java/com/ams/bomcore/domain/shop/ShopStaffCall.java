@@ -33,11 +33,17 @@ public class ShopStaffCall {
     @Column(name = "order_number")
     private Integer orderNumber;
 
+    @Column(name = "customer_name", length = 120)
+    private String customerName;
+
     @Column(name = "daily_seq")
     private Integer dailySeq;
 
     @Column(name = "order_code", length = 50)
     private String orderCode;
+
+    public String getCustomerName() { return customerName; }
+    public void setCustomerName(String customerName) { this.customerName = customerName; }
 
     @Column(name = "reason", nullable = false, length = 40)
     private String reason;

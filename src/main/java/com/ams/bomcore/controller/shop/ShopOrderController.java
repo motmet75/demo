@@ -324,6 +324,12 @@ public class ShopOrderController {
             if (!"payment".equals(reason) && !"other".equals(reason)) reason = "other";
             String note = stringValue(body.get("note"));
             if (note != null && note.length() > 500) note = note.substring(0, 500);
+            String customerName = stringValue(body.get("customerName"));
+            if (customerName != null) {
+                customerName = customerName.trim();
+                if (customerName.length() > 120) customerName = customerName.substring(0, 120);
+                if (customerName.isEmpty()) customerName = null;
+            }
 
             ShopOrder order = resolveStaffCallOrder(
                     parseUuid(body.get("orderId")),
@@ -334,6 +340,15 @@ public class ShopOrderController {
                     companyId
             );
 
+            if (order == null) {
+                if (customerName == null) {
+                    return ResponseEntity.badRequest().body(Map.of("error", "customerName is required when no order has been placed"));
+                }
+                if (tableId == null) {
+                    return ResponseEntity.badRequest().body(Map.of("error", "tableId is required when no order has been placed"));
+                }
+            }
+
             ShopStaffCall call = new ShopStaffCall();
             call.setTenantId(tenantId);
             call.setCompanyId(companyId);
@@ -342,6 +357,7 @@ public class ShopOrderController {
             call.setReason(reason);
             call.setNote(note);
             call.setToken(token);
+            call.setCustomerName(customerName);
             if (order != null) {
                 call.setOrderId(order.getId());
                 call.setOrderNumber(order.getOrderNumber());
@@ -2214,6 +2230,7 @@ public class ShopOrderController {
         m.put("orderNumber", call.getOrderNumber());
         m.put("dailySeq", call.getDailySeq());
         m.put("orderCode", call.getOrderCode());
+        m.put("customerName", call.getCustomerName());
         m.put("reason", call.getReason());
         m.put("note", call.getNote());
         m.put("replyMessage", call.getReplyMessage());

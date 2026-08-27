@@ -464,7 +464,7 @@ export function deleteToken(tokenId) {
 
 // ── Staff calls ────────────────────────────────────────────────────
 
-export function callStaff(tenantId, companyId, tableId, reason, note, token, order = null) {
+export function callStaff(tenantId, companyId, tableId, reason, note, token, order = null, customerName = null) {
   const orderInfo = order || {}
   return apiFetchJsonNoContext('/shop/public/call-staff', {
     method: 'POST',
@@ -480,6 +480,7 @@ export function callStaff(tenantId, companyId, tableId, reason, note, token, ord
       orderCode: orderInfo.orderCode || null,
       orderNumber: orderInfo.orderNumber ?? null,
       dailySeq: orderInfo.dailySeq ?? null,
+      customerName: customerName || null,
     }),
   })
 }
