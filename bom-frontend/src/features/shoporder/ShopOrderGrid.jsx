@@ -2928,13 +2928,12 @@ function CombinedReceiptDialog({ token, orderRangeParams = {}, modelMetaMap = {}
   const reload = () => {
     setLoading(true)
     fetchOrdersByToken(token, orderRangeParams)
-      .then(({ res, data }) => {
-        if (!res.ok) { setError(data?.error || t('shopOrder.grid.slipLoadFailed')); return }
-        const list = Array.isArray(data) ? data : []
-        setOrders(list.filter(order => orderInTimeRange(order, orderRangeParams)))
-      })
-      .catch(() => setError(t('shopOrder.grid.slipReloadFailed')))
-      .finally(() => setLoading(false))
+        .then(({ res, data }) => {
+          if (!res.ok) { setError(data?.error || t('shopOrder.grid.slipLoadFailed')); return }
+          setOrders(Array.isArray(data) ? data : [])
+        })
+        .catch(() => setError(t('shopOrder.grid.slipReloadFailed')))
+        .finally(() => setLoading(false))
   }
 
   useEffect(() => { reload() }, [token, orderRangeParams])

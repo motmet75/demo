@@ -531,14 +531,16 @@ public class ShopOrderController {
     }
     @GetMapping("/shop/staff/orders/by-token")
     public ResponseEntity<?> getOrdersByToken(@RequestParam String token,
-                                               @RequestParam(required = false) UUID tenantId,
-                                               @RequestParam(required = false) UUID companyId,
-                                               @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
-                                               @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+                                              @RequestParam(required = false) UUID tenantId,
+                                              @RequestParam(required = false) UUID companyId,
+                                              @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                              @RequestHeader(value = "X-Company-Id", required = false) String hCompany,
+                                              @RequestParam(required = false) Instant from,
+                                              @RequestParam(required = false) Instant to) {
         UUID tId = resolve(tenantId, hTenant);
         UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
-        return ResponseEntity.ok(shopOrderService.getOrdersByTokenForStaff(token, tId, cId));
+        return ResponseEntity.ok(shopOrderService.getOrdersByTokenForStaff(token, tId, cId, from, to));
     }
 
     @GetMapping("/shop/staff/orders/{orderId}")

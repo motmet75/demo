@@ -2505,8 +2505,9 @@ public class ShopOrderService {
     // ── Staff: combined receipt for a token ──────────────────────────
 
     @Transactional(readOnly = true)
-    public List<ShopOrderResponseDto> getOrdersByTokenForStaff(String token, UUID tenantId, UUID companyId) {
-        return shopOrderRepository.findAllBySourceTokenOrderByCreatedAtDesc(token)
+    public List<ShopOrderResponseDto> getOrdersByTokenForStaff(String token, UUID tenantId, UUID companyId,
+                                                               Instant fromTime, Instant toTime) {
+        return shopOrderRepository.searchOrdersByToken(token, fromTime, toTime)
                 .stream()
                 .filter(o -> o.getTenantId().equals(tenantId) && o.getCompanyId().equals(companyId))
                 .map(this::dto)
