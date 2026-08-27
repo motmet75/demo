@@ -656,6 +656,7 @@ export default function ShopMenuPage() {
   const [callStaffName, setCallStaffName]       = useState('')
   const [callStaffTableId, setCallStaffTableId] = useState('')
   const [callStaffLoading, setCallStaffLoading] = useState(false)
+  const [activeStaffCall, setActiveStaffCall]   = useState(null)
   const [staffCallNow, setStaffCallNow]         = useState(Date.now())
   const headerRef    = useRef(null)
   const searchInputRef = useRef(null)
