@@ -525,7 +525,7 @@ public class ShopOrderController {
         UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
         Object orders = Boolean.TRUE.equals(active)
-                ? shopOrderService.listActiveOrders(tId, cId)
+                ? shopOrderService.listActiveOrders(tId, cId, from, to)
                 : shopOrderService.listOrders(tId, cId, status, from, to);
         return staffOrdersResponse(orders, recordCounterPublicIp(cId, request));
     }

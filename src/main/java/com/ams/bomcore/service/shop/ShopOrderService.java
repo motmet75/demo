@@ -601,14 +601,13 @@ public class ShopOrderService {
 
     // ── Queries ───────────────────────────────────────────────────────
 
-    @Transactional(readOnly = true)
-    public List<ShopOrderResponseDto> listActiveOrders(UUID tenantId, UUID companyId) {
+    public List<ShopOrderResponseDto> listActiveOrders(UUID tenantId, UUID companyId, Instant fromTime, Instant toTime) {
         List<String> active = List.of(
                 ShopOrder.STATUS_PENDING, ShopOrder.STATUS_CONFIRMED,
                 ShopOrder.STATUS_PREPARING, ShopOrder.STATUS_READY
         );
         return shopOrderRepository
-                .findAllByTenantIdAndCompanyIdAndStatusInOrderByOrderNumberAsc(tenantId, companyId, active)
+                .searchActiveOrders(tenantId, companyId, active, fromTime, toTime)
                 .stream().map(this::dto).toList();
     }
 

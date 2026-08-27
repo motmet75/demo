@@ -53,6 +53,20 @@ public interface ShopOrderRepository extends JpaRepository<ShopOrder, UUID> {
                                         @Param("fromTime") Instant fromTime,
                                         @Param("toTime") Instant toTime);
     List<ShopOrder> findAllByTenantIdAndCompanyIdAndStatusInOrderByOrderNumberAsc(UUID tenantId, UUID companyId, List<String> statuses);
+    @Query("""
+        SELECT o FROM ShopOrder o
+        WHERE o.tenantId = :tenantId
+          AND o.companyId = :companyId
+          AND o.status IN :statuses
+          AND (:fromTime IS NULL OR o.createdAt >= :fromTime)
+          AND (:toTime IS NULL OR o.createdAt < :toTime)
+        ORDER BY o.orderNumber ASC
+        """)
+    List<ShopOrder> searchActiveOrders(@Param("tenantId") UUID tenantId,
+                                       @Param("companyId") UUID companyId,
+                                       @Param("statuses") List<String> statuses,
+                                       @Param("fromTime") Instant fromTime,
+                                       @Param("toTime") Instant toTime);
     List<ShopOrder> findAllByTable_IdAndTenantIdAndCompanyIdAndStatusIn(UUID tableId, UUID tenantId, UUID companyId, List<String> statuses);
     Optional<ShopOrder> findTopByTenantIdAndCompanyIdAndPickupScannedAtAfterOrderByPickupScannedAtDesc(UUID tenantId, UUID companyId, Instant after);
 

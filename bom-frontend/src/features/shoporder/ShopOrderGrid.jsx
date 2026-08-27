@@ -1618,7 +1618,7 @@ export default function ShopOrderGrid() {
   const loadBoard = useCallback(async () => {
     try {
       const [activeRes, pickedRes] = await Promise.all([
-        fetchActiveOrders(),
+        fetchActiveOrders(orderRangeParams),
         fetchShopOrders('PICKED_UP', orderRangeParams),
       ])
       const all = [

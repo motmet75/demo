@@ -213,8 +213,12 @@ export function unlockTokenSession(token) {
   return apiFetchJson(`/shop/staff/tokens/by-token/${encodeURIComponent(token)}/counter-unlock`, { method: 'PATCH' })
 }
 
-export async function fetchActiveOrders() {
-  return withCounterIpMeta(await apiFetchJson('/shop/staff/orders?active=true'))
+export async function fetchActiveOrders(range = {}) {
+  return withCounterIpMeta(await apiFetchJson('/shop/staff/orders' + qs({
+    active: true,
+    from: range?.from || null,
+    to: range?.to || null,
+  })))
 }
 
 export function pickupShopOrder(orderId) {
