@@ -1164,15 +1164,16 @@ public class ShopOrderController {
     }
 
     @GetMapping("/shop/public/display-board/{token}")
-    public ResponseEntity<?> getDisplayBoard(@PathVariable String token) {
+    public ResponseEntity<?> getDisplayBoard(@PathVariable String token,
+                                             @RequestParam(required = false) Instant from,
+                                             @RequestParam(required = false) Instant to) {
         try {
-            return ResponseEntity.ok(shopOrderService.getDisplayBoardOrders(token));
+            return ResponseEntity.ok(shopOrderService.getDisplayBoardOrders(token, from, to));
         } catch (NoSuchElementException e) {
             return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
         } catch (IllegalStateException e) {
             return ResponseEntity.status(410).body(Map.of("error", e.getMessage()));
         }
-    }
 
     // ── Token management (/shop/staff/tokens) ────────────────────────
 

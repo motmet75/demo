@@ -339,6 +339,8 @@ function Column({ title, emoji, subtitle, orders, colStyle, emptyEmoji, emptyTex
 export default function DisplayBoardPage() {
   const [searchParams] = useSearchParams()
   const token = searchParams.get('t')
+  const from  = searchParams.get('from')
+  const to    = searchParams.get('to')
 
   const [confirmed,  setConfirmed]  = useState([])
   const [processing, setProcessing] = useState([])
@@ -351,7 +353,7 @@ export default function DisplayBoardPage() {
   const load = useCallback(async () => {
     if (!token) return
     try {
-      const { res, data } = await fetchDisplayBoard(token)
+      const { res, data } = await fetchDisplayBoard(token, { from, to })
       if (res.status === 410 || res.status === 404) {
         setError(data?.error || 'Token expired. Ask staff to regenerate the display board URL.')
         return

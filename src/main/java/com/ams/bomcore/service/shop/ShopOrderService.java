@@ -906,7 +906,7 @@ public class ShopOrderService {
     }
 
     @Transactional(readOnly = true)
-    public Map<String, Object> getDisplayBoardOrders(String token) {
+    public Map<String, Object> getDisplayBoardOrders(String token, Instant fromTime, Instant toTime) {
         ShopAccessToken sat = shopAccessTokenRepository.findByToken(token)
                 .orElseThrow(() -> new NoSuchElementException("Token not found"));
         if (!sat.isValid()) throw new IllegalStateException("Token expired or disabled");
@@ -918,19 +918,19 @@ public class ShopOrderService {
                 .orElse(false);
 
         List<ShopOrderResponseDto> confirmed = shopOrderRepository
-                .findAllByTenantIdAndCompanyIdAndStatusInOrderByOrderNumberAsc(tId, cId, List.of(ShopOrder.STATUS_CONFIRMED))
+                .searchActiveOrders(tId, cId, List.of(ShopOrder.STATUS_CONFIRMED), fromTime, toTime)
                 .stream().map(this::dto).toList();
 
         List<ShopOrderResponseDto> preparing = shopOrderRepository
-                .findAllByTenantIdAndCompanyIdAndStatusInOrderByOrderNumberAsc(tId, cId, List.of(ShopOrder.STATUS_PREPARING))
+                .searchActiveOrders(tId, cId, List.of(ShopOrder.STATUS_PREPARING), fromTime, toTime)
                 .stream().map(this::dto).toList();
 
         List<ShopOrderResponseDto> readyList = shopOrderRepository
-                .findAllByTenantIdAndCompanyIdAndStatusInOrderByOrderNumberAsc(tId, cId, List.of(ShopOrder.STATUS_READY))
+                .searchActiveOrders(tId, cId, List.of(ShopOrder.STATUS_READY), fromTime, toTime)
                 .stream().map(this::dto).toList();
 
         List<ShopOrderResponseDto> pickedUp = shopOrderRepository
-                .findAllByTenantIdAndCompanyIdAndStatusInOrderByOrderNumberAsc(tId, cId, List.of(ShopOrder.STATUS_PICKED_UP))
+                .searchActiveOrders(tId, cId, List.of(ShopOrder.STATUS_PICKED_UP), fromTime, toTime)
                 .stream().map(this::dto).toList();
 
         // "preparing" key keeps backward compat (confirmed+preparing combined for old board)

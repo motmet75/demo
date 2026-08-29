@@ -1879,8 +1879,13 @@ export default function ShopOrderGrid() {
     try {
       const { data } = await generateDisplayBoardToken()
       const base = `${window.location.origin}/bom-inventory`
-      setBoardUrl(`${base}/shop/board?t=${data.token}`)
-      setCustomerBoardUrl(`${base}/shop/customer-board?t=${data.token}`)
+      const rangeQs = new URLSearchParams({
+        ...(orderRangeParams?.from ? { from: orderRangeParams.from } : {}),
+        ...(orderRangeParams?.to ? { to: orderRangeParams.to } : {}),
+      }).toString()
+      const suffix = rangeQs ? `&${rangeQs}` : ''
+      setBoardUrl(`${base}/shop/board?t=${data.token}${suffix}`)
+      setCustomerBoardUrl(`${base}/shop/customer-board?t=${data.token}${suffix}`)
     } catch (e) { setError(e.message || t('shopOrder.grid.generateBoardUrlFailed')) }
     setBoardLoading(false)
   }

@@ -159,6 +159,8 @@ function Section({ title, subtitle, emoji, orders, ready = false, cashier = fals
 export default function CustomerBoardPage() {
   const [params]      = useSearchParams()
   const token         = params.get('t') || params.get('token')
+  const from          = params.get('from')
+  const to            = params.get('to')
   const separateConfirmed = params.get('separateConfirmed') === '1'
   const [data, setData]       = useState(null)
   const [error, setError]     = useState('')
@@ -168,12 +170,12 @@ export default function CustomerBoardPage() {
   const load = useCallback(async () => {
     if (!token) { setError('No token — ask staff to share the Customer Display link.'); return }
     try {
-      const { data: d } = await fetchDisplayBoard(token)
+      const { data: d } = await fetchDisplayBoard(token, { from, to })
       setData(d)
       setLastUpdate(new Date())
       setError('')
     } catch (e) { setError(e.message || 'Failed to load') }
-  }, [token])
+  }, [token, from, to])
 
   useEffect(() => { load(); const t = setInterval(load, POLL_MS); return () => clearInterval(t) }, [load])
 

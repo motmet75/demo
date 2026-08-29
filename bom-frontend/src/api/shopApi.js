@@ -436,14 +436,16 @@ export function fetchPickupQr(orderId) {
 
 // ── Display board ──────────────────────────────────────────────────
 
-export function generateDisplayBoardToken() {
+export function   generateDisplayBoardToken() {
   return apiFetchJson('/shop/staff/display-board/token', { method: 'POST' })
 }
 
-export function fetchDisplayBoard(token) {
-  return apiFetchJsonNoContext(`/shop/public/display-board/${encodeURIComponent(token)}`)
+export function fetchDisplayBoard(token, range = {}) {
+  return apiFetchJsonNoContext(`/shop/public/display-board/${encodeURIComponent(token)}` + qs({
+    from: range?.from || null,
+    to: range?.to || null,
+  }))
 }
-
 // ── Token management ──────────────────────────────────────────────
 
 export function fetchTokens() {
