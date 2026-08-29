@@ -2,26 +2,30 @@ import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
-import { fetchActivePickup } from '../../api/shopApi'
+import { fetchActivePickup, fetchCounterDisplay, pushCounterDisplay } from '../../api/shopApi'
 import LanguageSelector from '../../components/LanguageSelector'
 import { ORDERING_LANGUAGE_CODES } from '../../i18n/translations'
 import { useI18n } from '../../i18n/I18nContext'
 import { localizedModelName, localizedSelectedOptions } from '../../i18n/menuLocalization'
 
 export const COUNTER_CHANNEL = 'shop_counter_display'
-const IDLE_TIMEOUT_MS = 5 * 60 * 1000
-const PICKUP_POLL_MS  = 3000
+const IDLE_TIMEOUT_MS   = 5 * 60 * 1000
+const PICKUP_POLL_MS    = 3000
+const COUNTER_POLL_MS   = 3000
 
 export function broadcastToCounter(order, tagQrBase64 = null) {
   const payload = order
-    ? { ...order, tagQrBase64, _ts: Date.now() }
-    : null
+      ? { ...order, tagQrBase64, _ts: Date.now() }
+      : null
   const msg = { type: 'COUNTER_DISPLAY_ORDER', payload }
   try {
     if (window.BroadcastChannel) new BroadcastChannel(COUNTER_CHANNEL).postMessage(msg)
     if (payload) localStorage.setItem('shop_counter_order', JSON.stringify(payload))
     else localStorage.removeItem('shop_counter_order')
   } catch { /* non-fatal */ }
+  // Cross-device: push to the backend too, so a counter display running on a separate
+  // physical device (not just a separate tab in the same browser) picks it up on its next poll.
+  pushCounterDisplay(payload).catch(() => { /* best-effort; local BroadcastChannel already covers same-browser */ })
 }
 
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : '0 đ'
@@ -486,6 +490,31 @@ export default function CounterDisplayPage() {
     const t = setInterval(pollPickup, PICKUP_POLL_MS)
     return () => clearInterval(t)
   }, [pollPickup])
+
+  // Cross-device polling: pick up staff-triggered counter pushes (new order, split payment,
+  // voucher redeemed, live cart preview) from ANY device, not just the one that triggered it.
+  const lastCounterPushedAt = useRef(null)
+  const pollCounterPush = useCallback(async () => {
+    if (!tenantId || !companyId) return
+    try {
+      const { res, data } = await fetchCounterDisplay(tenantId, companyId)
+      if (res.status === 204 || !data?.payload) return
+      if (data.pushedAt !== lastCounterPushedAt.current) {
+        lastCounterPushedAt.current = data.pushedAt
+        const payload = { ...data.payload, _ts: Date.now() }
+        setOrder(payload)
+        resetIdleTimer(payload)
+        localStorage.setItem('shop_counter_order', JSON.stringify(payload))
+      }
+    } catch (_) {}
+  }, [tenantId, companyId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!tenantId || !companyId) return
+    pollCounterPush()
+    const t = setInterval(pollCounterPush, COUNTER_POLL_MS)
+    return () => clearInterval(t)
+  }, [pollCounterPush])
 
   useEffect(() => {
     if (!window.BroadcastChannel) return

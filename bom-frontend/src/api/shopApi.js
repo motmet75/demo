@@ -426,6 +426,18 @@ export function pickupScan(orderCode) {
   )
 }
 
+export function fetchCounterDisplay(tenantId, companyId) {
+  return apiFetchJsonNoContext('/shop/public/counter-display' + qs({ tenantId, companyId }))
+}
+
+export function pushCounterDisplay(payload) {
+  return apiFetchJson('/shop/staff/counter-display/push', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload || {}),
+  })
+}
+
 export function fetchActivePickup(tenantId, companyId) {
   return apiFetchJsonNoContext('/shop/public/active-pickup' + qs({ tenantId, companyId }))
 }

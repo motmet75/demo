@@ -37,6 +37,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import jakarta.servlet.http.HttpServletRequest;
+import com.ams.bomcore.service.shop.CounterDisplayCache;
 
 import java.math.BigDecimal;
 import java.net.InetAddress;
@@ -62,6 +63,8 @@ public class ShopOrderController {
     private final ShopStaffCallRepository shopStaffCallRepository;
     private final ShopPrintHistoryRepository shopPrintHistoryRepository;
     private final ShopTableRepository shopTableRepository;
+    private final ShopTableRepository shopTableRepository;
+    private final CounterDisplayCache counterDisplayCache;
 
     private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
 
@@ -95,7 +98,8 @@ public class ShopOrderController {
                                ShopOrderRepository shopOrderRepository,
                                ShopStaffCallRepository shopStaffCallRepository,
                                ShopPrintHistoryRepository shopPrintHistoryRepository,
-                               ShopTableRepository shopTableRepository) {
+                               ShopTableRepository shopTableRepository,
+                               CounterDisplayCache counterDisplayCache) {
         this.shopOrderService = shopOrderService;
         this.shopLocalizedLabelService = shopLocalizedLabelService;
         this.shopPricingService = shopPricingService;
@@ -109,6 +113,7 @@ public class ShopOrderController {
         this.shopStaffCallRepository = shopStaffCallRepository;
         this.shopPrintHistoryRepository = shopPrintHistoryRepository;
         this.shopTableRepository = shopTableRepository;
+        this.counterDisplayCache = counterDisplayCache;
     }
 
     // ── PUBLIC endpoints (/shop/public/**) ────────────────────────────
@@ -281,6 +286,30 @@ public class ShopOrderController {
         return shopOrderService.getActivePickup(tenantId, companyId)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.noContent().build());
+    }
+
+    @GetMapping("/shop/public/counter-display")
+    public ResponseEntity<?> getCounterDisplay(@RequestParam UUID tenantId, @RequestParam UUID companyId) {
+        validateScope(tenantId, companyId);
+        return counterDisplayCache.latest(tenantId, companyId)
+                .<ResponseEntity<?>>map(p -> ResponseEntity.ok(Map.of(
+                        "payload", p.payload(),
+                        "pushedAt", p.pushedAt().toString()
+                )))
+                .orElse(ResponseEntity.noContent().build());
+    }
+
+    @PostMapping("/shop/staff/counter-display/push")
+    public ResponseEntity<?> pushCounterDisplay(@RequestBody(required = false) Map<String, Object> body,
+                                                @RequestParam(required = false) UUID tenantId,
+                                                @RequestParam(required = false) UUID companyId,
+                                                @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                                @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant);
+        UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        counterDisplayCache.push(tId, cId, body);
+        return ResponseEntity.ok(Map.of("ok", true));
     }
 
     @Transactional
