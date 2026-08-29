@@ -63,6 +63,11 @@ public class ShopOrderService {
     private final ShopBillItemRepository shopBillItemRepository;
     private final ShopLocalizedLabelService shopLocalizedLabelService;
     private final ShopNewOrderNotificationService newOrderNotificationService;
+    private static final Instant DISTANT_PAST   = Instant.EPOCH;
+    private static final Instant DISTANT_FUTURE = Instant.parse("9999-12-31T23:59:59Z");
+
+    private Instant resolveFrom(Instant fromTime) { return fromTime != null ? fromTime : DISTANT_PAST; }
+    private Instant resolveTo(Instant toTime)     { return toTime   != null ? toTime   : DISTANT_FUTURE; }
 
     @Value("${app.shop.public-base-url:http://localhost:5173/bom-inventory}")
     private String publicBaseUrl;
@@ -607,7 +612,7 @@ public class ShopOrderService {
                 ShopOrder.STATUS_PREPARING, ShopOrder.STATUS_READY
         );
         return shopOrderRepository
-                .searchActiveOrders(tenantId, companyId, active, fromTime, toTime)
+                .searchActiveOrders(tenantId, companyId, active, resolveFrom(fromTime), resolveTo(toTime))
                 .stream().map(this::dto).toList();
     }
 
@@ -918,19 +923,19 @@ public class ShopOrderService {
                 .orElse(false);
 
         List<ShopOrderResponseDto> confirmed = shopOrderRepository
-                .searchActiveOrders(tId, cId, List.of(ShopOrder.STATUS_CONFIRMED), fromTime, toTime)
+                .searchActiveOrders(tId, cId, List.of(ShopOrder.STATUS_CONFIRMED), resolveFrom(fromTime), resolveTo(toTime))
                 .stream().map(this::dto).toList();
 
         List<ShopOrderResponseDto> preparing = shopOrderRepository
-                .searchActiveOrders(tId, cId, List.of(ShopOrder.STATUS_PREPARING), fromTime, toTime)
+                .searchActiveOrders(tId, cId, List.of(ShopOrder.STATUS_PREPARING), resolveFrom(fromTime), resolveTo(toTime))
                 .stream().map(this::dto).toList();
 
         List<ShopOrderResponseDto> readyList = shopOrderRepository
-                .searchActiveOrders(tId, cId, List.of(ShopOrder.STATUS_READY), fromTime, toTime)
+                .searchActiveOrders(tId, cId, List.of(ShopOrder.STATUS_READY), resolveFrom(fromTime), resolveTo(toTime))
                 .stream().map(this::dto).toList();
 
         List<ShopOrderResponseDto> pickedUp = shopOrderRepository
-                .searchActiveOrders(tId, cId, List.of(ShopOrder.STATUS_PICKED_UP), fromTime, toTime)
+                .searchActiveOrders(tId, cId, List.of(ShopOrder.STATUS_PICKED_UP), resolveFrom(fromTime), resolveTo(toTime))
                 .stream().map(this::dto).toList();
 
         // "preparing" key keeps backward compat (confirmed+preparing combined for old board)

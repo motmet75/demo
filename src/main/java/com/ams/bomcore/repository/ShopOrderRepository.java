@@ -62,6 +62,15 @@ public interface ShopOrderRepository extends JpaRepository<ShopOrder, UUID> {
           AND (:toTime IS NULL OR o.createdAt < :toTime)
         ORDER BY o.orderNumber ASC
         """)
+    @Query("""
+        SELECT o FROM ShopOrder o
+        WHERE o.tenantId = :tenantId
+          AND o.companyId = :companyId
+          AND o.status IN :statuses
+          AND o.createdAt >= :fromTime
+          AND o.createdAt < :toTime
+        ORDER BY o.orderNumber ASC
+        """)
     List<ShopOrder> searchActiveOrders(@Param("tenantId") UUID tenantId,
                                        @Param("companyId") UUID companyId,
                                        @Param("statuses") List<String> statuses,
