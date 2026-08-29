@@ -63,7 +63,6 @@ public class ShopOrderController {
     private final ShopStaffCallRepository shopStaffCallRepository;
     private final ShopPrintHistoryRepository shopPrintHistoryRepository;
     private final ShopTableRepository shopTableRepository;
-    private final ShopTableRepository shopTableRepository;
     private final CounterDisplayCache counterDisplayCache;
 
     private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
