@@ -1174,6 +1174,7 @@ public class ShopOrderController {
         } catch (IllegalStateException e) {
             return ResponseEntity.status(410).body(Map.of("error", e.getMessage()));
         }
+    }
 
     // ── Token management (/shop/staff/tokens) ────────────────────────
 
