@@ -26,14 +26,14 @@ public interface ShopOrderRepository extends JpaRepository<ShopOrder, UUID> {
     List<ShopOrder> findAllByTenantIdAndCompanyIdAndStatusAndCreatedAtLessThanOrderByCreatedAtDesc(
             UUID tenantId, UUID companyId, String status, Instant to);
     @Query("""
-            SELECT o FROM ShopOrder o
-            WHERE o.tenantId = :tenantId
-              AND o.companyId = :companyId
-              AND (:status IS NULL OR :status = '' OR o.status = :status)
-              AND (:fromTime IS NULL OR o.createdAt >= :fromTime)
-              AND (:toTime IS NULL OR o.createdAt < :toTime)
-            ORDER BY o.createdAt DESC
-            """)
+        SELECT o FROM ShopOrder o
+        WHERE o.tenantId = :tenantId
+          AND o.companyId = :companyId
+          AND (CAST(:status AS string) IS NULL OR CAST(:status AS string) = '' OR o.status = CAST(:status AS string))
+          AND o.createdAt >= :fromTime
+          AND o.createdAt < :toTime
+        ORDER BY o.createdAt DESC
+        """)
     List<ShopOrder> searchStaffOrders(@Param("tenantId") UUID tenantId,
                                       @Param("companyId") UUID companyId,
                                       @Param("status") String status,
@@ -45,8 +45,8 @@ public interface ShopOrderRepository extends JpaRepository<ShopOrder, UUID> {
     @Query("""
         SELECT o FROM ShopOrder o
         WHERE o.sourceToken = :token
-          AND (:fromTime IS NULL OR o.createdAt >= :fromTime)
-          AND (:toTime IS NULL OR o.createdAt < :toTime)
+          AND o.createdAt >= :fromTime
+          AND o.createdAt < :toTime
         ORDER BY o.createdAt DESC
         """)
     List<ShopOrder> searchOrdersByToken(@Param("token") String token,
