@@ -346,33 +346,30 @@ public class ShopOrderController {
     }
 
     @PostMapping("/shop/staff/hours/close-today")
-    public ResponseEntity<?> closeToday(@RequestParam(required = false) UUID tenantId,
-                                        @RequestParam(required = false) UUID companyId,
-                                        @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
-                                        @RequestHeader(value = "X-Company-Id", required = false) String hCompany,
-                                        @RequestHeader(value = "X-Time-Zone", required = false) String timeZone,
-                                        java.security.Principal principal) {
+    public ResponseEntity<?> closeToday(...) {
         UUID tId = resolve(tenantId, hTenant);
         UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
         String closedBy = principal != null ? principal.getName() : null;
         ShopHoursService.OrderingStatus status = shopHoursService.closeToday(tId, cId, RequestTimeZone.resolve(timeZone), closedBy);
-        return ResponseEntity.ok(Map.of("open", status.open(), "reason", status.reason(),
-                "reopensAt", status.reopensAt() != null ? status.reopensAt().toString() : null));
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("open", status.open());
+        body.put("reason", status.reason());
+        body.put("reopensAt", status.reopensAt() != null ? status.reopensAt().toString() : null);
+        return ResponseEntity.ok(body);
     }
 
     @PostMapping("/shop/staff/hours/reopen")
-    public ResponseEntity<?> reopenShop(@RequestParam(required = false) UUID tenantId,
-                                        @RequestParam(required = false) UUID companyId,
-                                        @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
-                                        @RequestHeader(value = "X-Company-Id", required = false) String hCompany,
-                                        @RequestHeader(value = "X-Time-Zone", required = false) String timeZone) {
+    public ResponseEntity<?> reopenShop(...) {
         UUID tId = resolve(tenantId, hTenant);
         UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
         ShopHoursService.OrderingStatus status = shopHoursService.reopenNow(tId, cId, RequestTimeZone.resolve(timeZone));
-        return ResponseEntity.ok(Map.of("open", status.open(), "reason", status.reason(),
-                "reopensAt", status.reopensAt() != null ? status.reopensAt().toString() : null));
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("open", status.open());
+        body.put("reason", status.reason());
+        body.put("reopensAt", status.reopensAt() != null ? status.reopensAt().toString() : null);
+        return ResponseEntity.ok(body);
     }
 
     @PostMapping("/shop/staff/counter-display/push")
