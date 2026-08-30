@@ -53,6 +53,9 @@ import AssessmentIcon from '@mui/icons-material/Assessment'
 import SupportAgentIcon from '@mui/icons-material/SupportAgent'
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive'
 import MergeTypeIcon from '@mui/icons-material/MergeType'
+import LockIcon from '@mui/icons-material/Lock'
+import LockOpenIcon from '@mui/icons-material/LockOpen'
+
 import {
   fetchShopOrders, fetchActiveOrders, confirmShopOrder, prepareShopOrder, readyShopOrder,
   completeShopOrder, cancelShopOrder, resetOrderSequence, setShopOrderNumber,
