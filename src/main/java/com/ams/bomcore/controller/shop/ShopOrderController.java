@@ -346,12 +346,15 @@ public class ShopOrderController {
     }
 
     @PostMapping("/shop/staff/hours/close-today")
-    public ResponseEntity<?> closeToday(...) {
+    public ResponseEntity<?> closeToday(@RequestParam(required = false) UUID tenantId,
+                                        @RequestParam(required = false) UUID companyId,
+                                        @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                        @RequestHeader(value = "X-Company-Id", required = false) String hCompany,
+                                        @RequestHeader(value = "X-Time-Zone", required = false) String timeZone) {
         UUID tId = resolve(tenantId, hTenant);
         UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
-        String closedBy = principal != null ? principal.getName() : null;
-        ShopHoursService.OrderingStatus status = shopHoursService.closeToday(tId, cId, RequestTimeZone.resolve(timeZone), closedBy);
+        ShopHoursService.OrderingStatus status = shopHoursService.closeToday(tId, cId, RequestTimeZone.resolve(timeZone), null);
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("open", status.open());
         body.put("reason", status.reason());
@@ -360,7 +363,11 @@ public class ShopOrderController {
     }
 
     @PostMapping("/shop/staff/hours/reopen")
-    public ResponseEntity<?> reopenShop(...) {
+    public ResponseEntity<?> reopenShop(@RequestParam(required = false) UUID tenantId,
+                                        @RequestParam(required = false) UUID companyId,
+                                        @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                        @RequestHeader(value = "X-Company-Id", required = false) String hCompany,
+                                        @RequestHeader(value = "X-Time-Zone", required = false) String timeZone) {
         UUID tId = resolve(tenantId, hTenant);
         UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
