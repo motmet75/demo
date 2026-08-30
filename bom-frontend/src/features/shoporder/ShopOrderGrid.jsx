@@ -64,7 +64,7 @@ import {
   fetchShopTables, setOrderTable, setOrderSeat, fetchPickupQr, fetchOrdersByToken,
   lockTokenSession, unlockTokenSession,
   fetchStaffCalls, dismissStaffCall, replyStaffCall, forceConfirmOrder,
-  confirmScannedOrder,
+  confirmScannedOrder,fetchOrderingStatus, closeShopToday, reopenShop,
 } from '../../api/shopApi'
 import { printCupLabelsTracked, printOrderReceiptTracked, printOrderTagTracked, printCombinedReceiptTracked } from '../../utils/printWithHistory'
 import ShopOrderDetailModal from './ShopOrderDetailModal'
