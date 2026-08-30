@@ -38,10 +38,13 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import jakarta.servlet.http.HttpServletRequest;
 import com.ams.bomcore.service.shop.CounterDisplayCache;
+import com.ams.bomcore.service.shop.ShopSalesReportService;
+import com.ams.bomcore.service.shop.ShopHoursService;
 
 import java.math.BigDecimal;
 import java.net.InetAddress;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.*;
 import java.util.regex.Pattern;
 
@@ -66,7 +69,7 @@ public class ShopOrderController {
     private final CounterDisplayCache counterDisplayCache;
 
     private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
-
+    private final ShopHoursService shopHoursService;
     private ResponseEntity<?> dailyLimitResponse(ShopOrderService.DailyMenuLimitExceededException e) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("error", e.getMessage());
@@ -98,7 +101,8 @@ public class ShopOrderController {
                                ShopStaffCallRepository shopStaffCallRepository,
                                ShopPrintHistoryRepository shopPrintHistoryRepository,
                                ShopTableRepository shopTableRepository,
-                               CounterDisplayCache counterDisplayCache) {
+                               CounterDisplayCache counterDisplayCache,
+                               ShopHoursService shopHoursService) {
         this.shopOrderService = shopOrderService;
         this.shopLocalizedLabelService = shopLocalizedLabelService;
         this.shopPricingService = shopPricingService;
@@ -113,6 +117,7 @@ public class ShopOrderController {
         this.shopPrintHistoryRepository = shopPrintHistoryRepository;
         this.shopTableRepository = shopTableRepository;
         this.counterDisplayCache = counterDisplayCache;
+        this.shopHoursService = shopHoursService;
     }
 
     // ── PUBLIC endpoints (/shop/public/**) ────────────────────────────
@@ -222,16 +227,19 @@ public class ShopOrderController {
 
     @PostMapping("/shop/public/orders")
     public ResponseEntity<?> createOrder(@RequestBody ShopOrderService.CreateOrderRequest req,
-                                          @RequestParam UUID tenantId, @RequestParam UUID companyId,
-                                          @RequestHeader(value = "X-Time-Zone", required = false) String timeZone,
-                                          HttpServletRequest request) {
+                                         @RequestParam UUID tenantId, @RequestParam UUID companyId,
+                                         @RequestHeader(value = "X-Time-Zone", required = false) String timeZone,
+                                         HttpServletRequest request) {
         validateScope(tenantId, companyId);
+        ZoneId zone = RequestTimeZone.resolve(timeZone);
+        ResponseEntity<?> closed = rejectShopClosed(tenantId, companyId, zone);
+        if (closed != null) return closed;
         ResponseEntity<?> rejected = rejectPublicOrderingIfIpMismatch(tenantId, companyId, clientPublicIp(request));
         if (rejected != null) return rejected;
         rejected = rejectPublicTokenOrder(req != null ? req.token() : null, tenantId, companyId);
         if (rejected != null) return rejected;
         try {
-            ShopOrderResponseDto dto = shopOrderService.createOrder(req, tenantId, companyId, RequestTimeZone.resolve(timeZone));
+            ShopOrderResponseDto dto = shopOrderService.createOrder(req, tenantId, companyId, zone);
             createNewOrderStaffCall(dto);
             return ResponseEntity.status(HttpStatus.CREATED).body(dto);
         } catch (ShopOrderService.DailyMenuLimitExceededException e) {
@@ -296,6 +304,75 @@ public class ShopOrderController {
                         "pushedAt", p.pushedAt().toString()
                 )))
                 .orElse(ResponseEntity.noContent().build());
+    }
+
+    @GetMapping("/shop/public/ordering-status")
+    public ResponseEntity<?> getOrderingStatus(@RequestParam UUID tenantId, @RequestParam UUID companyId,
+                                               @RequestHeader(value = "X-Time-Zone", required = false) String timeZone) {
+        validateScope(tenantId, companyId);
+        ShopHoursService.OrderingStatus status = shopHoursService.getOrderingStatus(tenantId, companyId, RequestTimeZone.resolve(timeZone));
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("open", status.open());
+        body.put("reason", status.reason());
+        body.put("reopensAt", status.reopensAt() != null ? status.reopensAt().toString() : null);
+        return ResponseEntity.ok(body);
+    }
+
+    @GetMapping("/shop/staff/hours/shifts")
+    public ResponseEntity<?> getShiftSchedule(@RequestParam(required = false) UUID tenantId,
+                                              @RequestParam(required = false) UUID companyId,
+                                              @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                              @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant);
+        UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        return ResponseEntity.ok(shopHoursService.getShiftSchedule(tId, cId));
+    }
+
+    @PutMapping("/shop/staff/hours/shifts")
+    public ResponseEntity<?> saveShiftSchedule(@RequestBody List<ShopHoursService.ShiftUpsertRequest> shifts,
+                                               @RequestParam(required = false) UUID tenantId,
+                                               @RequestParam(required = false) UUID companyId,
+                                               @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                               @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant);
+        UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        try {
+            return ResponseEntity.ok(shopHoursService.saveShiftSchedule(tId, cId, shifts));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/shop/staff/hours/close-today")
+    public ResponseEntity<?> closeToday(@RequestParam(required = false) UUID tenantId,
+                                        @RequestParam(required = false) UUID companyId,
+                                        @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                        @RequestHeader(value = "X-Company-Id", required = false) String hCompany,
+                                        @RequestHeader(value = "X-Time-Zone", required = false) String timeZone,
+                                        java.security.Principal principal) {
+        UUID tId = resolve(tenantId, hTenant);
+        UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        String closedBy = principal != null ? principal.getName() : null;
+        ShopHoursService.OrderingStatus status = shopHoursService.closeToday(tId, cId, RequestTimeZone.resolve(timeZone), closedBy);
+        return ResponseEntity.ok(Map.of("open", status.open(), "reason", status.reason(),
+                "reopensAt", status.reopensAt() != null ? status.reopensAt().toString() : null));
+    }
+
+    @PostMapping("/shop/staff/hours/reopen")
+    public ResponseEntity<?> reopenShop(@RequestParam(required = false) UUID tenantId,
+                                        @RequestParam(required = false) UUID companyId,
+                                        @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                        @RequestHeader(value = "X-Company-Id", required = false) String hCompany,
+                                        @RequestHeader(value = "X-Time-Zone", required = false) String timeZone) {
+        UUID tId = resolve(tenantId, hTenant);
+        UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        ShopHoursService.OrderingStatus status = shopHoursService.reopenNow(tId, cId, RequestTimeZone.resolve(timeZone));
+        return ResponseEntity.ok(Map.of("open", status.open(), "reason", status.reason(),
+                "reopensAt", status.reopensAt() != null ? status.reopensAt().toString() : null));
     }
 
     @PostMapping("/shop/staff/counter-display/push")
@@ -1896,6 +1973,20 @@ public class ShopOrderController {
             return forbiddenPublicIp("Ordering is allowed only from the configured network for this counter.", deviceIp, allowedIps, company.getShopCounterPublicIpUpdatedAt());
         }
         return null;
+    }
+
+    private ResponseEntity<?> rejectShopClosed(UUID tenantId, UUID companyId, ZoneId zone) {
+        ShopHoursService.OrderingStatus status = shopHoursService.getOrderingStatus(tenantId, companyId, zone);
+        if (status.open()) return null;
+        String message = "MANUAL_CLOSED".equals(status.reason())
+                ? "The shop is temporarily closed. Please check back later."
+                : "The shop is closed right now.";
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("error", message);
+        body.put("message", message);
+        body.put("reason", status.reason());
+        body.put("reopensAt", status.reopensAt() != null ? status.reopensAt().toString() : null);
+        return ResponseEntity.status(HttpStatus.LOCKED).body(body);
     }
 
     private ResponseEntity<?> forbiddenPublicIp(String message, String deviceIp, List<String> allowedIps, Instant updatedAt) {

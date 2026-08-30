@@ -426,6 +426,30 @@ export function pickupScan(orderCode) {
   )
 }
 
+export function fetchOrderingStatus(tenantId, companyId) {
+  return apiFetchJsonNoContext('/shop/public/ordering-status' + qs({ tenantId, companyId }))
+}
+
+export function fetchShiftSchedule() {
+  return apiFetchJson('/shop/staff/hours/shifts')
+}
+
+export function saveShiftSchedule(shifts) {
+  return apiFetchJson('/shop/staff/hours/shifts', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(shifts),
+  })
+}
+
+export function closeShopToday() {
+  return apiFetchJson('/shop/staff/hours/close-today', { method: 'POST' })
+}
+
+export function reopenShop() {
+  return apiFetchJson('/shop/staff/hours/reopen', { method: 'POST' })
+}
+
 export function fetchCounterDisplay(tenantId, companyId) {
   return apiFetchJsonNoContext('/shop/public/counter-display' + qs({ tenantId, companyId }))
 }

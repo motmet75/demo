@@ -51,7 +51,7 @@ import { resolveToken, fetchMenu, createOrder, fetchPublicMenuOptions,
          fetchActiveTableOrders, startCustomerEdit, cancelCustomerEdit,
          updatePublicOrderItems, fetchPublicOrder, fetchTokenSession,
          cancelPublicOrder, fetchShopConfig, callStaff, fetchPublicStaffCall,
-         fetchLatestPublicStaffCall, redeemPublicVoucher, fetchPublicTables, changePublicOrderTable } from '../../api/shopApi'
+         fetchLatestPublicStaffCall, redeemPublicVoucher, fetchPublicTables, changePublicOrderTable, fetchOrderingStatus  } from '../../api/shopApi'
 import ItemOptionsDialog from './ItemOptionsDialog'
 import OrderReceiptDialog from './OrderReceiptDialog'
 import VoucherQrScanDialog from '../shoporder/VoucherQrScanDialog'
@@ -658,6 +658,7 @@ export default function ShopMenuPage() {
   const [callStaffLoading, setCallStaffLoading] = useState(false)
   const [activeStaffCall, setActiveStaffCall]   = useState(null)
   const [staffCallNow, setStaffCallNow]         = useState(Date.now())
+  const [orderingStatus, setOrderingStatus] = useState({ open: true, reason: null, reopensAt: null })
   const headerRef    = useRef(null)
   const searchInputRef = useRef(null)
   const tableTagInputRef = useRef(null)
@@ -672,6 +673,19 @@ export default function ShopMenuPage() {
     setActiveCategory(null)
     window.setTimeout(() => searchInputRef.current?.focus?.(), 150)
   }, [rawSearchQuery])
+
+  useEffect(() => {
+    if (!ctx?.tenantId || !ctx?.companyId) return
+    let cancelled = false
+    const poll = () => {
+      fetchOrderingStatus(ctx.tenantId, ctx.companyId)
+          .then(({ data }) => { if (!cancelled && data) setOrderingStatus(data) })
+          .catch(() => {})
+    }
+    poll()
+    const t = setInterval(poll, 30000)
+    return () => { cancelled = true; clearInterval(t) }
+  }, [ctx?.tenantId, ctx?.companyId])
 
   const [cart, setCart] = useState({})
   const [sideForm, setSideForm] = useState({})
@@ -1361,6 +1375,10 @@ export default function ShopMenuPage() {
   }
   const handlePlaceOrder = async () => {
     if (!itemCount) return
+    if (!orderingStatus.open && !editingOrderCode) {
+      setError(cText('checkout.shopClosed') || 'The shop is closed right now.')
+      return
+    }
     if (!editingOrderCode) {
       const name = form.customerName.trim()
       const phone = form.customerPhone.trim()
@@ -2130,7 +2148,16 @@ export default function ShopMenuPage() {
 
       {/* ── Content ───────────────────────────────────────────── */}
       {error && <Alert severity="error" sx={{ mx: 2, mt: 1, position: 'relative', zIndex: 1 }}>{error}</Alert>}
-
+      {!orderingStatus.open && (
+          <Box sx={{ bgcolor: '#fef3c7', border: '1px solid #f59e0b', borderRadius: 2, p: 1.5, mb: 2, textAlign: 'center' }}>
+            <Typography sx={{ fontWeight: 700, color: '#92400e' }}>
+              {orderingStatus.reason === 'MANUAL_CLOSED'
+                  ? 'The shop is temporarily closed.'
+                  : 'The shop is closed right now.'}
+              {orderingStatus.reopensAt && ` Reopens at ${new Date(orderingStatus.reopensAt).toLocaleString('vi-VN')}.`}
+            </Typography>
+          </Box>
+      )}
       <Box sx={{ pt: `${headerH}px`, pb: itemCount > 0 ? '80px' : '24px' }}>
         {editingOrderCode && (
           <Box sx={{ mx: 1.5, mt: 1.5, mb: 0.5, p: 1.5, bgcolor: '#fff7ed', border: '2px solid #f59e0b', borderRadius: 2.5, boxShadow: '0 3px 12px rgba(245,158,11,.18)' }}>

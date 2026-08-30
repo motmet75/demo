@@ -1890,6 +1890,28 @@ export default function ShopOrderGrid() {
     setBoardLoading(false)
   }
 
+  const [hoursStatus, setHoursStatus]   = useState({ open: true, reason: null, reopensAt: null })
+  const [closingToday, setClosingToday] = useState(false)
+
+  const refreshHoursStatus = useCallback(() => {
+    fetchOrderingStatus(ctxTenantId, ctxCompanyId).then(({ data }) => data && setHoursStatus(data)).catch(() => {})
+  }, [ctxTenantId, ctxCompanyId])
+
+  useEffect(() => { refreshHoursStatus() }, [refreshHoursStatus])
+
+  const handleCloseToday = async () => {
+    if (hoursStatus.open) {
+      if (!window.confirm(t('shopOrder.grid.confirmCloseToday'))) return
+    }
+    setClosingToday(true)
+    try {
+      const action = hoursStatus.open ? closeShopToday : reopenShop
+      const { data } = await action()
+      if (data) setHoursStatus(data)
+    } catch (e) { setError(e.message || t('shopOrder.grid.closeTodayFailed')) }
+    setClosingToday(false)
+  }
+
   const handleReset = async () => {
     setResetting(true)
     try { await resetOrderSequence(Number(resetTo)); setResetOpen(false); setResetTo(0) }
@@ -2251,6 +2273,11 @@ export default function ShopOrderGrid() {
           )}
           <Box sx={{ flex: 1, display: { xs: 'none', sm: 'block' } }} />
           <Button startIcon={<TvIcon />} onClick={handleOpenBoard} variant="outlined" size="small" color="info" sx={{ display: { xs: 'none', sm: 'inline-flex' } }}>{t('shopOrder.grid.displayBoard')}</Button>
+          <Button startIcon={hoursStatus.open ? <LockIcon /> : <LockOpenIcon />} onClick={handleCloseToday}
+                  variant="outlined" size="small" color={hoursStatus.open ? 'error' : 'success'} disabled={closingToday}
+                  sx={{ display: { xs: 'none', sm: 'inline-flex' } }}>
+            {hoursStatus.open ? t('shopOrder.grid.closeToday') : t('shopOrder.grid.reopenShop')}
+          </Button>
           <Tooltip title={t('shopOrder.grid.openCounterDisplay')}>
             <Button startIcon={<MonitorIcon />}
               onClick={openCounterDisplay}
