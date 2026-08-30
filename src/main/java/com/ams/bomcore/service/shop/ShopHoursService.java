@@ -85,6 +85,9 @@ public class ShopHoursService {
         if (closure != null && closure.getClosedUntil() != null && closure.getClosedUntil().isAfter(now)) {
             return new OrderingStatus(false, "MANUAL_CLOSED", closure.getClosedUntil());
         }
+        if (closure != null && closure.getForceOpenUntil() != null && closure.getForceOpenUntil().isAfter(now)) {
+            return new OrderingStatus(true, null, null);
+        }
 
         List<ShopShift> shifts = shopShiftRepository.findAllByTenantIdAndCompanyIdAndIsActiveTrueOrderByDayOfWeekAscStartTimeAsc(tenantId, companyId);
         if (shifts.isEmpty()) {
@@ -132,6 +135,7 @@ public class ShopHoursService {
         closure.setCompanyId(companyId);
         closure.setClosedAt(now);
         closure.setClosedUntil(reopensAt);
+        closure.setForceOpenUntil(null);
         closure.setClosedBy(closedBy);
         shopClosureRepository.save(closure);
         return getOrderingStatus(tenantId, companyId, zone);
@@ -139,10 +143,17 @@ public class ShopHoursService {
 
     @Transactional
     public OrderingStatus reopenNow(UUID tenantId, UUID companyId, ZoneId zone) {
-        shopClosureRepository.findByTenantIdAndCompanyId(tenantId, companyId).ifPresent(c -> {
-            c.setClosedUntil(null);
-            shopClosureRepository.save(c);
-        });
+        Instant now = Instant.now();
+        ShopClosure closure = shopClosureRepository.findByTenantIdAndCompanyId(tenantId, companyId).orElseGet(ShopClosure::new);
+        closure.setTenantId(tenantId);
+        closure.setCompanyId(companyId);
+        closure.setClosedUntil(null);
+        // Force-open override: lets staff open even with no shift configured, or outside
+        // the current shift window. Lasts until end of the current business day, so it
+        // doesn't silently linger — staff can Close Today again anytime to cancel it.
+        Instant endOfDay = now.atZone(zone).toLocalDate().plusDays(1).atStartOfDay(zone).toInstant();
+        closure.setForceOpenUntil(endOfDay);
+        shopClosureRepository.save(closure);
         return getOrderingStatus(tenantId, companyId, zone);
     }
 

@@ -37,6 +37,9 @@ public class ShopClosure {
     @Column(name = "updated_at")
     private Instant updatedAt;
 
+    @Column(name = "force_open_until")
+    private Instant forceOpenUntil;
+
     @PrePersist
     private void prePersist() {
         if (id == null) id = UUID.randomUUID();
@@ -47,7 +50,8 @@ public class ShopClosure {
     private void preUpdate() {
         updatedAt = Instant.now();
     }
-
+    public Instant getForceOpenUntil() { return forceOpenUntil; }
+    public void setForceOpenUntil(Instant forceOpenUntil) { this.forceOpenUntil = forceOpenUntil; }
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }
     public UUID getTenantId() { return tenantId; }
