@@ -2073,6 +2073,24 @@ export default function ShopMenuPage() {
           </Badge>
         </Box>
 
+        {!orderingStatus.open && (
+            <Box sx={{
+              mx: 1.5, mb: 0.75, px: 1.25, py: 0.6,
+              bgcolor: '#fff3e0', border: '1px solid #ffb74d', borderRadius: 1.5,
+              display: 'flex', alignItems: 'center', gap: 0.75,
+            }}>
+              <Typography sx={{ fontSize: 16, lineHeight: 1 }}>🔒</Typography>
+              <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: '#92400e', lineHeight: 1.3 }}>
+                {cText('checkout.shopClosed')}
+                {orderingStatus.reopensAt && (
+                    <Box component="span" sx={{ fontWeight: 500, opacity: 0.85 }}>
+                      {' '}· {new Date(orderingStatus.reopensAt).toLocaleString('vi-VN')}
+                    </Box>
+                )}
+              </Typography>
+            </Box>
+        )}
+
         {/* Row 2: Category tabs */}
         <Box sx={{
           display: 'flex', overflowX: 'auto', px: 1.5, pb: 0.75, gap: 0.5,
