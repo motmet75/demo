@@ -329,6 +329,21 @@ public class ShopOrderController {
         return ResponseEntity.ok(shopHoursService.getShiftSchedule(tId, cId));
     }
 
+    @GetMapping("/shop/staff/hours/close-today/preview")
+    public ResponseEntity<?> previewCloseToday(@RequestParam(required = false) UUID tenantId,
+                                               @RequestParam(required = false) UUID companyId,
+                                               @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                               @RequestHeader(value = "X-Company-Id", required = false) String hCompany,
+                                               @RequestHeader(value = "X-Time-Zone", required = false) String timeZone) {
+        UUID tId = resolve(tenantId, hTenant);
+        UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        Instant reopensAt = shopHoursService.previewNextOpenTime(tId, cId, RequestTimeZone.resolve(timeZone));
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("reopensAt", reopensAt != null ? reopensAt.toString() : null);
+        return ResponseEntity.ok(body);
+    }
+
     @PutMapping("/shop/staff/hours/shifts")
     public ResponseEntity<?> saveShiftSchedule(@RequestBody List<ShopHoursService.ShiftUpsertRequest> shifts,
                                                @RequestParam(required = false) UUID tenantId,

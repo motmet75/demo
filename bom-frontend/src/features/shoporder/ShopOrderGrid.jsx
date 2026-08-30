@@ -1895,6 +1895,12 @@ export default function ShopOrderGrid() {
 
   const [hoursStatus, setHoursStatus]   = useState({ open: true, reason: null, reopensAt: null })
   const [closingToday, setClosingToday] = useState(false)
+  const [hoursDialogOpen, setHoursDialogOpen] = useState(false)
+  const [shifts, setShifts]                   = useState([])
+  const [shiftsLoading, setShiftsLoading]      = useState(false)
+  const [shiftsSaving, setShiftsSaving]        = useState(false)
+  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false)
+  const [closePreview, setClosePreview]        = useState(null)
 
   const refreshHoursStatus = useCallback(() => {
     fetchOrderingStatus(ctxTenantId, ctxCompanyId).then(({ data }) => data && setHoursStatus(data)).catch(() => {})
@@ -1903,17 +1909,67 @@ export default function ShopOrderGrid() {
   useEffect(() => { refreshHoursStatus() }, [refreshHoursStatus])
 
   const handleCloseToday = async () => {
-    if (hoursStatus.open) {
-      if (!window.confirm(t('shopOrder.grid.confirmCloseToday'))) return
+    if (!hoursStatus.open) {
+      setClosingToday(true)
+      try {
+        const { data } = await reopenShop()
+        if (data) setHoursStatus(data)
+      } catch (e) { setError(e.message || t('shopOrder.grid.closeTodayFailed')) }
+      setClosingToday(false)
+      return
     }
+    try {
+      const { data } = await previewCloseToday()
+      setClosePreview(data?.reopensAt || null)
+      setCloseConfirmOpen(true)
+    } catch (e) { setError(e.message || t('shopOrder.grid.closeTodayFailed')) }
+  }
+
+  const confirmCloseToday = async () => {
+    setCloseConfirmOpen(false)
     setClosingToday(true)
     try {
-      const action = hoursStatus.open ? closeShopToday : reopenShop
-      const { data } = await action()
+      const { data } = await closeShopToday()
       if (data) setHoursStatus(data)
     } catch (e) { setError(e.message || t('shopOrder.grid.closeTodayFailed')) }
     setClosingToday(false)
   }
+
+  const openHoursDialog = () => {
+    setHoursDialogOpen(true)
+    setShiftsLoading(true)
+    fetchShiftSchedule()
+        .then(({ data }) => setShifts((data || []).map(s => ({ ...s, _key: s.id || Math.random().toString(36) }))))
+        .catch(e => setError(e.message || t('shopOrder.grid.loadShiftsFailed')))
+        .finally(() => setShiftsLoading(false))
+  }
+
+  const addShift = (dayOfWeek) => {
+    setShifts(prev => [...prev, { _key: Math.random().toString(36), dayOfWeek, startTime: '09:00', endTime: '17:00', label: '', isActive: true }])
+  }
+  const removeShift = (key) => setShifts(prev => prev.filter(s => s._key !== key))
+  const updateShift = (key, field, value) => setShifts(prev => prev.map(s => s._key === key ? { ...s, [field]: value } : s))
+
+  const saveShifts = async () => {
+    setShiftsSaving(true)
+    try {
+      const payload = shifts.map(s => ({ dayOfWeek: s.dayOfWeek, startTime: s.startTime, endTime: s.endTime, label: s.label || null, isActive: s.isActive !== false }))
+      await saveShiftSchedule(payload)
+      setHoursDialogOpen(false)
+      refreshHoursStatus()
+    } catch (e) { setError(e.message || t('shopOrder.grid.saveShiftsFailed')) }
+    setShiftsSaving(false)
+  }
+
+  const DAY_LABELS = [
+    { value: 1, label: t('shopOrder.grid.monday') },
+    { value: 2, label: t('shopOrder.grid.tuesday') },
+    { value: 3, label: t('shopOrder.grid.wednesday') },
+    { value: 4, label: t('shopOrder.grid.thursday') },
+    { value: 5, label: t('shopOrder.grid.friday') },
+    { value: 6, label: t('shopOrder.grid.saturday') },
+    { value: 7, label: t('shopOrder.grid.sunday') },
+  ]
 
   const handleReset = async () => {
     setResetting(true)
@@ -1921,6 +1977,8 @@ export default function ShopOrderGrid() {
     catch (e) { setError(e.message || t('shopOrder.grid.resetFailed')) }
     setResetting(false)
   }
+
+
 
   const handleSwitchAndPrint = async (row) => {
     try {
@@ -2276,6 +2334,10 @@ export default function ShopOrderGrid() {
           )}
           <Box sx={{ flex: 1, display: { xs: 'none', sm: 'block' } }} />
           <Button startIcon={<TvIcon />} onClick={handleOpenBoard} variant="outlined" size="small" color="info" sx={{ display: { xs: 'none', sm: 'inline-flex' } }}>{t('shopOrder.grid.displayBoard')}</Button>
+          <Button startIcon={<ScheduleIcon />} onClick={openHoursDialog} variant="outlined" size="small" color="info"
+                  sx={{ display: { xs: 'none', sm: 'inline-flex' } }}>
+            {t('shopOrder.grid.openingHours')}
+          </Button>
           <Button startIcon={hoursStatus.open ? <LockIcon /> : <LockOpenIcon />} onClick={handleCloseToday}
                   variant="outlined" size="small" color={hoursStatus.open ? 'error' : 'success'} disabled={closingToday}
                   sx={{ display: { xs: 'none', sm: 'inline-flex' } }}>
@@ -2725,6 +2787,62 @@ export default function ShopOrderGrid() {
         </DialogContent>
         <DialogActions><Button onClick={() => setBoardOpen(false)}>{t('shopOrder.grid.close')}</Button></DialogActions>
       </Dialog>
+        <Dialog open={hoursDialogOpen} onClose={() => setHoursDialogOpen(false)} maxWidth="sm" fullWidth>
+          <DialogTitle>{t('shopOrder.grid.openingHours')}</DialogTitle>
+          <DialogContent dividers>
+            {shiftsLoading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}><CircularProgress size={24} /></Box>
+            ) : (
+                DAY_LABELS.map(day => (
+                    <Box key={day.value} sx={{ mb: 2 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+                        <Typography fontWeight={700} fontSize={14}>{day.label}</Typography>
+                        <Button size="small" onClick={() => addShift(day.value)} sx={{ textTransform: 'none' }}>
+                          + {t('shopOrder.grid.addShift')}
+                        </Button>
+                      </Box>
+                      {shifts.filter(s => s.dayOfWeek === day.value).length === 0 && (
+                          <Typography variant="caption" color="text.secondary">{t('shopOrder.grid.noShifts')}</Typography>
+                      )}
+                      {shifts.filter(s => s.dayOfWeek === day.value).map(s => (
+                          <Box key={s._key} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                            <TextField size="small" label={t('shopOrder.grid.shiftLabel')} value={s.label || ''}
+                                       onChange={e => updateShift(s._key, 'label', e.target.value)} sx={{ width: 110 }} />
+                            <TextField size="small" type="time" value={s.startTime}
+                                       onChange={e => updateShift(s._key, 'startTime', e.target.value)} />
+                            <Typography>–</Typography>
+                            <TextField size="small" type="time" value={s.endTime}
+                                       onChange={e => updateShift(s._key, 'endTime', e.target.value)} />
+                            <IconButton size="small" color="error" onClick={() => removeShift(s._key)}><DeleteIcon fontSize="small" /></IconButton>
+                          </Box>
+                      ))}
+                    </Box>
+                ))
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setHoursDialogOpen(false)}>{t('shopOrder.grid.close')}</Button>
+            <Button variant="contained" onClick={saveShifts} disabled={shiftsSaving || shiftsLoading}>
+              {shiftsSaving ? <CircularProgress size={18} /> : t('common.save')}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Dialog open={closeConfirmOpen} onClose={() => setCloseConfirmOpen(false)} maxWidth="xs" fullWidth>
+          <DialogTitle>{t('shopOrder.grid.closeToday')}</DialogTitle>
+          <DialogContent>
+            <Typography>{t('shopOrder.grid.confirmCloseToday')}</Typography>
+            <Typography sx={{ mt: 1.5, fontWeight: 700 }}>
+              {closePreview
+                  ? `${t('shopOrder.grid.reopensAt')}: ${new Date(closePreview).toLocaleString('vi-VN')}`
+                  : t('shopOrder.grid.noReopenTime')}
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setCloseConfirmOpen(false)}>{t('common.back')}</Button>
+            <Button variant="contained" color="error" onClick={confirmCloseToday}>{t('shopOrder.grid.closeToday')}</Button>
+          </DialogActions>
+        </Dialog>
 
       {/* Payment QR dialog — generate VietQR (qr_only, no logo in center) for any unpaid order */}
       {payQrOrder && (() => {

@@ -426,6 +426,7 @@ export function pickupScan(orderCode) {
   )
 }
 
+
 export function fetchOrderingStatus(tenantId, companyId) {
   return apiFetchJsonNoContext('/shop/public/ordering-status' + qs({ tenantId, companyId }))
 }
@@ -448,6 +449,10 @@ export function closeShopToday() {
 
 export function reopenShop() {
   return apiFetchJson('/shop/staff/hours/reopen', { method: 'POST' })
+}
+
+export function previewCloseToday() {
+  return apiFetchJson('/shop/staff/hours/close-today/preview')
 }
 
 export function fetchCounterDisplay(tenantId, companyId) {

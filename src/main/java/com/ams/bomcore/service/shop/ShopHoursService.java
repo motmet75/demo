@@ -141,6 +141,13 @@ public class ShopHoursService {
         return getOrderingStatus(tenantId, companyId, zone);
     }
 
+    @Transactional(readOnly = true)
+    public Instant previewNextOpenTime(UUID tenantId, UUID companyId, ZoneId zone) {
+        List<ShopShift> shifts = shopShiftRepository.findAllByTenantIdAndCompanyIdAndIsActiveTrueOrderByDayOfWeekAscStartTimeAsc(tenantId, companyId);
+        if (shifts.isEmpty()) return null;
+        return computeNextOpenTime(shifts, zone, Instant.now());
+    }
+
     @Transactional
     public OrderingStatus reopenNow(UUID tenantId, UUID companyId, ZoneId zone) {
         Instant now = Instant.now();
