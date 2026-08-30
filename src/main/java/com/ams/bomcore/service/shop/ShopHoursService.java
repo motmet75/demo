@@ -88,8 +88,8 @@ public class ShopHoursService {
 
         List<ShopShift> shifts = shopShiftRepository.findAllByTenantIdAndCompanyIdAndIsActiveTrueOrderByDayOfWeekAscStartTimeAsc(tenantId, companyId);
         if (shifts.isEmpty()) {
-            // No schedule configured at all — don't restrict ordering; shift hours are opt-in.
-            return new OrderingStatus(true, null, null);
+            // Ordering is only allowed inside a configured shift window — no schedule means closed.
+            return new OrderingStatus(false, "OUTSIDE_HOURS", null);
         }
 
         ZonedDateTime nowZ = now.atZone(zone);
@@ -117,13 +117,15 @@ public class ShopHoursService {
     @Transactional
     public OrderingStatus closeToday(UUID tenantId, UUID companyId, ZoneId zone, String closedBy) {
         List<ShopShift> shifts = shopShiftRepository.findAllByTenantIdAndCompanyIdAndIsActiveTrueOrderByDayOfWeekAscStartTimeAsc(tenantId, companyId);
+        if (shifts.isEmpty()) {
+            throw new IllegalArgumentException("No opening hours configured yet. Set up the shift schedule before using Close Today.");
+        }
         Instant now = Instant.now();
         Instant reopensAt = computeNextOpenTime(shifts, zone, now);
         if (reopensAt == null) {
-            // No shift schedule configured (or none found in the next 7 days) — fall back to
-            // "24 hours from now" so a forgotten close doesn't silently stay closed forever.
-            // Staff can still reopen manually at any time.
-            reopensAt = now.plusSeconds(24 * 3600);
+            // Shouldn't normally happen (active shifts exist but none found within 7 days) —
+            // surface it rather than guessing a time.
+            throw new IllegalStateException("Could not determine the next opening time from the configured shifts.");
         }
         ShopClosure closure = shopClosureRepository.findByTenantIdAndCompanyId(tenantId, companyId).orElseGet(ShopClosure::new);
         closure.setTenantId(tenantId);

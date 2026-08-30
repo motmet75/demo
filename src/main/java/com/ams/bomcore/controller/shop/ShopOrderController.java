@@ -354,12 +354,16 @@ public class ShopOrderController {
         UUID tId = resolve(tenantId, hTenant);
         UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
-        ShopHoursService.OrderingStatus status = shopHoursService.closeToday(tId, cId, RequestTimeZone.resolve(timeZone), null);
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("open", status.open());
-        body.put("reason", status.reason());
-        body.put("reopensAt", status.reopensAt() != null ? status.reopensAt().toString() : null);
-        return ResponseEntity.ok(body);
+        try {
+            ShopHoursService.OrderingStatus status = shopHoursService.closeToday(tId, cId, RequestTimeZone.resolve(timeZone), null);
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("open", status.open());
+            body.put("reason", status.reason());
+            body.put("reopensAt", status.reopensAt() != null ? status.reopensAt().toString() : null);
+            return ResponseEntity.ok(body);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     @PostMapping("/shop/staff/hours/reopen")
