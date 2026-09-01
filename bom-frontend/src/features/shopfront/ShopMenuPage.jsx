@@ -698,12 +698,13 @@ export default function ShopMenuPage() {
     })
     return [...byCode.values()]
   }, [tableOrders, tokenSession?.orders])
+  const HIDDEN_TRACKING_STATUSES = new Set(['CANCELLED', 'COMPLETED', 'PICKED_UP'])
   const activeVisibleOrders = React.useMemo(
-      () => visibleOrders.filter(order => order.status !== 'CANCELLED' && order.status !== 'COMPLETED'),
+      () => visibleOrders.filter(order => !HIDDEN_TRACKING_STATUSES.has(order.status)),
       [visibleOrders]
   )
   const activeTableOrders = React.useMemo(
-      () => (tableOrders || []).filter(order => order.status !== 'CANCELLED' && order.status !== 'COMPLETED'),
+      () => (tableOrders || []).filter(order => !HIDDEN_TRACKING_STATUSES.has(order.status)),
       [tableOrders]
   )
   const visibleOrderSession = React.useMemo(
