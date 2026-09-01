@@ -708,8 +708,8 @@ export default function ShopMenuPage() {
       [tableOrders]
   )
   const visibleOrderSession = React.useMemo(
-    () => ({ ...(tokenSession || {}), orders: visibleOrders }),
-    [tokenSession, visibleOrders]
+      () => ({ ...(tokenSession || {}), orders: activeVisibleOrders }),
+      [tokenSession, activeVisibleOrders]
   )
 
   useEffect(() => {
