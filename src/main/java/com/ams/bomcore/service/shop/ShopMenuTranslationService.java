@@ -25,7 +25,7 @@ import java.util.UUID;
 @Service
 public class ShopMenuTranslationService {
 
-    private static final List<String> TARGET_LANGUAGES = List.of("cn", "tw", "ja", "ko", "es", "dv", "ms", "id", "vi", "th");
+    private static final List<String> TARGET_LANGUAGES = List.of("en", "cn", "tw", "ja", "ko", "es", "dv", "ms", "id", "vi", "th");
     private static final Set<String> SOURCE_LANGUAGES = Set.of("en", "cn", "tw", "ja", "ko", "es", "dv", "ms", "id", "vi", "th");
     private static final Map<String, String> LANGUAGE_NAMES = Map.ofEntries(
             Map.entry("en", "English"),
