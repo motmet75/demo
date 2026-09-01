@@ -174,7 +174,7 @@ export default function ShopTableGrid() {
 
   const openOrders = (row) => {
     setSelectedOrderIds([])
-    setOrdersDialog({ table: row, orders: row.orders || [] })
+    setOrdersDialog({ table: row, orders: (row.orders || []).filter(order => order.status !== 'COMPLETED') })
   }
 
   const completeSelectedOrders = async () => {
