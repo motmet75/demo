@@ -1119,17 +1119,19 @@ public class ShopOrderController {
 
     @GetMapping("/shop/staff/tables/{tableId}/qrcode")
     public ResponseEntity<?> tableQr(@PathVariable UUID tableId,
-                                      @RequestParam(required = false) UUID tenantId,
-                                      @RequestParam(required = false) UUID companyId,
-                                      @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
-                                      @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+                                     @RequestParam(required = false) UUID tenantId,
+                                     @RequestParam(required = false) UUID companyId,
+                                     @RequestParam(required = false, defaultValue = "false") boolean forceNew,
+                                     @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                     @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
-        ShopOrderService.TableQrResult result = shopOrderService.generateTableQr(tableId, tId, cId);
+        ShopOrderService.TableQrResult result = shopOrderService.generateTableQr(tableId, tId, cId, forceNew);
         Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("qrBase64", result.qrBase64());
         resp.put("token", result.token());
         resp.put("activeOrderCount", result.activeOrderCount());
+        resp.put("regenerated", result.regenerated());
         return ResponseEntity.ok(resp);
     }
 

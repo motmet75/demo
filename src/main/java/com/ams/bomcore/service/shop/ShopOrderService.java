@@ -705,10 +705,10 @@ public class ShopOrderService {
         return shopTableRepository.findAllByTenantIdAndCompanyId(tenantId, companyId);
     }
 
-    public record TableQrResult(String qrBase64, String token, int activeOrderCount) {}
+    public record TableQrResult(String qrBase64, String token, int activeOrderCount, boolean regenerated) {}
 
     @Transactional
-    public TableQrResult generateTableQr(UUID tableId, UUID tenantId, UUID companyId) {
+    public TableQrResult generateTableQr(UUID tableId, UUID tenantId, UUID companyId, boolean forceNew) {
         ShopTable table = shopTableRepository.findById(tableId)
                 .orElseThrow(() -> new NoSuchElementException("Table not found"));
         if (!table.getTenantId().equals(tenantId) || !table.getCompanyId().equals(companyId)) {
@@ -723,7 +723,29 @@ public class ShopOrderService {
                                 ShopOrder.STATUS_PREPARING, ShopOrder.STATUS_READY))
                 .size();
 
-        // Always create a fresh token for each press — 4-hour ordering window
+        List<ShopAccessToken> existing = shopAccessTokenRepository
+                .findAllByTenantIdAndCompanyId(tenantId, companyId)
+                .stream()
+                .filter(t -> ShopAccessToken.TYPE_TABLE_QR.equals(t.getTokenType()))
+                .filter(t -> tableId.equals(t.getTableId()))
+                .toList();
+
+        if (!forceNew) {
+            ShopAccessToken current = existing.stream().filter(ShopAccessToken::isValid).findFirst().orElse(null);
+            if (current != null) {
+                String currentUrl = publicBaseUrl + "/shop/menu?t=" + current.getToken();
+                return new TableQrResult(QrCodeUtil.generateBase64Png(currentUrl, 300), current.getToken(), activeOrderCount, false);
+            }
+        } else {
+            // Regenerate: disable previous QR tokens for this table so old printed stickers stop working.
+            for (ShopAccessToken old : existing) {
+                if (Boolean.TRUE.equals(old.getEnabled())) {
+                    old.setEnabled(false);
+                    shopAccessTokenRepository.save(old);
+                }
+            }
+        }
+
         ShopAccessToken sat = new ShopAccessToken();
         sat.setToken(UUID.randomUUID().toString());
         sat.setTenantId(tenantId);
@@ -731,11 +753,13 @@ public class ShopOrderService {
         sat.setTableId(tableId);
         sat.setTokenType(ShopAccessToken.TYPE_TABLE_QR);
         sat.setDescription("Table QR: " + table.getTableName());
-        sat.setExpiresAt(java.time.Instant.now().plus(4, java.time.temporal.ChronoUnit.HOURS));
+        // No expiry — a printed table QR sticker stays valid indefinitely until staff
+        // explicitly regenerates it (which disables this token via the branch above).
+        sat.setExpiresAt(null);
         shopAccessTokenRepository.save(sat);
 
         String url = publicBaseUrl + "/shop/menu?t=" + sat.getToken();
-        return new TableQrResult(QrCodeUtil.generateBase64Png(url, 300), sat.getToken(), activeOrderCount);
+        return new TableQrResult(QrCodeUtil.generateBase64Png(url, 300), sat.getToken(), activeOrderCount, forceNew);
     }
 
     public record WalkUpQrResult(String qrBase64, String qrUrl, String token, Integer seq, Integer maxOrders) {}

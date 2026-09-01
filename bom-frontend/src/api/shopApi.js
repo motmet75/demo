@@ -363,8 +363,8 @@ export function updateShopTableDrawing(drawingId, payload) {
 export function deleteShopTableDrawing(drawingId) {
   return apiFetchJson(`/shop/staff/table-drawings/${drawingId}`, { method: 'DELETE' })
 }
-export function fetchTableQr(tableId) {
-  return apiFetchJson(`/shop/staff/tables/${tableId}/qrcode`)
+export function fetchTableQr(tableId, forceNew = false) {
+  return apiFetchJson(`/shop/staff/tables/${tableId}/qrcode` + (forceNew ? '?forceNew=true' : ''))
 }
 
 export function setOrderTable(orderId, tableId) {

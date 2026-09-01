@@ -111,10 +111,11 @@ export default function ShopTableGrid() {
     try { await deleteShopTable(id); load() } catch (e) { setError(e.message || 'Delete failed') }
   }
 
-  const handleQr = async (row) => {
+  const handleQr = async (row, forceNew = false) => {
+    if (forceNew && !window.confirm(`Generate a new QR for ${row.tableName}? The old printed sticker will stop working.`)) return
     setQrDialog({ table: row, qrBase64: '', activeOrderCount: 0 })
     try {
-      const { data } = await fetchTableQr(row.id)
+      const { data } = await fetchTableQr(row.id, forceNew)
       setQrDialog({ table: row, qrBase64: data?.qrBase64 || '', activeOrderCount: data?.activeOrderCount ?? 0 })
     } catch { setError('Failed to load QR') }
   }
@@ -434,6 +435,9 @@ export default function ShopTableGrid() {
           ) : <CircularProgress sx={{ my: 4 }} />}
         </DialogContent>
         <DialogActions>
+          {qrDialog?.table && (
+              <Button color="warning" onClick={() => handleQr(qrDialog.table, true)}>Regenerate</Button>
+          )}
           {qrDialog?.qrBase64 && (
             <Button onClick={() => {
               const a = document.createElement('a')
