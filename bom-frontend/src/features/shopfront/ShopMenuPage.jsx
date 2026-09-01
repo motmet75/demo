@@ -699,12 +699,12 @@ export default function ShopMenuPage() {
     return [...byCode.values()]
   }, [tableOrders, tokenSession?.orders])
   const activeVisibleOrders = React.useMemo(
-    () => visibleOrders.filter(order => order.status !== 'CANCELLED'),
-    [visibleOrders]
+      () => visibleOrders.filter(order => order.status !== 'CANCELLED' && order.status !== 'COMPLETED'),
+      [visibleOrders]
   )
   const activeTableOrders = React.useMemo(
-    () => (tableOrders || []).filter(order => order.status !== 'CANCELLED'),
-    [tableOrders]
+      () => (tableOrders || []).filter(order => order.status !== 'CANCELLED' && order.status !== 'COMPLETED'),
+      [tableOrders]
   )
   const visibleOrderSession = React.useMemo(
     () => ({ ...(tokenSession || {}), orders: visibleOrders }),
