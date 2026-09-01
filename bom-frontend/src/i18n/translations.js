@@ -899,6 +899,14 @@ const EN = {
   'status.making': 'Making',
   'status.done': 'Done',
   'status.editing': 'Editing',
+  'shopOrder.grid.noNotificationHistory': 'No notification history yet.',
+  'shopOrder.grid.notifNewOrder': 'New order #{number}',
+  'shopOrder.grid.notifShopQr': 'Shop QR notification',
+  'shopOrder.grid.notifOrderNumber': 'Order #{number}',
+  'shopOrder.grid.notifTableChange': 'Customer changed table · Order #{number}',
+  'shopOrder.grid.notifEditingOrder': 'Customer editing order #{number}',
+  'shopOrder.grid.notifRead': 'Read',
+  'shopOrder.grid.clearHistory': 'Clear history',
 }
 
 const CN = {
@@ -1199,6 +1207,14 @@ const CN = {
   'status.making': '制作中',
   'status.done': '完成',
   'status.editing': '编辑中',
+  'shopOrder.grid.noNotificationHistory': '暂无通知记录。',
+  'shopOrder.grid.notifNewOrder': '新订单 #{number}',
+  'shopOrder.grid.notifShopQr': '店铺二维码通知',
+  'shopOrder.grid.notifOrderNumber': '订单 #{number}',
+  'shopOrder.grid.notifTableChange': '顾客更换了桌号 · 订单 #{number}',
+  'shopOrder.grid.notifEditingOrder': '顾客正在修改订单 #{number}',
+  'shopOrder.grid.notifRead': '已读',
+  'shopOrder.grid.clearHistory': '清除记录',
 }
 
 const TW = {
@@ -1499,6 +1515,14 @@ const TW = {
   'status.making': '製作中',
   'status.done': '完成',
   'status.editing': '編輯中',
+  'shopOrder.grid.noNotificationHistory': '暫無通知記錄。',
+  'shopOrder.grid.notifNewOrder': '新訂單 #{number}',
+  'shopOrder.grid.notifShopQr': '店鋪QR通知',
+  'shopOrder.grid.notifOrderNumber': '訂單 #{number}',
+  'shopOrder.grid.notifTableChange': '顧客更換了桌號 · 訂單 #{number}',
+  'shopOrder.grid.notifEditingOrder': '顧客正在修改訂單 #{number}',
+  'shopOrder.grid.notifRead': '已讀',
+  'shopOrder.grid.clearHistory': '清除記錄',
 }
 
 const JA = {
@@ -1696,6 +1720,14 @@ const JA = {
   'status.placed': '受付済み',
   'status.making': '調理中',
   'status.done': '完了',
+  'shopOrder.grid.noNotificationHistory': '通知履歴はまだありません。',
+  'shopOrder.grid.notifNewOrder': '新規注文 #{number}',
+  'shopOrder.grid.notifShopQr': '店舗QR通知',
+  'shopOrder.grid.notifOrderNumber': '注文 #{number}',
+  'shopOrder.grid.notifTableChange': 'お客様がテーブルを変更 · 注文 #{number}',
+  'shopOrder.grid.notifEditingOrder': 'お客様が注文を編集中 #{number}',
+  'shopOrder.grid.notifRead': '既読',
+  'shopOrder.grid.clearHistory': '履歴を削除',
 }
 
 const KO = {
@@ -1871,6 +1903,15 @@ const KO = {
   'status.beingPrepared': '준비 중...',
   'status.readyPickup': '픽업 준비 완료!',
   'status.orderCancelled': '주문이 취소되었습니다',
+
+  'shopOrder.grid.noNotificationHistory': '아직 알림 기록이 없습니다.',
+  'shopOrder.grid.notifNewOrder': '신규 주문 #{number}',
+  'shopOrder.grid.notifShopQr': '매장 QR 알림',
+  'shopOrder.grid.notifOrderNumber': '주문 #{number}',
+  'shopOrder.grid.notifTableChange': '고객이 테이블을 변경함 · 주문 #{number}',
+  'shopOrder.grid.notifEditingOrder': '고객이 주문을 수정 중 #{number}',
+  'shopOrder.grid.notifRead': '읽음',
+  'shopOrder.grid.clearHistory': '기록 지우기',
 }
 
 const ES = {
@@ -2061,6 +2102,14 @@ const ES = {
   'shop.justNow': 'ahora',
   'shop.minutesAgo': 'hace {count} min',
   'shop.hoursAgo': 'hace {count} h',
+  'shopOrder.grid.noNotificationHistory': 'Aún no hay historial de notificaciones.',
+  'shopOrder.grid.notifNewOrder': 'Nuevo pedido #{number}',
+  'shopOrder.grid.notifShopQr': 'Notificación de QR de la tienda',
+  'shopOrder.grid.notifOrderNumber': 'Pedido #{number}',
+  'shopOrder.grid.notifTableChange': 'El cliente cambió de mesa · Pedido #{number}',
+  'shopOrder.grid.notifEditingOrder': 'El cliente está editando el pedido #{number}',
+  'shopOrder.grid.notifRead': 'Leído',
+  'shopOrder.grid.clearHistory': 'Borrar historial',
   'shop.daysAgo': 'hace {count} días',
   'shop.scanVoucher': 'Escanear cupón',
   'shop.voucher': 'Cupón',
@@ -2124,6 +2173,7 @@ const ES = {
   'status.making': 'Preparando',
   'status.done': 'Listo',
   'status.editing': 'Editando',
+
 }
 
 const DV = {
@@ -2228,6 +2278,14 @@ const DV = {
   'status.ready': 'ތައްޔާރު',
   'status.completed': 'ނިމިފައި',
   'status.cancelled': 'ކެންސަލްކުރެވިފައި',
+  'shopOrder.grid.noNotificationHistory': 'އަދި އެއްވެސް އިޝްޢާރެއް ނެތް.',
+  'shopOrder.grid.notifNewOrder': 'އައު އޯޑަރު #{number}',
+  'shopOrder.grid.notifShopQr': 'ފިހާރައިގެ QR އިޝްޢާރު',
+  'shopOrder.grid.notifOrderNumber': 'އޯޑަރު #{number}',
+  'shopOrder.grid.notifTableChange': 'ކަސްޓަމަރު މޭޒު ބަދަލުކުރި · އޯޑަރު #{number}',
+  'shopOrder.grid.notifEditingOrder': 'ކަސްޓަމަރު އޯޑަރު އުނިއިތުރު ކުރަނީ #{number}',
+  'shopOrder.grid.notifRead': 'ކިޔައިފި',
+  'shopOrder.grid.clearHistory': 'ތާރީޚު ފޮހެލާ',
 }
 
 const MS = {
@@ -2353,6 +2411,14 @@ const MS = {
   'status.pickedUp': 'Diambil',
   'status.completed': 'Selesai',
   'status.cancelled': 'Dibatalkan',
+  'shopOrder.grid.noNotificationHistory': 'Belum ada sejarah pemberitahuan.',
+  'shopOrder.grid.notifNewOrder': 'Pesanan baharu #{number}',
+  'shopOrder.grid.notifShopQr': 'Pemberitahuan QR kedai',
+  'shopOrder.grid.notifOrderNumber': 'Pesanan #{number}',
+  'shopOrder.grid.notifTableChange': 'Pelanggan menukar meja · Pesanan #{number}',
+  'shopOrder.grid.notifEditingOrder': 'Pelanggan sedang mengedit pesanan #{number}',
+  'shopOrder.grid.notifRead': 'Dibaca',
+  'shopOrder.grid.clearHistory': 'Kosongkan sejarah',
 }
 
 const ID = {
@@ -2478,6 +2544,14 @@ const ID = {
   'status.pickedUp': 'Diambil',
   'status.completed': 'Selesai',
   'status.cancelled': 'Dibatalkan',
+  'shopOrder.grid.noNotificationHistory': 'Belum ada riwayat notifikasi.',
+  'shopOrder.grid.notifNewOrder': 'Pesanan baru #{number}',
+  'shopOrder.grid.notifShopQr': 'Notifikasi QR toko',
+  'shopOrder.grid.notifOrderNumber': 'Pesanan #{number}',
+  'shopOrder.grid.notifTableChange': 'Pelanggan mengganti meja · Pesanan #{number}',
+  'shopOrder.grid.notifEditingOrder': 'Pelanggan sedang mengedit pesanan #{number}',
+  'shopOrder.grid.notifRead': 'Dibaca',
+  'shopOrder.grid.clearHistory': 'Hapus riwayat',
 }
 
 const VI = {
@@ -2504,6 +2578,14 @@ const VI = {
   'shopOrder.detail.noVoucherActivity': 'Chưa có hoạt động phiếu ưu đãi.',
   'shopOrder.detail.faceValue': 'Mệnh giá',
   'shopOrder.detail.salePrice': 'Giá bán',
+  'shopOrder.grid.noNotificationHistory': 'Chưa có thông báo nào.',
+  'shopOrder.grid.notifNewOrder': 'Đơn hàng mới #{number}',
+  'shopOrder.grid.notifShopQr': 'Thông báo QR cửa hàng',
+  'shopOrder.grid.notifOrderNumber': 'Đơn #{number}',
+  'shopOrder.grid.notifTableChange': 'Khách đổi bàn · Đơn #{number}',
+  'shopOrder.grid.notifEditingOrder': 'Khách đang chỉnh sửa đơn #{number}',
+  'shopOrder.grid.notifRead': 'Đã đọc',
+  'shopOrder.grid.clearHistory': 'Xóa lịch sử',
   'shopOrder.detail.expiry': 'Hết hạn',
   'shopOrder.detail.issued': 'Ngày phát hành',
   'shopOrder.detail.redeemedOrder': 'Đơn đã sử dụng',
@@ -3297,6 +3379,14 @@ const TH = {
   'status.placed': 'รับออเดอร์แล้ว',
   'status.making': 'กำลังทำ',
   'status.done': 'เสร็จแล้ว',
+  'shopOrder.grid.noNotificationHistory': 'ยังไม่มีประวัติการแจ้งเตือน',
+  'shopOrder.grid.notifNewOrder': 'ออเดอร์ใหม่ #{number}',
+  'shopOrder.grid.notifShopQr': 'การแจ้งเตือน QR ร้าน',
+  'shopOrder.grid.notifOrderNumber': 'ออเดอร์ #{number}',
+  'shopOrder.grid.notifTableChange': 'ลูกค้าเปลี่ยนโต๊ะ · ออเดอร์ #{number}',
+  'shopOrder.grid.notifEditingOrder': 'ลูกค้ากำลังแก้ไขออเดอร์ #{number}',
+  'shopOrder.grid.notifRead': 'อ่านแล้ว',
+  'shopOrder.grid.clearHistory': 'ล้างประวัติ',
 }
 export const TRANSLATIONS = {
   en: EN,

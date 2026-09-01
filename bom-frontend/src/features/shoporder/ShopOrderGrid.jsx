@@ -2534,20 +2534,23 @@ export default function ShopOrderGrid() {
       <Dialog open={customerEditHistoryOpen} onClose={() => setCustomerEditHistoryOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>{t('shopOrder.grid.notificationHistory')}</DialogTitle>
         <DialogContent dividers>
-          {!customerEditHistory.length && <Typography color="text.secondary">No notification history yet.</Typography>}
+          {entry.type === 'new_order' ? t('shopOrder.grid.notifNewOrder', { number: entry.orderNumber })
+              : entry.type === 'shop_qr' ? t('shopOrder.grid.notifShopQr') + (entry.orderNumber ? ` · ${t('shopOrder.grid.notifOrderNumber', { number: entry.orderNumber })}` : '')
+                  : entry.type === 'table_change' ? t('shopOrder.grid.notifTableChange', { number: entry.orderNumber })
+                      : t('shopOrder.grid.notifEditingOrder', { number: entry.orderNumber })}
           <Stack spacing={1}>
             {customerEditHistory.map(entry => (
               <Box key={entry.id} sx={{ p: 1.25, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
                 <Typography fontWeight={800}>
                   {entry.type === 'new_order' ? `New order #${entry.orderNumber}` : entry.type === 'shop_qr' ? `Shop QR notification${entry.orderNumber ? ` · Order #${entry.orderNumber}` : ''}` : entry.type === 'table_change' ? `Customer changed table · Order #${entry.orderNumber}` : `Customer editing order #${entry.orderNumber}`}
                 </Typography>
-                <Typography variant="body2" color="text.secondary">{entry.customerName}{entry.detail ? ` · ${entry.detail}` : ''} · {dateFmt(entry.at)} · Read</Typography>
+                <Typography variant="body2" color="text.secondary">{entry.customerName}{entry.detail ? ` · ${entry.detail}` : ''} · {dateFmt(entry.at)} · {t('shopOrder.grid.notifRead')}</Typography>
               </Box>
             ))}
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button color="error" disabled={!customerEditHistory.length} onClick={() => setCustomerEditHistory([])}>Clear history</Button>
+          <Button color="error" disabled={!customerEditHistory.length} onClick={() => setCustomerEditHistory([])}>{t('shopOrder.grid.clearHistory')}</Button>
           <Button onClick={() => setCustomerEditHistoryOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>

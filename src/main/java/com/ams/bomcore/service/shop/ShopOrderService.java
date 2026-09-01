@@ -1962,6 +1962,11 @@ public class ShopOrderService {
         ShopAccessToken sat = shopAccessTokenRepository.findByToken(token).orElse(null);
         if (sat == null || !Boolean.TRUE.equals(sat.getEnabled())) return;
 
+        // Permanent tokens (no expiry — e.g. a printed table QR sticker) stay enabled
+        // indefinitely; only session-limited tokens (queue slips, walk-up QR, group orders)
+        // get auto-disabled once every order tied to them reaches a terminal state.
+        if (sat.getExpiresAt() == null) return;
+
         // Disable when every order in the session has reached a terminal state
         List<ShopOrder> sessionOrders = shopOrderRepository.findAllBySourceTokenOrderByCreatedAtDesc(token);
         boolean allDone = !sessionOrders.isEmpty()
