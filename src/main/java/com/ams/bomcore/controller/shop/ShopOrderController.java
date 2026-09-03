@@ -40,6 +40,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import com.ams.bomcore.service.shop.CounterDisplayCache;
 import com.ams.bomcore.service.shop.ShopSalesReportService;
 import com.ams.bomcore.service.shop.ShopHoursService;
+import com.ams.bomcore.domain.shop.ShopReservation;
+import com.ams.bomcore.service.shop.ShopReservationService;
 
 import java.math.BigDecimal;
 import java.net.InetAddress;
@@ -67,6 +69,7 @@ public class ShopOrderController {
     private final ShopPrintHistoryRepository shopPrintHistoryRepository;
     private final ShopTableRepository shopTableRepository;
     private final CounterDisplayCache counterDisplayCache;
+    private final ShopReservationService shopReservationService;
 
     private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
     private final ShopHoursService shopHoursService;
@@ -102,7 +105,7 @@ public class ShopOrderController {
                                ShopPrintHistoryRepository shopPrintHistoryRepository,
                                ShopTableRepository shopTableRepository,
                                CounterDisplayCache counterDisplayCache,
-                               ShopHoursService shopHoursService) {
+                               ShopHoursService shopHoursService, ShopReservationService shopReservationService) {
         this.shopOrderService = shopOrderService;
         this.shopLocalizedLabelService = shopLocalizedLabelService;
         this.shopPricingService = shopPricingService;
@@ -118,6 +121,7 @@ public class ShopOrderController {
         this.shopTableRepository = shopTableRepository;
         this.counterDisplayCache = counterDisplayCache;
         this.shopHoursService = shopHoursService;
+        this.shopReservationService = shopReservationService;
     }
 
     // ── PUBLIC endpoints (/shop/public/**) ────────────────────────────
@@ -1412,6 +1416,7 @@ public class ShopOrderController {
         if (body.containsKey("shopPhone"))            company.setShopPhone(stringValue(body.get("shopPhone")));
         if (body.containsKey("realtimeInventory"))    company.setRealtimeInventory(Boolean.TRUE.equals(body.get("realtimeInventory")));
         if (body.containsKey("processingInventoryRecheck")) company.setShopProcessingInventoryRecheck(Boolean.TRUE.equals(body.get("processingInventoryRecheck")));
+        if (body.containsKey("bookingEnabled"))       company.setShopBookingEnabled(Boolean.TRUE.equals(body.get("bookingEnabled")));
         if (body.containsKey("newOrderNotificationEnabled")) {
             company.setNewOrderNotificationEnabled(Boolean.TRUE.equals(body.get("newOrderNotificationEnabled")));
         }
@@ -1577,6 +1582,7 @@ public class ShopOrderController {
         m.put("newOrderNotificationEnabled", Boolean.TRUE.equals(company.getNewOrderNotificationEnabled()));
         m.put("newOrderNotificationEmails", company.getNewOrderNotificationEmails() != null ? company.getNewOrderNotificationEmails() : "");
         m.put("voucherSecretSet",     company.getVoucherSecret() != null && !company.getVoucherSecret().isBlank());
+        m.put("bookingEnabled",       Boolean.TRUE.equals(company.getShopBookingEnabled()));
         return m;
     }
 
@@ -1879,6 +1885,230 @@ public class ShopOrderController {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
         return ResponseEntity.ok(shopOrderService.getCustomerHistory(id, tId, cId));
+    }
+    // ── Reservations (PUBLIC) ─────────────────────────────────────────
+
+    @PostMapping("/shop/public/reservations")
+    public ResponseEntity<?> createReservation(@RequestBody Map<String, Object> body,
+                                               @RequestParam UUID tenantId, @RequestParam UUID companyId,
+                                               @RequestHeader(value = "X-Time-Zone", required = false) String timeZone) {
+        validateScope(tenantId, companyId);
+        try {
+            ShopReservationService.CreateReservationRequest req = new ShopReservationService.CreateReservationRequest(
+                    body.get("tableId") != null ? UUID.fromString(body.get("tableId").toString()) : null,
+                    stringValue(body.get("customerName")),
+                    stringValue(body.get("customerPhone")),
+                    stringValue(body.get("customerEmail")),
+                    body.get("partySize") != null ? Integer.valueOf(body.get("partySize").toString()) : null,
+                    body.get("reservationTime") != null ? Instant.parse(body.get("reservationTime").toString()) : null,
+                    body.get("durationMinutes") != null ? Integer.valueOf(body.get("durationMinutes").toString()) : null,
+                    stringValue(body.get("note")));
+            ShopReservation reservation = shopReservationService.createReservation(
+                    tenantId, companyId, req, RequestTimeZone.resolve(timeZone), ShopReservation.SOURCE_CUSTOMER);
+            return ResponseEntity.status(HttpStatus.CREATED).body(reservationMap(reservation));
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/shop/public/reservations/day-slots")
+    public ResponseEntity<?> publicDaySlots(@RequestParam UUID tenantId, @RequestParam UUID companyId,
+                                            @RequestParam Instant dayStart, @RequestParam Instant dayEnd) {
+        validateScope(tenantId, companyId);
+        return ResponseEntity.ok(shopReservationService.getDaySlots(tenantId, companyId, dayStart, dayEnd, false)
+                .stream().map(this::daySlotsMap).toList());
+    }
+
+    @GetMapping("/shop/staff/reservations/day-slots")
+    public ResponseEntity<?> staffDaySlots(@RequestParam(required = false) UUID tenantId, @RequestParam(required = false) UUID companyId,
+                                           @RequestParam Instant dayStart, @RequestParam Instant dayEnd,
+                                           @RequestParam(required = false, defaultValue = "false") boolean includeHidden,
+                                           @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                           @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        return ResponseEntity.ok(shopReservationService.getDaySlots(tId, cId, dayStart, dayEnd, includeHidden)
+                .stream().map(this::daySlotsMap).toList());
+    }
+
+    private Map<String, Object> daySlotsMap(ShopReservationService.TableDaySlots t) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("tableId", t.tableId());
+        m.put("tableName", t.tableName());
+        m.put("booked", t.booked().stream().map(b -> {
+            Map<String, Object> bm = new LinkedHashMap<>();
+            bm.put("start", b.start().toString());
+            bm.put("end", b.end().toString());
+            bm.put("status", b.status());
+            bm.put("customerName", b.customerName());
+            bm.put("reservationId", b.reservationId());
+            bm.put("hidden", b.hidden());
+            return bm;
+        }).toList());
+        return m;
+    }
+
+    @GetMapping("/shop/public/reservations/{token}")
+    public ResponseEntity<?> getReservationByToken(@PathVariable String token,
+                                                   @RequestParam UUID tenantId, @RequestParam UUID companyId) {
+        validateScope(tenantId, companyId);
+        try {
+            return ResponseEntity.ok(reservationMap(shopReservationService.getByToken(token, tenantId, companyId)));
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/shop/public/reservations/{token}/cancel")
+    public ResponseEntity<?> cancelReservationByToken(@PathVariable String token,
+                                                      @RequestParam UUID tenantId, @RequestParam UUID companyId) {
+        validateScope(tenantId, companyId);
+        try {
+            return ResponseEntity.ok(reservationMap(shopReservationService.cancelByToken(token, tenantId, companyId)));
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // ── Reservations (STAFF) ───────────────────────────────────────────
+
+    @GetMapping("/shop/staff/reservations")
+    public ResponseEntity<?> listReservations(@RequestParam(required = false) UUID tenantId,
+                                              @RequestParam(required = false) UUID companyId,
+                                              @RequestParam(required = false) Instant from,
+                                              @RequestParam(required = false) Instant to,
+                                              @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                              @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        List<Map<String, Object>> list = shopReservationService.listByRange(tId, cId, from, to)
+                .stream().map(this::reservationMap).toList();
+        return ResponseEntity.ok(list);
+    }
+
+    @PostMapping("/shop/staff/reservations/{id}/confirm")
+    public ResponseEntity<?> confirmReservation(@PathVariable UUID id, @RequestBody(required = false) Map<String, Object> body,
+                                                @RequestParam(required = false) UUID tenantId, @RequestParam(required = false) UUID companyId,
+                                                @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                                @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        try {
+            UUID tableId = body != null && body.get("tableId") != null ? UUID.fromString(body.get("tableId").toString()) : null;
+            return ResponseEntity.ok(reservationMap(shopReservationService.confirm(id, tId, cId, tableId)));
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/shop/staff/reservations/{id}/seat")
+    public ResponseEntity<?> seatReservation(@PathVariable UUID id, @RequestBody(required = false) Map<String, Object> body,
+                                             @RequestParam(required = false) UUID tenantId, @RequestParam(required = false) UUID companyId,
+                                             @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                             @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        try {
+            UUID tableId = body != null && body.get("tableId") != null ? UUID.fromString(body.get("tableId").toString()) : null;
+            return ResponseEntity.ok(reservationMap(shopReservationService.seat(id, tId, cId, tableId)));
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/shop/staff/reservations/{id}/complete")
+    public ResponseEntity<?> completeReservation(@PathVariable UUID id,
+                                                 @RequestParam(required = false) UUID tenantId, @RequestParam(required = false) UUID companyId,
+                                                 @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                                 @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        return ResponseEntity.ok(reservationMap(shopReservationService.complete(id, tId, cId)));
+    }
+
+    @PostMapping("/shop/staff/reservations/{id}/cancel")
+    public ResponseEntity<?> cancelReservationByStaff(@PathVariable UUID id, @RequestBody(required = false) Map<String, Object> body,
+                                                      @RequestParam(required = false) UUID tenantId, @RequestParam(required = false) UUID companyId,
+                                                      @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                                      @RequestHeader(value = "X-Company-Id", required = false) String hCompany,
+                                                      @RequestHeader(value = "X-Time-Zone", required = false) String timeZone) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        String reason = body != null ? stringValue(body.get("reason")) : null;
+        return ResponseEntity.ok(reservationMap(shopReservationService.cancel(id, tId, cId, reason, RequestTimeZone.resolve(timeZone))));
+    }
+
+    @PostMapping("/shop/staff/reservations/{id}/restore")
+    public ResponseEntity<?> restoreReservation(@PathVariable UUID id,
+                                                @RequestParam(required = false) UUID tenantId, @RequestParam(required = false) UUID companyId,
+                                                @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                                @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        try {
+            return ResponseEntity.ok(reservationMap(shopReservationService.restore(id, tId, cId)));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/shop/staff/reservations/{id}/no-show")
+    public ResponseEntity<?> markNoShow(@PathVariable UUID id,
+                                        @RequestParam(required = false) UUID tenantId, @RequestParam(required = false) UUID companyId,
+                                        @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                        @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        return ResponseEntity.ok(reservationMap(shopReservationService.markNoShow(id, tId, cId)));
+    }
+
+    private Map<String, Object> reservationMap(ShopReservation r) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", r.getId());
+        m.put("token", r.getToken());
+        m.put("tableId", r.getTableId());
+        m.put("tableName", r.getTableName());
+        m.put("customerName", r.getCustomerName());
+        m.put("customerPhone", r.getCustomerPhone());
+        m.put("partySize", r.getPartySize());
+        m.put("reservationTime", r.getReservationTime() != null ? r.getReservationTime().toString() : null);
+        m.put("durationMinutes", r.getDurationMinutes());
+        m.put("status", r.getStatus());
+        m.put("note", r.getNote());
+        m.put("customerEmail", r.getCustomerEmail());
+        m.put("createdAt", r.getCreatedAt() != null ? r.getCreatedAt().toString() : null);
+        return m;
+    }
+    @PostMapping("/shop/staff/reservations")
+    public ResponseEntity<?> createStaffReservation(@RequestBody Map<String, Object> body,
+                                                    @RequestParam(required = false) UUID tenantId, @RequestParam(required = false) UUID companyId,
+                                                    @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                                    @RequestHeader(value = "X-Company-Id", required = false) String hCompany,
+                                                    @RequestHeader(value = "X-Time-Zone", required = false) String timeZone) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        try {
+            ShopReservationService.CreateReservationRequest req = new ShopReservationService.CreateReservationRequest(
+                    body.get("tableId") != null ? UUID.fromString(body.get("tableId").toString()) : null,
+                    stringValue(body.get("customerName")),
+                    stringValue(body.get("customerPhone")),
+                    stringValue(body.get("customerEmail")),
+                    body.get("partySize") != null ? Integer.valueOf(body.get("partySize").toString()) : null,
+                    body.get("reservationTime") != null ? Instant.parse(body.get("reservationTime").toString()) : null,
+                    body.get("durationMinutes") != null ? Integer.valueOf(body.get("durationMinutes").toString()) : null,
+                    stringValue(body.get("note")));
+            ShopReservation reservation = shopReservationService.createReservation(
+                    tId, cId, req, RequestTimeZone.resolve(timeZone), ShopReservation.SOURCE_STAFF);
+            return ResponseEntity.status(HttpStatus.CREATED).body(reservationMap(reservation));
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
     // ── Helpers ───────────────────────────────────────────────────────
 

@@ -47,6 +47,7 @@ import Radio from '@mui/material/Radio'
 import RadioGroup from '@mui/material/RadioGroup'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Snackbar from '@mui/material/Snackbar'
+import EventAvailableIcon from '@mui/icons-material/EventAvailable'
 import { resolveToken, fetchMenu, createOrder, fetchPublicMenuOptions,
          fetchActiveTableOrders, startCustomerEdit, cancelCustomerEdit,
          updatePublicOrderItems, fetchPublicOrder, fetchTokenSession,
@@ -630,7 +631,7 @@ export default function ShopMenuPage() {
   const [tableOrdersPromptOpen, setTableOrdersPromptOpen] = useState(false)
   const [tokenSession, setTokenSession]     = useState(null)
   const [sessionOpen, setSessionOpen]       = useState(false)
-  const [shopConfig, setShopConfig]         = useState({ prepaidMenu: false, bankBin: '', bankAccountNumber: '', bankAccountName: '', shopLogoUrl: '', shopName: '', shopAddress: '', shopPhone: '', companyName: '' })
+  const [shopConfig, setShopConfig]         = useState({ prepaidMenu: false, bankBin: '', bankAccountNumber: '', bankAccountName: '', shopLogoUrl: '', shopName: '', shopAddress: '', shopPhone: '', companyName: '', bookingEnabled: false })
   const [shopInfoOpen, setShopInfoOpen]     = useState(false)
   const [publicTables, setPublicTables]     = useState([])
   const [prepaidQrOrder, setPrepaidQrOrder] = useState(null)
@@ -2045,6 +2046,17 @@ export default function ShopMenuPage() {
 
           <LanguageSelector compact languageCodes={ORDERING_LANGUAGE_CODES} onLanguageChange={handleOrderingLanguageChange} />
 
+          {/* Book a table */}
+          {shopConfig.bookingEnabled && (
+              <Button size="small" variant="outlined" onClick={() => navigate(`/shop/booking?tenantId=${ctx.tenantId}&companyId=${ctx.companyId}&lang=${language}`)}
+                      startIcon={<EventAvailableIcon sx={{ fontSize: '16px !important' }} />}
+                      sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 20, fontSize: 12,
+                        px: 1.25, py: 0.4, flexShrink: 0,
+                        borderColor: '#1976d2', color: '#1976d2',
+                        '&:hover': { bgcolor: '#e3f2fd', borderColor: '#1976d2' } }}>
+                {t('shop.bookTable')}
+              </Button>
+          )}
           {/* Gọi nhân viên */}
           <Button size="small" variant="outlined" onClick={() => { setCallStaffName(''); setCallStaffTableId(ctx.tableId || ''); setCallStaffOpen(true) }}
             startIcon={<SupportAgentIcon sx={{ fontSize: '16px !important' }} />}

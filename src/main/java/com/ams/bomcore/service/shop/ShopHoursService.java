@@ -164,6 +164,27 @@ public class ShopHoursService {
         return getOrderingStatus(tenantId, companyId, zone);
     }
 
+    @Transactional(readOnly = true)
+    public OrderingStatus getOrderingStatusAt(UUID tenantId, UUID companyId, Instant at, ZoneId zone) {
+        List<ShopShift> shifts = shopShiftRepository.findAllByTenantIdAndCompanyIdAndIsActiveTrueOrderByDayOfWeekAscStartTimeAsc(tenantId, companyId);
+        if (shifts.isEmpty()) {
+            return new OrderingStatus(false, "OUTSIDE_HOURS", null);
+        }
+        ZonedDateTime atZ = at.atZone(zone);
+        int dow = atZ.getDayOfWeek().getValue();
+        LocalTime atTime = atZ.toLocalTime();
+        boolean withinShift = shifts.stream().anyMatch(s ->
+                s.getDayOfWeek().equals(dow) && !atTime.isBefore(s.getStartTime()) && atTime.isBefore(s.getEndTime()));
+        return withinShift ? new OrderingStatus(true, null, null) : new OrderingStatus(false, "OUTSIDE_HOURS", null);
+    }
+
+    @Transactional(readOnly = true)
+    public void assertOpenAtInstant(UUID tenantId, UUID companyId, Instant at, ZoneId zone) {
+        if (!getOrderingStatusAt(tenantId, companyId, at, zone).open()) {
+            throw new IllegalArgumentException("That time is outside the shop's opening hours");
+        }
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────
 
     /** Finds the next moment (today or up to 7 days out) a shift starts, strictly after `from`. */

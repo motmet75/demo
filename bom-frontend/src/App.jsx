@@ -45,6 +45,7 @@ import ShopQueuePage from './features/shopfront/ShopQueuePage'
 import ShopOrderStatusPage from './features/shopfront/ShopOrderStatusPage'
 import ShopOrderPage from './features/shoporder/ShopOrderPage'
 import ShopTablePage from './features/shoptable/ShopTablePage'
+import ShopReservationCalendar from './features/shoptable/ShopReservationCalendar'
 import ShopMenuManagePage from './features/shopmenu/ShopMenuManagePage'
 import ShopBankConfigPage from './features/shopbank/ShopBankConfigPage'
 import ShopMaterialPage from './features/shopmaterials/ShopMaterialPage'
@@ -60,6 +61,7 @@ import ShopPrintingCenterPage from './features/shopprinting/ShopPrintingCenterPa
 import ProfilePage from './features/profile/ProfilePage'
 import { I18nProvider, useI18n } from './i18n/I18nContext'
 import LanguageSelector from './components/LanguageSelector'
+import ShopBookingPage from './features/shopfront/ShopBookingPage'
 
 const SIDEBAR_FULL = 210
 const SIDEBAR_MINI = 52
@@ -83,6 +85,9 @@ const PATH_TITLES = {
   '/consumption-log':    'Consumption Log',
   '/companies':          'Companies',
   '/shop-orders':        'Shop Orders',
+  '/shop-orders':        'Shop Orders',
+  '/shop-tables':        'Tables',
+  '/shop-reservations':  'Reservations',
   '/shop-tables':        'Tables',
   '/shop-menu':          'Menu Setup',
   '/shop-bank':          'Shop Setup',
@@ -176,6 +181,7 @@ const NAV_GROUPS = [
     items: [
       { label: 'Shop Orders', path: '/shop-orders', icon: '🧋' },
       { label: 'Tables',      path: '/shop-tables', icon: '🪑' },
+      { label: 'Reservations', path: '/shop-reservations', icon: '📅' },
       { label: 'Menu Setup',  path: '/shop-menu',   icon: '🍽️' },
       { label: 'Shop Materials', path: '/shop-materials', icon: '📦' },
       { label: 'Sales Report', path: '/shop-sales', icon: '💰' },
@@ -418,6 +424,7 @@ function MainShell({ user, logout, isAdmin }) {
             <Route path="/viettelpost" element={<RequireAuth><ViettelPostPage /></RequireAuth>} />
             <Route path="/shop-orders" element={<RequireAuth><RequireContext><ShopOrderPage /></RequireContext></RequireAuth>} />
             <Route path="/shop-tables" element={<RequireAuth><RequireContext><ShopTablePage /></RequireContext></RequireAuth>} />
+            <Route path="/shop-reservations" element={<RequireAuth><RequireContext><ShopReservationCalendar /></RequireContext></RequireAuth>} />
             <Route path="/shop-menu"   element={<RequireAuth><RequireContext><ShopMenuManagePage /></RequireContext></RequireAuth>} />
             <Route path="/shop-materials" element={<RequireAuth><RequireContext><ShopMaterialPage /></RequireContext></RequireAuth>} />
             <Route path="/shop-sales" element={<RequireAuth><RequireContext><ShopSalesReportPage /></RequireContext></RequireAuth>} />
@@ -447,6 +454,7 @@ function AppShell() {
       <Routes>
         {/* Public customer-facing shop routes — no sidebar/header */}
         <Route path="/shop/menu" element={<ShopMenuPage />} />
+        <Route path="/shop/booking" element={<ShopBookingPage />} />
         <Route path="/shop/queue" element={<ShopQueuePage />} />
         <Route path="/shop/order/:orderCode" element={<ShopOrderStatusPage />} />
         <Route path="/shop/board" element={<DisplayBoardPage />} />

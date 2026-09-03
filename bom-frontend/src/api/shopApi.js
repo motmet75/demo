@@ -40,6 +40,81 @@ export function fetchShopConfig(tenantId, companyId) {
   return apiFetchJsonNoContext('/shop/public/shop-config' + qs({ tenantId, companyId }))
 }
 
+export function fetchDaySlots(tenantId, companyId, dayStart, dayEnd) {
+  return apiFetchJsonNoContext('/shop/public/reservations/day-slots' + qs({ tenantId, companyId, dayStart, dayEnd }))
+}
+
+export function createReservation(tenantId, companyId, payload) {
+  return apiFetchJsonNoContext('/shop/public/reservations' + qs({ tenantId, companyId }), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export function fetchReservationByToken(token, tenantId, companyId) {
+  return apiFetchJsonNoContext(`/shop/public/reservations/${encodeURIComponent(token)}` + qs({ tenantId, companyId }))
+}
+
+export function cancelReservationByToken(token, tenantId, companyId) {
+  return apiFetchJsonNoContext(`/shop/public/reservations/${encodeURIComponent(token)}/cancel` + qs({ tenantId, companyId }), {
+    method: 'POST',
+  })
+}
+
+export function fetchStaffDaySlots(dayStart, dayEnd, includeHidden = false) {
+  return apiFetchJson('/shop/staff/reservations/day-slots' + qs({ dayStart, dayEnd, includeHidden: includeHidden || null }))
+}
+
+export function restoreReservation(id) {
+  return apiFetchJson(`/shop/staff/reservations/${id}/restore`, { method: 'POST' })
+}
+
+
+export function fetchStaffReservations(from, to) {
+  return apiFetchJson('/shop/staff/reservations' + qs({ from, to }))
+}
+
+export function confirmReservation(id, tableId) {
+  return apiFetchJson(`/shop/staff/reservations/${id}/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tableId: tableId || null }),
+  })
+}
+
+export function seatReservation(id, tableId) {
+  return apiFetchJson(`/shop/staff/reservations/${id}/seat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tableId: tableId || null }),
+  })
+}
+
+export function completeReservation(id) {
+  return apiFetchJson(`/shop/staff/reservations/${id}/complete`, { method: 'POST' })
+}
+
+export function cancelReservationStaff(id, reason) {
+  return apiFetchJson(`/shop/staff/reservations/${id}/cancel`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason: reason || null }),
+  })
+}
+
+export function markReservationNoShow(id) {
+  return apiFetchJson(`/shop/staff/reservations/${id}/no-show`, { method: 'POST' })
+}
+
+export function createStaffReservation(payload) {
+  return apiFetchJson('/shop/staff/reservations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
 export function fetchPublicLocalizedLabels(tenantId, companyId) {
   return apiFetchJsonNoContext('/shop/public/localized-labels' + qs({ tenantId, companyId }))
 }

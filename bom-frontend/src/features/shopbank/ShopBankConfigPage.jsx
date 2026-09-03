@@ -40,7 +40,7 @@ const POPULAR_BANKS = [
 ]
 
 export default function ShopBankConfigPage() {
-  const [form, setForm] = useState({ bankBin: '', bankAccountNumber: '', bankAccountName: '', prepaidMenu: false, shopLogoUrl: '', shopName: '', shopAddress: '', shopPhone: '', realtimeInventory: false, processingInventoryRecheck: true, pointsConversionRate: 10000, pointsRoundUp: false, loyaltyDiscountPointThreshold: 0, loyaltyDiscountPercent: 0 })
+  const [form, setForm] = useState({ bankBin: '', bankAccountNumber: '', bankAccountName: '', prepaidMenu: false, shopLogoUrl: '', shopName: '', shopAddress: '', shopPhone: '', realtimeInventory: false, processingInventoryRecheck: true, pointsConversionRate: 10000, pointsRoundUp: false, loyaltyDiscountPointThreshold: 0, loyaltyDiscountPercent: 0, bookingEnabled: false })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -53,7 +53,7 @@ export default function ShopBankConfigPage() {
     fetchBankConfig()
       .then(({ data }) => {
         if (data) {
-          setForm({ bankBin: data.bankBin || '', bankAccountNumber: data.bankAccountNumber || '', bankAccountName: data.bankAccountName || '', prepaidMenu: Boolean(data.prepaidMenu), shopLogoUrl: data.shopLogoUrl || '', shopName: data.shopName || data.companyName || '', shopAddress: data.shopAddress || '', shopPhone: data.shopPhone || '', realtimeInventory: Boolean(data.realtimeInventory), processingInventoryRecheck: data.processingInventoryRecheck !== false, pointsConversionRate: data.pointsConversionRate || 10000, pointsRoundUp: Boolean(data.pointsRoundUp), loyaltyDiscountPointThreshold: data.loyaltyDiscountPointThreshold || 0, loyaltyDiscountPercent: data.loyaltyDiscountPercent || 0 })
+          setForm({ bankBin: data.bankBin || '', bankAccountNumber: data.bankAccountNumber || '', bankAccountName: data.bankAccountName || '', prepaidMenu: Boolean(data.prepaidMenu), shopLogoUrl: data.shopLogoUrl || '', shopName: data.shopName || data.companyName || '', shopAddress: data.shopAddress || '', shopPhone: data.shopPhone || '', realtimeInventory: Boolean(data.realtimeInventory), processingInventoryRecheck: data.processingInventoryRecheck !== false, pointsConversionRate: data.pointsConversionRate || 10000, pointsRoundUp: Boolean(data.pointsRoundUp), loyaltyDiscountPointThreshold: data.loyaltyDiscountPointThreshold || 0, loyaltyDiscountPercent: data.loyaltyDiscountPercent || 0, bookingEnabled: Boolean(data.bookingEnabled) })
           setVoucherKeySet(Boolean(data.voucherSecretSet))
         }
         setLoading(false)
@@ -297,6 +297,26 @@ export default function ShopBankConfigPage() {
                   </Box>
                 }
                 sx={{ alignItems: 'flex-start', ml: 0 }}
+              />
+              <Divider sx={{ my: 1.5 }} />
+              <FormControlLabel
+                  control={
+                    <Switch
+                        checked={form.bookingEnabled}
+                        onChange={e => saveToggle('bookingEnabled', e.target.checked)}
+                        disabled={saving}
+                        color="primary"
+                    />
+                  }
+                  label={
+                    <Box>
+                      <Typography variant="body2" fontWeight={700}>Table booking</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Show a "Book a table" option to customers, letting them reserve a table for a future date and time.
+                      </Typography>
+                    </Box>
+                  }
+                  sx={{ alignItems: 'flex-start', ml: 0 }}
               />
             </CardContent>
           </Card>

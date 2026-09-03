@@ -117,6 +117,12 @@ public class Company {
     @Column(name = "new_order_notification_enabled")
     private Boolean newOrderNotificationEnabled = false;
 
+    @Column(name = "shop_booking_enabled")
+    private Boolean shopBookingEnabled = false;
+
+    public Boolean getShopBookingEnabled() { return shopBookingEnabled; }
+    public void setShopBookingEnabled(Boolean shopBookingEnabled) { this.shopBookingEnabled = shopBookingEnabled; }
+
     public Company() {}
 
     public UUID getId() { return id; }

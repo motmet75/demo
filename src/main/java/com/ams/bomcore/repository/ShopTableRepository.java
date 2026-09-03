@@ -9,4 +9,5 @@ import java.util.UUID;
 public interface ShopTableRepository extends JpaRepository<ShopTable, UUID> {
     List<ShopTable> findAllByTenantIdAndCompanyId(UUID tenantId, UUID companyId);
     List<ShopTable> findAllByTenantIdAndCompanyIdAndIsActive(UUID tenantId, UUID companyId, Boolean isActive);
+    List<ShopTable> findAllByTenantIdAndCompanyIdAndIsActiveTrueOrderByTableNameAsc(UUID tenantId, UUID companyId);
 }
