@@ -85,8 +85,6 @@ const PATH_TITLES = {
   '/consumption-log':    'Consumption Log',
   '/companies':          'Companies',
   '/shop-orders':        'Shop Orders',
-  '/shop-orders':        'Shop Orders',
-  '/shop-tables':        'Tables',
   '/shop-reservations':  'Reservations',
   '/shop-tables':        'Tables',
   '/shop-menu':          'Menu Setup',
