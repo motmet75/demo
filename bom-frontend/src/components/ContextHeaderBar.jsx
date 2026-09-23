@@ -4,7 +4,7 @@ import { useAuth } from '../context/useAuth'
 
 export default function ContextHeaderBar() {
   const { tenantId, companyId, setTenantId, setCompanyId, reset } = useAppContext()
-  const { isAdmin } = useAuth()
+  const { isSuperAdmin } = useAuth()
 
   // Helper to shorten UUIDs: "550e8400-e29b..." -> "550e..."
   const formatId = (id) => (id ? `${id.substring(0, 6)}...` : '<none>')
@@ -17,18 +17,18 @@ export default function ContextHeaderBar() {
       <strong>Context:</strong>
       <div style={{ marginTop: 8 }}>
         <span>Tenant: <strong>{formatId(tenantId)}</strong></span>
-        {isAdmin && tenantId && (
+        {isSuperAdmin && tenantId && (
           <button onClick={resetTenant} style={buttonStyle}>Change</button>
         )}
         
         <span style={{ margin: '0 12px', color: '#ccc' }}>|</span>
         
         <span>Company: <strong>{formatId(companyId)}</strong></span>
-        {isAdmin && companyId && (
+        {isSuperAdmin && companyId && (
           <button onClick={resetCompany} style={buttonStyle}>Change</button>
         )}
         
-        {isAdmin && (
+        {isSuperAdmin && (
           <button onClick={reset} style={{ ...buttonStyle, marginLeft: 16, color: 'red' }}>
             Reset all
           </button>

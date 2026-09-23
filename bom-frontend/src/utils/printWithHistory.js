@@ -6,6 +6,7 @@ import {
   printOrderTag,
   printCupLabels,
   printCombinedReceipt,
+  printCounterOrderAlert,
 } from './printOrderReceipt'
 
 const printError = (error) => error?.message || 'Print history was not saved'
@@ -103,6 +104,19 @@ export async function printCupLabelsTracked(order, onError) {
     notes: `${labelCount} label${labelCount === 1 ? '' : 's'}`,
   }, onError)
   printCupLabels(order, meta)
+}
+
+export async function printCounterOrderAlertTracked(order, onError) {
+  if (!order) return
+  const roots = (order.items || []).filter(item => !item.parentItemId)
+  const cupCount = roots.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0)
+  const meta = await recordPrint({
+    printType: 'COUNTER_ORDER_ALERT',
+    ...orderSource(order),
+    title: `Counter Alert ${orderNum(order)}`,
+    notes: `${cupCount} cup${cupCount === 1 ? '' : 's'} - auto new order alert`,
+  }, onError)
+  printCounterOrderAlert(order, meta)
 }
 
 export async function printCombinedReceiptTracked(orders, opts = {}, onError) {

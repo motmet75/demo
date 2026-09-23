@@ -12,14 +12,34 @@ const parseAuthoritiesInput = (value) => value
   .map((item) => item.trim())
   .filter(Boolean)
 
-export default function AdminUserEditModal({ open, user, onClose, onSave, saving }) {
+const ORDERING_ROLE = 'ROLE_SHOP_ORDERING'
+const COUNTER_ROLE = 'ROLE_COUNTER'
+const STAFF_ROLE_OPTIONS = [
+  { value: COUNTER_ROLE, label: 'Thu ngân / Bàn giao ca' },
+  { value: ORDERING_ROLE, label: 'Nhân viên gọi món' }
+]
+
+export default function AdminUserEditModal({ open, user, onClose, onSave, saving, currentUser, isSuperAdmin }) {
   const { t, tx } = useI18n()
   const [tenants, setTenants] = useState([])
   const [companies, setCompanies] = useState([])
+  const forcedTenantId = !isSuperAdmin && currentUser?.assignedTenantId ? String(currentUser.assignedTenantId) : ''
+  const forcedCompanyId = !isSuperAdmin && currentUser?.assignedCompanyId ? String(currentUser.assignedCompanyId) : ''
 
   useEffect(() => {
+    if (!isSuperAdmin) {
+      setTenants(forcedTenantId
+        ? [{
+          id: forcedTenantId,
+          tenantName: t('admin.users.assignedTenant'),
+          tenantCode: forcedTenantId.slice(0, 8),
+          isActive: true
+        }]
+        : [])
+      return
+    }
     getTenants().then(setTenants).catch(() => {})
-  }, [])
+  }, [forcedTenantId, isSuperAdmin, t])
 
   const initial = useMemo(() => ({
     username: user?.username || '',
@@ -28,14 +48,20 @@ export default function AdminUserEditModal({ open, user, onClose, onSave, saving
     lastName: user?.lastName || '',
     email: user?.email || '',
     enabled: user?.enabled ?? true,
-    authoritiesText: (user?.authorities || []).join(', '),
-    assignedTenantId: user?.assignedTenantId || '',
-    assignedCompanyId: user?.assignedCompanyId || ''
-  }), [user])
+    authoritiesText: isSuperAdmin
+      ? ((user?.authorities || []).join(', ') || 'ROLE_USER')
+      : ORDERING_ROLE,
+    staffRole: (user?.authorities || []).includes(COUNTER_ROLE) ? COUNTER_ROLE : ORDERING_ROLE,
+    assignedTenantId: forcedTenantId || user?.assignedTenantId || '',
+    assignedCompanyId: forcedCompanyId || user?.assignedCompanyId || ''
+  }), [user, forcedTenantId, forcedCompanyId, isSuperAdmin])
 
   const [form, setForm] = useState(initial)
   const [error, setError] = useState('')
 
+  useEffect(() => {
+    setForm(initial)
+  }, [initial])
 
   useEffect(() => {
     let cancelled = false
@@ -61,6 +87,7 @@ export default function AdminUserEditModal({ open, user, onClose, onSave, saving
   const handleSubmit = async (event) => {
     event.preventDefault()
     setError('')
+    const authoritiesText = isSuperAdmin ? form.authoritiesText : form.staffRole
     try {
       await onSave({
         username: form.username,
@@ -69,9 +96,9 @@ export default function AdminUserEditModal({ open, user, onClose, onSave, saving
         lastName: form.lastName,
         email: form.email,
         enabled: form.enabled,
-        authorities: parseAuthoritiesInput(form.authoritiesText),
-        assignedTenantId: form.assignedTenantId || null,
-        assignedCompanyId: form.assignedCompanyId || null
+        authorities: parseAuthoritiesInput(authoritiesText),
+        assignedTenantId: (forcedTenantId || form.assignedTenantId) || null,
+        assignedCompanyId: (forcedCompanyId || form.assignedCompanyId) || null
       })
     } catch (err) {
       setError(err?.message || 'Save failed')
@@ -97,17 +124,40 @@ export default function AdminUserEditModal({ open, user, onClose, onSave, saving
           <TextField label={t('admin.users.lastName')} value={form.lastName} onChange={handleChange('lastName')} required disabled={saving} />
           <TextField label={t('admin.users.email')} type="email" value={form.email} onChange={handleChange('email')} disabled={saving} />
           <FormControlLabel control={<Switch checked={!!form.enabled} onChange={handleChange('enabled')} disabled={saving} />} label={t('admin.users.enabled')} />
-          <TextField
-            label={t('admin.users.authorities')}
-            value={form.authoritiesText}
-            onChange={handleChange('authoritiesText')}
-            helperText={t('admin.users.authoritiesHelp')}
-            disabled={saving}
-          />
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-            {parseAuthoritiesInput(form.authoritiesText).map((role) => <Chip key={role} label={role} size="small" />)}
-          </Box>
-          <FormControl fullWidth disabled={saving}>
+          {isSuperAdmin ? (
+            <>
+              <TextField
+                label={t('admin.users.authorities')}
+                value={form.authoritiesText}
+                onChange={handleChange('authoritiesText')}
+                helperText={t('admin.users.authoritiesHelp')}
+                disabled={saving}
+              />
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                {parseAuthoritiesInput(form.authoritiesText).map((role) => <Chip key={role} label={role} size="small" />)}
+              </Box>
+            </>
+          ) : (
+            <>
+              <FormControl fullWidth disabled={saving}>
+                <InputLabel id="staff-role-label">Vai trò nhân viên</InputLabel>
+                <Select
+                  labelId="staff-role-label"
+                  label="Vai trò nhân viên"
+                  value={form.staffRole}
+                  onChange={handleChange('staffRole')}
+                >
+                  {STAFF_ROLE_OPTIONS.map((role) => (
+                    <MenuItem key={role.value} value={role.value}>{role.label}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                <Chip label={form.staffRole} size="small" />
+              </Box>
+            </>
+          )}
+          <FormControl fullWidth disabled={saving || Boolean(forcedTenantId)}>
             <InputLabel id="assigned-tenant-label">{t('admin.users.assignedTenant')}</InputLabel>
             <Select
               labelId="assigned-tenant-label"
@@ -123,7 +173,7 @@ export default function AdminUserEditModal({ open, user, onClose, onSave, saving
               ))}
             </Select>
           </FormControl>
-          <FormControl fullWidth disabled={saving || !form.assignedTenantId}>
+          <FormControl fullWidth disabled={saving || !form.assignedTenantId || Boolean(forcedCompanyId)}>
             <InputLabel id="assigned-company-label">{t('admin.users.assignedCompany')}</InputLabel>
             <Select
               labelId="assigned-company-label"

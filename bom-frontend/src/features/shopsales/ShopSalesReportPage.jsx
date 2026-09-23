@@ -99,6 +99,7 @@ export default function ShopSalesReportPage() {
 
   const fmtMoney = useCallback((value) => formatMoney(asNumber(value), 'VND'), [formatMoney])
   const fmtNum = useCallback((value, options = {}) => formatNumber(asNumber(value), options), [formatNumber])
+  const fmtPercent = useCallback((value) => `${formatNumber(asNumber(value), { maximumFractionDigits: 0 })}%`, [formatNumber])
   const fmtDate = useCallback((value) => value ? formatDateTime(value, { dateStyle: 'short', timeStyle: 'short' }) : '-', [formatDateTime])
   const exportDate = useCallback((value) => value ? formatDateTime(value, { dateStyle: 'medium', timeStyle: 'medium' }) : '', [formatDateTime])
 
@@ -122,6 +123,7 @@ export default function ShopSalesReportPage() {
   const periodRows = Array.isArray(report.periodRows) ? report.periodRows : []
   const orderRows = Array.isArray(report.orderRows) ? report.orderRows : []
   const deductionRows = Array.isArray(report.deductionRows) ? report.deductionRows : []
+  const profitRows = Array.isArray(report.profitRows) ? report.profitRows : []
 
   const filteredDeductionRows = useMemo(() => {
     const needle = search.trim().toLowerCase()
@@ -175,6 +177,14 @@ export default function ShopSalesReportPage() {
       Income: row.income,
       DeductionRows: row.deductionCount,
       InventoryMovements: row.movementCount,
+    }))
+    const profitData = profitRows.map(row => ({
+      STT: row.code,
+      KhoanMuc: row.label,
+      KyNayGiaTri: row.currentValue,
+      KyNayTyTrong: row.currentShare,
+      KyTruocGiaTri: row.previousValue,
+      KyTruocTyTrong: row.previousShare,
     }))
     const orderData = orderRows.map(row => ({
       Order: orderLabel(row),
@@ -235,6 +245,7 @@ export default function ShopSalesReportPage() {
     }))
 
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(summaryRows), 'Summary')
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(profitData), 'CUKCUK Profit')
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(periodData), 'Periods')
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(orderData), 'Orders')
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(deductionData), 'Inventory Deductions')
@@ -274,6 +285,48 @@ export default function ShopSalesReportPage() {
         <StatTile icon={<TrendingUpIcon fontSize="small" />} label="Income" value={fmtMoney(summary.income || 0)} tone={incomeTone} />
         <StatTile icon={<Inventory2Icon fontSize="small" />} label="Inventory moves" value={fmtNum(summary.movementCount || 0)} />
       </Box>
+
+      <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1, mb: 2 }}>
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} alignItems={{ xs: 'stretch', md: 'center' }} justifyContent="space-between" sx={{ mb: 1 }}>
+          <Box>
+            <Typography fontWeight={900}>Kết quả kinh doanh</Typography>
+            <Typography variant="caption" color="text.secondary">{report.from || from} - {report.to || to}</Typography>
+          </Box>
+          <Chip size="small" label="Kỳ này / Kỳ trước" variant="outlined" />
+        </Stack>
+        <TableContainer sx={{ maxHeight: 360 }}>
+          <Table size="small" stickyHeader>
+            <TableHead>
+              <TableRow>
+                <TableCell rowSpan={2} sx={{ width: 70 }}>STT</TableCell>
+                <TableCell rowSpan={2}>Khoản mục</TableCell>
+                <TableCell align="center" colSpan={2}>Kỳ này</TableCell>
+                <TableCell align="center" colSpan={2}>Kỳ trước</TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell align="right">Giá trị</TableCell>
+                <TableCell align="right">Tỷ trọng</TableCell>
+                <TableCell align="right">Giá trị</TableCell>
+                <TableCell align="right">Tỷ trọng</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {loading && profitRows.length === 0 && <EmptyRow colSpan={6}><CircularProgress size={24} /></EmptyRow>}
+              {!loading && profitRows.length === 0 && <EmptyRow colSpan={6}>No profit rows found for this period</EmptyRow>}
+              {profitRows.map((row, index) => (
+                <TableRow key={`${row.code}-${row.label}-${index}`} hover sx={row.section ? { bgcolor: '#f8fafc' } : undefined}>
+                  <TableCell sx={{ fontWeight: row.section ? 900 : 500 }}>{row.code}</TableCell>
+                  <TableCell sx={{ fontWeight: row.section ? 900 : 500 }}>{row.label}</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: row.section ? 900 : 500 }}>{fmtMoney(row.currentValue)}</TableCell>
+                  <TableCell align="right">{fmtPercent(row.currentShare)}</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: row.section ? 900 : 500 }}>{fmtMoney(row.previousValue)}</TableCell>
+                  <TableCell align="right">{fmtPercent(row.previousShare)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Paper>
 
       <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1, mb: 2 }}>
         <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>

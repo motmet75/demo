@@ -7,6 +7,7 @@ import java.util.regex.Pattern;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -91,6 +92,7 @@ public class ProfileController {
     }
 
     @PatchMapping("/profile/order-notification")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','USER')")
     public ResponseEntity<OrderNotificationResponse> updateOrderNotification(
             @RequestBody OrderNotificationRequest request,
             Authentication authentication) {
@@ -151,6 +153,7 @@ public class ProfileController {
     }
 
     @PostMapping("/shop/reset")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','USER')")
     public ResponseEntity<ShopResetResponse> resetShop(Authentication authentication) {
         if (authentication == null || !(authentication.getPrincipal() instanceof User user)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
@@ -173,6 +176,7 @@ public class ProfileController {
     }
 
     @PostMapping("/shop/setup")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','USER')")
     public ResponseEntity<ShopSetupResponse> setupShop(
             @RequestBody ShopSetupRequest request,
             Authentication authentication) {

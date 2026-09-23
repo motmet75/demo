@@ -5,7 +5,7 @@ import { useTenantList } from '../context/TenantListContext'
 
 export default function TenantSelector() {
   const { tenantId, setTenantId } = useAppContext()
-  const { isAdmin, user, loading: authLoading } = useAuth()
+  const { isSuperAdmin, user, loading: authLoading } = useAuth()
   const { tenants, loading, error } = useTenantList()
 
   const handleChange = (e) => {
@@ -13,12 +13,12 @@ export default function TenantSelector() {
     setTenantId(v)
   }
 
-  // Non-admin users are locked to their assignedTenantId – show name only
-  if (!isAdmin) {
-    if (!user?.assignedTenantName) return null
-    const label = user.assignedTenantCode
-      ? `${user.assignedTenantCode} - ${user.assignedTenantName}`
-      : user.assignedTenantName
+  // Non-super users are locked to their assigned tenant.
+  if (!isSuperAdmin) {
+    const label = user?.assignedTenantName
+      ? (user.assignedTenantCode ? `${user.assignedTenantCode} - ${user.assignedTenantName}` : user.assignedTenantName)
+      : (user?.assignedTenantId || tenantId || '')
+    if (!label) return null
     return (
       <div style={{ display: 'inline-block', marginRight: 12 }}>
         <label>Tenant: </label>

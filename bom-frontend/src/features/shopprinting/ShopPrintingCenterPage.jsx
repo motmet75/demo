@@ -27,6 +27,7 @@ const PRINT_TYPE_LABEL = {
   ORDER_RECEIPT: 'Order receipt',
   ORDER_QR_TAG: 'Tracking QR tag',
   CUP_LABELS: 'Cup labels',
+  COUNTER_ORDER_ALERT: 'Counter alert note',
   BILL_RECEIPT: 'Bill receipt',
   GENERAL: 'General print',
 }

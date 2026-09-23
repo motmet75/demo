@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Tooltip from '@mui/material/Tooltip'
 import IconButton from '@mui/material/IconButton'
@@ -58,6 +58,7 @@ import ShopTokenManagePage from './features/shoptoken/ShopTokenManagePage'
 import ShopCustomerPage from './features/shopcustomer/ShopCustomerPage'
 import ShopVoucherPage from './features/shopvoucher/ShopVoucherPage'
 import ShopPrintingCenterPage from './features/shopprinting/ShopPrintingCenterPage'
+import CounterShiftPage from './features/counter/CounterShiftPage'
 import ProfilePage from './features/profile/ProfilePage'
 import { I18nProvider, useI18n } from './i18n/I18nContext'
 import LanguageSelector from './components/LanguageSelector'
@@ -65,6 +66,17 @@ import ShopBookingPage from './features/shopfront/ShopBookingPage'
 
 const SIDEBAR_FULL = 210
 const SIDEBAR_MINI = 52
+const FULL_BUSINESS_ROLES = ['ROLE_SUPER_ADMIN', 'ROLE_ADMIN', 'ROLE_USER']
+const SHOP_ORDERING_ROLES = ['ROLE_SUPER_ADMIN', 'ROLE_ADMIN', 'ROLE_USER', 'ROLE_SHOP_ORDERING', 'ROLE_COUNTER']
+const COUNTER_OPERATION_ROLES = ['ROLE_SUPER_ADMIN', 'ROLE_ADMIN', 'ROLE_USER', 'ROLE_COUNTER']
+const ADMIN_MANAGEMENT_ROLES = ['ROLE_SUPER_ADMIN', 'ROLE_ADMIN']
+const SUPER_ADMIN_ROLES = ['ROLE_SUPER_ADMIN']
+const SHOP_ORDERING_PATHS = new Set(['/shop-orders', '/shop-tables', '/shop-reservations', '/shop-printing'])
+const COUNTER_OPERATION_PATHS = new Set(['/counter-shift', '/inventory', '/warehouses', '/shop-menu', '/shop-orders', '/shop-tables', '/shop-reservations', '/shop-printing'])
+
+function hasAnyRole(user, roles) {
+  return roles.some(role => user?.authorities?.includes(role))
+}
 
 // ── Page title ────────────────────────────────────────────────────────────────
 
@@ -95,6 +107,7 @@ const PATH_TITLES = {
   '/shop-customers':     'Customers',
   '/shop-vouchers':      'Vouchers',
   '/shop-printing':      'Printing Center',
+  '/counter-shift':      'Bàn giao ca',
   '/profile':            'Profile',
   '/admin':              'Admin',
   '/admin/users':        'Admin Users',
@@ -188,6 +201,7 @@ const NAV_GROUPS = [
       { label: 'Customers',   path: '/shop-customers', icon: '👤' },
       { label: 'Vouchers',    path: '/shop-vouchers',  icon: '🎫' },
       { label: 'Printing',    path: '/shop-printing',  icon: '🖨️' },
+      { label: 'Bàn giao ca', path: '/counter-shift',  icon: '💵' },
     ],
   },
 ]
@@ -197,9 +211,9 @@ const BOTTOM_ITEMS = [
 ]
 
 const ADMIN_ITEMS = [
-  { label: 'Admin',   path: '/admin',   icon: '🔧' },
-  { label: 'Tenants', path: '/tenants', icon: '🏗️' },
-  { label: 'ETL',     path: '/etl',     icon: '🔬' },
+  { label: 'Admin',   path: '/admin',   icon: '🔧', roles: ADMIN_MANAGEMENT_ROLES },
+  { label: 'Tenants', path: '/tenants', icon: '🏗️', roles: SUPER_ADMIN_ROLES },
+  { label: 'ETL',     path: '/etl',     icon: '🔬', roles: SUPER_ADMIN_ROLES },
 ]
 
 // ── Nav components ────────────────────────────────────────────────────────────
@@ -302,8 +316,23 @@ function NavGroup({ group, collapsed }) {
   )
 }
 
-function Sidebar({ collapsed, onToggle, isAdmin }) {
+function Sidebar({ collapsed, onToggle, user, isAdmin, isSuperAdmin, hasFullBusinessAccess, hasShopOrderingAccess, hasCounterAccess }) {
   const { t } = useI18n()
+  const visibleGroups = hasFullBusinessAccess
+    ? NAV_GROUPS
+    : hasCounterAccess
+      ? NAV_GROUPS
+          .map(group => ({ ...group, items: group.items.filter(item => COUNTER_OPERATION_PATHS.has(item.path)) }))
+          .filter(group => group.items.length)
+      : hasShopOrderingAccess
+      ? NAV_GROUPS
+          .map(group => ({ ...group, items: group.items.filter(item => SHOP_ORDERING_PATHS.has(item.path)) }))
+          .filter(group => group.items.length)
+      : []
+  const visibleAdminItems = ADMIN_ITEMS.filter(item => {
+    if (item.roles?.includes('ROLE_SUPER_ADMIN')) return isSuperAdmin
+    return isAdmin && hasAnyRole(user, item.roles || [])
+  })
   return (
     <Box sx={{
       width: collapsed ? SIDEBAR_MINI : SIDEBAR_FULL,
@@ -338,7 +367,7 @@ function Sidebar({ collapsed, onToggle, isAdmin }) {
 
       {/* Scrollable nav */}
       <Box sx={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', py: 0.5 }}>
-        {NAV_GROUPS.map((group, i) => (
+        {visibleGroups.map((group, i) => (
           <React.Fragment key={group.key}>
             {i > 0 && <Divider sx={{ my: 0.5, mx: collapsed ? 0.5 : 1 }} />}
             <NavGroup group={group} collapsed={collapsed} />
@@ -348,10 +377,10 @@ function Sidebar({ collapsed, onToggle, isAdmin }) {
         <Divider sx={{ my: 0.5, mx: collapsed ? 0.5 : 1 }} />
         {BOTTOM_ITEMS.map(item => <NavItem key={item.path} item={item} collapsed={collapsed} />)}
 
-        {isAdmin && (
+        {visibleAdminItems.length > 0 && (
           <>
             <Divider sx={{ my: 0.5, mx: collapsed ? 0.5 : 1 }} />
-            {ADMIN_ITEMS.map(item => <NavItem key={item.path} item={item} collapsed={collapsed} />)}
+            {visibleAdminItems.map(item => <NavItem key={item.path} item={item} collapsed={collapsed} />)}
           </>
         )}
       </Box>
@@ -391,11 +420,27 @@ function HeaderBar({ user, logout }) {
 
 // ── Main shell ────────────────────────────────────────────────────────────────
 
-function MainShell({ user, logout, isAdmin }) {
+function HomeRedirect({ user }) {
+  if (!user) return <Navigate to="/login" replace />
+  if (hasAnyRole(user, FULL_BUSINESS_ROLES)) return <Navigate to="/materials" replace />
+  if (hasAnyRole(user, ['ROLE_COUNTER'])) return <Navigate to="/counter-shift" replace />
+  return <Navigate to="/shop-orders" replace />
+}
+
+function MainShell({ user, logout, isAdmin, isSuperAdmin, hasFullBusinessAccess, hasShopOrderingAccess, hasCounterAccess }) {
   const [collapsed, setCollapsed] = useState(false)
   return (
     <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      {user && <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} isAdmin={isAdmin} />}
+      {user && <Sidebar
+        collapsed={collapsed}
+        onToggle={() => setCollapsed(c => !c)}
+        user={user}
+        isAdmin={isAdmin}
+        isSuperAdmin={isSuperAdmin}
+        hasFullBusinessAccess={hasFullBusinessAccess}
+        hasShopOrderingAccess={hasShopOrderingAccess}
+        hasCounterAccess={hasCounterAccess}
+      />}
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
         <Box sx={{ flexShrink: 0, borderBottom: '1px solid #e0e0e0', px: { xs: 0.75, sm: 2 }, py: { xs: 0.5, sm: 0.75 }, display: 'flex', alignItems: 'center', gap: { xs: 0.5, sm: 1.5 }, background: '#fff', flexWrap: { xs: 'nowrap', sm: 'wrap' }, minHeight: { xs: 42, sm: 'auto' } }}>
           <HeaderBar user={user} logout={logout} />
@@ -404,37 +449,38 @@ function MainShell({ user, logout, isAdmin }) {
           <Routes>
             <Route path="/login" element={<LoginForm />} />
             <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
-            <Route path="/" element={<RequireAuth><RequireContext><MaterialPage /></RequireContext></RequireAuth>} />
-            <Route path="/materials" element={<RequireAuth><RequireContext><MaterialPage /></RequireContext></RequireAuth>} />
-            <Route path="/models" element={<RequireAuth><ModelPage /></RequireAuth>} />
-            <Route path="/inventory" element={<RequireAuth><RequireContext><InventoryPage /></RequireContext></RequireAuth>} />
-            <Route path="/inventory-movements" element={<RequireAuth><RequireContext><InventoryMovementPage /></RequireContext></RequireAuth>} />
-            <Route path="/warehouses" element={<RequireAuth><WarehousePage /></RequireAuth>} />
-            <Route path="/suppliers" element={<RequireAuth><SupplierPage /></RequireAuth>} />
-            <Route path="/companies" element={<RequireAuth><CompanyPage /></RequireAuth>} />
-            <Route path="/contracts" element={<RequireAuth><RequireContext><ContractPage /></RequireContext></RequireAuth>} />
-            <Route path="/orders" element={<RequireAuth><RequireContext><OrderPage /></RequireContext></RequireAuth>} />
-            <Route path="/order-lines" element={<RequireAuth><RequireContext><OrderLinePage /></RequireContext></RequireAuth>} />
-            <Route path="/invoices" element={<RequireAuth><RequireContext><InvoicePage /></RequireContext></RequireAuth>} />
-            <Route path="/consumption" element={<RequireAuth><RequireContext><ConsumptionPage /></RequireContext></RequireAuth>} />
-            <Route path="/consumption-log" element={<RequireAuth><RequireContext><ConsumptionLogPage /></RequireContext></RequireAuth>} />
-            <Route path="/boms" element={<RequireAuth><RequireContext><BomPage /></RequireContext></RequireAuth>} />
-            <Route path="/viettelpost" element={<RequireAuth><ViettelPostPage /></RequireAuth>} />
-            <Route path="/shop-orders" element={<RequireAuth><RequireContext><ShopOrderPage /></RequireContext></RequireAuth>} />
-            <Route path="/shop-tables" element={<RequireAuth><RequireContext><ShopTablePage /></RequireContext></RequireAuth>} />
-            <Route path="/shop-reservations" element={<RequireAuth><RequireContext><ShopReservationCalendar /></RequireContext></RequireAuth>} />
-            <Route path="/shop-menu"   element={<RequireAuth><RequireContext><ShopMenuManagePage /></RequireContext></RequireAuth>} />
-            <Route path="/shop-materials" element={<RequireAuth><RequireContext><ShopMaterialPage /></RequireContext></RequireAuth>} />
-            <Route path="/shop-sales" element={<RequireAuth><RequireContext><ShopSalesReportPage /></RequireContext></RequireAuth>} />
-            <Route path="/shop-bank"   element={<RequireAuth><RequireContext><ShopBankConfigPage /></RequireContext></RequireAuth>} />
-            <Route path="/shop-tokens"    element={<RequireAuth><RequireContext><ShopTokenManagePage /></RequireContext></RequireAuth>} />
-            <Route path="/shop-customers" element={<RequireAuth><RequireContext><ShopCustomerPage /></RequireContext></RequireAuth>} />
-            <Route path="/shop-vouchers"  element={<RequireAuth><RequireContext><ShopVoucherPage /></RequireContext></RequireAuth>} />
-            <Route path="/shop-printing"  element={<RequireAuth><RequireContext><ShopPrintingCenterPage /></RequireContext></RequireAuth>} />
-            <Route path="/admin" element={<RequireAuth adminOnly><AdminPage /></RequireAuth>} />
-            <Route path="/admin/users" element={<RequireAuth adminOnly><AdminPage /></RequireAuth>} />
-            <Route path="/tenants" element={<RequireAuth adminOnly><TenantsPage /></RequireAuth>} />
-            <Route path="/etl"     element={<RequireAuth adminOnly><ETLPage /></RequireAuth>} />
+            <Route path="/" element={<RequireAuth><HomeRedirect user={user} /></RequireAuth>} />
+            <Route path="/materials" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><MaterialPage /></RequireContext></RequireAuth>} />
+            <Route path="/models" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><ModelPage /></RequireAuth>} />
+            <Route path="/inventory" element={<RequireAuth roles={COUNTER_OPERATION_ROLES}><RequireContext><InventoryPage /></RequireContext></RequireAuth>} />
+            <Route path="/inventory-movements" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><InventoryMovementPage /></RequireContext></RequireAuth>} />
+            <Route path="/warehouses" element={<RequireAuth roles={COUNTER_OPERATION_ROLES}><WarehousePage /></RequireAuth>} />
+            <Route path="/suppliers" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><SupplierPage /></RequireAuth>} />
+            <Route path="/companies" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><CompanyPage /></RequireAuth>} />
+            <Route path="/contracts" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><ContractPage /></RequireContext></RequireAuth>} />
+            <Route path="/orders" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><OrderPage /></RequireContext></RequireAuth>} />
+            <Route path="/order-lines" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><OrderLinePage /></RequireContext></RequireAuth>} />
+            <Route path="/invoices" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><InvoicePage /></RequireContext></RequireAuth>} />
+            <Route path="/consumption" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><ConsumptionPage /></RequireContext></RequireAuth>} />
+            <Route path="/consumption-log" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><ConsumptionLogPage /></RequireContext></RequireAuth>} />
+            <Route path="/boms" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><BomPage /></RequireContext></RequireAuth>} />
+            <Route path="/viettelpost" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><ViettelPostPage /></RequireAuth>} />
+            <Route path="/shop-orders" element={<RequireAuth roles={SHOP_ORDERING_ROLES}><RequireContext><ShopOrderPage /></RequireContext></RequireAuth>} />
+            <Route path="/shop-tables" element={<RequireAuth roles={SHOP_ORDERING_ROLES}><RequireContext><ShopTablePage /></RequireContext></RequireAuth>} />
+            <Route path="/shop-reservations" element={<RequireAuth roles={SHOP_ORDERING_ROLES}><RequireContext><ShopReservationCalendar /></RequireContext></RequireAuth>} />
+            <Route path="/shop-menu"   element={<RequireAuth roles={COUNTER_OPERATION_ROLES}><RequireContext><ShopMenuManagePage /></RequireContext></RequireAuth>} />
+            <Route path="/shop-materials" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><ShopMaterialPage /></RequireContext></RequireAuth>} />
+            <Route path="/shop-sales" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><ShopSalesReportPage /></RequireContext></RequireAuth>} />
+            <Route path="/shop-bank"   element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><ShopBankConfigPage /></RequireContext></RequireAuth>} />
+            <Route path="/shop-tokens"    element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><ShopTokenManagePage /></RequireContext></RequireAuth>} />
+            <Route path="/shop-customers" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><ShopCustomerPage /></RequireContext></RequireAuth>} />
+            <Route path="/shop-vouchers"  element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><ShopVoucherPage /></RequireContext></RequireAuth>} />
+            <Route path="/shop-printing"  element={<RequireAuth roles={SHOP_ORDERING_ROLES}><RequireContext><ShopPrintingCenterPage /></RequireContext></RequireAuth>} />
+            <Route path="/counter-shift"  element={<RequireAuth roles={COUNTER_OPERATION_ROLES}><RequireContext><CounterShiftPage /></RequireContext></RequireAuth>} />
+            <Route path="/admin" element={<RequireAuth roles={ADMIN_MANAGEMENT_ROLES}><AdminPage /></RequireAuth>} />
+            <Route path="/admin/users" element={<RequireAuth roles={ADMIN_MANAGEMENT_ROLES}><AdminPage /></RequireAuth>} />
+            <Route path="/tenants" element={<RequireAuth roles={SUPER_ADMIN_ROLES}><TenantsPage /></RequireAuth>} />
+            <Route path="/etl"     element={<RequireAuth roles={SUPER_ADMIN_ROLES}><ETLPage /></RequireAuth>} />
           </Routes>
         </Box>
       </Box>
@@ -445,7 +491,7 @@ function MainShell({ user, logout, isAdmin }) {
 // ── App root ──────────────────────────────────────────────────────────────────
 
 function AppShell() {
-  const { user, logout, isAdmin } = useAuth()
+  const { user, logout, isAdmin, isSuperAdmin, hasFullBusinessAccess, hasShopOrderingAccess, hasCounterAccess } = useAuth()
   return (
     <BrowserRouter basename="/bom-inventory">
       <PageTitleUpdater />
@@ -459,7 +505,15 @@ function AppShell() {
         <Route path="/shop/customer-board" element={<CustomerBoardPage />} />
         <Route path="/shop/pickup/:orderCode" element={<CustomerPickupPage />} />
         <Route path="/shop/counter" element={<CounterDisplayPage />} />
-        <Route path="/*" element={<MainShell user={user} logout={logout} isAdmin={isAdmin} />} />
+        <Route path="/*" element={<MainShell
+          user={user}
+          logout={logout}
+          isAdmin={isAdmin}
+          isSuperAdmin={isSuperAdmin}
+          hasFullBusinessAccess={hasFullBusinessAccess}
+          hasShopOrderingAccess={hasShopOrderingAccess}
+          hasCounterAccess={hasCounterAccess}
+        />} />
       </Routes>
     </BrowserRouter>
   )

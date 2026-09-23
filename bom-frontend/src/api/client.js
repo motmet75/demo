@@ -114,6 +114,8 @@ function apiPath(url) {
 function isProtectedApiPath(path) {
   if (!path) return false
   if (path.startsWith('/bom/')) return true
+  if (path.startsWith('/orders')) return true
+  if (path.startsWith('/order-lines')) return true
   if (path.startsWith('/shop/staff/')) return true
   if (path.startsWith('/admin/')) return true
   return [

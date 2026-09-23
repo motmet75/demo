@@ -19,8 +19,10 @@ import InventoryImport from './InventoryImport'
 import InventoryPatchCsv from './InventoryPatchCsv'
 import * as XLSX from 'xlsx'
 import { numFmt, dateFmt } from '../../utils/format'
+import { useAuth } from '../../context/useAuth'
 
 export default function InventoryGrid() {
+  const { hasInventoryPriceAccess } = useAuth()
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(false)
 
@@ -342,49 +344,54 @@ export default function InventoryGrid() {
     return Number.isFinite(n) ? n : 0
   }
 
-  const buildBatchExportRow = (r) => ({
-    InventoryId: r.inventoryId,
-    MaterialUUID: r.materialUuid,
-    MaterialCode: r.materialCode,
-    MaterialName: r.materialName,
-    WarehouseUUID: r.warehouseUuid,
-    WarehouseCode: r.warehouseCode,
-    WarehouseName: r.warehouseName,
-    Batch: r.batchNo,
-    QuantityOnHand: r.quantityOnHand,
-    QuantityReserved: r.quantityReserved,
-    QuantityLocked: r.quantityLocked,
-    Available: r.availableQuantity,
-    ContractCode: r.contractCode,
-    OrderToDeduction: r.orderToDeduction,
-    UserName: r.userName,
-    Unit: r.unit,
-    UnitPrice: r.unitPrice,
-    WarehouseImportQty: r.warehouseImportQuantity,
-    WarehouseImportUnit: r.warehouseImportUnit,
-    BomUnitPerWarehouseUnit: r.bomUnitPerWarehouseUnit,
-    WarehouseImportUnitPrice: r.warehouseImportUnitPrice,
-    Currency: r.currency,
-    HSCode: r.hsCode,
-    OriginType: r.originType,
-    OriginCountry: r.originCountry,
-    XformNo: r.xformNo,
-    CDSNo: r.cdsNo,
-    PurchaseNo: r.purchaseNo,
-    MaterialQuota: r.materialQuota,
-    MaterialQuotaPercentage: r.materialQuotaPercentage,
-    XformDate: r.xformDate,
-    PurchaseDateTime: r.purchaseDateTime,
-    CDSDateTime: r.cdsDateTime,
-    Expiration: r.expirationDateTime,
-    Production: r.productionDateTime,
-    CreatedAt: r.createdAt,
-    ModifiedTime: r.modifiedTime,
-    UpdatedAt: r.updatedAt,
-    Visible: r.visible,
-    Approved: r.approved,
-    Locked: r.locked
-  })
+  const buildBatchExportRow = (r) => {
+    const row = {
+      InventoryId: r.inventoryId,
+      MaterialUUID: r.materialUuid,
+      MaterialCode: r.materialCode,
+      MaterialName: r.materialName,
+      WarehouseUUID: r.warehouseUuid,
+      WarehouseCode: r.warehouseCode,
+      WarehouseName: r.warehouseName,
+      Batch: r.batchNo,
+      QuantityOnHand: r.quantityOnHand,
+      QuantityReserved: r.quantityReserved,
+      QuantityLocked: r.quantityLocked,
+      Available: r.availableQuantity,
+      ContractCode: r.contractCode,
+      OrderToDeduction: r.orderToDeduction,
+      UserName: r.userName,
+      Unit: r.unit,
+      WarehouseImportQty: r.warehouseImportQuantity,
+      WarehouseImportUnit: r.warehouseImportUnit,
+      BomUnitPerWarehouseUnit: r.bomUnitPerWarehouseUnit,
+      HSCode: r.hsCode,
+      OriginType: r.originType,
+      OriginCountry: r.originCountry,
+      XformNo: r.xformNo,
+      CDSNo: r.cdsNo,
+      PurchaseNo: r.purchaseNo,
+      MaterialQuota: r.materialQuota,
+      MaterialQuotaPercentage: r.materialQuotaPercentage,
+      XformDate: r.xformDate,
+      PurchaseDateTime: r.purchaseDateTime,
+      CDSDateTime: r.cdsDateTime,
+      Expiration: r.expirationDateTime,
+      Production: r.productionDateTime,
+      CreatedAt: r.createdAt,
+      ModifiedTime: r.modifiedTime,
+      UpdatedAt: r.updatedAt,
+      Visible: r.visible,
+      Approved: r.approved,
+      Locked: r.locked
+    }
+    if (hasInventoryPriceAccess) {
+      row.UnitPrice = r.unitPrice
+      row.WarehouseImportUnitPrice = r.warehouseImportUnitPrice
+      row.Currency = r.currency
+    }
+    return row
+  }
 
   const consolidateRowsByMaterial = (sourceRows) => {
     const map = new Map()
@@ -534,7 +541,7 @@ export default function InventoryGrid() {
     { field: 'productionDateTime',     headerName: 'Production',   width: 180 },
     { field: 'createdAt', headerName: 'Created At', width: 180, valueFormatter: dateFmt },
     { field: 'updatedAt', headerName: 'Updated At', width: 180, valueFormatter: dateFmt }
-  ]
+  ].filter(col => hasInventoryPriceAccess || !['unitPrice', 'warehouseImportUnitPrice', 'currency'].includes(col.field))
 
   // apply simple client-side filters
   const filteredRows = rows.filter(r => {
@@ -589,36 +596,44 @@ export default function InventoryGrid() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={() => { setSelected(null); setModalKey(k => k + 1); setEditOpen(true) }} disabled={saving}>Add Inventory</button>
-          <Button
-            variant="contained"
-            size="small"
-            startIcon={<AddIcon />}
-            onClick={() => setInvoiceReceiveOpen(true)}
-            disabled={saving}
-            sx={{ textTransform: 'none', fontWeight: 800 }}
-          >
-            New Invoice
-          </Button>
-          <button onClick={() => { setImportOpen(o => !o); setPatchOpen(false) }} disabled={saving}>
-            {importOpen ? '✕ Close Import' : 'Import Inventory'}
-          </button>
-          <button onClick={() => { setPatchOpen(o => !o); setImportOpen(false) }} disabled={saving}
-            style={{ background: patchOpen ? '#e65100' : '#1565c0', color: '#fff', border: 'none', borderRadius: 4, padding: '4px 12px', cursor: 'pointer' }}>
-            {patchOpen ? '✕ Close Patch' : '✏ Patch Deduction / Quota'}
-          </button>
-          <button onClick={() => load()} disabled={loading} title="Refresh">🔄 Refresh</button>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px', border: '1px solid #cfd8dc', borderRadius: 4, background: '#f8fafc', fontSize: 12 }}>
-            <span style={{ fontWeight: 700 }}>Add default currency</span>
-            <select
-              value={defaultCurrency}
-              onChange={e => setDefaultCurrency(e.target.value === 'USD' ? 'USD' : 'VND')}
+          {hasInventoryPriceAccess && (
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<AddIcon />}
+              onClick={() => setInvoiceReceiveOpen(true)}
               disabled={saving}
-              style={{ fontWeight: 700, padding: '2px 6px' }}
+              sx={{ textTransform: 'none', fontWeight: 800 }}
             >
-              <option value="VND">VND</option>
-              <option value="USD">USD</option>
-            </select>
-          </label>
+              New Invoice
+            </Button>
+          )}
+          {hasInventoryPriceAccess && (
+            <button onClick={() => { setImportOpen(o => !o); setPatchOpen(false) }} disabled={saving}>
+              {importOpen ? '✕ Close Import' : 'Import Inventory'}
+            </button>
+          )}
+          {hasInventoryPriceAccess && (
+            <button onClick={() => { setPatchOpen(o => !o); setImportOpen(false) }} disabled={saving}
+              style={{ background: patchOpen ? '#e65100' : '#1565c0', color: '#fff', border: 'none', borderRadius: 4, padding: '4px 12px', cursor: 'pointer' }}>
+              {patchOpen ? '✕ Close Patch' : '✏ Patch Deduction / Quota'}
+            </button>
+          )}
+          <button onClick={() => load()} disabled={loading} title="Refresh">🔄 Refresh</button>
+          {hasInventoryPriceAccess && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px', border: '1px solid #cfd8dc', borderRadius: 4, background: '#f8fafc', fontSize: 12 }}>
+              <span style={{ fontWeight: 700 }}>Add default currency</span>
+              <select
+                value={defaultCurrency}
+                onChange={e => setDefaultCurrency(e.target.value === 'USD' ? 'USD' : 'VND')}
+                disabled={saving}
+                style={{ fontWeight: 700, padding: '2px 6px' }}
+              >
+                <option value="VND">VND</option>
+                <option value="USD">USD</option>
+              </select>
+            </label>
+          )}
           <h2 style={{ margin: 0 }}>Inventory</h2>
         </div>
         <div />
@@ -779,7 +794,7 @@ export default function InventoryGrid() {
          </div>
        </div>
 
-      <InventoryEditModal key={modalKey} open={editOpen} inventory={selected} onClose={closeEdit} onSave={handleSave} saving={saving} defaultCurrency={defaultCurrency} />
+      <InventoryEditModal key={modalKey} open={editOpen} inventory={selected} onClose={closeEdit} onSave={handleSave} saving={saving} defaultCurrency={defaultCurrency} canViewPrices={hasInventoryPriceAccess} />
       <InventoryInvoiceReceiveDialog
         open={invoiceReceiveOpen}
         defaultCurrency={defaultCurrency}

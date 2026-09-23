@@ -175,7 +175,12 @@ export function AuthProvider({ children }) {
     resendLoginOtp,
     logout,
     refreshMe,
-    isAdmin: !!user?.authorities?.includes('ROLE_ADMIN')
+    isSuperAdmin: !!user?.authorities?.includes('ROLE_SUPER_ADMIN'),
+    isAdmin: !!user?.authorities?.includes('ROLE_SUPER_ADMIN') || !!user?.authorities?.includes('ROLE_ADMIN'),
+    hasFullBusinessAccess: ['ROLE_SUPER_ADMIN', 'ROLE_ADMIN', 'ROLE_USER'].some(role => user?.authorities?.includes(role)),
+    hasShopOrderingAccess: ['ROLE_SUPER_ADMIN', 'ROLE_ADMIN', 'ROLE_USER', 'ROLE_SHOP_ORDERING', 'ROLE_COUNTER'].some(role => user?.authorities?.includes(role)),
+    hasCounterAccess: ['ROLE_SUPER_ADMIN', 'ROLE_ADMIN', 'ROLE_USER', 'ROLE_COUNTER'].some(role => user?.authorities?.includes(role)),
+    hasInventoryPriceAccess: ['ROLE_SUPER_ADMIN', 'ROLE_ADMIN', 'ROLE_USER'].some(role => user?.authorities?.includes(role))
   }), [user, loading, login, verifyLoginTotp, verifyLoginOtp, resendLoginOtp, logout, refreshMe])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

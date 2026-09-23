@@ -6,6 +6,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -24,6 +25,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -91,11 +94,38 @@ public class MaterialController {
         return companyId;
     }
 
+    private boolean hideCostFields() {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null) return false;
+        var roles = auth.getAuthorities().stream().map(GrantedAuthority::getAuthority).toList();
+        boolean counter = roles.contains("ROLE_COUNTER");
+        boolean full = roles.stream().anyMatch(role ->
+                role.equals("ROLE_SUPER_ADMIN") || role.equals("ROLE_ADMIN") || role.equals("ROLE_USER"));
+        return counter && !full;
+    }
+
+    private Map<String, Object> safeMaterial(Material material) {
+        Map<String, Object> map = new java.util.LinkedHashMap<>();
+        map.put("id", material.getId());
+        map.put("materialCode", material.getMaterialCode());
+        map.put("materialName", material.getMaterialName());
+        map.put("unit", material.getUnit());
+        map.put("materialType", material.getMaterialType());
+        map.put("thumbnailUrl", material.getThumbnailUrl());
+        map.put("inventoryAlertEnabled", material.getInventoryAlertEnabled());
+        map.put("inventoryAlertQuantity", material.getInventoryAlertQuantity());
+        map.put("inventoryAlertPercentage", material.getInventoryAlertPercentage());
+        map.put("description", material.getDescription());
+        map.put("isActive", material.getIsActive());
+        map.put("createdAt", material.getCreatedAt());
+        return map;
+    }
+
     @GetMapping
-    public List<Material> list(@RequestParam(value = "tenantId", required = false) UUID tenantId,
-                               @RequestParam(value = "companyId", required = false) UUID companyId,
-                               @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId,
-                               @RequestHeader(value = "X-Company-Id", required = false) String headerCompanyId) {
+    public List<?> list(@RequestParam(value = "tenantId", required = false) UUID tenantId,
+                        @RequestParam(value = "companyId", required = false) UUID companyId,
+                        @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId,
+                        @RequestHeader(value = "X-Company-Id", required = false) String headerCompanyId) {
         // prefer headers
         tenantId = resolveTenant(tenantId, headerTenantId);
         companyId = resolveCompany(companyId, headerCompanyId);
@@ -112,7 +142,8 @@ public class MaterialController {
             throw new IllegalArgumentException("company does not belong to tenant");
         }
 
-        return materialService.findAllByCompany(company);
+        List<Material> materials = materialService.findAllByCompany(company);
+        return hideCostFields() ? materials.stream().map(this::safeMaterial).toList() : materials;
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)

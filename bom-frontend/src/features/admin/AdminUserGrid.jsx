@@ -8,10 +8,12 @@ import { createAdminUser, deleteAdminUser, fetchAdminUsers, updateAdminUser } fr
 import { getTenants } from '../../api/tenantApi'
 import { getCompanies } from '../../api/companyApi'
 import { useI18n } from '../../i18n/I18nContext'
+import { useAuth } from '../../context/useAuth'
 import AdminUserEditModal from './AdminUserEditModal'
 
 export default function AdminUserGrid() {
   const { t, tx } = useI18n()
+  const { user: currentUser, isSuperAdmin } = useAuth()
   const [rows, setRows] = useState([])
   const [tenants, setTenants] = useState([])
   const [companies, setCompanies] = useState([])
@@ -28,12 +30,22 @@ export default function AdminUserGrid() {
     setLoading(true)
     setError(null)
     try {
-      const [users, tenantList] = await Promise.all([fetchAdminUsers(), getTenants().catch(() => [])])
+      const users = await fetchAdminUsers()
+      const tenantList = isSuperAdmin
+        ? await getTenants().catch(() => [])
+        : (currentUser?.assignedTenantId
+          ? [{
+            id: currentUser.assignedTenantId,
+            tenantName: t('admin.users.assignedTenant'),
+            tenantCode: String(currentUser.assignedTenantId).slice(0, 8),
+            isActive: true
+          }]
+          : [])
       setTenants(tenantList)
       setRows(users.map((user) => ({ ...user, id: user.id })))
       const tenantIds = [...new Set([
         ...tenantList.map((tenant) => String(tenant.id)),
-        ...users.filter((user) => user.assignedTenantId).map((user) => String(user.assignedTenantId))
+        ...(isSuperAdmin ? users.filter((user) => user.assignedTenantId).map((user) => String(user.assignedTenantId)) : [])
       ])]
       const companyArrays = await Promise.all(tenantIds.map((tenantId) => getCompanies(tenantId).catch(() => [])))
       setCompanies(companyArrays.flat())
@@ -42,7 +54,7 @@ export default function AdminUserGrid() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [currentUser?.assignedTenantId, isSuperAdmin, t])
 
   useEffect(() => {
     load()
@@ -166,6 +178,8 @@ export default function AdminUserGrid() {
           onClose={() => { if (!saving) { setDialogOpen(false); setSelected(null) } }}
           onSave={handleSave}
           saving={saving}
+          currentUser={currentUser}
+          isSuperAdmin={isSuperAdmin}
         />
       ) : null}
     </Box>

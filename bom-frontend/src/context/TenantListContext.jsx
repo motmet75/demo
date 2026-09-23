@@ -15,7 +15,8 @@ function reducer(state, action) {
 
 export function TenantListProvider({ children }) {
   const { user, loading: authLoading } = useAuth()
-  const isAdmin = !!user?.authorities?.includes('ROLE_ADMIN')
+  const roles = Array.isArray(user?.authorities) ? user.authorities : []
+  const isSuperAdmin = roles.includes('ROLE_SUPER_ADMIN')
   const [state, dispatch] = useReducer(reducer, { tenants: [], loading: false, error: null })
 
   const fetchTenants = async (mounted) => {
@@ -30,13 +31,16 @@ export function TenantListProvider({ children }) {
 
   useEffect(() => {
     if (authLoading) return
-    if (!user || !isAdmin) return
+    if (!user || !isSuperAdmin) {
+      dispatch({ type: 'OK', data: [] })
+      return
+    }
 
     const mounted = { current: true }
     fetchTenants(mounted)
     return () => { mounted.current = false }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, authLoading])
+  }, [user, authLoading, isSuperAdmin])
 
   const reload = () => {
     const mounted = { current: true }

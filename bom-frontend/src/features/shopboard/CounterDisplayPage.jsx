@@ -2,16 +2,18 @@ import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
-import { fetchActivePickup, fetchCounterDisplay, pushCounterDisplay } from '../../api/shopApi'
+import { fetchActivePickup, fetchCounterDisplay, fetchCustomerOrderPrintAlert, pushCounterDisplay } from '../../api/shopApi'
 import LanguageSelector from '../../components/LanguageSelector'
 import { ORDERING_LANGUAGE_CODES } from '../../i18n/translations'
 import { useI18n } from '../../i18n/I18nContext'
 import { localizedModelName, localizedSelectedOptions } from '../../i18n/menuLocalization'
+import { printCounterOrderAlert } from '../../utils/printOrderReceipt'
 
 export const COUNTER_CHANNEL = 'shop_counter_display'
 const IDLE_TIMEOUT_MS   = 5 * 60 * 1000
 const PICKUP_POLL_MS    = 3000
 const COUNTER_POLL_MS   = 3000
+const PRINT_ALERT_POLL_MS = 3000
 
 export function broadcastToCounter(order, tagQrBase64 = null) {
   const payload = order
@@ -449,6 +451,8 @@ export default function CounterDisplayPage() {
   const idleTimerRef     = useRef(null)
   const flashTimerRef    = useRef(null)
   const lastPickupCode   = useRef(null)
+  const lastPrintAlertPushedAt = useRef(null)
+  const printAlertSeenKey = tenantId && companyId ? `shop_counter_print_alert_seen:${tenantId}:${companyId}` : ''
 
   const triggerFlash = () => {
     setFlash(true)
@@ -515,6 +519,33 @@ export default function CounterDisplayPage() {
     const t = setInterval(pollCounterPush, COUNTER_POLL_MS)
     return () => clearInterval(t)
   }, [pollCounterPush])
+
+  const pollPrintAlert = useCallback(async () => {
+    if (!tenantId || !companyId) return
+    try {
+      const { res, data } = await fetchCustomerOrderPrintAlert(tenantId, companyId)
+      if (res.status === 204 || !data?.payload || !data?.pushedAt) return
+      let seen = lastPrintAlertPushedAt.current
+      try { seen = localStorage.getItem(printAlertSeenKey) || seen } catch { /* storage may be blocked */ }
+      if (data.pushedAt === seen) return
+
+      lastPrintAlertPushedAt.current = data.pushedAt
+      try { localStorage.setItem(printAlertSeenKey, data.pushedAt) } catch { /* storage may be blocked */ }
+
+      const payload = { ...data.payload, _ts: Date.now() }
+      setOrder(payload)
+      resetIdleTimer(payload)
+      try { localStorage.setItem('shop_counter_order', JSON.stringify(payload)) } catch { /* storage may be blocked */ }
+      setTimeout(() => printCounterOrderAlert(payload), 150)
+    } catch (_) {}
+  }, [tenantId, companyId, printAlertSeenKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!tenantId || !companyId) return
+    pollPrintAlert()
+    const t = setInterval(pollPrintAlert, PRINT_ALERT_POLL_MS)
+    return () => clearInterval(t)
+  }, [pollPrintAlert])
 
   useEffect(() => {
     if (!window.BroadcastChannel) return

@@ -17,7 +17,7 @@ import { fetchAllInvoices } from '../../api/invoiceApi'
 import { useAppContext } from '../../context/AppContext'
 import { fmtNum } from '../../utils/format'
 
-export default function InventoryEditModal({ open, inventory, onClose, onSave, saving, defaultCurrency = 'USD' }) {
+export default function InventoryEditModal({ open, inventory, onClose, onSave, saving, defaultCurrency = 'USD', canViewPrices = true }) {
   const { tenantId, companyId } = useAppContext()
   const isoToLocalDatetime = (iso) => {
     if (!iso) return ''
@@ -227,7 +227,7 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
     String(form.warehouseImportUnit || '').trim() !== '' ||
     form.warehouseImportQuantity !== '' ||
     form.bomUnitPerWarehouseUnit !== '' ||
-    form.warehouseImportUnitPrice !== ''
+    (canViewPrices && form.warehouseImportUnitPrice !== '')
   )
   const conversionReady = hasWarehouseConversion &&
     warehouseImportQuantityNumber !== null && warehouseImportQuantityNumber > 0 &&
@@ -235,7 +235,7 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
   const convertedQuantityOnHand = conversionReady
     ? warehouseImportQuantityNumber * bomUnitPerWarehouseUnitNumber
     : null
-  const convertedUnitPrice = conversionReady && warehouseImportUnitPriceNumber !== null
+  const convertedUnitPrice = canViewPrices && conversionReady && warehouseImportUnitPriceNumber !== null
     ? warehouseImportUnitPriceNumber / bomUnitPerWarehouseUnitNumber
     : null
   const quantityOnHandValue = convertedQuantityOnHand !== null ? String(convertedQuantityOnHand) : form.quantityOnHand
@@ -269,12 +269,12 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
     if (hasWarehouseConversion) {
       if (warehouseImportQuantityNumber === null || warehouseImportQuantityNumber <= 0) { setErrorMessage('Warehouse Qty must be positive'); return }
       if (form.bomUnitPerWarehouseUnit !== '' && (bomUnitPerWarehouseUnitNumber === null || bomUnitPerWarehouseUnitNumber <= 0)) { setErrorMessage('BOM Qty / Warehouse Unit must be positive'); return }
-      if (form.warehouseImportUnitPrice !== '' && (warehouseImportUnitPriceNumber === null || warehouseImportUnitPriceNumber < 0)) { setErrorMessage('Warehouse Unit Price cannot be negative'); return }
+      if (canViewPrices && form.warehouseImportUnitPrice !== '' && (warehouseImportUnitPriceNumber === null || warehouseImportUnitPriceNumber < 0)) { setErrorMessage('Warehouse Unit Price cannot be negative'); return }
     } else {
       if (form.quantityOnHand === '' || form.quantityOnHand === null || form.quantityOnHand === undefined) { setErrorMessage('Quantity On Hand is required'); return }
       if (!validateNumber(form.quantityOnHand)) { setErrorMessage('Quantity On Hand must be numeric'); return }
     }
-    if (form.unitPrice !== '' && !validateNumber(form.unitPrice)) { setErrorMessage('Unit Price must be numeric'); return }
+    if (canViewPrices && form.unitPrice !== '' && !validateNumber(form.unitPrice)) { setErrorMessage('Unit Price must be numeric'); return }
     if (form.quantityReserved !== '' && !validateNumber(form.quantityReserved)) { setErrorMessage('Quantity Reserved must be numeric'); return }
     if (form.quantityLocked !== '' && !validateNumber(form.quantityLocked)) { setErrorMessage('Quantity Locked must be numeric'); return }
 
@@ -336,8 +336,10 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
       batchNo: form.batchNo,
       contractCode: form.contractCode || null,
       unit: form.unit || 'pcs',
-      unitPrice: unitPriceForPayload,
-      currency: form.currency || defaultCurrency || 'USD',
+      ...(canViewPrices ? {
+        unitPrice: unitPriceForPayload,
+        currency: form.currency || defaultCurrency || 'USD',
+      } : {}),
       hsCode: form.hsCode || null,
       originType: form.originType || null,
       originCountry: form.originCountry || null,
@@ -352,7 +354,7 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
         warehouseImportUnit: form.warehouseImportUnit || null,
         warehouseImportQuantity: coerceNumber(form.warehouseImportQuantity),
         bomUnitPerWarehouseUnit: coerceNumber(form.bomUnitPerWarehouseUnit),
-        warehouseImportUnitPrice: coerceNumber(form.warehouseImportUnitPrice)
+        ...(canViewPrices ? { warehouseImportUnitPrice: coerceNumber(form.warehouseImportUnitPrice) } : {})
       } : {}),
       ...(!isEditing && form.invoiceId ? { invoiceId: form.invoiceId } : {})
     }
@@ -438,14 +440,16 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
                   disabled={isSubmitting}
                   inputProps={{ step: 'any', min: 0 }}
                 />
-                <TextField
-                  label="Warehouse Unit Price"
-                  type="number"
-                  value={form.warehouseImportUnitPrice}
-                  onChange={handleChange('warehouseImportUnitPrice')}
-                  disabled={isSubmitting}
-                  inputProps={{ step: 'any', min: 0 }}
-                />
+                {canViewPrices && (
+                  <TextField
+                    label="Warehouse Unit Price"
+                    type="number"
+                    value={form.warehouseImportUnitPrice}
+                    onChange={handleChange('warehouseImportUnitPrice')}
+                    disabled={isSubmitting}
+                    inputProps={{ step: 'any', min: 0 }}
+                  />
+                )}
               </Box>
             )}
 
@@ -453,7 +457,7 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', px: 1, py: 0.5, bgcolor: 'grey.50', borderRadius: 1, border: '1px solid', borderColor: 'grey.200' }}>
                 <Typography variant="caption" color="text.secondary" sx={{ minWidth: 80 }}>Converted:</Typography>
                 <Chip label={`Qty ${fmtNum(convertedQuantityOnHand, 9)} ${form.unit || ''}`} size="small" variant="outlined" />
-                {convertedUnitPrice !== null && <Chip label={`Unit price ${fmtNum(convertedUnitPrice, 10)} ${form.currency || ''}`} size="small" variant="outlined" />}
+                {canViewPrices && convertedUnitPrice !== null && <Chip label={`Unit price ${fmtNum(convertedUnitPrice, 10)} ${form.currency || ''}`} size="small" variant="outlined" />}
               </Box>
             )}
 
@@ -525,9 +529,9 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
               helperText={isEditing ? 'Managed by Reserve/Release actions - Available = On Hand - Locked' : 'Qty blocked from use: Available = On Hand - Locked'} />
 
             <TextField label="Contract Code" value={form.contractCode} onChange={handleChange('contractCode')} disabled={isSubmitting} />
-            <TextField label="Unit Price" type="number" value={unitPriceValue} onChange={convertedUnitPrice !== null ? undefined : handleChange('unitPrice')} disabled={isSubmitting || convertedUnitPrice !== null} inputProps={{ step: 'any', min: 0 }} helperText={convertedUnitPrice !== null ? `Converted BOM unit price in ${form.currency || 'currency'}` : undefined} />
+            {canViewPrices && <TextField label="Unit Price" type="number" value={unitPriceValue} onChange={convertedUnitPrice !== null ? undefined : handleChange('unitPrice')} disabled={isSubmitting || convertedUnitPrice !== null} inputProps={{ step: 'any', min: 0 }} helperText={convertedUnitPrice !== null ? `Converted BOM unit price in ${form.currency || 'currency'}` : undefined} />}
             <TextField label="Unit" value={form.unit || 'pcs'} disabled helperText="From selected material" InputProps={{ readOnly: true }} />
-            <TextField label="Currency" value={form.currency || defaultCurrency} onChange={handleChange('currency')} disabled={isSubmitting || !isEditing} helperText={!isEditing ? 'From inventory main bar' : undefined} />
+            {canViewPrices && <TextField label="Currency" value={form.currency || defaultCurrency} onChange={handleChange('currency')} disabled={isSubmitting || !isEditing} helperText={!isEditing ? 'From inventory main bar' : undefined} />}
 
             <TextField label="HS Code" value={form.hsCode} onChange={handleChange('hsCode')} disabled={isSubmitting} />
             <TextField label="Origin Type" value={form.originType} onChange={handleChange('originType')} disabled={isSubmitting} />
@@ -602,5 +606,6 @@ InventoryEditModal.propTypes = {
   onClose: PropTypes.func,
   onSave: PropTypes.func,
   saving: PropTypes.bool,
-  defaultCurrency: PropTypes.string
+  defaultCurrency: PropTypes.string,
+  canViewPrices: PropTypes.bool
 }

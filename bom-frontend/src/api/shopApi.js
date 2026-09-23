@@ -36,6 +36,18 @@ export function fetchMenu(tenantId, companyId) {
   })
 }
 
+export async function fetchStaffMenuItems() {
+  const { res, data } = await apiFetchJson('/shop/staff/menu-items')
+  if (!res.ok) return []
+  if (Array.isArray(data)) return data
+  if (data && typeof data === 'object') {
+    if (Array.isArray(data.data)) return data.data
+    if (Array.isArray(data.items)) return data.items
+    if (Array.isArray(data.content)) return data.content
+  }
+  return []
+}
+
 export function fetchShopConfig(tenantId, companyId) {
   return apiFetchJsonNoContext('/shop/public/shop-config' + qs({ tenantId, companyId }))
 }
@@ -240,6 +252,50 @@ export function fetchAllowedPublicIps() {
 
 export function fetchStaffLocalizedLabels() {
   return apiFetchJson('/shop/staff/localized-labels')
+}
+
+export function fetchCounterShiftSummary(params = {}) {
+  return apiFetchJson('/shop/staff/counter/shift-summary' + qs(params))
+}
+
+export function fetchCounterInventorySnapshot() {
+  return apiFetchJson('/shop/staff/counter/inventory-snapshot')
+}
+
+export function fetchCounterPaymentNotes(date) {
+  return apiFetchJson('/shop/staff/counter/payment-notes' + qs({ date }))
+}
+
+export function createCounterPaymentNote(body) {
+  return apiFetchJson('/shop/staff/counter/payment-notes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {})
+  })
+}
+
+export function fetchCounterInventoryReconciliations(date) {
+  return apiFetchJson('/shop/staff/counter/inventory-reconciliations' + qs({ date }))
+}
+
+export function saveCounterInventoryReconciliation(body) {
+  return apiFetchJson('/shop/staff/counter/inventory-reconciliations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {})
+  })
+}
+
+export function fetchCounterShiftHandovers(date) {
+  return apiFetchJson('/shop/staff/counter/shift-handovers' + qs({ date }))
+}
+
+export function createCounterShiftHandover(body) {
+  return apiFetchJson('/shop/staff/counter/shift-handovers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {})
+  })
 }
 
 export function updateAllowedPublicIps(allowedPublicIps, allowAllNetworks = false, counterNetworkRules = null, counterPublicIp = null) {
@@ -532,6 +588,10 @@ export function previewCloseToday() {
 
 export function fetchCounterDisplay(tenantId, companyId) {
   return apiFetchJsonNoContext('/shop/public/counter-display' + qs({ tenantId, companyId }))
+}
+
+export function fetchCustomerOrderPrintAlert(tenantId, companyId) {
+  return apiFetchJsonNoContext('/shop/public/customer-order-print-alert' + qs({ tenantId, companyId }))
 }
 
 export function pushCounterDisplay(payload) {

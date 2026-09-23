@@ -33,6 +33,7 @@ import ShopTableEditModal from './ShopTableEditModal'
 import ShopTableLayoutDesigner from './ShopTableLayoutDesigner'
 import ManualOrderDialog from '../shoporder/ManualOrderDialog'
 import ShopOrderDetailModal from '../shoporder/ShopOrderDetailModal'
+import { useAuth } from '../../context/useAuth'
 
 const ACTIVE_STATUSES = new Set(['PENDING', 'CONFIRMED', 'PREPARING', 'READY'])
 const STATUS_CHIP = {
@@ -68,6 +69,7 @@ function sortOrders(orders) {
 }
 
 export default function ShopTableGrid() {
+  const { hasFullBusinessAccess } = useAuth()
   const [rows, setRows]                   = useState([])
   const [loading, setLoading]             = useState(false)
   const [error, setError]                 = useState('')
@@ -331,7 +333,9 @@ export default function ShopTableGrid() {
       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
         <Button startIcon={<AddIcon />} variant="contained" size="small" onClick={() => setEditTable({})}>New Table</Button>
         <Button startIcon={<RefreshIcon />} onClick={load} variant="outlined" size="small">Refresh</Button>
-        <Button startIcon={resettingSequence ? <CircularProgress size={14} /> : <RestartAltIcon />} onClick={resetDailyOrderNumber} variant="outlined" color="warning" size="small" disabled={resettingSequence}>Reset Order #</Button>
+        {hasFullBusinessAccess && (
+          <Button startIcon={resettingSequence ? <CircularProgress size={14} /> : <RestartAltIcon />} onClick={resetDailyOrderNumber} variant="outlined" color="warning" size="small" disabled={resettingSequence}>Reset Order #</Button>
+        )}
         <Button startIcon={showTableList ? <VisibilityOffIcon /> : <VisibilityIcon />} onClick={() => setShowTableList(v => !v)} variant={showTableList ? "outlined" : "contained"} size="small">{showTableList ? "Hide Table List" : "Show Table List"}</Button>
       </Box>
       {error && <Alert severity="error" onClose={() => setError('')}>{error}</Alert>}

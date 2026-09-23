@@ -20,6 +20,15 @@ function fmtPrintTime(value) {
   try { return new Date(value).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' }) } catch { return '' }
 }
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+}
+
 function printMetaHtml(meta) {
   if (!meta) return ''
   const slip = meta.slipNumber != null ? `Slip #${String(meta.slipNumber).padStart(5, '0')}` : ''
@@ -29,6 +38,138 @@ function printMetaHtml(meta) {
     ${slip ? `<div style="font-weight:900;letter-spacing:.4px">${slip}</div>` : ''}
     <div>${copy}${time ? ` &middot; ${time}` : ''}</div>
   </div>`
+}
+
+function printHtmlInHiddenFrame(html) {
+  if (typeof document === 'undefined' || !document.body) return
+  const frame = document.createElement('iframe')
+  frame.setAttribute('aria-hidden', 'true')
+  frame.style.position = 'fixed'
+  frame.style.right = '0'
+  frame.style.bottom = '0'
+  frame.style.width = '1px'
+  frame.style.height = '1px'
+  frame.style.border = '0'
+  frame.style.opacity = '0'
+  document.body.appendChild(frame)
+  const doc = frame.contentWindow?.document
+  if (!doc) {
+    frame.remove()
+    return
+  }
+  let printed = false
+  const runPrint = () => {
+    if (printed) return
+    printed = true
+    try {
+      frame.contentWindow?.focus()
+      frame.contentWindow?.print()
+    } finally {
+      setTimeout(() => frame.remove(), 1200)
+    }
+  }
+  frame.onload = runPrint
+  doc.open()
+  doc.write(html)
+  doc.close()
+  setTimeout(runPrint, 350)
+}
+
+function qtyText(value) {
+  const num = Number(value) || 0
+  if (Number.isInteger(num)) return String(num)
+  return num.toLocaleString('vi-VN', { maximumFractionDigits: 2 })
+}
+
+function fulfillmentLabel(value) {
+  if (value === 'DINE_IN') return 'DINE IN'
+  if (value === 'PICKUP') return 'PICKUP'
+  if (value === 'DELIVERY') return 'DELIVERY'
+  if (value === 'TAKEAWAY') return 'TAKEAWAY'
+  return value || 'ORDER'
+}
+
+export function printCounterOrderAlert(order, printMeta = null) {
+  if (!order) return
+  const num = order.orderNumber != null ? `#${order.orderNumber}` : order.orderCode || 'New order'
+  const created = fmtPrintTime(order.createdAt || new Date().toISOString())
+  const table = order.fulfillmentType === 'DINE_IN'
+    ? (order.tableName || order.customerTableTag || order.tableId || '')
+    : ''
+  const childMap = buildChildMap(order.items || [])
+  const rootItems = (order.items || []).filter(item => !item.parentItemId)
+  const itemRows = rootItems.length ? rootItems.map(item => {
+    const qty = Number(item.quantity) || 1
+    const options = selectedOptionSummary(item)
+    const note = String(item.itemNotes || '').trim()
+    const children = childMap[String(item.id)] || []
+    const childHtml = children.length ? `<div class="sides">${children.map(child => {
+      const childQty = qtyText(child.quantity || 1)
+      return `<div>+ ${escapeHtml(childQty)} x ${escapeHtml(itemDisplayName(child))}</div>`
+    }).join('')}</div>` : ''
+    return `<div class="item">
+      <div class="item-main">
+        <span class="qty">${escapeHtml(qtyText(qty))} ${qty === 1 ? 'cup' : 'cups'}</span>
+        <span class="name">${escapeHtml(itemDisplayName(item))}</span>
+      </div>
+      ${options ? `<div class="muted">${escapeHtml(options)}</div>` : ''}
+      ${note ? `<div class="note">Note: ${escapeHtml(note)}</div>` : ''}
+      ${childHtml}
+    </div>`
+  }).join('') : '<div class="empty">No items</div>'
+  const notes = String(order.notes || '').trim()
+
+  const html = `<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Counter Alert ${escapeHtml(num)}</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: Arial, sans-serif;
+    width: 270px; margin: 0 auto; padding: 10px 8px;
+    color: #111; line-height: 1.25;
+  }
+  .top { text-align: center; border-bottom: 2px solid #111; padding-bottom: 7px; margin-bottom: 8px; }
+  .title { font-size: 18px; font-weight: 900; letter-spacing: 0; }
+  .num { font-size: 40px; font-weight: 900; line-height: 1; margin-top: 4px; }
+  .time { font-size: 11px; color: #555; margin-top: 4px; }
+  .info { font-size: 13px; margin: 7px 0; }
+  .line { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px dashed #ddd; padding: 3px 0; }
+  .label { color: #555; font-weight: 700; white-space: nowrap; }
+  .value { text-align: right; font-weight: 800; overflow-wrap: anywhere; }
+  .items { margin-top: 8px; }
+  .item { border-bottom: 1px dashed #ddd; padding: 6px 0; }
+  .item-main { display: flex; gap: 8px; align-items: baseline; }
+  .qty { min-width: 62px; font-size: 15px; font-weight: 900; }
+  .name { flex: 1; font-size: 15px; font-weight: 900; overflow-wrap: anywhere; }
+  .muted, .note, .sides { margin-left: 70px; margin-top: 2px; font-size: 11px; color: #444; overflow-wrap: anywhere; }
+  .note { font-weight: 800; color: #111; }
+  .order-note { margin-top: 8px; padding: 6px; border: 1px solid #111; font-size: 12px; font-weight: 800; overflow-wrap: anywhere; }
+  .empty { color: #777; font-size: 12px; padding: 8px 0; }
+  @media print { @page { margin: 0; } body { padding: 8px 6px; } }
+</style>
+</head>
+<body>
+  <div class="top">
+    <div class="title">NEW ORDER</div>
+    <div class="num">${escapeHtml(num)}</div>
+    ${created ? `<div class="time">${escapeHtml(created)}</div>` : ''}
+  </div>
+  ${printMetaHtml(printMeta)}
+  <div class="info">
+    <div class="line"><span class="label">Type</span><span class="value">${escapeHtml(fulfillmentLabel(order.fulfillmentType))}</span></div>
+    ${table ? `<div class="line"><span class="label">Table</span><span class="value">${escapeHtml(table)}</span></div>` : ''}
+    ${order.customerName ? `<div class="line"><span class="label">Name</span><span class="value">${escapeHtml(order.customerName)}</span></div>` : ''}
+    ${order.customerPhone ? `<div class="line"><span class="label">Phone</span><span class="value">${escapeHtml(order.customerPhone)}</span></div>` : ''}
+  </div>
+  <div class="items">${itemRows}</div>
+  ${notes ? `<div class="order-note">Order note: ${escapeHtml(notes)}</div>` : ''}
+</body>
+</html>`
+
+  printHtmlInHiddenFrame(html)
 }
 export function printWalkUpQr(seq, qrBase64, qrUrl, opts = {}, printMeta = null) {
   if (!qrBase64) return

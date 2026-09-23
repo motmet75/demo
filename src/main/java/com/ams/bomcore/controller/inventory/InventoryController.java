@@ -24,6 +24,8 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -96,6 +98,69 @@ public class InventoryController {
         String value = bodyString(body, key);
         return value == null ? null : new BigDecimal(value);
     }
+
+    private boolean hideCostFields() {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null) return false;
+        var roles = auth.getAuthorities().stream().map(GrantedAuthority::getAuthority).toList();
+        boolean counter = roles.contains("ROLE_COUNTER");
+        boolean full = roles.stream().anyMatch(role ->
+                role.equals("ROLE_SUPER_ADMIN") || role.equals("ROLE_ADMIN") || role.equals("ROLE_USER"));
+        return counter && !full;
+    }
+
+    private Map<String, Object> safeInventoryView(InventoryViewDTO row) {
+        Map<String, Object> map = new java.util.LinkedHashMap<>();
+        map.put("inventoryId", row.getInventoryId());
+        map.put("id", row.getInventoryId());
+        map.put("tenantId", row.getTenantId());
+        map.put("companyId", row.getCompanyId());
+        map.put("materialId", row.getMaterialId());
+        map.put("materialCode", row.getMaterialCode());
+        map.put("materialName", row.getMaterialName());
+        map.put("warehouseId", row.getWarehouseId());
+        map.put("warehouseCode", row.getWarehouseCode());
+        map.put("warehouseName", row.getWarehouseName());
+        map.put("quantityOnHand", row.getQuantityOnHand());
+        map.put("quantityTotal", row.getQuantityTotal());
+        map.put("quantityReserved", row.getQuantityReserved());
+        map.put("quantityLocked", row.getQuantityLocked());
+        BigDecimal onHand = row.getQuantityOnHand() == null ? BigDecimal.ZERO : row.getQuantityOnHand();
+        BigDecimal locked = row.getQuantityLocked() == null ? BigDecimal.ZERO : row.getQuantityLocked();
+        map.put("availableQuantity", onHand.subtract(locked).max(BigDecimal.ZERO));
+        map.put("batchNo", row.getBatchNo());
+        map.put("contractCode", row.getContractCode());
+        map.put("orderToDeduction", row.getOrderToDeduction());
+        map.put("unit", row.getUnit());
+        map.put("expirationDateTime", row.getExpirationDateTime());
+        map.put("productionDateTime", row.getProductionDateTime());
+        map.put("createdAt", row.getCreatedAt());
+        map.put("updatedAt", row.getUpdatedAt());
+        map.put("visible", row.getVisible());
+        map.put("approved", row.getApproved());
+        map.put("locked", row.getLocked());
+        map.put("materialQuotaPercentage", row.getMaterialQuotaPercentage());
+        map.put("userName", row.getUserName());
+        return map;
+    }
+
+    private Map<String, Object> safeInventoryEntity(InventoryEntity row) {
+        Map<String, Object> map = new java.util.LinkedHashMap<>();
+        map.put("id", row.getId());
+        map.put("inventoryId", row.getId());
+        map.put("tenantId", row.getTenantId());
+        map.put("companyId", row.getCompanyId());
+        map.put("materialCode", row.getMaterial() != null ? row.getMaterial().getMaterialCode() : null);
+        map.put("materialName", row.getMaterial() != null ? row.getMaterial().getMaterialName() : null);
+        map.put("warehouseCode", row.getWarehouse() != null ? row.getWarehouse().getCode() : null);
+        map.put("warehouseName", row.getWarehouse() != null ? row.getWarehouse().getName() : null);
+        map.put("quantityOnHand", row.getQuantityOnHand());
+        map.put("quantityReserved", row.getQuantityReserved());
+        map.put("quantityLocked", row.getQuantityLocked());
+        map.put("batchNo", row.getBatchNo());
+        map.put("unit", row.getUnit());
+        return map;
+    }
     @GetMapping
     public List<InventoryEntity> list(@RequestParam(value = "tenantId", required = false) UUID tenantId,
                                       @RequestParam(value = "companyId", required = false) UUID companyId,
@@ -135,10 +200,10 @@ public class InventoryController {
 
     // New view endpoint for grid display — returns DTO projection to avoid N+1 and lazy issues
     @GetMapping(path = "/view", produces = MediaType.APPLICATION_JSON_VALUE)
-    public List<InventoryViewDTO> listView(@RequestParam(value = "tenantId", required = false) UUID tenantId,
-                                           @RequestParam(value = "companyId", required = false) UUID companyId,
-                                           @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId,
-                                           @RequestHeader(value = "X-Company-Id", required = false) String headerCompanyId) {
+    public List<?> listView(@RequestParam(value = "tenantId", required = false) UUID tenantId,
+                            @RequestParam(value = "companyId", required = false) UUID companyId,
+                            @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId,
+                            @RequestHeader(value = "X-Company-Id", required = false) String headerCompanyId) {
         tenantId = resolveTenant(tenantId, headerTenantId);
         companyId = resolveCompany(companyId, headerCompanyId);
 
@@ -146,7 +211,8 @@ public class InventoryController {
             throw new IllegalArgumentException("tenantId and companyId are required");
         }
 
-        return inventoryService.listInventoryViewByTenantAndCompany(tenantId, companyId);
+        List<InventoryViewDTO> rows = inventoryService.listInventoryViewByTenantAndCompany(tenantId, companyId);
+        return hideCostFields() ? rows.stream().map(this::safeInventoryView).toList() : rows;
     }
 
     /**
@@ -167,10 +233,10 @@ public class InventoryController {
 			}
 
             BigDecimal qty = bodyDecimal(body, "quantity");
-            BigDecimal unitPrice = bodyDecimal(body, "unitPrice");
+            BigDecimal unitPrice = hideCostFields() ? null : bodyDecimal(body, "unitPrice");
             BigDecimal warehouseImportQuantity = bodyDecimal(body, "warehouseImportQuantity");
             BigDecimal bomUnitPerWarehouseUnit = bodyDecimal(body, "bomUnitPerWarehouseUnit");
-            BigDecimal warehouseImportUnitPrice = bodyDecimal(body, "warehouseImportUnitPrice");
+            BigDecimal warehouseImportUnitPrice = hideCostFields() ? null : bodyDecimal(body, "warehouseImportUnitPrice");
             String warehouseImportUnit = bodyString(body, "warehouseImportUnit");
             String currency = bodyString(body, "currency");
 
@@ -205,7 +271,7 @@ public class InventoryController {
                 String warehouseCode = (String) body.get("warehouseCode");
                 saved = inventoryService.addStock(materialCode, warehouseCode, qty, batchNo, expirationDateTime, productionDateTime, quantityReserved, quantityLocked, orderToDeduction, materialQuotaPercentage, tenantId, companyId, reason, createdBy, notes, invoiceId, unitPrice, currency, warehouseImportUnit, warehouseImportQuantity, bomUnitPerWarehouseUnit, warehouseImportUnitPrice);
             }
-            return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+            return ResponseEntity.status(HttpStatus.CREATED).body(hideCostFields() ? safeInventoryEntity(saved) : saved);
         } catch (InventoryException ex) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
         } catch (Exception ex) {
@@ -230,7 +296,7 @@ public class InventoryController {
 			}
 
             BigDecimal qty = new BigDecimal(String.valueOf(body.get("quantity")));
-            BigDecimal unitPrice = bodyDecimal(body, "unitPrice");
+            BigDecimal unitPrice = hideCostFields() ? null : bodyDecimal(body, "unitPrice");
             String currency = bodyString(body, "currency");
             String batchNo = body.get("batchNo") == null ? null : String.valueOf(body.get("batchNo"));
             String exp = body.get("expirationDateTime") == null ? null : String.valueOf(body.get("expirationDateTime"));
@@ -249,7 +315,7 @@ public class InventoryController {
 
             // quantityTotal is intentionally NOT accepted here — it is set only at import/initial creation
             InventoryEntity updated = inventoryService.updateStock(id, qty, null, batchNo, expirationDateTime, productionDateTime, quantityReserved, orderToDeduction, materialQuotaPercentage, tenantId, companyId, reason, createdBy, notes, unitPrice, currency);
-            return ResponseEntity.ok(updated);
+            return ResponseEntity.ok(hideCostFields() ? safeInventoryEntity(updated) : updated);
         } catch (InventoryException ex) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
         } catch (Exception ex) {

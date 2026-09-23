@@ -45,11 +45,16 @@ public class CompanyController {
                                  @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId,
                                  Authentication authentication) {
 
-        // Non-admin users are always scoped to their assignedTenantId
+        // Only super admin can inspect companies across tenants. Shop admins
+        // and other users are always scoped to their assignedTenantId.
         if (authentication != null && authentication.getPrincipal() instanceof User currentUser) {
-            boolean isAdmin = currentUser.getAuthorities() != null &&
-                    currentUser.getAuthorities().stream().anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
-            if (!isAdmin && StringUtils.hasText(currentUser.getAssignedTenantId())) {
+            boolean isSuperAdmin = currentUser.getAuthorities() != null &&
+                    currentUser.getAuthorities().stream()
+                            .anyMatch(a -> "ROLE_SUPER_ADMIN".equals(a.getAuthority()));
+            if (!isSuperAdmin) {
+                if (!StringUtils.hasText(currentUser.getAssignedTenantId())) {
+                    throw new IllegalArgumentException("User is not assigned to a tenant");
+                }
                 try {
                     tenantId = UUID.fromString(currentUser.getAssignedTenantId());
                 } catch (Exception e) {
@@ -204,4 +209,3 @@ public class CompanyController {
         public ErrorDto(String message) { this.message = message; }
     }
 }
-

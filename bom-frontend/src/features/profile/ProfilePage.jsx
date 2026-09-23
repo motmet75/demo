@@ -152,7 +152,7 @@ function ValidityCard({ company, user, isAdmin, onExtended }) {
 }
 
 export default function ProfilePage() {
-  const { user, refreshMe } = useAuth()
+  const { user, refreshMe, isSuperAdmin, hasFullBusinessAccess } = useAuth()
   const navigate = useNavigate()
   const { t } = useI18n()
   const [profile, setProfile] = useState(null)
@@ -442,7 +442,7 @@ export default function ProfilePage() {
         </Box>
       </Paper>
 
-      {p?.company && (
+      {hasFullBusinessAccess && p?.company && (
         <Paper elevation={1} sx={{ p: 2.5, mb: 3 }}>
           <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, flexWrap: 'wrap' }}>
             <EmailIcon color={orderNotifyEnabled ? 'success' : 'primary'} sx={{ mt: 0.5 }} />
@@ -568,110 +568,113 @@ export default function ProfilePage() {
         </DialogActions>
       </Dialog>
 
-      {/* Validity card — always show when company exists */}
-      {p?.company && (
+      {hasFullBusinessAccess && p?.company && (
         <ValidityCard
           company={p.company}
           user={p.user}
-          isAdmin={user?.isAdmin || user?.role === 'ADMIN'}
+          isAdmin={isSuperAdmin}
           onExtended={loadProfile}
         />
       )}
 
-      {/* Shop setup */}
-      <Typography variant="h6" sx={{ mb: 2 }}>Set up your shop</Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        One click to create tables, sample menu items (models), BOMs, and options — your shop is ready to take orders immediately.
-      </Typography>
+      {hasFullBusinessAccess && (
+        <>
+          {/* Shop setup */}
+          <Typography variant="h6" sx={{ mb: 2 }}>Set up your shop</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            One click to create tables, sample menu items (models), BOMs, and options — your shop is ready to take orders immediately.
+          </Typography>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 2 }}>
-        {/* Matcha shop */}
-        <Card variant="outlined" sx={{ transition: 'box-shadow .15s', '&:hover': { boxShadow: 4 } }}>
-          <CardContent sx={{ textAlign: 'center', py: 3 }}>
-            <StoreIcon sx={{ fontSize: 44, color: '#388e3c', mb: 1 }} />
-            <Typography variant="subtitle1" fontWeight={700} gutterBottom>Matcha Shop</Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              6 bàn · Cà Phê Đen, Cà Phê Sữa, Trà Xanh · tùy chọn đường & đá
-            </Typography>
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 2 }}>
+            {/* Matcha shop */}
+            <Card variant="outlined" sx={{ transition: 'box-shadow .15s', '&:hover': { boxShadow: 4 } }}>
+              <CardContent sx={{ textAlign: 'center', py: 3 }}>
+                <StoreIcon sx={{ fontSize: 44, color: '#388e3c', mb: 1 }} />
+                <Typography variant="subtitle1" fontWeight={700} gutterBottom>Matcha Shop</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  6 bàn · Cà Phê Đen, Cà Phê Sữa, Trà Xanh · tùy chọn đường & đá
+                </Typography>
+                <Button
+                  variant="contained" color="success" fullWidth
+                  disabled={!!setupLoading}
+                  onClick={() => handleSetup('MATCHA')}
+                  startIcon={setupLoading === 'MATCHA' ? <CircularProgress size={16} color="inherit" /> : <StoreIcon />}
+                >
+                  {setupLoading === 'MATCHA' ? 'Đang tạo...' : 'Tạo Matcha Shop'}
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* QR shop */}
+            <Card variant="outlined" sx={{ transition: 'box-shadow .15s', '&:hover': { boxShadow: 4 } }}>
+              <CardContent sx={{ textAlign: 'center', py: 3 }}>
+                <QrCodeIcon sx={{ fontSize: 44, color: '#1565c0', mb: 1 }} />
+                <Typography variant="subtitle1" fontWeight={700} gutterBottom>QR Shop</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  10 bàn QR-01–10 · khách quét để đặt hàng · thức uống mẫu
+                </Typography>
+                <Button
+                  variant="contained" color="primary" fullWidth
+                  disabled={!!setupLoading}
+                  onClick={() => handleSetup('QR')}
+                  startIcon={setupLoading === 'QR' ? <CircularProgress size={16} color="inherit" /> : <QrCodeIcon />}
+                >
+                  {setupLoading === 'QR' ? 'Đang tạo...' : 'Tạo QR Shop'}
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Quán cơm */}
+            <Card variant="outlined" sx={{ transition: 'box-shadow .15s', '&:hover': { boxShadow: 4 } }}>
+              <CardContent sx={{ textAlign: 'center', py: 3 }}>
+                <RiceBowlIcon sx={{ fontSize: 44, color: '#e65100', mb: 1 }} />
+                <Typography variant="subtitle1" fontWeight={700} gutterBottom>Quán Cơm</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  6 bàn · Cơm Tấm với topping sườn, bì, chả, trứng · thêm hành, ớt, tốp mỡ (miễn phí)
+                </Typography>
+                <Button
+                  variant="contained" fullWidth
+                  disabled={!!setupLoading}
+                  onClick={() => handleSetup('RICE')}
+                  startIcon={setupLoading === 'RICE' ? <CircularProgress size={16} color="inherit" /> : <RiceBowlIcon />}
+                  sx={{ bgcolor: '#e65100', '&:hover': { bgcolor: '#bf360c' } }}
+                >
+                  {setupLoading === 'RICE' ? 'Đang tạo...' : 'Tạo Quán Cơm'}
+                </Button>
+              </CardContent>
+            </Card>
+          </Box>
+
+          <Divider sx={{ mt: 4, mb: 3 }} />
+
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+            <WarningAmberIcon sx={{ color: 'error.main', fontSize: 20 }} />
+            <Typography variant="subtitle2" color="error.main">Danger Zone</Typography>
+          </Box>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Reset clears all tables, orders, models, BOMs and menu options for this company. This cannot be undone.
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
             <Button
-              variant="contained" color="success" fullWidth
-              disabled={!!setupLoading}
-              onClick={() => handleSetup('MATCHA')}
-              startIcon={setupLoading === 'MATCHA' ? <CircularProgress size={16} color="inherit" /> : <StoreIcon />}
+              variant="outlined"
+              color="error"
+              disabled={resetLoading || !!setupLoading}
+              onClick={handleResetClick}
+              startIcon={resetLoading
+                ? <CircularProgress size={16} color="inherit" />
+                : <DeleteForeverIcon />}
+              sx={{ minWidth: 180 }}
             >
-              {setupLoading === 'MATCHA' ? 'Đang tạo...' : 'Tạo Matcha Shop'}
+              {resetLoading ? 'Resetting...' : resetConfirm ? 'Confirm Reset?' : 'Reset Shop'}
             </Button>
-          </CardContent>
-        </Card>
-
-        {/* QR shop */}
-        <Card variant="outlined" sx={{ transition: 'box-shadow .15s', '&:hover': { boxShadow: 4 } }}>
-          <CardContent sx={{ textAlign: 'center', py: 3 }}>
-            <QrCodeIcon sx={{ fontSize: 44, color: '#1565c0', mb: 1 }} />
-            <Typography variant="subtitle1" fontWeight={700} gutterBottom>QR Shop</Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              10 bàn QR-01–10 · khách quét để đặt hàng · thức uống mẫu
-            </Typography>
-            <Button
-              variant="contained" color="primary" fullWidth
-              disabled={!!setupLoading}
-              onClick={() => handleSetup('QR')}
-              startIcon={setupLoading === 'QR' ? <CircularProgress size={16} color="inherit" /> : <QrCodeIcon />}
-            >
-              {setupLoading === 'QR' ? 'Đang tạo...' : 'Tạo QR Shop'}
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Quán cơm */}
-        <Card variant="outlined" sx={{ transition: 'box-shadow .15s', '&:hover': { boxShadow: 4 } }}>
-          <CardContent sx={{ textAlign: 'center', py: 3 }}>
-            <RiceBowlIcon sx={{ fontSize: 44, color: '#e65100', mb: 1 }} />
-            <Typography variant="subtitle1" fontWeight={700} gutterBottom>Quán Cơm</Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              6 bàn · Cơm Tấm với topping sườn, bì, chả, trứng · thêm hành, ớt, tốp mỡ (miễn phí)
-            </Typography>
-            <Button
-              variant="contained" fullWidth
-              disabled={!!setupLoading}
-              onClick={() => handleSetup('RICE')}
-              startIcon={setupLoading === 'RICE' ? <CircularProgress size={16} color="inherit" /> : <RiceBowlIcon />}
-              sx={{ bgcolor: '#e65100', '&:hover': { bgcolor: '#bf360c' } }}
-            >
-              {setupLoading === 'RICE' ? 'Đang tạo...' : 'Tạo Quán Cơm'}
-            </Button>
-          </CardContent>
-        </Card>
-      </Box>
-
-      <Divider sx={{ mt: 4, mb: 3 }} />
-
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-        <WarningAmberIcon sx={{ color: 'error.main', fontSize: 20 }} />
-        <Typography variant="subtitle2" color="error.main">Danger Zone</Typography>
-      </Box>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Reset clears all tables, orders, models, BOMs and menu options for this company. This cannot be undone.
-      </Typography>
-      <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-        <Button
-          variant="outlined"
-          color="error"
-          disabled={resetLoading || !!setupLoading}
-          onClick={handleResetClick}
-          startIcon={resetLoading
-            ? <CircularProgress size={16} color="inherit" />
-            : <DeleteForeverIcon />}
-          sx={{ minWidth: 180 }}
-        >
-          {resetLoading ? 'Resetting...' : resetConfirm ? 'Confirm Reset?' : 'Reset Shop'}
-        </Button>
-        {resetConfirm && (
-          <Button variant="text" size="small" onClick={() => { clearTimeout(resetTimerRef.current); setResetConfirm(false) }}>
-            Cancel
-          </Button>
-        )}
-      </Box>
+            {resetConfirm && (
+              <Button variant="text" size="small" onClick={() => { clearTimeout(resetTimerRef.current); setResetConfirm(false) }}>
+                Cancel
+              </Button>
+            )}
+          </Box>
+        </>
+      )}
 
       <Box sx={{ mt: 3, textAlign: 'center' }}>
         <Button variant="text" onClick={() => navigate('/shop-orders')}>

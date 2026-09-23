@@ -104,21 +104,25 @@ export function AppProvider({ children }) {
   // Called by AuthContext after login/me to restore last-used tenant+company.
   const restoreFromUser = (user) => {
     if (!user) return
-    const isAdmin = Array.isArray(user.authorities) && user.authorities.includes('ROLE_ADMIN')
+    const roles = Array.isArray(user.authorities) ? user.authorities : []
+    const isSuperAdmin = roles.includes('ROLE_SUPER_ADMIN')
 
     setState((s) => {
-      // Non-admin: tenant is locked to assignedTenantId; restore lastCompanyId
-      // only when it belongs to the same forced tenant.
-      if (!isAdmin) {
+      // Only super admin can roam across tenants. Shop admins/users are locked
+      // to the tenant assigned to their account.
+      if (!isSuperAdmin) {
         const forcedTenant = user.assignedTenantId ?? null
-        const restoredCompany = forcedTenant === s.tenantId
-          ? (user.lastCompanyId ?? s.companyId)
-          : (user.lastCompanyId ?? null)
+        const forcedCompany = user.assignedCompanyId ?? null
+        const restoredCompany = forcedCompany || (
+          forcedTenant === s.tenantId
+            ? (user.lastCompanyId ?? s.companyId)
+            : (user.lastCompanyId ?? null)
+        )
         if (forcedTenant === s.tenantId && restoredCompany === s.companyId) return s
         return { tenantId: forcedTenant, companyId: restoredCompany, companyName: s.companyName }
       }
 
-      // Admin: use DB values directly and never blend with stale localStorage.
+      // Super admin: use DB values directly and never blend with stale localStorage.
       // The backend now always mirrors exactly what was last selected, so these
       // values are always self-consistent (no stale cross-tenant companyId).
       const newTenantId = user.lastTenantId ?? null

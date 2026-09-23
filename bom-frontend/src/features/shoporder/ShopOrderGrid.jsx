@@ -6,6 +6,7 @@ import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
 import TextField from '@mui/material/TextField'
 import MenuItem from '@mui/material/MenuItem'
+import FormControlLabel from '@mui/material/FormControlLabel'
 import Alert from '@mui/material/Alert'
 import CircularProgress from '@mui/material/CircularProgress'
 import Dialog from '@mui/material/Dialog'
@@ -69,7 +70,7 @@ import {
   confirmScannedOrder,fetchOrderingStatus, closeShopToday, reopenShop,
    previewCloseToday, fetchShiftSchedule, saveShiftSchedule,
 } from '../../api/shopApi'
-import { printCupLabelsTracked, printOrderReceiptTracked, printOrderTagTracked, printCombinedReceiptTracked } from '../../utils/printWithHistory'
+import { printCounterOrderAlertTracked, printCupLabelsTracked, printOrderReceiptTracked, printOrderTagTracked, printCombinedReceiptTracked } from '../../utils/printWithHistory'
 import ShopOrderDetailModal from './ShopOrderDetailModal'
 import ManualOrderDialog from './ManualOrderDialog'
 import QrOrderDialog from './QrOrderDialog'
@@ -92,7 +93,13 @@ const SHOP_ORDER_CARD_SIZE_PREF = 'shop.orders.cardSize'
 const SHOP_ORDER_CONTRAST_PREF = 'shop.orders.highContrast'
 const SHOP_ORDER_STATUS_FILTER_SESSION_KEY = 'shop.orders.statusFilter'
 const SHOP_ORDER_PAYMENT_FILTER_SESSION_KEY = 'shop.orders.paymentFilter'
+const SHOP_ORDER_QUICK_CONFIRM_COOKIE = 'shop_quick_confirm_v1'
 const CUSTOMER_EDIT_HISTORY_KEY = 'shop.orders.customerEditHistory.v1'
+const DEFAULT_QUICK_CONFIRM = {
+  paid: false,
+  paymentMethod: 'CASH',
+  complete: false,
+}
 function readShopOrderPref(key, fallback) {
   try { return localStorage.getItem(key) || fallback } catch { return fallback }
 }
@@ -104,6 +111,38 @@ function readShopOrderSessionValue(key, fallback) {
 }
 function writeShopOrderSessionValue(key, value) {
   try { sessionStorage.setItem(key, value) } catch { /* browser storage may be blocked */ }
+}
+function readCookie(name) {
+  try {
+    const entry = document.cookie.split('; ').find(item => item.startsWith(`${name}=`))
+    return entry ? decodeURIComponent(entry.slice(name.length + 1)) : ''
+  } catch {
+    return ''
+  }
+}
+function writeCookie(name, value, maxAgeDays = 365) {
+  try {
+    document.cookie = `${name}=${encodeURIComponent(value)}; Max-Age=${maxAgeDays * 24 * 60 * 60}; Path=/; SameSite=Lax`
+  } catch { /* cookies may be blocked */ }
+}
+function readQuickConfirmPrefs() {
+  try {
+    const parsed = JSON.parse(readCookie(SHOP_ORDER_QUICK_CONFIRM_COOKIE) || '{}')
+    return {
+      paid: Boolean(parsed.paid),
+      paymentMethod: parsed.paymentMethod === 'BANK_QR' ? 'BANK_QR' : 'CASH',
+      complete: Boolean(parsed.complete),
+    }
+  } catch {
+    return DEFAULT_QUICK_CONFIRM
+  }
+}
+function writeQuickConfirmPrefs(value) {
+  writeCookie(SHOP_ORDER_QUICK_CONFIRM_COOKIE, JSON.stringify({
+    paid: Boolean(value?.paid),
+    paymentMethod: value?.paymentMethod === 'BANK_QR' ? 'BANK_QR' : 'CASH',
+    complete: Boolean(value?.complete),
+  }))
 }
 function localDateTimeInputValue(date) {
   const p = value => String(value).padStart(2, '0')
@@ -239,6 +278,41 @@ function replaceOrderInList(list, order, include) {
   const next = [...list]
   next[idx] = order
   return next
+}
+
+function QuickConfirmOptions({ value, onChange }) {
+  const update = (patch) => onChange?.({ ...value, ...patch })
+  const paid = Boolean(value?.paid || value?.complete)
+  return (
+    <Box sx={{ mt: 1.5, p: 1.25, border: '1px solid #dbeafe', bgcolor: '#f8fbff', borderRadius: 1.5 }}>
+      <Typography variant="caption" fontWeight={800} color="primary" sx={{ display: 'block', mb: 0.75 }}>
+        Tùy chọn nhanh
+      </Typography>
+      <Stack spacing={0.5}>
+        <FormControlLabel
+          control={<Checkbox size="small" checked={paid} disabled={Boolean(value?.complete)} onChange={e => update({ paid: e.target.checked })} />}
+          label="Đã thanh toán"
+          sx={{ '& .MuiFormControlLabel-label': { fontSize: 13, fontWeight: 700 } }}
+        />
+        <TextField
+          select
+          size="small"
+          label="Thanh toán"
+          value={value?.paymentMethod === 'BANK_QR' ? 'BANK_QR' : 'CASH'}
+          onChange={e => update({ paymentMethod: e.target.value })}
+          sx={{ maxWidth: 220 }}
+        >
+          <MenuItem value="CASH">Tiền mặt</MenuItem>
+          <MenuItem value="BANK_QR">CK QR</MenuItem>
+        </TextField>
+        <FormControlLabel
+          control={<Checkbox size="small" checked={Boolean(value?.complete)} onChange={e => update({ complete: e.target.checked, paid: e.target.checked ? true : value?.paid })} />}
+          label="Hoàn tất đơn"
+          sx={{ '& .MuiFormControlLabel-label': { fontSize: 13, fontWeight: 700 } }}
+        />
+      </Stack>
+    </Box>
+  )
 }
 
 
@@ -1454,9 +1528,10 @@ export default function ShopOrderGrid() {
   const [highContrastCards, setHighContrastCards] = useState(() => readShopOrderPref(SHOP_ORDER_CONTRAST_PREF, 'false') === 'true')
   const [slipFilter, setSlipFilter]     = useState('')
   const [confirmDlg, setConfirmDlg]     = useState(null)
+  const [quickConfirmPrefs, setQuickConfirmPrefs] = useState(readQuickConfirmPrefs)
   const [orderScannerOpen, setOrderScannerOpen] = useState(false)
   const [scannedOrders, setScannedOrders] = useState([])
-  // confirmDlg shape: { title, message, confirmLabel, confirmColor, requireReason, onConfirm }
+  // confirmDlg shape: { title, message, confirmLabel, confirmColor, requireReason, quickConfirm, onConfirm }
   const [pickupQrOrder, setPickupQrOrder] = useState(null)  // { id, orderNumber, orderCode, qrBase64 }
   const [trackQrOrder, setTrackQrOrder]   = useState(null)  // { order, qrBase64, loading }
   const [combinedToken, setCombinedToken] = useState(null)  // token string — opens CombinedReceiptDialog
@@ -1482,6 +1557,8 @@ export default function ShopOrderGrid() {
     : ''
   const seenCallIdsRef = React.useRef(new Set())
   const knownOrderIdsRef = React.useRef(new Set())
+  const autoPrintedOrderIdsRef = React.useRef(new Set())
+  const quickConfirmPrefsRef = React.useRef(quickConfirmPrefs)
   const knownEditingRef = React.useRef(new Map())
   const knownSeatRef = React.useRef(new Map())
   const orderPollReadyRef = React.useRef(false)
@@ -1503,6 +1580,30 @@ export default function ShopOrderGrid() {
     })
   }, [])
 
+  const printCounterAlerts = useCallback((orders) => {
+    const list = Array.isArray(orders) ? orders.filter(order => order?.id) : []
+    if (!list.length) return
+    const run = async () => {
+      let config = bankConfig
+      if (config == null) {
+        try {
+          const { data } = await fetchBankConfig()
+          config = data || {}
+          setBankConfig(config)
+        } catch {
+          config = {}
+        }
+      }
+      if (!config?.autoPrintNewOrderAlert) return
+      list.forEach(order => {
+        if (autoPrintedOrderIdsRef.current.has(order.id)) return
+        autoPrintedOrderIdsRef.current.add(order.id)
+        printCounterOrderAlertTracked(order, setError)
+      })
+    }
+    run().catch(() => {})
+  }, [bankConfig])
+
   const notifyNewOrders = useCallback((orders) => {
     const list = Array.isArray(orders) ? orders : []
     const fresh = list.filter(order => order?.id && !knownOrderIdsRef.current.has(order.id))
@@ -1515,6 +1616,7 @@ export default function ShopOrderGrid() {
       return
     }
     if (fresh.length) {
+      printCounterAlerts(fresh)
       playNewOrderSound()
       const first = fresh[0]
       setNewOrderNotice({ count: fresh.length, orderNumber: first.orderNumber ?? null, orderCode: first.orderCode || '', at: Date.now() })
@@ -1535,7 +1637,7 @@ export default function ShopOrderGrid() {
       setCustomerEditHistory(prev => [...entries, ...prev].slice(0, 50))
       setCustomerEditNotice({ count: entries.length, ...entries[0] })
     }
-  }, [rememberOrders])
+  }, [printCounterAlerts, rememberOrders])
 
   useEffect(() => {
     try { localStorage.setItem(CUSTOMER_EDIT_HISTORY_KEY, JSON.stringify(customerEditHistory)) } catch { /* storage may be blocked */ }
@@ -1642,6 +1744,9 @@ export default function ShopOrderGrid() {
     fetchShopTables().then(({ data }) => setTables(Array.isArray(data) ? data : [])).catch(() => {})
   }, [])
   useEffect(() => {
+    fetchBankConfig().then(({ data }) => setBankConfig(data || {})).catch(() => setBankConfig({}))
+  }, [])
+  useEffect(() => {
     fetchModels().then(list => {
       const imageMap = {}
       const metaMap = {}
@@ -1695,16 +1800,22 @@ export default function ShopOrderGrid() {
 
         serviceCalls.forEach(() => playStaffCallSound())
 
+        const notifyOrderIds = new Set(newOrderCalls
+          .filter(c => orderPollReadyRef.current && c.orderId && !knownOrderIdsRef.current.has(c.orderId))
+          .map(c => c.orderId))
         const callsWithOrders = unseen.filter(c => c.orderId)
         if (callsWithOrders.length) {
-          await Promise.all(callsWithOrders.map(c => refreshOrderCard(c.orderId).catch(() => null)))
+          const refreshed = await Promise.all(callsWithOrders.map(c => refreshOrderCard(c.orderId).catch(() => null)))
+          if (notifyOrderIds.size) {
+            printCounterAlerts(refreshed.filter(order => order?.id && notifyOrderIds.has(order.id)))
+          }
         }
       } catch { /* silent */ }
     }
     poll()
     const id = setInterval(poll, 10000)
     return () => { cancelled = true; clearInterval(id) }
-  }, [refreshOrderCard])
+  }, [printCounterAlerts, refreshOrderCard])
   useEffect(() => {
     let cancelled = false
     const pollOrders = async () => {
@@ -1817,6 +1928,20 @@ export default function ShopOrderGrid() {
   }
 
   const askConfirm = (cfg, fn) => setConfirmDlg({ ...cfg, onConfirm: async (reason) => { setConfirmDlg(null); await fn(reason) } })
+
+  const updateQuickConfirmPrefs = useCallback((next) => {
+    const normalized = {
+      paid: Boolean(next?.paid || next?.complete),
+      paymentMethod: next?.paymentMethod === 'BANK_QR' ? 'BANK_QR' : 'CASH',
+      complete: Boolean(next?.complete),
+    }
+    setQuickConfirmPrefs(normalized)
+    writeQuickConfirmPrefs(normalized)
+  }, [])
+
+  useEffect(() => {
+    quickConfirmPrefsRef.current = quickConfirmPrefs
+  }, [quickConfirmPrefs])
 
   const handleBoardAction = (type, id, orderNum) => {
     const configs = {
@@ -1990,6 +2115,32 @@ export default function ShopOrderGrid() {
     } catch (e) { setError(e.message || t('shopOrder.grid.switchPaymentMethodFailed')) }
   }
 
+  const handleQuickConfirm = async (row) => {
+    const currentPrefs = quickConfirmPrefsRef.current || DEFAULT_QUICK_CONFIRM
+    const prefs = {
+      paid: Boolean(currentPrefs.paid || currentPrefs.complete),
+      paymentMethod: currentPrefs.paymentMethod === 'BANK_QR' ? 'BANK_QR' : 'CASH',
+      complete: Boolean(currentPrefs.complete),
+    }
+    writeQuickConfirmPrefs(prefs)
+    try {
+      await applyOrderResult(await confirmShopOrder(row.id), row.id)
+      if (prefs.paymentMethod === 'BANK_QR') {
+        await applyOrderResult(await switchToQrPayment(row.id), row.id, t('shopOrder.grid.switchPaymentMethodFailed'))
+      }
+      if (prefs.paid || prefs.complete) {
+        await applyOrderResult(await markOrderPaid(row.id), row.id)
+      }
+      if (prefs.complete) {
+        await applyOrderResult(await prepareShopOrder(row.id), row.id)
+        await applyOrderResult(await readyShopOrder(row.id), row.id)
+        await applyOrderResult(await completeShopOrder(row.id), row.id)
+      }
+    } catch (e) {
+      setError(e.message || 'Action failed')
+    }
+  }
+
   const handleRevertToCash = async (row) => {
     try {
       await applyOrderResult(await revertToCash(row.id), row.id, t('shopOrder.grid.revertPaymentFailed'))
@@ -2084,7 +2235,13 @@ export default function ShopOrderGrid() {
       try { await applyOrderResult(await setShopOrderNumber(id, n), id, t('shopOrder.grid.updateNumberFailed')) }
       catch (e) { setError(e.message || t('shopOrder.grid.updateNumberFailed')) }
     },
-    confirm:    (row) => askConfirm({ title: t('shopOrder.confirm.confirmTitle'), message: t('shopOrder.confirm.confirmMessage', { order: row.orderNumber ?? row.orderCode }), confirmLabel: t('shopOrder.grid.confirm'), confirmColor: 'primary' }, () => act(confirmShopOrder, row.id)),
+    confirm:    (row) => askConfirm({
+      title: t('shopOrder.confirm.confirmTitle'),
+      message: t('shopOrder.confirm.confirmMessage', { order: row.orderNumber ?? row.orderCode }),
+      confirmLabel: t('shopOrder.grid.confirm'),
+      confirmColor: 'primary',
+      quickConfirm: true
+    }, () => handleQuickConfirm(row)),
     prepare:    (row) => askConfirm({ title: t('shopOrder.confirm.prepareTitle'), message: t('shopOrder.confirm.prepareMessage', { order: row.orderNumber ?? row.orderCode }), confirmLabel: t('shopOrder.confirm.startLabel'), confirmColor: 'warning' }, () => act(prepareShopOrder, row.id)),
     ready:      (row) => askConfirm({ title: t('shopOrder.confirm.readyTitle'), message: t('shopOrder.confirm.readyMessage', { order: row.orderNumber ?? row.orderCode }), confirmLabel: t('shopOrder.confirm.markReadyLabel'), confirmColor: 'success' }, () => act(readyShopOrder, row.id, () => broadcastReady())),
     complete:   (row) => askConfirm({ title: t('shopOrder.confirm.completeTitle'), message: t('shopOrder.confirm.completeMessage', { order: row.orderNumber ?? row.orderCode }), confirmLabel: t('shopOrder.confirm.completeLabel'), confirmColor: 'success' }, () => act(completeShopOrder, row.id)),
@@ -2609,6 +2766,7 @@ export default function ShopOrderGrid() {
           else reload()
         }}
         defaultItems={manualDefaults}
+        autoPrintCounterAlert={Boolean(bankConfig?.autoPrintNewOrderAlert)}
       />
       <VoucherQrScanDialog
         open={orderScannerOpen}
@@ -2939,7 +3097,12 @@ export default function ShopOrderGrid() {
           reasonLabel={confirmDlg.reasonLabel}
           onConfirm={confirmDlg.onConfirm}
           onCancel={() => setConfirmDlg(null)}
-        />
+        >
+          {confirmDlg.quickConfirm && (
+            <QuickConfirmOptions value={quickConfirmPrefs} onChange={updateQuickConfirmPrefs} />
+          )}
+          {confirmDlg.children}
+        </ConfirmActionDialog>
       )}
 
       {/* Pickup QR dialog */}

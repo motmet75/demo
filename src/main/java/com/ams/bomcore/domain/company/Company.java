@@ -117,6 +117,12 @@ public class Company {
     @Column(name = "new_order_notification_enabled")
     private Boolean newOrderNotificationEnabled = false;
 
+    @Column(name = "shop_auto_print_new_order_alert")
+    private Boolean shopAutoPrintNewOrderAlert = false;
+
+    @Column(name = "shop_customer_order_print_alert_scope", length = 30)
+    private String shopCustomerOrderPrintAlertScope = "OFF";
+
     @Column(name = "shop_booking_enabled")
     private Boolean shopBookingEnabled = false;
 
@@ -196,6 +202,10 @@ public class Company {
     public void setNewOrderNotificationEmails(String newOrderNotificationEmails) { this.newOrderNotificationEmails = newOrderNotificationEmails; }
     public Boolean getNewOrderNotificationEnabled() { return Boolean.TRUE.equals(newOrderNotificationEnabled); }
     public void setNewOrderNotificationEnabled(Boolean newOrderNotificationEnabled) { this.newOrderNotificationEnabled = newOrderNotificationEnabled; }
+    public Boolean getShopAutoPrintNewOrderAlert() { return Boolean.TRUE.equals(shopAutoPrintNewOrderAlert); }
+    public void setShopAutoPrintNewOrderAlert(Boolean shopAutoPrintNewOrderAlert) { this.shopAutoPrintNewOrderAlert = shopAutoPrintNewOrderAlert; }
+    public String getShopCustomerOrderPrintAlertScope() { return shopCustomerOrderPrintAlertScope != null ? shopCustomerOrderPrintAlertScope : "OFF"; }
+    public void setShopCustomerOrderPrintAlertScope(String shopCustomerOrderPrintAlertScope) { this.shopCustomerOrderPrintAlertScope = shopCustomerOrderPrintAlertScope; }
 
     @PrePersist
     private void prePersist() {

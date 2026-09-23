@@ -35,6 +35,7 @@ export default function ConfirmActionDialog({
   reasonLabel,
   onConfirm,
   onCancel,
+  children,
 }) {
   const { t } = useI18n()
   const [reason, setReason]   = useState('')
@@ -75,6 +76,7 @@ export default function ConfirmActionDialog({
             {message}
           </Typography>
         )}
+        {children}
         {requireReason && (
           <TextField
             autoFocus

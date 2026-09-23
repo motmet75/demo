@@ -41,6 +41,7 @@ public class TenantController {
     }
 
     @GetMapping
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<?> list() {
         try {
             List<TenantDto> result = tenantRepository.findAll().stream()
@@ -55,7 +56,7 @@ public class TenantController {
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     @Transactional
     public ResponseEntity<?> create(@RequestBody CreateTenantDto dto) {
         var existing = tenantRepository.findByTenantCode(dto.tenantCode);
@@ -79,7 +80,7 @@ public class TenantController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<?> update(@PathVariable("id") UUID id, @RequestBody CreateTenantDto dto) {
         var opt = tenantRepository.findById(id);
         if (opt.isEmpty()) {
@@ -107,7 +108,7 @@ public class TenantController {
     }
 
     @PatchMapping("/{id}/activate")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<?> activate(@PathVariable("id") UUID id, @RequestBody ActivateDto dto) {
         var opt = tenantRepository.findById(id);
         if (opt.isEmpty()) {

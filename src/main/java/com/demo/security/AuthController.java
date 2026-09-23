@@ -257,7 +257,9 @@ public AuthController(AuthenticationManager authenticationManager,
         // Re-fetch from DB so lastTenantId / lastCompanyId are current
         User sessionUser = (User) authentication.getPrincipal();
         User dbUser = userRepository.findByUsernameIgnoreCase(sessionUser.getUsername()).orElse(sessionUser);
-        dbUser.setAuthorities(sessionUser.getAuthorities());
+        List<Authority> latestAuthorities = authorityRepository.findByUsername(dbUser.getUsername());
+        dbUser.setAuthorities(latestAuthorities);
+        sessionUser.setAuthorities(latestAuthorities);
         return ResponseEntity.ok(new AuthResponse(true, toView(dbUser), "Authenticated"));
     }
 
@@ -284,21 +286,36 @@ public AuthController(AuthenticationManager authenticationManager,
                     .body(new AuthResponse(false, null, "User not found"));
         }
 
-        // Always mirror exactly what the frontend has selected.
-        // Non-null + non-blank  → save the value.
-        // Null or blank         → clear the field (null in DB).
-        // This ensures the DB never holds a stale context after the user
-        // changes or clears either the tenant or the company.
-        user.setLastTenantId(
-            (request.tenantId() != null && !request.tenantId().isBlank())
-                ? request.tenantId() : null);
-        user.setLastCompanyId(
-            (request.companyId() != null && !request.companyId().isBlank())
-                ? request.companyId() : null);
+        List<Authority> latestAuthorities = authorityRepository.findByUsername(user.getUsername());
+        user.setAuthorities(latestAuthorities);
+        sessionUser.setAuthorities(latestAuthorities);
+        boolean superAdmin = hasAuthority(user, "ROLE_SUPER_ADMIN");
+
+        if (superAdmin) {
+            // Super admin can roam across tenants; mirror exactly what the
+            // frontend selected so clearing selectors also clears DB context.
+            user.setLastTenantId(normalizedId(request.tenantId()));
+            user.setLastCompanyId(normalizedId(request.companyId()));
+        } else {
+            // Shop admins/users are locked to their assigned tenant. If a shop
+            // admin is assigned to a company, lock that too.
+            user.setLastTenantId(normalizedId(user.getAssignedTenantId()));
+            user.setLastCompanyId(normalizedId(user.getAssignedCompanyId()) != null
+                    ? normalizedId(user.getAssignedCompanyId())
+                    : normalizedId(request.companyId()));
+        }
         userRepository.save(user);
 
-        user.setAuthorities(sessionUser.getAuthorities());
         return ResponseEntity.ok(new AuthResponse(true, toView(user), "Context saved"));
+    }
+
+    private String normalizedId(String value) {
+        return (value != null && !value.isBlank()) ? value : null;
+    }
+
+    private boolean hasAuthority(User user, String authority) {
+        return user.getAuthorities() != null && user.getAuthorities().stream()
+                .anyMatch(item -> authority.equals(item.getAuthority()));
     }
 
     // -------------------------------------------------------------------------

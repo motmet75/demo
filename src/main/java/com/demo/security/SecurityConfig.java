@@ -26,6 +26,10 @@ import jakarta.servlet.http.HttpServletRequest;
 @EnableMethodSecurity
 public class SecurityConfig {
 
+    private static final String[] FULL_BUSINESS_ROLES = {"SUPER_ADMIN", "ADMIN", "USER"};
+    private static final String[] SHOP_ORDERING_ROLES = {"SUPER_ADMIN", "ADMIN", "USER", "SHOP_ORDERING", "COUNTER"};
+    private static final String[] COUNTER_OPERATION_ROLES = {"SUPER_ADMIN", "ADMIN", "USER", "COUNTER"};
+
     private final GoogleOAuth2UserService googleOAuth2UserService;
 
     public SecurityConfig(GoogleOAuth2UserService googleOAuth2UserService) {
@@ -79,15 +83,57 @@ public class SecurityConfig {
                 .requestMatchers("/auth/quick-login/generate").authenticated()
                 .requestMatchers("/oauth2/**").permitAll()
                 .requestMatchers("/dang-nhap/oauth2/**").permitAll()
-                .requestMatchers("/bom/**").authenticated()
                 .requestMatchers(HttpMethod.PATCH, "/auth/profile/email").authenticated()
-                .requestMatchers(HttpMethod.PATCH, "/auth/profile/order-notification").authenticated()
+                .requestMatchers(HttpMethod.PATCH, "/auth/profile/order-notification").hasAnyRole(FULL_BUSINESS_ROLES)
+                .requestMatchers("/auth/shop/reset", "/auth/shop/setup").hasAnyRole(FULL_BUSINESS_ROLES)
                 .requestMatchers("/auth/password-otp/**").authenticated()
+                .requestMatchers("/auth/admin/**").hasRole("SUPER_ADMIN")
                 .requestMatchers("/auth/login", "/auth/login-otp/**", "/auth/login-totp/**", "/auth/logout", "/auth/me", "/auth/change-password", "/auth/last-context", "/auth/profile", "/error").permitAll()
-                .requestMatchers("/bom/etl/**").authenticated()
-                .requestMatchers(HttpMethod.GET, "/bom/tenants", "/bom/tenants/**").permitAll()
+                .requestMatchers("/admin/users/**").hasAnyRole("SUPER_ADMIN", "ADMIN")
+                .requestMatchers("/admin/**").hasRole("SUPER_ADMIN")
+                .requestMatchers("/bom/etl/**").hasRole("SUPER_ADMIN")
+                .requestMatchers(HttpMethod.GET, "/bom/tenants", "/bom/tenants/**").hasRole("SUPER_ADMIN")
+                .requestMatchers(HttpMethod.GET, "/bom/models/*/cost-estimate").hasAnyRole(FULL_BUSINESS_ROLES)
+                .requestMatchers("/bom/models/**").hasAnyRole(COUNTER_OPERATION_ROLES)
+                .requestMatchers(HttpMethod.GET, "/bom/materials").hasAnyRole(COUNTER_OPERATION_ROLES)
+                .requestMatchers("/bom/warehouses/**").hasAnyRole(COUNTER_OPERATION_ROLES)
+                .requestMatchers(HttpMethod.GET, "/bom/inventory/view", "/bom/inventory/alerts").hasAnyRole(COUNTER_OPERATION_ROLES)
+                .requestMatchers(HttpMethod.POST, "/bom/inventory", "/bom/inventory/*/reserve", "/bom/inventory/*/release").hasAnyRole(COUNTER_OPERATION_ROLES)
+                .requestMatchers(HttpMethod.PUT, "/bom/inventory/*").hasAnyRole(COUNTER_OPERATION_ROLES)
+                .requestMatchers("/bom/**", "/orders/**", "/order-lines/**").hasAnyRole(FULL_BUSINESS_ROLES)
                 .requestMatchers("/shop/public/**").permitAll()
-                .requestMatchers("/shop/staff/**").authenticated()
+                .requestMatchers("/shop/staff/counter/**").hasAnyRole(COUNTER_OPERATION_ROLES)
+                .requestMatchers("/shop/staff/menu-options/**").hasAnyRole(COUNTER_OPERATION_ROLES)
+                .requestMatchers(HttpMethod.GET, "/shop/staff/materials/menu-availability/**").hasAnyRole(COUNTER_OPERATION_ROLES)
+                .requestMatchers(HttpMethod.PUT, "/shop/staff/materials/menu-availability/**").hasAnyRole(COUNTER_OPERATION_ROLES)
+                .requestMatchers(HttpMethod.GET,
+                    "/shop/staff/menu-items",
+                    "/shop/staff/menu-items/**",
+                    "/shop/staff/menu-options",
+                    "/shop/staff/menu-options/**"
+                ).hasAnyRole(SHOP_ORDERING_ROLES)
+                .requestMatchers(
+                    "/shop/staff/bank-config/**",
+                    "/shop/staff/allowed-public-ips/**",
+                    "/shop/staff/tokens/**",
+                    "/shop/staff/display-board/token",
+                    "/shop/staff/menu-options/**",
+                    "/shop/staff/menu-items/**",
+                    "/shop/staff/materials/**",
+                    "/shop/staff/material-audit/**",
+                    "/shop/staff/sales-report",
+                    "/shop/staff/vouchers/**",
+                    "/shop/staff/customers/**",
+                    "/shop/staff/orders/sequence/reset",
+                    "/shop/staff/orders/*/number",
+                    "/shop/staff/orders/*/discount",
+                    "/shop/staff/orders/*/voucher",
+                    "/shop/staff/orders/*/customer",
+                    "/shop/staff/orders/*/earn-points",
+                    "/shop/staff/orders/*/material-audit",
+                    "/shop/staff/orders/*/material-audit/**"
+                ).hasAnyRole(FULL_BUSINESS_ROLES)
+                .requestMatchers("/shop/staff/**").hasAnyRole(SHOP_ORDERING_ROLES)
                 .anyRequest().permitAll()
             )
             .oauth2Login(oauth2 -> oauth2

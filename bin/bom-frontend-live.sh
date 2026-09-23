@@ -8,6 +8,15 @@ log_file=${DEMO_FRONTEND_LOG_FILE:-$demo_home/bom-frontend-live.log}
 host=${DEMO_FRONTEND_HOST:-127.0.0.1}
 port=${DEMO_FRONTEND_PORT:-5173}
 vite_bin="$frontend_home/node_modules/vite/bin/vite.js"
+preferred_node=/home/jason/.nvm/versions/node/v20.20.0/bin/node
+node_bin=${DEMO_FRONTEND_NODE:-}
+if [[ -z $node_bin ]]; then
+    if [[ -x $preferred_node ]]; then
+        node_bin=$preferred_node
+    else
+        node_bin=node
+    fi
+fi
 
 running_pid() {
     [[ -f $pid_file ]] || return 1
@@ -31,7 +40,7 @@ case "${1:-}" in
         [[ -f $vite_bin ]] || { echo "Vite is missing: $vite_bin" >&2; exit 1; }
         rm -f -- "$pid_file"
         cd "$frontend_home"
-        nohup node "$vite_bin" preview --host "$host" --port "$port" --strictPort >>"$log_file" 2>&1 &
+        nohup "$node_bin" "$vite_bin" preview --host "$host" --port "$port" --strictPort >>"$log_file" 2>&1 &
         pid=$!
         echo "$pid" > "$pid_file"
         sleep 1

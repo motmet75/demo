@@ -20,8 +20,7 @@ import DeleteIcon from '@mui/icons-material/Delete'
 import SaveIcon from '@mui/icons-material/Save'
 import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd'
 import CloseIcon from '@mui/icons-material/Close'
-import { fetchModels } from '../../api/modelApi'
-import { fetchMenuOptions, updateOrderItems } from '../../api/shopApi'
+import { fetchMenuOptions, updateOrderItems, fetchStaffMenuItems } from '../../api/shopApi'
 import { useI18n } from '../../i18n/I18nContext'
 
 const fmt       = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
@@ -69,7 +68,7 @@ export default function EditOrderDialog({ open, order, onClose, onUpdated }) {
     setItems(initial)
     setSideForm({})
     Promise.all([
-      fetchModels(),
+      fetchStaffMenuItems(),
       ...initial.map(i =>
         fetchMenuOptions(i.modelId)
           .then(({ data }) => ({ modelId: i.modelId, opts: Array.isArray(data) ? data : [] }))

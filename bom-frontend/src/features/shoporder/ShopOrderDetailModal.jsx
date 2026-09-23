@@ -36,6 +36,7 @@ import SplitBillDialog from './SplitBillDialog'
 import VoucherQrScanDialog from './VoucherQrScanDialog'
 import { useI18n } from '../../i18n/I18nContext'
 import { localizedModelName, localizedSelectedOptions } from '../../i18n/menuLocalization'
+import { useAuth } from '../../context/useAuth'
 
 const fmt     = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : '—'
 const payableAmount = (order) => Math.max(0, Number(order?.totalAmount || 0) - Number(order?.discountAmount || 0))
@@ -43,10 +44,6 @@ const splitCashPortion = (order) => Math.max(0, Math.min(Number(order?.splitCash
 const splitQrPortion = (order) => Math.max(0, payableAmount(order) - splitCashPortion(order))
 const fmtDots = (digits) => digits ? Number(digits).toLocaleString('vi-VN') : ''
 const stripNonDigits = (s) => s.replace(/[^0-9]/g, '')
-const pct = (sell, raw) => {
-  if (!sell || !raw || Number(raw) === 0) return '—'
-  return ((Number(sell) - Number(raw)) / Number(sell) * 100).toFixed(1) + '%'
-}
 const dateFmt = (v) => v ? new Date(v).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' }) : '—'
 
 function extractCustomerLookup(raw) {
@@ -151,6 +148,7 @@ function buildItemGroups(items) {
 
 export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, displaySize = 'normal' }) {
   const { language, t } = useI18n()
+  const { hasFullBusinessAccess } = useAuth()
   const large = displaySize === 'large'
   const [tagQr, setTagQr]           = useState(null)
   const [qrLoading, setQrLoading]   = useState(false)
@@ -205,14 +203,14 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
     setDiscountAmt(targetBill?.discountAmount ? String(targetBill.discountAmount) : (order.discountAmount ? String(order.discountAmount) : ''))
     setVoucherCode(targetBill?.voucherCode || order.voucherCode || '')
     setLinkedCustomer(null); setChangingCustomer(false); setCustSearch(''); setCustResults([]); setCustHistory(null); setVoucherDetail(null); setVoucherDetailOpen(false)
-    if (order.customerId) {
+    if (hasFullBusinessAccess && order.customerId) {
       fetchCustomers().then(({ data }) => {
         const c = (data || []).find(x => x.id === order.customerId)
         if (c) setLinkedCustomer(c)
       }).catch(() => {})
     }
-    if (!bankCfg) fetchBankConfig().then(({ data }) => setBankCfg(data)).catch(() => {})
-  }, [open, order?.id])
+    if (hasFullBusinessAccess && !bankCfg) fetchBankConfig().then(({ data }) => setBankCfg(data)).catch(() => {})
+  }, [open, order?.id, hasFullBusinessAccess])
 
   const handleRevert = async () => {
     setReverting(true); setError('')
@@ -580,8 +578,6 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
                 <TableCell>{t('shopOrder.detail.itemOptions')}</TableCell>
                 <TableCell align="center" width={52}>{t('shopOrder.detail.qty')}</TableCell>
                 <TableCell align="right" width={100}>{t('shopOrder.detail.price')}</TableCell>
-                <TableCell align="right" width={80}>{t('shopOrder.detail.raw')}</TableCell>
-                <TableCell align="right" width={72}>{t('shopOrder.detail.margin')}</TableCell>
                 <TableCell align="right" width={110}>{t('common.total')}</TableCell>
               </TableRow>
             </TableHead>
@@ -611,8 +607,6 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
                   </TableCell>
                   <TableCell align="center"><Typography fontWeight={700} fontSize={large ? 17 : 14}>{Number(root.quantity)}</Typography></TableCell>
                   <TableCell align="right">{fmt(root.unitPrice)}</TableCell>
-                  <TableCell align="right"><Typography variant="caption" color="text.secondary">{fmt(root.unitRawCost)}</Typography></TableCell>
-                  <TableCell align="right"><Typography variant="caption" color="success.main">{pct(root.unitPrice, root.unitRawCost)}</Typography></TableCell>
                   <TableCell align="right"><Typography fontWeight={700} fontSize={large ? 17 : 14} color="primary">{fmt(root.lineTotal)}</Typography></TableCell>
                 </TableRow>,
 
@@ -635,8 +629,6 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
                       </TableCell>
                       <TableCell align="center"><Typography fontWeight={800} fontSize={large ? 16 : 13} color="#6366f1">{effectiveQty}</Typography></TableCell>
                       <TableCell align="right"><Typography fontSize={large ? 15 : 13} color="text.secondary">{fmt(child.unitPrice)}</Typography></TableCell>
-                      <TableCell align="right"><Typography variant="caption" color="text.secondary">{fmt(child.unitRawCost)}</Typography></TableCell>
-                      <TableCell align="right"><Typography variant="caption" color="success.main">{pct(child.unitPrice, child.unitRawCost)}</Typography></TableCell>
                       <TableCell align="right"><Typography fontWeight={700} fontSize={large ? 16 : 13} color="#6366f1">{fmt(effectiveTotal)}</Typography></TableCell>
                     </TableRow>
                   )
@@ -645,7 +637,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
                 /* ── Subtotal row (only when children exist) ── */
                 children.length > 0 && (
                   <TableRow key={`sub-${root.id}`} sx={{ bgcolor: '#f0f4ff' }}>
-                    <TableCell colSpan={5} align="right">
+                    <TableCell colSpan={3} align="right">
                       <Typography variant="caption" sx={{ color: '#64748b', fontStyle: 'italic' }}>
                         subtotal ({root._label.replace('.', '')} {localizedModelName(root, language)})
                       </Typography>
@@ -678,7 +670,6 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
                 </Box>
               </Box>
               <Box sx={{ textAlign: 'right' }}>
-                <Typography variant="body2" color="text.secondary">{t('shopOrder.detail.rawCost')} {fmt(order.totalRawCost)}</Typography>
                 {delivery > 0 && (
                   <Typography variant="body2" color="text.secondary">{t('shopOrder.common.items')}: {fmt(itemsTotal)} + {t('shopOrder.detail.delivery')} {fmt(delivery)}</Typography>
                 )}
@@ -703,7 +694,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
           })()}
 
           {/* ── Discount / Voucher ────────────────────────────────── */}
-          {!isFinal && (
+          {hasFullBusinessAccess && !isFinal && (
             <Box sx={{ mb: 1.5, p: 1.25, bgcolor: '#fff9f0', border: '1px solid #ffe0b2', borderRadius: 1.5 }}>
               <Typography variant="caption" fontWeight={800} color="#e65100"
                 sx={{ textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', mb: 1 }}>
@@ -768,6 +759,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
           )}
 
           {/* ── Customer Link ──────────────────────────────────────── */}
+          {hasFullBusinessAccess && (
           <Box sx={{ mb: 1.5, p: 1.25, bgcolor: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 1.5 }}>
             <Typography variant="caption" fontWeight={800} color="text.secondary"
               sx={{ textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', mb: 1 }}>
@@ -884,6 +876,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
               </Box>
             )}
           </Box>
+          )}
 
           {/* ── Payment Panel ─────────────────────────────────────── */}
           <Divider sx={{ mb: 1.5 }} />

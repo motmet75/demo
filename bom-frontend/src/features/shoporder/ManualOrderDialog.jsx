@@ -35,14 +35,14 @@ import MonitorIcon from '@mui/icons-material/Monitor'
 import PersonIcon from '@mui/icons-material/Person'
 import PersonAddIcon from '@mui/icons-material/PersonAdd'
 import AutorenewIcon from '@mui/icons-material/Autorenew'
-import { fetchModels } from '../../api/modelApi'
-import { fetchShopTables, createStaffOrder, fetchOrderTagQr, fetchMenuOptions, fetchCustomers, linkOrderCustomer, createCustomer, redeemVoucher } from '../../api/shopApi'
-import { printOrderReceiptTracked, printOrderTagTracked } from '../../utils/printWithHistory'
+import { fetchShopTables, createStaffOrder, fetchOrderTagQr, fetchMenuOptions, fetchCustomers, linkOrderCustomer, createCustomer, redeemVoucher, fetchStaffMenuItems } from '../../api/shopApi'
+import { printCounterOrderAlertTracked, printOrderReceiptTracked, printOrderTagTracked } from '../../utils/printWithHistory'
 import { broadcastToCounter } from '../shopboard/CounterDisplayPage'
 import VoucherQrScanDialog from './VoucherQrScanDialog'
 import ItemOptionsDialog from '../shopfront/ItemOptionsDialog'
 import { useI18n } from '../../i18n/I18nContext'
 import { decorateAllowedSideOptions, getAllowedSideMax } from '../../utils/sideItemConfig'
+import { useAuth } from '../../context/useAuth'
 
 const fmt         = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 const fmtDots     = (digits) => digits ? Number(digits).toLocaleString('vi-VN') : ''
@@ -85,8 +85,9 @@ const FULFILLMENT = [
   { value: 'DELIVERY', label: 'Delivery', icon: <DeliveryDiningIcon fontSize="small" /> },
 ]
 
-export default function ManualOrderDialog({ open, onClose, onCreated, defaultTable, defaultItems }) {
+export default function ManualOrderDialog({ open, onClose, onCreated, defaultTable, defaultItems, autoPrintCounterAlert = false }) {
   const { t } = useI18n()
+  const { hasFullBusinessAccess } = useAuth()
   const [models, setModels]         = useState([])
   const [tables, setTables]         = useState([])
   const [loading, setLoading]       = useState(false)
@@ -154,6 +155,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
   }
 
   const saveNewCust = async () => {
+    if (!hasFullBusinessAccess) return
     if (!newCustForm.name.trim()) { setNewCustError('Name is required'); return }
     setNewCustSaving(true); setNewCustError('')
     try {
@@ -193,6 +195,11 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
   const handleCustInput = (val) => {
     setCustomer(c => ({ ...c, name: val }))
     setCustomerId(null)
+    if (!hasFullBusinessAccess) {
+      setCustOptions([])
+      setLinkedCustomerCode(null)
+      return
+    }
     clearTimeout(custTimerRef.current)
     if (!val || val.length < 1) { setCustOptions([]); return }
     custTimerRef.current = setTimeout(async () => {
@@ -224,6 +231,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
   }
 
   const handleCustomerScan = async (payload) => {
+    if (!hasFullBusinessAccess) return
     setCustomerScanOpen(false)
     const lookup = extractCustomerLookup(payload)
     if (!lookup) return
@@ -282,7 +290,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
     [models]
   )
 
-  // Load models + tables when dialog opens
+  // Load staff menu + tables when dialog opens
   useEffect(() => {
     if (!open) return
     setLoading(true)
@@ -298,7 +306,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
         sideItems: [],
       })))
     }
-    Promise.all([fetchModels(), fetchShopTables()])
+    Promise.all([fetchStaffMenuItems(), fetchShopTables()])
       .then(([mList, tRes]) => {
         setModels((mList || []).filter(m => m.sellingPrice != null))
         setTables(Array.isArray(tRes.data) ? tRes.data : [])
@@ -592,6 +600,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
   }
 
   const redeemVoucherForOrder = async (payload, orderToRedeem) => {
+    if (!hasFullBusinessAccess) return orderToRedeem
     const clean = String(payload || '').trim()
     if (!clean || !orderToRedeem?.id) return orderToRedeem
     setVoucherRedeeming(true); setVoucherError('')
@@ -617,6 +626,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
   }
 
   const handleVoucherScan = async (payload) => {
+    if (!hasFullBusinessAccess) return
     const clean = String(payload || '').trim()
     if (!clean) return
     setVoucherScanOpen(false)
@@ -661,17 +671,20 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
       const { res, data } = await createStaffOrder(body)
       if (!res.ok) { setError(data?.message || 'Failed to create order'); setSubmitting(false); return }
       let orderData = data
-      if (customerId) {
+      if (hasFullBusinessAccess && customerId) {
         try {
           const { res: linkRes, data: linked } = await linkOrderCustomer(data.id, customerId)
           if (linkRes.ok && linked?.id) orderData = linked
         } catch { /* silent */ }
       }
-      if (scannedVoucherPayload) {
+      if (hasFullBusinessAccess && scannedVoucherPayload) {
         orderData = await redeemVoucherForOrder(scannedVoucherPayload, orderData)
       }
       setCreatedOrder(orderData)
       onCreated?.(orderData)
+      if (autoPrintCounterAlert) {
+        printCounterOrderAlertTracked(orderData, setError)
+      }
       // broadcast real order (with order number), then again once tagQr is loaded
       broadcastToCounter(orderData, null)
       setTagLoading(true)
@@ -759,7 +772,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                     label={t('shopOrder.common.tableValue', { value: createdOrder.tableName })} size="small"
                     sx={{ mt: 0.25, bgcolor: 'rgba(255,255,255,0.12)', color: '#fff', fontSize: 11 }} />
                 )}
-                {discount > 0 && (
+                {hasFullBusinessAccess && discount > 0 && (
                   <Chip label={`Voucher -${fmt(discount)}`} size="small"
                     sx={{ mt: 0.25, ml: 0.5, bgcolor: 'rgba(74,222,128,0.18)', color: '#bbf7d0', fontSize: 11, fontWeight: 700 }} />
                 )}
@@ -794,20 +807,22 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                   onClick={() => printOrderReceiptTracked(createdOrder, null, setError)}>
                   Receipt
                 </Button>
-                <Button size="small" variant="outlined"
-                  sx={{ color: '#fff', borderColor: 'rgba(255,255,255,0.3)', textTransform: 'none', fontSize: 12 }}
-                  startIcon={voucherRedeeming ? <CircularProgress size={12} sx={{ color: '#fff' }} /> : <QrCode2Icon />}
-                  disabled={voucherRedeeming || !!createdOrder.voucherCode}
-                  onClick={() => setVoucherScanOpen(true)}>
-                  {createdOrder.voucherCode ? t('shopOrder.manual.voucherUsed') : 'Voucher'}
-                </Button>
+                {hasFullBusinessAccess && (
+                  <Button size="small" variant="outlined"
+                    sx={{ color: '#fff', borderColor: 'rgba(255,255,255,0.3)', textTransform: 'none', fontSize: 12 }}
+                    startIcon={voucherRedeeming ? <CircularProgress size={12} sx={{ color: '#fff' }} /> : <QrCode2Icon />}
+                    disabled={voucherRedeeming || !!createdOrder.voucherCode}
+                    onClick={() => setVoucherScanOpen(true)}>
+                    {createdOrder.voucherCode ? t('shopOrder.manual.voucherUsed') : 'Voucher'}
+                  </Button>
+                )}
               </Box>
             </Box>
           )
         })()}
 
-        {voucherError && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setVoucherError('')}>{voucherError}</Alert>}
-        {voucherResult && createdOrder && (
+        {hasFullBusinessAccess && voucherError && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setVoucherError('')}>{voucherError}</Alert>}
+        {hasFullBusinessAccess && voucherResult && createdOrder && (
           <Alert severity="success" sx={{ mb: 2 }} onClose={() => setVoucherResult(null)}>
             {t('shopOrder.manual.voucherRedeemed', { code: voucherResult.voucher?.code, discount: fmt(voucherResult.discountApplied) })}
           </Alert>
@@ -860,87 +875,96 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
               )}
 
               {/* Customer */}
-              <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
-                <Autocomplete
-                  freeSolo
-                  size="small"
-                  options={custOptions}
-                  getOptionLabel={opt => typeof opt === 'string' ? opt : opt.name}
-                  filterOptions={x => x}
-                  loading={custSearching}
-                  inputValue={customer.name}
-                  onInputChange={(_, val, reason) => {
-                    if (reason === 'input') handleCustInput(val)
-                    if (reason === 'clear') {
-                      setCustomer({ name: '', phone: '' }); setCustomerId(null); setCustOptions([])
-                      setLinkedCustomerCode(null)
-                    }
-                  }}
-                  onChange={(_, val) => {
-                    if (val && typeof val === 'object') {
-                      selectCustomer(val)
-                    }
-                  }}
-                  renderOption={(props, opt) => (
-                    <li {...props} key={opt.id}>
-                      <Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Typography variant="body2" fontWeight={700}>{opt.name}</Typography>
-                          {opt.customerCode && (
-                            <Typography variant="caption" sx={{ fontFamily: 'monospace', color: '#0288d1', fontWeight: 700 }}>
-                              {opt.customerCode}
-                            </Typography>
-                          )}
+              {hasFullBusinessAccess ? (
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                  <Autocomplete
+                    freeSolo
+                    size="small"
+                    options={custOptions}
+                    getOptionLabel={opt => typeof opt === 'string' ? opt : opt.name}
+                    filterOptions={x => x}
+                    loading={custSearching}
+                    inputValue={customer.name}
+                    onInputChange={(_, val, reason) => {
+                      if (reason === 'input') handleCustInput(val)
+                      if (reason === 'clear') {
+                        setCustomer({ name: '', phone: '' }); setCustomerId(null); setCustOptions([])
+                        setLinkedCustomerCode(null)
+                      }
+                    }}
+                    onChange={(_, val) => {
+                      if (val && typeof val === 'object') {
+                        selectCustomer(val)
+                      }
+                    }}
+                    renderOption={(props, opt) => (
+                      <li {...props} key={opt.id}>
+                        <Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography variant="body2" fontWeight={700}>{opt.name}</Typography>
+                            {opt.customerCode && (
+                              <Typography variant="caption" sx={{ fontFamily: 'monospace', color: '#0288d1', fontWeight: 700 }}>
+                                {opt.customerCode}
+                              </Typography>
+                            )}
+                          </Box>
+                          {opt.phone && <Typography variant="caption" color="text.secondary">{opt.phone}</Typography>}
                         </Box>
-                        {opt.phone && <Typography variant="caption" color="text.secondary">{opt.phone}</Typography>}
-                      </Box>
-                    </li>
-                  )}
-                  renderInput={params => (
-                    <TextField {...params} label={customerId ? t('shopOrder.manual.customerLinked') : t('shopOrder.manual.customerName')}
-                      InputProps={{
-                        ...params.InputProps,
-                        endAdornment: (
-                          <>
-                            {custSearching && <CircularProgress size={14} />}
-                            {customerId && <PersonIcon sx={{ fontSize: 16, color: 'success.main', mr: 0.5 }} />}
-                            {params.InputProps.endAdornment}
-                          </>
-                        ),
-                      }}
-                    />
-                  )}
-                  sx={{ flex: 1 }}
-                />
-                <TextField size="small" label={t('common.phone')} sx={{ width: 130 }} value={customer.phone}
-                  onChange={e => setCustomer(c => ({ ...c, phone: e.target.value }))} />
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25, flexShrink: 0, pt: 0.5 }}>
-                  <Tooltip title={t('shopOrder.manual.scanCustomerQr')}>
-                    <IconButton size="small" onClick={() => setCustomerScanOpen(true)} disabled={custSearching}
-                      sx={{ bgcolor: '#f0fdf4', color: '#15803d', '&:hover': { bgcolor: '#dcfce7' }, borderRadius: 1 }}>
-                      <QrCode2Icon sx={{ fontSize: 17 }} />
-                    </IconButton>
-                  </Tooltip>
-                  <Tooltip title={t('shopOrder.manual.registerCustomer')}>
-                    <IconButton size="small" onClick={openNewCust}
-                      sx={{ bgcolor: '#e3f2fd', color: '#1565c0', '&:hover': { bgcolor: '#bbdefb' }, borderRadius: 1 }}>
-                      <PersonAddIcon sx={{ fontSize: 17 }} />
-                    </IconButton>
-                  </Tooltip>
-                  {customerId && linkedCustomerCode && (
-                    <Tooltip title={t('shopOrder.manual.viewPrintCustomerQr')}>
-                      <IconButton size="small"
-                        onClick={() => setCustQrDialog({ name: customer.name, phone: customer.phone, customerCode: linkedCustomerCode })}
-                        sx={{ color: '#0288d1' }}>
+                      </li>
+                    )}
+                    renderInput={params => (
+                      <TextField {...params} label={customerId ? t('shopOrder.manual.customerLinked') : t('shopOrder.manual.customerName')}
+                        InputProps={{
+                          ...params.InputProps,
+                          endAdornment: (
+                            <>
+                              {custSearching && <CircularProgress size={14} />}
+                              {customerId && <PersonIcon sx={{ fontSize: 16, color: 'success.main', mr: 0.5 }} />}
+                              {params.InputProps.endAdornment}
+                            </>
+                          ),
+                        }}
+                      />
+                    )}
+                    sx={{ flex: 1 }}
+                  />
+                  <TextField size="small" label={t('common.phone')} sx={{ width: 130 }} value={customer.phone}
+                    onChange={e => setCustomer(c => ({ ...c, phone: e.target.value }))} />
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25, flexShrink: 0, pt: 0.5 }}>
+                    <Tooltip title={t('shopOrder.manual.scanCustomerQr')}>
+                      <IconButton size="small" onClick={() => setCustomerScanOpen(true)} disabled={custSearching}
+                        sx={{ bgcolor: '#f0fdf4', color: '#15803d', '&:hover': { bgcolor: '#dcfce7' }, borderRadius: 1 }}>
                         <QrCode2Icon sx={{ fontSize: 17 }} />
                       </IconButton>
                     </Tooltip>
-                  )}
+                    <Tooltip title={t('shopOrder.manual.registerCustomer')}>
+                      <IconButton size="small" onClick={openNewCust}
+                        sx={{ bgcolor: '#e3f2fd', color: '#1565c0', '&:hover': { bgcolor: '#bbdefb' }, borderRadius: 1 }}>
+                        <PersonAddIcon sx={{ fontSize: 17 }} />
+                      </IconButton>
+                    </Tooltip>
+                    {customerId && linkedCustomerCode && (
+                      <Tooltip title={t('shopOrder.manual.viewPrintCustomerQr')}>
+                        <IconButton size="small"
+                          onClick={() => setCustQrDialog({ name: customer.name, phone: customer.phone, customerCode: linkedCustomerCode })}
+                          sx={{ color: '#0288d1' }}>
+                          <QrCode2Icon sx={{ fontSize: 17 }} />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                  </Box>
                 </Box>
-              </Box>
+              ) : (
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                  <TextField size="small" label={t('shopOrder.manual.customerName')} sx={{ flex: 1, minWidth: 180 }} value={customer.name}
+                    onChange={e => setCustomer(c => ({ ...c, name: e.target.value }))} />
+                  <TextField size="small" label={t('common.phone')} sx={{ width: 150 }} value={customer.phone}
+                    onChange={e => setCustomer(c => ({ ...c, phone: e.target.value }))} />
+                </Box>
+              )}
 
               {/* Inline new customer form */}
-              {newCustOpen && (
+              {hasFullBusinessAccess && newCustOpen && (
                 <Box sx={{ bgcolor: '#f0fdf4', borderRadius: 2, p: 1.5, border: '1.5px solid #4caf50' }}>
                   <Typography variant="caption" fontWeight={800} color="success.dark" sx={{ display: 'block', mb: 1, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                     New Customer
@@ -993,16 +1017,18 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                     <MenuItem value="BANK_QR">{t('shopOrder.common.bankQr')}</MenuItem>
                   </Select>
                 </FormControl>
-                <Button
-                  variant="outlined"
-                  startIcon={voucherRedeeming ? <CircularProgress size={14} /> : <QrCode2Icon />}
-                  onClick={() => setVoucherScanOpen(true)}
-                  disabled={voucherRedeeming}
-                  sx={{ textTransform: 'none', fontWeight: 700, height: 40, flexShrink: 0 }}>
-                  {scannedVoucherPayload ? t('shopOrder.manual.replaceVoucher') : t('shopOrder.manual.scanVoucher')}
-                </Button>
+                {hasFullBusinessAccess && (
+                  <Button
+                    variant="outlined"
+                    startIcon={voucherRedeeming ? <CircularProgress size={14} /> : <QrCode2Icon />}
+                    onClick={() => setVoucherScanOpen(true)}
+                    disabled={voucherRedeeming}
+                    sx={{ textTransform: 'none', fontWeight: 700, height: 40, flexShrink: 0 }}>
+                    {scannedVoucherPayload ? t('shopOrder.manual.replaceVoucher') : t('shopOrder.manual.scanVoucher')}
+                  </Button>
+                )}
               </Box>
-              {scannedVoucherPayload && !createdOrder && (
+              {hasFullBusinessAccess && scannedVoucherPayload && !createdOrder && (
                 <Alert severity="info" onClose={() => setScannedVoucherPayload('')}>
                   Voucher {voucherLabel(scannedVoucherPayload)} scanned. It will redeem when order is created.
                 </Alert>
@@ -1449,7 +1475,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
       </DialogContent>
 
       {/* Customer QR dialog */}
-      <Dialog open={!!custQrDialog} onClose={() => setCustQrDialog(null)} maxWidth="xs" fullWidth
+      {hasFullBusinessAccess && <Dialog open={!!custQrDialog} onClose={() => setCustQrDialog(null)} maxWidth="xs" fullWidth
         PaperProps={{ sx: { borderRadius: 3 } }}>
         <DialogTitle sx={{ pb: 0.5 }}>
           <Typography fontWeight={800}>{t('shopOrder.manual.customerQr')}</Typography>
@@ -1489,22 +1515,22 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
             </Button>
           )}
         </DialogActions>
-      </Dialog>
+      </Dialog>}
 
-      <VoucherQrScanDialog
+      {hasFullBusinessAccess && <VoucherQrScanDialog
         open={customerScanOpen}
         onClose={() => setCustomerScanOpen(false)}
         onScan={handleCustomerScan}
         title={t('shopOrder.manual.scanCustomerQr')}
         manualLabel={t('shopOrder.manual.customerScanInput')}
         scannerLabel={t('shopOrder.manual.customerScanner')}
-      />
+      />}
 
-      <VoucherQrScanDialog
+      {hasFullBusinessAccess && <VoucherQrScanDialog
         open={voucherScanOpen}
         onClose={() => setVoucherScanOpen(false)}
         onScan={handleVoucherScan}
-      />
+      />}
 
       {/* Actions */}
       <DialogActions sx={{ px: 2, pb: 2, gap: 1 }}>

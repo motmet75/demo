@@ -21,6 +21,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -80,10 +81,10 @@ public class ShopSalesReportService {
                 .toList();
 
         if (orders.isEmpty()) {
+            SalesSummary summary = emptySummary();
+            SalesSummary previousSummary = summaryForRange(tenantId, companyId, previousPeriod(startDate, endDate, period), effectiveZone);
             return new SalesIncomeReport(startDate, endDate, period.name(), effectiveZone.getId(), Instant.now(),
-                    new SalesSummary(0, 0, 0, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                            BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, 0, 0),
-                    List.of(), List.of(), List.of());
+                    summary, List.of(), List.of(), List.of(), profitRows(summary, previousSummary));
         }
 
         List<UUID> orderIds = orders.stream().map(ShopOrder::getId).toList();
@@ -139,8 +140,112 @@ public class ShopSalesReportService {
         List<DeductionRow> deductionRows = deductionRows(audits, movements, ordersById, itemById, inventoryById,
                 materialUnits, metricsByOrder);
 
+        SalesSummary salesSummary = summary.toSummary();
+        SalesSummary previousSummary = summaryForRange(tenantId, companyId, previousPeriod(startDate, endDate, period), effectiveZone);
         return new SalesIncomeReport(startDate, endDate, period.name(), effectiveZone.getId(), Instant.now(),
-                summary.toSummary(), periodRows, orderRows, deductionRows);
+                salesSummary, periodRows, orderRows, deductionRows, profitRows(salesSummary, previousSummary));
+    }
+
+    private SalesSummary summaryForRange(UUID tenantId, UUID companyId, PreviousPeriod previousPeriod, ZoneId zone) {
+        Instant startInstant = previousPeriod.from().atStartOfDay(zone).toInstant();
+        Instant endInstant = previousPeriod.to().plusDays(1).atStartOfDay(zone).toInstant();
+        List<ShopOrder> orders = shopOrderRepository
+                .findAllByTenantIdAndCompanyIdAndCreatedAtGreaterThanEqualAndCreatedAtLessThanOrderByCreatedAtDesc(
+                        tenantId, companyId, startInstant, endInstant)
+                .stream()
+                .filter(order -> !ShopOrder.STATUS_CANCELLED.equals(order.getStatus()))
+                .toList();
+        if (orders.isEmpty()) return emptySummary();
+
+        List<UUID> orderIds = orders.stream().map(ShopOrder::getId).toList();
+        Map<UUID, List<ShopOrderItem>> itemsByOrder = shopOrderItemRepository.findAllByOrderIds(orderIds).stream()
+                .collect(Collectors.groupingBy(item -> item.getOrder().getId(), LinkedHashMap::new, Collectors.toList()));
+
+        TotalsAccumulator summary = new TotalsAccumulator();
+        for (ShopOrder order : orders) {
+            OrderMetrics metrics = orderMetrics(order, itemsByOrder.getOrDefault(order.getId(), List.of()));
+            summary.add(metrics, ShopOrder.PAY_STATUS_PAID.equals(order.getPaymentStatus()), 0, 0);
+        }
+        return summary.toSummary();
+    }
+
+    private SalesSummary emptySummary() {
+        return new SalesSummary(0, 0, 0, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, 0, 0);
+    }
+
+    private PreviousPeriod previousPeriod(LocalDate startDate, LocalDate endDate, ReportPeriod period) {
+        if (period == ReportPeriod.MONTH) {
+            YearMonth startMonth = YearMonth.from(startDate);
+            if (startDate.getDayOfMonth() == 1 && endDate.equals(startMonth.atEndOfMonth())) {
+                YearMonth previous = startMonth.minusMonths(1);
+                return new PreviousPeriod(previous.atDay(1), previous.atEndOfMonth());
+            }
+        } else if (period == ReportPeriod.QUARTER && isQuarterStart(startDate) && isQuarterEnd(startDate, endDate)) {
+            LocalDate previousStart = startDate.minusMonths(3);
+            return new PreviousPeriod(previousStart, previousStart.plusMonths(3).minusDays(1));
+        } else if (period == ReportPeriod.YEAR
+                && startDate.getDayOfYear() == 1
+                && endDate.equals(LocalDate.of(startDate.getYear(), 12, 31))) {
+            LocalDate previousStart = startDate.minusYears(1);
+            return new PreviousPeriod(previousStart, LocalDate.of(previousStart.getYear(), 12, 31));
+        }
+
+        long days = Math.max(1, ChronoUnit.DAYS.between(startDate, endDate) + 1);
+        LocalDate previousEnd = startDate.minusDays(1);
+        return new PreviousPeriod(previousEnd.minusDays(days - 1), previousEnd);
+    }
+
+    private boolean isQuarterStart(LocalDate date) {
+        return date.getDayOfMonth() == 1 && (date.getMonthValue() == 1 || date.getMonthValue() == 4
+                || date.getMonthValue() == 7 || date.getMonthValue() == 10);
+    }
+
+    private boolean isQuarterEnd(LocalDate startDate, LocalDate endDate) {
+        return endDate.equals(startDate.plusMonths(3).minusDays(1));
+    }
+
+    private List<ProfitStatementRow> profitRows(SalesSummary current, SalesSummary previous) {
+        ProfitInputs c = profitInputs(current);
+        ProfitInputs p = profitInputs(previous);
+        return List.of(
+                profitRow("I", "Doanh thu từ bán hàng (1+2+3-4-5)", c.netSales(), p.netSales(), c.netSales(), p.netSales(), true),
+                profitRow("1", "Tiền hàng", c.goodsSales(), p.goodsSales(), c.netSales(), p.netSales(), false),
+                profitRow("2", "Tiền phí", c.deliveryFee(), p.deliveryFee(), c.netSales(), p.netSales(), false),
+                profitRow("3", "Tiền thuế giá trị gia tăng", BigDecimal.ZERO, BigDecimal.ZERO, c.netSales(), p.netSales(), false),
+                profitRow("4", "Khuyến mại", c.discountAmount(), p.discountAmount(), c.netSales(), p.netSales(), false),
+                profitRow("5", "Chiết khấu đối tác giao hàng", BigDecimal.ZERO, BigDecimal.ZERO, c.netSales(), p.netSales(), false),
+                profitRow("II", "Chi phí (1+2)", c.rawCost(), p.rawCost(), c.netSales(), p.netSales(), true),
+                profitRow("1", "Chi phí nguyên vật liệu", c.rawCost(), p.rawCost(), c.netSales(), p.netSales(), false),
+                profitRow("2", "Chi phí khác", BigDecimal.ZERO, BigDecimal.ZERO, c.netSales(), p.netSales(), false),
+                profitRow("III", "Lợi nhuận từ bán hàng (I - II)", c.income(), p.income(), c.netSales(), p.netSales(), true)
+        );
+    }
+
+    private ProfitInputs profitInputs(SalesSummary summary) {
+        BigDecimal grossSales = money(summary.grossSales());
+        BigDecimal deliveryFee = money(summary.deliveryFee());
+        BigDecimal goodsSales = money(grossSales.subtract(deliveryFee));
+        if (goodsSales.compareTo(BigDecimal.ZERO) < 0) goodsSales = BigDecimal.ZERO;
+        return new ProfitInputs(goodsSales, deliveryFee, money(summary.discountAmount()),
+                money(summary.netSales()), money(summary.rawCost()), money(summary.income()));
+    }
+
+    private ProfitStatementRow profitRow(String code,
+                                         String label,
+                                         BigDecimal currentValue,
+                                         BigDecimal previousValue,
+                                         BigDecimal currentBase,
+                                         BigDecimal previousBase,
+                                         boolean section) {
+        return new ProfitStatementRow(code, label, money(currentValue), percent(currentValue, currentBase),
+                money(previousValue), percent(previousValue, previousBase), section);
+    }
+
+    private BigDecimal percent(BigDecimal value, BigDecimal base) {
+        BigDecimal safeBase = money(base);
+        if (safeBase.compareTo(BigDecimal.ZERO) == 0) return BigDecimal.ZERO;
+        return money(value).multiply(BigDecimal.valueOf(100)).divide(safeBase, 2, RoundingMode.HALF_UP);
     }
 
     private Map<UUID, InventoryEntity> inventoryById(List<InventoryMovementEntity> movements) {
@@ -366,6 +471,13 @@ public class ShopSalesReportService {
 
     private record MovementKey(UUID orderId, UUID materialId) {}
     private record PeriodBucket(String key, String label, LocalDate from, LocalDate to) {}
+    private record PreviousPeriod(LocalDate from, LocalDate to) {}
+    private record ProfitInputs(BigDecimal goodsSales,
+                                BigDecimal deliveryFee,
+                                BigDecimal discountAmount,
+                                BigDecimal netSales,
+                                BigDecimal rawCost,
+                                BigDecimal income) {}
 
     private record OrderMetrics(int lineCount,
                                 BigDecimal itemQuantity,
@@ -436,7 +548,8 @@ public class ShopSalesReportService {
                                     SalesSummary summary,
                                     List<PeriodRow> periodRows,
                                     List<OrderRow> orderRows,
-                                    List<DeductionRow> deductionRows) {}
+                                    List<DeductionRow> deductionRows,
+                                    List<ProfitStatementRow> profitRows) {}
 
     public record SalesSummary(int orderCount,
                                int paidOrderCount,
@@ -450,6 +563,14 @@ public class ShopSalesReportService {
                                BigDecimal income,
                                int deductionCount,
                                int movementCount) {}
+
+    public record ProfitStatementRow(String code,
+                                     String label,
+                                     BigDecimal currentValue,
+                                     BigDecimal currentShare,
+                                     BigDecimal previousValue,
+                                     BigDecimal previousShare,
+                                     boolean section) {}
 
     public record PeriodRow(String periodKey,
                             String periodLabel,
@@ -533,4 +654,3 @@ public class ShopSalesReportService {
                                BigDecimal orderRawCost,
                                BigDecimal orderIncome) {}
 }
-

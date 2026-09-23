@@ -6,15 +6,17 @@ import AdminUserGrid from './AdminUserGrid'
 import AdminShopValidityPanel from './AdminShopValidityPanel'
 
 export default function AdminPage() {
-  const { user } = useAuth()
+  const { user, isSuperAdmin } = useAuth()
   const { t } = useI18n()
 
   return (
     <Box>
       <Alert severity="info" sx={{ mb: 2 }}>
-        {t('admin.accessNotice', { username: user?.username || t('common.notAvailable') })}
+        {isSuperAdmin
+          ? t('admin.accessNoticeSuper', { username: user?.username || t('common.notAvailable') })
+          : t('admin.accessNotice', { username: user?.username || t('common.notAvailable') })}
       </Alert>
-      <AdminShopValidityPanel />
+      {isSuperAdmin && <AdminShopValidityPanel />}
       <AdminUserGrid />
     </Box>
   )

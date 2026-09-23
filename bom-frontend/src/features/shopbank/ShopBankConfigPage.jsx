@@ -10,9 +10,11 @@ import Alert from '@mui/material/Alert'
 import Divider from '@mui/material/Divider'
 import CircularProgress from '@mui/material/CircularProgress'
 import Chip from '@mui/material/Chip'
+import MenuItem from '@mui/material/MenuItem'
 import QrCode2Icon from '@mui/icons-material/QrCode2'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import Switch from '@mui/material/Switch'
+import Checkbox from '@mui/material/Checkbox'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import PaymentsIcon from '@mui/icons-material/Payments'
 import InputAdornment from '@mui/material/InputAdornment'
@@ -40,7 +42,7 @@ const POPULAR_BANKS = [
 ]
 
 export default function ShopBankConfigPage() {
-  const [form, setForm] = useState({ bankBin: '', bankAccountNumber: '', bankAccountName: '', prepaidMenu: false, shopLogoUrl: '', shopName: '', shopAddress: '', shopPhone: '', realtimeInventory: false, processingInventoryRecheck: true, pointsConversionRate: 10000, pointsRoundUp: false, loyaltyDiscountPointThreshold: 0, loyaltyDiscountPercent: 0, bookingEnabled: false })
+  const [form, setForm] = useState({ bankBin: '', bankAccountNumber: '', bankAccountName: '', prepaidMenu: false, shopLogoUrl: '', shopName: '', shopAddress: '', shopPhone: '', realtimeInventory: false, processingInventoryRecheck: true, autoPrintNewOrderAlert: false, customerOrderPrintAlertScope: 'OFF', pointsConversionRate: 10000, pointsRoundUp: false, loyaltyDiscountPointThreshold: 0, loyaltyDiscountPercent: 0, bookingEnabled: false })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -53,7 +55,7 @@ export default function ShopBankConfigPage() {
     fetchBankConfig()
       .then(({ data }) => {
         if (data) {
-          setForm({ bankBin: data.bankBin || '', bankAccountNumber: data.bankAccountNumber || '', bankAccountName: data.bankAccountName || '', prepaidMenu: Boolean(data.prepaidMenu), shopLogoUrl: data.shopLogoUrl || '', shopName: data.shopName || data.companyName || '', shopAddress: data.shopAddress || '', shopPhone: data.shopPhone || '', realtimeInventory: Boolean(data.realtimeInventory), processingInventoryRecheck: data.processingInventoryRecheck !== false, pointsConversionRate: data.pointsConversionRate || 10000, pointsRoundUp: Boolean(data.pointsRoundUp), loyaltyDiscountPointThreshold: data.loyaltyDiscountPointThreshold || 0, loyaltyDiscountPercent: data.loyaltyDiscountPercent || 0, bookingEnabled: Boolean(data.bookingEnabled) })
+          setForm({ bankBin: data.bankBin || '', bankAccountNumber: data.bankAccountNumber || '', bankAccountName: data.bankAccountName || '', prepaidMenu: Boolean(data.prepaidMenu), shopLogoUrl: data.shopLogoUrl || '', shopName: data.shopName || data.companyName || '', shopAddress: data.shopAddress || '', shopPhone: data.shopPhone || '', realtimeInventory: Boolean(data.realtimeInventory), processingInventoryRecheck: data.processingInventoryRecheck !== false, autoPrintNewOrderAlert: Boolean(data.autoPrintNewOrderAlert), customerOrderPrintAlertScope: data.customerOrderPrintAlertScope || 'OFF', pointsConversionRate: data.pointsConversionRate || 10000, pointsRoundUp: Boolean(data.pointsRoundUp), loyaltyDiscountPointThreshold: data.loyaltyDiscountPointThreshold || 0, loyaltyDiscountPercent: data.loyaltyDiscountPercent || 0, bookingEnabled: Boolean(data.bookingEnabled) })
           setVoucherKeySet(Boolean(data.voucherSecretSet))
         }
         setLoading(false)
@@ -84,6 +86,23 @@ export default function ShopBankConfigPage() {
   const saveToggle = async (field, checked) => {
     const previous = form[field]
     const next = { ...form, [field]: checked }
+    setForm(next)
+    setSaving(true); setError(''); setSuccess(false)
+    try {
+      const { res, data } = await updateBankConfig(next)
+      if (!res.ok) throw new Error(data?.message || data?.error || 'Save failed')
+      setSuccess(true)
+    } catch (e) {
+      setForm(current => ({ ...current, [field]: previous }))
+      setError(e.message || 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const saveField = async (field, value) => {
+    const previous = form[field]
+    const next = { ...form, [field]: value }
     setForm(next)
     setSaving(true); setError(''); setSuccess(false)
     try {
@@ -298,6 +317,41 @@ export default function ShopBankConfigPage() {
                 }
                 sx={{ alignItems: 'flex-start', ml: 0 }}
               />
+              <Divider sx={{ my: 1.5 }} />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={form.autoPrintNewOrderAlert}
+                    onChange={e => saveToggle('autoPrintNewOrderAlert', e.target.checked)}
+                    disabled={saving}
+                    color="secondary"
+                  />
+                }
+                label={
+                  <Box>
+                    <Typography variant="body2" fontWeight={700}>Auto print counter alert note</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Print a short kitchen/counter slip when customers or staff create a new order.
+                    </Typography>
+                  </Box>
+                }
+                sx={{ alignItems: 'flex-start', ml: 0 }}
+              />
+              <TextField
+                select
+                size="small"
+                fullWidth
+                label="Customer order print preview"
+                value={form.customerOrderPrintAlertScope}
+                onChange={e => saveField('customerOrderPrintAlertScope', e.target.value)}
+                disabled={saving}
+                helperText="When a customer submits an order, eligible counter screens open the browser print dialog for the alert slip."
+                sx={{ mt: 1 }}
+              >
+                <MenuItem value="OFF">Off</MenuItem>
+                <MenuItem value="COUNTER_IPS">Current counter IP / network only</MenuItem>
+                <MenuItem value="ALL_IPS">All counter display devices</MenuItem>
+              </TextField>
               <Divider sx={{ my: 1.5 }} />
               <FormControlLabel
                   control={

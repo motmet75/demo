@@ -38,6 +38,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import jakarta.servlet.http.HttpServletRequest;
 import com.ams.bomcore.service.shop.CounterDisplayCache;
+import com.ams.bomcore.service.shop.CounterPrintAlertCache;
 import com.ams.bomcore.service.shop.ShopSalesReportService;
 import com.ams.bomcore.service.shop.ShopHoursService;
 import com.ams.bomcore.domain.shop.ShopReservation;
@@ -53,6 +54,9 @@ import java.util.regex.Pattern;
 @RestController
 public class ShopOrderController {
     private static final String STAFF_CALL_REASON_NEW_ORDER = "new_order";
+    private static final String CUSTOMER_ORDER_PRINT_SCOPE_OFF = "OFF";
+    private static final String CUSTOMER_ORDER_PRINT_SCOPE_ALL_IPS = "ALL_IPS";
+    private static final String CUSTOMER_ORDER_PRINT_SCOPE_COUNTER_IPS = "COUNTER_IPS";
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
 
     private final ShopOrderService shopOrderService;
@@ -69,6 +73,7 @@ public class ShopOrderController {
     private final ShopPrintHistoryRepository shopPrintHistoryRepository;
     private final ShopTableRepository shopTableRepository;
     private final CounterDisplayCache counterDisplayCache;
+    private final CounterPrintAlertCache counterPrintAlertCache;
     private final ShopReservationService shopReservationService;
 
     private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
@@ -105,6 +110,7 @@ public class ShopOrderController {
                                ShopPrintHistoryRepository shopPrintHistoryRepository,
                                ShopTableRepository shopTableRepository,
                                CounterDisplayCache counterDisplayCache,
+                               CounterPrintAlertCache counterPrintAlertCache,
                                ShopHoursService shopHoursService, ShopReservationService shopReservationService) {
         this.shopOrderService = shopOrderService;
         this.shopLocalizedLabelService = shopLocalizedLabelService;
@@ -120,6 +126,7 @@ public class ShopOrderController {
         this.shopPrintHistoryRepository = shopPrintHistoryRepository;
         this.shopTableRepository = shopTableRepository;
         this.counterDisplayCache = counterDisplayCache;
+        this.counterPrintAlertCache = counterPrintAlertCache;
         this.shopHoursService = shopHoursService;
         this.shopReservationService = shopReservationService;
     }
@@ -160,6 +167,19 @@ public class ShopOrderController {
         validateScope(tenantId, companyId);
         java.time.LocalDate businessDate = java.time.LocalDate.now(RequestTimeZone.resolve(timeZone));
         return ResponseEntity.ok(shopOrderService.getMenu(tenantId, companyId, businessDate));
+    }
+
+    @GetMapping("/shop/staff/menu-items")
+    public ResponseEntity<?> listStaffMenuItems(@RequestParam(required = false) UUID tenantId,
+                                                @RequestParam(required = false) UUID companyId,
+                                                @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                                @RequestHeader(value = "X-Company-Id", required = false) String hCompany,
+                                                @RequestHeader(value = "X-Time-Zone", required = false) String timeZone) {
+        UUID tId = resolve(tenantId, hTenant);
+        UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        java.time.LocalDate businessDate = java.time.LocalDate.now(RequestTimeZone.resolve(timeZone));
+        return ResponseEntity.ok(shopOrderService.getMenu(tId, cId, businessDate));
     }
 
     @GetMapping("/shop/public/localized-labels")
@@ -245,6 +265,7 @@ public class ShopOrderController {
         try {
             ShopOrderResponseDto dto = shopOrderService.createOrder(req, tenantId, companyId, zone);
             createNewOrderStaffCall(dto);
+            publishCustomerOrderPrintAlert(dto);
             return ResponseEntity.status(HttpStatus.CREATED).body(dto);
         } catch (ShopOrderService.DailyMenuLimitExceededException e) {
             return dailyLimitResponse(e);
@@ -306,6 +327,24 @@ public class ShopOrderController {
                 .<ResponseEntity<?>>map(p -> ResponseEntity.ok(Map.of(
                         "payload", p.payload(),
                         "pushedAt", p.pushedAt().toString()
+                )))
+                .orElse(ResponseEntity.noContent().build());
+    }
+
+    @GetMapping("/shop/public/customer-order-print-alert")
+    public ResponseEntity<?> getCustomerOrderPrintAlert(@RequestParam UUID tenantId,
+                                                        @RequestParam UUID companyId,
+                                                        HttpServletRequest request) {
+        validateScope(tenantId, companyId);
+        Company company = companyRepository.findById(companyId).orElseThrow();
+        if (!isCustomerOrderPrintAlertAllowed(company, clientPublicIp(request))) {
+            return ResponseEntity.noContent().build();
+        }
+        return counterPrintAlertCache.latest(tenantId, companyId)
+                .<ResponseEntity<?>>map(p -> ResponseEntity.ok(Map.of(
+                        "payload", p.order(),
+                        "pushedAt", p.pushedAt().toString(),
+                        "scope", normalizeCustomerOrderPrintAlertScope(company.getShopCustomerOrderPrintAlertScope())
                 )))
                 .orElse(ResponseEntity.noContent().build());
     }
@@ -1416,6 +1455,10 @@ public class ShopOrderController {
         if (body.containsKey("shopPhone"))            company.setShopPhone(stringValue(body.get("shopPhone")));
         if (body.containsKey("realtimeInventory"))    company.setRealtimeInventory(Boolean.TRUE.equals(body.get("realtimeInventory")));
         if (body.containsKey("processingInventoryRecheck")) company.setShopProcessingInventoryRecheck(Boolean.TRUE.equals(body.get("processingInventoryRecheck")));
+        if (body.containsKey("autoPrintNewOrderAlert")) company.setShopAutoPrintNewOrderAlert(Boolean.TRUE.equals(body.get("autoPrintNewOrderAlert")));
+        if (body.containsKey("customerOrderPrintAlertScope")) {
+            company.setShopCustomerOrderPrintAlertScope(normalizeCustomerOrderPrintAlertScope(body.get("customerOrderPrintAlertScope")));
+        }
         if (body.containsKey("bookingEnabled"))       company.setShopBookingEnabled(Boolean.TRUE.equals(body.get("bookingEnabled")));
         if (body.containsKey("newOrderNotificationEnabled")) {
             company.setNewOrderNotificationEnabled(Boolean.TRUE.equals(body.get("newOrderNotificationEnabled")));
@@ -1581,6 +1624,8 @@ public class ShopOrderController {
         m.put("loyaltyDiscountPercent", company.getLoyaltyDiscountPercent());
         m.put("newOrderNotificationEnabled", Boolean.TRUE.equals(company.getNewOrderNotificationEnabled()));
         m.put("newOrderNotificationEmails", company.getNewOrderNotificationEmails() != null ? company.getNewOrderNotificationEmails() : "");
+        m.put("autoPrintNewOrderAlert", Boolean.TRUE.equals(company.getShopAutoPrintNewOrderAlert()));
+        m.put("customerOrderPrintAlertScope", normalizeCustomerOrderPrintAlertScope(company.getShopCustomerOrderPrintAlertScope()));
         m.put("voucherSecretSet",     company.getVoucherSecret() != null && !company.getVoucherSecret().isBlank());
         m.put("bookingEnabled",       Boolean.TRUE.equals(company.getShopBookingEnabled()));
         return m;
@@ -2581,6 +2626,44 @@ public class ShopOrderController {
         call.setNote("New order");
         call.setStatus(ShopStaffCall.STATUS_OPEN);
         shopStaffCallRepository.save(call);
+    }
+
+    private void publishCustomerOrderPrintAlert(ShopOrderResponseDto order) {
+        if (order == null || order.getTenantId() == null || order.getCompanyId() == null) return;
+        Company company = companyRepository.findById(order.getCompanyId()).orElse(null);
+        if (company == null) return;
+        String scope = normalizeCustomerOrderPrintAlertScope(company.getShopCustomerOrderPrintAlertScope());
+        if (CUSTOMER_ORDER_PRINT_SCOPE_OFF.equals(scope)) return;
+        counterPrintAlertCache.push(order.getTenantId(), order.getCompanyId(), order);
+    }
+
+    private boolean isCustomerOrderPrintAlertAllowed(Company company, String deviceIp) {
+        String scope = normalizeCustomerOrderPrintAlertScope(company != null ? company.getShopCustomerOrderPrintAlertScope() : null);
+        if (CUSTOMER_ORDER_PRINT_SCOPE_OFF.equals(scope)) return false;
+        if (CUSTOMER_ORDER_PRINT_SCOPE_ALL_IPS.equals(scope)) return true;
+        if (!CUSTOMER_ORDER_PRINT_SCOPE_COUNTER_IPS.equals(scope) || company == null) return false;
+
+        CounterNetworkRule rule = effectiveCounterNetworkRule(company);
+        if (rule.allowAllNetworks()) return true;
+        List<String> allowedIps = new ArrayList<>(rule.allowedPublicIps());
+        String counterIp = cleanIp(rule.counterPublicIp() != null ? rule.counterPublicIp() : company.getShopCounterPublicIp());
+        if (counterIp != null && !containsNormalizedIp(allowedIps, counterIp)) {
+            allowedIps.add(counterIp);
+        }
+        if (normalizeIp(deviceIp) == null || allowedIps.isEmpty()) return false;
+        return containsNormalizedIp(allowedIps, deviceIp);
+    }
+
+    private String normalizeCustomerOrderPrintAlertScope(Object raw) {
+        String value = raw != null ? String.valueOf(raw).trim().toUpperCase(Locale.ROOT) : "";
+        if ("ALL".equals(value) || "ALL_IP".equals(value) || CUSTOMER_ORDER_PRINT_SCOPE_ALL_IPS.equals(value)) {
+            return CUSTOMER_ORDER_PRINT_SCOPE_ALL_IPS;
+        }
+        if ("COUNTER".equals(value) || "COUNTER_IP".equals(value) || "COUNTER_ONLY".equals(value)
+                || CUSTOMER_ORDER_PRINT_SCOPE_COUNTER_IPS.equals(value)) {
+            return CUSTOMER_ORDER_PRINT_SCOPE_COUNTER_IPS;
+        }
+        return CUSTOMER_ORDER_PRINT_SCOPE_OFF;
     }
 
     private void createOrderEvent(ShopOrderResponseDto order, String reason, String note) {
