@@ -41,6 +41,7 @@ import java.util.Map;
 
 @Service
 public class ShopOrderService {
+    private final CounterShiftGuard counterShiftGuard;
 
     private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
     public static final int DEFAULT_WALK_UP_MAX_ORDERS = 12;
@@ -89,7 +90,8 @@ public class ShopOrderService {
                             ShopBillRepository shopBillRepository,
                             ShopBillItemRepository shopBillItemRepository,
                             ShopLocalizedLabelService shopLocalizedLabelService,
-                            ShopNewOrderNotificationService newOrderNotificationService) {
+                            ShopNewOrderNotificationService newOrderNotificationService, CounterShiftGuard counterShiftGuard) {
+        this.counterShiftGuard=counterShiftGuard;
         this.shopOrderRepository = shopOrderRepository;
         this.shopOrderItemRepository = shopOrderItemRepository;
         this.shopTableRepository = shopTableRepository;
@@ -506,6 +508,7 @@ public class ShopOrderService {
 
     @Transactional
     public ShopOrderResponseDto startPreparing(UUID orderId, UUID tenantId, UUID companyId) {
+        counterShiftGuard.requireOpenForReceipt(tenantId,companyId);
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         requireStatus(order, ShopOrder.STATUS_CONFIRMED);
         Company company = companyRepository.findById(companyId).orElse(null);
@@ -560,6 +563,7 @@ public class ShopOrderService {
 
     @Transactional
     public ShopOrderResponseDto pickupOrder(UUID orderId, UUID tenantId, UUID companyId) {
+        counterShiftGuard.requireOpenForReceipt(tenantId,companyId);
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         requireStatus(order, ShopOrder.STATUS_READY);
         order.setStatus(ShopOrder.STATUS_PICKED_UP);
@@ -573,6 +577,7 @@ public class ShopOrderService {
 
     @Transactional
     public ShopOrderResponseDto completeOrder(UUID orderId, UUID tenantId, UUID companyId) {
+        counterShiftGuard.requireOpenForReceipt(tenantId,companyId);
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         requireStatus(order, ShopOrder.STATUS_READY);
         order.setStatus(ShopOrder.STATUS_COMPLETED);
@@ -613,6 +618,12 @@ public class ShopOrderService {
         );
         return shopOrderRepository
                 .searchActiveOrders(tenantId, companyId, active, resolveFrom(fromTime), resolveTo(toTime))
+                .stream().map(this::dto).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ShopOrderResponseDto> listTableVisibleOrders(UUID tenantId, UUID companyId) {
+        return shopOrderRepository.findTableVisibleOrders(tenantId, companyId)
                 .stream().map(this::dto).toList();
     }
 
@@ -1177,6 +1188,7 @@ public class ShopOrderService {
 
     @Transactional
     public ShopOrderResponseDto markAsPaid(UUID orderId, UUID tenantId, UUID companyId) {
+        counterShiftGuard.requireOpenForReceipt(tenantId,companyId);
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         if (ShopOrder.STATUS_CANCELLED.equals(order.getStatus())) {
             throw new IllegalStateException("Cannot mark a cancelled order as paid");
@@ -1199,7 +1211,21 @@ public class ShopOrderService {
                 throw new IllegalArgumentException("Table does not belong to this company");
             }
             order.setTable(table);
+            order.setFulfillmentType(ShopOrder.FULFILLMENT_DINE_IN);
+            order.setTableClearedAt(null);
         }
+        shopOrderRepository.save(order);
+        return dto(order);
+    }
+
+    @Transactional
+    public ShopOrderResponseDto clearOrderTable(UUID orderId, UUID tenantId, UUID companyId) {
+        ShopOrder order = requireOrder(orderId, tenantId, companyId);
+        if (!ShopOrder.STATUS_COMPLETED.equals(order.getStatus())
+                && !ShopOrder.STATUS_PICKED_UP.equals(order.getStatus())) {
+            throw new IllegalStateException("Complete the order before clearing the table");
+        }
+        order.setTableClearedAt(Instant.now());
         shopOrderRepository.save(order);
         return dto(order);
     }

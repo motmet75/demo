@@ -73,7 +73,7 @@ public class ShopCounterOpsController {
             return ResponseEntity.badRequest().body(Map.of("message", "Invalid shift range"));
         }
 
-        List<ShopOrder> orders = shopOrderRepository.searchStaffOrders(tId, cId, null, from, to);
+        List<ShopOrder> orders = shopOrderRepository.findShiftOrders(tId, cId, from, to);
         BigDecimal totalSales = BigDecimal.ZERO;
         BigDecimal cashIn = BigDecimal.ZERO;
         BigDecimal bankIn = BigDecimal.ZERO;
@@ -92,6 +92,9 @@ public class ShopCounterOpsController {
                 debt = debt.add(net);
                 continue;
             }
+            // Attribute receipts to payment time, including orders created in a previous shift.
+            Instant receiptAt = order.getPaidAt() != null ? order.getPaidAt() : order.getCreatedAt();
+            if (receiptAt.isBefore(from) || !receiptAt.isBefore(to)) continue;
             if (ShopOrder.STATUS_COMPLETED.equals(order.getStatus())) completed++;
             String method = order.getPaymentMethod();
             if (ShopOrder.PAYMENT_BANK_QR.equals(method)) {
@@ -107,7 +110,10 @@ public class ShopCounterOpsController {
             }
         }
 
-        BigDecimal paymentNoteTotal = paymentNoteTotal(tId, cId, from, to);
+        BigDecimal paymentNoteTotal = paymentNoteTotal(tId, cId, from, to, "CASH");
+        BigDecimal bankPaymentNoteTotal = paymentNoteTotal(tId, cId, from, to, "BANK_QR");
+        BigDecimal receiptNoteCashTotal = financialNoteTotal(tId, cId, from, to, "CASH", "RECEIPT");
+        BigDecimal receiptNoteBankTotal = financialNoteTotal(tId, cId, from, to, "BANK_QR", "RECEIPT");
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("orderCount", orders.size());
         result.put("completedOrderCount", completed);
@@ -118,6 +124,9 @@ public class ShopCounterOpsController {
         result.put("bankingIn", bankIn);
         result.put("debtAmount", debt);
         result.put("paymentNoteTotal", paymentNoteTotal);
+        result.put("bankPaymentNoteTotal", bankPaymentNoteTotal);
+        result.put("receiptNoteCashTotal", receiptNoteCashTotal);
+        result.put("receiptNoteBankTotal", receiptNoteBankTotal);
         return ResponseEntity.ok(result);
     }
 
@@ -146,7 +155,7 @@ public class ShopCounterOpsController {
         LocalDate targetDate = date != null ? date : LocalDate.now();
         return ResponseEntity.ok(jdbcTemplate.queryForList("""
                 SELECT id, note_number, note_date, object_name, recipient_name, address, reason,
-                       amount, created_by, created_at
+                       amount, payment_method, invoice_id, note_type, inventory_movement_id, created_by, created_at
                 FROM shop_payment_note
                 WHERE tenant_id = ? AND company_id = ? AND note_date = ?
                 ORDER BY created_at DESC
@@ -164,23 +173,26 @@ public class ShopCounterOpsController {
         UUID tId = resolve(tenantId, hTenant);
         UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
+        new com.ams.bomcore.service.shop.CounterShiftGuard(jdbcTemplate).requireOpenForReceipt(tId,cId);
+        String noteType = noteType(body.get("noteType"));
         String reason = stringValue(body.get("reason"));
-        if (reason == null) return ResponseEntity.badRequest().body(Map.of("message", "Lý do chi là bắt buộc"));
+        if (reason == null) return ResponseEntity.badRequest().body(Map.of("message", "Nội dung phiếu thu / chi là bắt buộc"));
         BigDecimal amount = decimalValue(body.get("amount"));
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
             return ResponseEntity.badRequest().body(Map.of("message", "Số tiền phải lớn hơn 0"));
         }
         LocalDate noteDate = localDateValue(body.get("noteDate"), LocalDate.now());
-        String noteNumber = nextPaymentNoteNumber(tId, cId);
+        String noteNumber = nextPaymentNoteNumber(tId, cId, noteType);
         UUID id = UUID.randomUUID();
         jdbcTemplate.update("""
                 INSERT INTO shop_payment_note
                 (id, tenant_id, company_id, note_number, note_date, object_name, recipient_name,
-                 address, reason, amount, created_by, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now(), now())
+                 address, reason, amount, payment_method, invoice_id, note_type, created_by, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now(), now())
                 """, id, tId, cId, noteNumber, Date.valueOf(noteDate), stringValue(body.get("objectName")),
                 stringValue(body.get("recipientName")), stringValue(body.get("address")), reason,
-                amount, currentUsername(authentication));
+                amount, paymentMethod(body.get("paymentMethod")), uuidOrNull(body.get("invoiceId")), noteType,
+                currentUsername(authentication));
         return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
                 "id", id,
                 "noteNumber", noteNumber,
@@ -284,6 +296,9 @@ public class ShopCounterOpsController {
         UUID tId = resolve(tenantId, hTenant);
         UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
+        if (Boolean.TRUE.equals(jdbcTemplate.queryForObject("SELECT EXISTS(SELECT 1 FROM shop_counter_shift WHERE tenant_id=? AND company_id=?)", Boolean.class,tId,cId))) {
+            return ResponseEntity.badRequest().body(Map.of("message","Dùng Đóng ca & bàn giao để kiểm đếm và khóa ca."));
+        }
         LocalDate shiftDate = localDateValue(body.get("shiftDate"), LocalDate.now());
         UUID id = UUID.randomUUID();
         jdbcTemplate.update("""
@@ -358,20 +373,39 @@ public class ShopCounterOpsController {
         }
     }
 
-    private BigDecimal paymentNoteTotal(UUID tenantId, UUID companyId, Instant from, Instant to) {
+    private BigDecimal paymentNoteTotal(UUID tenantId, UUID companyId, Instant from, Instant to,
+                                        String paymentMethod) {
+        return financialNoteTotal(tenantId, companyId, from, to, paymentMethod, "EXPENSE");
+    }
+
+    private BigDecimal financialNoteTotal(UUID tenantId, UUID companyId, Instant from, Instant to,
+                                          String paymentMethod, String noteType) {
         BigDecimal value = jdbcTemplate.queryForObject("""
                 SELECT COALESCE(SUM(amount), 0)
                 FROM shop_payment_note
                 WHERE tenant_id = ? AND company_id = ? AND created_at >= ? AND created_at < ?
-                """, BigDecimal.class, tenantId, companyId, Timestamp.from(from), Timestamp.from(to));
+                  AND COALESCE(payment_method, 'CASH') = ?
+                  AND COALESCE(note_type, 'EXPENSE') = ?
+                """, BigDecimal.class, tenantId, companyId, Timestamp.from(from), Timestamp.from(to), paymentMethod, noteType);
         return nz(value);
     }
 
-    private String nextPaymentNoteNumber(UUID tenantId, UUID companyId) {
+    private String nextPaymentNoteNumber(UUID tenantId, UUID companyId, String noteType) {
         Long count = jdbcTemplate.queryForObject("""
-                SELECT COUNT(*) FROM shop_payment_note WHERE tenant_id = ? AND company_id = ?
-                """, Long.class, tenantId, companyId);
-        return "PC" + String.format("%06d", (count == null ? 0 : count) + 1);
+                SELECT COUNT(*) FROM shop_payment_note
+                WHERE tenant_id = ? AND company_id = ? AND COALESCE(note_type, 'EXPENSE') = ?
+                """, Long.class, tenantId, companyId, noteType);
+        return ("RECEIPT".equals(noteType) ? "PT" : "PC") + String.format("%06d", (count == null ? 0 : count) + 1);
+    }
+
+    private String noteType(Object raw) {
+        String type = stringValue(raw);
+        if (type == null) return "EXPENSE";
+        type = type.toUpperCase();
+        if (!"EXPENSE".equals(type) && !"RECEIPT".equals(type)) {
+            throw new IllegalArgumentException("noteType must be EXPENSE or RECEIPT");
+        }
+        return type;
     }
 
     private BigDecimal netOrderAmount(ShopOrder order) {
@@ -387,6 +421,16 @@ public class ShopCounterOpsController {
         Object principal = authentication.getPrincipal();
         if (principal instanceof User user) return user.getUsername();
         return authentication.getName() != null ? authentication.getName() : "system";
+    }
+
+    private String paymentMethod(Object raw) {
+        String method = stringValue(raw);
+        if (method == null) return "CASH";
+        method = method.toUpperCase();
+        if (!"CASH".equals(method) && !"BANK_QR".equals(method)) {
+            throw new IllegalArgumentException("paymentMethod must be CASH or BANK_QR");
+        }
+        return method;
     }
 
     private String stringValue(Object raw) {

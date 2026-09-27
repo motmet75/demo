@@ -512,6 +512,6 @@ public class InventoryMovementService {
 
     @Transactional(rollbackFor = Exception.class)
     public void delete(UUID id) {
-        movementRepository.deleteById(id);
+        throw new InventoryException("Phiếu đã ghi sổ không được xóa. Lập phiếu điều chỉnh có lý do.");
     }
 }

@@ -151,6 +151,26 @@ public class InvoiceController {
         }
     }
 
+    @PostMapping(path = "/{id}/payment", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> recordPurchasePayment(
+            @PathVariable UUID id,
+            @RequestBody Map<String, Object> body,
+            @RequestParam(value = "tenantId", required = false) UUID tenantId,
+            @RequestParam(value = "companyId", required = false) UUID companyId,
+            @RequestHeader(value = "X-Tenant-Id", required = false) String ht,
+            @RequestHeader(value = "X-Company-Id", required = false) String hc) {
+        tenantId = resolveTenant(tenantId, ht);
+        companyId = resolveCompany(companyId, hc);
+        if (tenantId == null || companyId == null) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("tenantId and companyId are required");
+        }
+        try {
+            return ResponseEntity.ok(invoiceService.recordPurchasePayment(id, body, tenantId, companyId));
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+        }
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(
             @PathVariable UUID id,

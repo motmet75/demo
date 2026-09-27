@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Alert, Box, Button, Chip, CircularProgress, Divider, Paper, Stack, Tab, Table,
-  TableBody, TableCell, TableContainer, TableHead, TableRow, Tabs, TextField,
+  Alert, Box, Button, Checkbox, Chip, CircularProgress, Divider, FormControlLabel, Paper, Stack, Tab, Table,
+  TableBody, TableCell, TableContainer, TableHead, TableRow, Tabs, TextField, MenuItem,
   Typography
 } from '@mui/material'
 import RefreshIcon from '@mui/icons-material/Refresh'
@@ -19,6 +19,7 @@ import {
   fetchCounterShiftSummary,
   saveCounterInventoryReconciliation,
 } from '../../api/shopApi'
+import CounterWorkflow from './CounterWorkflow'
 import { useAuth } from '../../context/useAuth'
 
 const DENOMINATIONS = [500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000, 500]
@@ -27,6 +28,19 @@ const fmtMoney = (value) => `${Number(value || 0).toLocaleString('vi-VN')}đ`
 const fmtQty = (value) => Number(value || 0).toLocaleString('vi-VN', { maximumFractionDigits: 4 })
 const digits = (value) => String(value || '').replace(/[^\d.-]/g, '')
 const moneyNumber = (value) => Number(digits(value)) || 0
+const inventoryTimestamp = row => new Date(row.createdAt || row.updatedAt || 0).getTime() || 0
+const shortInventoryDate = value => {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '-'
+  const month = date.toLocaleDateString('en-US', { month: 'short', timeZone: 'Asia/Ho_Chi_Minh' })
+  const day = date.toLocaleDateString('en-US', { day: '2-digit', timeZone: 'Asia/Ho_Chi_Minh' })
+  return `${month}-${day}`
+}
+const quantityTotals = rows => Object.entries(rows.reduce((totals, row) => {
+  const unit = row.unit || 'đơn vị'
+  totals[unit] = (totals[unit] || 0) + Number(row.quantityOnHand || 0)
+  return totals
+}, {})).map(([unit, quantity]) => `${fmtQty(quantity)} ${unit}`).join(' · ')
 
 function localDateValue(date = new Date()) {
   const pad = (n) => String(n).padStart(2, '0')
@@ -75,7 +89,7 @@ function printHtml(title, bodyHtml) {
 
 export default function CounterShiftPage() {
   const { user } = useAuth()
-  const [tab, setTab] = useState(0)
+  const [tab, setTab] = useState(3)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(false)
@@ -94,13 +108,16 @@ export default function CounterShiftPage() {
 
   const [inventoryRows, setInventoryRows] = useState([])
   const [inventorySearch, setInventorySearch] = useState('')
+  const [printGroupByWarehouse, setPrintGroupByWarehouse] = useState(true)
+  const [printSubtotalByCode, setPrintSubtotalByCode] = useState(false)
   const [actualQtyById, setActualQtyById] = useState({})
   const [reasonById, setReasonById] = useState({})
   const [reconciliations, setReconciliations] = useState([])
+  const inventoryCellRefs = useRef({ actual: {}, reason: {} })
 
   const [paymentDate, setPaymentDate] = useState(localDateValue())
   const [paymentNotes, setPaymentNotes] = useState([])
-  const [paymentForm, setPaymentForm] = useState({ objectName: '', recipientName: '', address: '', reason: '', amount: '' })
+  const [paymentForm, setPaymentForm] = useState({ noteType: 'EXPENSE', objectName: '', recipientName: '', address: '', reason: '', amount: '', paymentMethod: 'CASH' })
 
   const cashActual = useMemo(() => DENOMINATIONS.reduce((sum, value) => {
     const count = Number(denominationCounts[value] || 0)
@@ -111,17 +128,30 @@ export default function CounterShiftPage() {
   const otherAmountNumber = moneyNumber(otherAmount)
   const expectedCash = openingCashNumber
     + Number(summary.cashIn || 0)
+    + Number(summary.receiptNoteCashTotal || 0)
     + otherAmountNumber
     - Number(summary.paymentNoteTotal || 0)
   const cashDifference = cashActual - expectedCash
 
   const filteredInventoryRows = useMemo(() => {
     const q = inventorySearch.trim().toLowerCase()
-    if (!q) return inventoryRows
-    return inventoryRows.filter(row => [
+    const rows = q ? inventoryRows.filter(row => [
       row.materialCode, row.materialName, row.warehouseCode, row.warehouseName, row.batchNo
-    ].some(value => String(value || '').toLowerCase().includes(q)))
+    ].some(value => String(value || '').toLowerCase().includes(q))) : inventoryRows
+    return [...rows].sort((a, b) => inventoryTimestamp(b) - inventoryTimestamp(a)
+      || String(a.materialCode || '').localeCompare(String(b.materialCode || '')))
   }, [inventoryRows, inventorySearch])
+
+  const focusInventoryCell = (rowIndex, field) => {
+    const row = filteredInventoryRows[rowIndex]
+    if (!row) return
+    const key = row.inventoryId || row.id
+    requestAnimationFrame(() => {
+      const input = inventoryCellRefs.current[field]?.[key]
+      input?.focus()
+      if (field === 'actual') input?.select()
+    })
+  }
 
   const loadSummary = async () => {
     setError('')
@@ -162,7 +192,7 @@ export default function CounterShiftPage() {
       const notes = await apiData(fetchCounterPaymentNotes(paymentDate))
       setPaymentNotes(Array.isArray(notes) ? notes : [])
     } catch (e) {
-      setError(e.message || 'Không tải được phiếu chi')
+      setError(e.message || 'Không tải được phiếu thu / chi')
     } finally {
       setLoading(false)
     }
@@ -184,7 +214,7 @@ export default function CounterShiftPage() {
         handoverTo,
         openingCash: openingCashNumber,
         cashSales: summary.cashIn || 0,
-        bankSales: summary.bankingIn || 0,
+        bankSales: Number(summary.bankingIn || 0) + Number(summary.receiptNoteBankTotal || 0),
         debtAmount: summary.debtAmount || 0,
         otherAmount: otherAmountNumber,
         paymentNoteTotal: summary.paymentNoteTotal || 0,
@@ -244,18 +274,20 @@ export default function CounterShiftPage() {
     try {
       const note = await apiData(createCounterPaymentNote({
         noteDate: paymentDate,
+        noteType: paymentForm.noteType,
         objectName: paymentForm.objectName,
         recipientName: paymentForm.recipientName,
         address: paymentForm.address,
         reason: paymentForm.reason,
         amount: moneyNumber(paymentForm.amount),
-      }), 'Không tạo được phiếu chi')
-      setSuccess(`Đã tạo phiếu chi ${note.noteNumber || ''}`)
-      setPaymentForm({ objectName: '', recipientName: '', address: '', reason: '', amount: '' })
+        paymentMethod: paymentForm.paymentMethod,
+      }), 'Không tạo được phiếu thu / chi')
+      setSuccess(`Đã tạo ${paymentForm.noteType === 'RECEIPT' ? 'phiếu thu' : 'phiếu chi'} ${note.noteNumber || ''}`)
+      setPaymentForm({ noteType: 'EXPENSE', objectName: '', recipientName: '', address: '', reason: '', amount: '', paymentMethod: 'CASH' })
       await loadPaymentNotes()
       await loadSummary()
     } catch (e) {
-      setError(e.message || 'Không tạo được phiếu chi')
+      setError(e.message || 'Không tạo được phiếu thu / chi')
     }
   }
 
@@ -265,7 +297,7 @@ export default function CounterShiftPage() {
       if (!count) return ''
       return `<tr><td class="right">${fmtMoney(value)}</td><td class="right">${count}</td><td class="right">${fmtMoney(value * count)}</td></tr>`
     }).join('')
-    const paymentRows = paymentNotes.map((note, idx) =>
+    const paymentRows = paymentNotes.filter(note => (note.note_type || 'EXPENSE') === 'EXPENSE').map((note, idx) =>
       `<tr><td>${idx + 1}</td><td>${note.reason || ''}</td><td class="right">${fmtMoney(note.amount)}</td></tr>`
     ).join('')
     printHtml('Biên bản bàn giao ca', `
@@ -278,8 +310,11 @@ export default function CounterShiftPage() {
         <tr><td>Tổng doanh thu</td><td class="right bold">${fmtMoney(summary.totalSales)}</td></tr>
         <tr><td>Tiền mặt đầu ca</td><td class="right">${fmtMoney(openingCashNumber)}</td></tr>
         <tr><td>Thu tiền mặt trong ca</td><td class="right">${fmtMoney(summary.cashIn)}</td></tr>
+        <tr><td>Phiếu thu tiền mặt</td><td class="right">${fmtMoney(summary.receiptNoteCashTotal)}</td></tr>
         <tr><td>Chi trong ca</td><td class="right">${fmtMoney(summary.paymentNoteTotal)}</td></tr>
         <tr><td>Tiền thẻ / chuyển khoản</td><td class="right">${fmtMoney(summary.bankingIn)}</td></tr>
+        <tr><td>Phiếu thu QR / chuyển khoản</td><td class="right">${fmtMoney(summary.receiptNoteBankTotal)}</td></tr>
+        <tr><td>Phiếu chi QR / chuyển khoản</td><td class="right">${fmtMoney(summary.bankPaymentNoteTotal)}</td></tr>
         <tr><td>Order chưa thanh toán</td><td class="right">${summary.unpaidOrderCount || 0}</td></tr>
         <tr><td>Tiền dự kiến trong két</td><td class="right">${fmtMoney(expectedCash)}</td></tr>
         <tr><td>Thực tế kiểm đếm</td><td class="right">${fmtMoney(cashActual)}</td></tr>
@@ -295,27 +330,53 @@ export default function CounterShiftPage() {
   }
 
   const printInventorySnapshot = () => {
-    const rows = filteredInventoryRows.map(row =>
-      `<tr><td>${row.materialCode || ''}</td><td>${row.materialName || ''}</td><td>${row.warehouseCode || ''}</td><td>${row.batchNo || ''}</td><td class="right">${fmtQty(row.quantityOnHand)}</td><td>${row.unit || ''}</td><td></td></tr>`
-    ).join('')
+    const renderRows = (sourceRows, showWarehouse) => {
+      const detail = row => `<tr><td>${row.materialCode || ''}</td><td>${row.materialName || ''}</td>${showWarehouse ? `<td>${row.warehouseCode || '-'}</td>` : ''}<td>${row.batchNo || '-'}</td><td>${shortInventoryDate(row.createdAt || row.updatedAt)}</td><td class="right">${fmtQty(row.quantityOnHand)}</td><td>${row.unit || ''}</td><td></td></tr>`
+      if (!printSubtotalByCode) return sourceRows.map(detail).join('')
+      const materialGroups = new Map()
+      sourceRows.forEach(row => {
+        const key = `${row.materialCode || ''}\u0000${row.unit || ''}`
+        if (!materialGroups.has(key)) materialGroups.set(key, [])
+        materialGroups.get(key).push(row)
+      })
+      return [...materialGroups.values()].map(group => `${group.map(detail).join('')}<tr style="font-weight:800;background:#f3f4f6"><td colspan="${showWarehouse ? 5 : 4}">Tổng mã ${group[0].materialCode || '-'} · ${group[0].materialName || ''}</td><td class="right">${fmtQty(group.reduce((sum, row) => sum + Number(row.quantityOnHand || 0), 0))}</td><td>${group[0].unit || ''}</td><td></td></tr>`).join('')
+    }
+    let rows = ''
+    let warehouseHeader = '<th>Kho</th>'
+    if (printGroupByWarehouse) {
+      warehouseHeader = ''
+      const warehouses = new Map()
+      filteredInventoryRows.forEach(row => {
+        const code = row.warehouseCode || 'Chưa có mã kho'
+        if (!warehouses.has(code)) warehouses.set(code, [])
+        warehouses.get(code).push(row)
+      })
+      rows = [...warehouses.entries()]
+        .sort(([, a], [, b]) => Math.max(...b.map(inventoryTimestamp)) - Math.max(...a.map(inventoryTimestamp)))
+        .map(([code, group]) => `<tr style="font-weight:900;background:#dbeafe"><td colspan="7">KHO ${code} · Tổng ${quantityTotals(group)}</td></tr>${renderRows(group, false)}`)
+        .join('')
+    } else {
+      rows = renderRows(filteredInventoryRows, true)
+    }
     printHtml('Đối soát tồn kho', `
       <h1>ĐỐI SOÁT TỒN KHO</h1>
-      <h2>Ngày ${shiftDate}</h2>
-      <table><tr><th>Mã</th><th>Tên</th><th>Kho</th><th>Lô</th><th class="right">Tồn hệ thống</th><th>ĐVT</th><th>Thực đếm</th></tr>${rows}</table>
+      <h2>Ngày ${shortInventoryDate(`${shiftDate}T00:00:00+07:00`)} · Lô mới nhất ở trên</h2>
+      <table><tr><th>Mã</th><th>Tên</th>${warehouseHeader}<th>Lô</th><th>Ngày nhập</th><th class="right">Tồn hệ thống</th><th>ĐVT</th><th>Thực đếm</th></tr>${rows}</table>
     `)
   }
 
   const printPaymentNote = (note) => {
-    printHtml('Phiếu chi', `
-      <h1>PHIẾU CHI</h1>
+    const isReceipt = note.note_type === 'RECEIPT'
+    printHtml(isReceipt ? 'Phiếu thu' : 'Phiếu chi', `
+      <h1>PHIẾU ${isReceipt ? 'THU' : 'CHI'}</h1>
       <h2>Ngày ${note.note_date || note.noteDate || paymentDate}</h2>
       <p><b>Số:</b> ${note.note_number || note.noteNumber || ''}</p>
       <p><b>Đối tượng:</b> ${note.object_name || ''}</p>
-      <p><b>Người nhận:</b> ${note.recipient_name || ''}</p>
+      <p><b>${isReceipt ? 'Người nộp' : 'Người nhận'}:</b> ${note.recipient_name || ''}</p>
       <p><b>Địa chỉ:</b> ${note.address || ''}</p>
-      <p><b>Lý do chi:</b> ${note.reason || ''}</p>
+      <p><b>Nội dung ${isReceipt ? 'thu' : 'chi'}:</b> ${note.reason || ''}</p>
       <p><b>Số tiền:</b> <span class="bold">${fmtMoney(note.amount)}</span></p>
-      <div class="sign"><div>Người nhận tiền<br><br><br>(Ký, họ tên)</div><div>Người lập phiếu<br><br><br>(Ký, họ tên)</div></div>
+      <div class="sign"><div>${isReceipt ? 'Người nộp tiền' : 'Người nhận tiền'}<br><br><br>(Ký, họ tên)</div><div>Người lập phiếu<br><br><br>(Ký, họ tên)</div></div>
     `)
   }
 
@@ -333,15 +394,17 @@ export default function CounterShiftPage() {
       </Box>
 
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ bgcolor: '#fff', borderBottom: '1px solid #ddd' }}>
-        <Tab label="Bàn giao ca" />
-        <Tab label="Đối soát tồn kho" />
-        <Tab label="Phiếu chi" />
+        <Tab value={3} label="Mở / đóng ca · Nhập xuất kho" />
+        <Tab value={0} label="Báo cáo / in bàn giao" />
+        <Tab value={1} label="Đối soát tồn kho" />
+        <Tab value={2} label="Phiếu thu / chi" />
       </Tabs>
 
       <Box sx={{ p: 2, overflow: 'auto', flex: 1 }}>
         {error && <Alert severity="error" sx={{ mb: 1.5 }} onClose={() => setError('')}>{error}</Alert>}
         {success && <Alert severity="success" sx={{ mb: 1.5 }} onClose={() => setSuccess('')}>{success}</Alert>}
 
+        {tab === 3 && <CounterWorkflow />}
         {tab === 0 && (
           <Stack spacing={2}>
             <Paper sx={{ p: 1.5, borderRadius: 1 }}>
@@ -374,8 +437,11 @@ export default function CounterShiftPage() {
                   <Table size="small">
                     <TableBody>
                       <TableRow><TableCell>Thu tiền mặt</TableCell><TableCell align="right">{fmtMoney(summary.cashIn)}</TableCell></TableRow>
+                      <TableRow><TableCell>Phiếu thu tiền mặt</TableCell><TableCell align="right">{fmtMoney(summary.receiptNoteCashTotal)}</TableCell></TableRow>
                       <TableRow><TableCell>Tiền thẻ / QR</TableCell><TableCell align="right">{fmtMoney(summary.bankingIn)}</TableCell></TableRow>
+                      <TableRow><TableCell>Phiếu thu QR / chuyển khoản</TableCell><TableCell align="right">{fmtMoney(summary.receiptNoteBankTotal)}</TableCell></TableRow>
                       <TableRow><TableCell>Phiếu chi trong ca</TableCell><TableCell align="right">{fmtMoney(summary.paymentNoteTotal)}</TableCell></TableRow>
+                      <TableRow><TableCell>Phiếu chi QR / chuyển khoản</TableCell><TableCell align="right">{fmtMoney(summary.bankPaymentNoteTotal)}</TableCell></TableRow>
                       <TableRow><TableCell>Nợ / chưa thanh toán</TableCell><TableCell align="right">{fmtMoney(summary.debtAmount)}</TableCell></TableRow>
                       <TableRow><TableCell sx={{ fontWeight: 900 }}>Tiền mặt dự kiến</TableCell><TableCell align="right" sx={{ fontWeight: 900 }}>{fmtMoney(expectedCash)}</TableCell></TableRow>
                       <TableRow><TableCell sx={{ fontWeight: 900 }}>Thực tế kiểm đếm</TableCell><TableCell align="right" sx={{ fontWeight: 900 }}>{fmtMoney(cashActual)}</TableCell></TableRow>
@@ -443,6 +509,10 @@ export default function CounterShiftPage() {
                 <Button variant="outlined" startIcon={<PrintIcon />} onClick={printInventorySnapshot}>In tồn hiện tại</Button>
                 <Button variant="contained" startIcon={<Inventory2Icon />} onClick={saveReconciliation}>Lưu đối soát</Button>
               </Stack>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mt: 1 }}>
+                <FormControlLabel control={<Checkbox size="small" checked={printGroupByWarehouse} onChange={e => setPrintGroupByWarehouse(e.target.checked)} />} label="Khi in: gom theo mã kho, bỏ cột kho lặp lại" />
+                <FormControlLabel control={<Checkbox size="small" checked={printSubtotalByCode} onChange={e => setPrintSubtotalByCode(e.target.checked)} />} label="Khi in: thêm tổng phụ theo mã vật tư" />
+              </Stack>
             </Paper>
             <TableContainer component={Paper} sx={{ borderRadius: 1, maxHeight: 'calc(100vh - 260px)' }}>
               <Table size="small" stickyHeader>
@@ -457,7 +527,7 @@ export default function CounterShiftPage() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {filteredInventoryRows.map(row => {
+                  {filteredInventoryRows.map((row, rowIndex) => {
                     const key = row.inventoryId || row.id
                     const actualRaw = actualQtyById[key]
                     const systemQty = Number(row.quantityOnHand || 0)
@@ -472,15 +542,29 @@ export default function CounterShiftPage() {
                         </TableCell>
                         <TableCell>
                           <Typography>{row.warehouseCode || '-'}</Typography>
-                          <Typography variant="caption" color="text.secondary">{row.batchNo || '-'}</Typography>
+                          <Typography variant="caption" color="text.secondary">{row.batchNo || '-'} · {shortInventoryDate(row.createdAt || row.updatedAt)}</Typography>
                         </TableCell>
                         <TableCell align="right">{fmtQty(row.quantityOnHand)} {row.unit || ''}</TableCell>
                         <TableCell align="right" width={150}>
-                          <TextField size="small" type="number" value={actualQtyById[key] ?? ''} onChange={e => setActualQtyById(prev => ({ ...prev, [key]: e.target.value }))} inputProps={{ step: 'any', style: { textAlign: 'right' } }} />
+                          <TextField size="small" type="number" value={actualQtyById[key] ?? ''} onChange={e => setActualQtyById(prev => ({ ...prev, [key]: e.target.value }))}
+                            inputRef={node => { if (node) inventoryCellRefs.current.actual[key] = node; else delete inventoryCellRefs.current.actual[key] }}
+                            onKeyDown={event => {
+                              if (event.nativeEvent.isComposing) return
+                              if (event.key === 'Enter') {
+                                event.preventDefault()
+                                focusInventoryCell(rowIndex + 1, 'actual')
+                              } else if (event.key === 'Tab' && !event.shiftKey) {
+                                event.preventDefault()
+                                focusInventoryCell(rowIndex, 'reason')
+                              }
+                            }}
+                            inputProps={{ step: 'any', style: { textAlign: 'right' }, 'aria-label': `Thực đếm ${row.materialCode || rowIndex + 1}` }} />
                         </TableCell>
                         <TableCell align="right">{diff === null ? '-' : <Chip size="small" color={mismatch ? 'warning' : 'success'} label={fmtQty(diff)} />}</TableCell>
                         <TableCell width={240}>
-                          <TextField size="small" value={reasonById[key] ?? ''} onChange={e => setReasonById(prev => ({ ...prev, [key]: e.target.value }))} placeholder="Không bắt buộc" fullWidth />
+                          <TextField size="small" value={reasonById[key] ?? ''} onChange={e => setReasonById(prev => ({ ...prev, [key]: e.target.value }))} placeholder="Không bắt buộc" fullWidth
+                            inputRef={node => { if (node) inventoryCellRefs.current.reason[key] = node; else delete inventoryCellRefs.current.reason[key] }}
+                            inputProps={{ 'aria-label': `Lý do ${row.materialCode || rowIndex + 1}` }} />
                         </TableCell>
                       </TableRow>
                     )
@@ -495,34 +579,42 @@ export default function CounterShiftPage() {
         {tab === 2 && (
           <Stack spacing={1.5}>
             <Paper sx={{ p: 1.5, borderRadius: 1 }}>
-              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '160px 1fr 1fr' }, gap: 1.25 }}>
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '160px 160px 1fr 1fr' }, gap: 1.25 }}>
                 <TextField label="Ngày" type="date" size="small" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} InputLabelProps={{ shrink: true }} />
+                <TextField select label="Loại phiếu" size="small" value={paymentForm.noteType} onChange={e => setPaymentForm(prev => ({ ...prev, noteType: e.target.value }))}>
+                  <MenuItem value="EXPENSE">Phiếu chi</MenuItem><MenuItem value="RECEIPT">Phiếu thu</MenuItem>
+                </TextField>
                 <TextField label="Đối tượng" size="small" value={paymentForm.objectName} onChange={e => setPaymentForm(prev => ({ ...prev, objectName: e.target.value }))} />
                 <TextField label="Người nhận" size="small" value={paymentForm.recipientName} onChange={e => setPaymentForm(prev => ({ ...prev, recipientName: e.target.value }))} />
                 <TextField label="Địa chỉ" size="small" value={paymentForm.address} onChange={e => setPaymentForm(prev => ({ ...prev, address: e.target.value }))} />
-                <TextField label="Lý do chi" size="small" required value={paymentForm.reason} onChange={e => setPaymentForm(prev => ({ ...prev, reason: e.target.value }))} />
+                <TextField label={paymentForm.noteType === 'RECEIPT' ? 'Nội dung thu' : 'Lý do chi'} size="small" required value={paymentForm.reason} onChange={e => setPaymentForm(prev => ({ ...prev, reason: e.target.value }))} />
                 <TextField label="Số tiền" size="small" required value={paymentForm.amount} onChange={e => setPaymentForm(prev => ({ ...prev, amount: digits(e.target.value) }))} inputMode="numeric" />
+                <TextField select label="Thanh toán" size="small" value={paymentForm.paymentMethod} onChange={e => setPaymentForm(prev => ({ ...prev, paymentMethod: e.target.value }))}>
+                  <MenuItem value="CASH">Tiền mặt</MenuItem><MenuItem value="BANK_QR">QR / chuyển khoản</MenuItem>
+                </TextField>
               </Box>
               <Stack direction="row" spacing={1} sx={{ mt: 1.25 }}>
-                <Button variant="contained" startIcon={<SaveIcon />} onClick={savePaymentNote}>Tạo phiếu chi</Button>
+                <Button variant="contained" startIcon={<SaveIcon />} onClick={savePaymentNote}>Tạo {paymentForm.noteType === 'RECEIPT' ? 'phiếu thu' : 'phiếu chi'}</Button>
                 <Button variant="outlined" startIcon={<RefreshIcon />} onClick={loadPaymentNotes}>Tải lại</Button>
               </Stack>
             </Paper>
             <TableContainer component={Paper} sx={{ borderRadius: 1 }}>
               <Table size="small">
-                <TableHead><TableRow><TableCell>Số phiếu</TableCell><TableCell>Lý do</TableCell><TableCell>Người nhận</TableCell><TableCell align="right">Số tiền</TableCell><TableCell>Người lập</TableCell><TableCell align="right">In</TableCell></TableRow></TableHead>
+                <TableHead><TableRow><TableCell>Số phiếu</TableCell><TableCell>Loại</TableCell><TableCell>Nội dung</TableCell><TableCell>Người nhận / nộp</TableCell><TableCell>Thanh toán</TableCell><TableCell align="right">Số tiền</TableCell><TableCell>Người lập</TableCell><TableCell align="right">In</TableCell></TableRow></TableHead>
                 <TableBody>
                   {paymentNotes.map(note => (
                     <TableRow key={note.id} hover>
                       <TableCell>{note.note_number || '-'}</TableCell>
+                      <TableCell>{note.note_type === 'RECEIPT' ? 'Thu' : 'Chi'}</TableCell>
                       <TableCell>{note.reason || '-'}</TableCell>
                       <TableCell>{note.recipient_name || '-'}</TableCell>
+                      <TableCell>{note.payment_method === 'BANK_QR' ? 'QR / chuyển khoản' : 'Tiền mặt'}</TableCell>
                       <TableCell align="right">{fmtMoney(note.amount)}</TableCell>
                       <TableCell>{note.created_by || '-'}</TableCell>
                       <TableCell align="right"><Button size="small" startIcon={<PrintIcon />} onClick={() => printPaymentNote(note)}>In</Button></TableCell>
                     </TableRow>
                   ))}
-                  {!paymentNotes.length && <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4, color: 'text.secondary' }}>Chưa có phiếu chi trong ngày</TableCell></TableRow>}
+                  {!paymentNotes.length && <TableRow><TableCell colSpan={8} align="center" sx={{ py: 4, color: 'text.secondary' }}>Chưa có phiếu thu / chi trong ngày</TableCell></TableRow>}
                 </TableBody>
               </Table>
             </TableContainer>

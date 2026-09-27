@@ -193,7 +193,7 @@ function apiMessage(data, fallback) {
   return (data && (data.message || data.error)) || (typeof data === 'string' ? data : null) || fallback
 }
 
-export default function ShopTableLayoutDesigner({ tables = [], expanded = false }) {
+export default function ShopTableLayoutDesigner({ tables = [], expanded = false, onQuickOrder }) {
   const stageRef = useRef(null)
   const [layouts, setLayouts] = useState([defaultLayout()])
   const [selectedLayoutId, setSelectedLayoutId] = useState('')
@@ -350,6 +350,28 @@ export default function ShopTableLayoutDesigner({ tables = [], expanded = false 
     }
   }
 
+  const saveTableFavorites = async (itemId, favoriteModelIds) => {
+    if (!selectedLayout) return
+    const next = {
+      ...selectedLayout,
+      items: (selectedLayout.items || []).map(item => item.id === itemId ? { ...item, favoriteModelIds } : item),
+    }
+    setLayouts(prev => prev.map(layout => layout.id === selectedLayout.id ? next : layout))
+    if (!next.persisted) {
+      setSavedText('Favorites ready · save drawing')
+      return
+    }
+    setSavingDrawing(true); setDrawingError('')
+    try {
+      const response = await updateShopTableDrawing(next.id, payloadForLayout(next))
+      if (!response.res.ok) throw new Error(apiMessage(response.data, 'Failed to save favorites'))
+      const saved = entityToLayout(response.data)
+      setLayouts(prev => prev.map(layout => layout.id === next.id ? saved : layout))
+      setSavedText('Favorites saved')
+    } catch (error) { setDrawingError(error.message || 'Failed to save favorites') }
+    finally { setSavingDrawing(false) }
+  }
+
   const deleteSelectedItem = () => {
     if (!selectedItem) return
     updateLayout(layout => ({ ...layout, items: (layout.items || []).filter(item => item.id !== selectedItem.id) }))
@@ -399,6 +421,7 @@ export default function ShopTableLayoutDesigner({ tables = [], expanded = false 
   }
 
   const beginDrag = (event, item) => {
+    if (event.button === 2) return
     if (panMode) {
       beginPan(event)
       return
@@ -478,12 +501,18 @@ export default function ShopTableLayoutDesigner({ tables = [], expanded = false 
     const table = item.tableId ? tableMap.get(String(item.tableId)) : null
     const orders = activeOrders(table)
     const numbers = orderNumberText(orders)
+    const paidCount = orders.filter(order => order.paymentStatus === 'PAID').length
+    const unpaidCount = orders.length - paidCount
     const shape = normalizeTableShape(item.shape)
     const tableLabel = shapeLabel(shape)
     return (
       <Box
         key={item.id}
         onPointerDown={event => beginDrag(event, item)}
+        onContextMenu={event => {
+          event.preventDefault(); event.stopPropagation()
+          if (table) onQuickOrder?.({ table, favoriteIds: item.favoriteModelIds || [], onSaveFavorites: ids => saveTableFavorites(item.id, ids) })
+        }}
         sx={{
           ...commonSx,
           border: 'none',
@@ -514,8 +543,8 @@ export default function ShopTableLayoutDesigner({ tables = [], expanded = false 
           sx={{
             position: 'absolute',
             inset: 0,
-            bgcolor: orders.length ? '#e3f2fd' : '#ffffff',
-            border: isSelected ? '2px solid #1565c0' : `1px solid ${orders.length ? '#0288d1' : '#90a4ae'}`,
+            bgcolor: orders.length ? (unpaidCount ? '#fff7ed' : '#f0fdf4') : '#ffffff',
+            border: isSelected ? '2px solid #1565c0' : `2px solid ${orders.length ? (unpaidCount ? '#ea580c' : '#16a34a') : '#90a4ae'}`,
             boxShadow: isSelected ? '0 0 0 3px rgba(21,101,192,0.12)' : 'none',
             borderRadius: tableBorderRadius(shape, item),
             display: 'flex',
@@ -528,9 +557,20 @@ export default function ShopTableLayoutDesigner({ tables = [], expanded = false 
           }}
         >
           <Typography variant="caption" fontWeight={900} noWrap sx={{ width: '100%' }}>{table?.tableName || 'No table'}</Typography>
-          <Typography variant="caption" color={orders.length ? 'primary.main' : 'text.secondary'} fontWeight={900} noWrap sx={{ width: '100%' }}>{numbers || 'No order'}</Typography>
+          <Typography variant="caption" color={orders.length ? (unpaidCount ? '#c2410c' : '#15803d') : 'text.secondary'} fontWeight={900} noWrap sx={{ width: '100%' }}>{numbers || 'No order'}</Typography>
+          {orders.length > 0 && <Typography variant="caption" noWrap sx={{ width: '100%', fontSize: 10, fontWeight: 900, color: unpaidCount ? '#c2410c' : '#15803d' }}>{paidCount} đã trả · {unpaidCount} chưa trả</Typography>}
           <Typography variant="caption" color="text.secondary" noWrap sx={{ width: '100%' }}>{tableLabel}</Typography>
           <Typography variant="caption" color="text.secondary">{normalizeChairCount(item.chairs, 0)} chairs</Typography>
+          {table && <IconButton
+            size="small"
+            aria-label={`Gọi món nhanh ${table.tableName}`}
+            onPointerDown={event => event.stopPropagation()}
+            onClick={event => {
+              event.stopPropagation()
+              onQuickOrder?.({ table, favoriteIds: item.favoriteModelIds || [], onSaveFavorites: ids => saveTableFavorites(item.id, ids) })
+            }}
+            sx={{ position: 'absolute', right: 3, bottom: 3, width: 24, height: 24, bgcolor: '#1976d2', color: '#fff', '&:hover': { bgcolor: '#1565c0' } }}
+          ><AddIcon sx={{ fontSize: 16 }} /></IconButton>}
         </Box>
       </Box>
     )
@@ -555,6 +595,7 @@ export default function ShopTableLayoutDesigner({ tables = [], expanded = false 
           <Button size="small" variant="outlined" startIcon={<CenterFocusStrongIcon />} onClick={resetView}>Reset</Button>
         </Box>
       </Box>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>Nhấp “+” hoặc nhấp chuột phải vào bàn để gọi món nhanh và cấu hình món hay gọi.</Typography>
       {drawingError && <Alert severity="error" sx={{ mb: 1 }} onClose={() => setDrawingError('')}>{drawingError}</Alert>}
 
       <Box sx={{ display: 'flex', gap: 1, alignItems: 'stretch', overflowX: 'auto' }}>

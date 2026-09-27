@@ -64,6 +64,7 @@ public class ShopOrderResponseDto {
     private Instant confirmedAt;
     private Instant readyAt;
     private Instant completedAt;
+    private Instant tableClearedAt;
     private List<ItemDto> items;
     private List<BillDto> bills = Collections.emptyList();
 
@@ -301,6 +302,7 @@ public class ShopOrderResponseDto {
         dto.confirmedAt = order.getConfirmedAt();
         dto.readyAt = order.getReadyAt();
         dto.completedAt = order.getCompletedAt();
+        dto.tableClearedAt = order.getTableClearedAt();
         dto.items = items.stream().map(ItemDto::from).toList();
         return dto;
     }
@@ -379,6 +381,7 @@ public class ShopOrderResponseDto {
     public Instant getConfirmedAt() { return confirmedAt; }
     public Instant getReadyAt() { return readyAt; }
     public Instant getCompletedAt() { return completedAt; }
+    public Instant getTableClearedAt() { return tableClearedAt; }
     public List<ItemDto> getItems() { return items; }
     public List<BillDto> getBills() { return bills; }
 }

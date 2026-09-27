@@ -73,6 +73,8 @@ import {
 import { printCounterOrderAlertTracked, printCupLabelsTracked, printOrderReceiptTracked, printOrderTagTracked, printCombinedReceiptTracked } from '../../utils/printWithHistory'
 import ShopOrderDetailModal from './ShopOrderDetailModal'
 import ManualOrderDialog from './ManualOrderDialog'
+import ShopMenuPage from '../shopfront/ShopMenuPage'
+import QuickCounterDesk from './QuickCounterDesk'
 import QrOrderDialog from './QrOrderDialog'
 import EodAuditDialog from './EodAuditDialog'
 import ConfirmActionDialog from './ConfirmActionDialog'
@@ -280,18 +282,26 @@ function replaceOrderInList(list, order, include) {
   return next
 }
 
+function mergeOrderSnapshots(...snapshots) {
+  const byId = new Map()
+  snapshots.flat().forEach(order => {
+    if (order?.id) byId.set(order.id, order)
+  })
+  return Array.from(byId.values()).sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+}
+
 function QuickConfirmOptions({ value, onChange }) {
   const update = (patch) => onChange?.({ ...value, ...patch })
   const paid = Boolean(value?.paid || value?.complete)
   return (
     <Box sx={{ mt: 1.5, p: 1.25, border: '1px solid #dbeafe', bgcolor: '#f8fbff', borderRadius: 1.5 }}>
       <Typography variant="caption" fontWeight={800} color="primary" sx={{ display: 'block', mb: 0.75 }}>
-        Tùy chọn nhanh
+        Tùy chọn nhanh · thực hiện cùng lúc khi xác nhận
       </Typography>
       <Stack spacing={0.5}>
         <FormControlLabel
           control={<Checkbox size="small" checked={paid} disabled={Boolean(value?.complete)} onChange={e => update({ paid: e.target.checked })} />}
-          label="Đã thanh toán"
+          label="Đã trả tiền"
           sx={{ '& .MuiFormControlLabel-label': { fontSize: 13, fontWeight: 700 } }}
         />
         <TextField
@@ -1441,10 +1451,10 @@ function OrderCardGrid({ rows, loading, tables, actions, modelImageMap = {}, sel
           value={search} onChange={e => setSearch(e.target.value)}
           sx={{ flex: 1, display: { xs: 'none', sm: 'inline-flex' } }} inputProps={{ style: { fontSize: 13 } }} />
         <Box sx={{ display: { xs: 'flex', sm: 'none' }, gap: 0.5, flex: 1 }}>
-          <Button size="small" variant={sortBy === 'newest' ? 'contained' : 'outlined'} onClick={() => { setSortBy('newest'); try { localStorage.setItem('shop_orders_sort', 'newest') } catch {} }} sx={{ flex: 1, minHeight: 40, px: 0.75, fontSize: 11, fontWeight: 800 }}>{t('shopOrder.grid.sortNewest')}</Button>
-          <Button size="small" variant={sortBy === 'oldest' ? 'contained' : 'outlined'} color="warning" onClick={() => { setSortBy('oldest'); try { localStorage.setItem('shop_orders_sort', 'oldest') } catch {} }} sx={{ flex: 1, minHeight: 40, px: 0.75, fontSize: 11, fontWeight: 800 }}>{t('shopOrder.grid.sortOldest')}</Button>
+          <Button size="small" variant={sortBy === 'newest' ? 'contained' : 'outlined'} onClick={() => { setSortBy('newest'); try { localStorage.setItem('shop_orders_sort', 'newest') } catch { /* browser storage may be blocked */ } }} sx={{ flex: 1, minHeight: 40, px: 0.75, fontSize: 11, fontWeight: 800 }}>{t('shopOrder.grid.sortNewest')}</Button>
+          <Button size="small" variant={sortBy === 'oldest' ? 'contained' : 'outlined'} color="warning" onClick={() => { setSortBy('oldest'); try { localStorage.setItem('shop_orders_sort', 'oldest') } catch { /* browser storage may be blocked */ } }} sx={{ flex: 1, minHeight: 40, px: 0.75, fontSize: 11, fontWeight: 800 }}>{t('shopOrder.grid.sortOldest')}</Button>
         </Box>
-        <TextField select size="small" label={t('shopOrder.grid.sort')} value={sortBy} onChange={e => { setSortBy(e.target.value); try { localStorage.setItem('shop_orders_sort', e.target.value) } catch {} }} sx={{ width: 190, display: { xs: 'none', sm: 'inline-flex' } }}>
+        <TextField select size="small" label={t('shopOrder.grid.sort')} value={sortBy} onChange={e => { setSortBy(e.target.value); try { localStorage.setItem('shop_orders_sort', e.target.value) } catch { /* browser storage may be blocked */ } }} sx={{ width: 190, display: { xs: 'none', sm: 'inline-flex' } }}>
           {SORT_OPTIONS.map(o => <MenuItem key={o.value} value={o.value}>{t(o.labelKey)}</MenuItem>)}
         </TextField>
         <Typography sx={{ fontSize: 12, color: '#94a3b8', flexShrink: 0 }}>{t('shopOrder.grid.filteredOrdersCount', { shown: filtered.length, total: rows.length })}</Typography>
@@ -1502,6 +1512,7 @@ export default function ShopOrderGrid() {
   const [resetOpen, setResetOpen]       = useState(false)
   const [resetTo, setResetTo]           = useState(0)
   const [resetting, setResetting]       = useState(false)
+  const [customerMenuOpen, setCustomerMenuOpen] = useState(false)
   const [manualOpen, setManualOpen]     = useState(false)
   const [manualDefaults, setManualDefaults] = useState(null)
   const [qrOrderOpen, setQrOrderOpen]   = useState(false)
@@ -1512,7 +1523,7 @@ export default function ShopOrderGrid() {
   const [boardLoading, setBoardLoading] = useState(false)
   const [copied, setCopied]             = useState(false)
   const [copiedCustomer, setCopiedCustomer] = useState(false)
-  const [tab, setTab]                   = useState(0)
+  const [tab, setTab]                   = useState(5)
   const [stockItems, setStockItems]     = useState([])
   const [pendingStockUids, setPendingStockUids] = useState([])
   const [payQrOrder, setPayQrOrder]     = useState(null)
@@ -1552,6 +1563,7 @@ export default function ShopOrderGrid() {
   const [quickLoginLoading, setQuickLoginLoading] = useState(false)
   const [quickLoginError, setQuickLoginError] = useState('')
   const [mobileToolsOpen, setMobileToolsOpen] = useState(false)
+  const [counterShiftState, setCounterShiftState] = useState(null)
   const customerBoardDisplayUrl = customerBoardUrl
     ? `${customerBoardUrl}${separateCustomerConfirmed ? '&separateConfirmed=1' : ''}`
     : ''
@@ -1713,20 +1725,26 @@ export default function ShopOrderGrid() {
   const load = useCallback(async () => {
     setLoading(true); setError('')
     try {
-      const result = await fetchShopOrders(null, orderRangeParams)
-      const { data } = result
-      const list = Array.isArray(data) ? data : []
+      const [rangeResult, activeResult] = await Promise.all([
+        fetchShopOrders(null, orderRangeParams),
+        fetchActiveOrders(),
+      ])
+      if (!rangeResult.res.ok) throw new Error(rangeResult.data?.message || rangeResult.data?.error || t('shopOrder.grid.loadOrdersFailed'))
+      const list = mergeOrderSnapshots(
+        Array.isArray(rangeResult.data) ? rangeResult.data : [],
+        activeResult.res.ok && Array.isArray(activeResult.data) ? activeResult.data : [],
+      )
       setRows(list.filter(shouldShowInRows))
       rememberOrders(list)
       orderPollReadyRef.current = true
-    } catch { setError(t('shopOrder.grid.loadOrdersFailed')) }
+    } catch (error) { setError(error.message || t('shopOrder.grid.loadOrdersFailed')) }
     setLoading(false)
   }, [orderRangeParams, rememberOrders, shouldShowInRows, t])
 
   const loadBoard = useCallback(async () => {
     try {
       const [activeRes, pickedRes] = await Promise.all([
-        fetchActiveOrders(orderRangeParams),
+        fetchActiveOrders(),
         fetchShopOrders('PICKED_UP', orderRangeParams),
       ])
       const all = [
@@ -1746,6 +1764,18 @@ export default function ShopOrderGrid() {
   useEffect(() => {
     fetchBankConfig().then(({ data }) => setBankConfig(data || {})).catch(() => setBankConfig({}))
   }, [])
+  useEffect(() => {
+    let cancelled = false
+    const loadCounterShift = async () => {
+      try {
+        const { res, data } = await apiFetchJson('/shop/staff/counter/workflow')
+        if (!cancelled && res.ok) setCounterShiftState(data || null)
+      } catch { /* shift summary is optional for the order screen */ }
+    }
+    loadCounterShift()
+    const id = setInterval(loadCounterShift, 30000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [ctxCompanyId, ctxTenantId])
   useEffect(() => {
     fetchModels().then(list => {
       const imageMap = {}
@@ -1815,14 +1845,21 @@ export default function ShopOrderGrid() {
     poll()
     const id = setInterval(poll, 10000)
     return () => { cancelled = true; clearInterval(id) }
-  }, [printCounterAlerts, refreshOrderCard])
+  }, [printCounterAlerts, refreshOrderCard, t])
   useEffect(() => {
     let cancelled = false
     const pollOrders = async () => {
       try {
-        const { res, data } = await fetchShopOrders(null, orderRangeParams)
-        if (cancelled || !res.ok) return
-        applyOrderSnapshot(data, { notify: true })
+        const [rangeResult, activeResult] = await Promise.all([
+          fetchShopOrders(null, orderRangeParams),
+          fetchActiveOrders(),
+        ])
+        if (cancelled || !rangeResult.res.ok) return
+        const list = mergeOrderSnapshots(
+          Array.isArray(rangeResult.data) ? rangeResult.data : [],
+          activeResult.res.ok && Array.isArray(activeResult.data) ? activeResult.data : [],
+        )
+        applyOrderSnapshot(list, { notify: true })
       } catch { /* silent */ }
     }
     pollOrders()
@@ -2223,6 +2260,13 @@ export default function ShopOrderGrid() {
   }
 
   const cardActions = {
+    receive: row => askConfirm({
+      title: 'Xác nhận đơn',
+      message: `Xác nhận đơn #${row.orderNumber ?? row.orderCode}. Tích “Đã trả tiền” nếu đã nhận tiền; tích “Hoàn tất đơn” nếu đã thu tiền và trả đủ món.`,
+      confirmLabel: 'Xác nhận',
+      confirmColor: 'primary',
+      quickConfirm: true,
+    }, () => handleQuickConfirm(row)),
     detail:          (row) => setDetailOrder(row),
     combinedReceipt: (token) => setCombinedToken(token),
     payQr:           handlePayQr,
@@ -2356,7 +2400,7 @@ export default function ShopOrderGrid() {
 
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {/* Toolbar */}
-        <Box sx={{ px: { xs: 1, sm: 1.5 }, py: { xs: 0.5, sm: 1 }, display: 'flex', gap: { xs: 0.75, sm: 1 }, alignItems: 'center', flexWrap: 'wrap', borderBottom: '1px solid #e0e0e0', flexShrink: 0 }}>
+        <Box sx={{ px: { xs: 1, sm: 1.5 }, py: { xs: 0.5, sm: 1 }, display: tab === 5 ? 'none' : 'flex', gap: { xs: 0.75, sm: 1 }, alignItems: 'center', flexWrap: 'wrap', borderBottom: '1px solid #e0e0e0', flexShrink: 0 }}>
           <TextField select label={t('common.status')} value={statusFilters}
             onChange={e => {
               const values = typeof e.target.value === 'string'
@@ -2454,6 +2498,7 @@ export default function ShopOrderGrid() {
               </IconButton>
             </Tooltip>
           )}
+          <Button variant="contained" color="success" onClick={() => setCustomerMenuOpen(true)}>Gọi món nhanh · chọn bàn</Button>
           <Button startIcon={<AddCircleOutlineIcon />} onClick={() => { setManualDefaults(null); setManualOpen(true) }}
             variant="contained" size="small" color="success" sx={{ textTransform: 'none', fontWeight: 700, whiteSpace: 'nowrap', px: { xs: 1, sm: 1.25 }, '& .MuiButton-startIcon': { mr: { xs: 0.5, sm: 1 } } }}>{t('shopOrder.grid.newOrder')}</Button>
           <Button startIcon={<QrCode2Icon />} onClick={() => setQrOrderOpen(true)}
@@ -2632,16 +2677,18 @@ export default function ShopOrderGrid() {
         {/* Tabs */}
         <Box sx={{ borderBottom: '1px solid #e0e0e0', px: { xs: 0.5, sm: 1.5 }, flexShrink: 0 }}>
           <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons={false} sx={{ minHeight: { xs: 36, sm: 40 } }}>
-            <Tab label={t('shop.orders')}                                                                           sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
-            <Tab label={tabBadge(t('shopOrder.grid.production'), confirmedOrders.length, 'primary')}                      sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
-            <Tab label={tabBadge(t('shopOrder.grid.processing'), preparingOrders.length, 'warning')}                      sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
-            <Tab label={tabBadge(t('shopOrder.grid.ready'), readyOrders.length,     'success')}                      sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
-            <Tab label={tabBadge(t('shopOrder.grid.pickedUp'), pickedUpOrders.length,  'info')}                         sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
+            <Tab value={5} label="Quầy nhanh" sx={{fontWeight:800}} />
+            <Tab value={0} label={t('shop.orders')}                                                                           sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
+            <Tab value={1} label={tabBadge(t('shopOrder.grid.production'), confirmedOrders.length, 'primary')}                      sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
+            <Tab value={2} label={tabBadge(t('shopOrder.grid.processing'), preparingOrders.length, 'warning')}                      sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
+            <Tab value={3} label={tabBadge(t('shopOrder.grid.ready'), readyOrders.length,     'success')}                      sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
+            <Tab value={4} label={tabBadge(t('shopOrder.grid.pickedUp'), pickedUpOrders.length,  'info')}                         sx={{ textTransform: 'none', fontWeight: 600, minHeight: 40, fontSize: 13 }} />
           </Tabs>
         </Box>
 
         {/* Tab content */}
         <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+          {tab === 5 && <QuickCounterDesk rows={Array.from(new Map([...boardRows,...rows].map(r=>[r.id,r])).values())} actions={cardActions} onNew={()=>setCustomerMenuOpen(true)} shiftState={counterShiftState} />}
           {tab === 0 && (
             <>
             {(visibleOrderTotals.tables.length > 0 || visibleOrderTotals.separateCount > 0) && (
@@ -2749,6 +2796,10 @@ export default function ShopOrderGrid() {
           )}
         </DialogContent>
         <DialogActions><Button onClick={() => setQuickLoginOpen(false)}>Đóng</Button></DialogActions>
+      </Dialog>
+      <Dialog open={customerMenuOpen} onClose={() => setCustomerMenuOpen(false)} fullScreen>
+        <DialogTitle sx={{display:'flex',justifyContent:'space-between'}}>1. Chọn món → 2. Chọn bàn → 3. Tạo đơn<Button onClick={() => setCustomerMenuOpen(false)}>Về quầy / thanh toán</Button></DialogTitle>
+        <DialogContent sx={{p:0}}>{customerMenuOpen && <ShopMenuPage staffContext={{tenantId:ctxTenantId,companyId:ctxCompanyId}} onStaffClose={()=>setCustomerMenuOpen(false)} onStaffCreated={order=>{setCustomerMenuOpen(false);mergeOrderIntoState(order);}} />}</DialogContent>
       </Dialog>
       <ManualOrderDialog
         open={manualOpen}

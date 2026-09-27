@@ -43,6 +43,15 @@ export async function updateInvoice(id, payload, options = {}) {
   return data
 }
 
+export async function recordInvoicePayment(id, payload, options = {}) {
+  const headers = { 'Content-Type': 'application/json' }
+  if (options.tenantId) headers['X-Tenant-Id'] = options.tenantId
+  if (options.companyId) headers['X-Company-Id'] = options.companyId
+  const { res, data } = await apiFetchJson(`${BASE}/${encodeURIComponent(id)}/payment`, { method: 'POST', headers, body: JSON.stringify(payload) })
+  if (!res.ok) throw new Error(typeof data === 'string' ? data : data?.message || 'Không ghi được thanh toán')
+  return data
+}
+
 export async function deleteInvoice(id, options = {}) {
   const headers = {}
   if (options.tenantId) headers['X-Tenant-Id'] = options.tenantId

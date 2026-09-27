@@ -37,6 +37,7 @@ import ConsumptionPage from './features/consumption/ConsumptionPage'
 import ConsumptionLogPage from './features/consumption/ConsumptionLogPage'
 import LoginForm from './components/LoginForm'
 import RequireAuth from './components/RequireAuth'
+import AuditHistoryPage from './features/audit/AuditHistoryPage'
 import AdminPage from './features/admin/AdminPage'
 import TenantsPage from './features/tenant/TenantsPage'
 import ETLPage from './features/etl/ETLPage'
@@ -109,6 +110,7 @@ const PATH_TITLES = {
   '/shop-printing':      'Printing Center',
   '/counter-shift':      'Bàn giao ca',
   '/profile':            'Profile',
+  '/audit-history': 'Nhật ký thay đổi',
   '/admin':              'Admin',
   '/admin/users':        'Admin Users',
   '/tenants':            'Tenants',
@@ -190,6 +192,7 @@ const NAV_GROUPS = [
     label: 'Shop',
     icon: '🧋',
     items: [
+      { label: 'Bàn giao ca', path: '/counter-shift',  icon: '💵' },
       { label: 'Shop Orders', path: '/shop-orders', icon: '🧋' },
       { label: 'Tables',      path: '/shop-tables', icon: '🪑' },
       { label: 'Reservations', path: '/shop-reservations', icon: '📅' },
@@ -201,7 +204,6 @@ const NAV_GROUPS = [
       { label: 'Customers',   path: '/shop-customers', icon: '👤' },
       { label: 'Vouchers',    path: '/shop-vouchers',  icon: '🎫' },
       { label: 'Printing',    path: '/shop-printing',  icon: '🖨️' },
-      { label: 'Bàn giao ca', path: '/counter-shift',  icon: '💵' },
     ],
   },
 ]
@@ -211,6 +213,7 @@ const BOTTOM_ITEMS = [
 ]
 
 const ADMIN_ITEMS = [
+  { label: 'Nhật ký thay đổi', path: '/audit-history', icon: '📋', roles: ADMIN_MANAGEMENT_ROLES },
   { label: 'Admin',   path: '/admin',   icon: '🔧', roles: ADMIN_MANAGEMENT_ROLES },
   { label: 'Tenants', path: '/tenants', icon: '🏗️', roles: SUPER_ADMIN_ROLES },
   { label: 'ETL',     path: '/etl',     icon: '🔬', roles: SUPER_ADMIN_ROLES },
@@ -477,6 +480,7 @@ function MainShell({ user, logout, isAdmin, isSuperAdmin, hasFullBusinessAccess,
             <Route path="/shop-vouchers"  element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><ShopVoucherPage /></RequireContext></RequireAuth>} />
             <Route path="/shop-printing"  element={<RequireAuth roles={SHOP_ORDERING_ROLES}><RequireContext><ShopPrintingCenterPage /></RequireContext></RequireAuth>} />
             <Route path="/counter-shift"  element={<RequireAuth roles={COUNTER_OPERATION_ROLES}><RequireContext><CounterShiftPage /></RequireContext></RequireAuth>} />
+            <Route path="/audit-history" element={<RequireAuth roles={ADMIN_MANAGEMENT_ROLES}><RequireContext><AuditHistoryPage /></RequireContext></RequireAuth>} />
             <Route path="/admin" element={<RequireAuth roles={ADMIN_MANAGEMENT_ROLES}><AdminPage /></RequireAuth>} />
             <Route path="/admin/users" element={<RequireAuth roles={ADMIN_MANAGEMENT_ROLES}><AdminPage /></RequireAuth>} />
             <Route path="/tenants" element={<RequireAuth roles={SUPER_ADMIN_ROLES}><TenantsPage /></RequireAuth>} />

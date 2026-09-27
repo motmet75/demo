@@ -17,6 +17,7 @@ import AddIcon from '@mui/icons-material/Add'
 import CircularProgress from '@mui/material/CircularProgress'
 import Box from '@mui/material/Box'
 import Chip from '@mui/material/Chip'
+import Autocomplete from '@mui/material/Autocomplete'
 import PropTypes from 'prop-types'
 import { useAppContext } from '../../context/AppContext'
 import { fetchModelBomsByModel, createModelBom, updateModelBom, deleteModelBom } from '../../api/modelApi'
@@ -31,6 +32,7 @@ function BomItemForm({ initial, materials, onSave, onCancel, saving }) {
   const [warehouseUnit, setWarehouseUnit] = useState(initial?.warehouseUnit ?? '')
   const [bomUnitPerWarehouseUnit, setBomUnitPerWarehouseUnit] = useState(initial?.bomUnitPerWarehouseUnit != null ? String(initial.bomUnitPerWarehouseUnit) : '')
   const [err, setErr] = useState('')
+  const selectedMaterial = materials.find(material => String(material.id) === String(materialId)) || null
 
   const toNumberOrNull = (value) => {
     if (value === '' || value === null || value === undefined) return null
@@ -66,21 +68,21 @@ function BomItemForm({ initial, materials, onSave, onCancel, saving }) {
   return (
     <form onSubmit={handleSubmit}>
       <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', flexWrap: 'wrap', mt: 1 }}>
-        <TextField
-          select
-          SelectProps={{ native: true }}
-          label="Material"
-          value={materialId}
-          onChange={e => setMaterialId(e.target.value)}
-          size="small"
-          sx={{ minWidth: 220 }}
+        <Autocomplete
+          options={materials}
+          value={selectedMaterial}
+          onChange={(_, material) => setMaterialId(material?.id || '')}
+          getOptionLabel={material => `${material.materialCode || ''} — ${material.materialName || ''}`}
+          isOptionEqualToValue={(a, b) => String(a.id) === String(b.id)}
+          filterOptions={(options, state) => {
+            const query = state.inputValue.trim().toLocaleLowerCase('vi')
+            return query ? options.filter(material => `${material.materialCode} ${material.materialName}`.toLocaleLowerCase('vi').includes(query)) : options
+          }}
+          autoHighlight
           disabled={saving}
-        >
-          <option value="">-- select --</option>
-          {materials.map(m => (
-            <option key={m.id} value={m.id}>{m.materialCode} — {m.materialName}</option>
-          ))}
-        </TextField>
+          sx={{ minWidth: 260 }}
+          renderInput={params => <TextField {...params} label="Material" size="small" placeholder="Type code or name" required />}
+        />
         <TextField
           label="Warehouse Qty"
           value={warehouseQty}

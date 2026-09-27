@@ -48,7 +48,7 @@ import RadioGroup from '@mui/material/RadioGroup'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Snackbar from '@mui/material/Snackbar'
 import EventAvailableIcon from '@mui/icons-material/EventAvailable'
-import { resolveToken, fetchMenu, createOrder, fetchPublicMenuOptions,
+import { resolveToken, fetchMenu, createOrder, createStaffOrder, fetchPublicMenuOptions,
          fetchActiveTableOrders, startCustomerEdit, cancelCustomerEdit,
          updatePublicOrderItems, fetchPublicOrder, fetchTokenSession,
          cancelPublicOrder, fetchShopConfig, callStaff, fetchPublicStaffCall,
@@ -592,7 +592,7 @@ function parseOpts(selectedOptions) {
   try { return selectedOptions ? JSON.parse(selectedOptions) : {} } catch { return {} }
 }
 
-export default function ShopMenuPage() {
+export default function ShopMenuPage({ staffContext = null, onStaffCreated, onStaffClose } = {}) {
   const [params] = useSearchParams()
   const navigate = useNavigate()
   const { language, setLanguage, t, formatMoney } = useI18n()
@@ -603,15 +603,15 @@ export default function ShopMenuPage() {
   const optionGroupName = useCallback((group) => localizedGroupName(group, language), [language])
   const choiceName = useCallback((choice) => localizedChoiceLabel(choice, language), [language])
 
-  const tokenParam    = params.get('t')
-  const rawTenantId   = params.get('tenantId')
-  const rawCompanyId  = params.get('companyId')
+  const tokenParam    = staffContext ? null : params.get('t')
+  const rawTenantId   = staffContext?.tenantId || params.get('tenantId')
+  const rawCompanyId  = staffContext?.companyId || params.get('companyId')
   const rawTableId    = params.get('tableId')
   const rawCustomerName = params.get('customerName') || ''
   const rawLanguage   = params.get('lang') || params.get('language') || ''
   const rawSearchQuery = params.get('search') || params.get('q') || params.get('item') || ''
   const seqParam      = params.get('seq')
-  const editOrderCode = params.get('editOrder')
+  const editOrderCode = staffContext ? null : params.get('editOrder')
 
   const [ctx, setCtx] = useState(
     tokenParam ? null : { tenantId: rawTenantId, companyId: rawCompanyId, tableId: rawTableId }
@@ -646,7 +646,7 @@ export default function ShopMenuPage() {
 
   // ── New UI state ───────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery]         = useState(rawSearchQuery)
-  const [gridView, setGridView]               = useState(false)
+  const [gridView, setGridView]               = useState(Boolean(staffContext))
   const [displaySize, setDisplaySize]         = useState(() => readShopMenuPref(SHOP_MENU_DISPLAY_SIZE_PREF, 'normal'))
   const [highContrast, setHighContrast]       = useState(() => readShopMenuPref(SHOP_MENU_CONTRAST_PREF, 'false') === 'true')
   const [activeCategory, setActiveCategory]   = useState(null)
@@ -1409,7 +1409,7 @@ export default function ShopMenuPage() {
         setError(cText('checkout.needDeliveryAddress')); return
       }
     }
-    const trackingTab = !editingOrderCode && form.paymentMethod !== 'BANK_QR'
+    const trackingTab = !staffContext && !editingOrderCode && form.paymentMethod !== 'BANK_QR'
       ? window.open('about:blank', '_blank')
       : null
     const closeTrackingTab = () => {
@@ -1441,8 +1441,9 @@ export default function ShopMenuPage() {
           deliveryFee: null, paymentMethod: form.paymentMethod, notes: notes || null,
           manualOrderNumber: seqParam ? Number(seqParam) : null, token: tokenParam || null, items,
         }
-        const { res, data } = await createOrder(ctx.tenantId, ctx.companyId, body)
+        const { res, data } = await (staffContext ? createStaffOrder(body) : createOrder(ctx.tenantId, ctx.companyId, body))
         if (!res.ok) { closeTrackingTab(); setError(dailyLimitErrorText(data, 'checkout.cannotCreateOrder')); setSubmitting(false); return }
+        if (staffContext) { closeTrackingTab(); setCart({}); setCheckout(false); onStaffCreated?.(data); return }
         const finalOrder = await applyVoucherToOrder(data)
         rememberVisibleOrder(finalOrder)
         setCart({}); setSideForm({}); setNotes(''); setCheckout(false); setCartOpen(false)
@@ -2046,6 +2047,8 @@ export default function ShopMenuPage() {
 
           <LanguageSelector compact languageCodes={ORDERING_LANGUAGE_CODES} onLanguageChange={handleOrderingLanguageChange} />
 
+          {staffContext && <Button variant="contained" onClick={onStaffClose}>Về quầy / thanh toán</Button>}
+          {!staffContext && <>
           {/* Book a table */}
           {shopConfig.bookingEnabled && (
               <Button size="small" variant="outlined" onClick={() => navigate(`/shop/booking?tenantId=${ctx.tenantId}&companyId=${ctx.companyId}&lang=${language}`)}
@@ -2084,6 +2087,7 @@ export default function ShopMenuPage() {
               {t('shop.orders')}
             </Button>
           </Badge>
+          </>}
         </Box>
 
         {!orderingStatus.open && (
@@ -2218,7 +2222,7 @@ export default function ShopMenuPage() {
                   {filteredItems.length} kết quả
                 </Typography>
                 {gridView ? (
-                  <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.25 }}>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: staffContext ? {xs:'repeat(2,1fr)',md:'repeat(4,1fr)'} : 'repeat(2, 1fr)', gap: 1.25 }}>
                     {filteredItems.map(m => <MenuGridItem key={m.id} m={m} />)}
                   </Box>
                 ) : (
@@ -2239,7 +2243,7 @@ export default function ShopMenuPage() {
               {activeCategory} · {categoryItems.length} món
             </Typography>
             {gridView ? (
-              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.25 }}>
+              <Box sx={{ display: 'grid', gridTemplateColumns: staffContext ? {xs:'repeat(2,1fr)',md:'repeat(4,1fr)'} : 'repeat(2, 1fr)', gap: 1.25 }}>
                 {categoryItems.map(m => <MenuGridItem key={m.id} m={m} />)}
               </Box>
             ) : (
@@ -2261,7 +2265,7 @@ export default function ShopMenuPage() {
               </Typography>
               <Box sx={{ px: 1.5, pt: 1, pb: 0.5 }}>
                 {gridView ? (
-                  <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.25 }}>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: staffContext ? {xs:'repeat(2,1fr)',md:'repeat(4,1fr)'} : 'repeat(2, 1fr)', gap: 1.25 }}>
                     {items.map(m => <MenuGridItem key={m.id} m={m} />)}
                   </Box>
                 ) : (
@@ -2601,10 +2605,16 @@ export default function ShopMenuPage() {
                   {publicTables.length > 0 && (
                     <>
                       <Divider><Typography variant="caption" color="text.secondary">{cText('checkout.or')}</Typography></Divider>
-                      <TextField select label={cText('checkout.chooseTable')} size="small" fullWidth value={form.selectedTableId}
-                        onChange={e => { setForm(f => ({ ...f, selectedTableId: e.target.value, customerTableTag: '' })); setError('') }}>
-                        {publicTables.map(table => <MenuItem key={table.id} value={table.id}>{localizedTableName(table, language)}</MenuItem>)}
-                      </TextField>
+                      <Autocomplete
+                        options={publicTables}
+                        value={publicTables.find(table => String(table.id) === String(form.selectedTableId)) || null}
+                        onChange={(_, table) => { setForm(f => ({ ...f, selectedTableId: table?.id || '', customerTableTag: '' })); setError('') }}
+                        getOptionLabel={table => localizedTableName(table, language)}
+                        isOptionEqualToValue={(a, b) => String(a.id) === String(b.id)}
+                        autoHighlight
+                        fullWidth
+                        renderInput={params => <TextField {...params} label={cText('checkout.chooseTable')} size="small" placeholder={cText('checkout.chooseTable')} />}
+                      />
                     </>
                   )}
                 </Stack>

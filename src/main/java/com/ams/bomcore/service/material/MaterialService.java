@@ -49,6 +49,7 @@ public class MaterialService {
         existing.setMaterialType(material.getMaterialType());
         existing.setThumbnailUrl(material.getThumbnailUrl());
         existing.setPrice(material.getPrice());
+        existing.setManualShiftConsumption(material.getManualShiftConsumption());
         existing.setInventoryAlertEnabled(material.getInventoryAlertEnabled() != null ? material.getInventoryAlertEnabled() : Boolean.TRUE);
         existing.setInventoryAlertQuantity(material.getInventoryAlertQuantity());
         existing.setInventoryAlertPercentage(material.getInventoryAlertPercentage());

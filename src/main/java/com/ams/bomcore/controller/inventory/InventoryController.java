@@ -246,7 +246,7 @@ public class InventoryController {
             String qres = body.get("quantityReserved") == null ? null : String.valueOf(body.get("quantityReserved"));
             String qlock = body.get("quantityLocked") == null ? null : String.valueOf(body.get("quantityLocked"));
             String reason     = body.get("reason")     != null ? String.valueOf(body.get("reason"))     : "Manual add stock";
-            String createdBy  = body.get("createdBy")  != null ? String.valueOf(body.get("createdBy"))  : "system";
+            String createdBy = com.ams.bomcore.audit.AuditActor.username();
             String notes      = body.get("notes")      != null ? String.valueOf(body.get("notes"))      : null;
             UUID invoiceId    = body.get("invoiceId")  != null ? UUID.fromString(String.valueOf(body.get("invoiceId"))) : null;
             String orderToDeduction = body.get("orderToDeduction") != null ? String.valueOf(body.get("orderToDeduction")) : null;
@@ -302,8 +302,9 @@ public class InventoryController {
             String exp = body.get("expirationDateTime") == null ? null : String.valueOf(body.get("expirationDateTime"));
             String prod = body.get("productionDateTime") == null ? null : String.valueOf(body.get("productionDateTime"));
             String qres = body.get("quantityReserved") == null ? null : String.valueOf(body.get("quantityReserved"));
-            String reason    = body.get("reason")    != null ? String.valueOf(body.get("reason"))    : "Manual update stock";
-            String createdBy = body.get("createdBy") != null ? String.valueOf(body.get("createdBy")) : "system";
+            String reason = body.get("reason") != null ? String.valueOf(body.get("reason")).trim() : "";
+            if (reason.isEmpty()) return ResponseEntity.badRequest().body("Điều chỉnh tồn kho bắt buộc nhập lý do");
+            String createdBy = com.ams.bomcore.audit.AuditActor.username();
             String notes     = body.get("notes")     != null ? String.valueOf(body.get("notes"))     : null;
             String orderToDeduction = body.get("orderToDeduction") != null ? String.valueOf(body.get("orderToDeduction")) : null;
             String mqp = body.get("materialQuotaPercentage") != null ? String.valueOf(body.get("materialQuotaPercentage")) : null;

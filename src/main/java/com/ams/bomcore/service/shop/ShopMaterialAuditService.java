@@ -213,6 +213,13 @@ public class ShopMaterialAuditService {
 
         BigDecimal totalWaiting = BigDecimal.ZERO;
         for (ShopMaterialAudit row : rows) {
+            if (materialRepository.findById(row.getMaterialId()).map(m -> Boolean.TRUE.equals(m.getManualShiftConsumption())).orElse(false)) {
+                row.setWaitingQty(BigDecimal.ZERO);
+                row.setStatus("MANUAL_SHIFT");
+                row.setRemark("Xuất tiêu hao thủ công cuối ca; không tự trừ BOM.");
+                auditRepository.save(row);
+                continue;
+            }
             if (ShopMaterialAudit.STATUS_DEDUCTED.equals(row.getStatus())
                     || ShopMaterialAudit.STATUS_NO_BOM.equals(row.getStatus())) {
                 continue;
@@ -469,7 +476,7 @@ public class ShopMaterialAuditService {
 
     private void addOrderRequirement(ShopOrderItem item, BomItemEntity node, BigDecimal multiplier,
                                      Map<RequirementKey, MaterialRequirement> requirements) {
-        if (node.getMaterial() == null || node.getQuantity() == null) return;
+        if (node.getMaterial() == null || node.getQuantity() == null || Boolean.TRUE.equals(node.getMaterial().getManualShiftConsumption())) return;
         UUID materialId = node.getMaterial().getId();
         RequirementKey key = new RequirementKey(item.getId(), materialId);
         MaterialRequirement req = requirements.computeIfAbsent(key,
@@ -479,7 +486,7 @@ public class ShopMaterialAuditService {
 
     private void addModelRequirement(Model model, BomItemEntity node, BigDecimal multiplier,
                                      Map<UUID, MaterialRequirement> requirements) {
-        if (node.getMaterial() == null || node.getQuantity() == null) return;
+        if (node.getMaterial() == null || node.getQuantity() == null || Boolean.TRUE.equals(node.getMaterial().getManualShiftConsumption())) return;
         UUID materialId = node.getMaterial().getId();
         MaterialRequirement req = requirements.computeIfAbsent(materialId,
                 ignored -> MaterialRequirement.forModel(model, node));

@@ -29,6 +29,7 @@ export default function MaterialEditModal({ open, material, onClose, onSave, sav
     materialType: m?.materialType ?? 'MATERIAL',
     thumbnailUrl: m?.thumbnailUrl ?? '',
     unit: m?.unit ?? '',
+    manualShiftConsumption: m?.manualShiftConsumption ?? false,
     price: m?.price != null ? String(m.price) : '',
     inventoryAlertEnabled: m?.inventoryAlertEnabled ?? true,
     inventoryAlertQuantity: m?.inventoryAlertQuantity != null ? String(m.inventoryAlertQuantity) : '',
@@ -65,6 +66,7 @@ export default function MaterialEditModal({ open, material, onClose, onSave, sav
       materialType: form.materialType,
       thumbnailUrl: form.thumbnailUrl,
       unit: form.unit,
+      manualShiftConsumption: form.manualShiftConsumption,
       price: form.price === '' ? null : Number(form.price),
       inventoryAlertEnabled: !!form.inventoryAlertEnabled,
       inventoryAlertQuantity: form.inventoryAlertQuantity === '' ? null : Number(form.inventoryAlertQuantity),
@@ -184,6 +186,7 @@ export default function MaterialEditModal({ open, material, onClose, onSave, sav
               disabled={isBusy}
             />
 
+            <FormControlLabel control={<Checkbox checked={form.manualShiftConsumption} disabled={isBusy} onChange={e=>setForm(prev=>({...prev,manualShiftConsumption:e.target.checked}))}/>} label="Xuất tiêu hao cuối ca (không tự trừ theo BOM khi bán)" />
             <TextField
               label="Price"
               type="number"

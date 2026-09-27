@@ -352,6 +352,10 @@ export async function fetchActiveOrders(range = {}) {
   })))
 }
 
+export function fetchTableOrders() {
+  return apiFetchJson('/shop/staff/table-orders')
+}
+
 export function pickupShopOrder(orderId) {
   return apiFetchJson(`/shop/staff/orders/${orderId}/pickup`, { method: 'PATCH' })
 }
@@ -503,6 +507,10 @@ export function setOrderTable(orderId, tableId) {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tableId: tableId || null })
   })
+}
+
+export function clearOrderTable(orderId) {
+  return apiFetchJson(`/shop/staff/orders/${orderId}/clear-table`, { method: 'PATCH' })
 }
 
 export function setOrderSeat(orderId, tableId, customerTableTag, fulfillmentType = null) {

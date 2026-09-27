@@ -237,6 +237,7 @@ public class InventoryMovementController {
             String unit = body.get("unit") != null ? String.valueOf(body.get("unit")) : "pcs";
             String batchNo = body.get("batchNo") != null ? String.valueOf(body.get("batchNo")) : null;
             String reason = body.get("reason") != null ? String.valueOf(body.get("reason")) : null;
+            if (reason == null || reason.isBlank()) return ResponseEntity.badRequest().body("Điều chỉnh bắt buộc có lý do");
             String createdBy = body.get("createdBy") != null ? String.valueOf(body.get("createdBy")) : "system";
             String notes = body.get("notes") != null ? String.valueOf(body.get("notes")) : null;
 
@@ -261,7 +262,6 @@ public class InventoryMovementController {
         if (existing == null) {
             return ResponseEntity.notFound().build();
         }
-        movementService.delete(id);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.status(HttpStatus.CONFLICT).build();
     }
 }

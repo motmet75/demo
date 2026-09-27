@@ -21,6 +21,7 @@ import Chip from '@mui/material/Chip'
 import Tooltip from '@mui/material/Tooltip'
 import Badge from '@mui/material/Badge'
 import InputAdornment from '@mui/material/InputAdornment'
+import Paper from '@mui/material/Paper'
 import AddIcon from '@mui/icons-material/Add'
 import RemoveIcon from '@mui/icons-material/Remove'
 import DeleteIcon from '@mui/icons-material/Delete'
@@ -67,6 +68,17 @@ function extractCustomerLookup(raw) {
 }
 
 const normalizeCustomerLookup = (value) => String(value || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase()
+const selectedOptionsText = value => {
+  if (!value) return ''
+  try {
+    const parsed = typeof value === 'string' ? JSON.parse(value) : value
+    return Object.entries(parsed || {}).flatMap(([group, choice]) => {
+      if (Array.isArray(choice)) return choice.map(item => `${group}: ${item}`)
+      if (choice && typeof choice === 'object') return Object.entries(choice).map(([item, quantity]) => `${group}: ${item}${Number(quantity) > 1 ? ` × ${quantity}` : ''}`)
+      return [`${group}: ${choice}`]
+    }).join(' · ')
+  } catch { return String(value) }
+}
 
 
 const hasPricedChoices = (choices) =>
@@ -643,6 +655,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
   }
 
   const handleSubmit = async () => {
+    if (fulfillment === 'DINE_IN' && !tableId) { setError('Chọn bàn trước khi tạo đơn'); return }
     if (!items.length) { setError('Add at least one item'); return }
     setSubmitting(true); setError('')
     const body = {
@@ -821,6 +834,20 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
           )
         })()}
 
+        {createdOrder && <Paper variant="outlined" sx={{ p: 1.5, mb: 1.5, borderColor: '#86efac', bgcolor: '#f0fdf4' }}>
+          <Typography fontWeight={900}>Đọc lại đơn với khách</Typography>
+          {(createdOrder.items || []).filter(item => !item.parentItemId).map(item => {
+            const options = selectedOptionsText(item.selectedOptions)
+            const sides = (createdOrder.items || []).filter(side => String(side.parentItemId || '') === String(item.id || ''))
+            return <Box key={item.id || `${item.modelName}-${item.quantity}`} sx={{ py: 0.5 }}>
+              <Typography><strong>{item.quantity} × {item.modelName}</strong>{item.itemNotes ? ` · Ghi chú: ${item.itemNotes}` : ''}</Typography>
+              {options && <Typography variant="body2" color="text.secondary">Tùy chọn: {options}</Typography>}
+              {sides.length > 0 && <Typography variant="body2" color="text.secondary">Món thêm: {sides.map(side => `${side.quantity} × ${side.modelName}`).join(' · ')}</Typography>}
+            </Box>
+          })}
+          {createdOrder.notes && <Typography variant="body2"><strong>Ghi chú đơn:</strong> {createdOrder.notes}</Typography>}
+        </Paper>}
+
         {hasFullBusinessAccess && voucherError && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setVoucherError('')}>{voucherError}</Alert>}
         {hasFullBusinessAccess && voucherResult && createdOrder && (
           <Alert severity="success" sx={{ mb: 2 }} onClose={() => setVoucherResult(null)}>
@@ -865,13 +892,15 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
 
               {/* Table */}
               {fulfillment === 'DINE_IN' && (
-                <FormControl size="small" fullWidth>
-                  <InputLabel>{t('common.table')}</InputLabel>
-                  <Select value={tableId} label={t('common.table')} onChange={e => setTableId(e.target.value)}>
-                    <MenuItem value=""><em>{t('shopOrder.manual.noTable')}</em></MenuItem>
-                    {tables.map(t => <MenuItem key={t.id} value={t.id}>{t.tableName}</MenuItem>)}
-                  </Select>
-                </FormControl>
+                <Autocomplete
+                  options={tables}
+                  value={tables.find(table => String(table.id) === String(tableId)) || null}
+                  onChange={(_, table) => setTableId(table?.id || '')}
+                  getOptionLabel={table => table.tableName || ''}
+                  isOptionEqualToValue={(a,b)=>String(a.id)===String(b.id)}
+                  autoHighlight
+                  renderInput={params => <TextField {...params} size="small" label={t('common.table')} placeholder="Gõ tên bàn để lọc" required />}
+                />
               )}
 
               {/* Customer */}

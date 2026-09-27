@@ -66,7 +66,7 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
     orderToDeduction: i?.orderToDeduction ?? '',
     materialQuotaPercentage: i?.materialQuotaPercentage ?? '',
     userName: i?.userName ?? 'system',
-    reason: i ? 'Manual adjustment' : 'Manual add stock',
+    reason: i ? '' : 'Manual add stock',
     createdBy: i?.userName ?? 'system',
     notes: '',
     expirationLocal: i?.expirationDateTime ? isoToLocalDatetime(i.expirationDateTime) : (i?.expiration_date ? isoToLocalDatetime(i.expiration_date) : localNow()),
@@ -347,7 +347,7 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
       materialQuotaPercentage: coerceNumber(form.materialQuotaPercentage) ?? null,
       expirationDateTime: toIso(form.expirationLocal),
       productionDateTime: toIso(form.productionLocal),
-      reason: form.reason || (isEditing ? 'Manual adjustment' : 'Manual add stock'),
+      reason: form.reason,
       createdBy: form.createdBy || 'system',
       notes: form.notes || null,
       ...(!isEditing && hasWarehouseConversion ? {
@@ -562,7 +562,7 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
             <Divider />
 
             {/* Movement audit fields */}
-            <TextField label="Reason" value={form.reason} onChange={handleChange('reason')} disabled={isSubmitting}
+            <TextField required={isEditing} label="Reason" value={form.reason} onChange={handleChange('reason')} disabled={isSubmitting}
               helperText={isEditing ? 'Recorded in the ADJUSTMENT movement entry' : 'Recorded in Inventory Movements log'} />
             <TextField label="Created By" value={form.createdBy} onChange={handleChange('createdBy')} disabled={isSubmitting} />
             <TextField label="Notes" value={form.notes} onChange={handleChange('notes')} disabled={isSubmitting}

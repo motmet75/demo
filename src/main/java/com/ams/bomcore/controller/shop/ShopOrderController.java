@@ -694,7 +694,7 @@ public class ShopOrderController {
         history.setSourceNumber(sourceNumber);
         history.setTitle(bounded(stringValue(body.get("title")), 180));
         history.setAmount(decimalValue(body.get("amount")));
-        history.setPrintedBy(bounded(stringValue(body.get("printedBy")) != null ? stringValue(body.get("printedBy")) : hUsername, 120));
+        history.setPrintedBy(bounded(com.ams.bomcore.audit.AuditActor.username(), 120));
         history.setNotes(stringValue(body.get("notes")));
         return ResponseEntity.status(HttpStatus.CREATED).body(printHistoryMap(shopPrintHistoryRepository.save(history)));
     }
@@ -715,6 +715,17 @@ public class ShopOrderController {
                 ? shopOrderService.listActiveOrders(tId, cId, from, to)
                 : shopOrderService.listOrders(tId, cId, status, from, to);
         return staffOrdersResponse(orders, recordCounterPublicIp(cId, request));
+    }
+
+    @GetMapping("/shop/staff/table-orders")
+    public ResponseEntity<?> listTableOrders(@RequestParam(required = false) UUID tenantId,
+                                              @RequestParam(required = false) UUID companyId,
+                                              @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                              @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant);
+        UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        return ResponseEntity.ok(shopOrderService.listTableVisibleOrders(tId, cId));
     }
     @GetMapping("/shop/staff/orders/by-token")
     public ResponseEntity<?> getOrdersByToken(@RequestParam String token,
@@ -1001,6 +1012,22 @@ public class ShopOrderController {
         String tableIdStr = body.get("tableId") != null ? body.get("tableId").toString() : null;
         UUID tableId = (tableIdStr != null && !tableIdStr.isBlank()) ? UUID.fromString(tableIdStr) : null;
         return ResponseEntity.ok(shopOrderService.setOrderTable(orderId, tableId, tId, cId));
+    }
+
+    @PatchMapping("/shop/staff/orders/{orderId}/clear-table")
+    public ResponseEntity<?> clearTable(@PathVariable UUID orderId,
+                                         @RequestParam(required = false) UUID tenantId,
+                                         @RequestParam(required = false) UUID companyId,
+                                         @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                         @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant);
+        UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        try {
+            return ResponseEntity.ok(shopOrderService.clearOrderTable(orderId, tId, cId));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", e.getMessage()));
+        }
     }
 
     @PatchMapping("/shop/staff/orders/{orderId}/seat")

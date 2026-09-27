@@ -14,7 +14,7 @@ import * as XLSX from 'xlsx'
 import { numFmt, dateFmt } from '../../utils/format'
 import { useAppContext } from '../../context/AppContext'
 import { useAuth } from '../../context/useAuth'
-import { fetchMovements, recordMovementIn, recordMovementOut, recordMovementTransfer, recordMovementAdjustment, deleteMovement } from '../../api/inventoryMovementApi'
+import { fetchMovements, recordMovementIn, recordMovementOut, recordMovementTransfer, recordMovementAdjustment } from '../../api/inventoryMovementApi'
 import { fetchMaterials } from '../../api/materialApi'
 import { fetchWarehouses } from '../../api/warehouseApi'
 
@@ -33,7 +33,7 @@ export default function InventoryMovementPage() {
     toWarehouseId: '',
     warehouseId: '',
     quantity: '',
-    unit: 'pcs',
+    unit: '',
     batchNo: '',
     reason: '',
     notes: ''
@@ -124,34 +124,6 @@ export default function InventoryMovementPage() {
       setError(ex?.message || 'Failed to record movement')
     } finally {
       setSaving(false)
-    }
-  }
-
-  async function handleDelete(id) {
-    if (!window.confirm('Delete this movement record?')) return
-    try { await deleteMovement(id); setRows(prev => prev.filter(r => r.id !== id)) }
-    catch (ex) { alert('Delete failed: ' + (ex?.message || ex)) }
-  }
-
-  async function handleDeleteSelected() {
-    if (selectedIds.length === 0) return
-    if (!window.confirm(`Delete ${selectedIds.length} selected movement record(s)? This cannot be undone.`)) return
-    const failed = []
-    for (const id of selectedIds) {
-      try {
-        await deleteMovement(id)
-      } catch (e) {
-        console.error('Failed to delete movement', id, e)
-        failed.push(id)
-      }
-    }
-    const deleted = selectedIds.filter(id => !failed.includes(id))
-    setRows(prev => prev.filter(r => !deleted.includes(r.id)))
-    setSelectionModel({ type: 'include', ids: new Set() })
-    if (failed.length > 0) {
-      alert(`Deleted ${deleted.length} record(s). Failed to delete ${failed.length} record(s).`)
-    } else {
-      alert(`Deleted ${deleted.length} movement record(s) successfully.`)
     }
   }
 
@@ -278,6 +250,9 @@ export default function InventoryMovementPage() {
     { field: 'toWarehouseId', headerName: 'To WH', width: 130, valueGetter: (value, row) => row?.toWarehouse ? row.toWarehouse.code : (row && whMap[row.toWarehouseId] ? whMap[row.toWarehouseId].code : '') },
     { field: 'quantity', headerName: 'Qty', width: 100, type: 'number', valueFormatter: numFmt },
     { field: 'unit', headerName: 'Unit', width: 80 },
+    { field: 'enteredQuantity', headerName: 'SL nhập/xuất', width: 130 },
+    { field: 'enteredUnit', headerName: 'ĐVT nhập/xuất', width: 130 },
+    { field: 'unitPrice', headerName: 'Đơn giá', width: 120, valueFormatter: numFmt },
     { field: 'batchNo', headerName: 'Batch', width: 120 },
     { field: 'reason', headerName: 'Reason', width: 150 },
     { field: 'referenceType', headerName: 'Ref Type', width: 120 },
@@ -298,7 +273,7 @@ export default function InventoryMovementPage() {
     { field: 'status', headerName: 'Status', width: 110 },
     { field: 'createdBy', headerName: 'Created By', width: 130 },
     { field: 'notes', headerName: 'Notes', flex: 1 },
-    { field: 'actions', headerName: '', width: 80, sortable: false, renderCell: ({ row }) => row.movementType !== 'IMPORT' && row.movementType !== 'IMPORT_UPDATE' ? <Button size="small" color="error" onClick={() => handleDelete(row.id)}>Del</Button> : null }
+
   ]
 
   return (
@@ -324,14 +299,6 @@ export default function InventoryMovementPage() {
             title={selectedIds.length > 0 ? `Export ${selectedIds.length} selected row(s) to CSV` : 'Export all filtered rows to CSV'}
           >
             ⬇ CSV{selectedIds.length > 0 ? ` (${selectedIds.length})` : ''}
-          </Button>
-          <Button
-            variant="outlined"
-            color="error"
-            disabled={selectedIds.length === 0}
-            onClick={handleDeleteSelected}
-          >
-            Delete Selected ({selectedIds.length})
           </Button>
           <Button variant="contained" onClick={() => { setForm(makeEmptyForm()); setError(''); setDialogOpen(true) }}>+ Record Movement</Button>
 
@@ -404,7 +371,7 @@ export default function InventoryMovementPage() {
               {['IN', 'OUT', 'TRANSFER', 'ADJUSTMENT'].map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
             </TextField>
 
-            <TextField select label="Material" value={form.materialId} onChange={handleChange('materialId')} required disabled={saving} size="small">
+            <TextField select label="Material" value={form.materialId} onChange={e => setForm(prev => ({...prev, materialId:e.target.value, unit: materials.find(m=>m.id===e.target.value)?.unit || ''}))} required disabled={saving} size="small">
               {materials.map(m => <MenuItem key={m.id} value={m.id}>{m.materialCode} — {m.materialName}</MenuItem>)}
             </TextField>
 
@@ -436,7 +403,7 @@ export default function InventoryMovementPage() {
               <TextField label="Unit" value={form.unit} onChange={handleChange('unit')} disabled={saving} size="small" sx={{ width: 90 }} />
             </Box>
             <TextField label="Batch No" value={form.batchNo} onChange={handleChange('batchNo')} disabled={saving} size="small" />
-            <TextField label="Reason" value={form.reason} onChange={handleChange('reason')} disabled={saving} size="small" />
+            <TextField label="Reason" required={form.movementType === 'ADJUSTMENT'} value={form.reason} onChange={handleChange('reason')} disabled={saving} size="small" />
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <span style={{ fontSize: 13, color: '#555', minWidth: 80 }}>Created By:</span>
               <span style={{ fontSize: 13, fontWeight: 600 }}>{currentUsername}</span>

@@ -11,6 +11,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface ShopOrderRepository extends JpaRepository<ShopOrder, UUID> {
+    @org.springframework.data.jpa.repository.Query("SELECT o FROM ShopOrder o WHERE o.tenantId=:tenantId AND o.companyId=:companyId AND ((o.createdAt >= :from AND o.createdAt < :to) OR (o.paidAt >= :from AND o.paidAt < :to))")
+    java.util.List<com.ams.bomcore.domain.shop.ShopOrder> findShiftOrders(@org.springframework.data.repository.query.Param("tenantId") java.util.UUID tenantId, @org.springframework.data.repository.query.Param("companyId") java.util.UUID companyId, @org.springframework.data.repository.query.Param("from") java.time.Instant from, @org.springframework.data.repository.query.Param("to") java.time.Instant to);
+
     List<ShopOrder> findAllByTenantIdAndCompanyIdOrderByCreatedAtDesc(UUID tenantId, UUID companyId);
     List<ShopOrder> findAllByTenantIdAndCompanyIdAndStatusOrderByCreatedAtDesc(UUID tenantId, UUID companyId, String status);
     List<ShopOrder> findAllByTenantIdAndCompanyIdAndCreatedAtGreaterThanEqualAndCreatedAtLessThanOrderByCreatedAtDesc(
@@ -68,6 +71,19 @@ public interface ShopOrderRepository extends JpaRepository<ShopOrder, UUID> {
                                        @Param("fromTime") Instant fromTime,
                                        @Param("toTime") Instant toTime);
     List<ShopOrder> findAllByTable_IdAndTenantIdAndCompanyIdAndStatusIn(UUID tableId, UUID tenantId, UUID companyId, List<String> statuses);
+    @Query("""
+        SELECT o FROM ShopOrder o
+        WHERE o.tenantId = :tenantId
+          AND o.companyId = :companyId
+          AND o.table IS NOT NULL
+          AND (
+            o.status IN ('PENDING', 'CONFIRMED', 'PREPARING', 'READY')
+            OR (o.status IN ('COMPLETED', 'PICKED_UP') AND o.tableClearedAt IS NULL)
+          )
+        ORDER BY o.createdAt DESC
+        """)
+    List<ShopOrder> findTableVisibleOrders(@Param("tenantId") UUID tenantId,
+                                           @Param("companyId") UUID companyId);
     Optional<ShopOrder> findTopByTenantIdAndCompanyIdAndPickupScannedAtAfterOrderByPickupScannedAtDesc(UUID tenantId, UUID companyId, Instant after);
 
     @Query("SELECT COUNT(o) FROM ShopOrder o WHERE o.companyId = :companyId AND o.createdAt >= :start AND o.createdAt < :end")

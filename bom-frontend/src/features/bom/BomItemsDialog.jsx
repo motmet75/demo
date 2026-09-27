@@ -16,6 +16,7 @@ import Chip from '@mui/material/Chip'
 import Tooltip from '@mui/material/Tooltip'
 import CircularProgress from '@mui/material/CircularProgress'
 import Alert from '@mui/material/Alert'
+import Autocomplete from '@mui/material/Autocomplete'
 import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
 import DeleteIcon from '@mui/icons-material/Delete'
@@ -33,6 +34,7 @@ const EMPTY_ROW = { materialId: '', quantity: '', level: 1 }
 function ItemRow({ row, materials, onSave, onCancel, saving }) {
   const [form, setForm] = useState({ materialId: row.materialId ?? '', quantity: row.quantity != null ? String(row.quantity) : '', level: row.level ?? 1 })
   const [err, setErr] = useState('')
+  const selectedMaterial = materials.find(material => String(material.id) === String(form.materialId)) || null
 
   const ch = f => e => setForm(p => ({ ...p, [f]: e.target.value }))
 
@@ -50,13 +52,17 @@ function ItemRow({ row, materials, onSave, onCancel, saving }) {
       <TableCell colSpan={2}>
         <form onSubmit={submit}>
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-            <TextField select SelectProps={{ native: true }} label="Material *" value={form.materialId}
-              onChange={ch('materialId')} size="small" sx={{ minWidth: 240 }} disabled={saving}>
-              <option value="">— select material —</option>
-              {materials.map(m => (
-                <option key={m.id} value={m.id}>{m.materialCode} — {m.materialName}</option>
-              ))}
-            </TextField>
+            <Autocomplete
+              options={materials}
+              value={selectedMaterial}
+              onChange={(_, material) => setForm(current => ({ ...current, materialId: material?.id || '' }))}
+              getOptionLabel={material => `${material.materialCode || ''} — ${material.materialName || ''}`}
+              isOptionEqualToValue={(a,b)=>String(a.id)===String(b.id)}
+              autoHighlight
+              disabled={saving}
+              sx={{ minWidth: 280 }}
+              renderInput={params => <TextField {...params} label="Material *" size="small" placeholder="Type code or name" required />}
+            />
             <TextField label="Qty / Unit *" type="number" value={form.quantity}
               onChange={ch('quantity')} size="small" sx={{ width: 120 }}
               inputProps={{ step: 'any', min: 0.0001 }} disabled={saving} />
@@ -144,11 +150,6 @@ export default function BomItemsDialog({ open, bom, onClose }) {
       setItems(prev => prev.filter(it => it.id !== id))
     } catch (e) { setError('Delete failed: ' + e.message) }
     finally { setSavingId(null) }
-  }
-
-  function getMaterialLabel(materialId) {
-    const m = materials.find(x => x.id === materialId)
-    return m ? `${m.materialCode} — ${m.materialName}` : materialId
   }
 
   const busy = !!savingId

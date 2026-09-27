@@ -77,6 +77,18 @@ public class InvoiceEntity {
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
 
+    @Column(name = "payment_method", length = 20)
+    private String paymentMethod;
+
+    @Column(name = "paid_at")
+    private Instant paidAt;
+
+    @Column(name = "payment_note_id")
+    private UUID paymentNoteId;
+
+    @Column(name = "payment_notes", columnDefinition = "TEXT")
+    private String paymentNotes;
+
     @Column(name = "created_by", length = 100)
     private String createdBy;
 
@@ -163,6 +175,18 @@ public class InvoiceEntity {
 
     public String getNotes() { return notes; }
     public void setNotes(String notes) { this.notes = notes; }
+
+    public String getPaymentMethod() { return paymentMethod; }
+    public void setPaymentMethod(String paymentMethod) { this.paymentMethod = paymentMethod; }
+
+    public Instant getPaidAt() { return paidAt; }
+    public void setPaidAt(Instant paidAt) { this.paidAt = paidAt; }
+
+    public UUID getPaymentNoteId() { return paymentNoteId; }
+    public void setPaymentNoteId(UUID paymentNoteId) { this.paymentNoteId = paymentNoteId; }
+
+    public String getPaymentNotes() { return paymentNotes; }
+    public void setPaymentNotes(String paymentNotes) { this.paymentNotes = paymentNotes; }
 
     public String getCreatedBy() { return createdBy; }
     public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }

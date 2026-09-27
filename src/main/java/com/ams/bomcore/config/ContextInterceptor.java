@@ -59,11 +59,7 @@ public class ContextInterceptor implements HandlerInterceptor {
         // set tenant context for downstream services/repositories
         TenantContext.setTenantId(tenantHeader);
 
-        // capture logged-in username from header (set by frontend/gateway)
-        String usernameHeader = request.getHeader("X-Username");
-        if (usernameHeader != null && !usernameHeader.isBlank()) {
-            UserContext.setUsername(usernameHeader);
-        }
+        UserContext.setUsername(com.ams.bomcore.audit.AuditActor.username());
 
         if (companyHeader == null || companyHeader.isBlank()) {
             response.sendError(HttpStatus.BAD_REQUEST.value(), "Missing X-Company-Id header");

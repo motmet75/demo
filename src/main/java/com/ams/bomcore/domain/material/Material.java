@@ -71,6 +71,11 @@ public class Material {
     @Column(name = "created_at")
     private Instant createdAt;
 
+    @Column(name = "manual_shift_consumption", nullable = false)
+    private Boolean manualShiftConsumption = false;
+    public Boolean getManualShiftConsumption() { return manualShiftConsumption; }
+    public void setManualShiftConsumption(Boolean value) { manualShiftConsumption = Boolean.TRUE.equals(value); }
+
     public Material() {
         // default constructor required by JPA
     }

@@ -1,6 +1,8 @@
 package com.ams.bomcore.service.invoice;
 
 import java.math.BigDecimal;
+import java.sql.Date;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -8,11 +10,13 @@ import java.util.UUID;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ams.bomcore.domain.invoice.InvoiceEntity;
 import com.ams.bomcore.repository.InvoiceRepository;
+import com.ams.bomcore.service.shop.CounterShiftGuard;
 
 /**
  * Business logic for Invoice (PURCHASE / SALE).
@@ -23,9 +27,14 @@ import com.ams.bomcore.repository.InvoiceRepository;
 public class InvoiceService {
 
     private final InvoiceRepository invoiceRepository;
+    private final JdbcTemplate jdbcTemplate;
+    private final CounterShiftGuard counterShiftGuard;
 
-    public InvoiceService(InvoiceRepository invoiceRepository) {
+    public InvoiceService(InvoiceRepository invoiceRepository, JdbcTemplate jdbcTemplate,
+                          CounterShiftGuard counterShiftGuard) {
         this.invoiceRepository = invoiceRepository;
+        this.jdbcTemplate = jdbcTemplate;
+        this.counterShiftGuard = counterShiftGuard;
     }
 
     public Page<InvoiceEntity> list(UUID tenantId, UUID companyId,
@@ -78,7 +87,7 @@ public class InvoiceService {
         inv.setTaxAmount(decimal(body, "taxAmount"));
         inv.setTotalAmount(decimal(body, "totalAmount"));
         inv.setNotes(str(body, "notes"));
-        inv.setCreatedBy(str(body, "createdBy"));
+        inv.setCreatedBy(com.ams.bomcore.audit.AuditActor.username());
         inv.setStatus(InvoiceEntity.STATUS_DRAFT);
         return invoiceRepository.save(inv);
     }
@@ -123,6 +132,54 @@ public class InvoiceService {
     public void delete(UUID id, UUID tenantId, UUID companyId) {
         InvoiceEntity inv = getById(id, tenantId, companyId);
         invoiceRepository.delete(inv);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public InvoiceEntity recordPurchasePayment(UUID id, Map<String, Object> body,
+                                               UUID tenantId, UUID companyId) {
+        InvoiceEntity inv = getById(id, tenantId, companyId);
+        if (!InvoiceEntity.TYPE_PURCHASE.equals(inv.getInvoiceType())) {
+            throw new IllegalArgumentException("Only purchase invoices can create a payment note");
+        }
+        if (InvoiceEntity.STATUS_CANCELLED.equals(inv.getStatus())) {
+            throw new IllegalArgumentException("Cancelled invoice cannot be paid");
+        }
+
+        String method = str(body, "paymentMethod");
+        method = method == null ? "" : method.trim().toUpperCase();
+        if (!"CASH".equals(method) && !"BANK_QR".equals(method)) {
+            throw new IllegalArgumentException("paymentMethod must be CASH or BANK_QR");
+        }
+        boolean createPaymentNote = Boolean.parseBoolean(String.valueOf(body.getOrDefault("createPaymentNote", false)));
+        String paymentNotes = str(body, "paymentNotes");
+        UUID paymentNoteId = null;
+
+        if (createPaymentNote) {
+            counterShiftGuard.requireOpenForReceipt(tenantId, companyId);
+            Long count = jdbcTemplate.queryForObject("""
+                    SELECT COUNT(*) FROM shop_payment_note WHERE tenant_id = ? AND company_id = ?
+                    """, Long.class, tenantId, companyId);
+            String noteNumber = "PC" + String.format("%06d", (count == null ? 0 : count) + 1);
+            paymentNoteId = UUID.randomUUID();
+            String reason = paymentNotes == null
+                    ? "Thanh toán hóa đơn nhập kho " + inv.getInvoiceNumber()
+                    : paymentNotes;
+            jdbcTemplate.update("""
+                    INSERT INTO shop_payment_note
+                    (id, tenant_id, company_id, note_number, note_date, object_name, recipient_name,
+                     reason, amount, payment_method, invoice_id, created_by, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now(), now())
+                    """, paymentNoteId, tenantId, companyId, noteNumber, Date.valueOf(LocalDate.now()),
+                    inv.getPartyName(), inv.getPartyName(), reason, inv.getTotalAmount(), method, inv.getId(),
+                    com.ams.bomcore.audit.AuditActor.username());
+        }
+
+        inv.setStatus(InvoiceEntity.STATUS_PAID);
+        inv.setPaymentMethod(method);
+        inv.setPaidAt(Instant.now());
+        inv.setPaymentNoteId(paymentNoteId);
+        inv.setPaymentNotes(paymentNotes);
+        return invoiceRepository.save(inv);
     }
 
     // ── helpers ──────────────────────────────────────────────────────

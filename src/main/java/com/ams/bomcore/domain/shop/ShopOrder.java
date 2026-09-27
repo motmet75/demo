@@ -161,6 +161,9 @@ public class ShopOrder {
     @Column(name = "completed_at")
     private Instant completedAt;
 
+    @Column(name = "table_cleared_at")
+    private Instant tableClearedAt;
+
     public ShopOrder() {}
 
     @PrePersist
@@ -212,7 +215,12 @@ public class ShopOrder {
     public String getPaymentMethod() { return paymentMethod; }
     public void setPaymentMethod(String paymentMethod) { this.paymentMethod = paymentMethod; }
     public String getPaymentStatus() { return paymentStatus; }
-    public void setPaymentStatus(String paymentStatus) { this.paymentStatus = paymentStatus; }
+    public void setPaymentStatus(String paymentStatus) { if (PAY_STATUS_PAID.equals(paymentStatus) && !PAY_STATUS_PAID.equals(this.paymentStatus)) this.paidAt = Instant.now();
+        this.paymentStatus = paymentStatus; }
+    @Column(name = "paid_at")
+    private Instant paidAt;
+    public Instant getPaidAt() { return paidAt; }
+
     public Instant getPaymentRequestedAt() { return paymentRequestedAt; }
     public void setPaymentRequestedAt(Instant paymentRequestedAt) { this.paymentRequestedAt = paymentRequestedAt; }
     public String getPaymentQr() { return paymentQr; }
@@ -235,6 +243,8 @@ public class ShopOrder {
     public void setReadyAt(Instant readyAt) { this.readyAt = readyAt; }
     public Instant getCompletedAt() { return completedAt; }
     public void setCompletedAt(Instant completedAt) { this.completedAt = completedAt; }
+    public Instant getTableClearedAt() { return tableClearedAt; }
+    public void setTableClearedAt(Instant tableClearedAt) { this.tableClearedAt = tableClearedAt; }
     public String getSourceToken() { return sourceToken; }
     public void setSourceToken(String sourceToken) { this.sourceToken = sourceToken; }
     public String getStaffName() { return staffName; }

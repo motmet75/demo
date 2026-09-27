@@ -92,6 +92,19 @@ public class InventoryMovementEntity {
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
 
+    @Column(name="unit_price")
+    private BigDecimal unitPrice;
+    @Column(name="entered_quantity")
+    private BigDecimal enteredQuantity;
+    @Column(name="entered_unit")
+    private String enteredUnit;
+    @Column(name="shift_id")
+    private UUID shiftId;
+    public BigDecimal getUnitPrice() { return unitPrice; }
+    public BigDecimal getEnteredQuantity() { return enteredQuantity; }
+    public String getEnteredUnit() { return enteredUnit; }
+    public UUID getShiftId() { return shiftId; }
+
     public InventoryMovementEntity() {
     }
 

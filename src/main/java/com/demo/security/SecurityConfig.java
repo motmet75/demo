@@ -91,6 +91,7 @@ public class SecurityConfig {
                 .requestMatchers("/auth/login", "/auth/login-otp/**", "/auth/login-totp/**", "/auth/logout", "/auth/me", "/auth/change-password", "/auth/last-context", "/auth/profile", "/error").permitAll()
                 .requestMatchers("/admin/users/**").hasAnyRole("SUPER_ADMIN", "ADMIN")
                 .requestMatchers("/admin/**").hasRole("SUPER_ADMIN")
+                .requestMatchers("/bom/audit", "/bom/audit/**").hasAnyRole("SUPER_ADMIN", "ADMIN")
                 .requestMatchers("/bom/etl/**").hasRole("SUPER_ADMIN")
                 .requestMatchers(HttpMethod.GET, "/bom/tenants", "/bom/tenants/**").hasRole("SUPER_ADMIN")
                 .requestMatchers(HttpMethod.GET, "/bom/models/*/cost-estimate").hasAnyRole(FULL_BUSINESS_ROLES)
