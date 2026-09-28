@@ -12,6 +12,7 @@ import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
 import java.time.*;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 /** Counter writes are append-only, tenant scoped and serialized against shift closure. */
@@ -29,6 +30,10 @@ public class ShopCounterWorkflowController {
     private void require(boolean ok, String message) { if (!ok) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message); }
     private BigDecimal n(Object v) { try { return new BigDecimal(String.valueOf(v)); } catch(Exception e) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Số không hợp lệ"); } }
     private String s(Object v) { return v == null ? "" : v.toString().trim(); }
+    private boolean admin(Authentication auth) {
+        return auth != null && auth.getAuthorities().stream().anyMatch(a ->
+                a.getAuthority().equals("ROLE_ADMIN") || a.getAuthority().equals("ROLE_SUPER_ADMIN"));
+    }
     private String encode(Object v) { try { return json.writeValueAsString(v); } catch(Exception e) { throw new IllegalArgumentException(e); } }
     private void scope(UUID t, UUID c) {
         var auth=org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
@@ -67,6 +72,7 @@ public class ShopCounterWorkflowController {
         result.put("suggestedShift",now.getHour()>=22 || now.getHour()<14?1:2);
         result.put("nextHandoverTo",handoverUser);
         result.put("canOpen",handoverUser.isEmpty() || (auth!=null && handoverUser.equalsIgnoreCase(auth.getName())));
+        result.put("canAdminReopen",admin(auth));
         result.put("schedule",List.of(Map.of("number",1,"name","Ca 1 · 06:00–14:00"),Map.of("number",2,"name","Ca 2 · 14:00–22:00")));
         result.put("usedShifts",db.queryForList("SELECT shift_number FROM shop_counter_shift WHERE tenant_id=? AND company_id=? AND shift_date=? AND shift_number IS NOT NULL",Integer.class,t,c,java.sql.Date.valueOf(shiftDate)));
         var history=db.queryForList("SELECT * FROM shop_counter_shift WHERE tenant_id=? AND company_id=? ORDER BY opened_at DESC LIMIT 20",t,c);
@@ -116,6 +122,52 @@ public class ShopCounterWorkflowController {
         if(prev==null || prevBank==null || cash.compareTo(n(prev))!=0 || bank.compareTo(n(prevBank))!=0) require(!reason.isEmpty() && Boolean.TRUE.equals(body.get("confirmed")),"Nhập lý do và xác nhận lại số dư đầu ca khác bàn giao / khởi tạo lần đầu");
         UUID id=UUID.randomUUID();
         db.update("INSERT INTO shop_counter_shift(id,tenant_id,company_id,shift_date,shift_number,shift_name,opened_by,previous_cash,opening_cash,previous_bank,opening_bank,opening_reason) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",id,t,c,java.sql.Date.valueOf(today),shiftNumber,shiftNumber==1?"Ca 1 · 06:00–14:00":"Ca 2 · 14:00–22:00",auth.getName(),prev,cash,prevBank,bank,reason);
+        return state(t,c,auth);
+    }
+
+    @PostMapping("/reopen") @Transactional
+    public Map<String,Object> reopen(@RequestHeader("X-Tenant-Id") UUID t,
+                                     @RequestHeader("X-Company-Id") UUID c,
+                                     Authentication auth,
+                                     @RequestBody Map<String,Object> body) {
+        lock(t,c);
+        require(admin(auth),"Chỉ Admin / Super Admin được mở lại ca đã bàn giao");
+        require(active(t,c).isEmpty(),"Đang có ca mở; tải lại trước khi thao tác");
+        UUID closedShiftId;
+        try { closedShiftId=UUID.fromString(s(body.get("shiftId"))); }
+        catch(Exception e) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Ca cần mở lại không hợp lệ"); }
+        var closedRows=db.queryForList("""
+                SELECT * FROM shop_counter_shift
+                WHERE id=? AND tenant_id=? AND company_id=? AND status='CLOSED'
+                FOR UPDATE
+                """,closedShiftId,t,c);
+        require(closedRows.size()==1,"Không tìm thấy ca đã bàn giao để mở lại");
+        var closed=closedRows.get(0);
+        String assignedTo=s(body.get("assignedTo"));
+        require(!assignedTo.isEmpty(),"Chọn thu ngân được phân công tiếp tục ca");
+        require(Boolean.TRUE.equals(db.queryForObject("""
+                SELECT EXISTS(SELECT 1 FROM usertb u JOIN authorities a ON upper(a.username)=upper(u.username)
+                WHERE upper(u.username)=upper(?) AND u.isenabled=true AND u.assigned_tenant_id=?
+                  AND u.assigned_company_id=? AND a.authority='ROLE_COUNTER')
+                """,Boolean.class,assignedTo,t.toString(),c.toString())),
+                "Người được phân công phải có vai trò Thu ngân / Bàn giao ca");
+        String reason=s(body.get("reason"));
+        require(!reason.isEmpty(),"Nhập lý do mở lại ca");
+        require(closed.get("actual_cash")!=null,"Ca cũ chưa có số tiền bàn giao");
+        BigDecimal cash=n(closed.get("actual_cash"));
+        BigDecimal bank=closed.get("actual_bank")==null?BigDecimal.ZERO:n(closed.get("actual_bank"));
+        ZonedDateTime now=ZonedDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
+        UUID id=UUID.randomUUID();
+        String name=s(closed.get("shift_name"))+" · Mở lại "+now.format(DateTimeFormatter.ofPattern("HH:mm"));
+        String auditReason="Admin "+auth.getName()+" mở lại và giao cho "+assignedTo+": "+reason;
+        db.update("""
+                INSERT INTO shop_counter_shift
+                (id,tenant_id,company_id,shift_date,shift_number,shift_name,opened_at,opened_by,
+                 previous_cash,opening_cash,previous_bank,opening_bank,opening_reason,
+                 reopened_from_shift_id,reopened_by,assigned_to)
+                VALUES(?,?,?,?,null,?,?,?,?,?,?,?,?,?,?,?)
+                """,id,t,c,closed.get("shift_date"),name,Timestamp.from(now.toInstant()),assignedTo,
+                cash,cash,bank,bank,auditReason,closedShiftId,auth.getName(),assignedTo);
         return state(t,c,auth);
     }
     @GetMapping("/stock")
@@ -297,15 +349,20 @@ public class ShopCounterWorkflowController {
                 """, Long.class, t, c, noteType);
         String prefix = noteType.equals("RECEIPT") ? "PT" : "PC";
         String number = prefix + String.format("%06d", (count == null ? 0 : count) + 1);
+        UUID shiftId=db.queryForObject("""
+                SELECT id FROM shop_counter_shift
+                WHERE tenant_id=? AND company_id=? AND status='OPEN'
+                ORDER BY opened_at DESC LIMIT 1
+                """,UUID.class,t,c);
         UUID id = UUID.randomUUID();
         db.update("""
                 INSERT INTO shop_payment_note
                 (id,tenant_id,company_id,note_number,note_date,object_name,recipient_name,reason,amount,
-                 payment_method,note_type,inventory_movement_id,created_by,created_at,updated_at)
-                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,now(),now())
+                 payment_method,note_type,inventory_movement_id,shift_id,created_by,created_at,updated_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,now(),now())
                 """, id, t, c, number, java.sql.Date.valueOf(LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh"))),
                 s(body.get("objectName")), s(body.get("recipientName")), reason, amount, method, noteType,
-                movementId, auth.getName());
+                movementId, shiftId, auth.getName());
         return Map.of("id", id, "noteNumber", number, "noteType", noteType, "amount", amount);
     }
 
@@ -421,6 +478,11 @@ public class ShopCounterWorkflowController {
             require(diff.signum()==0 || !s(row.get("reason")).isEmpty(),"Chênh lệch tồn kho cần lý do: "+inv.get("material_code"));
             var item=new LinkedHashMap<String,Object>(inv); item.put("actual",actual); item.put("difference",diff); item.put("reason",s(row.get("reason"))); saved.add(item);
         }
+        summary.put("shiftName",shift.get("shift_name"));
+        summary.put("shiftNumber",shift.get("shift_number"));
+        summary.put("openedAt",start.toString());
+        summary.put("handedOverAt",end.toString());
+        summary.put("handoverTo",handoverTo);
         summary.put("expectedCash",expected); summary.put("expectedBank",expectedBank); summary.put("differenceCash",cash.subtract(expected)); summary.put("differenceBank",bank.subtract(expectedBank));
         db.update("UPDATE shop_counter_shift SET status='CLOSED',closed_at=?,closed_by=?,actual_cash=?,actual_bank=?,closing_reason=?,handover_to=?,summary=?::jsonb,inventory_counts=?::jsonb WHERE id=?",Timestamp.from(end),auth.getName(),cash,bank,s(body.get("reason")),handoverTo,encode(summary),encode(saved),shift.get("id"));
         return state(t,c,auth);

@@ -29,6 +29,11 @@ import { dateFmt } from '../../utils/format'
 import BomItemsDialog from './BomItemsDialog'
 
 const STATUS_COLOR = { ACTIVE: 'success', ARCHIVED: 'default', DRAFT: 'warning' }
+const normalizeSearch = value => String(value ?? '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/[đĐ]/g, match => match === 'đ' ? 'd' : 'D')
+  .toLowerCase()
 
 // ... (CreateBomDialog code remains unchanged)
 
@@ -132,8 +137,8 @@ export default function BomGrid() {
 
   // ── Export Logic (Based on InventoryMovementPage.jsx) ──────────────[cite: 1]
   const filteredRows = rows.filter(r => {
-    const s = v => (v == null ? '' : String(v)).toLowerCase()
-    if (filterModelCode && ![r.id, r.modelCode, r.bomName, r.version, r.status].some(value => s(value).includes(filterModelCode.toLowerCase()))) return false
+    const query = normalizeSearch(filterModelCode)
+    if (query && ![r.id, r.modelCode, r.bomName, r.version, r.status].some(value => normalizeSearch(value).includes(query))) return false
     if (filterStatus && r.status !== filterStatus) return false
     return true
   })
@@ -210,7 +215,7 @@ export default function BomGrid() {
     <Box>
       <Box sx={{ display: 'flex', gap: 1.5, mb: 2, alignItems: 'center', flexWrap: 'wrap' }}>
         <Typography variant="h6">BOM Management</Typography>
-        <TextField size="small" label="Filter code, name, UUID, version" value={filterModelCode} onChange={event => { setFilterModelCode(event.target.value); setPaginationModel(prev => ({ ...prev, page: 0 })) }} sx={{ minWidth: 280, flex: 1 }} />
+        <TextField size="small" label="Filter code, name (with/without accents), UUID, version" value={filterModelCode} onChange={event => { setFilterModelCode(event.target.value); setPaginationModel(prev => ({ ...prev, page: 0 })) }} sx={{ minWidth: 320, flex: 1 }} />
         <TextField select size="small" label="Status" value={filterStatus} onChange={event => { setFilterStatus(event.target.value); setPaginationModel(prev => ({ ...prev, page: 0 })) }} sx={{ minWidth: 140 }}>
           <MenuItem value="">All</MenuItem><MenuItem value="ACTIVE">Active</MenuItem><MenuItem value="DRAFT">Draft</MenuItem><MenuItem value="ARCHIVED">Archived</MenuItem>
         </TextField>

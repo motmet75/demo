@@ -624,7 +624,7 @@ const BOARD_HIGH_CONTRAST_STYLE = {
   PICKED_UP:  { headerBg: '#e0f2fe', border: '#0369a1',  cardBg: '#ffffff',  color: '#0f172a',  numColor: '#0369a1' },
 }
 
-function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, onPrintReceipt, onPayQr, onPickupQr, onSwitchQr, onRevertCash, onShowTrackQr, onPrintTag, onMergeBills, onChangeSeat, displaySize = 'normal', highContrast = false }) {
+function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, onPrintAlert, onPrintReceipt, onPayQr, onPickupQr, onSwitchQr, onRevertCash, onShowTrackQr, onPrintTag, onMergeBills, onChangeSeat, displaySize = 'normal', highContrast = false }) {
   const { language, t } = useI18n()
   // onAction(type, orderId, orderNumber)
   const large = displaySize === 'large'
@@ -665,6 +665,7 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
         const since = elapsed(order.confirmedAt || order.createdAt)
         const boardActionItems = [
           { key: 'detail', labelKey: 'shop.orderAction.viewDetail', icon: <VisibilityIcon />, color: 'primary', onClick: () => onDetail(order) },
+          { key: 'orderAlert', labelKey: 'shop.orderAction.printOrderAlert', icon: <NotificationsActiveIcon />, color: 'warning', onClick: () => onPrintAlert?.(order) },
           { key: 'receipt', labelKey: 'shop.orderAction.printReceipt', icon: <ReceiptLongIcon />, color: 'primary', onClick: () => onPrintReceipt?.(order) },
           { key: 'trackQr', labelKey: 'shop.orderAction.showTracking', icon: <QrCodeScannerIcon />, color: 'info', show: Boolean(onShowTrackQr), onClick: () => onShowTrackQr?.(order) },
           { key: 'trackingTag', labelKey: 'shop.orderAction.printTrackingTag', icon: <LocalOfferIcon />, color: 'secondary', show: Boolean(onPrintTag), onClick: () => onPrintTag?.(order) },
@@ -923,6 +924,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
   })
   const orderActionItems = [
     { key: 'detail', labelKey: 'shop.orderAction.viewDetail', icon: <VisibilityIcon />, color: 'primary', onClick: () => actions.detail(order) },
+    { key: 'orderAlert', labelKey: 'shop.orderAction.printOrderAlert', icon: <NotificationsActiveIcon />, color: 'warning', onClick: () => actions.printAlert(order) },
     { key: 'receipt', labelKey: 'shop.orderAction.printReceipt', icon: <ReceiptLongIcon />, color: 'primary', onClick: () => actions.printReceipt(order) },
     { key: 'combinedReceipt', labelKey: 'shop.orderAction.combinedReceipt', icon: <PeopleAltIcon />, color: 'secondary', show: Boolean(order.sourceToken), onClick: () => actions.combinedReceipt(order.sourceToken) },
     { key: 'trackQr', labelKey: 'shop.orderAction.showTracking', icon: <QrCodeScannerIcon />, color: 'info', onClick: () => actions.showTrackQr(order) },
@@ -1015,6 +1017,9 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
             </Tooltip>
             <Tooltip title={t('shop.orderAction.printReceipt')}>
               <IconButton size="small" color="primary" onClick={() => actions.printReceipt(order)} sx={{ p: 0.35 }}><ReceiptLongIcon sx={{ fontSize: large ? 20 : 17 }} /></IconButton>
+            </Tooltip>
+            <Tooltip title={t('shop.orderAction.printOrderAlert')}>
+              <IconButton size="small" color="warning" onClick={() => actions.printAlert(order)} sx={{ p: 0.35 }}><NotificationsActiveIcon sx={{ fontSize: large ? 20 : 17 }} /></IconButton>
             </Tooltip>
             {order.sourceToken && (
               <Tooltip title={t('shop.orderAction.combinedReceipt')}>
@@ -1358,6 +1363,7 @@ function OrderRowsGrid({ rows, tables, actions, selectedIds, onToggleSelect, dis
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                     {renderPrimaryAction(order)}
                     <Tooltip title={t('shopOrder.grid.viewDetail')}><IconButton size="small" onClick={() => actions.detail(order)}><VisibilityIcon sx={{ fontSize: large ? 20 : 17 }} /></IconButton></Tooltip>
+                    <Button size="small" variant="outlined" color="warning" onClick={() => actions.printAlert(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 12 : 10 }}>{t('shop.orderAction.printOrderAlert')}</Button>
                     <Tooltip title={t('shopOrder.grid.printReceipt')}><IconButton size="small" color="primary" onClick={() => actions.printReceipt(order)}><PrintIcon sx={{ fontSize: large ? 20 : 17 }} /></IconButton></Tooltip>
                     {order.paymentStatus !== 'PAID' && isActive && <Button size="small" variant="outlined" color="success" onClick={() => actions.markPaid(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 12 : 10 }}>{t('shopOrder.grid.markPaid')}</Button>}
                     {order.paymentStatus !== 'PAID' && order.status !== 'CANCELLED' && <Tooltip title={t('shopOrder.grid.paymentQr')}><IconButton size="small" color="primary" onClick={() => actions.payQr(order)}><QrCode2Icon sx={{ fontSize: large ? 20 : 17 }} /></IconButton></Tooltip>}
@@ -2353,6 +2359,7 @@ export default function ShopOrderGrid() {
       quickConfirmOrder: row,
     }, () => handleQuickConfirm(row)),
     detail:          (row) => setDetailOrder(row),
+    printAlert:      (row) => printCounterOrderAlertTracked(row, setError),
     printReceipt:    (row) => ['COMPLETED', 'PICKED_UP', 'CANCELLED'].includes(row.status) ? printOrderReceiptTracked(row) : openPaymentAction(row, 'print'),
     combinedReceipt: (token) => setCombinedToken(token),
     payQr:           handlePayQr,
@@ -2814,10 +2821,10 @@ export default function ShopOrderGrid() {
             />
             </>
           )}
-          {tab === 1 && <StatusBoard status="CONFIRMED"  orders={confirmedOrders} modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPrintReceipt={cardActions.printReceipt} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} onShowTrackQr={handleShowTrackQr} onPrintTag={handlePrintTrack} onMergeBills={cardActions.mergeBills} onChangeSeat={handleChangeSeat} />}
-          {tab === 2 && <StatusBoard status="PREPARING"  orders={preparingOrders} modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPrintReceipt={cardActions.printReceipt} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} onShowTrackQr={handleShowTrackQr} onPrintTag={handlePrintTrack} onMergeBills={cardActions.mergeBills} onChangeSeat={handleChangeSeat} />}
-          {tab === 3 && <StatusBoard status="READY"      orders={readyOrders}     modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPrintReceipt={cardActions.printReceipt} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} onShowTrackQr={handleShowTrackQr} onPrintTag={handlePrintTrack} onMergeBills={cardActions.mergeBills} onChangeSeat={handleChangeSeat} />}
-          {tab === 4 && <StatusBoard status="PICKED_UP"  orders={pickedUpOrders}  modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPrintReceipt={cardActions.printReceipt} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} onShowTrackQr={handleShowTrackQr} onPrintTag={handlePrintTrack} onMergeBills={cardActions.mergeBills} onChangeSeat={handleChangeSeat} />}
+          {tab === 1 && <StatusBoard status="CONFIRMED"  orders={confirmedOrders} modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPrintAlert={cardActions.printAlert} onPrintReceipt={cardActions.printReceipt} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} onShowTrackQr={handleShowTrackQr} onPrintTag={handlePrintTrack} onMergeBills={cardActions.mergeBills} onChangeSeat={handleChangeSeat} />}
+          {tab === 2 && <StatusBoard status="PREPARING"  orders={preparingOrders} modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPrintAlert={cardActions.printAlert} onPrintReceipt={cardActions.printReceipt} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} onShowTrackQr={handleShowTrackQr} onPrintTag={handlePrintTrack} onMergeBills={cardActions.mergeBills} onChangeSeat={handleChangeSeat} />}
+          {tab === 3 && <StatusBoard status="READY"      orders={readyOrders}     modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPrintAlert={cardActions.printAlert} onPrintReceipt={cardActions.printReceipt} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} onShowTrackQr={handleShowTrackQr} onPrintTag={handlePrintTrack} onMergeBills={cardActions.mergeBills} onChangeSeat={handleChangeSeat} />}
+          {tab === 4 && <StatusBoard status="PICKED_UP"  orders={pickedUpOrders}  modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPrintAlert={cardActions.printAlert} onPrintReceipt={cardActions.printReceipt} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} onShowTrackQr={handleShowTrackQr} onPrintTag={handlePrintTrack} onMergeBills={cardActions.mergeBills} onChangeSeat={handleChangeSeat} />}
         </Box>
       </Box>
 

@@ -2,8 +2,9 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Alert, Autocomplete, Avatar, Box, Button, Checkbox, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, IconButton, MenuItem, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
-import { formatIntegerInput, formatQuantityInput, parseIntegerInput, parseQuantityInput } from '../../utils/numberInput'
+import { formatQuantityInput, parseQuantityInput } from '../../utils/numberInput'
 import { apiFetchJson } from '../../api/client'
+import { useAuth } from '../../context/useAuth'
 
 const money = n => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 6 })
 const financialMethodOptions = [
@@ -41,6 +42,7 @@ async function api(path = '', body) {
 const handoverUserLabel = user => typeof user === 'string' ? user : [user?.firstName, user?.lastName].filter(Boolean).join(' ') || user?.username || ''
 
 export default function CounterWorkflow({ handoverUsers = [] }) {
+  const { isAdmin } = useAuth()
   const [state, setState] = useState({}), [stock, setStock] = useState([])
   const [error, setError] = useState(''), [success, setSuccess] = useState(''), [busy, setBusy] = useState(false)
   const [record,setRecord] = useState(null)
@@ -49,6 +51,7 @@ export default function CounterWorkflow({ handoverUsers = [] }) {
   const [dialog, setDialog] = useState(''), [sample, setSample] = useState(false)
   const [opening, setOpening] = useState(''), [openingBank, setOpeningBank] = useState(''), [reason, setReason] = useState(''), [confirmed, setConfirmed] = useState(false)
   const [cash, setCash] = useState(''), [bank, setBank] = useState(''), [receiver, setReceiver] = useState(''), [counts, setCounts] = useState({})
+  const [reopenTo, setReopenTo] = useState(''), [reopenReason, setReopenReason] = useState('')
   const [movementLines, setMovementLines] = useState([movementLine()])
   const [movementLocation, setMovementLocation] = useState({ warehouseId: '', batchNo: '' })
   const [financialNote, setFinancialNote] = useState({ create: false, paymentMethod: 'CASH', amount: '', reason: '', objectName: '' })
@@ -67,6 +70,12 @@ export default function CounterWorkflow({ handoverUsers = [] }) {
       setFinancialNote({ create: false, paymentMethod: 'CASH', amount: '', reason: '', objectName: '' })
     }
     if(kind === 'OPEN') { setOpening(state.previousCash ?? ''); setOpeningBank(state.previousBank ?? ''); setShiftNumber(String((state.usedShifts || []).includes(state.suggestedShift) ? [1,2].find(n=>!(state.usedShifts || []).includes(n)) || '' : state.suggestedShift || 1)) }
+    if(kind === 'REOPEN') {
+      const lastClosed = (state.history || []).find(item => item.status === 'CLOSED')
+      setRecord(lastClosed || null)
+      setReopenTo(lastClosed?.handover_to || '')
+      setReopenReason('')
+    }
   }
   const rememberMovementLocation = (warehouseId, batchNo) => {
     movementDefaults.current = { warehouseId: warehouseId || '', batchNo: batchNo || '' }
@@ -226,13 +235,17 @@ export default function CounterWorkflow({ handoverUsers = [] }) {
     const batchNo = dialog === 'IN' ? movementLocation.batchNo : ''
     applyMovementLocation(warehouseId, batchNo)
   }
+  const lastClosedShift = (state.history || []).find(item => item.status === 'CLOSED')
   return <Paper sx={{p:2, mb:2, border:'1px solid #cbd5e1', borderRadius:2}}>
     <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap">
       <Box sx={{flex:1}}><Typography variant="h6" fontWeight={800}>Ca làm việc · {state.shiftDate || new Date().toLocaleDateString('vi-VN', {timeZone:'Asia/Ho_Chi_Minh'})}</Typography><Typography variant="body2">{state.active ? `${state.active.shift_name} · ${state.active.shift_date} · ${state.active.opened_by} · Tiền mặt ${money(state.active.opening_cash)}đ · Ngân hàng ${money(state.active.opening_bank)}đ` : 'Mở ca → bán hàng / nhập xuất kho → kiểm đếm và bàn giao'}</Typography></Box>
       <Typography variant="body2">Ca 1: 06:00–14:00 · Ca 2: 14:00–22:00 (giờ Việt Nam)</Typography>
       <Chip color={state.active?'success':'default'} label={state.active?'Đang mở':'Chưa mở ca'} />
       <Button disabled={busy} onClick={() => act(reload)}>Tải lại</Button>
-      {!state.active ? <Button disabled={busy || state.usedShifts?.length===2 || state.canOpen===false} variant="contained" onClick={() => start('OPEN')}>Mở ca</Button> : <Button disabled={busy} variant="contained" onClick={() => closeSetup()}>Đóng ca & bàn giao</Button>}
+      {!state.active ? <>
+        <Button disabled={busy || state.usedShifts?.length===2 || state.canOpen===false} variant="contained" onClick={() => start('OPEN')}>Mở ca</Button>
+        {isAdmin && lastClosedShift && <Button disabled={busy} variant="outlined" color="warning" onClick={() => start('REOPEN')}>Mở lại ca đã bàn giao</Button>}
+      </> : <Button disabled={busy} variant="contained" onClick={() => closeSetup()}>Đóng ca & bàn giao</Button>}
     </Stack>
     <Stack direction="row" gap={1} sx={{mt:2}} flexWrap="wrap">
       <Button variant="contained" href="/bom-inventory/shop-orders">Bán hàng / quầy nhanh</Button>
@@ -246,16 +259,25 @@ export default function CounterWorkflow({ handoverUsers = [] }) {
     {!state.active && state.canOpen===false && <Alert severity="warning" sx={{mt:1}}>Ca tiếp theo đã bàn giao cho <b>{state.nextHandoverTo}</b>. Người này cần đăng nhập để mở ca.</Alert>}
     {state.history?.filter(h=>h.status==='CLOSED').slice(0,3).map(h=><Typography key={h.id} variant="body2" sx={{mt:1}}><Button onClick={()=>{setRecord(h);setHistoryCombineMaterials(true);setDialog('HISTORY')}}>Xem biên bản</Button>{h.shift_name} · Đã khóa · {new Date(h.closed_at).toLocaleString('vi-VN')} · {h.closed_by} → {h.handover_to} · Bàn giao {money(h.actual_cash)}đ</Typography>)}
     <Dialog open={!!dialog} onClose={busy?undefined:()=>setDialog('')} fullWidth maxWidth={dialog==='CLOSE'||['IN','OUT','ADJUSTMENT'].includes(dialog)?'xl':'sm'}>
-      <DialogTitle>{({HISTORY:'Biên bản đã khóa',OPEN:'Mở ca — kiểm tiền nhận bàn giao',IN:'Nhập kho từng dòng',OUT:'Xuất kho từng dòng',ADJUSTMENT:'Điều chỉnh tồn kho',CLOSE:sample?'Ca mẫu hôm nay — xem trước':'Đóng ca — kiểm đếm & bàn giao'})[dialog]}</DialogTitle>
+      <DialogTitle>{({HISTORY:'Biên bản đã khóa',OPEN:'Mở ca — kiểm tiền nhận bàn giao',REOPEN:'Admin mở lại ca đã bàn giao',IN:'Nhập kho từng dòng',OUT:'Xuất kho từng dòng',ADJUSTMENT:'Điều chỉnh tồn kho',CLOSE:sample?'Ca mẫu hôm nay — xem trước':'Đóng ca — kiểm đếm & bàn giao'})[dialog]}</DialogTitle>
       <DialogContent>
         {error && <Alert severity="error" sx={{mb:2}}>{error}</Alert>}
         {dialog==='HISTORY' && record && <Stack gap={2}>
           <Typography>{record.shift_name} · {record.shift_date}</Typography>
           <Typography>{record.opened_by} → {record.handover_to} · {new Date(record.opened_at).toLocaleString('vi-VN')} — {new Date(record.closed_at).toLocaleString('vi-VN')}</Typography>
+          <Alert severity="info">Biên bản chỉ chốt dữ liệu từ lúc mở ca đến đúng thời điểm bàn giao trên, không khóa toàn bộ khung giờ ca.</Alert>
           <Typography>Đầu ca: tiền mặt {money(record.opening_cash)}đ · ngân hàng {money(record.opening_bank)}đ · Bàn giao: tiền mặt {money(record.actual_cash)}đ · ngân hàng {money(record.actual_bank)}đ</Typography>
+          <Typography>Phiếu thu: {money(record.summary?.receiptNoteSubtotal)}đ · Phiếu chi: {money(record.summary?.expenseNoteSubtotal)}đ · Tổng Thu + Chi: {money(record.summary?.receiptExpenseTotal)}đ</Typography>
           <Typography>Lý do đầu ca: {record.opening_reason || 'Khớp bàn giao'} · Giải trình cuối ca: {record.closing_reason || 'Không chênh lệch tiền'}</Typography>
           <FormControlLabel control={<Checkbox checked={historyCombineMaterials} onChange={e=>setHistoryCombineMaterials(e.target.checked)} />} label="Gộp theo mã vật tư · bỏ cột Kho / lô" />
           <Box sx={{overflow:'auto'}}><Table size="small"><TableHead><TableRow>{(historyCombineMaterials?['Hàng','Hệ thống','Thực đếm','Chênh lệch','Lý do']:['Hàng','Kho / lô','Hệ thống','Thực đếm','Chênh lệch','Lý do']).map(x=><TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>{(historyCombineMaterials?combineHistoryCounts(Array.isArray(record.inventory_counts)?record.inventory_counts:[]):Array.isArray(record.inventory_counts)?record.inventory_counts:[]).map(r=><TableRow key={r.id}><TableCell>{r.material_code} · {r.material_name}</TableCell>{!historyCombineMaterials&&<TableCell>{r.warehouse_code} / {r.batch_no}</TableCell>}<TableCell>{money(r.quantity_on_hand)} {r.unit}</TableCell><TableCell>{money(r.actual)}</TableCell><TableCell>{money(r.difference)}</TableCell><TableCell>{r.reason}</TableCell></TableRow>)}</TableBody></Table></Box>
+        </Stack>}
+        {dialog==='REOPEN' && record && <Stack gap={2} sx={{pt:1}}>
+          <Alert severity="warning">Ca cũ vẫn giữ nguyên biên bản đã khóa. Hệ thống sẽ mở một phiên tiếp tục từ thời điểm xác nhận hiện tại và chỉ ghi nhận phát sinh mới.</Alert>
+          <Typography fontWeight={800}>{record.shift_name} · đã bàn giao lúc {new Date(record.closed_at).toLocaleString('vi-VN')}</Typography>
+          <Typography>Tiền nhận lại: tiền mặt {money(record.actual_cash)}đ · ngân hàng {money(record.actual_bank)}đ</Typography>
+          <Autocomplete fullWidth options={handoverUsers} value={handoverUsers.find(user=>user.username===reopenTo)||null} getOptionLabel={handoverUserLabel} isOptionEqualToValue={(option,value)=>option?.username===value?.username} onChange={(_,value)=>setReopenTo(value?.username||'')} renderOption={(props,user)=><Box component="li" {...props} key={user.username}><Box><Typography>{handoverUserLabel(user)}</Typography><Typography variant="caption" color="text.secondary">{user.username}{user.email?` · ${user.email}`:''}</Typography></Box></Box>} noOptionsText="Chưa có người dùng ROLE_COUNTER" renderInput={params=><TextField {...params} required label="Phân công lại cho thu ngân"/>}/>
+          <TextField required label="Lý do mở lại ca" value={reopenReason} onChange={e=>setReopenReason(e.target.value)} multiline minRows={2}/>
         </Stack>}
         {dialog==='OPEN' && <Stack gap={2} sx={{pt:1}}>
           <TextField select label={`Ca làm việc · ${state.shiftDate || ''}`} value={shiftNumber} onChange={e=>setShiftNumber(e.target.value)}>{(state.schedule || []).map(slot=><MenuItem key={slot.number} value={String(slot.number)} disabled={state.usedShifts?.includes(slot.number)}>{slot.name}{state.usedShifts?.includes(slot.number)?' · Đã mở trong ngày':''}</MenuItem>)}</TextField>
@@ -356,6 +378,7 @@ export default function CounterWorkflow({ handoverUsers = [] }) {
       </DialogContent>
       <DialogActions><Button disabled={busy} onClick={()=>setDialog('')}>Đóng</Button>
         {dialog==='OPEN' && <Button disabled={busy || !shiftNumber || opening==='' || openingBank==='' || ((openingDiff || openingBankDiff) && (!confirmed || !reason.trim()))} variant="contained" onClick={()=>act(async()=>{setState(await api('/open',{openingCash:opening,openingBank,reason,confirmed,shiftNumber:Number(shiftNumber),shiftDate:state.shiftDate}));setDialog('');setSuccess('Đã mở ca')})}>Xác nhận mở ca</Button>}
+        {dialog==='REOPEN' && <Button disabled={busy || !record?.id || !reopenTo.trim() || !reopenReason.trim()} variant="contained" color="warning" onClick={()=>act(async()=>{setState(await api('/reopen',{shiftId:record.id,assignedTo:reopenTo,reason:reopenReason}));setDialog('');setSuccess(`Đã mở lại ca từ thời điểm hiện tại và phân công cho ${reopenTo}`)})}>Mở lại & phân công</Button>}
         {['IN','OUT','ADJUSTMENT'].includes(dialog) && <Button disabled={busy || !movementLines.some(hasMovementInput)} type="submit" form="stock-lines" variant="contained">Lưu & khóa {movementLines.filter(hasMovementInput).length} dòng</Button>}
         {dialog==='CLOSE' && !sample && <Button disabled={busy || !confirmed || cash==='' || bank==='' || !receiver.trim()} variant="contained" onClick={()=>act(async()=>{setState(await api('/close',{shiftId:state.active.id,actualCash:cash,actualBank:bank,handoverTo:receiver,reason,confirmed,counts:stock.map(r=>({id:r.id,expected:r.quantity_on_hand,actual:counts[r.id]?.actual??'',reason:counts[r.id]?.reason||''}))}));setDialog('');setSuccess('Đã đóng và khóa ca. Tiền bàn giao sẽ chuyển sang đầu ca tiếp theo.')})}>Xác nhận đóng & khóa ca</Button>}
       </DialogActions>

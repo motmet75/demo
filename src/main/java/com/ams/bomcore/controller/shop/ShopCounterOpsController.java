@@ -114,7 +114,11 @@ public class ShopCounterOpsController {
         BigDecimal bankPaymentNoteTotal = paymentNoteTotal(tId, cId, from, to, "BANK_QR");
         BigDecimal receiptNoteCashTotal = financialNoteTotal(tId, cId, from, to, "CASH", "RECEIPT");
         BigDecimal receiptNoteBankTotal = financialNoteTotal(tId, cId, from, to, "BANK_QR", "RECEIPT");
+        BigDecimal receiptNoteSubtotal = financialNoteTypeTotal(tId, cId, from, to, "RECEIPT");
+        BigDecimal expenseNoteSubtotal = financialNoteTypeTotal(tId, cId, from, to, "EXPENSE");
         Map<String, Object> result = new LinkedHashMap<>();
+        result.put("from", from);
+        result.put("to", to);
         result.put("orderCount", orders.size());
         result.put("completedOrderCount", completed);
         result.put("unpaidOrderCount", unpaid);
@@ -127,6 +131,9 @@ public class ShopCounterOpsController {
         result.put("bankPaymentNoteTotal", bankPaymentNoteTotal);
         result.put("receiptNoteCashTotal", receiptNoteCashTotal);
         result.put("receiptNoteBankTotal", receiptNoteBankTotal);
+        result.put("receiptNoteSubtotal", receiptNoteSubtotal);
+        result.put("expenseNoteSubtotal", expenseNoteSubtotal);
+        result.put("receiptExpenseTotal", receiptNoteSubtotal.add(expenseNoteSubtotal));
         return ResponseEntity.ok(result);
     }
 
@@ -154,11 +161,15 @@ public class ShopCounterOpsController {
         validateScope(tId, cId);
         LocalDate targetDate = date != null ? date : LocalDate.now();
         return ResponseEntity.ok(jdbcTemplate.queryForList("""
-                SELECT id, note_number, note_date, object_name, recipient_name, address, reason,
-                       amount, payment_method, invoice_id, note_type, inventory_movement_id, created_by, created_at
-                FROM shop_payment_note
-                WHERE tenant_id = ? AND company_id = ? AND note_date = ?
-                ORDER BY created_at DESC
+                SELECT note.id, note.note_number, note.note_date, note.object_name, note.recipient_name,
+                       note.address, note.reason, note.amount, note.payment_method, note.invoice_id,
+                       note.note_type, note.inventory_movement_id, note.created_by, note.created_at,
+                       note.shift_id, shift.shift_name, shift.shift_number, shift.opened_at AS shift_opened_at,
+                       shift.closed_at AS handed_over_at, shift.handover_to, shift.status AS shift_status
+                FROM shop_payment_note note
+                LEFT JOIN shop_counter_shift shift ON shift.id = note.shift_id
+                WHERE note.tenant_id = ? AND note.company_id = ? AND note.note_date = ?
+                ORDER BY note.created_at DESC
                 """, tId, cId, Date.valueOf(targetDate)));
     }
 
@@ -177,21 +188,31 @@ public class ShopCounterOpsController {
         String noteType = noteType(body.get("noteType"));
         String reason = stringValue(body.get("reason"));
         if (reason == null) return ResponseEntity.badRequest().body(Map.of("message", "Nội dung phiếu thu / chi là bắt buộc"));
+        String recipientName = stringValue(body.get("recipientName"));
+        if (recipientName == null) {
+            return ResponseEntity.badRequest().body(Map.of("message",
+                    "RECEIPT".equals(noteType) ? "Người nộp là bắt buộc" : "Người nhận là bắt buộc"));
+        }
         BigDecimal amount = decimalValue(body.get("amount"));
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
             return ResponseEntity.badRequest().body(Map.of("message", "Số tiền phải lớn hơn 0"));
         }
         LocalDate noteDate = localDateValue(body.get("noteDate"), LocalDate.now());
         String noteNumber = nextPaymentNoteNumber(tId, cId, noteType);
+        UUID shiftId = jdbcTemplate.queryForObject("""
+                SELECT id FROM shop_counter_shift
+                WHERE tenant_id = ? AND company_id = ? AND status = 'OPEN'
+                ORDER BY opened_at DESC LIMIT 1
+                """, UUID.class, tId, cId);
         UUID id = UUID.randomUUID();
         jdbcTemplate.update("""
                 INSERT INTO shop_payment_note
                 (id, tenant_id, company_id, note_number, note_date, object_name, recipient_name,
-                 address, reason, amount, payment_method, invoice_id, note_type, created_by, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now(), now())
+                 address, reason, amount, payment_method, invoice_id, note_type, shift_id, created_by, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now(), now())
                 """, id, tId, cId, noteNumber, Date.valueOf(noteDate), stringValue(body.get("objectName")),
-                stringValue(body.get("recipientName")), stringValue(body.get("address")), reason,
-                amount, paymentMethod(body.get("paymentMethod")), uuidOrNull(body.get("invoiceId")), noteType,
+                recipientName, stringValue(body.get("address")), reason,
+                amount, paymentMethod(body.get("paymentMethod")), uuidOrNull(body.get("invoiceId")), noteType, shiftId,
                 currentUsername(authentication));
         return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
                 "id", id,
@@ -396,6 +417,17 @@ public class ShopCounterOpsController {
                   AND COALESCE(payment_method, 'CASH') = ?
                   AND COALESCE(note_type, 'EXPENSE') = ?
                 """, BigDecimal.class, tenantId, companyId, Timestamp.from(from), Timestamp.from(to), paymentMethod, noteType);
+        return nz(value);
+    }
+
+    private BigDecimal financialNoteTypeTotal(UUID tenantId, UUID companyId, Instant from, Instant to,
+                                              String noteType) {
+        BigDecimal value = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(amount), 0)
+                FROM shop_payment_note
+                WHERE tenant_id = ? AND company_id = ? AND created_at >= ? AND created_at < ?
+                  AND COALESCE(note_type, 'EXPENSE') = ?
+                """, BigDecimal.class, tenantId, companyId, Timestamp.from(from), Timestamp.from(to), noteType);
         return nz(value);
     }
 

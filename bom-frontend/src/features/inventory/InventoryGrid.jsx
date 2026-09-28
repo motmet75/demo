@@ -22,6 +22,12 @@ import { numFmt, dateFmt } from '../../utils/format'
 import { useAuth } from '../../context/useAuth'
 import FormattedNumberField from '../../components/FormattedNumberField'
 
+const normalizeSearch = value => String(value ?? '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/[đĐ]/g, match => match === 'đ' ? 'd' : 'D')
+  .toLowerCase()
+
 export default function InventoryGrid() {
   const { hasInventoryPriceAccess } = useAuth()
   const [rows, setRows] = useState([])
@@ -546,10 +552,11 @@ export default function InventoryGrid() {
 
   // apply simple client-side filters
   const filteredRows = rows.filter(r => {
-    if (filterMaterial && filterMaterial.trim() !== '' && !(r.materialCode || '').toLowerCase().includes(filterMaterial.trim().toLowerCase())) return false
-    if (filterWarehouse && filterWarehouse.trim() !== '' && !(r.warehouseCode || '').toLowerCase().includes(filterWarehouse.trim().toLowerCase())) return false
-    if (filterInventoryUuid && filterInventoryUuid.trim() !== '' && !(r.inventoryId || '').toLowerCase().includes(filterInventoryUuid.trim().toLowerCase())) return false
-    if (filterBatch && filterBatch.trim() !== '' && !(r.batchNo || '').toLowerCase().includes(filterBatch.trim().toLowerCase())) return false
+    const materialQuery = normalizeSearch(filterMaterial.trim())
+    if (materialQuery && !normalizeSearch(`${r.materialCode || ''} ${r.materialName || ''}`).includes(materialQuery)) return false
+    if (filterWarehouse && !normalizeSearch(`${r.warehouseCode || ''} ${r.warehouseName || ''}`).includes(normalizeSearch(filterWarehouse.trim()))) return false
+    if (filterInventoryUuid && !normalizeSearch(r.inventoryId).includes(normalizeSearch(filterInventoryUuid.trim()))) return false
+    if (filterBatch && !normalizeSearch(r.batchNo).includes(normalizeSearch(filterBatch.trim()))) return false
     if (filterCreatedFrom || filterCreatedTo) {
       const d = r.createdAt ? new Date(r.createdAt) : null
       if (!d || isNaN(d)) return false
@@ -666,8 +673,8 @@ export default function InventoryGrid() {
           <input value={filterInventoryUuid} onChange={e => setFilterInventoryUuid(e.target.value)} style={{ width: 280 }} />
         </div>
         <div>
-          <label style={{ fontSize: 12 }}>Filter Material:</label><br />
-          <input value={filterMaterial} onChange={e => setFilterMaterial(e.target.value)} />
+          <label style={{ fontSize: 12 }}>Filter Material Code / Name (no accents needed):</label><br />
+          <input value={filterMaterial} onChange={e => setFilterMaterial(e.target.value)} style={{ width: 250 }} />
         </div>
         <div>
           <label style={{ fontSize: 12 }}>Filter Warehouse:</label><br />

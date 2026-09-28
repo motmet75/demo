@@ -31,6 +31,11 @@ const fmtMoney = (value) => `${Number(value || 0).toLocaleString('vi-VN')}đ`
 const fmtQty = (value) => Number(value || 0).toLocaleString('vi-VN', { maximumFractionDigits: 4 })
 const digits = (value) => String(value || '').replace(/[^\d.-]/g, '')
 const moneyNumber = (value) => Number(digits(value)) || 0
+const searchText = (value) => String(value || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/[đĐ]/g, match => match === 'đ' ? 'd' : 'D')
+  .toLowerCase()
 const paymentMethodLabel = value => ({
   CASH: 'Tiền mặt',
   BANK_QR: 'QR / chuyển khoản ngay',
@@ -96,12 +101,9 @@ function localDatetimeValue(date = new Date()) {
 
 function defaultShiftRange(now = new Date()) {
   const startHour = now.getHours() < 14 ? 6 : 14
-  const endHour = now.getHours() < 14 ? 14 : 22
   const d = new Date(now)
   d.setHours(startHour, 0, 0, 0)
-  const end = new Date(d)
-  end.setHours(endHour, 0, 0, 0)
-  return { from: localDatetimeValue(d), to: localDatetimeValue(end), name: startHour === 6 ? 'Ca 1 · 06:00–14:00' : 'Ca 2 · 14:00–22:00' }
+  return { from: localDatetimeValue(d), to: localDatetimeValue(now), name: startHour === 6 ? 'Ca 1 · 06:00–14:00' : 'Ca 2 · 14:00–22:00' }
 }
 
 function configuredShiftRange(shifts, now = new Date()) {
@@ -121,12 +123,18 @@ function configuredShiftRange(shifts, now = new Date()) {
   const date = localDateValue(now)
   const start = String(selected.startTime || '06:00').slice(0, 5)
   const end = String(selected.endTime || '14:00').slice(0, 5)
-  return { from: `${date}T${start}`, to: `${date}T${end}`, name: selected.label || `Ca ${start}–${end}` }
+  return { from: `${date}T${start}`, to: localDatetimeValue(now), name: selected.label || `Ca ${start}–${end}` }
 }
 
 function toIso(localValue) {
   const d = new Date(localValue)
   return Number.isNaN(d.getTime()) ? null : d.toISOString()
+}
+
+function handoverToIso(localValue) {
+  const selected = new Date(localValue)
+  if (Number.isNaN(selected.getTime())) return null
+  return new Date(Math.min(selected.getTime(), Date.now())).toISOString()
 }
 
 async function apiData(promise, fallback = 'Thao tác thất bại') {
@@ -192,6 +200,13 @@ export default function CounterShiftPage() {
     const count = Number(denominationCounts[value] || 0)
     return sum + value * (Number.isFinite(count) ? count : 0)
   }, 0), [denominationCounts])
+  const paymentNoteTotals = useMemo(() => paymentNotes.reduce((totals, note) => {
+    const amount = Number(note.amount || 0)
+    if (note.note_type === 'RECEIPT') totals.receipt += amount
+    else totals.expense += amount
+    totals.total += amount
+    return totals
+  }, { receipt: 0, expense: 0, total: 0 }), [paymentNotes])
 
   const openingCashNumber = moneyNumber(openingCash)
   const otherAmountNumber = moneyNumber(otherAmount)
@@ -203,10 +218,10 @@ export default function CounterShiftPage() {
   const cashDifference = cashActual - expectedCash
 
   const filteredInventoryRows = useMemo(() => {
-    const q = inventorySearch.trim().toLowerCase()
+    const q = searchText(inventorySearch.trim())
     const matchingRows = q ? inventoryRows.filter(row => [
       row.materialCode, row.materialName, row.warehouseCode, row.warehouseName, row.batchNo
-    ].some(value => String(value || '').toLowerCase().includes(q))) : inventoryRows
+    ].some(value => searchText(value).includes(q))) : inventoryRows
     const rows = combineInventoryTotals ? combineInventoryRows(matchingRows) : matchingRows
     return [...rows].sort((a, b) => inventoryTimestamp(b) - inventoryTimestamp(a)
       || String(a.materialCode || '').localeCompare(String(b.materialCode || '')))
@@ -227,7 +242,7 @@ export default function CounterShiftPage() {
     setError('')
     setLoading(true)
     try {
-      const data = await apiData(fetchCounterShiftSummary({ from: toIso(fromLocal), to: toIso(toLocal) }))
+      const data = await apiData(fetchCounterShiftSummary({ from: toIso(fromLocal), to: handoverToIso(toLocal) }))
       setSummary(data || {})
       const saved = await apiData(fetchCounterShiftHandovers(shiftDate))
       setHandovers(Array.isArray(saved) ? saved : [])
@@ -283,7 +298,7 @@ export default function CounterShiftPage() {
   useEffect(() => {
     if (tab !== 0) return undefined
     let active = true
-    const refresh = () => apiData(fetchCounterShiftSummary({ from: toIso(fromLocal), to: toIso(toLocal) }))
+    const refresh = () => apiData(fetchCounterShiftSummary({ from: toIso(fromLocal), to: handoverToIso(toLocal) }))
       .then(data => { if (active) setSummary(data || {}) })
       .catch(() => {})
     void refresh()
@@ -299,7 +314,7 @@ export default function CounterShiftPage() {
   const saveHandover = async () => {
     setError(''); setSuccess('')
     try {
-      const currentSummary = await apiData(fetchCounterShiftSummary({ from: toIso(fromLocal), to: toIso(toLocal) })) || {}
+      const currentSummary = await apiData(fetchCounterShiftSummary({ from: toIso(fromLocal), to: handoverToIso(toLocal) })) || {}
       setSummary(currentSummary)
       const currentExpectedCash = openingCashNumber
         + Number(currentSummary.cashIn || 0)
@@ -311,7 +326,7 @@ export default function CounterShiftPage() {
         shiftDate,
         shiftName,
         openedAt: toIso(fromLocal),
-        closedAt: toIso(toLocal),
+        closedAt: handoverToIso(toLocal),
         handoverBy: user?.username || '',
         handoverTo,
         openingCash: openingCashNumber,
@@ -374,6 +389,10 @@ export default function CounterShiftPage() {
 
   const savePaymentNote = async () => {
     setError(''); setSuccess('')
+    const person = paymentForm.recipientName.trim()
+    if (!person) { setError(paymentForm.noteType === 'RECEIPT' ? 'Nhập người nộp tiền' : 'Nhập người nhận tiền'); return }
+    const noteLabel = paymentForm.noteType === 'RECEIPT' ? 'phiếu thu' : 'phiếu chi'
+    if (!window.confirm(`Xác nhận tạo ${noteLabel} ${fmtMoney(moneyNumber(paymentForm.amount))}\n${paymentForm.noteType === 'RECEIPT' ? 'Người nộp' : 'Người nhận'}: ${person}`)) return
     try {
       const note = await apiData(createCounterPaymentNote({
         noteDate: paymentDate,
@@ -397,7 +416,7 @@ export default function CounterShiftPage() {
   const printHandover = async () => {
     let reportSummary = summary
     try {
-      reportSummary = await apiData(fetchCounterShiftSummary({ from: toIso(fromLocal), to: toIso(toLocal) })) || {}
+      reportSummary = await apiData(fetchCounterShiftSummary({ from: toIso(fromLocal), to: handoverToIso(toLocal) })) || {}
       setSummary(reportSummary)
     } catch (printError) {
       setError(printError.message || 'Không tải lại được số liệu trước khi in')
@@ -414,13 +433,24 @@ export default function CounterShiftPage() {
       if (!count) return ''
       return `<tr><td class="right">${fmtMoney(value)}</td><td class="right">${count}</td><td class="right">${fmtMoney(value * count)}</td></tr>`
     }).join('')
-    const paymentRows = paymentNotes.filter(note => (note.note_type || 'EXPENSE') === 'EXPENSE').map((note, idx) =>
-      `<tr><td>${idx + 1}</td><td>${note.reason || ''}</td><td class="right">${fmtMoney(note.amount)}</td></tr>`
+    let reportPaymentNotes = paymentNotes
+    try {
+      reportPaymentNotes = await apiData(fetchCounterPaymentNotes(shiftDate)) || []
+      setPaymentNotes(Array.isArray(reportPaymentNotes) ? reportPaymentNotes : [])
+    } catch { /* summary totals remain authoritative */ }
+    const fromMs = new Date(fromLocal).getTime()
+    const toMs = new Date(handoverToIso(toLocal)).getTime()
+    const notesInShift = (Array.isArray(reportPaymentNotes) ? reportPaymentNotes : []).filter(note => {
+      const at = new Date(note.created_at).getTime()
+      return at >= fromMs && at < toMs
+    })
+    const paymentRows = notesInShift.map((note, idx) =>
+      `<tr><td>${idx + 1}</td><td>${note.note_type === 'RECEIPT' ? 'Thu' : 'Chi'}</td><td>${new Date(note.created_at).toLocaleTimeString('vi-VN')}</td><td>${note.recipient_name || ''}</td><td>${note.reason || ''}</td><td class="right">${fmtMoney(note.amount)}</td></tr>`
     ).join('')
     printHtml('Biên bản bàn giao ca', `
       <h1>BIÊN BẢN BÀN GIAO CA</h1>
       <h2>${shiftName || ''} ngày ${shiftDate}</h2>
-      <p><b>Giờ mở ca:</b> ${fromLocal} &nbsp; <b>Giờ đóng ca:</b> ${toLocal}</p>
+      <p><b>Giờ mở ca:</b> ${new Date(fromLocal).toLocaleString('vi-VN')} &nbsp; <b>Bàn giao lúc:</b> ${new Date(handoverToIso(toLocal)).toLocaleString('vi-VN')}</p>
       <p><b>Người bàn giao:</b> ${user?.username || ''}</p>
       <div class="section">Nội dung bàn giao</div>
       <table>
@@ -432,6 +462,9 @@ export default function CounterShiftPage() {
         <tr><td>Tiền thẻ / chuyển khoản</td><td class="right">${fmtMoney(reportSummary.bankingIn)}</td></tr>
         <tr><td>Phiếu thu QR / chuyển khoản</td><td class="right">${fmtMoney(reportSummary.receiptNoteBankTotal)}</td></tr>
         <tr><td>Phiếu chi QR / chuyển khoản</td><td class="right">${fmtMoney(reportSummary.bankPaymentNoteTotal)}</td></tr>
+        <tr><td class="bold">Tổng phụ phiếu thu</td><td class="right bold">${fmtMoney(reportSummary.receiptNoteSubtotal)}</td></tr>
+        <tr><td class="bold">Tổng phụ phiếu chi</td><td class="right bold">${fmtMoney(reportSummary.expenseNoteSubtotal)}</td></tr>
+        <tr><td class="bold">Tổng Thu + Chi</td><td class="right bold">${fmtMoney(reportSummary.receiptExpenseTotal)}</td></tr>
         <tr><td>Order chưa thanh toán</td><td class="right">${reportSummary.unpaidOrderCount || 0}</td></tr>
         <tr><td>Tiền dự kiến trong két</td><td class="right">${fmtMoney(reportExpectedCash)}</td></tr>
         <tr><td>Thực tế kiểm đếm</td><td class="right">${fmtMoney(cashActual)}</td></tr>
@@ -439,8 +472,8 @@ export default function CounterShiftPage() {
       </table>
       <div class="section">Chi tiết kiểm đếm</div>
       <table><tr><th>Mệnh giá</th><th class="right">SL</th><th class="right">Thành tiền</th></tr>${denominationRows}</table>
-      <div class="section">Các khoản chi tiền mặt</div>
-      <table><tr><th>#</th><th>Lý do chi</th><th class="right">Số tiền</th></tr>${paymentRows || '<tr><td colspan="3">Không có</td></tr>'}</table>
+      <div class="section">Phiếu thu / chi trong thời gian ca</div>
+      <table><tr><th>#</th><th>Loại</th><th>Giờ</th><th>Người nhận / nộp</th><th>Nội dung</th><th class="right">Số tiền</th></tr>${paymentRows || '<tr><td colspan="6">Không có</td></tr>'}</table>
       <p><b>Ghi chú:</b> ${handoverNotes || ''}</p>
       <div class="sign"><div>Người bàn giao<br><br><br>(Ký, họ tên)</div><div>Người nhận bàn giao<br><br><br>(Ký, họ tên)</div></div>
     `)
@@ -533,7 +566,7 @@ export default function CounterShiftPage() {
                 <TextField label="Ngày ca" type="date" size="small" value={shiftDate} onChange={e => setShiftDate(e.target.value)} InputLabelProps={{ shrink: true }} />
                 <TextField label="Tên ca" size="small" value={shiftName} onChange={e => setShiftName(e.target.value)} />
                 <TextField label="Mở ca" type="datetime-local" size="small" value={fromLocal} onChange={e => setFromLocal(e.target.value)} InputLabelProps={{ shrink: true }} />
-                <TextField label="Đóng ca" type="datetime-local" size="small" value={toLocal} onChange={e => setToLocal(e.target.value)} InputLabelProps={{ shrink: true }} />
+                <TextField label="Bàn giao đến thời điểm" type="datetime-local" size="small" value={toLocal} onChange={e => setToLocal(e.target.value)} InputLabelProps={{ shrink: true }} inputProps={{ max: localDatetimeValue() }} helperText="Không vượt quá thời điểm hiện tại" />
                 <Button variant="outlined" startIcon={<RefreshIcon />} onClick={loadSummary}>Tải lại</Button>
               </Stack>
             </Paper>
@@ -563,6 +596,9 @@ export default function CounterShiftPage() {
                       <TableRow><TableCell>Phiếu thu QR / chuyển khoản</TableCell><TableCell align="right">{fmtMoney(summary.receiptNoteBankTotal)}</TableCell></TableRow>
                       <TableRow><TableCell>Phiếu chi trong ca</TableCell><TableCell align="right">{fmtMoney(summary.paymentNoteTotal)}</TableCell></TableRow>
                       <TableRow><TableCell>Phiếu chi QR / chuyển khoản</TableCell><TableCell align="right">{fmtMoney(summary.bankPaymentNoteTotal)}</TableCell></TableRow>
+                      <TableRow><TableCell sx={{ fontWeight: 900 }}>Tổng phụ phiếu thu</TableCell><TableCell align="right" sx={{ fontWeight: 900 }}>{fmtMoney(summary.receiptNoteSubtotal)}</TableCell></TableRow>
+                      <TableRow><TableCell sx={{ fontWeight: 900 }}>Tổng phụ phiếu chi</TableCell><TableCell align="right" sx={{ fontWeight: 900 }}>{fmtMoney(summary.expenseNoteSubtotal)}</TableCell></TableRow>
+                      <TableRow><TableCell sx={{ fontWeight: 900 }}>Tổng Thu + Chi</TableCell><TableCell align="right" sx={{ fontWeight: 900 }}>{fmtMoney(summary.receiptExpenseTotal)}</TableCell></TableRow>
                       <TableRow><TableCell>Nợ / chưa thanh toán</TableCell><TableCell align="right">{fmtMoney(summary.debtAmount)}</TableCell></TableRow>
                       <TableRow><TableCell sx={{ fontWeight: 900 }}>Tiền mặt dự kiến</TableCell><TableCell align="right" sx={{ fontWeight: 900 }}>{fmtMoney(expectedCash)}</TableCell></TableRow>
                       <TableRow><TableCell sx={{ fontWeight: 900 }}>Thực tế kiểm đếm</TableCell><TableCell align="right" sx={{ fontWeight: 900 }}>{fmtMoney(cashActual)}</TableCell></TableRow>
@@ -625,7 +661,7 @@ export default function CounterShiftPage() {
             <Paper sx={{ p: 1.5, borderRadius: 1 }}>
               <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.25}>
                 <TextField label="Ngày kiểm" type="date" size="small" value={shiftDate} onChange={e => setShiftDate(e.target.value)} InputLabelProps={{ shrink: true }} />
-                <TextField label="Tìm nguyên liệu / kho / lô" size="small" value={inventorySearch} onChange={e => setInventorySearch(e.target.value)} sx={{ minWidth: 280 }} />
+                <TextField label="Lọc mã / tên nguyên vật liệu, kho, lô (có hoặc không dấu)" size="small" value={inventorySearch} onChange={e => setInventorySearch(e.target.value)} sx={{ minWidth: 360 }} />
                 <Button variant="outlined" startIcon={<RefreshIcon />} onClick={loadInventory}>Tải tồn kho</Button>
                 <Button variant="outlined" startIcon={<PrintIcon />} onClick={printInventorySnapshot}>In tồn hiện tại</Button>
                 <Button variant="contained" startIcon={<Inventory2Icon />} onClick={saveReconciliation}>Lưu đối soát</Button>
@@ -700,6 +736,11 @@ export default function CounterShiftPage() {
 
         {tab === 2 && (
           <Stack spacing={1.5}>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+              <Chip color="success" label={`Tổng phiếu thu: ${fmtMoney(paymentNoteTotals.receipt)}`} />
+              <Chip color="error" label={`Tổng phiếu chi: ${fmtMoney(paymentNoteTotals.expense)}`} />
+              <Chip color="primary" label={`Tổng Thu + Chi: ${fmtMoney(paymentNoteTotals.total)}`} />
+            </Stack>
             <Paper sx={{ p: 1.5, borderRadius: 1 }}>
               <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '160px 160px 1fr 1fr' }, gap: 1.25 }}>
                 <TextField label="Ngày" type="date" size="small" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} InputLabelProps={{ shrink: true }} />
@@ -707,7 +748,7 @@ export default function CounterShiftPage() {
                   <MenuItem value="EXPENSE">Phiếu chi</MenuItem><MenuItem value="RECEIPT">Phiếu thu</MenuItem>
                 </TextField>
                 <TextField label="Đối tượng" size="small" value={paymentForm.objectName} onChange={e => setPaymentForm(prev => ({ ...prev, objectName: e.target.value }))} />
-                <TextField label="Người nhận" size="small" value={paymentForm.recipientName} onChange={e => setPaymentForm(prev => ({ ...prev, recipientName: e.target.value }))} />
+                <TextField required label={paymentForm.noteType === 'RECEIPT' ? 'Người nộp' : 'Người nhận'} size="small" value={paymentForm.recipientName} onChange={e => setPaymentForm(prev => ({ ...prev, recipientName: e.target.value }))} helperText="Người dùng nhập và xác nhận trước khi hệ thống tạo phiếu" />
                 <TextField label="Địa chỉ" size="small" value={paymentForm.address} onChange={e => setPaymentForm(prev => ({ ...prev, address: e.target.value }))} />
                 <TextField label={paymentForm.noteType === 'RECEIPT' ? 'Nội dung thu' : 'Lý do chi'} size="small" required value={paymentForm.reason} onChange={e => setPaymentForm(prev => ({ ...prev, reason: e.target.value }))} />
                 <TextField label="Số tiền" size="small" required value={formatIntegerInput(paymentForm.amount)} onChange={e => setPaymentForm(prev => ({ ...prev, amount: parseIntegerInput(e.target.value) }))} inputMode="numeric" />
@@ -725,21 +766,23 @@ export default function CounterShiftPage() {
             </Paper>
             <TableContainer component={Paper} sx={{ borderRadius: 1 }}>
               <Table size="small">
-                <TableHead><TableRow><TableCell>Số phiếu</TableCell><TableCell>Loại</TableCell><TableCell>Nội dung</TableCell><TableCell>Người nhận / nộp</TableCell><TableCell>Thanh toán</TableCell><TableCell align="right">Số tiền</TableCell><TableCell>Người lập</TableCell><TableCell align="right">In</TableCell></TableRow></TableHead>
+                <TableHead><TableRow><TableCell>Số phiếu</TableCell><TableCell>Loại</TableCell><TableCell>Ca / giờ ghi nhận</TableCell><TableCell>Nội dung</TableCell><TableCell>Người nhận / nộp</TableCell><TableCell>Thanh toán</TableCell><TableCell align="right">Số tiền</TableCell><TableCell>Bàn giao</TableCell><TableCell>Người lập</TableCell><TableCell align="right">In</TableCell></TableRow></TableHead>
                 <TableBody>
                   {paymentNotes.map(note => (
                     <TableRow key={note.id} hover>
                       <TableCell>{note.note_number || '-'}</TableCell>
                       <TableCell>{note.note_type === 'RECEIPT' ? 'Thu' : 'Chi'}</TableCell>
+                      <TableCell><Typography variant="body2" fontWeight={700}>{note.shift_name || 'Chưa gắn ca'}</Typography><Typography variant="caption" color="text.secondary">{note.created_at ? new Date(note.created_at).toLocaleString('vi-VN') : '-'}</Typography></TableCell>
                       <TableCell>{note.reason || '-'}</TableCell>
                       <TableCell>{note.recipient_name || '-'}</TableCell>
                       <TableCell>{paymentMethodLabel(note.payment_method)}</TableCell>
                       <TableCell align="right">{fmtMoney(note.amount)}</TableCell>
+                      <TableCell>{note.handed_over_at ? new Date(note.handed_over_at).toLocaleString('vi-VN') : note.shift_status === 'OPEN' ? 'Ca đang mở' : '-'}</TableCell>
                       <TableCell>{note.created_by || '-'}</TableCell>
                       <TableCell align="right"><Button size="small" startIcon={<PrintIcon />} onClick={() => printPaymentNote(note)}>In</Button></TableCell>
                     </TableRow>
                   ))}
-                  {!paymentNotes.length && <TableRow><TableCell colSpan={8} align="center" sx={{ py: 4, color: 'text.secondary' }}>Chưa có phiếu thu / chi trong ngày</TableCell></TableRow>}
+                  {!paymentNotes.length && <TableRow><TableCell colSpan={10} align="center" sx={{ py: 4, color: 'text.secondary' }}>Chưa có phiếu thu / chi trong ngày</TableCell></TableRow>}
                 </TableBody>
               </Table>
             </TableContainer>

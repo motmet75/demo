@@ -43,6 +43,7 @@ export default function QuickCounterDesk({ rows, actions, onNew, shiftState }) {
       <Typography variant="body2" color="text.secondary">{(order.items||[]).map(i=>`${i.quantity} × ${i.modelName || i.name || ''}`).join(' · ')}</Typography>
       <Typography sx={{my:1}} fontWeight={800}>{Math.max(0,Number(order.totalAmount||0)-Number(order.discountAmount||0)).toLocaleString('vi-VN')}đ · {order.paymentMethod==='BANK_QR'?'QR / chuyển khoản':order.paymentMethod==='SPLIT'?'Tiền mặt + QR':order.paymentMethod==='PAY_LATER'?'Trả sau':'Tiền mặt'}</Typography>
       <Stack direction="row" flexWrap="wrap" gap={1}><Button variant="outlined" onClick={()=>actions.detail(order)}>Chi tiết</Button>
+        <Button variant="outlined" color="warning" onClick={()=>actions.printAlert(order)}>In báo đơn</Button>
         {order.status==='PENDING' && <Button variant="contained" onClick={()=>actions.receive(order)}>Xác nhận</Button>}
         {order.status==='CONFIRMED' && <Button variant="contained" onClick={()=>actions.prepare(order)}>Bắt đầu làm</Button>}
         {order.status==='PREPARING' && <Button variant="contained" onClick={()=>actions.ready(order)}>Món đã sẵn sàng</Button>}

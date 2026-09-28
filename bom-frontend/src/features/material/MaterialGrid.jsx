@@ -8,6 +8,12 @@ import MaterialEditModal from './MaterialEditModal'
 import * as XLSX from 'xlsx'
 import { dateFmt, numFmt } from '../../utils/format'
 
+const normalizeSearch = value => String(value ?? '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/[đĐ]/g, match => match === 'đ' ? 'd' : 'D')
+  .toLowerCase()
+
 export default function MaterialGrid({ refreshKey }) {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(false)
@@ -329,13 +335,12 @@ export default function MaterialGrid({ refreshKey }) {
   ]
 
   const filteredRows = rows.filter(r => {
-    const s = (v) => (v == null ? '' : String(v)).toLowerCase()
-    if (filterUuid && !s(r.id).includes(filterUuid.toLowerCase())) return false
-    if (filterCode && !s(r.materialCode).includes(filterCode.toLowerCase())) return false
-    if (filterName && !s(r.materialName).includes(filterName.toLowerCase())) return false
-    if (filterUnit && !s(r.unit).includes(filterUnit.toLowerCase())) return false
-    if (filterType && !s(r.materialType).includes(filterType.toLowerCase())) return false
-    if (filterDescription && !s(r.description).includes(filterDescription.toLowerCase())) return false
+    if (filterUuid && !normalizeSearch(r.id).includes(normalizeSearch(filterUuid))) return false
+    if (filterCode && !normalizeSearch(r.materialCode).includes(normalizeSearch(filterCode))) return false
+    if (filterName && !normalizeSearch(r.materialName).includes(normalizeSearch(filterName))) return false
+    if (filterUnit && !normalizeSearch(r.unit).includes(normalizeSearch(filterUnit))) return false
+    if (filterType && !normalizeSearch(r.materialType).includes(normalizeSearch(filterType))) return false
+    if (filterDescription && !normalizeSearch(r.description).includes(normalizeSearch(filterDescription))) return false
     if (filterCreatedFrom || filterCreatedTo) {
       const rowDate = r.createdAt ? new Date(r.createdAt) : null
       if (!rowDate || isNaN(rowDate)) return false
