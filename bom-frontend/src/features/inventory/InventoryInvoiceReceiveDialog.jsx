@@ -47,12 +47,12 @@ const invoiceNumberSeed = () => {
 }
 
 const normalizeSearch = value => String(value || '')
-  .normalize('NFD')
-  .replace(/[\u0300-\u036f]/g, '')
-  .replace(/đ/g, 'd')
-  .replace(/Đ/g, 'D')
-  .toLowerCase()
-  .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+    .trim()
 
 const newLine = () => ({
   id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -90,19 +90,19 @@ function MaterialThumb({ material, size = 40 }) {
   const src = material?.thumbnailUrl || ''
   if (!src) {
     return (
-      <Box sx={{ width: size, height: size, borderRadius: 1, bgcolor: '#eef2f7', border: '1px solid #d8dee8', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
-        {String(material?.materialCode || '?').slice(0, 2).toUpperCase()}
-      </Box>
+        <Box sx={{ width: size, height: size, borderRadius: 1, bgcolor: '#eef2f7', border: '1px solid #d8dee8', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
+          {String(material?.materialCode || '?').slice(0, 2).toUpperCase()}
+        </Box>
     )
   }
   return (
-    <Box
-      component="img"
-      src={src}
-      alt={material?.materialName || material?.materialCode || 'Material'}
-      onError={e => { e.currentTarget.style.display = 'none' }}
-      sx={{ width: size, height: size, borderRadius: 1, objectFit: 'cover', border: '1px solid #d8dee8', bgcolor: '#f8fafc', flexShrink: 0 }}
-    />
+      <Box
+          component="img"
+          src={src}
+          alt={material?.materialName || material?.materialCode || 'Material'}
+          onError={e => { e.currentTarget.style.display = 'none' }}
+          sx={{ width: size, height: size, borderRadius: 1, objectFit: 'cover', border: '1px solid #d8dee8', bgcolor: '#f8fafc', flexShrink: 0 }}
+      />
   )
 }
 
@@ -132,12 +132,12 @@ function findMaterialFromScan(raw, materials) {
     const code = String(material.materialCode || '').toLowerCase()
     const name = String(material.materialName || '').toLowerCase()
     return lowerCandidates.some(candidate =>
-      candidate === id ||
-      candidate === code ||
-      candidate === name ||
-      (code && candidate.includes(code)) ||
-      (code && rawLower.includes(code)) ||
-      (name && rawLower.includes(name))
+        candidate === id ||
+        candidate === code ||
+        candidate === name ||
+        (code && candidate.includes(code)) ||
+        (code && rawLower.includes(code)) ||
+        (name && rawLower.includes(name))
     )
   }) || null
 }
@@ -188,10 +188,10 @@ function MaterialQrScanDialog({ open, onClose, onScan }) {
       const scanner = createScanner()
       scannerRef.current = scanner
       await scanner.start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: (width, height) => ({ width: Math.floor(Math.min(width, height) * 0.72), height: Math.floor(Math.min(width, height) * 0.72) }) },
-        decodedText => handleDetected(decodedText),
-        () => {}
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: (width, height) => ({ width: Math.floor(Math.min(width, height) * 0.72), height: Math.floor(Math.min(width, height) * 0.72) }) },
+          decodedText => handleDetected(decodedText),
+          () => {}
       )
       setStreaming(true)
     } catch (e) {
@@ -229,34 +229,34 @@ function MaterialQrScanDialog({ open, onClose, onScan }) {
   }, [open, startCamera, stopCamera])
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, fontWeight: 800 }}>
-        <QrCode2Icon color="primary" /> Scan Material QR
-      </DialogTitle>
-      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: '8px !important' }}>
-        {error && <Alert severity="warning">{error}</Alert>}
-        <Box sx={{ position: 'relative', bgcolor: '#0f172a', borderRadius: 2, overflow: 'hidden', aspectRatio: '4 / 3', display: 'flex', alignItems: 'center', justifyContent: 'center', '& video': { width: '100% !important', height: '100% !important', objectFit: 'cover' } }}>
-          <Box id={readerIdRef.current} sx={{ position: 'absolute', inset: 0 }} />
-          {!streaming && !starting && (
-            <Box sx={{ textAlign: 'center', color: '#e2e8f0', px: 2, zIndex: 1, pointerEvents: 'none' }}>
-              <QrCode2Icon sx={{ fontSize: 42, mb: 1 }} />
-              <Typography variant="body2">Camera or image scanner</Typography>
-            </Box>
-          )}
-          {starting && <CircularProgress size={30} sx={{ color: '#fff', zIndex: 1 }} />}
-          <Chip size="small" label={streaming ? 'Camera active' : 'Scanner'} color={streaming ? 'success' : 'default'} sx={{ position: 'absolute', top: 8, right: 8, fontWeight: 700, zIndex: 2 }} />
-        </Box>
-        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-          <Button size="small" variant="outlined" startIcon={starting ? <CircularProgress size={14} /> : <CameraAltIcon />} onClick={startCamera} disabled={starting || !cameraSupported}>Start Camera</Button>
-          <Button size="small" variant="outlined" component="label" startIcon={<UploadFileIcon />}>Scan Image<input hidden type="file" accept="image/*" onChange={e => { void decodeImageFile(e.target.files?.[0]); e.target.value = '' }} /></Button>
-        </Box>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <TextField fullWidth size="small" label="QR text or material code" value={manualValue} onChange={e => setManualValue(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleDetected(manualValue) }} />
-          <Button variant="contained" onClick={() => handleDetected(manualValue)} disabled={!manualValue.trim()}>Use</Button>
-        </Box>
-      </DialogContent>
-      <DialogActions><Button onClick={onClose}>Close</Button></DialogActions>
-    </Dialog>
+      <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, fontWeight: 800 }}>
+          <QrCode2Icon color="primary" /> Scan Material QR
+        </DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: '8px !important' }}>
+          {error && <Alert severity="warning">{error}</Alert>}
+          <Box sx={{ position: 'relative', bgcolor: '#0f172a', borderRadius: 2, overflow: 'hidden', aspectRatio: '4 / 3', display: 'flex', alignItems: 'center', justifyContent: 'center', '& video': { width: '100% !important', height: '100% !important', objectFit: 'cover' } }}>
+            <Box id={readerIdRef.current} sx={{ position: 'absolute', inset: 0 }} />
+            {!streaming && !starting && (
+                <Box sx={{ textAlign: 'center', color: '#e2e8f0', px: 2, zIndex: 1, pointerEvents: 'none' }}>
+                  <QrCode2Icon sx={{ fontSize: 42, mb: 1 }} />
+                  <Typography variant="body2">Camera or image scanner</Typography>
+                </Box>
+            )}
+            {starting && <CircularProgress size={30} sx={{ color: '#fff', zIndex: 1 }} />}
+            <Chip size="small" label={streaming ? 'Camera active' : 'Scanner'} color={streaming ? 'success' : 'default'} sx={{ position: 'absolute', top: 8, right: 8, fontWeight: 700, zIndex: 2 }} />
+          </Box>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            <Button size="small" variant="outlined" startIcon={starting ? <CircularProgress size={14} /> : <CameraAltIcon />} onClick={startCamera} disabled={starting || !cameraSupported}>Start Camera</Button>
+            <Button size="small" variant="outlined" component="label" startIcon={<UploadFileIcon />}>Scan Image<input hidden type="file" accept="image/*" onChange={e => { void decodeImageFile(e.target.files?.[0]); e.target.value = '' }} /></Button>
+          </Box>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <TextField fullWidth size="small" label="QR text or material code" value={manualValue} onChange={e => setManualValue(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleDetected(manualValue) }} />
+            <Button variant="contained" onClick={() => handleDetected(manualValue)} disabled={!manualValue.trim()}>Use</Button>
+          </Box>
+        </DialogContent>
+        <DialogActions><Button onClick={onClose}>Close</Button></DialogActions>
+      </Dialog>
   )
 }
 
@@ -517,8 +517,8 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
       }
       if (receiptReady) setSavedInvoice(createdInvoice)
       setError(receiptReady
-        ? `Hóa đơn và hàng nhập đã được lưu. Thanh toán chưa ghi được: ${e?.message || 'thử lại hoặc chọn Chưa thanh toán.'}`
-        : e?.message || 'Không lưu được hóa đơn và các dòng nhập kho.')
+          ? `Hóa đơn và hàng nhập đã được lưu. Thanh toán chưa ghi được: ${e?.message || 'thử lại hoặc chọn Chưa thanh toán.'}`
+          : e?.message || 'Không lưu được hóa đơn và các dòng nhập kho.')
     } finally {
       savingRef.current = false
       setSaving(false)
@@ -526,113 +526,113 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
   }
 
   return (
-    <>
-      <Dialog open={open} onClose={saving || paymentDialogOpen ? undefined : onClose} maxWidth="xl" fullWidth>
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
-          <span>Hóa đơn mới · Nhập kho</span>
-          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-            <Chip label={`${enteredLines.length} dòng hàng`} variant="outlined" sx={{ fontWeight: 800 }} />
-            <Chip label={`Currency ${currency}`} color="primary" variant="outlined" sx={{ fontWeight: 800 }} />
-          </Box>
-        </DialogTitle>
-        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '12px !important' }}>
-          {error && <Alert severity="error">{error}</Alert>}
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 130px' }, gap: 1.5 }}>
-            <TextField label="Số hóa đơn" size="small" value={form.invoiceNumber} onChange={setFormField('invoiceNumber')} required error={validationIssue?.field==='invoiceNumber'} helperText={validationIssue?.field==='invoiceNumber'?'Bắt buộc nhập số hóa đơn.':''} />
-            <TextField label="Nhà cung cấp" size="small" value={form.partyName} onChange={setFormField('partyName')} />
-            <TextField label="Ngày hóa đơn" type="date" size="small" value={form.invoiceDate} onChange={setFormField('invoiceDate')} InputLabelProps={{ shrink: true }} />
-          </Box>
+      <>
+        <Dialog open={open} onClose={saving || paymentDialogOpen ? undefined : onClose} maxWidth="xl" fullWidth>
+          <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+            <span>Hóa đơn mới · Nhập kho</span>
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+              <Chip label={`${enteredLines.length} dòng hàng`} variant="outlined" sx={{ fontWeight: 800 }} />
+              <Chip label={`Currency ${currency}`} color="primary" variant="outlined" sx={{ fontWeight: 800 }} />
+            </Box>
+          </DialogTitle>
+          <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '12px !important' }}>
+            {error && <Alert severity="error">{error}</Alert>}
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 130px' }, gap: 1.5 }}>
+              <TextField label="Số hóa đơn" size="small" value={form.invoiceNumber} onChange={setFormField('invoiceNumber')} required error={validationIssue?.field==='invoiceNumber'} helperText={validationIssue?.field==='invoiceNumber'?'Bắt buộc nhập số hóa đơn.':''} />
+              <TextField label="Nhà cung cấp" size="small" value={form.partyName} onChange={setFormField('partyName')} />
+              <TextField label="Ngày hóa đơn" type="date" size="small" value={form.invoiceDate} onChange={setFormField('invoiceDate')} InputLabelProps={{ shrink: true }} />
+            </Box>
 
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'minmax(260px, 1fr) minmax(220px, 1fr)' }, gap: 1.5, p: 1.5, border: '1px solid #bfdbfe', borderRadius: 1, bgcolor: '#eff6ff' }}>
-            <TextField size="small" select SelectProps={{ native: true }} label="Kho chung · áp dụng tất cả dòng" value={sharedLocation.warehouse?.id || ''} onChange={e => applyWarehouseToAll(warehouses.find(w => w.id === e.target.value) || null)}>
-              <option value="">Chọn kho</option>{warehouses.map(w => <option key={w.id} value={w.id}>{w.code} · {w.name}</option>)}
-            </TextField>
-            <TextField size="small" label="Số lô chung · áp dụng tất cả dòng" value={sharedLocation.batchNo} onChange={e => applyBatchToAll(e.target.value)} />
-          </Box>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'minmax(260px, 1fr) minmax(220px, 1fr)' }, gap: 1.5, p: 1.5, border: '1px solid #bfdbfe', borderRadius: 1, bgcolor: '#eff6ff' }}>
+              <TextField size="small" select SelectProps={{ native: true }} label="Kho chung · áp dụng tất cả dòng" value={sharedLocation.warehouse?.id || ''} onChange={e => applyWarehouseToAll(warehouses.find(w => w.id === e.target.value) || null)}>
+                <option value="">Chọn kho</option>{warehouses.map(w => <option key={w.id} value={w.id}>{w.code} · {w.name}</option>)}
+              </TextField>
+              <TextField size="small" label="Số lô chung · áp dụng tất cả dòng" value={sharedLocation.batchNo} onChange={e => applyBatchToAll(e.target.value)} />
+            </Box>
 
-          <Alert severity="info">Kho và số lô phía trên là mặc định chung. Đổi tại ô chung hoặc tại bất kỳ dòng nào sẽ áp dụng ngay cho tất cả dòng hiện tại và dòng mới. Tab / Shift+Tab chuyển ô · Tab chọn vật tư đầu tiên · Enter thêm dòng.</Alert>
-          <Box component="fieldset" disabled={saving || loadingRefs} sx={{border:0,p:0,m:0,minWidth:0}}>
-          <TableContainer sx={{maxHeight:'55vh',border:'1px solid #cbd5e1',borderRadius:1}}>
-            <Table stickyHeader size="small" sx={{minWidth:1600,'& th':{fontWeight:800,bgcolor:'#eff6ff',whiteSpace:'nowrap'},'& td':{p:0.5,verticalAlign:'top'},'& .MuiOutlinedInput-root':{borderRadius:0.5}}}>
-              <TableHead><TableRow>{['#','QR / Xóa','Mã / tên vật tư','SL nhập','Đơn vị kho','Hệ số → BOM','Đơn vị BOM','SL quy đổi','Đơn giá nhập','Thành tiền','Kho','Số lô','Ghi chú'].map((label,index)=><TableCell key={index}>{label}</TableCell>)}</TableRow></TableHead>
-              <TableBody>{lines.map((line,index)=>{
-                const calc=lineCalc(line)
-                const defaults=receivingDefaults(line.material,line.warehouse,inventory,boms,currency)
-                const materialQuery=normalizeSearch(line.materialInput)
-                const matches=materialOptions.filter(m=>normalizeSearch(`${m.materialCode} ${m.materialName}`).includes(materialQuery)).slice(0,80)
-                const conversionKey=defaults.options.find(o=>o.unit===line.warehouseImportUnit && o.ratio===Number(line.bomUnitPerWarehouseUnit))?.key || ''
-                return <TableRow key={line.id} onKeyDown={e=>rowKeyDown(e,line)} sx={{'&:focus-within':{bgcolor:'#f0f9ff'}}}>
-                  <TableCell>{index+1}</TableCell>
-                  <TableCell sx={{whiteSpace:'nowrap'}}><IconButton tabIndex={-1} aria-label={`Quét QR dòng ${index+1}`} size="small" onClick={()=>openScannerForLine(line.id)}><QrCode2Icon fontSize="small"/></IconButton><IconButton tabIndex={-1} aria-label={`Xóa dòng ${index+1}`} size="small" color="error" disabled={saving || lines.length<=1} onClick={()=>removeLine(line.id)}><DeleteIcon fontSize="small"/></IconButton></TableCell>
-                  <TableCell sx={{minWidth:280}}>
-                    <Autocomplete autoHighlight options={materialOptions} loading={loadingRefs} value={line.material} inputValue={line.materialInput}
-                      onInputChange={(_,value,reason)=>{if(reason==='input') updateLine(line.id,{materialInput:value,material:null,warehouseImportUnit:'',bomUnitPerWarehouseUnit:'',warehouseImportUnitPrice:''})}}
-                      onChange={(_,option)=>selectMaterial(line,option)}
-                      filterOptions={()=>line.material ? materialOptions.slice(0,80) : matches}
-                      getOptionLabel={option=>`${option.materialCode} - ${option.materialName}`}
-                      isOptionEqualToValue={(a,b)=>a.id===b.id}
-                      slotProps={{clearIndicator:{tabIndex:-1},popupIndicator:{tabIndex:-1}}}
-                      renderOption={(props,option)=><Box component="li" {...props} key={option.id} sx={{gap:1}}><MaterialThumb material={option} size={32}/><Box><Typography variant="body2">{option.materialCode} · {option.materialName}</Typography><Typography variant="caption">Đơn vị BOM: {option.unit || 'Chưa cấu hình'}</Typography></Box></Box>}
-                      renderInput={params=><TextField {...params} size="small" placeholder="Gõ mã / tên, không cần dấu" error={validationIssue?.lineId===line.id&&validationIssue?.field==='material'} helperText={validationIssue?.lineId===line.id&&validationIssue?.field==='material'?'Bắt buộc':''} inputRef={node=>{cells.current[`${line.id}:material`]=node}}
-                        inputProps={{...params.inputProps,'aria-label':`Vật tư dòng ${index+1}`}}
-                        onKeyDown={event=>{if(event.key==='Tab' && !event.shiftKey && !line.material && matches[0]) {event.preventDefault();event.defaultMuiPrevented=true;selectMaterial(line,matches[0]);cells.current[`${line.id}:quantity`]?.focus()}}}/>}/>
-                  </TableCell>
-                  <TableCell sx={{minWidth:110}}><TextField {...cellProps(line,'quantity','SL nhập')} type="text" value={formatQuantityInput(line.warehouseImportQuantity)} error={validationIssue?.lineId===line.id&&validationIssue?.field==='quantity'} helperText={validationIssue?.lineId===line.id&&validationIssue?.field==='quantity'?'Bắt buộc':''} onChange={e=>updateLine(line.id,{warehouseImportQuantity:parseQuantityInput(e.target.value)})} inputProps={{...cellProps(line,'quantity','SL nhập').inputProps,inputMode:'decimal',min:0,step:'any'}}/></TableCell>
-                  <TableCell sx={{minWidth:170}}><TextField {...cellProps(line,'unit','Đơn vị kho')} select value={conversionKey} error={validationIssue?.lineId===line.id&&validationIssue?.field==='unit'} helperText={validationIssue?.lineId===line.id&&validationIssue?.field==='unit'?'Bắt buộc':''} SelectProps={{native:true}} onChange={e=>{const option=defaults.options.find(o=>o.key===e.target.value);if(option)updateLine(line.id,{warehouseImportUnit:option.unit,bomUnitPerWarehouseUnit:option.ratio,warehouseImportUnitPrice:defaults.priceFor(option.unit,option.ratio)})}}>
-                    <option value="" disabled>{defaults.options.length?'Chọn quy đổi':'Chọn vật tư'}</option>{defaults.options.map(option=><option key={option.key} value={option.key}>{option.unit} · ×{option.ratio} ({option.source})</option>)}
-                  </TextField></TableCell>
-                  <TableCell sx={{minWidth:95}}><Typography sx={{pt:1}}>{line.bomUnitPerWarehouseUnit || '—'}</Typography></TableCell>
-                  <TableCell><Typography sx={{pt:1}}>{line.material?.unit || '—'}</Typography></TableCell>
-                  <TableCell><Typography sx={{pt:1}}>{calc.bomQty==null?'—':fmtNum(calc.bomQty,9)}</Typography></TableCell>
-                  <TableCell sx={{minWidth:130}}><TextField {...cellProps(line,'price','Đơn giá nhập')} type="text" value={formatIntegerInput(line.warehouseImportUnitPrice)} error={validationIssue?.lineId===line.id&&validationIssue?.field==='price'} helperText={validationIssue?.lineId===line.id&&validationIssue?.field==='price'?'Không hợp lệ':''} onChange={e=>updateLine(line.id,{warehouseImportUnitPrice:parseIntegerInput(e.target.value)})} inputProps={{...cellProps(line,'price','Đơn giá nhập').inputProps,inputMode:'numeric',min:0,step:'any'}}/></TableCell>
-                  <TableCell><Typography sx={{pt:1,whiteSpace:'nowrap'}}>{fmtNum(calc.total,2)}</Typography></TableCell>
-                  <TableCell sx={{minWidth:190}}><TextField {...cellProps(line,'warehouse','Kho')} select SelectProps={{native:true}} value={line.warehouse?.id || ''} error={validationIssue?.lineId===line.id&&validationIssue?.field==='warehouse'} helperText={validationIssue?.lineId===line.id&&validationIssue?.field==='warehouse'?'Bắt buộc':''} onChange={e=>applyWarehouseToAll(warehouses.find(w=>w.id===e.target.value)||null)}><option value="">Chọn kho</option>{warehouses.map(w=><option key={w.id} value={w.id}>{w.code} · {w.name}</option>)}</TextField></TableCell>
-                  <TableCell sx={{minWidth:170}}><TextField {...cellProps(line,'batch','Số lô')} required value={line.batchNo} error={validationIssue?.lineId===line.id&&validationIssue?.field==='batch'} helperText={validationIssue?.lineId===line.id&&validationIssue?.field==='batch'?'Bắt buộc nhập số lô':''} onChange={e=>applyBatchToAll(e.target.value)}/></TableCell>
-                  <TableCell sx={{minWidth:170}}><TextField {...cellProps(line,'notes','Ghi chú')} value={line.notes} onChange={e=>updateLine(line.id,{notes:e.target.value})}/></TableCell>
-                </TableRow>
-              })}</TableBody>
-            </Table>
-          </TableContainer>
-          </Box>
+            <Alert severity="info">Kho và số lô phía trên là mặc định chung. Đổi tại ô chung hoặc tại bất kỳ dòng nào sẽ áp dụng ngay cho tất cả dòng hiện tại và dòng mới. Tab / Shift+Tab chuyển ô · Tab chọn vật tư đầu tiên · Enter thêm dòng.</Alert>
+            <Box component="fieldset" disabled={saving || loadingRefs} sx={{border:0,p:0,m:0,minWidth:0}}>
+              <TableContainer sx={{maxHeight:'55vh',border:'1px solid #cbd5e1',borderRadius:1}}>
+                <Table stickyHeader size="small" sx={{minWidth:1600,'& th':{fontWeight:800,bgcolor:'#eff6ff',whiteSpace:'nowrap'},'& td':{p:0.5,verticalAlign:'top'},'& .MuiOutlinedInput-root':{borderRadius:0.5}}}>
+                  <TableHead><TableRow>{['#','QR / Xóa','Mã / tên vật tư','SL nhập','Đơn vị kho','Hệ số → BOM','Đơn vị BOM','SL quy đổi','Đơn giá nhập','Thành tiền','Kho','Số lô','Ghi chú'].map((label,index)=><TableCell key={index}>{label}</TableCell>)}</TableRow></TableHead>
+                  <TableBody>{lines.map((line,index)=>{
+                    const calc=lineCalc(line)
+                    const defaults=receivingDefaults(line.material,line.warehouse,inventory,boms,currency)
+                    const materialQuery=normalizeSearch(line.materialInput)
+                    const matches=materialOptions.filter(m=>normalizeSearch(`${m.materialCode} ${m.materialName}`).includes(materialQuery)).slice(0,80)
+                    const conversionKey=defaults.options.find(o=>o.unit===line.warehouseImportUnit && o.ratio===Number(line.bomUnitPerWarehouseUnit))?.key || ''
+                    return <TableRow key={line.id} onKeyDown={e=>rowKeyDown(e,line)} sx={{'&:focus-within':{bgcolor:'#f0f9ff'}}}>
+                      <TableCell>{index+1}</TableCell>
+                      <TableCell sx={{whiteSpace:'nowrap'}}><IconButton tabIndex={-1} aria-label={`Quét QR dòng ${index+1}`} size="small" onClick={()=>openScannerForLine(line.id)}><QrCode2Icon fontSize="small"/></IconButton><IconButton tabIndex={-1} aria-label={`Xóa dòng ${index+1}`} size="small" color="error" disabled={saving || lines.length<=1} onClick={()=>removeLine(line.id)}><DeleteIcon fontSize="small"/></IconButton></TableCell>
+                      <TableCell sx={{minWidth:280}}>
+                        <Autocomplete autoHighlight options={materialOptions} loading={loadingRefs} value={line.material} inputValue={line.materialInput}
+                                      onInputChange={(_,value,reason)=>{if(reason==='input') updateLine(line.id,{materialInput:value,material:null,warehouseImportUnit:'',bomUnitPerWarehouseUnit:'',warehouseImportUnitPrice:''})}}
+                                      onChange={(_,option)=>selectMaterial(line,option)}
+                                      filterOptions={()=>line.material ? materialOptions.slice(0,80) : matches}
+                                      getOptionLabel={option=>`${option.materialCode} - ${option.materialName}`}
+                                      isOptionEqualToValue={(a,b)=>a.id===b.id}
+                                      slotProps={{clearIndicator:{tabIndex:-1},popupIndicator:{tabIndex:-1}}}
+                                      renderOption={(props,option)=><Box component="li" {...props} key={option.id} sx={{gap:1}}><MaterialThumb material={option} size={32}/><Box><Typography variant="body2">{option.materialCode} · {option.materialName}</Typography><Typography variant="caption">Đơn vị BOM: {option.unit || 'Chưa cấu hình'}</Typography></Box></Box>}
+                                      renderInput={params=><TextField {...params} size="small" placeholder="Gõ mã / tên, không cần dấu" error={validationIssue?.lineId===line.id&&validationIssue?.field==='material'} helperText={validationIssue?.lineId===line.id&&validationIssue?.field==='material'?'Bắt buộc':''} inputRef={node=>{cells.current[`${line.id}:material`]=node}}
+                                                                      inputProps={{...params.inputProps,'aria-label':`Vật tư dòng ${index+1}`}}
+                                                                      onKeyDown={event=>{if(event.key==='Tab' && !event.shiftKey && !line.material && matches[0]) {event.preventDefault();event.defaultMuiPrevented=true;selectMaterial(line,matches[0]);cells.current[`${line.id}:quantity`]?.focus()}}}/>}/>
+                      </TableCell>
+                      <TableCell sx={{minWidth:110}}><TextField {...cellProps(line,'quantity','SL nhập')} type="text" value={formatQuantityInput(line.warehouseImportQuantity)} error={validationIssue?.lineId===line.id&&validationIssue?.field==='quantity'} helperText={validationIssue?.lineId===line.id&&validationIssue?.field==='quantity'?'Bắt buộc':''} onChange={e=>updateLine(line.id,{warehouseImportQuantity:parseQuantityInput(e.target.value)})} inputProps={{...cellProps(line,'quantity','SL nhập').inputProps,inputMode:'decimal',min:0,step:'any'}}/></TableCell>
+                      <TableCell sx={{minWidth:170}}><TextField {...cellProps(line,'unit','Đơn vị kho')} select value={conversionKey} error={validationIssue?.lineId===line.id&&validationIssue?.field==='unit'} helperText={validationIssue?.lineId===line.id&&validationIssue?.field==='unit'?'Bắt buộc':''} SelectProps={{native:true}} onChange={e=>{const option=defaults.options.find(o=>o.key===e.target.value);if(option)updateLine(line.id,{warehouseImportUnit:option.unit,bomUnitPerWarehouseUnit:option.ratio,warehouseImportUnitPrice:defaults.priceFor(option.unit,option.ratio)})}}>
+                        <option value="" disabled>{defaults.options.length?'Chọn quy đổi':'Chọn vật tư'}</option>{defaults.options.map(option=><option key={option.key} value={option.key}>{option.unit} · ×{option.ratio} ({option.source})</option>)}
+                      </TextField></TableCell>
+                      <TableCell sx={{minWidth:95}}><Typography sx={{pt:1}}>{line.bomUnitPerWarehouseUnit || '—'}</Typography></TableCell>
+                      <TableCell><Typography sx={{pt:1}}>{line.material?.unit || '—'}</Typography></TableCell>
+                      <TableCell><Typography sx={{pt:1}}>{calc.bomQty==null?'—':fmtNum(calc.bomQty,9)}</Typography></TableCell>
+                      <TableCell sx={{minWidth:130}}><TextField {...cellProps(line,'price','Đơn giá nhập')} type="text" value={formatQuantityInput(line.warehouseImportUnitPrice, 2)} error={validationIssue?.lineId===line.id&&validationIssue?.field==='price'} helperText={validationIssue?.lineId===line.id&&validationIssue?.field==='price'?'Không hợp lệ':''} onChange={e=>updateLine(line.id,{warehouseImportUnitPrice:parseQuantityInput(e.target.value,{maximumFractionDigits:2})})} inputProps={{...cellProps(line,'price','Đơn giá nhập').inputProps,inputMode:'decimal',min:0,step:'any'}}/></TableCell>
+                      <TableCell><Typography sx={{pt:1,whiteSpace:'nowrap'}}>{fmtNum(calc.total,2)}</Typography></TableCell>
+                      <TableCell sx={{minWidth:190}}><TextField {...cellProps(line,'warehouse','Kho')} select SelectProps={{native:true}} value={line.warehouse?.id || ''} error={validationIssue?.lineId===line.id&&validationIssue?.field==='warehouse'} helperText={validationIssue?.lineId===line.id&&validationIssue?.field==='warehouse'?'Bắt buộc':''} onChange={e=>applyWarehouseToAll(warehouses.find(w=>w.id===e.target.value)||null)}><option value="">Chọn kho</option>{warehouses.map(w=><option key={w.id} value={w.id}>{w.code} · {w.name}</option>)}</TextField></TableCell>
+                      <TableCell sx={{minWidth:170}}><TextField {...cellProps(line,'batch','Số lô')} required value={line.batchNo} error={validationIssue?.lineId===line.id&&validationIssue?.field==='batch'} helperText={validationIssue?.lineId===line.id&&validationIssue?.field==='batch'?'Bắt buộc nhập số lô':''} onChange={e=>applyBatchToAll(e.target.value)}/></TableCell>
+                      <TableCell sx={{minWidth:170}}><TextField {...cellProps(line,'notes','Ghi chú')} value={line.notes} onChange={e=>updateLine(line.id,{notes:e.target.value})}/></TableCell>
+                    </TableRow>
+                  })}</TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
 
-          <Button variant="outlined" startIcon={<AddIcon />} onClick={()=>addLine()} disabled={saving} sx={{ alignSelf: 'flex-start', fontWeight: 800 }}>Thêm dòng · Enter</Button>
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <Chip label={`Tổng hóa đơn ${fmtNum(invoiceTotal, 2)} ${currency}`} color="primary" sx={{ fontWeight: 900 }} />
-          </Box>
-          <TextField label="Ghi chú hóa đơn" size="small" value={form.notes} onChange={setFormField('notes')} multiline minRows={2} />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={onClose} disabled={saving}>Hủy</Button>
-          <Button variant="contained" onClick={requestSave} disabled={saving || loadingRefs}>
-            {saving ? 'Đang lưu...' : savedInvoice ? 'Tiếp tục ghi thanh toán' : 'Lưu hóa đơn & nhập kho'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-      <Dialog open={paymentDialogOpen} onClose={saving ? undefined : () => setPaymentDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Thanh toán hóa đơn nhập kho</DialogTitle>
-        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '10px !important' }}>
-          {error && <Alert severity="warning">{error}</Alert>}
-          <Alert severity="info"><strong>Có tạo phiếu chi hay không?</strong> Chọn cách đã trả cho nhà cung cấp. Phiếu chi tiền mặt được tính vào tiền ra của ca thu ngân; QR được lưu riêng.</Alert>
-          <ToggleButtonGroup exclusive fullWidth color="primary" value={payment.method} onChange={(_, method) => method && setPayment(prev => ({ ...prev, method }))}>
-            <ToggleButton value="NONE">Chưa thanh toán</ToggleButton>
-            <ToggleButton value="CASH">Tiền mặt</ToggleButton>
-            <ToggleButton value="BANK_QR">QR / chuyển khoản</ToggleButton>
-          </ToggleButtonGroup>
-          {payment.method !== 'NONE' && <>
-            <FormControlLabel control={<Switch checked={payment.createPaymentNote} onChange={e => setPayment(prev => ({ ...prev, createPaymentNote: e.target.checked }))} />} label="Tạo phiếu chi" />
-            <TextField autoFocus label="Ghi chú thanh toán / lý do chi" size="small" value={payment.notes} onChange={e => setPayment(prev => ({ ...prev, notes: e.target.value }))} multiline minRows={2} />
-            <Chip color={payment.method === 'CASH' ? 'success' : 'primary'} label={`${payment.method === 'CASH' ? 'Tiền mặt' : 'QR'} · ${fmtNum(invoiceTotal, 2)} ${currency}`} sx={{ alignSelf: 'flex-start', fontWeight: 800 }} />
-          </>}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setPaymentDialogOpen(false)} disabled={saving}>Quay lại</Button>
-          <Button variant="contained" onClick={handleSave} disabled={saving}>
-            {saving ? 'Đang lưu...' : payment.method === 'NONE' ? 'Lưu chưa thanh toán' : payment.createPaymentNote ? 'Lưu & tạo phiếu chi' : 'Lưu đã thanh toán'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-      <MaterialQrScanDialog open={scannerOpen} onClose={() => setScannerOpen(false)} onScan={handleScan} />
-    </>
+            <Button variant="outlined" startIcon={<AddIcon />} onClick={()=>addLine()} disabled={saving} sx={{ alignSelf: 'flex-start', fontWeight: 800 }}>Thêm dòng · Enter</Button>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Chip label={`Tổng hóa đơn ${fmtNum(invoiceTotal, 2)} ${currency}`} color="primary" sx={{ fontWeight: 900 }} />
+            </Box>
+            <TextField label="Ghi chú hóa đơn" size="small" value={form.notes} onChange={setFormField('notes')} multiline minRows={2} />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={onClose} disabled={saving}>Hủy</Button>
+            <Button variant="contained" onClick={requestSave} disabled={saving || loadingRefs}>
+              {saving ? 'Đang lưu...' : savedInvoice ? 'Tiếp tục ghi thanh toán' : 'Lưu hóa đơn & nhập kho'}
+            </Button>
+          </DialogActions>
+        </Dialog>
+        <Dialog open={paymentDialogOpen} onClose={saving ? undefined : () => setPaymentDialogOpen(false)} maxWidth="sm" fullWidth>
+          <DialogTitle>Thanh toán hóa đơn nhập kho</DialogTitle>
+          <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '10px !important' }}>
+            {error && <Alert severity="warning">{error}</Alert>}
+            <Alert severity="info"><strong>Có tạo phiếu chi hay không?</strong> Chọn cách đã trả cho nhà cung cấp. Phiếu chi tiền mặt được tính vào tiền ra của ca thu ngân; QR được lưu riêng.</Alert>
+            <ToggleButtonGroup exclusive fullWidth color="primary" value={payment.method} onChange={(_, method) => method && setPayment(prev => ({ ...prev, method }))}>
+              <ToggleButton value="NONE">Chưa thanh toán</ToggleButton>
+              <ToggleButton value="CASH">Tiền mặt</ToggleButton>
+              <ToggleButton value="BANK_QR">QR / chuyển khoản</ToggleButton>
+            </ToggleButtonGroup>
+            {payment.method !== 'NONE' && <>
+              <FormControlLabel control={<Switch checked={payment.createPaymentNote} onChange={e => setPayment(prev => ({ ...prev, createPaymentNote: e.target.checked }))} />} label="Tạo phiếu chi" />
+              <TextField autoFocus label="Ghi chú thanh toán / lý do chi" size="small" value={payment.notes} onChange={e => setPayment(prev => ({ ...prev, notes: e.target.value }))} multiline minRows={2} />
+              <Chip color={payment.method === 'CASH' ? 'success' : 'primary'} label={`${payment.method === 'CASH' ? 'Tiền mặt' : 'QR'} · ${fmtNum(invoiceTotal, 2)} ${currency}`} sx={{ alignSelf: 'flex-start', fontWeight: 800 }} />
+            </>}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setPaymentDialogOpen(false)} disabled={saving}>Quay lại</Button>
+            <Button variant="contained" onClick={handleSave} disabled={saving}>
+              {saving ? 'Đang lưu...' : payment.method === 'NONE' ? 'Lưu chưa thanh toán' : payment.createPaymentNote ? 'Lưu & tạo phiếu chi' : 'Lưu đã thanh toán'}
+            </Button>
+          </DialogActions>
+        </Dialog>
+        <MaterialQrScanDialog open={scannerOpen} onClose={() => setScannerOpen(false)} onScan={handleScan} />
+      </>
   )
 }
 

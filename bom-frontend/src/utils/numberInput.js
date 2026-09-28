@@ -1,4 +1,4 @@
-const viInteger = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 })
+const usInteger = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
 
 export function formatIntegerInput(value) {
   if (value == null || value === '') return ''
@@ -6,7 +6,7 @@ export function formatIntegerInput(value) {
   const negative = raw.startsWith('-')
   const digits = raw.replace(/[^0-9]/g, '')
   if (!digits) return negative ? '-' : ''
-  return `${negative ? '-' : ''}${viInteger.format(Number(digits))}`
+  return `${negative ? '-' : ''}${usInteger.format(Number(digits))}`
 }
 
 export function parseIntegerInput(value, allowNegative = false) {
@@ -22,21 +22,32 @@ export function formatQuantityInput(value, maximumFractionDigits = 4) {
   const negative = raw.startsWith('-')
   const unsigned = negative ? raw.slice(1) : raw
   const decimalAt = unsigned.indexOf('.')
-  const integerDigits = (decimalAt >= 0 ? unsigned.slice(0, decimalAt) : unsigned).replace(/[^0-9]/g, '') || '0'
-  const decimalDigits = decimalAt >= 0 ? unsigned.slice(decimalAt + 1).replace(/[^0-9]/g, '').slice(0, maximumFractionDigits) : ''
-  const grouped = viInteger.format(Number(integerDigits))
-  return `${negative ? '-' : ''}${grouped}${decimalAt >= 0 ? `,${decimalDigits}` : ''}`
+  const integerDigits = (decimalAt >= 0 ? unsigned.slice(0, decimalAt) : unsigned)
+      .replace(/[^0-9]/g, '') || '0'
+  const decimalDigits = decimalAt >= 0
+      ? unsigned.slice(decimalAt + 1).replace(/[^0-9]/g, '').slice(0, maximumFractionDigits)
+      : ''
+  const grouped = usInteger.format(Number(integerDigits))
+  return `${negative ? '-' : ''}${grouped}${decimalAt >= 0 ? `.${decimalDigits}` : ''}`
 }
 
-export function parseQuantityInput(value, { allowNegative = false, maximumFractionDigits = 4 } = {}) {
+export function parseQuantityInput(
+    value,
+    { allowNegative = false, maximumFractionDigits = 4 } = {}
+) {
   const raw = String(value || '').trim()
   const negative = allowNegative && raw.startsWith('-')
-  const unsigned = raw.replace(/^-/, '').replace(/\s/g, '')
-  const commaAt = unsigned.indexOf(',')
-  const integerDigits = (commaAt >= 0 ? unsigned.slice(0, commaAt) : unsigned).replace(/[^0-9]/g, '')
-  const decimalDigits = commaAt >= 0 ? unsigned.slice(commaAt + 1).replace(/[^0-9]/g, '').slice(0, maximumFractionDigits) : ''
-  if (!integerDigits && commaAt < 0) return negative ? '-' : ''
-  return `${negative ? '-' : ''}${integerDigits || '0'}${commaAt >= 0 ? `.${decimalDigits}` : ''}`
+  const unsigned = raw.replace(/^-/, '').replace(/\s/g, '').replace(/,/g, '')
+  const dotAt = unsigned.indexOf('.')
+  const integerDigits = (dotAt >= 0 ? unsigned.slice(0, dotAt) : unsigned)
+      .replace(/[^0-9]/g, '')
+  const decimalDigits = dotAt >= 0
+      ? unsigned.slice(dotAt + 1).replace(/[^0-9]/g, '').slice(0, maximumFractionDigits)
+      : ''
+
+  if (!integerDigits && dotAt < 0) return negative ? '-' : ''
+
+  return `${negative ? '-' : ''}${integerDigits || '0'}${dotAt >= 0 ? `.${decimalDigits}` : ''}`
 }
 
 export function moneyInputSuggestions(value, maximum = Number.POSITIVE_INFINITY) {
