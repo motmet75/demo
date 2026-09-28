@@ -64,7 +64,28 @@ public class ShopCounterWorkflowController {
     @GetMapping
     public Map<String,Object> state(@RequestHeader("X-Tenant-Id") UUID t, @RequestHeader("X-Company-Id") UUID c, Authentication auth) {
         scope(t,c); var result=new LinkedHashMap<String,Object>(); var a=active(t,c);
-        result.put("active",a.isEmpty()?null:a.get(0)); result.put("previousCash",previousCash(t,c)); result.put("previousBank",previousBank(t,c));
+        Object previousCash=previousCash(t,c), previousBank=previousBank(t,c);
+        BigDecimal currentCash=previousCash==null?BigDecimal.ZERO:n(previousCash);
+        BigDecimal currentBank=previousBank==null?BigDecimal.ZERO:n(previousBank);
+        if(!a.isEmpty()) {
+            var shift=a.get(0);
+            Instant from=((Timestamp)shift.get("opened_at")).toInstant(), to=Instant.now();
+            @SuppressWarnings("unchecked")
+            var summary=(Map<String,Object>)reports.shiftSummary(t,c,null,null,from,to).getBody();
+            BigDecimal cashReceipts=summary.get("totalCashReceipts")!=null?n(summary.get("totalCashReceipts")):
+                    n(summary.get("cashIn")).add(summary.get("receiptNoteCashTotal")==null?BigDecimal.ZERO:n(summary.get("receiptNoteCashTotal")));
+            BigDecimal cashExpenses=summary.get("totalCashExpenses")!=null?n(summary.get("totalCashExpenses")):
+                    n(summary.get("paymentNoteTotal"));
+            BigDecimal qrReceipts=summary.get("totalQrReceipts")!=null?n(summary.get("totalQrReceipts")):
+                    n(summary.get("bankingIn")).add(summary.get("receiptNoteBankTotal")==null?BigDecimal.ZERO:n(summary.get("receiptNoteBankTotal")));
+            BigDecimal qrExpenses=summary.get("totalQrExpenses")!=null?n(summary.get("totalQrExpenses")):
+                    summary.get("bankPaymentNoteTotal")==null?BigDecimal.ZERO:n(summary.get("bankPaymentNoteTotal"));
+            currentCash=n(shift.get("opening_cash")).add(cashReceipts).subtract(cashExpenses);
+            currentBank=n(shift.get("opening_bank")).add(qrReceipts).subtract(qrExpenses);
+        }
+        result.put("active",a.isEmpty()?null:a.get(0));
+        result.put("previousCash",previousCash); result.put("previousBank",previousBank);
+        result.put("currentCashBalance",currentCash); result.put("currentBankBalance",currentBank);
         var now=ZonedDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
         var shiftDate=operationalShiftDate(now);
         String handoverUser=nextHandoverUser(t,c);

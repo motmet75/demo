@@ -272,6 +272,10 @@ export function fetchCounterShiftSummary(params = {}) {
   return apiFetchJson('/shop/staff/counter/shift-summary' + qs(params))
 }
 
+export function fetchCounterWorkflowState() {
+  return apiFetchJson('/shop/staff/counter/workflow')
+}
+
 export function fetchCounterInventorySnapshot() {
   return apiFetchJson('/shop/staff/counter/inventory-snapshot')
 }

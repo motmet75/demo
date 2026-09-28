@@ -18,6 +18,7 @@ import {
   fetchCounterPaymentNotes,
   fetchCounterShiftHandovers,
   fetchCounterShiftSummary,
+  fetchCounterWorkflowState,
   fetchShiftSchedule,
   saveCounterInventoryReconciliation,
 } from '../../api/shopApi'
@@ -175,6 +176,7 @@ export default function CounterShiftPage() {
   const [shiftName, setShiftName] = useState(initialShift.name)
   const [handoverTo, setHandoverTo] = useState('')
   const [openingCash, setOpeningCash] = useState('')
+  const [openingBank, setOpeningBank] = useState('')
   const [otherAmount, setOtherAmount] = useState('')
   const [handoverNotes, setHandoverNotes] = useState('')
   const [denominationCounts, setDenominationCounts] = useState(() => Object.fromEntries(DENOMINATIONS.map(v => [v, ''])))
@@ -218,6 +220,7 @@ export default function CounterShiftPage() {
   }), [paymentNotes])
 
   const openingCashNumber = moneyNumber(openingCash)
+  const openingBankNumber = moneyNumber(openingBank)
   const otherAmountNumber = moneyNumber(otherAmount)
   const expectedCash = openingCashNumber
     + Number(summary.cashIn || 0)
@@ -225,6 +228,10 @@ export default function CounterShiftPage() {
     + otherAmountNumber
     - Number(summary.paymentNoteTotal || 0)
   const cashDifference = cashActual - expectedCash
+  const expectedBank = openingBankNumber
+    + Number(summary.bankingIn || 0)
+    + Number(summary.receiptNoteBankTotal || 0)
+    - Number(summary.bankPaymentNoteTotal || 0)
 
   const filteredInventoryRows = useMemo(() => {
     const q = searchText(inventorySearch.trim())
@@ -259,6 +266,23 @@ export default function CounterShiftPage() {
       setError(e.message || 'Không tải được dữ liệu bàn giao')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadWorkflowBalances = async (syncActiveRange = false) => {
+    try {
+      const workflow = await apiData(fetchCounterWorkflowState()) || {}
+      const activeShift = workflow.active
+      setOpeningCash(String(activeShift?.opening_cash ?? workflow.currentCashBalance ?? workflow.previousCash ?? 0))
+      setOpeningBank(String(activeShift?.opening_bank ?? workflow.currentBankBalance ?? workflow.previousBank ?? 0))
+      if (syncActiveRange && activeShift?.opened_at) {
+        setShiftDate(String(activeShift.shift_date || localDateValue()))
+        setShiftName(activeShift.shift_name || '')
+        setFromLocal(localDatetimeValue(new Date(activeShift.opened_at)))
+        setToLocal(localDatetimeValue())
+      }
+    } catch (e) {
+      setError(e.message || 'Không tải được số dư đầu ca')
     }
   }
 
@@ -317,6 +341,7 @@ export default function CounterShiftPage() {
   useEffect(() => {
     fetchCounterHandoverUsers().then(({ res, data }) => { if (res.ok) setHandoverUsers(Array.isArray(data) ? data : []) }).catch(() => {})
   }, [])
+  useEffect(() => { if (tab === 0) loadWorkflowBalances(true) }, [tab])
   useEffect(() => { if (tab === 1) loadInventory() }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (tab === 2) loadPaymentNotes() }, [tab, paymentDate]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -465,6 +490,7 @@ export default function CounterShiftPage() {
       <table>
         <tr><td>Tổng doanh thu</td><td class="right bold">${fmtMoney(reportSummary.totalSales)}</td></tr>
         <tr><td>Tiền mặt đầu ca</td><td class="right">${fmtMoney(openingCashNumber)}</td></tr>
+        <tr><td>Tài khoản ngân hàng đầu ca</td><td class="right">${fmtMoney(openingBankNumber)}</td></tr>
         <tr><td>Thu tiền mặt trong ca</td><td class="right">${fmtMoney(reportSummary.cashIn)}</td></tr>
         <tr><td>Phiếu thu tiền mặt</td><td class="right">${fmtMoney(reportSummary.receiptNoteCashTotal)}</td></tr>
         <tr><td>Chi trong ca</td><td class="right">${fmtMoney(reportSummary.paymentNoteTotal)}</td></tr>
@@ -472,6 +498,7 @@ export default function CounterShiftPage() {
         <tr><td>Tiền thẻ / chuyển khoản</td><td class="right">${fmtMoney(reportSummary.bankingIn)}</td></tr>
         <tr><td>Phiếu thu QR / chuyển khoản</td><td class="right">${fmtMoney(reportSummary.receiptNoteBankTotal)}</td></tr>
         <tr><td>Phiếu chi QR / chuyển khoản</td><td class="right">${fmtMoney(reportSummary.bankPaymentNoteTotal)}</td></tr>
+        <tr><td class="bold">Số dư ngân hàng hiện tại</td><td class="right bold">${fmtMoney(openingBankNumber + Number(reportSummary.bankingIn || 0) + Number(reportSummary.receiptNoteBankTotal || 0) - Number(reportSummary.bankPaymentNoteTotal || 0))}</td></tr>
         <tr><td class="bold">Tổng Thu + Chi QR / chuyển khoản</td><td class="right bold">${fmtMoney(reportSummary.totalQrReceiptsExpenses)}</td></tr>
         <tr><td class="bold">Tổng phụ phiếu thu</td><td class="right bold">${fmtMoney(reportSummary.receiptNoteSubtotal)}</td></tr>
         <tr><td class="bold">Tổng phụ phiếu chi</td><td class="right bold">${fmtMoney(reportSummary.expenseNoteSubtotal)}</td></tr>
@@ -599,7 +626,8 @@ export default function CounterShiftPage() {
                 </Box>
                 <Divider sx={{ my: 1.5 }} />
                 <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.25 }}>
-                  <TextField label="Tiền mặt đầu ca" value={formatIntegerInput(openingCash)} onChange={e => setOpeningCash(parseIntegerInput(e.target.value))} inputMode="numeric" />
+                  <TextField label="Tiền mặt đầu ca · tự động" value={formatIntegerInput(openingCash)} onChange={e => setOpeningCash(parseIntegerInput(e.target.value))} inputMode="numeric" helperText="Lấy từ ca đang mở hoặc số dư bàn giao gần nhất" />
+                  <TextField label="Tài khoản ngân hàng đầu ca · tự động" value={formatIntegerInput(openingBank)} onChange={e => setOpeningBank(parseIntegerInput(e.target.value))} inputMode="numeric" helperText="Lấy từ ca đang mở hoặc số dư bàn giao gần nhất" />
                   <TextField label="Khác (+/-)" value={formatIntegerInput(otherAmount)} onChange={e => setOtherAmount(parseIntegerInput(e.target.value, true))} inputMode="numeric" />
                   <Autocomplete options={handoverUsers} value={handoverUsers.find(item => item.username === handoverTo) || null} getOptionLabel={handoverUserLabel} isOptionEqualToValue={(option, value) => option?.username === value?.username} onChange={(_, value) => setHandoverTo(value?.username || '')} renderOption={(props, item) => <Box component="li" {...props} key={item.username}><Box><Typography>{handoverUserLabel(item)}</Typography><Typography variant="caption" color="text.secondary">{item.username}{item.email ? ` · ${item.email}` : ''}</Typography></Box></Box>} noOptionsText="Chưa có người dùng ROLE_COUNTER" renderInput={params => <TextField {...params} required label="Người nhận bàn giao" placeholder="Gõ để tìm người dùng có quyền bàn giao ca" />} />
                   <TextField label="Ghi chú" value={handoverNotes} onChange={e => setHandoverNotes(e.target.value)} />
@@ -623,6 +651,7 @@ export default function CounterShiftPage() {
                       <TableRow><TableCell sx={{ fontWeight: 900 }}>Tổng Thu + Chi</TableCell><TableCell align="right" sx={{ fontWeight: 900 }}>{fmtMoney(summary.receiptExpenseTotal)}</TableCell></TableRow>
                       <TableRow><TableCell>Nợ / chưa thanh toán</TableCell><TableCell align="right">{fmtMoney(summary.debtAmount)}</TableCell></TableRow>
                       <TableRow><TableCell sx={{ fontWeight: 900 }}>Tiền mặt dự kiến</TableCell><TableCell align="right" sx={{ fontWeight: 900 }}>{fmtMoney(expectedCash)}</TableCell></TableRow>
+                      <TableRow><TableCell sx={{ fontWeight: 900 }}>Số dư ngân hàng hiện tại</TableCell><TableCell align="right" sx={{ fontWeight: 900 }}>{fmtMoney(expectedBank)}</TableCell></TableRow>
                       <TableRow><TableCell sx={{ fontWeight: 900 }}>Thực tế kiểm đếm</TableCell><TableCell align="right" sx={{ fontWeight: 900 }}>{fmtMoney(cashActual)}</TableCell></TableRow>
                       <TableRow><TableCell sx={{ fontWeight: 900 }}>Chênh lệch</TableCell><TableCell align="right"><Chip size="small" color={cashDifference === 0 ? 'success' : 'warning'} label={fmtMoney(cashDifference)} /></TableCell></TableRow>
                     </TableBody>
