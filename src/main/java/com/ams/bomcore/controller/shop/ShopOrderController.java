@@ -25,6 +25,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -39,6 +40,7 @@ import org.springframework.web.bind.annotation.RestController;
 import jakarta.servlet.http.HttpServletRequest;
 import com.ams.bomcore.service.shop.CounterDisplayCache;
 import com.ams.bomcore.service.shop.CounterPrintAlertCache;
+import com.ams.bomcore.service.shop.ShopOrderDraftCache;
 import com.ams.bomcore.service.shop.ShopSalesReportService;
 import com.ams.bomcore.service.shop.ShopHoursService;
 import com.ams.bomcore.domain.shop.ShopReservation;
@@ -75,6 +77,7 @@ public class ShopOrderController {
     private final CounterDisplayCache counterDisplayCache;
     private final CounterPrintAlertCache counterPrintAlertCache;
     private final ShopReservationService shopReservationService;
+    private final ShopOrderDraftCache shopOrderDraftCache;
 
     private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
     private final ShopHoursService shopHoursService;
@@ -111,7 +114,8 @@ public class ShopOrderController {
                                ShopTableRepository shopTableRepository,
                                CounterDisplayCache counterDisplayCache,
                                CounterPrintAlertCache counterPrintAlertCache,
-                               ShopHoursService shopHoursService, ShopReservationService shopReservationService) {
+                               ShopHoursService shopHoursService, ShopReservationService shopReservationService,
+                               ShopOrderDraftCache shopOrderDraftCache) {
         this.shopOrderService = shopOrderService;
         this.shopLocalizedLabelService = shopLocalizedLabelService;
         this.shopPricingService = shopPricingService;
@@ -129,6 +133,7 @@ public class ShopOrderController {
         this.counterPrintAlertCache = counterPrintAlertCache;
         this.shopHoursService = shopHoursService;
         this.shopReservationService = shopReservationService;
+        this.shopOrderDraftCache = shopOrderDraftCache;
     }
 
     // ── PUBLIC endpoints (/shop/public/**) ────────────────────────────
@@ -770,6 +775,100 @@ public class ShopOrderController {
         }
     }
 
+    @GetMapping("/shop/staff/order-drafts/table/{tableId}")
+    public ResponseEntity<?> getTableOrderDraft(@PathVariable UUID tableId,
+                                                 @RequestParam(required = false) UUID tenantId,
+                                                 @RequestParam(required = false) UUID companyId,
+                                                 @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                                 @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId); requireDraftTable(tableId, tId, cId);
+        return shopOrderDraftCache.get(tId, cId, tableId)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.noContent().build());
+    }
+
+    @GetMapping("/shop/staff/order-drafts")
+    public ResponseEntity<?> listTableOrderDrafts(@RequestParam(required = false) UUID tenantId,
+                                                   @RequestParam(required = false) UUID companyId,
+                                                   @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                                   @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId);
+        return ResponseEntity.ok(shopOrderDraftCache.list(tId, cId));
+    }
+
+    @PutMapping("/shop/staff/order-drafts/table/{tableId}")
+    public ResponseEntity<?> saveTableOrderDraft(@PathVariable UUID tableId,
+                                                  @RequestBody ShopOrderDraftCache.DraftPayload payload,
+                                                  Authentication authentication,
+                                                  @RequestParam(required = false) UUID tenantId,
+                                                  @RequestParam(required = false) UUID companyId,
+                                                  @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                                  @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId); requireDraftTable(tableId, tId, cId);
+        if (payload == null || payload.order() == null || payload.order().items() == null || payload.order().items().isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Thêm ít nhất một món vào đơn tạm"));
+        }
+        if (!ShopOrder.FULFILLMENT_DINE_IN.equals(payload.order().fulfillmentType())
+                || payload.order().tableId() == null || !tableId.equals(payload.order().tableId())) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Đơn tạm phải thuộc đúng bàn đang chọn"));
+        }
+        if (payload.order().items().size() > 100) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Đơn tạm tối đa 100 dòng món"));
+        }
+        String username = authentication == null ? "unknown" : authentication.getName();
+        return ResponseEntity.ok(shopOrderDraftCache.save(tId, cId, tableId, payload, username));
+    }
+
+    @DeleteMapping("/shop/staff/order-drafts/table/{tableId}")
+    public ResponseEntity<?> clearTableOrderDraft(@PathVariable UUID tableId,
+                                                   @RequestParam(required = false) String draftId,
+                                                   @RequestParam(required = false) UUID tenantId,
+                                                   @RequestParam(required = false) UUID companyId,
+                                                   @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                                   @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId); requireDraftTable(tableId, tId, cId);
+        return ResponseEntity.ok(Map.of("cleared", shopOrderDraftCache.clear(tId, cId, tableId, draftId)));
+    }
+
+    @PostMapping("/shop/staff/order-drafts/table/{tableId}/confirm")
+    public ResponseEntity<?> confirmTableOrderDraft(@PathVariable UUID tableId,
+                                                     @RequestBody(required = false) Map<String,Object> body,
+                                                     @RequestParam(required = false) UUID tenantId,
+                                                     @RequestParam(required = false) UUID companyId,
+                                                     @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
+                                                     @RequestHeader(value = "X-Company-Id", required = false) String hCompany,
+                                                     @RequestHeader(value = "X-Time-Zone", required = false) String timeZone) {
+        UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
+        validateScope(tId, cId); requireDraftTable(tableId, tId, cId);
+        Optional<ShopOrderDraftCache.DraftView> taken = shopOrderDraftCache.take(tId, cId, tableId);
+        if (taken.isEmpty()) return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", "Đơn tạm đã được người khác xác nhận hoặc không còn tồn tại"));
+        ShopOrderDraftCache.DraftView draft = taken.get();
+        String requestedDraftId = body == null ? null : stringValue(body.get("draftId"));
+        if (requestedDraftId != null && !requestedDraftId.equals(draft.draftId())) {
+            shopOrderDraftCache.restoreIfAbsent(tId, cId, tableId, draft);
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", "Đơn tạm vừa được cập nhật; tải lại trước khi xác nhận"));
+        }
+        try {
+            ShopOrderResponseDto created = shopOrderService.createCounterOrder(draft.order(), tId, cId, RequestTimeZone.resolve(timeZone));
+            return ResponseEntity.status(HttpStatus.CREATED).body(created);
+        } catch (RuntimeException error) {
+            shopOrderDraftCache.restoreIfAbsent(tId, cId, tableId, draft);
+            throw error;
+        }
+    }
+
+    private void requireDraftTable(UUID tableId, UUID tenantId, UUID companyId) {
+        ShopTable table = shopTableRepository.findById(tableId)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy bàn"));
+        if (!tenantId.equals(table.getTenantId()) || !companyId.equals(table.getCompanyId())) {
+            throw new IllegalArgumentException("Bàn không thuộc cửa hàng này");
+        }
+    }
+
     @PostMapping("/shop/staff/orders/scan-confirm")
     public ResponseEntity<?> confirmScannedOrder(@RequestBody Map<String, Object> body,
                                                   @RequestParam(required = false) UUID tenantId,
@@ -918,13 +1017,15 @@ public class ShopOrderController {
 
     @PatchMapping("/shop/staff/orders/{orderId}/complete")
     public ResponseEntity<?> complete(@PathVariable UUID orderId,
+                                       @RequestBody(required = false) Map<String,Object> body,
                                        @RequestParam(required = false) UUID tenantId,
                                        @RequestParam(required = false) UUID companyId,
                                        @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
                                        @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
-        return ResponseEntity.ok(shopOrderService.completeOrder(orderId, tId, cId));
+        String paymentMethod = body == null ? null : stringValue(body.get("paymentMethod"));
+        return ResponseEntity.ok(shopOrderService.completeOrder(orderId, paymentMethod, tId, cId));
     }
 
     @PostMapping("/shop/staff/orders/sequence/reset")
@@ -1053,13 +1154,15 @@ public class ShopOrderController {
 
     @PatchMapping("/shop/staff/orders/{orderId}/pay")
     public ResponseEntity<?> markAsPaid(@PathVariable UUID orderId,
+                                         @RequestBody(required = false) Map<String,Object> body,
                                          @RequestParam(required = false) UUID tenantId,
                                          @RequestParam(required = false) UUID companyId,
                                          @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
                                          @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
-        return ResponseEntity.ok(shopOrderService.markAsPaid(orderId, tId, cId));
+        String paymentMethod = body == null ? null : stringValue(body.get("paymentMethod"));
+        return ResponseEntity.ok(shopOrderService.markAsPaid(orderId, paymentMethod, tId, cId));
     }
 
     @PutMapping("/shop/staff/orders/{orderId}/items")

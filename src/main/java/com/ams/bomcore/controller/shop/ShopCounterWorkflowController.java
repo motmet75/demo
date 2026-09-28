@@ -8,6 +8,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
 import java.time.*;
 import java.util.*;
@@ -122,11 +124,13 @@ public class ShopCounterWorkflowController {
         return db.queryForList("""
             SELECT i.id, i.material_id, i.warehouse_id, i.batch_no, i.quantity_on_hand, i.quantity_reserved,
              i.quantity_locked, i.unit, i.unit_price, i.warehouse_import_unit, i.bom_unit_per_warehouse_unit,
-             i.warehouse_import_unit_price, i.updated_at, m.material_code, m.material_name, m.thumbnail_url,
+             i.warehouse_import_unit_price, i.production_date_time, i.expiration_date_time, i.created_at, i.updated_at,
+             m.material_code, m.material_name, m.thumbnail_url,
              m.manual_shift_consumption, w.code warehouse_code, w.name warehouse_name
             FROM inventory i JOIN material m ON m.id=i.material_id JOIN warehouse w ON w.id=i.warehouse_id
             WHERE i.tenant_id=? AND i.company_id=? AND COALESCE(i.locked,false)=false
-            ORDER BY m.material_code, w.code, i.batch_no
+            ORDER BY m.material_code,
+             COALESCE(i.production_date_time, i.created_at), i.created_at, w.code, i.batch_no
             """,t,c);
     }
     @PostMapping("/movement") @Transactional
@@ -157,7 +161,11 @@ public class ShopCounterWorkflowController {
             ((Map<?,?>) raw).forEach((key, value) -> row.put(String.valueOf(key), value));
             row.put("type", type);
             row.put("shiftId", shift.get("id"));
-            saved.add(applyMovement(t, c, auth, shift, row));
+            if (type.equals("OUT") && Boolean.TRUE.equals(row.get("autoAllocate"))) {
+                saved.addAll(applyOutFifoMovements(t, c, auth, shift, row));
+            } else {
+                saved.add(applyMovement(t, c, auth, shift, row));
+            }
         }
         Map<String,Object> result = new LinkedHashMap<>();
         result.put("saved", saved.size());
@@ -168,6 +176,94 @@ public class ShopCounterWorkflowController {
             result.put("financialNote", createMovementFinancialNote(t, c, auth, type, saved, note));
         }
         return result;
+    }
+
+    private List<Map<String,Object>> applyOutFifoMovements(UUID t, UUID c, Authentication auth,
+                                                            Map<String,Object> shift, Map<String,Object> body) {
+        UUID requestId=UUID.fromString(s(body.get("requestId")));
+        var duplicate=db.queryForList("SELECT id FROM inventory_movement WHERE id=? AND tenant_id=? AND company_id=?",requestId,t,c);
+        if(!duplicate.isEmpty()) return List.of(Map.of("id",requestId,"alreadySaved",true));
+
+        UUID materialId=UUID.fromString(s(body.get("materialId")));
+        require(body.get("inventoryIds") instanceof List<?>, "Chọn ít nhất một Kho / số lô để xuất");
+        Set<UUID> selectedIds=new LinkedHashSet<>();
+        for(Object raw:(List<?>)body.get("inventoryIds")) {
+            try { selectedIds.add(UUID.fromString(s(raw))); }
+            catch(Exception e) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Kho / số lô đã chọn không hợp lệ"); }
+        }
+        require(!selectedIds.isEmpty(),"Chọn ít nhất một Kho / số lô để xuất");
+
+        List<Map<String,Object>> candidates=db.queryForList("""
+            SELECT * FROM inventory
+            WHERE tenant_id=? AND company_id=? AND material_id=? AND COALESCE(locked,false)=false
+            ORDER BY COALESCE(production_date_time,created_at),created_at,batch_no,id
+            FOR UPDATE
+            """,t,c,materialId);
+        candidates.removeIf(inv -> !selectedIds.contains(inv.get("id")));
+        require(!candidates.isEmpty(),"Không còn Kho / số lô phù hợp để xuất");
+
+        UUID templateId=UUID.fromString(s(body.get("inventoryId")));
+        Map<String,Object> template=candidates.stream().filter(inv -> templateId.equals(inv.get("id"))).findFirst().orElse(candidates.get(0));
+        BigDecimal enteredQuantity=n(body.get("quantity"));
+        require(enteredQuantity.signum()>0,"Số lượng xuất phải lớn hơn 0");
+        String enteredUnit=s(body.get("unit"));
+        BigDecimal factor=BigDecimal.ONE;
+        if(!enteredUnit.equals(s(template.get("unit")))) {
+            require(enteredUnit.equals(s(template.get("warehouse_import_unit"))),"Chọn đơn vị kho hoặc đơn vị quy đổi đã cấu hình");
+            factor=n(template.get("bom_unit_per_warehouse_unit"));
+            require(factor.signum()>0,"Chưa cấu hình quy đổi đơn vị");
+        }
+        BigDecimal requestedBase=enteredQuantity.multiply(factor);
+        BigDecimal availableTotal=candidates.stream().map(inv -> {
+            BigDecimal protectedQty=n(inv.get("quantity_reserved")==null?0:inv.get("quantity_reserved"))
+                    .add(n(inv.get("quantity_locked")==null?0:inv.get("quantity_locked")));
+            return n(inv.get("quantity_on_hand")).subtract(protectedQty).max(BigDecimal.ZERO);
+        }).reduce(BigDecimal.ZERO,BigDecimal::add);
+        require(availableTotal.compareTo(requestedBase)>=0,
+                "Không đủ tồn khả dụng trong các Kho / số lô đã chọn. Có " + availableTotal.stripTrailingZeros().toPlainString()
+                        + ", cần " + requestedBase.stripTrailingZeros().toPlainString());
+
+        String reason=s(body.get("reason"));
+        require(reason.length()<=100,"Lý do tối đa 100 ký tự");
+        BigDecimal price=n(body.get("unitPrice"));
+        require(price.signum()>=0,"Đơn giá không được âm");
+        BigDecimal remaining=requestedBase;
+        List<Map<String,Object>> saved=new ArrayList<>();
+        int allocationIndex=0;
+        for(Map<String,Object> inv:candidates) {
+            if(remaining.signum()<=0) break;
+            BigDecimal onHand=n(inv.get("quantity_on_hand"));
+            BigDecimal protectedQty=n(inv.get("quantity_reserved")==null?0:inv.get("quantity_reserved"))
+                    .add(n(inv.get("quantity_locked")==null?0:inv.get("quantity_locked")));
+            BigDecimal available=onHand.subtract(protectedQty).max(BigDecimal.ZERO);
+            if(available.signum()<=0) continue;
+            BigDecimal allocated=remaining.min(available);
+            BigDecimal next=onHand.subtract(allocated);
+            UUID inventoryId=(UUID)inv.get("id");
+            db.update("UPDATE inventory SET quantity_on_hand=?, updated_at=now() WHERE id=?",next,inventoryId);
+
+            UUID movementId=allocationIndex==0 ? requestId : UUID.nameUUIDFromBytes(
+                    (requestId+":"+inventoryId).getBytes(StandardCharsets.UTF_8));
+            BigDecimal allocatedEntered=allocated.divide(factor,12,RoundingMode.HALF_UP).stripTrailingZeros();
+            db.update("""
+                INSERT INTO inventory_movement(id,tenant_id,company_id,material_id,from_warehouse_id,to_warehouse_id,
+                quantity,unit,movement_type,reason,inventory_id,batch_no,status,created_at,created_by,unit_price,
+                entered_quantity,entered_unit,shift_id)
+                VALUES(?,?,?,?,?,null,?,?,?,?,?,?,'COMPLETED',now(),?,?,?,?,?)
+                """,movementId,t,c,materialId,inv.get("warehouse_id"),allocated.negate(),inv.get("unit"),"OUT",reason,
+                    inventoryId,inv.get("batch_no"),auth.getName(),price,allocatedEntered,enteredUnit,shift.get("id"));
+            Map<String,Object> savedRow=new LinkedHashMap<>();
+            savedRow.put("id",movementId);
+            savedRow.put("inventoryId",inventoryId);
+            savedRow.put("batchNo",s(inv.get("batch_no")));
+            savedRow.put("quantity",allocated);
+            savedRow.put("quantityOnHand",next);
+            saved.add(savedRow);
+            remaining=remaining.subtract(allocated);
+            allocationIndex++;
+        }
+        require(remaining.signum()==0,"Không thể phân bổ đủ số lượng xuất theo FIFO");
+        return saved;
     }
 
     private Map<String,Object> createMovementFinancialNote(UUID t, UUID c, Authentication auth,

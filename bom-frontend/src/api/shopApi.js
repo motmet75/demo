@@ -406,8 +406,12 @@ export function readyShopOrder(orderId) {
   return apiFetchJson(`/shop/staff/orders/${orderId}/ready`, { method: 'PATCH' })
 }
 
-export function completeShopOrder(orderId) {
-  return apiFetchJson(`/shop/staff/orders/${orderId}/complete`, { method: 'PATCH' })
+export function completeShopOrder(orderId, paymentMethod) {
+  return apiFetchJson(`/shop/staff/orders/${orderId}/complete`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(paymentMethod ? { paymentMethod } : {}),
+  })
 }
 
 export function cancelShopOrder(orderId, reason) {
@@ -422,8 +426,40 @@ export function revertShopOrder(orderId) {
   return apiFetchJson(`/shop/staff/orders/${orderId}/revert`, { method: 'PATCH' })
 }
 
-export function markOrderPaid(orderId) {
-  return apiFetchJson(`/shop/staff/orders/${orderId}/pay`, { method: 'PATCH' })
+export function markOrderPaid(orderId, paymentMethod) {
+  return apiFetchJson(`/shop/staff/orders/${orderId}/pay`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(paymentMethod ? { paymentMethod } : {}),
+  })
+}
+
+export function fetchTableOrderDraft(tableId) {
+  return apiFetchJson(`/shop/staff/order-drafts/table/${encodeURIComponent(tableId)}`)
+}
+
+export function fetchTableOrderDrafts() {
+  return apiFetchJson('/shop/staff/order-drafts')
+}
+
+export function saveTableOrderDraft(tableId, payload) {
+  return apiFetchJson(`/shop/staff/order-drafts/table/${encodeURIComponent(tableId)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export function clearTableOrderDraft(tableId, draftId) {
+  return apiFetchJson(`/shop/staff/order-drafts/table/${encodeURIComponent(tableId)}${draftId ? `?draftId=${encodeURIComponent(draftId)}` : ''}`, { method: 'DELETE' })
+}
+
+export function confirmTableOrderDraft(tableId, draftId) {
+  return apiFetchJson(`/shop/staff/order-drafts/table/${encodeURIComponent(tableId)}/confirm`, {
+    method: 'POST',
+    headers: timeZoneHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ draftId }),
+  })
 }
 
 export function switchToQrPayment(orderId) {

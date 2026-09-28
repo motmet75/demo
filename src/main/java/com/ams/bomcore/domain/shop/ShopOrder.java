@@ -24,6 +24,7 @@ public class ShopOrder {
     public static final String PAYMENT_CASH     = "CASH";
     public static final String PAYMENT_BANK_QR  = "BANK_QR";
     public static final String PAYMENT_SPLIT    = "SPLIT";
+    public static final String PAYMENT_PAY_LATER = "PAY_LATER";
 
     public static final String PAY_STATUS_UNPAID = "UNPAID";
     public static final String PAY_STATUS_PAID   = "PAID";

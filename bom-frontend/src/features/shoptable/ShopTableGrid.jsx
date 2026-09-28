@@ -35,13 +35,14 @@ import PushPinIcon from '@mui/icons-material/PushPin'
 import {
   fetchShopTables, deleteShopTable, fetchTableQr, fetchTableOrders, fetchShopOrders,
   confirmShopOrder, completeShopOrder, markOrderPaid, resetOrderSequence,
-  fetchShopTableDrawings, updateShopTableDrawing, setOrderTable, clearOrderTable
+  fetchShopTableDrawings, updateShopTableDrawing, setOrderTable, clearOrderTable, fetchTableOrderDrafts
 } from '../../api/shopApi'
 import ShopTableEditModal from './ShopTableEditModal'
 import ShopTableLayoutDesigner from './ShopTableLayoutDesigner'
 import QuickTableOrderDialog from './QuickTableOrderDialog'
 import ManualOrderDialog from '../shoporder/ManualOrderDialog'
 import ShopOrderDetailModal from '../shoporder/ShopOrderDetailModal'
+import PaymentMethodConfirmDialog from '../shoporder/PaymentMethodConfirmDialog'
 import { useAuth } from '../../context/useAuth'
 import { useAppContext } from '../../context/AppContext'
 
@@ -143,6 +144,7 @@ export default function ShopTableGrid() {
   const [moveOrder, setMoveOrder] = useState(null)
   const [moveTable, setMoveTable] = useState(null)
   const [movingOrder, setMovingOrder] = useState(false)
+  const [paymentAction, setPaymentAction] = useState(null)
   const [pinnedTableIds, setPinnedTableIds] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(pinStorageKey) || '[]')
@@ -170,13 +172,15 @@ export default function ShopTableGrid() {
   const load = useCallback(async () => {
     setLoading(true); setError('')
     try {
-      const [tablesRes, ordersRes, drawingsRes, completedRes] = await Promise.all([
+      const [tablesRes, ordersRes, drawingsRes, completedRes, draftsRes] = await Promise.all([
         fetchShopTables(), fetchTableOrders(), fetchShopTableDrawings().catch(() => ({ data: [] })),
         fetchShopOrders('COMPLETED', currentShiftRange()),
+        fetchTableOrderDrafts().catch(() => ({ data: [] })),
       ])
       const tables = Array.isArray(tablesRes.data) ? tablesRes.data : []
       const orders = Array.isArray(ordersRes.data) ? ordersRes.data : []
       const completed = Array.isArray(completedRes.data) ? completedRes.data : []
+      const drafts = Array.isArray(draftsRes.data) ? draftsRes.data : []
       setCounterOrders(completed.filter(order => order.paymentStatus === 'PAID' && !order.tableId && !order.tableClearedAt && order.fulfillmentType !== 'DELIVERY'))
       setRows(tables.map(table => {
         const tableOrders = sortOrders(orders.filter(order => order.tableId && String(order.tableId) === String(table.id)))
@@ -185,6 +189,7 @@ export default function ShopTableGrid() {
           orders: tableOrders,
           activeOrders: tableOrders,
           activeOrder: tableOrders[0] || null,
+          draft: drafts.find(draft => String(draft.tableId) === String(table.id)) || null,
           orderCount: tableOrders.length,
           activeOrderCount: tableOrders.length,
         }
@@ -352,22 +357,29 @@ export default function ShopTableGrid() {
       setError('Select at least one Ready order to complete')
       return
     }
-    if (!window.confirm(`Complete ${selected.length} selected order${selected.length > 1 ? 's' : ''} for ${ordersDialog.table.tableName}?`)) return
+    setPaymentAction({ action: 'complete-many', orders: selected, order: { orderNumber: `${selected.length} đơn`, totalAmount: selected.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0), paymentMethod: selected[0]?.paymentMethod } })
+  }
+
+  const confirmPaymentAction = async paymentMethod => {
+    if (!paymentAction) return
     setCompletingSelected(true)
     try {
-      await Promise.all(selected.map(order => completeShopOrder(order.id)))
-      const completedIds = new Set(selected.map(order => order.id))
+      const selected = paymentAction.orders || [paymentAction.order]
+      if (paymentAction.action === 'paid') await markOrderPaid(paymentAction.order.id, paymentMethod)
+      else await Promise.all(selected.map(order => completeShopOrder(order.id, paymentMethod)))
+      const completedIds = new Set(paymentAction.action === 'paid' ? [] : selected.map(order => order.id))
       const now = new Date().toISOString()
       setOrdersDialog(prev => prev ? {
         ...prev,
-        orders: prev.orders.map(order => completedIds.has(order.id)
-          ? { ...order, status: 'COMPLETED', paymentStatus: 'PAID', completedAt: now }
-          : order),
+        orders: prev.orders.map(order => order.id === paymentAction.order.id && paymentAction.action === 'paid'
+          ? { ...order, paymentStatus: 'PAID', paymentMethod }
+          : completedIds.has(order.id) ? { ...order, status: 'COMPLETED', paymentStatus: 'PAID', paymentMethod, completedAt: now } : order),
       } : prev)
-      setSelectedOrderIds([])
+      if (paymentAction.action !== 'paid') setSelectedOrderIds([])
+      setPaymentAction(null)
       await load()
     } catch (e) {
-      setError(e.message || 'Failed to complete selected orders')
+      setError(e.message || 'Không xử lý được thanh toán')
     } finally {
       setCompletingSelected(false)
     }
@@ -383,7 +395,8 @@ export default function ShopTableGrid() {
         orderLabel(order), order.status, order.customerName, order.staffName,
         ...(order.items || []).map(item => item.modelName),
       ].filter(Boolean).join(' ')).join(' ')
-      return normalizeSearch(`${row.tableName || ''} ${orderText}`).includes(query)
+      const draftText = (row.draft?.displayItems || []).map(item => item.modelName).join(' ')
+      return normalizeSearch(`${row.tableName || ''} ${orderText} ${draftText}`).includes(query)
     })
     return [...matches].sort((a, b) => {
       const aPinned = pinnedTableIds.includes(String(a.id))
@@ -418,8 +431,8 @@ export default function ShopTableGrid() {
   const renderOrderActions = order => (
     <Stack direction="row" gap={0.5} alignItems="center" flexWrap="wrap">
       {order.status === 'PENDING' && <Button size="small" variant="contained" disabled={!!orderActionId} onClick={() => runOrderAction(order, confirmShopOrder, 'xác nhận')}>Xác nhận</Button>}
-      {order.paymentStatus !== 'PAID' && <Button size="small" variant="outlined" color="success" disabled={!!orderActionId} onClick={() => runOrderAction(order, markOrderPaid, 'đánh dấu đã thanh toán')}>Đã thanh toán</Button>}
-      {order.status === 'READY' && <Button size="small" variant="contained" color="success" disabled={!!orderActionId} onClick={() => runOrderAction(order, completeShopOrder, 'hoàn tất')}>Hoàn tất</Button>}
+      {order.paymentStatus !== 'PAID' && <Button size="small" variant="outlined" color="success" disabled={!!orderActionId} onClick={() => setPaymentAction({ order, action: 'paid' })}>Đã thanh toán</Button>}
+      {order.status === 'READY' && <Button size="small" variant="contained" color="success" disabled={!!orderActionId} onClick={() => setPaymentAction({ order, action: 'complete' })}>Hoàn tất & trả món</Button>}
       {!['COMPLETED', 'PICKED_UP', 'CANCELLED'].includes(order.status) && <Button size="small" variant="outlined" startIcon={<TableBarIcon />} disabled={!!orderActionId} onClick={() => { setMoveOrder(order); setMoveTable(null) }}>Chuyển bàn</Button>}
       {['COMPLETED', 'PICKED_UP'].includes(order.status) && !order.tableClearedAt && <Button size="small" variant="outlined" color="warning" disabled={!!orderActionId} onClick={() => runOrderAction(order, clearOrderTable, 'dọn bàn')}>Khách đã rời · Dọn bàn</Button>}
       {orderActionId.endsWith(`:${order.id}`) && <CircularProgress size={18} />}
@@ -444,17 +457,19 @@ export default function ShopTableGrid() {
     },
     {
       field: 'activeOrderCount', headerName: 'Tại bàn', width: 90,
-      renderCell: ({ value }) => value
-        ? <Chip label={value} size="small" color="primary" sx={{ fontWeight: 800 }} />
+      renderCell: ({ value, row }) => row.draft
+        ? <Chip label="Đơn tạm" size="small" color="warning" sx={{ fontWeight: 800 }} />
+        : value ? <Chip label={value} size="small" color="primary" sx={{ fontWeight: 800 }} />
         : <Chip label="Trống" size="small" variant="outlined" sx={{ color: '#78909c', borderColor: '#cfd8dc' }} />,
     },
     {
       field: 'activeOrders', headerName: 'Đơn tại bàn · thanh toán', flex: 1, minWidth: 320,
-      renderCell: ({ value }) => {
+      renderCell: ({ value, row }) => {
         const list = value || []
-        if (!list.length) return <Typography variant="caption" color="text.disabled">Không có đơn tại bàn</Typography>
+        if (!list.length && !row.draft) return <Typography variant="caption" color="text.disabled">Không có đơn tại bàn</Typography>
         return (
           <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', overflow: 'hidden' }}>
+            {row.draft && <Chip label={`Tạm: ${(row.draft.displayItems || []).map(item => `${item.quantity}× ${item.modelName}`).join(' · ')}`} size="small" color="warning" sx={{ maxWidth: 300, fontWeight: 800 }} />}
             {list.slice(0, 3).map(order => (
               <Tooltip key={order.id} title={tableOrderBadge(order)}>
                 <Chip label={tableOrderBadge(order)} size="small" color={order.paymentStatus === 'PAID' ? 'success' : 'warning'} variant="outlined" sx={{ maxWidth: 280, fontWeight: 800 }} />
@@ -579,7 +594,8 @@ export default function ShopTableGrid() {
           renderInput={params => <TextField {...params} label="Gõ tên bàn để lọc và chọn" size="small" />}
         />
         {mobileTable && <Box sx={{ mt: 1.5 }}>
-          <Stack direction="row" justifyContent="space-between" alignItems="center"><Typography variant="h6" fontWeight={900}>{mobileTable.tableName}</Typography><Chip color={mobileTable.activeOrderCount?'primary':'success'} label={mobileTable.activeOrderCount?`${mobileTable.activeOrderCount} đơn chưa dọn`:'Bàn trống'} /></Stack>
+          <Stack direction="row" justifyContent="space-between" alignItems="center"><Typography variant="h6" fontWeight={900}>{mobileTable.tableName}</Typography><Chip color={mobileTable.draft?'warning':mobileTable.activeOrderCount?'primary':'success'} label={mobileTable.draft?'Có đơn tạm':mobileTable.activeOrderCount?`${mobileTable.activeOrderCount} đơn chưa dọn`:'Bàn trống'} /></Stack>
+          {mobileTable.draft && <Alert severity="warning" sx={{ mt: 1 }}><strong>Đơn tạm:</strong> {(mobileTable.draft.displayItems || []).map(item => `${item.quantity} × ${item.modelName}`).join(' · ')} · cập nhật bởi {mobileTable.draft.updatedBy}</Alert>}
           {(mobileTable.activeOrders || []).map(order => <Paper key={order.id} variant="outlined" sx={{ p: 1, my: 1 }} onClick={()=>setDetailOrder(order)}>
             <Stack direction="row" justifyContent="space-between" alignItems="center" gap={1}><Typography fontWeight={800}>#{order.orderNumber ?? order.dailySeq} · {order.staffName || 'Khách tự gọi'}</Typography><Chip size="small" label={order.paymentStatus === 'PAID' ? 'Đã trả' : 'Chưa trả'} color={order.paymentStatus === 'PAID' ? 'success' : 'warning'} /></Stack>
             <Typography variant="body2">{(order.items || []).filter(item=>!item.parentItemId).map(item=>`${item.quantity} × ${item.modelName}${item.itemNotes?` (${item.itemNotes})`:''}`).join(' · ')}</Typography>
@@ -606,9 +622,11 @@ export default function ShopTableGrid() {
               </Stack>
               <Stack direction="row" gap={0.5} flexWrap="wrap" justifyContent="flex-end">
                 <Chip size="small" color={table.activeOrderCount ? 'primary' : 'success'} label={table.activeOrderCount ? `${table.activeOrderCount} đơn chưa dọn` : 'Bàn trống'} />
+                {table.draft && <Chip size="small" color="warning" label={`Đơn tạm · ${(table.draft.displayItems || []).length} dòng`} />}
                 {table.activeOrderCount > 0 && <Chip size="small" color={(table.activeOrders || []).some(order => order.paymentStatus !== 'PAID') ? 'warning' : 'success'} variant="outlined" label={`${(table.activeOrders || []).filter(order => order.paymentStatus === 'PAID').length} đã trả · ${(table.activeOrders || []).filter(order => order.paymentStatus !== 'PAID').length} chưa trả`} />}
               </Stack>
             </Stack>
+            {table.draft && <Typography variant="body2" fontWeight={800} color="warning.dark" sx={{ mt: 0.5 }}>Tạm: {(table.draft.displayItems || []).map(item => `${item.quantity} × ${item.modelName}`).join(' · ')} · {table.draft.updatedBy}</Typography>}
             {(table.activeOrders || []).map(order => <Paper key={order.id} variant="outlined" sx={{ p: 1, mt: 1 }}>
               <Stack direction="row" alignItems="center" gap={0.5} flexWrap="wrap"><Typography fontWeight={900}>{orderLabel(order)}</Typography>{statusChip(order.status)}<Chip size="small" label={order.paymentStatus === 'PAID' ? 'Đã trả' : 'Chưa trả'} color={order.paymentStatus === 'PAID' ? 'success' : 'warning'} /></Stack>
               <Typography variant="body2">{(order.items || []).filter(item => !item.parentItemId).map(item => `${item.quantity} × ${item.modelName}`).join(' · ')}</Typography>
@@ -747,6 +765,15 @@ export default function ShopTableGrid() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {paymentAction && <PaymentMethodConfirmDialog
+        open
+        order={paymentAction.order}
+        action={paymentAction?.action === 'paid' ? 'paid' : 'complete'}
+        busy={completingSelected}
+        onCancel={() => setPaymentAction(null)}
+        onConfirm={confirmPaymentAction}
+      />}
 
       <ShopOrderDetailModal
         open={!!detailOrder}

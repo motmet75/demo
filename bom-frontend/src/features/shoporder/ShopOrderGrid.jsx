@@ -78,6 +78,7 @@ import QuickCounterDesk from './QuickCounterDesk'
 import QrOrderDialog from './QrOrderDialog'
 import EodAuditDialog from './EodAuditDialog'
 import ConfirmActionDialog from './ConfirmActionDialog'
+import PaymentMethodConfirmDialog from './PaymentMethodConfirmDialog'
 import MergeBillsDialog from './MergeBillsDialog'
 import VoucherQrScanDialog from './VoucherQrScanDialog'
 import { useAppContext } from '../../context/AppContext'
@@ -95,7 +96,6 @@ const SHOP_ORDER_CARD_SIZE_PREF = 'shop.orders.cardSize'
 const SHOP_ORDER_CONTRAST_PREF = 'shop.orders.highContrast'
 const SHOP_ORDER_STATUS_FILTER_SESSION_KEY = 'shop.orders.statusFilter'
 const SHOP_ORDER_PAYMENT_FILTER_SESSION_KEY = 'shop.orders.paymentFilter'
-const SHOP_ORDER_QUICK_CONFIRM_COOKIE = 'shop_quick_confirm_v1'
 const CUSTOMER_EDIT_HISTORY_KEY = 'shop.orders.customerEditHistory.v1'
 const DEFAULT_QUICK_CONFIRM = {
   paid: false,
@@ -113,38 +113,6 @@ function readShopOrderSessionValue(key, fallback) {
 }
 function writeShopOrderSessionValue(key, value) {
   try { sessionStorage.setItem(key, value) } catch { /* browser storage may be blocked */ }
-}
-function readCookie(name) {
-  try {
-    const entry = document.cookie.split('; ').find(item => item.startsWith(`${name}=`))
-    return entry ? decodeURIComponent(entry.slice(name.length + 1)) : ''
-  } catch {
-    return ''
-  }
-}
-function writeCookie(name, value, maxAgeDays = 365) {
-  try {
-    document.cookie = `${name}=${encodeURIComponent(value)}; Max-Age=${maxAgeDays * 24 * 60 * 60}; Path=/; SameSite=Lax`
-  } catch { /* cookies may be blocked */ }
-}
-function readQuickConfirmPrefs() {
-  try {
-    const parsed = JSON.parse(readCookie(SHOP_ORDER_QUICK_CONFIRM_COOKIE) || '{}')
-    return {
-      paid: Boolean(parsed.paid),
-      paymentMethod: parsed.paymentMethod === 'BANK_QR' ? 'BANK_QR' : 'CASH',
-      complete: Boolean(parsed.complete),
-    }
-  } catch {
-    return DEFAULT_QUICK_CONFIRM
-  }
-}
-function writeQuickConfirmPrefs(value) {
-  writeCookie(SHOP_ORDER_QUICK_CONFIRM_COOKIE, JSON.stringify({
-    paid: Boolean(value?.paid),
-    paymentMethod: value?.paymentMethod === 'BANK_QR' ? 'BANK_QR' : 'CASH',
-    complete: Boolean(value?.complete),
-  }))
 }
 function localDateTimeInputValue(date) {
   const p = value => String(value).padStart(2, '0')
@@ -246,6 +214,7 @@ const localizedPaymentMethodLabel = (method, t) => {
   if (method === 'BANK_QR') return t('shopOrder.grid.qrBank')
   if (method === 'CASH' || !method) return t('shopOrder.common.cash')
   if (method === 'SPLIT') return t('shopOrder.grid.splitPayment')
+  if (method === 'PAY_LATER') return 'Trả sau'
   return method
 }
 const ORDER_STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'PICKED_UP', 'COMPLETED', 'CANCELLED']
@@ -818,14 +787,10 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                       sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>
                       {t('shopOrder.grid.pickupQr')}
                     </Button>
-                    <Box sx={{ display: 'flex', gap: 0.75 }}>
-                      {(order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT')
-                        ? <Button size="small" variant="contained" color="info" fullWidth onClick={() => onAction('pickup', order.id, order.orderNumber)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>{t('shopOrder.grid.pickedUpCheck')}</Button>
-                        : <Button size="small" variant="contained" color="success" fullWidth onClick={() => onAction('complete', order.id, order.orderNumber)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>{t('shopOrder.grid.completeCheck')}</Button>
-                      }
-                    </Box>
+                    {(order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT') && <Button size="small" variant="contained" color="info" fullWidth onClick={() => onAction('pickup', order.id, order.orderNumber)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>{t('shopOrder.grid.pickedUpCheck')}</Button>}
                   </Stack>
                 )}
+                {!['COMPLETED', 'PICKED_UP', 'CANCELLED'].includes(status) && <Button size="small" variant="contained" color="success" fullWidth onClick={() => onAction('complete', order.id, order.orderNumber)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: 12 }}>Hoàn tất & trả món</Button>}
                 {status === 'PICKED_UP' && (
                   <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11, textAlign: 'center', display: 'block' }}>
                     {t('shopOrder.grid.pickedUpAt', { time: order.completedAt ? dateFmt(order.completedAt) : '' })}
@@ -1177,10 +1142,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
                 sx={{ textTransform: 'none', fontWeight: 700, fontSize: 11, flex: 1, py: 0.5 }}>
                 {t('shopOrder.grid.pickupQr')}
               </Button>
-              {isQr
-                ? <Button size="small" variant="contained" color="info" onClick={() => actions.pickup(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: 12, flex: 1 }}>{t('shopOrder.grid.pickedUpCheck')}</Button>
-                : <Button size="small" variant="contained" color="success" onClick={() => actions.complete(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: 12, flex: 1 }}>{t('shopOrder.grid.completeCheck')}</Button>
-              }
+              {isQr && <Button size="small" variant="contained" color="info" onClick={() => actions.pickup(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: 12, flex: 1 }}>{t('shopOrder.grid.pickedUpCheck')}</Button>}
             </>
           )}
           {(order.status === 'PICKED_UP' || order.status === 'COMPLETED') && (
@@ -1194,6 +1156,8 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
             </Typography>
           )}
         </Box>
+
+        {isActive && <Button size="small" variant="contained" color="success" fullWidth onClick={() => actions.complete(order)} sx={{ textTransform: 'none', fontWeight: 900, fontSize: 12 }}>Hoàn tất & trả món</Button>}
 
         {/* Mark paid + Cancel */}
         <Box sx={{ display: 'flex', gap: 0.5 }}>
@@ -1271,10 +1235,12 @@ function OrderRowsGrid({ rows, tables, actions, selectedIds, onToggleSelect, dis
     bgcolor: highContrast ? '#fff' : 'inherit',
   }
   const renderPrimaryAction = (order) => {
-    if (order.status === 'PENDING') return <Button size="small" variant="contained" disabled={Boolean(order.customerEditing)} onClick={() => actions.confirm(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 13 : 11 }}>{t('shopOrder.grid.confirm')}</Button>
-    if (order.status === 'CONFIRMED') return <Button size="small" variant="contained" color="warning" onClick={() => actions.prepare(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 13 : 11 }}>{t('shopOrder.grid.prepare')}</Button>
-    if (order.status === 'PREPARING') return <Button size="small" variant="contained" color="success" onClick={() => actions.ready(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 13 : 11 }}>{t('shopOrder.grid.ready')}</Button>
-    if (order.status === 'READY') return <Button size="small" variant="contained" color={order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT' ? 'info' : 'success'} onClick={() => (order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT') ? actions.pickup(order) : actions.complete(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 13 : 11 }}>{order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT' ? t('shopOrder.grid.pickedUp') : t('shopOrder.grid.complete')}</Button>
+    let stageButton = null
+    if (order.status === 'PENDING') stageButton = <Button size="small" variant="outlined" disabled={Boolean(order.customerEditing)} onClick={() => actions.confirm(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 13 : 11 }}>{t('shopOrder.grid.confirm')}</Button>
+    if (order.status === 'CONFIRMED') stageButton = <Button size="small" variant="outlined" color="warning" onClick={() => actions.prepare(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 13 : 11 }}>{t('shopOrder.grid.prepare')}</Button>
+    if (order.status === 'PREPARING') stageButton = <Button size="small" variant="outlined" color="success" onClick={() => actions.ready(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 13 : 11 }}>{t('shopOrder.grid.ready')}</Button>
+    if (order.status === 'READY' && (order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT')) stageButton = <Button size="small" variant="outlined" color="info" onClick={() => actions.pickup(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 13 : 11 }}>{t('shopOrder.grid.pickedUp')}</Button>
+    if (!['COMPLETED', 'PICKED_UP', 'CANCELLED'].includes(order.status)) return <Stack gap={0.5}>{stageButton}<Button size="small" variant="contained" color="success" onClick={() => actions.complete(order)} sx={{ textTransform: 'none', fontWeight: 900, fontSize: large ? 13 : 11 }}>Hoàn tất & trả món</Button></Stack>
     return <Typography sx={{ fontSize: large ? 13 : 11, color: '#64748b', fontWeight: 700 }}>{localizedStatusLabel(order.status, t)}</Typography>
   }
 
@@ -1539,7 +1505,9 @@ export default function ShopOrderGrid() {
   const [highContrastCards, setHighContrastCards] = useState(() => readShopOrderPref(SHOP_ORDER_CONTRAST_PREF, 'false') === 'true')
   const [slipFilter, setSlipFilter]     = useState('')
   const [confirmDlg, setConfirmDlg]     = useState(null)
-  const [quickConfirmPrefs, setQuickConfirmPrefs] = useState(readQuickConfirmPrefs)
+  const [paymentAction, setPaymentAction] = useState(null)
+  const [paymentActionBusy, setPaymentActionBusy] = useState(false)
+  const [quickConfirmPrefs, setQuickConfirmPrefs] = useState(() => ({ ...DEFAULT_QUICK_CONFIRM }))
   const [orderScannerOpen, setOrderScannerOpen] = useState(false)
   const [scannedOrders, setScannedOrders] = useState([])
   // confirmDlg shape: { title, message, confirmLabel, confirmColor, requireReason, quickConfirm, onConfirm }
@@ -1964,7 +1932,14 @@ export default function ShopOrderGrid() {
     } catch (e) { setError(e.message || 'Action failed') }
   }
 
-  const askConfirm = (cfg, fn) => setConfirmDlg({ ...cfg, onConfirm: async (reason) => { setConfirmDlg(null); await fn(reason) } })
+  const askConfirm = (cfg, fn) => {
+    if (cfg.quickConfirm) {
+      const defaults = { ...DEFAULT_QUICK_CONFIRM }
+      quickConfirmPrefsRef.current = defaults
+      setQuickConfirmPrefs(defaults)
+    }
+    setConfirmDlg({ ...cfg, onConfirm: async (reason) => { setConfirmDlg(null); await fn(reason) } })
+  }
 
   const updateQuickConfirmPrefs = useCallback((next) => {
     const normalized = {
@@ -1972,15 +1947,43 @@ export default function ShopOrderGrid() {
       paymentMethod: next?.paymentMethod === 'BANK_QR' ? 'BANK_QR' : 'CASH',
       complete: Boolean(next?.complete),
     }
+    quickConfirmPrefsRef.current = normalized
     setQuickConfirmPrefs(normalized)
-    writeQuickConfirmPrefs(normalized)
   }, [])
 
   useEffect(() => {
     quickConfirmPrefsRef.current = quickConfirmPrefs
   }, [quickConfirmPrefs])
 
+  const openPaymentAction = (order, action) => {
+    if (!order?.id) return
+    setPaymentAction({ order, action })
+  }
+
+  const confirmPaymentAction = async (paymentMethod) => {
+    if (!paymentAction?.order?.id) return
+    setPaymentActionBusy(true)
+    try {
+      if (paymentAction.action === 'complete') {
+        let current = paymentAction.order
+        if (current.status === 'PENDING') current = await applyOrderResult(await confirmShopOrder(current.id), current.id)
+        if (current.status === 'CONFIRMED') current = await applyOrderResult(await prepareShopOrder(current.id), current.id)
+        if (current.status === 'PREPARING') current = await applyOrderResult(await readyShopOrder(current.id), current.id)
+        if (current.status === 'READY') await applyOrderResult(await completeShopOrder(current.id, paymentMethod), current.id)
+      } else {
+        await applyOrderResult(await markOrderPaid(paymentAction.order.id, paymentMethod), paymentAction.order.id)
+      }
+      setPaymentAction(null)
+    } catch (e) { setError(e.message || 'Không xử lý được thanh toán') }
+    setPaymentActionBusy(false)
+  }
+
   const handleBoardAction = (type, id, orderNum) => {
+    if (type === 'complete' || type === 'pay') {
+      const order = [...boardRows, ...rows].find(item => item.id === id) || { id, orderNumber: orderNum }
+      openPaymentAction(order, type === 'complete' ? 'complete' : 'paid')
+      return
+    }
     const configs = {
       'prepare':               { title: t('shopOrder.confirm.prepareTitle'), message: t('shopOrder.confirm.prepareMessage', { order: orderNum }), confirmLabel: t('shopOrder.confirm.startPreparingLabel'), confirmColor: 'warning' },
       'revert':                { title: t('shopOrder.confirm.revertWaitingTitle'), message: t('shopOrder.confirm.revertWaitingMessage'), confirmLabel: t('shopOrder.confirm.revertLabel'), confirmColor: 'error' },
@@ -2115,6 +2118,25 @@ export default function ShopOrderGrid() {
   const removeShift = (key) => setShifts(prev => prev.filter(s => s._key !== key))
   const updateShift = (key, field, value) => setShifts(prev => prev.map(s => s._key === key ? { ...s, [field]: value } : s))
 
+  const applyMondayShiftsToRemainingDays = () => {
+    setShifts(prev => {
+      const mondayShifts = prev.filter(shift => shift.dayOfWeek === 1)
+      if (mondayShifts.length === 0) {
+        setError('Hãy thêm ít nhất một ca Thứ Hai trước khi áp dụng cho các ngày còn lại.')
+        return prev
+      }
+      const copiedShifts = [2, 3, 4, 5, 6, 7].flatMap(dayOfWeek =>
+        mondayShifts.map(shift => ({
+          ...shift,
+          id: undefined,
+          _key: `${dayOfWeek}-${Math.random().toString(36).slice(2)}`,
+          dayOfWeek,
+        })),
+      )
+      return [...mondayShifts, ...copiedShifts]
+    })
+  }
+
   const saveShifts = async () => {
     setShiftsSaving(true)
     try {
@@ -2159,19 +2181,18 @@ export default function ShopOrderGrid() {
       paymentMethod: currentPrefs.paymentMethod === 'BANK_QR' ? 'BANK_QR' : 'CASH',
       complete: Boolean(currentPrefs.complete),
     }
-    writeQuickConfirmPrefs(prefs)
     try {
       await applyOrderResult(await confirmShopOrder(row.id), row.id)
       if (prefs.paymentMethod === 'BANK_QR') {
         await applyOrderResult(await switchToQrPayment(row.id), row.id, t('shopOrder.grid.switchPaymentMethodFailed'))
       }
       if (prefs.paid || prefs.complete) {
-        await applyOrderResult(await markOrderPaid(row.id), row.id)
+        await applyOrderResult(await markOrderPaid(row.id, prefs.paymentMethod), row.id)
       }
       if (prefs.complete) {
         await applyOrderResult(await prepareShopOrder(row.id), row.id)
         await applyOrderResult(await readyShopOrder(row.id), row.id)
-        await applyOrderResult(await completeShopOrder(row.id), row.id)
+        await applyOrderResult(await completeShopOrder(row.id, prefs.paymentMethod), row.id)
       }
     } catch (e) {
       setError(e.message || 'Action failed')
@@ -2288,9 +2309,9 @@ export default function ShopOrderGrid() {
     }, () => handleQuickConfirm(row)),
     prepare:    (row) => askConfirm({ title: t('shopOrder.confirm.prepareTitle'), message: t('shopOrder.confirm.prepareMessage', { order: row.orderNumber ?? row.orderCode }), confirmLabel: t('shopOrder.confirm.startLabel'), confirmColor: 'warning' }, () => act(prepareShopOrder, row.id)),
     ready:      (row) => askConfirm({ title: t('shopOrder.confirm.readyTitle'), message: t('shopOrder.confirm.readyMessage', { order: row.orderNumber ?? row.orderCode }), confirmLabel: t('shopOrder.confirm.markReadyLabel'), confirmColor: 'success' }, () => act(readyShopOrder, row.id, () => broadcastReady())),
-    complete:   (row) => askConfirm({ title: t('shopOrder.confirm.completeTitle'), message: t('shopOrder.confirm.completeMessage', { order: row.orderNumber ?? row.orderCode }), confirmLabel: t('shopOrder.confirm.completeLabel'), confirmColor: 'success' }, () => act(completeShopOrder, row.id)),
+    complete:   (row) => openPaymentAction(row, 'complete'),
     pickup:     (row) => askConfirm({ title: t('shopOrder.confirm.pickupTitle'), message: t('shopOrder.confirm.pickupMessage'), confirmLabel: t('shopOrder.confirm.pickedUpLabel'), confirmColor: 'primary' }, () => act(pickupShopOrder, row.id)),
-    markPaid:   (row) => askConfirm({ title: t('shopOrder.grid.markAsPaidConfirmTitle'), message: t('shopOrder.grid.markAsPaidConfirmMessage', { order: row.orderNumber ?? row.orderCode }), confirmLabel: t('shopOrder.grid.markPaid'), confirmColor: 'success' }, () => act(markOrderPaid, row.id)),
+    markPaid:   (row) => openPaymentAction(row, 'paid'),
     cancel:     handleCancel,
     revert:     (row) => askConfirm({ title: t('shopOrder.confirm.revertOrderTitle'), message: t('shopOrder.confirm.revertOrderMessage', { order: row.orderNumber ?? row.orderCode }), confirmLabel: t('shopOrder.confirm.revertLabel'), confirmColor: 'warning' }, () => act(revertShopOrder, row.id)),
     switchToQr: (row) => askConfirm({ title: t('shopOrder.grid.switchQrConfirmTitle'), message: t('shopOrder.grid.switchQrConfirmMessage'), confirmLabel: t('shopOrder.grid.switchPrint'), confirmColor: 'success' }, () => handleSwitchAndPrint(row)),
@@ -3008,7 +3029,22 @@ export default function ShopOrderGrid() {
             {shiftsLoading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}><CircularProgress size={24} /></Box>
             ) : (
-                DAY_LABELS.map(day => (
+              <>
+                <Box sx={{ mb: 2, p: 1.5, borderRadius: 2, bgcolor: 'action.hover' }}>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<ContentCopyIcon />}
+                    onClick={applyMondayShiftsToRemainingDays}
+                    sx={{ textTransform: 'none', fontWeight: 700 }}
+                  >
+                    Áp dụng ca Thứ Hai cho Thứ Ba – Chủ Nhật
+                  </Button>
+                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.75 }}>
+                    Thay thế giờ hiện tại của các ngày còn lại bằng toàn bộ ca đã cấu hình cho Thứ Hai.
+                  </Typography>
+                </Box>
+                {DAY_LABELS.map(day => (
                     <Box key={day.value} sx={{ mb: 2 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
                         <Typography fontWeight={700} fontSize={14}>{day.label}</Typography>
@@ -3032,7 +3068,8 @@ export default function ShopOrderGrid() {
                           </Box>
                       ))}
                     </Box>
-                ))
+                ))}
+              </>
             )}
           </DialogContent>
           <DialogActions>
@@ -3155,6 +3192,14 @@ export default function ShopOrderGrid() {
           {confirmDlg.children}
         </ConfirmActionDialog>
       )}
+      {paymentAction && <PaymentMethodConfirmDialog
+        open
+        order={paymentAction.order}
+        action={paymentAction.action}
+        busy={paymentActionBusy}
+        onCancel={() => setPaymentAction(null)}
+        onConfirm={confirmPaymentAction}
+      />}
 
       {/* Pickup QR dialog */}
       {pickupQrOrder && (() => {

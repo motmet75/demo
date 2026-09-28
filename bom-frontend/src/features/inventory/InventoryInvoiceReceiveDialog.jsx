@@ -277,6 +277,7 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
   const [saving, setSaving] = useState(false)
   const [loadingRefs, setLoadingRefs] = useState(false)
   const [error, setError] = useState('')
+  const [validationIssue, setValidationIssue] = useState(null)
   const [form, setForm] = useState({ invoiceNumber: invoiceNumberSeed(), partyName: '', invoiceDate: todayLocalDate(), notes: '' })
   const [lines, setLines] = useState([newLine()])
   const [sharedLocation, setSharedLocation] = useState({ warehouse: null, batchNo: '' })
@@ -289,6 +290,7 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
   useEffect(() => {
     if (!open) return
     setError('')
+    setValidationIssue(null)
     setScannerOpen(false)
     setScanLineId(null)
     setPaymentDialogOpen(false)
@@ -317,7 +319,7 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
         setSharedLocation({ warehouse: initialWarehouse, batchNo: remembered.current.batchNo || '' })
         setLines(prev=>prev.map(line=>line.warehouse?line:{...line,warehouse:initialWarehouse}))
       } catch (e) {
-        if (mounted) setError(e?.message || 'Failed to load material or warehouse data')
+        if (mounted) setError(e?.message || 'Không tải được danh sách vật tư hoặc kho.')
       } finally {
         if (mounted) setLoadingRefs(false)
       }
@@ -333,9 +335,11 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
     remembered.current = { ...remembered.current, ...patch }
     try { sessionStorage.setItem(sessionKey, JSON.stringify(remembered.current)) } catch { /* memory still works */ }
   }
-  const setFormField = field => event => setForm(prev => ({ ...prev, [field]: event.target.value }))
-  const updateLine = (id, patch) => setLines(prev => prev.map(line => line.id === id ? { ...line, ...patch } : line))
+  const clearValidation = () => { setValidationIssue(null); setError('') }
+  const setFormField = field => event => { clearValidation(); setForm(prev => ({ ...prev, [field]: event.target.value })) }
+  const updateLine = (id, patch) => { clearValidation(); setLines(prev => prev.map(line => line.id === id ? { ...line, ...patch } : line)) }
   const applyWarehouseToAll = warehouse => {
+    clearValidation()
     rememberDefaults({ warehouseId: warehouse?.id || '' })
     setSharedLocation(prev => ({ ...prev, warehouse }))
     setLines(prev => prev.map(line => ({
@@ -345,6 +349,7 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
     })))
   }
   const applyBatchToAll = batchNo => {
+    clearValidation()
     rememberDefaults({ batchNo })
     setSharedLocation(prev => ({ ...prev, batchNo }))
     setLines(prev => prev.map(line => ({ ...line, batchNo })))
@@ -387,7 +392,7 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
     const material = findMaterialFromScan(raw, materialOptions)
     setScannerOpen(false)
     if (!material) {
-      setError(`No material matched QR: ${String(raw).slice(0, 120)}`)
+      setError(`Không tìm thấy vật tư khớp với QR: ${String(raw).slice(0, 120)}`)
       return
     }
     const targetId = scanLineId || lines[0]?.id
@@ -398,32 +403,42 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
 
   const validateLine = (line, index) => {
     const { warehouseQty, warehouseUnitPrice, ratio } = lineCalc(line)
-    const prefix = `Item ${index + 1}`
-    if (!line.material?.unit) return `${prefix}: vật tư chưa cấu hình đơn vị BOM.`
-    if (!line.material) return `${prefix}: select material by code, name, or QR.`
-    if (!line.warehouse) return `${prefix}: select warehouse.`
-    if (!line.batchNo.trim()) return `${prefix}: batch number is required.`
-    if (!line.warehouseImportUnit.trim()) return `${prefix}: warehouse unit is required.`
-    if (warehouseQty === null || warehouseQty <= 0) return `${prefix}: warehouse qty must be positive.`
-    if (warehouseUnitPrice === null || warehouseUnitPrice < 0) return `${prefix}: unit price cannot be negative.`
-    if (ratio === null || ratio <= 0) return `${prefix}: ratio must be positive.`
-    return ''
+    const prefix = `Dòng ${index + 1}`
+    const issue = (field, message) => ({ lineId: line.id, field, message: `${prefix}: ${message}` })
+    if (!line.material) return issue('material', 'bắt buộc chọn vật tư bằng mã, tên hoặc QR.')
+    if (!line.material.unit) return issue('material', 'vật tư chưa cấu hình đơn vị BOM.')
+    if (!line.warehouse) return issue('warehouse', 'bắt buộc chọn kho.')
+    if (!line.batchNo.trim()) return issue('batch', 'bắt buộc nhập số lô.')
+    if (!line.warehouseImportUnit.trim()) return issue('unit', 'bắt buộc chọn đơn vị kho.')
+    if (warehouseQty === null || warehouseQty <= 0) return issue('quantity', 'số lượng nhập phải lớn hơn 0.')
+    if (warehouseUnitPrice === null || warehouseUnitPrice < 0) return issue('price', 'đơn giá không được âm.')
+    if (ratio === null || ratio <= 0) return issue('unit', 'hệ số quy đổi phải lớn hơn 0.')
+    return null
   }
 
   const validate = () => {
-    if (!tenantId || !companyId) return 'Select tenant and company first.'
-    if (!form.invoiceNumber.trim()) return 'Invoice number is required.'
-    if (!enteredLines.length) return 'Nhập ít nhất một dòng hàng.'
+    if (!tenantId || !companyId) return { message: 'Vui lòng chọn đơn vị và công ty trước.' }
+    if (!form.invoiceNumber.trim()) return { field: 'invoiceNumber', message: 'Bắt buộc nhập số hóa đơn.' }
+    if (!enteredLines.length) return { message: 'Nhập ít nhất một dòng hàng.' }
     for (let i = 0; i < enteredLines.length; i++) {
-      const message = validateLine(enteredLines[i], i)
-      if (message) return message
+      const issue = validateLine(enteredLines[i], i)
+      if (issue) return issue
     }
-    return ''
+    return null
+  }
+
+  const showValidation = issue => {
+    setValidationIssue(issue)
+    setError(issue.message)
+    if (issue.lineId && issue.field) {
+      window.requestAnimationFrame(() => cells.current[`${issue.lineId}:${issue.field}`]?.focus())
+    }
   }
 
   const requestSave = () => {
     const validation = validate()
-    if (validation) { setError(validation); return }
+    if (validation) { showValidation(validation); return }
+    setValidationIssue(null)
     setError('')
     if (!savedInvoice) {
       setPayment({
@@ -438,7 +453,8 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
   const handleSave = async () => {
     if (savingRef.current) return
     const validation = validate()
-    if (validation) { setError(validation); return }
+    if (validation) { showValidation(validation); return }
+    setValidationIssue(null)
     savingRef.current = true
     setSaving(true)
     setError('')
@@ -501,7 +517,7 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
       if (receiptReady) setSavedInvoice(createdInvoice)
       setError(receiptReady
         ? `Hóa đơn và hàng nhập đã được lưu. Thanh toán chưa ghi được: ${e?.message || 'thử lại hoặc chọn Chưa thanh toán.'}`
-        : e?.message || 'Failed to save invoice and inventory items')
+        : e?.message || 'Không lưu được hóa đơn và các dòng nhập kho.')
     } finally {
       savingRef.current = false
       setSaving(false)
@@ -521,7 +537,7 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '12px !important' }}>
           {error && <Alert severity="error">{error}</Alert>}
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 130px' }, gap: 1.5 }}>
-            <TextField label="Số hóa đơn" size="small" value={form.invoiceNumber} onChange={setFormField('invoiceNumber')} required />
+            <TextField label="Số hóa đơn" size="small" value={form.invoiceNumber} onChange={setFormField('invoiceNumber')} required error={validationIssue?.field==='invoiceNumber'} helperText={validationIssue?.field==='invoiceNumber'?'Bắt buộc nhập số hóa đơn.':''} />
             <TextField label="Nhà cung cấp" size="small" value={form.partyName} onChange={setFormField('partyName')} />
             <TextField label="Ngày hóa đơn" type="date" size="small" value={form.invoiceDate} onChange={setFormField('invoiceDate')} InputLabelProps={{ shrink: true }} />
           </Box>
@@ -556,21 +572,21 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
                       isOptionEqualToValue={(a,b)=>a.id===b.id}
                       slotProps={{clearIndicator:{tabIndex:-1},popupIndicator:{tabIndex:-1}}}
                       renderOption={(props,option)=><Box component="li" {...props} key={option.id} sx={{gap:1}}><MaterialThumb material={option} size={32}/><Box><Typography variant="body2">{option.materialCode} · {option.materialName}</Typography><Typography variant="caption">Đơn vị BOM: {option.unit || 'Chưa cấu hình'}</Typography></Box></Box>}
-                      renderInput={params=><TextField {...params} size="small" placeholder="Gõ mã / tên, không cần dấu" inputRef={node=>{cells.current[`${line.id}:material`]=node}}
+                      renderInput={params=><TextField {...params} size="small" placeholder="Gõ mã / tên, không cần dấu" error={validationIssue?.lineId===line.id&&validationIssue?.field==='material'} helperText={validationIssue?.lineId===line.id&&validationIssue?.field==='material'?'Bắt buộc':''} inputRef={node=>{cells.current[`${line.id}:material`]=node}}
                         inputProps={{...params.inputProps,'aria-label':`Vật tư dòng ${index+1}`}}
                         onKeyDown={event=>{if(event.key==='Tab' && !event.shiftKey && !line.material && matches[0]) {event.preventDefault();event.defaultMuiPrevented=true;selectMaterial(line,matches[0]);cells.current[`${line.id}:quantity`]?.focus()}}}/>}/>
                   </TableCell>
-                  <TableCell sx={{minWidth:110}}><TextField {...cellProps(line,'quantity','SL nhập')} type="number" value={line.warehouseImportQuantity} onChange={e=>updateLine(line.id,{warehouseImportQuantity:e.target.value})} inputProps={{...cellProps(line,'quantity','SL nhập').inputProps,min:0,step:'any'}}/></TableCell>
-                  <TableCell sx={{minWidth:170}}><TextField {...cellProps(line,'unit','Đơn vị kho')} select value={conversionKey} SelectProps={{native:true}} onChange={e=>{const option=defaults.options.find(o=>o.key===e.target.value);if(option)updateLine(line.id,{warehouseImportUnit:option.unit,bomUnitPerWarehouseUnit:option.ratio,warehouseImportUnitPrice:defaults.priceFor(option.unit,option.ratio)})}}>
+                  <TableCell sx={{minWidth:110}}><TextField {...cellProps(line,'quantity','SL nhập')} type="number" value={line.warehouseImportQuantity} error={validationIssue?.lineId===line.id&&validationIssue?.field==='quantity'} helperText={validationIssue?.lineId===line.id&&validationIssue?.field==='quantity'?'Bắt buộc':''} onChange={e=>updateLine(line.id,{warehouseImportQuantity:e.target.value})} inputProps={{...cellProps(line,'quantity','SL nhập').inputProps,min:0,step:'any'}}/></TableCell>
+                  <TableCell sx={{minWidth:170}}><TextField {...cellProps(line,'unit','Đơn vị kho')} select value={conversionKey} error={validationIssue?.lineId===line.id&&validationIssue?.field==='unit'} helperText={validationIssue?.lineId===line.id&&validationIssue?.field==='unit'?'Bắt buộc':''} SelectProps={{native:true}} onChange={e=>{const option=defaults.options.find(o=>o.key===e.target.value);if(option)updateLine(line.id,{warehouseImportUnit:option.unit,bomUnitPerWarehouseUnit:option.ratio,warehouseImportUnitPrice:defaults.priceFor(option.unit,option.ratio)})}}>
                     <option value="" disabled>{defaults.options.length?'Chọn quy đổi':'Chọn vật tư'}</option>{defaults.options.map(option=><option key={option.key} value={option.key}>{option.unit} · ×{option.ratio} ({option.source})</option>)}
                   </TextField></TableCell>
                   <TableCell sx={{minWidth:95}}><Typography sx={{pt:1}}>{line.bomUnitPerWarehouseUnit || '—'}</Typography></TableCell>
                   <TableCell><Typography sx={{pt:1}}>{line.material?.unit || '—'}</Typography></TableCell>
                   <TableCell><Typography sx={{pt:1}}>{calc.bomQty==null?'—':fmtNum(calc.bomQty,9)}</Typography></TableCell>
-                  <TableCell sx={{minWidth:130}}><TextField {...cellProps(line,'price','Đơn giá nhập')} type="number" value={line.warehouseImportUnitPrice} onChange={e=>updateLine(line.id,{warehouseImportUnitPrice:e.target.value})} inputProps={{...cellProps(line,'price','Đơn giá nhập').inputProps,min:0,step:'any'}}/></TableCell>
+                  <TableCell sx={{minWidth:130}}><TextField {...cellProps(line,'price','Đơn giá nhập')} type="number" value={line.warehouseImportUnitPrice} error={validationIssue?.lineId===line.id&&validationIssue?.field==='price'} helperText={validationIssue?.lineId===line.id&&validationIssue?.field==='price'?'Không hợp lệ':''} onChange={e=>updateLine(line.id,{warehouseImportUnitPrice:e.target.value})} inputProps={{...cellProps(line,'price','Đơn giá nhập').inputProps,min:0,step:'any'}}/></TableCell>
                   <TableCell><Typography sx={{pt:1,whiteSpace:'nowrap'}}>{fmtNum(calc.total,2)}</Typography></TableCell>
-                  <TableCell sx={{minWidth:190}}><TextField {...cellProps(line,'warehouse','Kho')} select SelectProps={{native:true}} value={line.warehouse?.id || ''} onChange={e=>applyWarehouseToAll(warehouses.find(w=>w.id===e.target.value)||null)}><option value="">Chọn kho</option>{warehouses.map(w=><option key={w.id} value={w.id}>{w.code} · {w.name}</option>)}</TextField></TableCell>
-                  <TableCell sx={{minWidth:170}}><TextField {...cellProps(line,'batch','Số lô')} value={line.batchNo} onChange={e=>applyBatchToAll(e.target.value)}/></TableCell>
+                  <TableCell sx={{minWidth:190}}><TextField {...cellProps(line,'warehouse','Kho')} select SelectProps={{native:true}} value={line.warehouse?.id || ''} error={validationIssue?.lineId===line.id&&validationIssue?.field==='warehouse'} helperText={validationIssue?.lineId===line.id&&validationIssue?.field==='warehouse'?'Bắt buộc':''} onChange={e=>applyWarehouseToAll(warehouses.find(w=>w.id===e.target.value)||null)}><option value="">Chọn kho</option>{warehouses.map(w=><option key={w.id} value={w.id}>{w.code} · {w.name}</option>)}</TextField></TableCell>
+                  <TableCell sx={{minWidth:170}}><TextField {...cellProps(line,'batch','Số lô')} required value={line.batchNo} error={validationIssue?.lineId===line.id&&validationIssue?.field==='batch'} helperText={validationIssue?.lineId===line.id&&validationIssue?.field==='batch'?'Bắt buộc nhập số lô':''} onChange={e=>applyBatchToAll(e.target.value)}/></TableCell>
                   <TableCell sx={{minWidth:170}}><TextField {...cellProps(line,'notes','Ghi chú')} value={line.notes} onChange={e=>updateLine(line.id,{notes:e.target.value})}/></TableCell>
                 </TableRow>
               })}</TableBody>

@@ -97,7 +97,7 @@ const FULFILLMENT = [
   { value: 'DELIVERY', label: 'Delivery', icon: <DeliveryDiningIcon fontSize="small" /> },
 ]
 
-export default function ManualOrderDialog({ open, onClose, onCreated, defaultTable, defaultItems, autoPrintCounterAlert = false }) {
+export default function ManualOrderDialog({ open, onClose, onCreated, defaultTable, defaultItems }) {
   const { t } = useI18n()
   const { hasFullBusinessAccess } = useAuth()
   const [models, setModels]         = useState([])
@@ -767,9 +767,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
       }
       setCreatedOrder(orderData)
       onCreated?.(orderData)
-      if (autoPrintCounterAlert) {
-        printCounterOrderAlertTracked(orderData, setError)
-      }
+      await printCounterOrderAlertTracked(orderData, setError)
       // broadcast real order (with order number), then again once tagQr is loaded
       broadcastToCounter(orderData, null)
       setTagLoading(true)
@@ -1671,7 +1669,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
               sx={{ borderRadius: 2, fontWeight: 700, textTransform: 'none', minWidth: 160 }}>
               {submitting
                 ? <CircularProgress size={18} />
-                : `Create Order${total ? ' · ' + fmt(total) : ''}`}
+                : `Xác nhận & in báo đơn${total ? ' · ' + fmt(total) : ''}`}
             </Button>
           </>
         )}

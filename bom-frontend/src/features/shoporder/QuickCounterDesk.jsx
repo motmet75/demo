@@ -41,13 +41,14 @@ export default function QuickCounterDesk({ rows, actions, onNew, shiftState }) {
     <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',md:'repeat(2,minmax(0,1fr))',xl:'repeat(4,minmax(0,1fr))'},gap:2}}>{groups.map(group=><Box key={group.title} sx={{bgcolor:group.color,p:1.5,borderRadius:2}}><Typography fontWeight={800} sx={{mb:1.5}}>{group.title} · {filtered.filter(r=>group.statuses.includes(r.status)).length}</Typography>{filtered.filter(r=>group.statuses.includes(r.status)).map(order=><Paper key={order.id} sx={{p:1.5,mb:1.5,borderRadius:2}}>
       <Stack direction="row" justifyContent="space-between" alignItems="center"><Typography variant="h6" fontWeight={800}>{order.tableName || order.customerTableTag || 'Mang đi'} · #{order.orderNumber ?? order.dailySeq}</Typography><Chip size="small" color={order.paymentStatus==='PAID'?'success':'warning'} label={order.paymentStatus==='PAID'?'Đã thu':'Chưa thu'} /></Stack>
       <Typography variant="body2" color="text.secondary">{(order.items||[]).map(i=>`${i.quantity} × ${i.modelName || i.name || ''}`).join(' · ')}</Typography>
-      <Typography sx={{my:1}} fontWeight={800}>{Math.max(0,Number(order.totalAmount||0)-Number(order.discountAmount||0)).toLocaleString('vi-VN')}đ · {order.paymentMethod==='BANK_QR'?'QR / chuyển khoản':order.paymentMethod==='SPLIT'?'Tiền mặt + QR':'Tiền mặt'}</Typography>
+      <Typography sx={{my:1}} fontWeight={800}>{Math.max(0,Number(order.totalAmount||0)-Number(order.discountAmount||0)).toLocaleString('vi-VN')}đ · {order.paymentMethod==='BANK_QR'?'QR / chuyển khoản':order.paymentMethod==='SPLIT'?'Tiền mặt + QR':order.paymentMethod==='PAY_LATER'?'Trả sau':'Tiền mặt'}</Typography>
       <Stack direction="row" flexWrap="wrap" gap={1}><Button variant="outlined" onClick={()=>actions.detail(order)}>Chi tiết</Button>
         {order.status==='PENDING' && <Button variant="contained" onClick={()=>actions.receive(order)}>Xác nhận</Button>}
         {order.status==='CONFIRMED' && <Button variant="contained" onClick={()=>actions.prepare(order)}>Bắt đầu làm</Button>}
         {order.status==='PREPARING' && <Button variant="contained" onClick={()=>actions.ready(order)}>Món đã sẵn sàng</Button>}
         {order.paymentStatus!=='PAID' && ['CONFIRMED','PREPARING','READY'].includes(order.status) && <><Button onClick={()=>actions.markPaid(order)}>Đã nhận tiền</Button>{order.paymentMethod==='BANK_QR' && <Button onClick={()=>actions.payQr(order)}>Hiện QR</Button>}</>}
-        {order.status==='READY' && <><Button variant="outlined" onClick={()=>actions.printTag(order)}>In phiếu</Button><Button variant="contained" color="success" onClick={()=>actions.complete(order)}>{order.paymentStatus==='PAID'?'Hoàn tất / trả món':'Xác nhận đã thu & hoàn tất'}</Button></>}
+        {order.status==='READY' && <Button variant="outlined" onClick={()=>actions.printTag(order)}>In phiếu</Button>}
+        {!['COMPLETED','PICKED_UP','CANCELLED'].includes(order.status) && <Button variant="contained" color="success" onClick={()=>actions.complete(order)}>Hoàn tất & trả món</Button>}
       </Stack>
     </Paper>)}</Box>)}</Box>
   </Box>
