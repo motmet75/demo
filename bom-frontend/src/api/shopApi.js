@@ -215,6 +215,20 @@ export function createStaffOrder(body) {
   })
 }
 
+export function fetchOrderTemplates() {
+  return apiFetchJson('/shop/staff/order-templates')
+}
+
+export function saveOrderTemplate(body) {
+  return apiFetchJson('/shop/staff/order-templates', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+  })
+}
+
+export function deleteOrderTemplate(id) {
+  return apiFetchJson(`/shop/staff/order-templates/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
 export function fetchOrderTagQr(orderId) {
   return apiFetchJson(`/shop/staff/orders/${orderId}/tag-qr`)
 }
@@ -260,6 +274,10 @@ export function fetchCounterShiftSummary(params = {}) {
 
 export function fetchCounterInventorySnapshot() {
   return apiFetchJson('/shop/staff/counter/inventory-snapshot')
+}
+
+export function fetchCounterHandoverUsers() {
+  return apiFetchJson('/shop/staff/counter/workflow/users')
 }
 
 export function fetchCounterPaymentNotes(date) {

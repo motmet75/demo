@@ -26,6 +26,7 @@ public class AdminUserService {
 
     private static final String ROLE_SUPER_ADMIN = "ROLE_SUPER_ADMIN";
     private static final String ROLE_ADMIN = "ROLE_ADMIN";
+    private static final String ROLE_USER = "ROLE_USER";
     private static final String ROLE_SHOP_ORDERING = "ROLE_SHOP_ORDERING";
     private static final String ROLE_COUNTER = "ROLE_COUNTER";
 
@@ -207,7 +208,7 @@ public class AdminUserService {
         }
         Set<String> normalized = normalizeAuthorities(requested);
         List<String> staffRoles = normalized.stream()
-                .filter(role -> ROLE_COUNTER.equals(role) || ROLE_SHOP_ORDERING.equals(role))
+                .filter(role -> ROLE_USER.equals(role) || ROLE_COUNTER.equals(role) || ROLE_SHOP_ORDERING.equals(role))
                 .toList();
         return staffRoles.isEmpty() ? List.of(ROLE_COUNTER) : staffRoles;
     }

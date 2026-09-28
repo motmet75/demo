@@ -38,20 +38,35 @@ public class ShopCounterWorkflowController {
     private void lock(UUID t, UUID c) { scope(t,c); db.queryForList("SELECT id FROM company WHERE id=? AND tenant_id=? FOR UPDATE",c,t); }
     private List<Map<String,Object>> active(UUID t, UUID c) { return db.queryForList("SELECT * FROM shop_counter_shift WHERE tenant_id=? AND company_id=? AND status='OPEN'",t,c); }
     private Map<String,Object> opened(UUID t, UUID c) { var a=active(t,c); require(!a.isEmpty(), "Cần mở ca trước khi ghi nhận"); return a.get(0); }
-    private Object previous(UUID t, UUID c) {
+    private Object previousCash(UUID t, UUID c) {
         var rows=db.queryForList("SELECT actual_cash FROM shop_counter_shift WHERE tenant_id=? AND company_id=? AND status='CLOSED' ORDER BY closed_at DESC LIMIT 1",t,c);
         if(rows.isEmpty()) rows=db.queryForList("SELECT actual_cash FROM shop_shift_handover WHERE tenant_id=? AND company_id=? ORDER BY closed_at DESC NULLS LAST, created_at DESC LIMIT 1",t,c);
         return rows.isEmpty()?null:rows.get(0).get("actual_cash");
     }
+    private Object previousBank(UUID t, UUID c) {
+        var rows=db.queryForList("SELECT actual_bank FROM shop_counter_shift WHERE tenant_id=? AND company_id=? AND status='CLOSED' ORDER BY closed_at DESC LIMIT 1",t,c);
+        return rows.isEmpty()?null:rows.get(0).get("actual_bank");
+    }
+    private String nextHandoverUser(UUID t, UUID c) {
+        var rows=db.queryForList("SELECT handover_to FROM shop_counter_shift WHERE tenant_id=? AND company_id=? AND status='CLOSED' ORDER BY closed_at DESC LIMIT 1",t,c);
+        return rows.isEmpty()?"":s(rows.get(0).get("handover_to"));
+    }
+    private LocalDate operationalShiftDate(ZonedDateTime now) {
+        return now.getHour() >= 22 ? now.toLocalDate().plusDays(1) : now.toLocalDate();
+    }
     @GetMapping
-    public Map<String,Object> state(@RequestHeader("X-Tenant-Id") UUID t, @RequestHeader("X-Company-Id") UUID c) {
+    public Map<String,Object> state(@RequestHeader("X-Tenant-Id") UUID t, @RequestHeader("X-Company-Id") UUID c, Authentication auth) {
         scope(t,c); var result=new LinkedHashMap<String,Object>(); var a=active(t,c);
-        result.put("active",a.isEmpty()?null:a.get(0)); result.put("previousCash",previous(t,c));
+        result.put("active",a.isEmpty()?null:a.get(0)); result.put("previousCash",previousCash(t,c)); result.put("previousBank",previousBank(t,c));
         var now=ZonedDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
-        result.put("shiftDate",now.toLocalDate().toString());
-        result.put("suggestedShift",now.getHour()<14?1:2);
+        var shiftDate=operationalShiftDate(now);
+        String handoverUser=nextHandoverUser(t,c);
+        result.put("shiftDate",shiftDate.toString());
+        result.put("suggestedShift",now.getHour()>=22 || now.getHour()<14?1:2);
+        result.put("nextHandoverTo",handoverUser);
+        result.put("canOpen",handoverUser.isEmpty() || (auth!=null && handoverUser.equalsIgnoreCase(auth.getName())));
         result.put("schedule",List.of(Map.of("number",1,"name","Ca 1 · 06:00–14:00"),Map.of("number",2,"name","Ca 2 · 14:00–22:00")));
-        result.put("usedShifts",db.queryForList("SELECT shift_number FROM shop_counter_shift WHERE tenant_id=? AND company_id=? AND shift_date=? AND shift_number IS NOT NULL",Integer.class,t,c,java.sql.Date.valueOf(now.toLocalDate())));
+        result.put("usedShifts",db.queryForList("SELECT shift_number FROM shop_counter_shift WHERE tenant_id=? AND company_id=? AND shift_date=? AND shift_number IS NOT NULL",Integer.class,t,c,java.sql.Date.valueOf(shiftDate)));
         var history=db.queryForList("SELECT * FROM shop_counter_shift WHERE tenant_id=? AND company_id=? ORDER BY opened_at DESC LIMIT 20",t,c);
         for(var h:history) for(String key:List.of("summary","inventory_counts")) {
             if(h.get(key)!=null) try { h.put(key,json.readValue(h.get(key).toString(),Object.class)); } catch(Exception e) { throw new IllegalStateException("Cannot read saved handover",e); }
@@ -59,21 +74,47 @@ public class ShopCounterWorkflowController {
         result.put("history",history);
         return result;
     }
+    @GetMapping("/users")
+    public List<Map<String,Object>> handoverUsers(@RequestHeader("X-Tenant-Id") UUID t,
+                                                   @RequestHeader("X-Company-Id") UUID c,
+                                                   Authentication auth) {
+        scope(t,c);
+        var rows=db.queryForList("""
+                SELECT username, firstname, lastname, email
+                FROM usertb
+                WHERE isenabled=true
+                  AND assigned_tenant_id=? AND assigned_company_id=?
+                  AND EXISTS (SELECT 1 FROM authorities a WHERE upper(a.username)=upper(usertb.username)
+                              AND a.authority='ROLE_COUNTER')
+                ORDER BY firstname,lastname,username
+                """,t.toString(),c.toString());
+        return rows.stream().map(row -> {
+            Map<String,Object> user=new LinkedHashMap<>();
+            user.put("username",row.get("username"));
+            user.put("firstName",row.get("firstname"));
+            user.put("lastName",row.get("lastname"));
+            user.put("email",row.get("email"));
+            return user;
+        }).toList();
+    }
     @PostMapping("/open") @Transactional
     public Map<String,Object> open(@RequestHeader("X-Tenant-Id") UUID t, @RequestHeader("X-Company-Id") UUID c, Authentication auth, @RequestBody Map<String,Object> body) {
         lock(t,c); require(active(t,c).isEmpty(),"Đã có ca đang mở");
-        var today=LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh"));
+        var today=operationalShiftDate(ZonedDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")));
         require(today.toString().equals(s(body.get("shiftDate"))),"Ngày làm việc đã thay đổi, tải lại trước khi mở ca");
+        String handoverUser=nextHandoverUser(t,c);
+        require(handoverUser.isEmpty() || handoverUser.equalsIgnoreCase(auth.getName()),"Ca đã bàn giao cho "+handoverUser+"; tài khoản này phải đăng nhập để mở ca tiếp theo");
         String slot=s(body.get("shiftNumber"));
         require(slot.equals("1") || slot.equals("2"),"Chọn ca 1 (06:00–14:00) hoặc ca 2 (14:00–22:00)");
         int shiftNumber=Integer.parseInt(slot);
         require(!Boolean.TRUE.equals(db.queryForObject("SELECT EXISTS(SELECT 1 FROM shop_counter_shift WHERE tenant_id=? AND company_id=? AND shift_date=? AND shift_number=?)",Boolean.class,t,c,java.sql.Date.valueOf(today),shiftNumber)),"Ca này đã được mở trong ngày; không thể mở lại ca đã khóa");
         BigDecimal cash=n(body.get("openingCash")); require(cash.signum()>=0,"Tiền đầu ca không được âm");
-        Object prev=previous(t,c); String reason=s(body.get("reason"));
-        if(prev==null || cash.compareTo(n(prev))!=0) require(!reason.isEmpty() && Boolean.TRUE.equals(body.get("confirmed")),"Nhập lý do và xác nhận lại tiền đầu ca khác bàn giao / khởi tạo lần đầu");
+        BigDecimal bank=n(body.get("openingBank")); require(bank.signum()>=0,"Số dư ngân hàng đầu ca không được âm");
+        Object prev=previousCash(t,c), prevBank=previousBank(t,c); String reason=s(body.get("reason"));
+        if(prev==null || prevBank==null || cash.compareTo(n(prev))!=0 || bank.compareTo(n(prevBank))!=0) require(!reason.isEmpty() && Boolean.TRUE.equals(body.get("confirmed")),"Nhập lý do và xác nhận lại số dư đầu ca khác bàn giao / khởi tạo lần đầu");
         UUID id=UUID.randomUUID();
-        db.update("INSERT INTO shop_counter_shift(id,tenant_id,company_id,shift_date,shift_number,shift_name,opened_by,previous_cash,opening_cash,opening_reason) VALUES(?,?,?,?,?,?,?,?,?,?)",id,t,c,java.sql.Date.valueOf(today),shiftNumber,shiftNumber==1?"Ca 1 · 06:00–14:00":"Ca 2 · 14:00–22:00",auth.getName(),prev,cash,reason);
-        return state(t,c);
+        db.update("INSERT INTO shop_counter_shift(id,tenant_id,company_id,shift_date,shift_number,shift_name,opened_by,previous_cash,opening_cash,previous_bank,opening_bank,opening_reason) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",id,t,c,java.sql.Date.valueOf(today),shiftNumber,shiftNumber==1?"Ca 1 · 06:00–14:00":"Ca 2 · 14:00–22:00",auth.getName(),prev,cash,prevBank,bank,reason);
+        return state(t,c,auth);
     }
     @GetMapping("/stock")
     public List<Map<String,Object>> stock(@RequestHeader("X-Tenant-Id") UUID t, @RequestHeader("X-Company-Id") UUID c) {
@@ -137,7 +178,7 @@ public class ShopCounterWorkflowController {
         require(!expectedType.isEmpty() && expectedType.equals(noteType),
                 "Phiếu nhập chỉ tạo phiếu chi; phiếu xuất chỉ tạo phiếu thu");
         String method = s(body.get("paymentMethod")).toUpperCase(Locale.ROOT);
-        require(Set.of("CASH", "BANK_QR").contains(method), "Chọn tiền mặt hoặc QR / chuyển khoản");
+        require(Set.of("CASH", "BANK_QR", "UNPAID", "BANK_LATER").contains(method), "Chọn hình thức thanh toán hợp lệ");
         BigDecimal amount = n(body.get("amount"));
         require(amount.signum() > 0, "Số tiền phiếu thu / chi phải lớn hơn 0");
         String reason = s(body.get("reason"));
@@ -177,11 +218,50 @@ public class ShopCounterWorkflowController {
         UUID requestId=UUID.fromString(s(body.get("requestId")));
         var duplicate=db.queryForList("SELECT id FROM inventory_movement WHERE id=? AND tenant_id=? AND company_id=?",requestId,t,c);
         if(!duplicate.isEmpty()) return Map.of("id",requestId,"alreadySaved",true);
-        UUID inventoryId=UUID.fromString(s(body.get("inventoryId")));
+        String type=s(body.get("type")); require(Set.of("IN","OUT","ADJUSTMENT").contains(type),"Loại phiếu không hợp lệ");
+        boolean createBatch=type.equals("IN") && Boolean.TRUE.equals(body.get("createBatch"));
+        UUID inventoryId;
+        boolean createdBatch=false;
+        if(createBatch) {
+            UUID templateInventoryId=UUID.fromString(s(body.get("inventoryId")));
+            UUID materialId=UUID.fromString(s(body.get("materialId")));
+            UUID warehouseId=UUID.fromString(s(body.get("warehouseId")));
+            String batchNo=s(body.get("batchNo"));
+            require(!batchNo.isEmpty(),"Nhập số lô mới");
+            require(batchNo.length()<=255,"Số lô tối đa 255 ký tự");
+            var existing=db.queryForList("""
+                SELECT id FROM inventory
+                WHERE tenant_id=? AND company_id=? AND material_id=? AND warehouse_id=? AND batch_no=?
+                FOR UPDATE
+                """,t,c,materialId,warehouseId,batchNo);
+            if(!existing.isEmpty()) {
+                inventoryId=(UUID)existing.get(0).get("id");
+            } else {
+                inventoryId=UUID.randomUUID();
+                int inserted=db.update("""
+                    INSERT INTO inventory
+                    (id,tenant_id,company_id,material_id,warehouse_id,material_code,warehouse_code,batch_no,
+                     user_name,unit,unit_price,currency,warehouse_import_unit,warehouse_import_quantity,
+                     bom_unit_per_warehouse_unit,warehouse_import_unit_price,quantity_on_hand,quantity_total,
+                     quantity_reserved,quantity_locked,visible,approved,locked,created_at,updated_at)
+                    SELECT ?,?,?,source.material_id,?,source.material_code,w.code,?,?,source.unit,
+                           source.unit_price,source.currency,source.warehouse_import_unit,0,
+                           source.bom_unit_per_warehouse_unit,source.warehouse_import_unit_price,
+                           0,0,0,0,true,false,false,now(),now()
+                    FROM inventory source
+                    JOIN warehouse w ON w.id=? AND w.tenant_id=? AND w.company_id=?
+                    WHERE source.id=? AND source.tenant_id=? AND source.company_id=? AND source.material_id=?
+                    """,inventoryId,t,c,warehouseId,batchNo,auth.getName(),warehouseId,t,c,
+                    templateInventoryId,t,c,materialId);
+                require(inserted==1,"Không thể tạo lô mới từ cấu hình vật tư đã chọn");
+                createdBatch=true;
+            }
+        } else {
+            inventoryId=UUID.fromString(s(body.get("inventoryId")));
+        }
         var rows=db.queryForList("SELECT * FROM inventory WHERE id=? AND tenant_id=? AND company_id=? FOR UPDATE",inventoryId,t,c);
         require(rows.size()==1,"Không tìm thấy tồn kho"); var inv=rows.get(0);
         require(!Boolean.TRUE.equals(inv.get("locked")),"Tồn kho đã khóa");
-        String type=s(body.get("type")); require(Set.of("IN","OUT","ADJUSTMENT").contains(type),"Loại phiếu không hợp lệ");
         String reason=s(body.get("reason")); require(reason.length()<=100,"Lý do tối đa 100 ký tự");
         if(type.equals("ADJUSTMENT")) require(!reason.isEmpty(),"Điều chỉnh bắt buộc có lý do");
         BigDecimal quantity=n(body.get("quantity")); require(type.equals("ADJUSTMENT")?quantity.signum()!=0:quantity.signum()>0,"Số lượng không hợp lệ");
@@ -195,7 +275,12 @@ public class ShopCounterWorkflowController {
         BigDecimal next=n(inv.get("quantity_on_hand")).add(delta);
         BigDecimal protectedQty=n(inv.getOrDefault("quantity_reserved",BigDecimal.ZERO)==null?0:inv.get("quantity_reserved")).add(n(inv.get("quantity_locked")==null?0:inv.get("quantity_locked")));
         require(next.signum()>=0 && (delta.signum()>0 || next.compareTo(protectedQty)>=0),"Không đủ tồn khả dụng");
-        db.update("UPDATE inventory SET quantity_on_hand=?, updated_at=now() WHERE id=?",next,inventoryId);
+        if(createdBatch) {
+            db.update("UPDATE inventory SET quantity_on_hand=?, quantity_total=?, warehouse_import_quantity=?, updated_at=now() WHERE id=?",
+                    next,next,unit.equals(s(inv.get("warehouse_import_unit")))?quantity:null,inventoryId);
+        } else {
+            db.update("UPDATE inventory SET quantity_on_hand=?, updated_at=now() WHERE id=?",next,inventoryId);
+        }
         UUID id=requestId;
         db.update("""
             INSERT INTO inventory_movement(id,tenant_id,company_id,material_id,from_warehouse_id,to_warehouse_id,
@@ -203,7 +288,7 @@ public class ShopCounterWorkflowController {
             VALUES(?,?,?,?,?,?,?,?,?,?,?,?, 'COMPLETED',now(),?,?,?,?,?)
             """,id,t,c,inv.get("material_id"),delta.signum()<0?inv.get("warehouse_id"):null,delta.signum()>0?inv.get("warehouse_id"):null,
             delta,inv.get("unit"),type,reason,inventoryId,inv.get("batch_no"),auth.getName(),price,quantity,unit,shift.get("id"));
-        return Map.of("id",id,"quantityOnHand",next);
+        return Map.of("id",id,"quantityOnHand",next,"createdBatch",createdBatch,"batchNo",s(inv.get("batch_no")));
     }
     @PostMapping("/close") @Transactional
     public Map<String,Object> close(@RequestHeader("X-Tenant-Id") UUID t, @RequestHeader("X-Company-Id") UUID c, Authentication auth, @RequestBody Map<String,Object> body) {
@@ -211,12 +296,19 @@ public class ShopCounterWorkflowController {
         require(s(shift.get("id")).equals(s(body.get("shiftId"))),"Ca đã thay đổi, vui lòng tải lại");
         require(Boolean.TRUE.equals(body.get("confirmed")),"Xác nhận trách nhiệm tiền mặt, QR và tồn kho");
         BigDecimal cash=n(body.get("actualCash")), bank=n(body.get("actualBank")); require(cash.signum()>=0 && bank.signum()>=0,"Tiền thực tế không được âm");
-        require(!s(body.get("handoverTo")).isEmpty(),"Nhập người nhận bàn giao");
+        String handoverTo=s(body.get("handoverTo"));
+        require(!handoverTo.isEmpty(),"Chọn người nhận bàn giao");
+        require(Boolean.TRUE.equals(db.queryForObject("""
+                SELECT EXISTS(SELECT 1 FROM usertb u JOIN authorities a ON upper(a.username)=upper(u.username)
+                WHERE upper(u.username)=upper(?) AND u.isenabled=true AND u.assigned_tenant_id=?
+                  AND u.assigned_company_id=? AND a.authority='ROLE_COUNTER')
+                """,Boolean.class,handoverTo,t.toString(),c.toString())),"Người nhận bàn giao phải có vai trò Thu ngân / Bàn giao ca");
         Instant end=Instant.now(), start=((Timestamp)shift.get("opened_at")).toInstant();
         var summary=(Map<String,Object>) reports.shiftSummary(t,c,null,null,start,end).getBody();
         BigDecimal expected=n(shift.get("opening_cash")).add(n(summary.get("cashIn")))
                 .add(n(summary.get("receiptNoteCashTotal"))).subtract(n(summary.get("paymentNoteTotal")));
-        BigDecimal expectedBank=n(summary.get("bankingIn")).add(n(summary.get("receiptNoteBankTotal")));
+        BigDecimal expectedBank=n(shift.get("opening_bank")).add(n(summary.get("bankingIn")))
+                .add(n(summary.get("receiptNoteBankTotal"))).subtract(n(summary.get("bankPaymentNoteTotal")));
         boolean different=cash.compareTo(expected)!=0 || bank.compareTo(expectedBank)!=0;
         require(!different || !s(body.get("reason")).isEmpty(),"Chênh lệch tiền mặt / QR cần lý do");
         require(body.get("counts") instanceof List<?>,"Cần kiểm đếm toàn bộ tồn kho");
@@ -234,7 +326,7 @@ public class ShopCounterWorkflowController {
             var item=new LinkedHashMap<String,Object>(inv); item.put("actual",actual); item.put("difference",diff); item.put("reason",s(row.get("reason"))); saved.add(item);
         }
         summary.put("expectedCash",expected); summary.put("expectedBank",expectedBank); summary.put("differenceCash",cash.subtract(expected)); summary.put("differenceBank",bank.subtract(expectedBank));
-        db.update("UPDATE shop_counter_shift SET status='CLOSED',closed_at=?,closed_by=?,actual_cash=?,actual_bank=?,closing_reason=?,handover_to=?,summary=?::jsonb,inventory_counts=?::jsonb WHERE id=?",Timestamp.from(end),auth.getName(),cash,bank,s(body.get("reason")),s(body.get("handoverTo")),encode(summary),encode(saved),shift.get("id"));
-        return state(t,c);
+        db.update("UPDATE shop_counter_shift SET status='CLOSED',closed_at=?,closed_by=?,actual_cash=?,actual_bank=?,closing_reason=?,handover_to=?,summary=?::jsonb,inventory_counts=?::jsonb WHERE id=?",Timestamp.from(end),auth.getName(),cash,bank,s(body.get("reason")),handoverTo,encode(summary),encode(saved),shift.get("id"));
+        return state(t,c,auth);
     }
 }

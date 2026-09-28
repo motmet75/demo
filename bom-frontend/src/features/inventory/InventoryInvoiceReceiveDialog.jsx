@@ -279,6 +279,7 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
   const [error, setError] = useState('')
   const [form, setForm] = useState({ invoiceNumber: invoiceNumberSeed(), partyName: '', invoiceDate: todayLocalDate(), notes: '' })
   const [lines, setLines] = useState([newLine()])
+  const [sharedLocation, setSharedLocation] = useState({ warehouse: null, batchNo: '' })
 
   const currency = defaultCurrency === 'USD' ? 'USD' : 'VND'
   const materialOptions = useMemo(() => materials.filter(m => m.materialCode || m.materialName), [materials])
@@ -295,6 +296,7 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
     setSavedInvoice(null)
     setForm({ invoiceNumber: invoiceNumberSeed(), partyName: '', invoiceDate: todayLocalDate(), notes: '' })
     try { remembered.current = JSON.parse(sessionStorage.getItem(sessionKey) || '{}') } catch { remembered.current = {} }
+    setSharedLocation({ warehouse: null, batchNo: remembered.current.batchNo || '' })
     setLines([{ ...newLine(), batchNo: remembered.current.batchNo || '' }])
   }, [open, sessionKey])
 
@@ -312,6 +314,7 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
         const options=Array.isArray(warehouseList) ? warehouseList.map(normalizeWarehouseOption) : []
         setWarehouses(options)
         const initialWarehouse=options.find(w=>w.id===remembered.current.warehouseId) || (options.length===1?options[0]:null)
+        setSharedLocation({ warehouse: initialWarehouse, batchNo: remembered.current.batchNo || '' })
         setLines(prev=>prev.map(line=>line.warehouse?line:{...line,warehouse:initialWarehouse}))
       } catch (e) {
         if (mounted) setError(e?.message || 'Failed to load material or warehouse data')
@@ -332,12 +335,26 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
   }
   const setFormField = field => event => setForm(prev => ({ ...prev, [field]: event.target.value }))
   const updateLine = (id, patch) => setLines(prev => prev.map(line => line.id === id ? { ...line, ...patch } : line))
+  const applyWarehouseToAll = warehouse => {
+    rememberDefaults({ warehouseId: warehouse?.id || '' })
+    setSharedLocation(prev => ({ ...prev, warehouse }))
+    setLines(prev => prev.map(line => ({
+      ...line,
+      warehouse,
+      ...receivingDefaults(line.material, warehouse, inventory, boms, currency),
+    })))
+  }
+  const applyBatchToAll = batchNo => {
+    rememberDefaults({ batchNo })
+    setSharedLocation(prev => ({ ...prev, batchNo }))
+    setLines(prev => prev.map(line => ({ ...line, batchNo })))
+  }
   const addLine = (afterId = lines.at(-1)?.id) => {
     const index = lines.findIndex(line => line.id === afterId)
     const existing = lines[index + 1]
     const defaults = {
-      warehouse: warehouses.find(w=>w.id===remembered.current.warehouseId) || lines[index]?.warehouse || (warehouses.length === 1 ? warehouses[0] : null),
-      batchNo: remembered.current.batchNo ?? lines[index]?.batchNo ?? '',
+      warehouse: sharedLocation.warehouse || warehouses.find(w=>w.id===remembered.current.warehouseId) || lines[index]?.warehouse || (warehouses.length === 1 ? warehouses[0] : null),
+      batchNo: sharedLocation.batchNo,
     }
     if (existing && !hasLineInput(existing)) {
       nextFocus.current = `${existing.id}:material`
@@ -349,8 +366,8 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
     setLines(prev => [...prev.slice(0,index + 1), row, ...prev.slice(index + 1)])
   }
   const selectMaterial = (line, material) => {
-    const warehouse = line.warehouse || warehouses.find(w=>w.id===remembered.current.warehouseId) || (warehouses.length === 1 ? warehouses[0] : null)
-    updateLine(line.id, { material, warehouse, materialInput: material ? `${material.materialCode} - ${material.materialName}` : '', batchNo: line.batchNo || remembered.current.batchNo || '',
+    const warehouse = sharedLocation.warehouse || line.warehouse || warehouses.find(w=>w.id===remembered.current.warehouseId) || (warehouses.length === 1 ? warehouses[0] : null)
+    updateLine(line.id, { material, warehouse, materialInput: material ? `${material.materialCode} - ${material.materialName}` : '', batchNo: sharedLocation.batchNo,
       ...receivingDefaults(material, warehouse, inventory, boms, currency) })
   }
   const rowKeyDown = (event, line) => {
@@ -509,7 +526,14 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
             <TextField label="Ngày hóa đơn" type="date" size="small" value={form.invoiceDate} onChange={setFormField('invoiceDate')} InputLabelProps={{ shrink: true }} />
           </Box>
 
-          <Alert severity="info">Tab / Shift+Tab chuyển ô · Tab chọn vật tư đầu tiên · Enter thêm dòng và chuyển đến mã hàng. Đơn vị BOM lấy từ vật tư; quy đổi lấy từ cấu hình kho / BOM. Kho và số lô được nhớ trong phiên làm việc cho dòng tiếp theo. Dòng trống cuối bảng không được lưu.</Alert>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'minmax(260px, 1fr) minmax(220px, 1fr)' }, gap: 1.5, p: 1.5, border: '1px solid #bfdbfe', borderRadius: 1, bgcolor: '#eff6ff' }}>
+            <TextField size="small" select SelectProps={{ native: true }} label="Kho chung · áp dụng tất cả dòng" value={sharedLocation.warehouse?.id || ''} onChange={e => applyWarehouseToAll(warehouses.find(w => w.id === e.target.value) || null)}>
+              <option value="">Chọn kho</option>{warehouses.map(w => <option key={w.id} value={w.id}>{w.code} · {w.name}</option>)}
+            </TextField>
+            <TextField size="small" label="Số lô chung · áp dụng tất cả dòng" value={sharedLocation.batchNo} onChange={e => applyBatchToAll(e.target.value)} />
+          </Box>
+
+          <Alert severity="info">Kho và số lô phía trên là mặc định chung. Đổi tại ô chung hoặc tại bất kỳ dòng nào sẽ áp dụng ngay cho tất cả dòng hiện tại và dòng mới. Tab / Shift+Tab chuyển ô · Tab chọn vật tư đầu tiên · Enter thêm dòng.</Alert>
           <Box component="fieldset" disabled={saving || loadingRefs} sx={{border:0,p:0,m:0,minWidth:0}}>
           <TableContainer sx={{maxHeight:'55vh',border:'1px solid #cbd5e1',borderRadius:1}}>
             <Table stickyHeader size="small" sx={{minWidth:1600,'& th':{fontWeight:800,bgcolor:'#eff6ff',whiteSpace:'nowrap'},'& td':{p:0.5,verticalAlign:'top'},'& .MuiOutlinedInput-root':{borderRadius:0.5}}}>
@@ -545,8 +569,8 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
                   <TableCell><Typography sx={{pt:1}}>{calc.bomQty==null?'—':fmtNum(calc.bomQty,9)}</Typography></TableCell>
                   <TableCell sx={{minWidth:130}}><TextField {...cellProps(line,'price','Đơn giá nhập')} type="number" value={line.warehouseImportUnitPrice} onChange={e=>updateLine(line.id,{warehouseImportUnitPrice:e.target.value})} inputProps={{...cellProps(line,'price','Đơn giá nhập').inputProps,min:0,step:'any'}}/></TableCell>
                   <TableCell><Typography sx={{pt:1,whiteSpace:'nowrap'}}>{fmtNum(calc.total,2)}</Typography></TableCell>
-                  <TableCell sx={{minWidth:190}}><TextField {...cellProps(line,'warehouse','Kho')} select SelectProps={{native:true}} value={line.warehouse?.id || ''} onChange={e=>{const warehouse=warehouses.find(w=>w.id===e.target.value)||null;rememberDefaults({warehouseId:warehouse?.id || ''});updateLine(line.id,{warehouse,...receivingDefaults(line.material,warehouse,inventory,boms,currency)})}}><option value="">Chọn kho</option>{warehouses.map(w=><option key={w.id} value={w.id}>{w.code} · {w.name}</option>)}</TextField></TableCell>
-                  <TableCell sx={{minWidth:170}}><TextField {...cellProps(line,'batch','Số lô')} value={line.batchNo} onChange={e=>{rememberDefaults({batchNo:e.target.value});updateLine(line.id,{batchNo:e.target.value})}}/></TableCell>
+                  <TableCell sx={{minWidth:190}}><TextField {...cellProps(line,'warehouse','Kho')} select SelectProps={{native:true}} value={line.warehouse?.id || ''} onChange={e=>applyWarehouseToAll(warehouses.find(w=>w.id===e.target.value)||null)}><option value="">Chọn kho</option>{warehouses.map(w=><option key={w.id} value={w.id}>{w.code} · {w.name}</option>)}</TextField></TableCell>
+                  <TableCell sx={{minWidth:170}}><TextField {...cellProps(line,'batch','Số lô')} value={line.batchNo} onChange={e=>applyBatchToAll(e.target.value)}/></TableCell>
                   <TableCell sx={{minWidth:170}}><TextField {...cellProps(line,'notes','Ghi chú')} value={line.notes} onChange={e=>updateLine(line.id,{notes:e.target.value})}/></TableCell>
                 </TableRow>
               })}</TableBody>

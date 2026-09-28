@@ -36,7 +36,7 @@ import MonitorIcon from '@mui/icons-material/Monitor'
 import PersonIcon from '@mui/icons-material/Person'
 import PersonAddIcon from '@mui/icons-material/PersonAdd'
 import AutorenewIcon from '@mui/icons-material/Autorenew'
-import { fetchShopTables, createStaffOrder, fetchOrderTagQr, fetchMenuOptions, fetchCustomers, linkOrderCustomer, createCustomer, redeemVoucher, fetchStaffMenuItems } from '../../api/shopApi'
+import { fetchShopTables, createStaffOrder, fetchOrderTagQr, fetchMenuOptions, fetchCustomers, linkOrderCustomer, createCustomer, redeemVoucher, fetchStaffMenuItems, fetchOrderTemplates, saveOrderTemplate, deleteOrderTemplate } from '../../api/shopApi'
 import { printCounterOrderAlertTracked, printOrderReceiptTracked, printOrderTagTracked } from '../../utils/printWithHistory'
 import { broadcastToCounter } from '../shopboard/CounterDisplayPage'
 import VoucherQrScanDialog from './VoucherQrScanDialog'
@@ -121,6 +121,10 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
   const [configuringOptions, setConfiguringOptions] = useState([])
   const [configuringOpen, setConfiguringOpen] = useState(false)
   const [configuringLoading, setConfiguringLoading] = useState(false)
+  const [orderTemplates, setOrderTemplates] = useState([])
+  const [selectedTemplate, setSelectedTemplate] = useState(null)
+  const [templateName, setTemplateName] = useState('')
+  const [templateSaving, setTemplateSaving] = useState(false)
 
   // customer search/link
   const [customerId, setCustomerId]         = useState(null)
@@ -318,10 +322,11 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
         sideItems: [],
       })))
     }
-    Promise.all([fetchStaffMenuItems(), fetchShopTables()])
-      .then(([mList, tRes]) => {
+    Promise.all([fetchStaffMenuItems(), fetchShopTables(), fetchOrderTemplates().catch(() => ({ data: [] }))])
+      .then(([mList, tRes, templateRes]) => {
         setModels((mList || []).filter(m => m.sellingPrice != null))
         setTables(Array.isArray(tRes.data) ? tRes.data : [])
+        setOrderTemplates(Array.isArray(templateRes.data) ? templateRes.data : [])
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -386,10 +391,77 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
     setVoucherScanOpen(false); setScannedVoucherPayload(''); setVoucherRedeeming(false)
     setVoucherResult(null); setVoucherError('')
     setConfiguringModel(null); setConfiguringOptions([]); setConfiguringOpen(false); setConfiguringLoading(false)
+    setSelectedTemplate(null); setTemplateName(''); setTemplateSaving(false)
     setImagePreview(null)
   }
 
   const handleClose = () => { reset(); onClose() }
+
+  const applyOrderTemplate = template => {
+    if (!template) return
+    const templateItems = Array.isArray(template.items) ? template.items : []
+    const restored = templateItems.map(saved => {
+      const model = models.find(item => String(item.id) === String(saved.modelId))
+      if (!model) return null
+      const sideItems = (saved.sideItems || []).map(side => {
+        const sideModel = models.find(item => String(item.id) === String(side.modelId))
+        if (!sideModel) return null
+        return {
+          uid: crypto.randomUUID(), modelId: sideModel.id, modelName: sideModel.modelName,
+          imageUrl: sideModel.imageUrl || sideModel.thumbnailUrl || null,
+          customPriceDigits: String(Math.round(Number(sideModel.sellingPrice) || 0)), qty: Number(side.qty) || 1,
+        }
+      }).filter(Boolean)
+      return {
+        uid: crypto.randomUUID(), modelId: model.id, modelName: model.modelName,
+        sellingPrice: model.sellingPrice, imageUrl: model.imageUrl || model.thumbnailUrl || null,
+        customPriceDigits: String(Math.round(Number(model.sellingPrice) || 0)), qty: Number(saved.qty) || 1,
+        selectedOptions: saved.selectedOptions || {}, itemNotes: saved.itemNotes || '', sideItems,
+      }
+    }).filter(Boolean)
+    setItems(restored)
+    setCustomer(current => ({ name: template.customerName || current.name, phone: template.customerPhone || current.phone }))
+    setCustomerId(null)
+    setLinkedCustomerCode(null)
+    setNotes(template.orderNotes || '')
+    setSelectedTemplate(template)
+    setTemplateName(template.templateName || '')
+    setError(restored.length === templateItems.length ? '' : 'Một số món trong mẫu không còn trên menu và đã được bỏ qua.')
+  }
+
+  const saveCurrentOrderTemplate = async () => {
+    if (!templateName.trim()) { setError('Nhập tên mẫu món khách đặc biệt'); return }
+    if (!items.length) { setError('Thêm ít nhất một món trước khi lưu mẫu'); return }
+    setTemplateSaving(true); setError('')
+    try {
+      const payload = {
+        templateName: templateName.trim(), customerName: customer.name || '', customerPhone: customer.phone || '', orderNotes: notes || '',
+        items: items.map(item => ({
+          modelId: item.modelId, qty: item.qty, selectedOptions: item.selectedOptions || {}, itemNotes: item.itemNotes || '',
+          sideItems: (item.sideItems || []).map(side => ({ modelId: side.modelId, qty: side.qty || 1 })),
+        })),
+      }
+      const { res, data } = await saveOrderTemplate(payload)
+      if (!res.ok) throw new Error(data?.message || data?.error || 'Không lưu được mẫu')
+      const refreshed = await fetchOrderTemplates()
+      const next = Array.isArray(refreshed.data) ? refreshed.data : []
+      setOrderTemplates(next)
+      setSelectedTemplate(next.find(template => String(template.id) === String(data.id)) || next.find(template => template.templateName === payload.templateName) || null)
+    } catch (saveError) { setError(saveError.message || 'Không lưu được mẫu') }
+    finally { setTemplateSaving(false) }
+  }
+
+  const removeOrderTemplate = async () => {
+    if (!selectedTemplate || templateSaving) return
+    setTemplateSaving(true); setError('')
+    try {
+      const { res, data } = await deleteOrderTemplate(selectedTemplate.id)
+      if (!res.ok) throw new Error(data?.message || data?.error || 'Không xóa được mẫu')
+      setOrderTemplates(current => current.filter(template => template.id !== selectedTemplate.id))
+      setSelectedTemplate(null); setTemplateName('')
+    } catch (deleteError) { setError(deleteError.message || 'Không xóa được mẫu') }
+    finally { setTemplateSaving(false) }
+  }
 
   // ── Side item helpers ──────────────────────────────────────────────
   const allowedSideOptionsFor = (modelId) => {
@@ -1035,6 +1107,24 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                     </Box>
                   </Stack>
                 </Box>
+              )}
+
+              {hasFullBusinessAccess && (
+                <Paper variant="outlined" sx={{ p: 1.25, bgcolor: '#faf5ff', borderColor: '#d8b4fe' }}>
+                  <Typography variant="subtitle2" fontWeight={900} color="secondary.dark">Mẫu món khách đặc biệt</Typography>
+                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>Lưu tên khách, ghi chú và toàn bộ tùy chọn món như đá, đường, hương vị, loại ly và món thêm.</Typography>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} gap={1} alignItems={{ sm: 'flex-start' }}>
+                    <Autocomplete size="small" options={orderTemplates} value={selectedTemplate}
+                      onChange={(_, template) => { setSelectedTemplate(template); if (template) { setTemplateName(template.templateName || ''); applyOrderTemplate(template) } }}
+                      getOptionLabel={template => template.templateName || ''} isOptionEqualToValue={(a,b) => a.id === b.id}
+                      renderOption={(props, template) => <li {...props} key={template.id}><Box><Typography variant="body2" fontWeight={800}>{template.templateName}</Typography><Typography variant="caption" color="text.secondary">{template.customerName || 'Không ghi tên khách'} · {(template.items || []).length} món</Typography></Box></li>}
+                      renderInput={params => <TextField {...params} label="Chọn mẫu để áp dụng" placeholder="Tìm tên mẫu / khách" />}
+                      sx={{ flex: 1, minWidth: 240 }} />
+                    <TextField size="small" label="Tên mẫu" value={templateName} onChange={event => setTemplateName(event.target.value)} placeholder="VD: Chú Minh · ít đá, ly lớn" sx={{ flex: 1, minWidth: 220 }} />
+                    <Button variant="contained" color="secondary" disabled={templateSaving || !items.length || !templateName.trim()} onClick={saveCurrentOrderTemplate} sx={{ whiteSpace: 'nowrap' }}>{templateSaving ? <CircularProgress size={17} color="inherit" /> : 'Lưu mẫu hiện tại'}</Button>
+                    {selectedTemplate && <Tooltip title="Xóa mẫu"><IconButton color="error" disabled={templateSaving} onClick={removeOrderTemplate}><DeleteIcon /></IconButton></Tooltip>}
+                  </Stack>
+                </Paper>
               )}
 
               {/* Payment */}

@@ -5,23 +5,46 @@ import DeleteIcon from '@mui/icons-material/Delete'
 import { apiFetchJson } from '../../api/client'
 
 const money = n => Number(n || 0).toLocaleString('vi-VN')
+const financialMethodOptions = [
+  ['CASH', 'Tiền mặt'],
+  ['BANK_QR', 'QR / chuyển khoản ngay'],
+  ['UNPAID', 'Chưa thu / chưa chi tiền'],
+  ['BANK_LATER', 'Ngân hàng cửa hàng · xử lý sau'],
+]
 const normalizeSearch = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().trim()
-const movementLine = defaults => ({ id: crypto.randomUUID(), requestId: crypto.randomUUID(), inventory: null, materialInput: '', quantity: '', unit: '', unitPrice: '', reason: '', ...defaults })
+const movementLine = defaults => ({ id: crypto.randomUUID(), requestId: crypto.randomUUID(), materialId: null, inventory: null, newBatch: false, materialInput: '', quantity: '', unit: '', unitPrice: '', reason: '', ...defaults })
 const hasMovementInput = line => Boolean(line.inventory || line.materialInput.trim() || line.quantity !== '' || line.reason.trim())
+const combineHistoryCounts = rows => {
+  const groups = new Map()
+  rows.forEach(row => {
+    const key = `${row.material_code || row.material_name || ''}|${row.unit || ''}`
+    if (!groups.has(key)) groups.set(key, { ...row, id: `combined:${key}`, quantity_on_hand: 0, actual: 0, difference: 0, reasons: new Set() })
+    const group = groups.get(key)
+    group.quantity_on_hand += Number(row.quantity_on_hand || 0)
+    group.actual += Number(row.actual || 0)
+    group.difference += Number(row.difference || 0)
+    if (row.reason) group.reasons.add(row.reason)
+  })
+  return [...groups.values()].map(row => ({ ...row, reason: [...row.reasons].join('; ') }))
+}
 async function api(path = '', body) {
   const { res, data } = await apiFetchJson(`/shop/staff/counter/workflow${path}`, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
   if (!res.ok) throw new Error(data?.message || data?.detail || (typeof data === 'string' ? data : 'Không lưu được. Kiểm tra dữ liệu và thử lại.'))
   return data
 }
-export default function CounterWorkflow() {
+const handoverUserLabel = user => typeof user === 'string' ? user : [user?.firstName, user?.lastName].filter(Boolean).join(' ') || user?.username || ''
+
+export default function CounterWorkflow({ handoverUsers = [] }) {
   const [state, setState] = useState({}), [stock, setStock] = useState([])
   const [error, setError] = useState(''), [success, setSuccess] = useState(''), [busy, setBusy] = useState(false)
   const [record,setRecord] = useState(null)
+  const [historyCombineMaterials, setHistoryCombineMaterials] = useState(true)
   const [shiftNumber, setShiftNumber] = useState('')
   const [dialog, setDialog] = useState(''), [sample, setSample] = useState(false)
-  const [opening, setOpening] = useState(''), [reason, setReason] = useState(''), [confirmed, setConfirmed] = useState(false)
+  const [opening, setOpening] = useState(''), [openingBank, setOpeningBank] = useState(''), [reason, setReason] = useState(''), [confirmed, setConfirmed] = useState(false)
   const [cash, setCash] = useState(''), [bank, setBank] = useState(''), [receiver, setReceiver] = useState(''), [counts, setCounts] = useState({})
   const [movementLines, setMovementLines] = useState([movementLine()])
+  const [movementLocation, setMovementLocation] = useState({ warehouseId: '', batchNo: '' })
   const [financialNote, setFinancialNote] = useState({ create: false, paymentMethod: 'CASH', amount: '', reason: '', objectName: '' })
   const [summary, setSummary] = useState(null), [search, setSearch] = useState('')
   const movementCells = useRef({}), nextMovementFocus = useRef(null), movementDefaults = useRef({})
@@ -33,32 +56,61 @@ export default function CounterWorkflow() {
     setError(''); setSuccess(''); setReason(''); setConfirmed(false); setDialog(kind); setSample(false)
     if (['IN','OUT','ADJUSTMENT'].includes(kind)) {
       try { movementDefaults.current = JSON.parse(sessionStorage.getItem('counter.movement.defaults') || '{}') } catch { movementDefaults.current = {} }
+      setMovementLocation({ warehouseId: movementDefaults.current.warehouseId || '', batchNo: movementDefaults.current.batchNo || '' })
       setMovementLines([movementLine()])
       setFinancialNote({ create: false, paymentMethod: 'CASH', amount: '', reason: '', objectName: '' })
     }
-    if(kind === 'OPEN') { setOpening(state.previousCash ?? ''); setShiftNumber(String((state.usedShifts || []).includes(state.suggestedShift) ? [1,2].find(n=>!(state.usedShifts || []).includes(n)) || '' : state.suggestedShift || 1)) }
+    if(kind === 'OPEN') { setOpening(state.previousCash ?? ''); setOpeningBank(state.previousBank ?? ''); setShiftNumber(String((state.usedShifts || []).includes(state.suggestedShift) ? [1,2].find(n=>!(state.usedShifts || []).includes(n)) || '' : state.suggestedShift || 1)) }
   }
-  const rememberMovement = inventory => {
-    movementDefaults.current = { warehouseId: inventory?.warehouse_id || '', batchNo: inventory?.batch_no || '' }
+  const rememberMovementLocation = (warehouseId, batchNo) => {
+    movementDefaults.current = { warehouseId: warehouseId || '', batchNo: batchNo || '' }
     try { sessionStorage.setItem('counter.movement.defaults', JSON.stringify(movementDefaults.current)) } catch { /* in-memory fallback */ }
   }
   const updateMovementLine = (id, patch) => setMovementLines(prev => prev.map(line => line.id === id ? { ...line, ...patch } : line))
-  const selectMovementInventory = (line, inventory) => {
-    if (!inventory) { updateMovementLine(line.id, { inventory: null, unit: '', unitPrice: '' }); return }
+  const inventoryPatch = inventory => {
     const unit = inventory.warehouse_import_unit || inventory.unit
-    rememberMovement(inventory)
-    updateMovementLine(line.id, {
+    return {
       inventory,
+      newBatch: false,
+      materialId: inventory.material_id,
       materialInput: `${inventory.material_code} — ${inventory.material_name}`,
       unit,
       unitPrice: unit === inventory.warehouse_import_unit ? inventory.warehouse_import_unit_price ?? inventory.unit_price ?? 0 : inventory.unit_price ?? 0,
-    })
+    }
+  }
+  const applyMovementLocation = (warehouseId, batchNo, targetLineId = '', targetInventory = null) => {
+    const next = { warehouseId: warehouseId || '', batchNo: batchNo || '' }
+    setMovementLocation(next)
+    rememberMovementLocation(next.warehouseId, next.batchNo)
+    setMovementLines(prev => prev.map(line => {
+      const materialId = line.materialId || line.inventory?.material_id
+      if (line.id === targetLineId && targetInventory && (!next.warehouseId || String(targetInventory.warehouse_id) === String(next.warehouseId)) && (!next.batchNo || String(targetInventory.batch_no || '') === String(next.batchNo))) return { ...line, ...inventoryPatch(targetInventory) }
+      if (!materialId) return line
+      const replacement = stock.find(row => String(row.material_id) === String(materialId)
+        && (!next.warehouseId || String(row.warehouse_id) === String(next.warehouseId))
+        && (!next.batchNo || String(row.batch_no || '') === String(next.batchNo)))
+      const template = targetInventory || line.inventory || stock.find(row => String(row.material_id) === String(materialId)
+        && (!next.warehouseId || String(row.warehouse_id) === String(next.warehouseId))) || stock.find(row => String(row.material_id) === String(materialId))
+      return replacement
+        ? { ...line, ...inventoryPatch(replacement) }
+        : dialog === 'IN' && template && next.warehouseId && next.batchNo
+          ? { ...line, ...inventoryPatch(template), newBatch: true }
+        : { ...line, materialId, inventory: null, unit: '', unitPrice: '' }
+    }))
+  }
+  const selectMovementInventory = (line, inventory) => {
+    if (!inventory) { updateMovementLine(line.id, { materialId: null, inventory: null, newBatch: false, unit: '', unitPrice: '' }); return }
+    const warehouseId = dialog === 'IN' && movementLocation.warehouseId ? movementLocation.warehouseId : inventory.warehouse_id
+    const batchNo = dialog === 'IN' && movementLocation.batchNo ? movementLocation.batchNo : inventory.batch_no
+    applyMovementLocation(warehouseId, batchNo, line.id, inventory)
   }
   const movementOptions = line => {
     const query = normalizeSearch(line.materialInput)
-    const matches = query ? stock.filter(row => normalizeSearch(`${row.material_code} ${row.material_name} ${row.warehouse_code} ${row.warehouse_name} ${row.batch_no}`).includes(query)) : [...stock]
-    const { warehouseId, batchNo } = movementDefaults.current
-    return matches.sort((a, b) => Number(b.warehouse_id === warehouseId && b.batch_no === batchNo) - Number(a.warehouse_id === warehouseId && a.batch_no === batchNo)).slice(0, 80)
+    const locationRows = stock.filter(row => (!movementLocation.warehouseId || String(row.warehouse_id) === String(movementLocation.warehouseId))
+      && (dialog === 'IN' || !movementLocation.batchNo || String(row.batch_no || '') === String(movementLocation.batchNo)))
+    const matches = query ? locationRows.filter(row => normalizeSearch(`${row.material_code} ${row.material_name} ${row.warehouse_code} ${row.warehouse_name} ${row.batch_no}`).includes(query)) : locationRows
+    const options = dialog === 'IN' ? [...new Map(matches.map(row => [String(row.material_id), row])).values()] : matches
+    return options.slice(0, 80)
   }
   const addMovementLine = (afterId = movementLines.at(-1)?.id) => {
     const index = movementLines.findIndex(line => line.id === afterId)
@@ -80,15 +132,24 @@ export default function CounterWorkflow() {
   }, [movementLines])
   const closeSetup = async (preview = false) => {
     await act(async () => {
-      const { s, rows } = await reload(); setCounts({}); setCash(''); setBank(''); setReceiver(''); setReason(''); setConfirmed(false); setSample(preview)
-      if(preview) { setOpening(s.previousCash ?? 500000); setCash(s.previousCash ?? 500000); setBank('0'); setReceiver('Người nhận mẫu'); setCounts(Object.fromEntries(rows.map(r => [r.id, {actual:r.quantity_on_hand, reason:''}]))); setSummary({cashIn:0,bankingIn:0,paymentNoteTotal:0,receiptNoteCashTotal:0,receiptNoteBankTotal:0}); }
-      else { const from = new Date(s.active.opened_at).toISOString(); const {res,data} = await apiFetchJson(`/shop/staff/counter/shift-summary?from=${encodeURIComponent(from)}&to=${encodeURIComponent(new Date().toISOString())}`); if(!res.ok) throw new Error('Không tải được tổng kết'); setSummary(data) }
+      const { s, rows } = await reload(); setCounts(Object.fromEntries(rows.map(r => [r.id, {actual:r.quantity_on_hand, reason:''}]))); setCash(''); setBank(''); setReceiver(''); setReason(''); setConfirmed(false); setSample(preview)
+      if(preview) { setOpening(s.previousCash ?? 500000); setCash(s.previousCash ?? 500000); setBank('0'); setReceiver('Người nhận mẫu'); setSummary({cashIn:0,bankingIn:0,paymentNoteTotal:0,receiptNoteCashTotal:0,receiptNoteBankTotal:0}); }
+      else {
+        const from = new Date(s.active.opened_at).toISOString()
+        const {res,data} = await apiFetchJson(`/shop/staff/counter/shift-summary?from=${encodeURIComponent(from)}&to=${encodeURIComponent(new Date().toISOString())}`)
+        if(!res.ok) throw new Error('Không tải được tổng kết')
+        setSummary(data)
+        setCash(String(Number(s.active.opening_cash || 0) + Number(data?.cashIn || 0) + Number(data?.receiptNoteCashTotal || 0) - Number(data?.paymentNoteTotal || 0)))
+        setBank(String(Number(s.active.opening_bank || 0) + Number(data?.bankingIn || 0) + Number(data?.receiptNoteBankTotal || 0) - Number(data?.bankPaymentNoteTotal || 0)))
+      }
       setDialog('CLOSE')
     })
   }
   const saveMovementLines = e => { e.preventDefault(); act(async () => {
     const rows = movementLines.filter(hasMovementInput)
     if (!rows.length) throw new Error('Nhập ít nhất một dòng hàng')
+    if (dialog === 'IN' && !movementLocation.warehouseId) throw new Error('Chọn kho chung cho phiếu nhập')
+    if (dialog === 'IN' && !movementLocation.batchNo.trim()) throw new Error('Nhập số lô cho phiếu nhập')
     rows.forEach((line, index) => {
       if (!line.inventory) throw new Error(`Dòng ${index + 1}: chọn vật tư / kho / lô trong danh sách`)
       if (!(Number(line.quantity) > 0) && dialog !== 'ADJUSTMENT') throw new Error(`Dòng ${index + 1}: số lượng phải lớn hơn 0`)
@@ -104,7 +165,7 @@ export default function CounterWorkflow() {
     const result = await api('/movements', {
       shiftId: state.active.id,
       type: dialog,
-      rows: rows.map(line => ({ requestId: line.requestId, inventoryId: line.inventory.id, quantity: line.quantity, unit: line.unit, unitPrice: line.unitPrice, reason: line.reason })),
+      rows: rows.map(line => ({ requestId: line.requestId, inventoryId: line.inventory.id, materialId: line.materialId, warehouseId: movementLocation.warehouseId || line.inventory.warehouse_id, batchNo: movementLocation.batchNo || line.inventory.batch_no, createBatch: dialog === 'IN' && line.newBatch, quantity: line.quantity, unit: line.unit, unitPrice: line.unitPrice, reason: line.reason })),
       financialNote: financialNote.create ? {
         noteType: dialog === 'IN' ? 'EXPENSE' : 'RECEIPT',
         paymentMethod: financialNote.paymentMethod,
@@ -122,14 +183,25 @@ export default function CounterWorkflow() {
   }) }
   const movementTotal = movementLines.filter(hasMovementInput).reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.unitPrice || 0), 0)
   const expectedCash = Number(sample ? opening : state.active?.opening_cash || 0) + Number(summary?.cashIn || 0) + Number(summary?.receiptNoteCashTotal || 0) - Number(summary?.paymentNoteTotal || 0)
+  const expectedBank = Number(sample ? 0 : state.active?.opening_bank || 0) + Number(summary?.bankingIn || 0) + Number(summary?.receiptNoteBankTotal || 0) - Number(summary?.bankPaymentNoteTotal || 0)
   const openingDiff = state.previousCash == null || Number(opening) !== Number(state.previousCash)
+  const openingBankDiff = state.previousBank == null || Number(openingBank) !== Number(state.previousBank)
+  const movementWarehouses = [...new Map(stock.map(row => [String(row.warehouse_id), { id: String(row.warehouse_id), code: row.warehouse_code, name: row.warehouse_name }])).values()]
+  const movementBatches = [...new Set(stock
+    .filter(row => !movementLocation.warehouseId || String(row.warehouse_id) === String(movementLocation.warehouseId))
+    .map(row => String(row.batch_no || '')).filter(Boolean))]
+  const changeMovementWarehouse = warehouseId => {
+    const batches = [...new Set(stock.filter(row => String(row.warehouse_id) === String(warehouseId)).map(row => String(row.batch_no || '')).filter(Boolean))]
+    const batchNo = dialog === 'IN' ? movementLocation.batchNo : batches.includes(movementLocation.batchNo) ? movementLocation.batchNo : batches[0] || ''
+    applyMovementLocation(warehouseId, batchNo)
+  }
   return <Paper sx={{p:2, mb:2, border:'1px solid #cbd5e1', borderRadius:2}}>
     <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap">
-      <Box sx={{flex:1}}><Typography variant="h6" fontWeight={800}>Ca làm việc · {state.shiftDate || new Date().toLocaleDateString('vi-VN', {timeZone:'Asia/Ho_Chi_Minh'})}</Typography><Typography variant="body2">{state.active ? `${state.active.shift_name} · ${state.active.shift_date} · ${state.active.opened_by} · Tiền đầu ca ${money(state.active.opening_cash)}đ` : 'Mở ca → bán hàng / nhập xuất kho → kiểm đếm và bàn giao'}</Typography></Box>
+      <Box sx={{flex:1}}><Typography variant="h6" fontWeight={800}>Ca làm việc · {state.shiftDate || new Date().toLocaleDateString('vi-VN', {timeZone:'Asia/Ho_Chi_Minh'})}</Typography><Typography variant="body2">{state.active ? `${state.active.shift_name} · ${state.active.shift_date} · ${state.active.opened_by} · Tiền mặt ${money(state.active.opening_cash)}đ · Ngân hàng ${money(state.active.opening_bank)}đ` : 'Mở ca → bán hàng / nhập xuất kho → kiểm đếm và bàn giao'}</Typography></Box>
       <Typography variant="body2">Ca 1: 06:00–14:00 · Ca 2: 14:00–22:00 (giờ Việt Nam)</Typography>
       <Chip color={state.active?'success':'default'} label={state.active?'Đang mở':'Chưa mở ca'} />
       <Button disabled={busy} onClick={() => act(reload)}>Tải lại</Button>
-      {!state.active ? <Button disabled={busy || state.usedShifts?.length===2} variant="contained" onClick={() => start('OPEN')}>Mở ca</Button> : <Button disabled={busy} variant="contained" onClick={() => closeSetup()}>Đóng ca & bàn giao</Button>}
+      {!state.active ? <Button disabled={busy || state.usedShifts?.length===2 || state.canOpen===false} variant="contained" onClick={() => start('OPEN')}>Mở ca</Button> : <Button disabled={busy} variant="contained" onClick={() => closeSetup()}>Đóng ca & bàn giao</Button>}
     </Stack>
     <Stack direction="row" gap={1} sx={{mt:2}} flexWrap="wrap">
       <Button variant="contained" href="/bom-inventory/shop-orders">Bán hàng / quầy nhanh</Button>
@@ -140,7 +212,8 @@ export default function CounterWorkflow() {
     </Stack>
     {success && <Alert severity="success" sx={{mt:1}}>{success}</Alert>}
     {error && <Alert severity="error" sx={{mt:1}}>{error}</Alert>}
-    {state.history?.filter(h=>h.status==='CLOSED').slice(0,3).map(h=><Typography key={h.id} variant="body2" sx={{mt:1}}><Button onClick={()=>{setRecord(h);setDialog('HISTORY')}}>Xem biên bản</Button>{h.shift_name} · Đã khóa · {new Date(h.closed_at).toLocaleString('vi-VN')} · {h.closed_by} → {h.handover_to} · Bàn giao {money(h.actual_cash)}đ</Typography>)}
+    {!state.active && state.canOpen===false && <Alert severity="warning" sx={{mt:1}}>Ca tiếp theo đã bàn giao cho <b>{state.nextHandoverTo}</b>. Người này cần đăng nhập để mở ca.</Alert>}
+    {state.history?.filter(h=>h.status==='CLOSED').slice(0,3).map(h=><Typography key={h.id} variant="body2" sx={{mt:1}}><Button onClick={()=>{setRecord(h);setHistoryCombineMaterials(true);setDialog('HISTORY')}}>Xem biên bản</Button>{h.shift_name} · Đã khóa · {new Date(h.closed_at).toLocaleString('vi-VN')} · {h.closed_by} → {h.handover_to} · Bàn giao {money(h.actual_cash)}đ</Typography>)}
     <Dialog open={!!dialog} onClose={busy?undefined:()=>setDialog('')} fullWidth maxWidth={dialog==='CLOSE'||['IN','OUT','ADJUSTMENT'].includes(dialog)?'xl':'sm'}>
       <DialogTitle>{({HISTORY:'Biên bản đã khóa',OPEN:'Mở ca — kiểm tiền nhận bàn giao',IN:'Nhập kho từng dòng',OUT:'Xuất kho từng dòng',ADJUSTMENT:'Điều chỉnh tồn kho',CLOSE:sample?'Ca mẫu hôm nay — xem trước':'Đóng ca — kiểm đếm & bàn giao'})[dialog]}</DialogTitle>
       <DialogContent>
@@ -148,19 +221,28 @@ export default function CounterWorkflow() {
         {dialog==='HISTORY' && record && <Stack gap={2}>
           <Typography>{record.shift_name} · {record.shift_date}</Typography>
           <Typography>{record.opened_by} → {record.handover_to} · {new Date(record.opened_at).toLocaleString('vi-VN')} — {new Date(record.closed_at).toLocaleString('vi-VN')}</Typography>
-          <Typography>Tiền đầu ca: {money(record.opening_cash)}đ · Bàn giao: {money(record.actual_cash)}đ · QR thực nhận: {money(record.actual_bank)}đ</Typography>
+          <Typography>Đầu ca: tiền mặt {money(record.opening_cash)}đ · ngân hàng {money(record.opening_bank)}đ · Bàn giao: tiền mặt {money(record.actual_cash)}đ · ngân hàng {money(record.actual_bank)}đ</Typography>
           <Typography>Lý do đầu ca: {record.opening_reason || 'Khớp bàn giao'} · Giải trình cuối ca: {record.closing_reason || 'Không chênh lệch tiền'}</Typography>
-          <Box sx={{overflow:'auto'}}><Table size="small"><TableHead><TableRow>{['Hàng','Kho / lô','Hệ thống','Thực đếm','Chênh lệch','Lý do'].map(x=><TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>{(Array.isArray(record.inventory_counts)?record.inventory_counts:[]).map(r=><TableRow key={r.id}><TableCell>{r.material_code} · {r.material_name}</TableCell><TableCell>{r.warehouse_code} / {r.batch_no}</TableCell><TableCell>{money(r.quantity_on_hand)} {r.unit}</TableCell><TableCell>{money(r.actual)}</TableCell><TableCell>{money(r.difference)}</TableCell><TableCell>{r.reason}</TableCell></TableRow>)}</TableBody></Table></Box>
+          <FormControlLabel control={<Checkbox checked={historyCombineMaterials} onChange={e=>setHistoryCombineMaterials(e.target.checked)} />} label="Gộp theo mã vật tư · bỏ cột Kho / lô" />
+          <Box sx={{overflow:'auto'}}><Table size="small"><TableHead><TableRow>{(historyCombineMaterials?['Hàng','Hệ thống','Thực đếm','Chênh lệch','Lý do']:['Hàng','Kho / lô','Hệ thống','Thực đếm','Chênh lệch','Lý do']).map(x=><TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>{(historyCombineMaterials?combineHistoryCounts(Array.isArray(record.inventory_counts)?record.inventory_counts:[]):Array.isArray(record.inventory_counts)?record.inventory_counts:[]).map(r=><TableRow key={r.id}><TableCell>{r.material_code} · {r.material_name}</TableCell>{!historyCombineMaterials&&<TableCell>{r.warehouse_code} / {r.batch_no}</TableCell>}<TableCell>{money(r.quantity_on_hand)} {r.unit}</TableCell><TableCell>{money(r.actual)}</TableCell><TableCell>{money(r.difference)}</TableCell><TableCell>{r.reason}</TableCell></TableRow>)}</TableBody></Table></Box>
         </Stack>}
         {dialog==='OPEN' && <Stack gap={2} sx={{pt:1}}>
           <TextField select label={`Ca làm việc · ${state.shiftDate || ''}`} value={shiftNumber} onChange={e=>setShiftNumber(e.target.value)}>{(state.schedule || []).map(slot=><MenuItem key={slot.number} value={String(slot.number)} disabled={state.usedShifts?.includes(slot.number)}>{slot.name}{state.usedShifts?.includes(slot.number)?' · Đã mở trong ngày':''}</MenuItem>)}</TextField>
           <Typography variant="body2">Đóng và bàn giao ca 1 trước khi mở ca 2. Tiền bàn giao ca 2 chuyển sang ca đầu tiên ngày tiếp theo. Giờ thực tế được ghi nhận khi xác nhận mở / đóng ca.</Typography>
-          <Alert severity="info">Bàn giao gần nhất: {state.previousCash == null ? 'Chưa có — cần xác nhận số tiền khởi tạo' : `${money(state.previousCash)}đ`}</Alert>
-          <TextField autoFocus label="Tiền mặt thực nhận" type="number" value={opening} onChange={e=>setOpening(e.target.value)} inputProps={{min:0}} />
-          {openingDiff && <><TextField required label="Lý do khác bàn giao / khởi tạo" value={reason} onChange={e=>setReason(e.target.value)} /><FormControlLabel control={<Checkbox checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>} label="Tôi đã đếm lại và xác nhận số tiền cùng lý do" /></>}
+          {state.nextHandoverTo && <Alert severity="success">Người nhận được phép mở ca này: <b>{state.nextHandoverTo}</b></Alert>}
+          <Alert severity="info">Bàn giao gần nhất: tiền mặt {state.previousCash == null ? 'chưa có' : `${money(state.previousCash)}đ`} · ngân hàng {state.previousBank == null ? 'chưa có' : `${money(state.previousBank)}đ`}</Alert>
+          <Stack direction={{xs:'column',sm:'row'}} gap={2}><TextField autoFocus fullWidth label="Tiền mặt thực nhận" type="number" value={opening} onChange={e=>setOpening(e.target.value)} inputProps={{min:0}} /><TextField fullWidth label="Số dư tài khoản ngân hàng nhận bàn giao" type="number" value={openingBank} onChange={e=>setOpeningBank(e.target.value)} inputProps={{min:0}} /></Stack>
+          {(openingDiff || openingBankDiff) && <><TextField required label="Lý do khác bàn giao / khởi tạo" value={reason} onChange={e=>setReason(e.target.value)} /><FormControlLabel control={<Checkbox checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>} label="Tôi đã kiểm tra và xác nhận số dư tiền mặt, ngân hàng cùng lý do" /></>}
         </Stack>}
         {['IN','OUT','ADJUSTMENT'].includes(dialog) && <Stack component="form" id="stock-lines" onSubmit={saveMovementLines} gap={1.5} sx={{pt:1}}>
-          <Alert severity="info">Nhập giống “Hóa đơn mới · Nhập kho”: gõ mã / tên không cần dấu, Tab chọn dòng đầu, Enter thêm dòng. Đơn vị và hệ số quy đổi lấy từ cấu hình tồn kho. Kho + số lô của lần chọn đầu được ưu tiên cho các dòng tiếp theo.</Alert>
+          {['IN','OUT'].includes(dialog) && <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',sm:'minmax(260px,1fr) minmax(220px,1fr)'},gap:1.5,p:1.5,border:'1px solid #bfdbfe',borderRadius:1,bgcolor:'#eff6ff'}}>
+            <TextField select size="small" SelectProps={{native:true}} label="Kho chung · áp dụng tất cả dòng" value={movementLocation.warehouseId} onChange={e=>changeMovementWarehouse(e.target.value)}>
+              <option value="">Tất cả kho / chọn theo vật tư</option>{movementWarehouses.map(warehouse=><option key={warehouse.id} value={warehouse.id}>{warehouse.code} · {warehouse.name}</option>)}
+            </TextField>
+            {dialog==='IN' ? <TextField size="small" label="Số lô chung · nhập lô mới hoặc chọn gợi ý" value={movementLocation.batchNo} onChange={e=>applyMovementLocation(movementLocation.warehouseId,e.target.value)} inputProps={{list:'counter-in-batches',maxLength:255}} helperText="Có thể nhập số lô chưa tồn tại" /> : <TextField select size="small" SelectProps={{native:true}} label="Số lô chung · áp dụng tất cả dòng" value={movementLocation.batchNo} onChange={e=>applyMovementLocation(movementLocation.warehouseId,e.target.value)}><option value="">Tất cả số lô / chọn theo vật tư</option>{movementBatches.map(batch=><option key={batch} value={batch}>{batch}</option>)}</TextField>}
+            {dialog==='IN' && <datalist id="counter-in-batches">{movementBatches.map(batch=><option key={batch} value={batch}/>)}</datalist>}
+          </Box>}
+          <Alert severity="info">{dialog==='IN'?'Nhập số lô mới để hệ thống tự tạo lô và lấy đơn vị, hệ số quy đổi, giá cấu hình từ vật tư. ':'Kho và số lô phía trên là mặc định chung. '}Đổi giá trị áp dụng cho tất cả dòng. Gõ mã / tên không cần dấu, Tab chọn dòng đầu, Enter thêm dòng.</Alert>
           {success && <Alert severity="success">{success}</Alert>}
           <TableContainer sx={{ maxHeight: '58vh', border: '1px solid #cbd5e1', borderRadius: 1 }}>
             <Table stickyHeader size="small" sx={{ minWidth: 1450, '& th': { fontWeight: 800, bgcolor: '#eff6ff', whiteSpace: 'nowrap' }, '& td': { p: 0.5, verticalAlign: 'top' }, '& .MuiOutlinedInput-root': { borderRadius: 0.5 } }}>
@@ -176,14 +258,14 @@ export default function CounterWorkflow() {
                 }} sx={{ '&:focus-within': { bgcolor: '#f0f9ff' } }}>
                   <TableCell>{index+1}</TableCell>
                   <TableCell sx={{minWidth:300}}><Autocomplete autoHighlight options={options} filterOptions={x=>x} value={inventory} inputValue={line.materialInput}
-                    onInputChange={(_,value,reason)=>{if(reason==='input') updateMovementLine(line.id,{materialInput:value,inventory:null,unit:'',unitPrice:''})}}
+                    onInputChange={(_,value,reason)=>{if(reason==='input') updateMovementLine(line.id,{materialInput:value,materialId:null,inventory:null,newBatch:false,unit:'',unitPrice:''})}}
                     onChange={(_,value)=>selectMovementInventory(line,value)} getOptionLabel={row=>`${row.material_code} — ${row.material_name}`}
                     isOptionEqualToValue={(a,b)=>a.id===b.id} slotProps={{clearIndicator:{tabIndex:-1},popupIndicator:{tabIndex:-1}}}
                     renderOption={(props,row)=><Box component="li" {...props} key={row.id} sx={{gap:1}}><Avatar src={row.thumbnail_url || undefined} variant="rounded">{row.material_name?.[0]}</Avatar><Box><Typography>{row.material_code} · {row.material_name}</Typography><Typography variant="caption">{row.warehouse_code} / {row.batch_no} · Tồn {money(row.quantity_on_hand)} {row.unit}</Typography></Box></Box>}
                     renderInput={params=><TextField {...params} size="small" placeholder="Gõ mã / tên, không cần dấu" inputRef={node=>{movementCells.current[`${line.id}:material`]=node}} inputProps={{...params.inputProps,'aria-label':`Vật tư dòng ${index+1}`}}
                       onKeyDown={event=>{if(event.key==='Tab'&&!event.shiftKey&&!inventory&&options[0]){event.preventDefault();event.defaultMuiPrevented=true;selectMovementInventory(line,options[0]);movementCells.current[`${line.id}:quantity`]?.focus()}}}/>} /></TableCell>
-                  <TableCell sx={{minWidth:170}}><Typography sx={{pt:1}}>{inventory ? `${inventory.warehouse_code} / ${inventory.batch_no}` : '—'}</Typography></TableCell>
-                  <TableCell sx={{whiteSpace:'nowrap'}}><Typography sx={{pt:1}}>{inventory ? `${money(inventory.quantity_on_hand)} ${inventory.unit}` : '—'}</Typography></TableCell>
+                  <TableCell sx={{minWidth:170}}><Typography sx={{pt:1}} color={line.newBatch?'success.main':!inventory&&line.materialId?'error.main':'inherit'}>{inventory ? `${movementWarehouses.find(item=>item.id===String(movementLocation.warehouseId))?.code||inventory.warehouse_code} / ${movementLocation.batchNo||inventory.batch_no}${line.newBatch?' · Lô mới':''}` : line.materialId ? 'Không có vật tư ở Kho/Lô này' : '—'}</Typography></TableCell>
+                  <TableCell sx={{whiteSpace:'nowrap'}}><Typography sx={{pt:1}}>{inventory ? `${line.newBatch?'0':money(inventory.quantity_on_hand)} ${inventory.unit}` : '—'}</Typography></TableCell>
                   <TableCell sx={{minWidth:115}}><TextField size="small" fullWidth type="number" value={line.quantity} inputRef={node=>{movementCells.current[`${line.id}:quantity`]=node}} onChange={e=>updateMovementLine(line.id,{quantity:e.target.value})} inputProps={{min:dialog==='ADJUSTMENT'?undefined:0,step:'any','aria-label':`Số lượng dòng ${index+1}`}} /></TableCell>
                   <TableCell sx={{minWidth:160}}><TextField size="small" fullWidth select SelectProps={{native:true}} value={line.unit} onChange={e=>updateMovementLine(line.id,{unit:e.target.value,unitPrice:e.target.value===inventory?.warehouse_import_unit?inventory?.warehouse_import_unit_price??0:inventory?.unit_price??0})}><option value="">Chọn đơn vị</option>{[...new Set([inventory?.unit,inventory?.warehouse_import_unit].filter(Boolean))].map(unit=><option key={unit} value={unit}>{unit}</option>)}</TextField></TableCell>
                   <TableCell><Typography sx={{pt:1}}>{inventory ? factor : '—'}</Typography></TableCell>
@@ -206,8 +288,8 @@ export default function CounterWorkflow() {
             }))}/>} label={<Typography fontWeight={800}>{dialog==='IN'?'Có tạo Phiếu chi cho lần nhập kho này không?':'Xuất bán / dùng cho hoạt động đặt món — tạo Phiếu thu'}</Typography>} />
             {dialog==='OUT' && !financialNote.create && <Typography variant="caption" color="text.secondary" display="block">Chọn khi hàng xuất có thu tiền trực tiếp. Xuất tiêu hao nội bộ thì không tạo phiếu thu.</Typography>}
             {financialNote.create && <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',md:'180px 180px 1fr 1fr'},gap:1,mt:1}}>
-              <TextField select size="small" label="Thanh toán" value={financialNote.paymentMethod} onChange={e=>setFinancialNote(prev=>({...prev,paymentMethod:e.target.value}))}>
-                <MenuItem value="CASH">Tiền mặt</MenuItem><MenuItem value="BANK_QR">QR / chuyển khoản</MenuItem>
+              <TextField select size="small" label="Thanh toán" value={financialNote.paymentMethod} onChange={e=>setFinancialNote(prev=>({...prev,paymentMethod:e.target.value}))} helperText={['UNPAID','BANK_LATER'].includes(financialNote.paymentMethod)?'Ghi nhận công nợ, chưa cộng/trừ số dư ca':''}>
+                {financialMethodOptions.map(([value,label])=><MenuItem key={value} value={value}>{label}</MenuItem>)}
               </TextField>
               <TextField required size="small" type="number" label="Số tiền" value={financialNote.amount} onChange={e=>setFinancialNote(prev=>({...prev,amount:e.target.value}))} inputProps={{min:0,step:'any'}} helperText={`Tổng dòng: ${money(movementTotal)}đ`} />
               <TextField size="small" label={dialog==='IN'?'Nhà cung cấp / người nhận':'Khách hàng / người nộp'} value={financialNote.objectName} onChange={e=>setFinancialNote(prev=>({...prev,objectName:e.target.value}))} />
@@ -219,15 +301,15 @@ export default function CounterWorkflow() {
           <Typography>{sample?'Lịch hôm nay: Ca 1 · 06:00–14:00 / Ca 2 · 14:00–22:00':`${state.active?.shift_name || ''} · ${state.active?.shift_date || ''}`}</Typography>
           {sample && <Alert severity="info">Dữ liệu minh họa từ tồn kho hiện tại. Tiền mẫu {money(opening)}đ, doanh thu mẫu 0đ. Không ghi vào sổ ca hay thay đổi tồn kho.</Alert>}
           <Alert severity="info">Xuất tiêu hao thực tế (sữa, nguyên liệu dùng lẻ) trước khi kiểm đếm. Ghi nhận chênh lệch không tự thay đổi tồn; điều chỉnh phải lập phiếu có lý do.</Alert>
-          <Stack direction={{xs:'column',sm:'row'}} gap={2}><TextField label={`Tiền mặt thực đếm · dự kiến ${money(expectedCash)}đ`} type="number" value={cash} onChange={e=>setCash(e.target.value)} fullWidth/><TextField label={`QR / ngân hàng thực nhận · hệ thống ${money(Number(summary?.bankingIn || 0) + Number(summary?.receiptNoteBankTotal || 0))}đ`} type="number" value={bank} onChange={e=>setBank(e.target.value)} fullWidth/></Stack>
-          <Stack direction={{xs:'column',sm:'row'}} gap={2}><TextField label="Người nhận bàn giao" value={receiver} onChange={e=>setReceiver(e.target.value)} fullWidth/><TextField label="Giải trình chênh lệch tiền mặt / QR" value={reason} onChange={e=>setReason(e.target.value)} fullWidth/></Stack>
+          <Stack direction={{xs:'column',sm:'row'}} gap={2}><TextField label={`Tiền mặt thực đếm · dự kiến ${money(expectedCash)}đ`} type="number" value={cash} onChange={e=>setCash(e.target.value)} fullWidth/><TextField label={`Số dư ngân hàng thực tế · dự kiến ${money(expectedBank)}đ`} type="number" value={bank} onChange={e=>setBank(e.target.value)} fullWidth/></Stack>
+          <Stack direction={{xs:'column',sm:'row'}} gap={2}><Autocomplete fullWidth options={handoverUsers} value={handoverUsers.find(user=>user.username===receiver)||null} getOptionLabel={handoverUserLabel} isOptionEqualToValue={(option,value)=>option?.username===value?.username} onChange={(_,value)=>setReceiver(value?.username||'')} renderOption={(props,user)=><Box component="li" {...props} key={user.username}><Box><Typography>{handoverUserLabel(user)}</Typography><Typography variant="caption" color="text.secondary">{user.username}{user.email?` · ${user.email}`:''}</Typography></Box></Box>} noOptionsText="Chưa có người dùng ROLE_COUNTER" renderInput={params=><TextField {...params} required label="Người nhận bàn giao" placeholder="Gõ để tìm người dùng có quyền bàn giao ca"/>}/><TextField label="Giải trình chênh lệch tiền mặt / QR" value={reason} onChange={e=>setReason(e.target.value)} fullWidth/></Stack>
           <TextField size="small" label={`Tìm hàng để kiểm đếm (${Object.values(counts).filter(r=>r.actual!=='').length}/${stock.length})`} value={search} onChange={e=>setSearch(e.target.value)}/>
           <Box sx={{maxHeight:360,overflow:'auto'}}><Table stickyHeader size="small"><TableHead><TableRow>{['Hàng / kho / lô','Tồn hệ thống','Thực đếm','Lý do chênh lệch'].map(x=><TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>{stock.filter(r=>`${r.material_code} ${r.material_name}`.toLowerCase().includes(search.toLowerCase())).map(r=><TableRow key={r.id}><TableCell>{r.material_code} · {r.material_name}<Typography variant="caption" display="block">{r.warehouse_code} / {r.batch_no}</Typography></TableCell><TableCell>{money(r.quantity_on_hand)} {r.unit}</TableCell><TableCell><TextField size="small" type="number" inputProps={{min:0,step:'any','aria-label':`Thực đếm ${r.material_code}`}} value={counts[r.id]?.actual??''} onChange={e=>setCounts(v=>({...v,[r.id]:{...v[r.id],actual:e.target.value}}))}/></TableCell><TableCell><TextField size="small" value={counts[r.id]?.reason||''} inputProps={{'aria-label':`Lý do ${r.material_code}`}} onChange={e=>setCounts(v=>({...v,[r.id]:{...v[r.id],reason:e.target.value}}))}/></TableCell></TableRow>)}</TableBody></Table></Box>
           <FormControlLabel control={<Checkbox checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>} label="Tôi đã kiểm tồn, tiền mặt và QR; xác nhận các chênh lệch cùng người nhận bàn giao." />
         </Stack>}
       </DialogContent>
       <DialogActions><Button disabled={busy} onClick={()=>setDialog('')}>Đóng</Button>
-        {dialog==='OPEN' && <Button disabled={busy || !shiftNumber || opening==='' || (openingDiff && (!confirmed || !reason.trim()))} variant="contained" onClick={()=>act(async()=>{setState(await api('/open',{openingCash:opening,reason,confirmed,shiftNumber:Number(shiftNumber),shiftDate:state.shiftDate}));setDialog('');setSuccess('Đã mở ca')})}>Xác nhận mở ca</Button>}
+        {dialog==='OPEN' && <Button disabled={busy || !shiftNumber || opening==='' || openingBank==='' || ((openingDiff || openingBankDiff) && (!confirmed || !reason.trim()))} variant="contained" onClick={()=>act(async()=>{setState(await api('/open',{openingCash:opening,openingBank,reason,confirmed,shiftNumber:Number(shiftNumber),shiftDate:state.shiftDate}));setDialog('');setSuccess('Đã mở ca')})}>Xác nhận mở ca</Button>}
         {['IN','OUT','ADJUSTMENT'].includes(dialog) && <Button disabled={busy || !movementLines.some(hasMovementInput)} type="submit" form="stock-lines" variant="contained">Lưu & khóa {movementLines.filter(hasMovementInput).length} dòng</Button>}
         {dialog==='CLOSE' && !sample && <Button disabled={busy || !confirmed || cash==='' || bank==='' || !receiver.trim()} variant="contained" onClick={()=>act(async()=>{setState(await api('/close',{shiftId:state.active.id,actualCash:cash,actualBank:bank,handoverTo:receiver,reason,confirmed,counts:stock.map(r=>({id:r.id,expected:r.quantity_on_hand,actual:counts[r.id]?.actual??'',reason:counts[r.id]?.reason||''}))}));setDialog('');setSuccess('Đã đóng và khóa ca. Tiền bàn giao sẽ chuyển sang đầu ca tiếp theo.')})}>Xác nhận đóng & khóa ca</Button>}
       </DialogActions>

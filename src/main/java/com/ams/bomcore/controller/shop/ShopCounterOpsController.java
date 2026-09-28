@@ -299,6 +299,15 @@ public class ShopCounterOpsController {
         if (Boolean.TRUE.equals(jdbcTemplate.queryForObject("SELECT EXISTS(SELECT 1 FROM shop_counter_shift WHERE tenant_id=? AND company_id=?)", Boolean.class,tId,cId))) {
             return ResponseEntity.badRequest().body(Map.of("message","Dùng Đóng ca & bàn giao để kiểm đếm và khóa ca."));
         }
+        String handoverTo = stringValue(body.get("handoverTo"));
+        Boolean validHandoverUser = jdbcTemplate.queryForObject("""
+                SELECT EXISTS(SELECT 1 FROM usertb u JOIN authorities a ON upper(a.username)=upper(u.username)
+                WHERE upper(u.username)=upper(?) AND u.isenabled=true AND u.assigned_tenant_id=?
+                  AND u.assigned_company_id=? AND a.authority='ROLE_COUNTER')
+                """, Boolean.class, handoverTo == null ? "" : handoverTo, tId.toString(), cId.toString());
+        if (!Boolean.TRUE.equals(validHandoverUser)) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Người nhận bàn giao phải có vai trò Thu ngân / Bàn giao ca"));
+        }
         LocalDate shiftDate = localDateValue(body.get("shiftDate"), LocalDate.now());
         UUID id = UUID.randomUUID();
         jdbcTemplate.update("""
@@ -312,7 +321,7 @@ public class ShopCounterOpsController {
                 """,
                 id, tId, cId, Date.valueOf(shiftDate), stringValue(body.get("shiftName")),
                 timestampOrNull(body.get("openedAt")), timestampOrNull(body.get("closedAt")),
-                stringValue(body.get("handoverBy")), stringValue(body.get("handoverTo")),
+                stringValue(body.get("handoverBy")), handoverTo,
                 decimalValue(body.get("openingCash")), decimalValue(body.get("cashSales")),
                 decimalValue(body.get("bankSales")), decimalValue(body.get("debtAmount")),
                 decimalValue(body.get("otherAmount")), decimalValue(body.get("paymentNoteTotal")),
@@ -427,8 +436,8 @@ public class ShopCounterOpsController {
         String method = stringValue(raw);
         if (method == null) return "CASH";
         method = method.toUpperCase();
-        if (!"CASH".equals(method) && !"BANK_QR".equals(method)) {
-            throw new IllegalArgumentException("paymentMethod must be CASH or BANK_QR");
+        if (!List.of("CASH", "BANK_QR", "UNPAID", "BANK_LATER").contains(method)) {
+            throw new IllegalArgumentException("paymentMethod must be CASH, BANK_QR, UNPAID or BANK_LATER");
         }
         return method;
     }

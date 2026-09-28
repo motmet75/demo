@@ -26,7 +26,6 @@ import * as XLSX from 'xlsx' // Ensure you have installed: npm install xlsx
 import { useAppContext } from '../../context/AppContext'
 import { fetchBoms, createBom, updateBomName, updateBomStatus, deleteBom, syncBomFromModelBoms } from '../../api/bomApi'
 import { dateFmt } from '../../utils/format'
-import { apiFetchJson } from '../../api/client'
 import BomItemsDialog from './BomItemsDialog'
 
 const STATUS_COLOR = { ACTIVE: 'success', ARCHIVED: 'default', DRAFT: 'warning' }
@@ -41,6 +40,8 @@ export default function BomGrid() {
   const [error,   setError]   = useState('')
 
   const [createOpen, setCreateOpen] = useState(false)
+  const [createForm, setCreateForm] = useState({ modelId: '', bomName: '', version: 1, status: 'DRAFT' })
+  const [createSaving, setCreateSaving] = useState(false)
   const [itemsBom,   setItemsBom]   = useState(null)  
   const [actionLoading, setActionLoading] = useState({})
   const [renameRow,  setRenameRow]  = useState(null)  
@@ -54,8 +55,6 @@ export default function BomGrid() {
   // Filters
   const [filterModelCode, setFilterModelCode] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
-  const [filterCreatedFrom, setFilterCreatedFrom] = useState('')
-  const [filterCreatedTo, setFilterCreatedTo] = useState('')
 
   const load = useCallback(async () => {
     if (!tenantId || !companyId) return
@@ -118,10 +117,23 @@ export default function BomGrid() {
     finally { setRenameSaving(false) }
   }
 
+  async function handleCreateSubmit(e) {
+    e.preventDefault()
+    if (!createForm.modelId.trim() || createSaving) return
+    setCreateSaving(true); setError('')
+    try {
+      await createBom({ ...createForm, modelId: createForm.modelId.trim(), version: Number(createForm.version) || 1 })
+      setCreateOpen(false)
+      setCreateForm({ modelId: '', bomName: '', version: 1, status: 'DRAFT' })
+      await load()
+    } catch (e) { setError(e.message || 'Create BOM failed') }
+    finally { setCreateSaving(false) }
+  }
+
   // ── Export Logic (Based on InventoryMovementPage.jsx) ──────────────[cite: 1]
   const filteredRows = rows.filter(r => {
     const s = v => (v == null ? '' : String(v)).toLowerCase()
-    if (filterModelCode && !s(r.modelCode).includes(filterModelCode.toLowerCase())) return false
+    if (filterModelCode && ![r.id, r.modelCode, r.bomName, r.version, r.status].some(value => s(value).includes(filterModelCode.toLowerCase()))) return false
     if (filterStatus && r.status !== filterStatus) return false
     return true
   })
@@ -196,8 +208,12 @@ export default function BomGrid() {
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', gap: 1.5, mb: 2, alignItems: 'center' }}>
-        <Typography variant="h6" sx={{ flex: 1 }}>BOM Management</Typography>
+      <Box sx={{ display: 'flex', gap: 1.5, mb: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Typography variant="h6">BOM Management</Typography>
+        <TextField size="small" label="Filter code, name, UUID, version" value={filterModelCode} onChange={event => { setFilterModelCode(event.target.value); setPaginationModel(prev => ({ ...prev, page: 0 })) }} sx={{ minWidth: 280, flex: 1 }} />
+        <TextField select size="small" label="Status" value={filterStatus} onChange={event => { setFilterStatus(event.target.value); setPaginationModel(prev => ({ ...prev, page: 0 })) }} sx={{ minWidth: 140 }}>
+          <MenuItem value="">All</MenuItem><MenuItem value="ACTIVE">Active</MenuItem><MenuItem value="DRAFT">Draft</MenuItem><MenuItem value="ARCHIVED">Archived</MenuItem>
+        </TextField>
         <Button variant="outlined" color="success" size="small" onClick={handleExportXlsx}>Export XLSX {selectedIds.length > 0 ? `(${selectedIds.length})` : ''}</Button>
         <Tooltip title="Refresh"><IconButton onClick={load}><RefreshIcon /></IconButton></Tooltip>
         <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>New BOM</Button>
@@ -212,13 +228,37 @@ export default function BomGrid() {
         checkboxSelection
         rowSelectionModel={selectionModel}
         onRowSelectionModelChange={setSelectionModel}
+        paginationModel={paginationModel}
+        onPaginationModelChange={setPaginationModel}
+        pageSizeOptions={[20, 50, 100]}
         autoHeight
         sx={{ background: '#fff', borderRadius: 2 }}
       />
 
       {/* Dialogs remain exactly as per your source logic */}
       <BomItemsDialog open={!!itemsBom} bom={itemsBom} onClose={() => setItemsBom(null)} />
-      {/* ... (Rename dialog) */}
+      <Dialog open={createOpen} onClose={createSaving ? undefined : () => setCreateOpen(false)} maxWidth="sm" fullWidth>
+        <Box component="form" onSubmit={handleCreateSubmit}>
+          <DialogTitle>New BOM</DialogTitle>
+          <DialogContent sx={{ display: 'grid', gap: 1.5, pt: '8px !important' }}>
+            <TextField autoFocus required label="Model UUID" value={createForm.modelId} onChange={e => setCreateForm(prev => ({ ...prev, modelId: e.target.value }))} />
+            <TextField label="BOM Name" value={createForm.bomName} onChange={e => setCreateForm(prev => ({ ...prev, bomName: e.target.value }))} />
+            <TextField type="number" label="Version" value={createForm.version} onChange={e => setCreateForm(prev => ({ ...prev, version: e.target.value }))} inputProps={{ min: 1 }} />
+            <TextField select label="Status" value={createForm.status} onChange={e => setCreateForm(prev => ({ ...prev, status: e.target.value }))}><MenuItem value="DRAFT">Draft</MenuItem><MenuItem value="ACTIVE">Active</MenuItem></TextField>
+          </DialogContent>
+          <DialogActions><Button onClick={() => setCreateOpen(false)} disabled={createSaving}>Cancel</Button><Button type="submit" variant="contained" disabled={createSaving || !createForm.modelId.trim()}>{createSaving ? 'Saving…' : 'Create'}</Button></DialogActions>
+        </Box>
+      </Dialog>
+      <Dialog open={!!renameRow} onClose={renameSaving ? undefined : () => setRenameRow(null)} maxWidth="xs" fullWidth>
+        <Box component="form" onSubmit={handleRenameSubmit}>
+          <DialogTitle>Rename BOM</DialogTitle>
+          <DialogContent sx={{ pt: '8px !important' }}>
+            {renameError && <Alert severity="error" sx={{ mb: 1 }}>{renameError}</Alert>}
+            <TextField autoFocus fullWidth label="BOM Name" value={renameName} onChange={e => setRenameName(e.target.value)} />
+          </DialogContent>
+          <DialogActions><Button onClick={() => setRenameRow(null)} disabled={renameSaving}>Cancel</Button><Button type="submit" variant="contained" disabled={renameSaving}>{renameSaving ? 'Saving…' : 'Save'}</Button></DialogActions>
+        </Box>
+      </Dialog>
     </Box>
   )
 }

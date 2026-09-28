@@ -14,10 +14,13 @@ const parseAuthoritiesInput = (value) => value
 
 const ORDERING_ROLE = 'ROLE_SHOP_ORDERING'
 const COUNTER_ROLE = 'ROLE_COUNTER'
+const BUSINESS_ROLE = 'ROLE_USER'
 const STAFF_ROLE_OPTIONS = [
+  { value: BUSINESS_ROLE, label: 'Nhân viên nghiệp vụ' },
   { value: COUNTER_ROLE, label: 'Thu ngân / Bàn giao ca' },
   { value: ORDERING_ROLE, label: 'Nhân viên gọi món' }
 ]
+const MEMBER_ROLES = new Set(STAFF_ROLE_OPTIONS.map(role => role.value))
 
 export default function AdminUserEditModal({ open, user, onClose, onSave, saving, currentUser, isSuperAdmin }) {
   const { t, tx } = useI18n()
@@ -51,7 +54,9 @@ export default function AdminUserEditModal({ open, user, onClose, onSave, saving
     authoritiesText: isSuperAdmin
       ? ((user?.authorities || []).join(', ') || 'ROLE_USER')
       : ORDERING_ROLE,
-    staffRole: (user?.authorities || []).includes(COUNTER_ROLE) ? COUNTER_ROLE : ORDERING_ROLE,
+    staffRoles: (user?.authorities || []).filter(role => MEMBER_ROLES.has(role)).length
+      ? (user?.authorities || []).filter(role => MEMBER_ROLES.has(role))
+      : [ORDERING_ROLE],
     assignedTenantId: forcedTenantId || user?.assignedTenantId || '',
     assignedCompanyId: forcedCompanyId || user?.assignedCompanyId || ''
   }), [user, forcedTenantId, forcedCompanyId, isSuperAdmin])
@@ -84,10 +89,19 @@ export default function AdminUserEditModal({ open, user, onClose, onSave, saving
     })
   }
 
+  const toggleAuthorityRole = (role) => {
+    setForm((prev) => {
+      const roles = new Set(parseAuthoritiesInput(prev.authoritiesText))
+      if (roles.has(role)) roles.delete(role)
+      else roles.add(role)
+      return { ...prev, authoritiesText: [...roles].join(', ') }
+    })
+  }
+
   const handleSubmit = async (event) => {
     event.preventDefault()
     setError('')
-    const authoritiesText = isSuperAdmin ? form.authoritiesText : form.staffRole
+    const authoritiesText = isSuperAdmin ? form.authoritiesText : form.staffRoles.join(', ')
     try {
       await onSave({
         username: form.username,
@@ -136,6 +150,9 @@ export default function AdminUserEditModal({ open, user, onClose, onSave, saving
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                 {parseAuthoritiesInput(form.authoritiesText).map((role) => <Chip key={role} label={role} size="small" />)}
               </Box>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                {STAFF_ROLE_OPTIONS.map((role) => <Chip key={role.value} clickable label={`Gán ${role.label}`} color={parseAuthoritiesInput(form.authoritiesText).includes(role.value) ? 'primary' : 'default'} variant={parseAuthoritiesInput(form.authoritiesText).includes(role.value) ? 'filled' : 'outlined'} onClick={() => toggleAuthorityRole(role.value)} />)}
+              </Box>
             </>
           ) : (
             <>
@@ -144,8 +161,10 @@ export default function AdminUserEditModal({ open, user, onClose, onSave, saving
                 <Select
                   labelId="staff-role-label"
                   label="Vai trò nhân viên"
-                  value={form.staffRole}
-                  onChange={handleChange('staffRole')}
+                  multiple
+                  value={form.staffRoles}
+                  onChange={handleChange('staffRoles')}
+                  renderValue={(selected) => selected.map(value => STAFF_ROLE_OPTIONS.find(role => role.value === value)?.label || value).join(' · ')}
                 >
                   {STAFF_ROLE_OPTIONS.map((role) => (
                     <MenuItem key={role.value} value={role.value}>{role.label}</MenuItem>
@@ -153,7 +172,7 @@ export default function AdminUserEditModal({ open, user, onClose, onSave, saving
                 </Select>
               </FormControl>
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                <Chip label={form.staffRole} size="small" />
+                {form.staffRoles.map(role => <Chip key={role} label={role} size="small" />)}
               </Box>
             </>
           )}
