@@ -117,8 +117,9 @@ public class ShopCounterOpsController {
         BigDecimal receiptNoteSubtotal = financialNoteTypeTotal(tId, cId, from, to, "RECEIPT");
         BigDecimal expenseNoteSubtotal = financialNoteTypeTotal(tId, cId, from, to, "EXPENSE");
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("from", from);
-        result.put("to", to);
+        // Keep the summary JSON portable for the workflow's lightweight ObjectMapper.
+        result.put("from", from.toString());
+        result.put("to", to.toString());
         result.put("orderCount", orders.size());
         result.put("completedOrderCount", completed);
         result.put("unpaidOrderCount", unpaid);
