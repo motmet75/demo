@@ -591,14 +591,14 @@ public class ShopOrderService {
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         requireStatus(order, ShopOrder.STATUS_READY);
         boolean alreadyPaid = ShopOrder.PAY_STATUS_PAID.equals(order.getPaymentStatus());
-        if (!alreadyPaid && (paymentMethod == null || paymentMethod.isBlank()
-                || ShopOrder.PAYMENT_PAY_LATER.equalsIgnoreCase(paymentMethod.trim()))) {
-            throw new IllegalArgumentException("Chọn Tiền mặt hoặc QR / chuyển khoản trước khi hoàn tất đơn");
+        if (!alreadyPaid && (paymentMethod == null || paymentMethod.isBlank())) {
+            throw new IllegalArgumentException("Chọn hình thức thanh toán hoặc Đã phục vụ · thanh toán sau");
         }
         if (!alreadyPaid) applySelectedPaymentMethod(order, paymentMethod, splitCashAmount, companyId);
         order.setStatus(ShopOrder.STATUS_COMPLETED);
         order.setCompletedAt(Instant.now());
-        order.setPaymentStatus(ShopOrder.PAY_STATUS_PAID);
+        order.setPaymentStatus(ShopOrder.PAYMENT_PAY_LATER.equals(order.getPaymentMethod())
+                ? ShopOrder.PAY_STATUS_UNPAID : ShopOrder.PAY_STATUS_PAID);
         order.setPaymentRequestedAt(null);
         shopOrderRepository.save(order);
         disableSourceToken(order);

@@ -252,7 +252,12 @@ export default function QuickTableOrderDialog({ open, table, favoriteIds = [], t
         await printOrderReceiptTracked(updated, null, setError)
         setPrintedOrderIds(current => new Set([...current, action.order.id]))
       } else if (action.type === 'paid') updated = await callOrderAction(markOrderPaid, action.order, 'Không đánh dấu được thanh toán', payment)
-      else updated = await advanceAndFinish(action.order, payment)
+      else {
+        updated = await advanceAndFinish(action.order, payment)
+        if (action.type === 'clear' && updated.paymentStatus !== 'PAID') {
+          updated = await callOrderAction(markOrderPaid, updated, 'Không đánh dấu được thanh toán', payment)
+        }
+      }
       if (action.type === 'clear') {
         updated = await callOrderAction(clearOrderTable, updated, 'Không dọn được đơn khỏi bàn')
         setClearedOrderIds(current => new Set([...current, action.order.id]))
@@ -345,7 +350,7 @@ export default function QuickTableOrderDialog({ open, table, favoriteIds = [], t
   </Dialog>
   {configuring && <ItemOptionsDialog open model={configuring.model} options={configuringOptions} allowedSideOptions={decorateAllowedSideOptions(models, configuring.model.allowedSideIds)} initialCart={configuring.item ? { qty: configuring.item.quantity, selectedOptions: configuring.item.selectedOptions, itemNotes: configuring.item.itemNotes, sideItems: configuring.item.sideItems?.map(side => ({ modelId: side.modelId, qty: side.quantity })) } : null} onConfirm={saveConfiguredItem} onClose={() => setConfiguring(null)} />}
   {editOrder && <EditOrderDialog open order={orderUpdates[editOrder.id] || editOrder} onClose={() => setEditOrder(null)} onUpdated={updated => { applyLocalOrder(updated); setEditOrder(null); onCreated?.(updated) }} />}
-  {paymentAction && <PaymentMethodConfirmDialog open order={paymentAction.order} action={paymentAction.type === 'paid' ? 'paid' : paymentAction.type === 'print' ? 'print' : 'complete'} busy={Boolean(orderActionId)} onCancel={() => setPaymentAction(null)} onConfirm={runPaymentAction} />}
+  {paymentAction && <PaymentMethodConfirmDialog open order={paymentAction.order} action={paymentAction.type === 'paid' ? 'paid' : paymentAction.type === 'print' ? 'print' : paymentAction.type === 'clear' ? 'clear' : 'complete'} busy={Boolean(orderActionId)} onCancel={() => setPaymentAction(null)} onConfirm={runPaymentAction} />}
   <Dialog open={Boolean(moveOrder)} onClose={orderActionId ? undefined : () => { setMoveOrder(null); setMoveTarget(null) }} fullWidth maxWidth="xs">
     <DialogTitle>Chuyển đơn #{moveOrder?.orderNumber ?? moveOrder?.dailySeq} sang bàn khác</DialogTitle>
     <DialogContent sx={{ pt: '10px !important' }}><Alert severity="info" sx={{ mb: 1.5 }}>Đơn sẽ rời {table?.tableName || 'bàn hiện tại'} và xuất hiện ngay tại bàn mới.</Alert><Autocomplete autoHighlight options={moveTableOptions} value={moveTarget} onChange={(_, value) => setMoveTarget(value)} getOptionLabel={item => item.tableName || ''} isOptionEqualToValue={(a,b)=>a.id===b.id} filterOptions={(options,state)=>{const query=normalizeSearch(state.inputValue);return query?options.filter(item=>normalizeSearch(item.tableName).includes(query)):options}} renderInput={params=><TextField {...params} autoFocus label="Gõ tên bàn đích để tìm" placeholder="Không cần gõ dấu" />} /></DialogContent>

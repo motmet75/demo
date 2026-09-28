@@ -405,6 +405,12 @@ export default function ShopTableGrid() {
       }
       const selected = paymentAction.orders || [paymentAction.order]
       if (paymentAction.action === 'paid') await markOrderPaid(paymentAction.order.id, paymentMethod, splitCashAmount)
+      else if (paymentAction.action === 'clear') {
+        const paidResult = await markOrderPaid(paymentAction.order.id, paymentMethod, splitCashAmount)
+        if (!paidResult.res.ok) throw new Error(paidResult.data?.message || paidResult.data?.error || 'Không đánh dấu được thanh toán')
+        const clearResult = await clearOrderTable(paymentAction.order.id)
+        if (!clearResult.res.ok) throw new Error(clearResult.data?.message || clearResult.data?.error || 'Không dọn được bàn')
+      }
       else {
         const aggregateTotal = selected.reduce((sum, order) => sum + Math.max(0, Number(order.totalAmount || 0) - Number(order.discountAmount || 0)), 0)
         await Promise.all(selected.map(order => {
@@ -419,7 +425,7 @@ export default function ShopTableGrid() {
         ...prev,
         orders: prev.orders.map(order => order.id === paymentAction.order.id && paymentAction.action === 'paid'
           ? { ...order, paymentStatus: 'PAID', paymentMethod }
-          : completedIds.has(order.id) ? { ...order, status: 'COMPLETED', paymentStatus: 'PAID', paymentMethod, completedAt: now } : order),
+          : completedIds.has(order.id) ? { ...order, status: 'COMPLETED', paymentStatus: paymentMethod === 'PAY_LATER' ? 'UNPAID' : 'PAID', paymentMethod, completedAt: now } : order),
       } : prev)
       if (paymentAction.action !== 'paid') setSelectedOrderIds([])
       setPaymentAction(null)
@@ -485,7 +491,7 @@ export default function ShopTableGrid() {
       {order.status === 'READY' && <Button size="small" variant="contained" color="success" disabled={!!orderActionId} onClick={() => setPaymentAction({ order, action: 'complete' })}>Hoàn tất & trả món</Button>}
       <Button size="small" variant="outlined" startIcon={<PrintIcon />} disabled={!!orderActionId} onClick={() => isServedOrder(order) ? printOrderReceiptTracked(order) : setPaymentAction({ order, action: 'print' })}>In hóa đơn</Button>
       {!['COMPLETED', 'PICKED_UP', 'CANCELLED'].includes(order.status) && <Button size="small" variant="outlined" startIcon={<TableBarIcon />} disabled={!!orderActionId} onClick={() => { setMoveOrder(order); setMoveTable(null) }}>Chuyển bàn</Button>}
-      {['COMPLETED', 'PICKED_UP'].includes(order.status) && !order.tableClearedAt && <Button size="small" variant="outlined" color="warning" disabled={!!orderActionId} onClick={() => runOrderAction(order, clearOrderTable, 'dọn bàn')}>Khách đã rời · Dọn bàn</Button>}
+      {['COMPLETED', 'PICKED_UP'].includes(order.status) && !order.tableClearedAt && <Button size="small" variant="outlined" color="warning" disabled={!!orderActionId} onClick={() => order.paymentStatus === 'PAID' ? runOrderAction(order, clearOrderTable, 'dọn bàn') : setPaymentAction({ order, action: 'clear' })}>Khách đã rời · Dọn bàn</Button>}
       {orderActionId.endsWith(`:${order.id}`) && <CircularProgress size={18} />}
       <Tooltip title="Xem chi tiết"><IconButton size="small" onClick={() => setDetailOrder(order)}><VisibilityIcon fontSize="small" /></IconButton></Tooltip>
     </Stack>
@@ -835,7 +841,7 @@ export default function ShopTableGrid() {
       {paymentAction && <PaymentMethodConfirmDialog
         open
         order={paymentAction.order}
-        action={paymentAction?.action === 'paid' ? 'paid' : paymentAction?.action === 'print' ? 'print' : 'complete'}
+        action={paymentAction?.action === 'paid' ? 'paid' : paymentAction?.action === 'print' ? 'print' : paymentAction?.action === 'clear' ? 'clear' : 'complete'}
         busy={completingSelected}
         onCancel={() => setPaymentAction(null)}
         onConfirm={confirmPaymentAction}
