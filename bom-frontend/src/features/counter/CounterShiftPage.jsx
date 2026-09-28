@@ -32,7 +32,7 @@ import { formatIntegerInput, formatQuantityInput, parseIntegerInput, parseQuanti
 const DENOMINATIONS = [500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000, 500]
 const emptyDenominationCounts = () => Object.fromEntries(DENOMINATIONS.map(value => [value, '']))
 
-const fmtMoney = (value) => `${Number(value || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}đ`
+const fmtMoney = (value) => `${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}đ`
 const fmtQty = (value) => Number(value || 0).toLocaleString('en-US', { maximumFractionDigits: 4 })
 const digits = (value) => String(value || '').replace(/[^\d.-]/g, '')
 const moneyNumber = (value) => Number(digits(value)) || 0
@@ -700,9 +700,9 @@ export default function CounterShiftPage() {
                 </Box>
                 <Divider sx={{ my: 1.5 }} />
                 <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.25 }}>
-                  <TextField label="Tiền mặt đầu ca · tự động" value={formatIntegerInput(openingCash)} onChange={e => setOpeningCash(parseIntegerInput(e.target.value))} inputMode="numeric" helperText="Lấy từ ca đang mở hoặc số dư bàn giao gần nhất" />
-                  <TextField label="Tài khoản ngân hàng đầu ca · tự động" value={formatIntegerInput(openingBank)} onChange={e => setOpeningBank(parseIntegerInput(e.target.value))} inputMode="numeric" helperText="Lấy từ ca đang mở hoặc số dư bàn giao gần nhất" />
-                  <TextField label="Khác (+/-)" value={formatIntegerInput(otherAmount)} onChange={e => setOtherAmount(parseIntegerInput(e.target.value, true))} inputMode="numeric" />
+                  <TextField label="Tiền mặt đầu ca · tự động" value={formatQuantityInput(openingCash, 2)} onChange={e => setOpeningCash(parseQuantityInput(e.target.value, { maximumFractionDigits: 2 }))} inputMode="decimal" helperText="Lấy từ ca đang mở hoặc số dư bàn giao gần nhất" />
+                  <TextField label="Tài khoản ngân hàng đầu ca · tự động" value={formatQuantityInput(openingBank, 2)} onChange={e => setOpeningBank(parseQuantityInput(e.target.value, { maximumFractionDigits: 2 }))} inputMode="decimal" helperText="Lấy từ ca đang mở hoặc số dư bàn giao gần nhất" />
+                  <TextField label="Khác (+/-)" value={formatQuantityInput(otherAmount, 2)} onChange={e => setOtherAmount(parseQuantityInput(e.target.value, { allowNegative: true, maximumFractionDigits: 2 }))} inputMode="decimal" />
                   <Autocomplete options={handoverUsers} value={handoverUsers.find(item => item.username === handoverTo) || null} getOptionLabel={handoverUserLabel} isOptionEqualToValue={(option, value) => option?.username === value?.username} onChange={(_, value) => setHandoverTo(value?.username || '')} renderOption={(props, item) => <Box component="li" {...props} key={item.username}><Box><Typography>{handoverUserLabel(item)}</Typography><Typography variant="caption" color="text.secondary">{item.username}{item.email ? ` · ${item.email}` : ''}</Typography></Box></Box>} noOptionsText="Chưa có người dùng ROLE_COUNTER" renderInput={params => <TextField {...params} required label="Người nhận bàn giao" placeholder="Gõ để tìm người dùng có quyền bàn giao ca" />} />
                   <TextField label="Ghi chú" value={handoverNotes} onChange={e => setHandoverNotes(e.target.value)} />
                 </Box>
@@ -889,7 +889,7 @@ export default function CounterShiftPage() {
                 <TextField required label={paymentForm.noteType === 'RECEIPT' ? 'Người nộp' : 'Người nhận'} size="small" value={paymentForm.recipientName} onChange={e => setPaymentForm(prev => ({ ...prev, recipientName: e.target.value }))} helperText="Người dùng nhập và xác nhận trước khi hệ thống tạo phiếu" />
                 <TextField label="Địa chỉ" size="small" value={paymentForm.address} onChange={e => setPaymentForm(prev => ({ ...prev, address: e.target.value }))} />
                 <TextField label={paymentForm.noteType === 'RECEIPT' ? 'Nội dung thu' : 'Lý do chi'} size="small" required value={paymentForm.reason} onChange={e => setPaymentForm(prev => ({ ...prev, reason: e.target.value }))} />
-                <TextField label="Số tiền" size="small" required value={formatIntegerInput(paymentForm.amount)} onChange={e => setPaymentForm(prev => ({ ...prev, amount: parseIntegerInput(e.target.value) }))} inputMode="numeric" />
+                <TextField label="Số tiền" size="small" required value={formatQuantityInput(paymentForm.amount, 2)} onChange={e => setPaymentForm(prev => ({ ...prev, amount: parseQuantityInput(e.target.value, { maximumFractionDigits: 2 }) }))} inputMode="decimal" />
                 <TextField select label="Thanh toán" size="small" value={paymentForm.paymentMethod} onChange={e => setPaymentForm(prev => ({ ...prev, paymentMethod: e.target.value }))} helperText={['UNPAID', 'BANK_LATER'].includes(paymentForm.paymentMethod) ? 'Ghi nhận công nợ, chưa cộng/trừ số dư ca' : ''}>
                   <MenuItem value="CASH">Tiền mặt</MenuItem>
                   <MenuItem value="BANK_QR">QR / chuyển khoản ngay</MenuItem>

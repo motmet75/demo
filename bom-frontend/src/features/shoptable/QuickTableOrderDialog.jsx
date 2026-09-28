@@ -8,6 +8,7 @@ import RemoveIcon from '@mui/icons-material/Remove'
 import SettingsIcon from '@mui/icons-material/Settings'
 import TableBarIcon from '@mui/icons-material/TableBar'
 import PrintIcon from '@mui/icons-material/Print'
+import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive'
 import {
   clearOrderTable, clearTableOrderDraft, completeShopOrder, confirmShopOrder, confirmTableOrderDraft,
   fetchMenuOptions, fetchShopTables, fetchStaffMenuItems, fetchTableOrderDraft, markOrderPaid,
@@ -34,7 +35,7 @@ const optionText = value => {
   } catch { return String(value) }
 }
 
-function OrderReadBack({ order, busy, printed, onPrint, onPaid, onComplete, onClear, onEdit, onMove }) {
+function OrderReadBack({ order, busy, printed, onPrint, onPrintAlert, onPaid, onComplete, onClear, onEdit, onMove }) {
   if (!order) return null
   const items = (order.items || []).filter(item => !item.parentItemId)
   return <Paper variant="outlined" sx={{ p: 1.5, borderColor: '#86efac', bgcolor: '#f0fdf4' }}>
@@ -57,6 +58,7 @@ function OrderReadBack({ order, busy, printed, onPrint, onPaid, onComplete, onCl
     {order.notes && <Typography variant="body2"><strong>Ghi chú đơn:</strong> {order.notes}</Typography>}
     <Typography fontWeight={900}>Tổng: {money(order.totalAmount)}</Typography>
     <Stack direction="row" gap={0.75} flexWrap="wrap" sx={{ mt: 1 }}>
+      <Button size="small" variant="outlined" color="warning" startIcon={<NotificationsActiveIcon />} disabled={busy} onClick={() => onPrintAlert(order)}>In lại báo đơn</Button>
       <Button size="small" variant="outlined" color="primary" startIcon={<PrintIcon />} disabled={busy} onClick={() => onPrint(order, printed)}>{printed ? 'In lại' : 'In hóa đơn'}</Button>
       {order.status === 'PENDING' && <Button size="small" variant="outlined" startIcon={<EditIcon />} disabled={busy} onClick={() => onEdit(order)}>Sửa đơn</Button>}
       {!['COMPLETED', 'PICKED_UP', 'CANCELLED'].includes(order.status) && <Button size="small" variant="outlined" startIcon={<TableBarIcon />} disabled={busy} onClick={() => onMove(order)}>Chuyển bàn</Button>}
@@ -270,6 +272,12 @@ export default function QuickTableOrderDialog({ open, table, favoriteIds = [], t
     }
     setPaymentAction({ order, type: 'print' })
   }
+  const requestPrintAlert = order => {
+    setOrderActionId(order.id); setError('')
+    printCounterOrderAlertTracked(order, setError)
+      .catch(actionError => setError(actionError.message || 'Không in lại được báo đơn'))
+      .finally(() => setOrderActionId(''))
+  }
   const requestClear = order => {
     if (!window.confirm(`Khách đã rời ${table?.tableName || 'bàn'}? Đơn sẽ được hoàn tất và dọn khỏi bàn.`)) return
     if (order.paymentStatus !== 'PAID') setPaymentAction({ order, type: 'clear' })
@@ -330,8 +338,8 @@ export default function QuickTableOrderDialog({ open, table, favoriteIds = [], t
         <Stack direction="row" gap={1} alignItems="center" sx={{ mt: 1 }}><Typography fontWeight={900} sx={{ flex: 1 }}>Tạm tính: {money(draftTotal)}</Typography><Button color="error" disabled={saving} onClick={() => { if (window.confirm('Xóa toàn bộ đơn tạm của bàn này?')) void persistDraft([]) }}>Bỏ đơn tạm</Button><Button variant="contained" color="success" disabled={saving || draftDirty} onClick={confirmDraft}>{saving ? 'Đang xác nhận…' : 'Xác nhận & in báo đơn'}</Button></Stack>
       </Paper>}
 
-      <OrderReadBack order={created} busy={orderActionId === created?.id} printed={printedOrderIds.has(created?.id)} onPrint={requestPrint} onPaid={order => setPaymentAction({ order, type: 'paid' })} onComplete={order => setPaymentAction({ order, type: 'complete' })} onClear={requestClear} onEdit={setEditOrder} onMove={setMoveOrder} />
-      {otherOrders.length > 0 && <Box><Typography fontWeight={800} sx={{ mb: 1 }}>Các đơn đã xác nhận tại bàn này</Typography><Stack gap={1}>{otherOrders.map(order => <OrderReadBack key={order.id} order={order} busy={orderActionId === order.id} printed={printedOrderIds.has(order.id)} onPrint={requestPrint} onPaid={row => setPaymentAction({ order: row, type: 'paid' })} onComplete={row => setPaymentAction({ order: row, type: 'complete' })} onClear={requestClear} onEdit={setEditOrder} onMove={setMoveOrder} />)}</Stack></Box>}
+      <OrderReadBack order={created} busy={orderActionId === created?.id} printed={printedOrderIds.has(created?.id)} onPrint={requestPrint} onPrintAlert={requestPrintAlert} onPaid={order => setPaymentAction({ order, type: 'paid' })} onComplete={order => setPaymentAction({ order, type: 'complete' })} onClear={requestClear} onEdit={setEditOrder} onMove={setMoveOrder} />
+      {otherOrders.length > 0 && <Box><Typography fontWeight={800} sx={{ mb: 1 }}>Các đơn đã xác nhận tại bàn này</Typography><Stack gap={1}>{otherOrders.map(order => <OrderReadBack key={order.id} order={order} busy={orderActionId === order.id} printed={printedOrderIds.has(order.id)} onPrint={requestPrint} onPrintAlert={requestPrintAlert} onPaid={row => setPaymentAction({ order: row, type: 'paid' })} onComplete={row => setPaymentAction({ order: row, type: 'complete' })} onClear={requestClear} onEdit={setEditOrder} onMove={setMoveOrder} />)}</Stack></Box>}
     </DialogContent>
     <DialogActions><Button onClick={onClose} disabled={saving || Boolean(editOrder) || Boolean(moveOrder) || Boolean(configuring)}>Đóng</Button></DialogActions>
   </Dialog>
