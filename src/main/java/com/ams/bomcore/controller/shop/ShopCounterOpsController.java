@@ -244,11 +244,11 @@ public class ShopCounterOpsController {
                                                       @RequestParam(required = false) UUID companyId,
                                                       @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
                                                       @RequestHeader(value = "X-Company-Id", required = false) String hCompany,
-                                                      @RequestParam(required = false) LocalDate date) {
+                                                      @RequestParam(required = false) String date) {
         UUID tId = resolve(tenantId, hTenant);
         UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
-        LocalDate targetDate = date != null ? date : LocalDate.now();
+        LocalDate targetDate = localDateValue(date, LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh")));
         return ResponseEntity.ok(jdbcTemplate.queryForList("""
                 SELECT id, check_date, inventory_id, material_id, material_code, material_name,
                        warehouse_id, warehouse_code, warehouse_name, batch_no, unit,
@@ -523,7 +523,11 @@ public class ShopCounterOpsController {
     private LocalDate localDateValue(Object raw, LocalDate fallback) {
         String value = stringValue(raw);
         if (value == null) return fallback;
-        return LocalDate.parse(value);
+        try {
+            return LocalDate.parse(value);
+        } catch (Exception ignored) {
+            return Instant.parse(value).atZone(ZoneId.of("Asia/Ho_Chi_Minh")).toLocalDate();
+        }
     }
 
     private Timestamp timestampOrNull(Object raw) {

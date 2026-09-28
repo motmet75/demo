@@ -95,6 +95,18 @@ function localDateValue(date = new Date()) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
+function shopDateValue(value) {
+  if (!value) return localDateValue()
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return String(value)
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return localDateValue()
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(date)
+  const part = type => parts.find(item => item.type === type)?.value || ''
+  return `${part('year')}-${part('month')}-${part('day')}`
+}
+
 function localDatetimeValue(date = new Date()) {
   const pad = (n) => String(n).padStart(2, '0')
   return `${localDateValue(date)}T${pad(date.getHours())}:${pad(date.getMinutes())}`
@@ -276,7 +288,7 @@ export default function CounterShiftPage() {
       setOpeningCash(String(activeShift?.opening_cash ?? workflow.currentCashBalance ?? workflow.previousCash ?? 0))
       setOpeningBank(String(activeShift?.opening_bank ?? workflow.currentBankBalance ?? workflow.previousBank ?? 0))
       if (syncActiveRange && activeShift?.opened_at) {
-        setShiftDate(String(activeShift.shift_date || localDateValue()))
+        setShiftDate(shopDateValue(activeShift.shift_date))
         setShiftName(activeShift.shift_name || '')
         setFromLocal(localDatetimeValue(new Date(activeShift.opened_at)))
         setToLocal(localDatetimeValue())
@@ -292,7 +304,7 @@ export default function CounterShiftPage() {
     try {
       const [snapshot, saved] = await Promise.all([
         apiData(fetchCounterInventorySnapshot()),
-        apiData(fetchCounterInventoryReconciliations(shiftDate)),
+        apiData(fetchCounterInventoryReconciliations(shopDateValue(shiftDate))),
       ])
       const rows = Array.isArray(snapshot) ? snapshot : []
       setInventoryRows(rows)
@@ -413,7 +425,7 @@ export default function CounterShiftPage() {
       })
     if (!rows.length) { setError('Chưa nhập số thực đếm'); return }
     try {
-      const result = await apiData(saveCounterInventoryReconciliation({ checkDate: shiftDate, rows }), 'Không lưu được đối soát')
+      const result = await apiData(saveCounterInventoryReconciliation({ checkDate: shopDateValue(shiftDate), rows }), 'Không lưu được đối soát')
       setSuccess(`Đã lưu ${result.saved || rows.length} dòng đối soát tồn kho`)
       await loadInventory()
     } catch (e) {

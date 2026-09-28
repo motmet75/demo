@@ -84,6 +84,7 @@ public class ShopCounterWorkflowController {
             currentBank=n(shift.get("opening_bank")).add(qrReceipts).subtract(qrExpenses);
         }
         result.put("active",a.isEmpty()?null:a.get(0));
+        for(var shift:a) if(shift.get("shift_date") instanceof java.sql.Date date) shift.put("shift_date",date.toLocalDate().toString());
         result.put("previousCash",previousCash); result.put("previousBank",previousBank);
         result.put("currentCashBalance",currentCash); result.put("currentBankBalance",currentBank);
         var now=ZonedDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
@@ -97,8 +98,11 @@ public class ShopCounterWorkflowController {
         result.put("schedule",List.of(Map.of("number",1,"name","Ca 1 · 06:00–14:00"),Map.of("number",2,"name","Ca 2 · 14:00–22:00")));
         result.put("usedShifts",db.queryForList("SELECT shift_number FROM shop_counter_shift WHERE tenant_id=? AND company_id=? AND shift_date=? AND shift_number IS NOT NULL",Integer.class,t,c,java.sql.Date.valueOf(shiftDate)));
         var history=db.queryForList("SELECT * FROM shop_counter_shift WHERE tenant_id=? AND company_id=? ORDER BY opened_at DESC LIMIT 20",t,c);
-        for(var h:history) for(String key:List.of("summary","inventory_counts")) {
-            if(h.get(key)!=null) try { h.put(key,json.readValue(h.get(key).toString(),Object.class)); } catch(Exception e) { throw new IllegalStateException("Cannot read saved handover",e); }
+        for(var h:history) {
+            if(h.get("shift_date") instanceof java.sql.Date date) h.put("shift_date",date.toLocalDate().toString());
+            for(String key:List.of("summary","inventory_counts")) {
+                if(h.get(key)!=null) try { h.put(key,json.readValue(h.get(key).toString(),Object.class)); } catch(Exception e) { throw new IllegalStateException("Cannot read saved handover",e); }
+            }
         }
         result.put("history",history);
         return result;
