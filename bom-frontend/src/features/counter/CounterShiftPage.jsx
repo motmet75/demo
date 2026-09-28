@@ -10,8 +10,10 @@ import SaveIcon from '@mui/icons-material/Save'
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong'
 import Inventory2Icon from '@mui/icons-material/Inventory2'
 import {
+  clearCounterCashCountDraft,
   createCounterPaymentNote,
   createCounterShiftHandover,
+  fetchCounterCashCountDraft,
   fetchCounterInventoryReconciliations,
   fetchCounterInventorySnapshot,
   fetchCounterHandoverUsers,
@@ -20,6 +22,7 @@ import {
   fetchCounterShiftSummary,
   fetchCounterWorkflowState,
   fetchShiftSchedule,
+  saveCounterCashCountDraft,
   saveCounterInventoryReconciliation,
 } from '../../api/shopApi'
 import CounterWorkflow from './CounterWorkflow'
@@ -27,9 +30,10 @@ import { useAuth } from '../../context/useAuth'
 import { formatIntegerInput, formatQuantityInput, parseIntegerInput, parseQuantityInput } from '../../utils/numberInput'
 
 const DENOMINATIONS = [500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000, 500]
+const emptyDenominationCounts = () => Object.fromEntries(DENOMINATIONS.map(value => [value, '']))
 
-const fmtMoney = (value) => `${Number(value || 0).toLocaleString('vi-VN')}đ`
-const fmtQty = (value) => Number(value || 0).toLocaleString('vi-VN', { maximumFractionDigits: 4 })
+const fmtMoney = (value) => `${Number(value || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}đ`
+const fmtQty = (value) => Number(value || 0).toLocaleString('en-US', { maximumFractionDigits: 4 })
 const digits = (value) => String(value || '').replace(/[^\d.-]/g, '')
 const moneyNumber = (value) => Number(digits(value)) || 0
 const searchText = (value) => String(value || '')
@@ -191,7 +195,12 @@ export default function CounterShiftPage() {
   const [openingBank, setOpeningBank] = useState('')
   const [otherAmount, setOtherAmount] = useState('')
   const [handoverNotes, setHandoverNotes] = useState('')
-  const [denominationCounts, setDenominationCounts] = useState(() => Object.fromEntries(DENOMINATIONS.map(v => [v, ''])))
+  const [denominationCounts, setDenominationCounts] = useState(emptyDenominationCounts)
+  const [cashDraftScope, setCashDraftScope] = useState('')
+  const [cashDraftReadyScope, setCashDraftReadyScope] = useState('')
+  const [cashDraftStatus, setCashDraftStatus] = useState('')
+  const cashDraftSaveQueue = useRef(Promise.resolve())
+  const cashDraftSaveVersion = useRef(0)
   const [summary, setSummary] = useState({})
   const [handovers, setHandovers] = useState([])
   const [handoverUsers, setHandoverUsers] = useState([])
@@ -285,16 +294,59 @@ export default function CounterShiftPage() {
     try {
       const workflow = await apiData(fetchCounterWorkflowState()) || {}
       const activeShift = workflow.active
+      const workflowDate = shopDateValue(activeShift?.shift_date || workflow.shiftDate || shiftDate)
+      const scopeId = activeShift?.id
+        ? `shift:${activeShift.id}`
+        : `report:${workflowDate}:${String(fromLocal || '').slice(0, 16)}`
       setOpeningCash(String(activeShift?.opening_cash ?? workflow.currentCashBalance ?? workflow.previousCash ?? 0))
       setOpeningBank(String(activeShift?.opening_bank ?? workflow.currentBankBalance ?? workflow.previousBank ?? 0))
       if (syncActiveRange && activeShift?.opened_at) {
-        setShiftDate(shopDateValue(activeShift.shift_date))
+        setShiftDate(workflowDate)
         setShiftName(activeShift.shift_name || '')
         setFromLocal(localDatetimeValue(new Date(activeShift.opened_at)))
         setToLocal(localDatetimeValue())
       }
+      setCashDraftScope(scopeId)
+      setCashDraftReadyScope('')
+      setCashDraftStatus('Đang tải bản nháp kiểm tiền…')
+      const { res, data } = await fetchCounterCashCountDraft(scopeId)
+      if (!res.ok) throw new Error(data?.message || 'Không tải được bản nháp kiểm tiền từ Redis')
+      setDenominationCounts({ ...emptyDenominationCounts(), ...(data?.denominationCounts || {}) })
+      setCashDraftReadyScope(scopeId)
+      setCashDraftStatus(data?.updatedAt
+        ? `Đã khôi phục bản nháp Redis · ${new Date(data.updatedAt).toLocaleString('vi-VN')}`
+        : 'Bản nháp Redis sẵn sàng · tự lưu theo tài khoản')
     } catch (e) {
-      setError(e.message || 'Không tải được số dư đầu ca')
+      setCashDraftStatus(e.message || 'Không tải được bản nháp Redis')
+    }
+  }
+
+  const updateDenominationCount = (denomination, value) => {
+    const next = { ...denominationCounts, [denomination]: parseIntegerInput(value) }
+    setDenominationCounts(next)
+    if (!cashDraftScope || cashDraftReadyScope !== cashDraftScope) return
+    const version = ++cashDraftSaveVersion.current
+    setCashDraftStatus('Đang lưu bản nháp Redis…')
+    cashDraftSaveQueue.current = cashDraftSaveQueue.current
+      .catch(() => undefined)
+      .then(() => apiData(saveCounterCashCountDraft(cashDraftScope, next), 'Không lưu được bản nháp kiểm tiền'))
+      .then(data => {
+        if (version === cashDraftSaveVersion.current) {
+          setCashDraftStatus(`Đã tự lưu Redis · ${new Date(data?.updatedAt || Date.now()).toLocaleTimeString('vi-VN')}`)
+        }
+      })
+      .catch(e => { if (version === cashDraftSaveVersion.current) setCashDraftStatus(e.message || 'Không lưu được bản nháp Redis') })
+  }
+
+  const clearCashCountDraft = async () => {
+    if (!cashDraftScope) return
+    try {
+      await cashDraftSaveQueue.current.catch(() => undefined)
+      await apiData(clearCounterCashCountDraft(cashDraftScope), 'Không xóa được bản nháp kiểm tiền')
+      setDenominationCounts(emptyDenominationCounts())
+      setCashDraftStatus('Đã xóa bản nháp kiểm tiền')
+    } catch (e) {
+      setCashDraftStatus(e.message || 'Không xóa được bản nháp Redis')
     }
   }
 
@@ -353,7 +405,7 @@ export default function CounterShiftPage() {
   useEffect(() => {
     fetchCounterHandoverUsers().then(({ res, data }) => { if (res.ok) setHandoverUsers(Array.isArray(data) ? data : []) }).catch(() => {})
   }, [])
-  useEffect(() => { if (tab === 0) loadWorkflowBalances(true) }, [tab])
+  useEffect(() => { if (tab === 0) loadWorkflowBalances(true) }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (tab === 1) loadInventory() }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (tab === 2) loadPaymentNotes() }, [tab, paymentDate]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -394,6 +446,16 @@ export default function CounterShiftPage() {
         })),
         notes: handoverNotes,
       }), 'Không lưu được bàn giao ca')
+      if (cashDraftScope) {
+        try {
+          await cashDraftSaveQueue.current.catch(() => undefined)
+          await apiData(clearCounterCashCountDraft(cashDraftScope), 'Không xóa được bản nháp kiểm tiền sau bàn giao')
+          setDenominationCounts(emptyDenominationCounts())
+          setCashDraftStatus('Đã lưu bàn giao và xóa bản nháp kiểm tiền')
+        } catch (draftError) {
+          setCashDraftStatus(draftError.message || 'Bàn giao đã lưu nhưng chưa xóa được bản nháp Redis')
+        }
+      }
       setSuccess('Đã lưu biên bản bàn giao ca')
       await loadSummary()
     } catch (e) {
@@ -672,7 +734,10 @@ export default function CounterShiftPage() {
               </Paper>
 
               <Paper sx={{ p: 1.5, borderRadius: 1 }}>
-                <Typography fontWeight={900} sx={{ mb: 1 }}>Chi tiết kiểm đếm</Typography>
+                <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+                  <Box sx={{ flex: 1 }}><Typography fontWeight={900}>Chi tiết kiểm đếm</Typography><Typography variant="caption" color="text.secondary">{cashDraftStatus || 'Tự lưu bản nháp Redis riêng cho tài khoản đang đăng nhập'}</Typography></Box>
+                  <Button size="small" color="warning" disabled={!cashDraftScope} onClick={clearCashCountDraft}>Xóa bản nháp</Button>
+                </Stack>
                 <Table size="small">
                   <TableHead><TableRow><TableCell>Mệnh giá</TableCell><TableCell align="right">SL</TableCell><TableCell align="right">Thành tiền</TableCell></TableRow></TableHead>
                   <TableBody>
@@ -682,7 +747,7 @@ export default function CounterShiftPage() {
                         <TableRow key={value}>
                           <TableCell>{fmtMoney(value)}</TableCell>
                           <TableCell align="right" width={96}>
-                            <TextField size="small" type="text" value={formatIntegerInput(denominationCounts[value])} onChange={e => setDenominationCounts(prev => ({ ...prev, [value]: parseIntegerInput(e.target.value) }))} inputProps={{ inputMode: 'numeric', min: 0, style: { textAlign: 'right' } }} />
+                            <TextField size="small" type="text" value={formatIntegerInput(denominationCounts[value])} onChange={e => updateDenominationCount(value, e.target.value)} inputProps={{ inputMode: 'numeric', min: 0, style: { textAlign: 'right' } }} />
                           </TableCell>
                           <TableCell align="right">{fmtMoney(value * count)}</TableCell>
                         </TableRow>

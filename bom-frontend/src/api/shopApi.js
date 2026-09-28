@@ -276,6 +276,22 @@ export function fetchCounterWorkflowState() {
   return apiFetchJson('/shop/staff/counter/workflow')
 }
 
+export function fetchCounterCashCountDraft(scopeId) {
+  return apiFetchJson('/shop/staff/counter/cash-count-draft' + qs({ scopeId }))
+}
+
+export function saveCounterCashCountDraft(scopeId, denominationCounts) {
+  return apiFetchJson('/shop/staff/counter/cash-count-draft' + qs({ scopeId }), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ denominationCounts: denominationCounts || {} })
+  })
+}
+
+export function clearCounterCashCountDraft(scopeId) {
+  return apiFetchJson('/shop/staff/counter/cash-count-draft' + qs({ scopeId }), { method: 'DELETE' })
+}
+
 export function fetchCounterInventorySnapshot() {
   return apiFetchJson('/shop/staff/counter/inventory-snapshot')
 }
