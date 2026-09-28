@@ -202,11 +202,20 @@ export default function CounterShiftPage() {
   }, 0), [denominationCounts])
   const paymentNoteTotals = useMemo(() => paymentNotes.reduce((totals, note) => {
     const amount = Number(note.amount || 0)
-    if (note.note_type === 'RECEIPT') totals.receipt += amount
+    const isReceipt = note.note_type === 'RECEIPT'
+    const method = note.payment_method === 'BANK_QR' ? 'qr' : note.payment_method === 'CASH' || !note.payment_method ? 'cash' : 'deferred'
+    if (isReceipt) totals.receipt += amount
     else totals.expense += amount
+    totals[`${method}${isReceipt ? 'Receipt' : 'Expense'}`] += amount
+    totals[`${method}Total`] += amount
     totals.total += amount
     return totals
-  }, { receipt: 0, expense: 0, total: 0 }), [paymentNotes])
+  }, {
+    receipt: 0, expense: 0, total: 0,
+    cashReceipt: 0, cashExpense: 0, cashTotal: 0,
+    qrReceipt: 0, qrExpense: 0, qrTotal: 0,
+    deferredReceipt: 0, deferredExpense: 0, deferredTotal: 0,
+  }), [paymentNotes])
 
   const openingCashNumber = moneyNumber(openingCash)
   const otherAmountNumber = moneyNumber(otherAmount)
@@ -445,7 +454,7 @@ export default function CounterShiftPage() {
       return at >= fromMs && at < toMs
     })
     const paymentRows = notesInShift.map((note, idx) =>
-      `<tr><td>${idx + 1}</td><td>${note.note_type === 'RECEIPT' ? 'Thu' : 'Chi'}</td><td>${new Date(note.created_at).toLocaleTimeString('vi-VN')}</td><td>${note.recipient_name || ''}</td><td>${note.reason || ''}</td><td class="right">${fmtMoney(note.amount)}</td></tr>`
+      `<tr><td>${idx + 1}</td><td>${note.note_type === 'RECEIPT' ? 'Thu' : 'Chi'}</td><td>${paymentMethodLabel(note.payment_method)}</td><td>${new Date(note.created_at).toLocaleTimeString('vi-VN')}</td><td>${note.recipient_name || ''}</td><td>${note.reason || ''}</td><td class="right">${fmtMoney(note.amount)}</td></tr>`
     ).join('')
     printHtml('Biên bản bàn giao ca', `
       <h1>BIÊN BẢN BÀN GIAO CA</h1>
@@ -459,9 +468,11 @@ export default function CounterShiftPage() {
         <tr><td>Thu tiền mặt trong ca</td><td class="right">${fmtMoney(reportSummary.cashIn)}</td></tr>
         <tr><td>Phiếu thu tiền mặt</td><td class="right">${fmtMoney(reportSummary.receiptNoteCashTotal)}</td></tr>
         <tr><td>Chi trong ca</td><td class="right">${fmtMoney(reportSummary.paymentNoteTotal)}</td></tr>
+        <tr><td class="bold">Tổng Thu + Chi tiền mặt</td><td class="right bold">${fmtMoney(reportSummary.totalCashReceiptsExpenses)}</td></tr>
         <tr><td>Tiền thẻ / chuyển khoản</td><td class="right">${fmtMoney(reportSummary.bankingIn)}</td></tr>
         <tr><td>Phiếu thu QR / chuyển khoản</td><td class="right">${fmtMoney(reportSummary.receiptNoteBankTotal)}</td></tr>
         <tr><td>Phiếu chi QR / chuyển khoản</td><td class="right">${fmtMoney(reportSummary.bankPaymentNoteTotal)}</td></tr>
+        <tr><td class="bold">Tổng Thu + Chi QR / chuyển khoản</td><td class="right bold">${fmtMoney(reportSummary.totalQrReceiptsExpenses)}</td></tr>
         <tr><td class="bold">Tổng phụ phiếu thu</td><td class="right bold">${fmtMoney(reportSummary.receiptNoteSubtotal)}</td></tr>
         <tr><td class="bold">Tổng phụ phiếu chi</td><td class="right bold">${fmtMoney(reportSummary.expenseNoteSubtotal)}</td></tr>
         <tr><td class="bold">Tổng Thu + Chi</td><td class="right bold">${fmtMoney(reportSummary.receiptExpenseTotal)}</td></tr>
@@ -470,10 +481,16 @@ export default function CounterShiftPage() {
         <tr><td>Thực tế kiểm đếm</td><td class="right">${fmtMoney(cashActual)}</td></tr>
         <tr><td>Chênh lệch</td><td class="right bold">${fmtMoney(reportCashDifference)}</td></tr>
       </table>
+      <div class="section">Phân loại Thu / Chi theo phương thức</div>
+      <table>
+        <tr><th>Phương thức</th><th class="right">Tổng Thu</th><th class="right">Tổng Chi</th><th class="right">Thu + Chi</th></tr>
+        <tr><td>Tiền mặt</td><td class="right">${fmtMoney(reportSummary.totalCashReceipts)}</td><td class="right">${fmtMoney(reportSummary.totalCashExpenses)}</td><td class="right bold">${fmtMoney(reportSummary.totalCashReceiptsExpenses)}</td></tr>
+        <tr><td>QR / chuyển khoản</td><td class="right">${fmtMoney(reportSummary.totalQrReceipts)}</td><td class="right">${fmtMoney(reportSummary.totalQrExpenses)}</td><td class="right bold">${fmtMoney(reportSummary.totalQrReceiptsExpenses)}</td></tr>
+      </table>
       <div class="section">Chi tiết kiểm đếm</div>
       <table><tr><th>Mệnh giá</th><th class="right">SL</th><th class="right">Thành tiền</th></tr>${denominationRows}</table>
       <div class="section">Phiếu thu / chi trong thời gian ca</div>
-      <table><tr><th>#</th><th>Loại</th><th>Giờ</th><th>Người nhận / nộp</th><th>Nội dung</th><th class="right">Số tiền</th></tr>${paymentRows || '<tr><td colspan="6">Không có</td></tr>'}</table>
+      <table><tr><th>#</th><th>Loại</th><th>Phương thức</th><th>Giờ</th><th>Người nhận / nộp</th><th>Nội dung</th><th class="right">Số tiền</th></tr>${paymentRows || '<tr><td colspan="7">Không có</td></tr>'}</table>
       <p><b>Ghi chú:</b> ${handoverNotes || ''}</p>
       <div class="sign"><div>Người bàn giao<br><br><br>(Ký, họ tên)</div><div>Người nhận bàn giao<br><br><br>(Ký, họ tên)</div></div>
     `)
@@ -596,6 +613,11 @@ export default function CounterShiftPage() {
                       <TableRow><TableCell>Phiếu thu QR / chuyển khoản</TableCell><TableCell align="right">{fmtMoney(summary.receiptNoteBankTotal)}</TableCell></TableRow>
                       <TableRow><TableCell>Phiếu chi trong ca</TableCell><TableCell align="right">{fmtMoney(summary.paymentNoteTotal)}</TableCell></TableRow>
                       <TableRow><TableCell>Phiếu chi QR / chuyển khoản</TableCell><TableCell align="right">{fmtMoney(summary.bankPaymentNoteTotal)}</TableCell></TableRow>
+                      <TableRow sx={{ bgcolor: 'rgba(25, 118, 210, 0.06)' }}><TableCell sx={{ fontWeight: 900 }}>Tổng Thu + Chi tiền mặt</TableCell><TableCell align="right" sx={{ fontWeight: 900 }}>{fmtMoney(summary.totalCashReceiptsExpenses)}</TableCell></TableRow>
+                      <TableRow sx={{ bgcolor: 'rgba(25, 118, 210, 0.06)' }}><TableCell sx={{ fontWeight: 900 }}>Tổng Thu + Chi QR / chuyển khoản</TableCell><TableCell align="right" sx={{ fontWeight: 900 }}>{fmtMoney(summary.totalQrReceiptsExpenses)}</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={2} sx={{ pt: 2, pb: 0.5, fontWeight: 900 }}>Phân loại theo phương thức</TableCell></TableRow>
+                      <TableRow><TableCell>Tiền mặt · Tổng Thu / Tổng Chi</TableCell><TableCell align="right">{fmtMoney(summary.totalCashReceipts)} / {fmtMoney(summary.totalCashExpenses)}</TableCell></TableRow>
+                      <TableRow><TableCell>QR · Tổng Thu / Tổng Chi</TableCell><TableCell align="right">{fmtMoney(summary.totalQrReceipts)} / {fmtMoney(summary.totalQrExpenses)}</TableCell></TableRow>
                       <TableRow><TableCell sx={{ fontWeight: 900 }}>Tổng phụ phiếu thu</TableCell><TableCell align="right" sx={{ fontWeight: 900 }}>{fmtMoney(summary.receiptNoteSubtotal)}</TableCell></TableRow>
                       <TableRow><TableCell sx={{ fontWeight: 900 }}>Tổng phụ phiếu chi</TableCell><TableCell align="right" sx={{ fontWeight: 900 }}>{fmtMoney(summary.expenseNoteSubtotal)}</TableCell></TableRow>
                       <TableRow><TableCell sx={{ fontWeight: 900 }}>Tổng Thu + Chi</TableCell><TableCell align="right" sx={{ fontWeight: 900 }}>{fmtMoney(summary.receiptExpenseTotal)}</TableCell></TableRow>
@@ -741,6 +763,16 @@ export default function CounterShiftPage() {
               <Chip color="error" label={`Tổng phiếu chi: ${fmtMoney(paymentNoteTotals.expense)}`} />
               <Chip color="primary" label={`Tổng Thu + Chi: ${fmtMoney(paymentNoteTotals.total)}`} />
             </Stack>
+            <TableContainer component={Paper} sx={{ borderRadius: 1, maxWidth: 720 }}>
+              <Table size="small">
+                <TableHead><TableRow><TableCell>Phương thức</TableCell><TableCell align="right">Thu</TableCell><TableCell align="right">Chi</TableCell><TableCell align="right">Thu + Chi</TableCell></TableRow></TableHead>
+                <TableBody>
+                  <TableRow><TableCell>Tiền mặt</TableCell><TableCell align="right">{fmtMoney(paymentNoteTotals.cashReceipt)}</TableCell><TableCell align="right">{fmtMoney(paymentNoteTotals.cashExpense)}</TableCell><TableCell align="right" sx={{ fontWeight: 900 }}>{fmtMoney(paymentNoteTotals.cashTotal)}</TableCell></TableRow>
+                  <TableRow><TableCell>QR / chuyển khoản</TableCell><TableCell align="right">{fmtMoney(paymentNoteTotals.qrReceipt)}</TableCell><TableCell align="right">{fmtMoney(paymentNoteTotals.qrExpense)}</TableCell><TableCell align="right" sx={{ fontWeight: 900 }}>{fmtMoney(paymentNoteTotals.qrTotal)}</TableCell></TableRow>
+                  {paymentNoteTotals.deferredTotal > 0 && <TableRow><TableCell>Chưa thu/chi · xử lý sau</TableCell><TableCell align="right">{fmtMoney(paymentNoteTotals.deferredReceipt)}</TableCell><TableCell align="right">{fmtMoney(paymentNoteTotals.deferredExpense)}</TableCell><TableCell align="right" sx={{ fontWeight: 900 }}>{fmtMoney(paymentNoteTotals.deferredTotal)}</TableCell></TableRow>}
+                </TableBody>
+              </Table>
+            </TableContainer>
             <Paper sx={{ p: 1.5, borderRadius: 1 }}>
               <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '160px 160px 1fr 1fr' }, gap: 1.25 }}>
                 <TextField label="Ngày" type="date" size="small" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} InputLabelProps={{ shrink: true }} />

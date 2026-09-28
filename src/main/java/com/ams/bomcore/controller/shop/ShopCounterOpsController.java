@@ -116,6 +116,14 @@ public class ShopCounterOpsController {
         BigDecimal receiptNoteBankTotal = financialNoteTotal(tId, cId, from, to, "BANK_QR", "RECEIPT");
         BigDecimal receiptNoteSubtotal = financialNoteTypeTotal(tId, cId, from, to, "RECEIPT");
         BigDecimal expenseNoteSubtotal = financialNoteTypeTotal(tId, cId, from, to, "EXPENSE");
+        BigDecimal totalCashReceipts = cashIn.add(receiptNoteCashTotal);
+        BigDecimal totalCashExpenses = paymentNoteTotal;
+        BigDecimal totalQrReceipts = bankIn.add(receiptNoteBankTotal);
+        BigDecimal totalQrExpenses = bankPaymentNoteTotal;
+        BigDecimal deferredReceiptNoteTotal = receiptNoteSubtotal
+                .subtract(receiptNoteCashTotal).subtract(receiptNoteBankTotal).max(BigDecimal.ZERO);
+        BigDecimal deferredExpenseNoteTotal = expenseNoteSubtotal
+                .subtract(paymentNoteTotal).subtract(bankPaymentNoteTotal).max(BigDecimal.ZERO);
         Map<String, Object> result = new LinkedHashMap<>();
         // Keep the summary JSON portable for the workflow's lightweight ObjectMapper.
         result.put("from", from.toString());
@@ -135,6 +143,14 @@ public class ShopCounterOpsController {
         result.put("receiptNoteSubtotal", receiptNoteSubtotal);
         result.put("expenseNoteSubtotal", expenseNoteSubtotal);
         result.put("receiptExpenseTotal", receiptNoteSubtotal.add(expenseNoteSubtotal));
+        result.put("totalCashReceipts", totalCashReceipts);
+        result.put("totalCashExpenses", totalCashExpenses);
+        result.put("totalCashReceiptsExpenses", totalCashReceipts.add(totalCashExpenses));
+        result.put("totalQrReceipts", totalQrReceipts);
+        result.put("totalQrExpenses", totalQrExpenses);
+        result.put("totalQrReceiptsExpenses", totalQrReceipts.add(totalQrExpenses));
+        result.put("deferredReceiptNoteTotal", deferredReceiptNoteTotal);
+        result.put("deferredExpenseNoteTotal", deferredExpenseNoteTotal);
         return ResponseEntity.ok(result);
     }
 
