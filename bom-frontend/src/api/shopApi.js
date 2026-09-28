@@ -406,11 +406,11 @@ export function readyShopOrder(orderId) {
   return apiFetchJson(`/shop/staff/orders/${orderId}/ready`, { method: 'PATCH' })
 }
 
-export function completeShopOrder(orderId, paymentMethod) {
+export function completeShopOrder(orderId, paymentMethod, splitCashAmount) {
   return apiFetchJson(`/shop/staff/orders/${orderId}/complete`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(paymentMethod ? { paymentMethod } : {}),
+    body: JSON.stringify(paymentMethod ? { paymentMethod, ...(splitCashAmount != null ? { splitCashAmount } : {}) } : {}),
   })
 }
 
@@ -426,11 +426,11 @@ export function revertShopOrder(orderId) {
   return apiFetchJson(`/shop/staff/orders/${orderId}/revert`, { method: 'PATCH' })
 }
 
-export function markOrderPaid(orderId, paymentMethod) {
+export function markOrderPaid(orderId, paymentMethod, splitCashAmount) {
   return apiFetchJson(`/shop/staff/orders/${orderId}/pay`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(paymentMethod ? { paymentMethod } : {}),
+    body: JSON.stringify(paymentMethod ? { paymentMethod, ...(splitCashAmount != null ? { splitCashAmount } : {}) } : {}),
   })
 }
 

@@ -20,6 +20,7 @@ import RefreshIcon from '@mui/icons-material/Refresh'
 import { useAppContext } from '../../context/AppContext'
 import { fetchInvoices, createInvoice, updateInvoice, deleteInvoice } from '../../api/invoiceApi'
 import { numFmt } from '../../utils/format'
+import { formatQuantityInput, parseQuantityInput } from '../../utils/numberInput'
 
 const TYPE_COLOR = { PURCHASE: 'info', SALE: 'success' }
 const STATUS_COLOR = { DRAFT: 'default', ISSUED: 'primary', PAID: 'success', CANCELLED: 'error' }
@@ -244,12 +245,12 @@ export default function InvoicePage() {
           <Box sx={{ display: 'flex', gap: 2 }}>
             <TextField label="Currency" value={form.currency} size="small" sx={{ width: 80 }}
               onChange={e => setForm(f => ({ ...f, currency: e.target.value }))} />
-            <TextField label="Subtotal" type="number" value={form.subtotal} size="small" sx={{ flex: 1 }}
-              onChange={e => setForm(f => ({ ...f, subtotal: e.target.value }))} />
-            <TextField label="Tax" type="number" value={form.taxAmount} size="small" sx={{ flex: 1 }}
-              onChange={e => setForm(f => ({ ...f, taxAmount: e.target.value }))} />
-            <TextField label="Total" type="number" value={form.totalAmount} size="small" sx={{ flex: 1 }}
-              onChange={e => setForm(f => ({ ...f, totalAmount: e.target.value }))} />
+            <TextField label="Subtotal" type="text" value={formatQuantityInput(form.subtotal, 2)} size="small" sx={{ flex: 1 }} inputProps={{ inputMode: 'decimal' }}
+              onChange={e => setForm(f => ({ ...f, subtotal: parseQuantityInput(e.target.value, { maximumFractionDigits: 2 }) }))} />
+            <TextField label="Tax" type="text" value={formatQuantityInput(form.taxAmount, 2)} size="small" sx={{ flex: 1 }} inputProps={{ inputMode: 'decimal' }}
+              onChange={e => setForm(f => ({ ...f, taxAmount: parseQuantityInput(e.target.value, { maximumFractionDigits: 2 }) }))} />
+            <TextField label="Total" type="text" value={formatQuantityInput(form.totalAmount, 2)} size="small" sx={{ flex: 1 }} inputProps={{ inputMode: 'decimal' }}
+              onChange={e => setForm(f => ({ ...f, totalAmount: parseQuantityInput(e.target.value, { maximumFractionDigits: 2 }) }))} />
           </Box>
           <TextField label="Notes" value={form.notes} size="small" multiline rows={2}
             onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />

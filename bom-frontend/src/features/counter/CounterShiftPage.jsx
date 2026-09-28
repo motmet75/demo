@@ -18,10 +18,12 @@ import {
   fetchCounterPaymentNotes,
   fetchCounterShiftHandovers,
   fetchCounterShiftSummary,
+  fetchShiftSchedule,
   saveCounterInventoryReconciliation,
 } from '../../api/shopApi'
 import CounterWorkflow from './CounterWorkflow'
 import { useAuth } from '../../context/useAuth'
+import { formatIntegerInput, formatQuantityInput, parseIntegerInput, parseQuantityInput } from '../../utils/numberInput'
 
 const DENOMINATIONS = [500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000, 500]
 
@@ -92,10 +94,34 @@ function localDatetimeValue(date = new Date()) {
   return `${localDateValue(date)}T${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
-function defaultShiftStart() {
-  const d = new Date()
-  d.setHours(6, 0, 0, 0)
-  return localDatetimeValue(d)
+function defaultShiftRange(now = new Date()) {
+  const startHour = now.getHours() < 14 ? 6 : 14
+  const endHour = now.getHours() < 14 ? 14 : 22
+  const d = new Date(now)
+  d.setHours(startHour, 0, 0, 0)
+  const end = new Date(d)
+  end.setHours(endHour, 0, 0, 0)
+  return { from: localDatetimeValue(d), to: localDatetimeValue(end), name: startHour === 6 ? 'Ca 1 · 06:00–14:00' : 'Ca 2 · 14:00–22:00' }
+}
+
+function configuredShiftRange(shifts, now = new Date()) {
+  const dayOfWeek = now.getDay() === 0 ? 7 : now.getDay()
+  const today = (shifts || []).filter(shift => shift.isActive !== false && Number(shift.dayOfWeek) === dayOfWeek)
+    .sort((a, b) => String(a.startTime).localeCompare(String(b.startTime)))
+  if (!today.length) return null
+  const minutes = now.getHours() * 60 + now.getMinutes()
+  const shiftMinutes = shift => {
+    const [startHour, startMinute] = String(shift.startTime || '00:00').split(':').map(Number)
+    const [endHour, endMinute] = String(shift.endTime || '00:00').split(':').map(Number)
+    return { start: startHour * 60 + startMinute, end: endHour * 60 + endMinute }
+  }
+  const selected = today.find(shift => { const range = shiftMinutes(shift); return minutes >= range.start && minutes < range.end })
+    || [...today].reverse().find(shift => minutes >= shiftMinutes(shift).start)
+    || today[0]
+  const date = localDateValue(now)
+  const start = String(selected.startTime || '06:00').slice(0, 5)
+  const end = String(selected.endTime || '14:00').slice(0, 5)
+  return { from: `${date}T${start}`, to: `${date}T${end}`, name: selected.label || `Ca ${start}–${end}` }
 }
 
 function toIso(localValue) {
@@ -134,10 +160,11 @@ export default function CounterShiftPage() {
   const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(false)
 
+  const initialShift = useMemo(() => defaultShiftRange(), [])
   const [shiftDate, setShiftDate] = useState(localDateValue())
-  const [fromLocal, setFromLocal] = useState(defaultShiftStart())
-  const [toLocal, setToLocal] = useState(localDatetimeValue())
-  const [shiftName, setShiftName] = useState('Ca hiện tại')
+  const [fromLocal, setFromLocal] = useState(initialShift.from)
+  const [toLocal, setToLocal] = useState(initialShift.to)
+  const [shiftName, setShiftName] = useState(initialShift.name)
   const [handoverTo, setHandoverTo] = useState('')
   const [openingCash, setOpeningCash] = useState('')
   const [otherAmount, setOtherAmount] = useState('')
@@ -246,6 +273,24 @@ export default function CounterShiftPage() {
 
   useEffect(() => { loadSummary() }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
+    fetchShiftSchedule().then(({ res, data }) => {
+      if (!res.ok) return
+      const range = configuredShiftRange(Array.isArray(data) ? data : [])
+      if (!range) return
+      setShiftDate(range.from.slice(0, 10)); setFromLocal(range.from); setToLocal(range.to); setShiftName(range.name)
+    }).catch(() => {})
+  }, [])
+  useEffect(() => {
+    if (tab !== 0) return undefined
+    let active = true
+    const refresh = () => apiData(fetchCounterShiftSummary({ from: toIso(fromLocal), to: toIso(toLocal) }))
+      .then(data => { if (active) setSummary(data || {}) })
+      .catch(() => {})
+    void refresh()
+    const timer = window.setInterval(refresh, 10000)
+    return () => { active = false; window.clearInterval(timer) }
+  }, [tab, fromLocal, toLocal])
+  useEffect(() => {
     fetchCounterHandoverUsers().then(({ res, data }) => { if (res.ok) setHandoverUsers(Array.isArray(data) ? data : []) }).catch(() => {})
   }, [])
   useEffect(() => { if (tab === 1) loadInventory() }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -254,6 +299,14 @@ export default function CounterShiftPage() {
   const saveHandover = async () => {
     setError(''); setSuccess('')
     try {
+      const currentSummary = await apiData(fetchCounterShiftSummary({ from: toIso(fromLocal), to: toIso(toLocal) })) || {}
+      setSummary(currentSummary)
+      const currentExpectedCash = openingCashNumber
+        + Number(currentSummary.cashIn || 0)
+        + Number(currentSummary.receiptNoteCashTotal || 0)
+        + otherAmountNumber
+        - Number(currentSummary.paymentNoteTotal || 0)
+      const currentCashDifference = cashActual - currentExpectedCash
       await apiData(createCounterShiftHandover({
         shiftDate,
         shiftName,
@@ -262,17 +315,17 @@ export default function CounterShiftPage() {
         handoverBy: user?.username || '',
         handoverTo,
         openingCash: openingCashNumber,
-        cashSales: summary.cashIn || 0,
-        bankSales: Number(summary.bankingIn || 0) + Number(summary.receiptNoteBankTotal || 0),
-        debtAmount: summary.debtAmount || 0,
+        cashSales: currentSummary.cashIn || 0,
+        bankSales: Number(currentSummary.bankingIn || 0) + Number(currentSummary.receiptNoteBankTotal || 0),
+        debtAmount: currentSummary.debtAmount || 0,
         otherAmount: otherAmountNumber,
-        paymentNoteTotal: summary.paymentNoteTotal || 0,
-        expectedCash,
+        paymentNoteTotal: currentSummary.paymentNoteTotal || 0,
+        expectedCash: currentExpectedCash,
         actualCash: cashActual,
-        differenceCash: cashDifference,
-        orderCount: summary.orderCount || 0,
-        cardSlipCount: summary.cardSlipCount || 0,
-        unpaidOrderCount: summary.unpaidOrderCount || 0,
+        differenceCash: currentCashDifference,
+        orderCount: currentSummary.orderCount || 0,
+        cardSlipCount: currentSummary.cardSlipCount || 0,
+        unpaidOrderCount: currentSummary.unpaidOrderCount || 0,
         cashDenominations: DENOMINATIONS.map(value => ({
           denomination: value,
           count: Number(denominationCounts[value] || 0),
@@ -341,7 +394,21 @@ export default function CounterShiftPage() {
     }
   }
 
-  const printHandover = () => {
+  const printHandover = async () => {
+    let reportSummary = summary
+    try {
+      reportSummary = await apiData(fetchCounterShiftSummary({ from: toIso(fromLocal), to: toIso(toLocal) })) || {}
+      setSummary(reportSummary)
+    } catch (printError) {
+      setError(printError.message || 'Không tải lại được số liệu trước khi in')
+      return
+    }
+    const reportExpectedCash = openingCashNumber
+      + Number(reportSummary.cashIn || 0)
+      + Number(reportSummary.receiptNoteCashTotal || 0)
+      + otherAmountNumber
+      - Number(reportSummary.paymentNoteTotal || 0)
+    const reportCashDifference = cashActual - reportExpectedCash
     const denominationRows = DENOMINATIONS.map(value => {
       const count = Number(denominationCounts[value] || 0)
       if (!count) return ''
@@ -357,18 +424,18 @@ export default function CounterShiftPage() {
       <p><b>Người bàn giao:</b> ${user?.username || ''}</p>
       <div class="section">Nội dung bàn giao</div>
       <table>
-        <tr><td>Tổng doanh thu</td><td class="right bold">${fmtMoney(summary.totalSales)}</td></tr>
+        <tr><td>Tổng doanh thu</td><td class="right bold">${fmtMoney(reportSummary.totalSales)}</td></tr>
         <tr><td>Tiền mặt đầu ca</td><td class="right">${fmtMoney(openingCashNumber)}</td></tr>
-        <tr><td>Thu tiền mặt trong ca</td><td class="right">${fmtMoney(summary.cashIn)}</td></tr>
-        <tr><td>Phiếu thu tiền mặt</td><td class="right">${fmtMoney(summary.receiptNoteCashTotal)}</td></tr>
-        <tr><td>Chi trong ca</td><td class="right">${fmtMoney(summary.paymentNoteTotal)}</td></tr>
-        <tr><td>Tiền thẻ / chuyển khoản</td><td class="right">${fmtMoney(summary.bankingIn)}</td></tr>
-        <tr><td>Phiếu thu QR / chuyển khoản</td><td class="right">${fmtMoney(summary.receiptNoteBankTotal)}</td></tr>
-        <tr><td>Phiếu chi QR / chuyển khoản</td><td class="right">${fmtMoney(summary.bankPaymentNoteTotal)}</td></tr>
-        <tr><td>Order chưa thanh toán</td><td class="right">${summary.unpaidOrderCount || 0}</td></tr>
-        <tr><td>Tiền dự kiến trong két</td><td class="right">${fmtMoney(expectedCash)}</td></tr>
+        <tr><td>Thu tiền mặt trong ca</td><td class="right">${fmtMoney(reportSummary.cashIn)}</td></tr>
+        <tr><td>Phiếu thu tiền mặt</td><td class="right">${fmtMoney(reportSummary.receiptNoteCashTotal)}</td></tr>
+        <tr><td>Chi trong ca</td><td class="right">${fmtMoney(reportSummary.paymentNoteTotal)}</td></tr>
+        <tr><td>Tiền thẻ / chuyển khoản</td><td class="right">${fmtMoney(reportSummary.bankingIn)}</td></tr>
+        <tr><td>Phiếu thu QR / chuyển khoản</td><td class="right">${fmtMoney(reportSummary.receiptNoteBankTotal)}</td></tr>
+        <tr><td>Phiếu chi QR / chuyển khoản</td><td class="right">${fmtMoney(reportSummary.bankPaymentNoteTotal)}</td></tr>
+        <tr><td>Order chưa thanh toán</td><td class="right">${reportSummary.unpaidOrderCount || 0}</td></tr>
+        <tr><td>Tiền dự kiến trong két</td><td class="right">${fmtMoney(reportExpectedCash)}</td></tr>
         <tr><td>Thực tế kiểm đếm</td><td class="right">${fmtMoney(cashActual)}</td></tr>
-        <tr><td>Chênh lệch</td><td class="right bold">${fmtMoney(cashDifference)}</td></tr>
+        <tr><td>Chênh lệch</td><td class="right bold">${fmtMoney(reportCashDifference)}</td></tr>
       </table>
       <div class="section">Chi tiết kiểm đếm</div>
       <table><tr><th>Mệnh giá</th><th class="right">SL</th><th class="right">Thành tiền</th></tr>${denominationRows}</table>
@@ -482,8 +549,8 @@ export default function CounterShiftPage() {
                 </Box>
                 <Divider sx={{ my: 1.5 }} />
                 <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.25 }}>
-                  <TextField label="Tiền mặt đầu ca" value={openingCash} onChange={e => setOpeningCash(digits(e.target.value))} inputMode="numeric" />
-                  <TextField label="Khác (+/-)" value={otherAmount} onChange={e => setOtherAmount(digits(e.target.value))} inputMode="numeric" />
+                  <TextField label="Tiền mặt đầu ca" value={formatIntegerInput(openingCash)} onChange={e => setOpeningCash(parseIntegerInput(e.target.value))} inputMode="numeric" />
+                  <TextField label="Khác (+/-)" value={formatIntegerInput(otherAmount)} onChange={e => setOtherAmount(parseIntegerInput(e.target.value, true))} inputMode="numeric" />
                   <Autocomplete options={handoverUsers} value={handoverUsers.find(item => item.username === handoverTo) || null} getOptionLabel={handoverUserLabel} isOptionEqualToValue={(option, value) => option?.username === value?.username} onChange={(_, value) => setHandoverTo(value?.username || '')} renderOption={(props, item) => <Box component="li" {...props} key={item.username}><Box><Typography>{handoverUserLabel(item)}</Typography><Typography variant="caption" color="text.secondary">{item.username}{item.email ? ` · ${item.email}` : ''}</Typography></Box></Box>} noOptionsText="Chưa có người dùng ROLE_COUNTER" renderInput={params => <TextField {...params} required label="Người nhận bàn giao" placeholder="Gõ để tìm người dùng có quyền bàn giao ca" />} />
                   <TextField label="Ghi chú" value={handoverNotes} onChange={e => setHandoverNotes(e.target.value)} />
                 </Box>
@@ -516,7 +583,7 @@ export default function CounterShiftPage() {
                         <TableRow key={value}>
                           <TableCell>{fmtMoney(value)}</TableCell>
                           <TableCell align="right" width={96}>
-                            <TextField size="small" type="number" value={denominationCounts[value]} onChange={e => setDenominationCounts(prev => ({ ...prev, [value]: e.target.value }))} inputProps={{ min: 0, style: { textAlign: 'right' } }} />
+                            <TextField size="small" type="text" value={formatIntegerInput(denominationCounts[value])} onChange={e => setDenominationCounts(prev => ({ ...prev, [value]: parseIntegerInput(e.target.value) }))} inputProps={{ inputMode: 'numeric', min: 0, style: { textAlign: 'right' } }} />
                           </TableCell>
                           <TableCell align="right">{fmtMoney(value * count)}</TableCell>
                         </TableRow>
@@ -601,7 +668,7 @@ export default function CounterShiftPage() {
                         </TableCell>
                         <TableCell align="right">{fmtQty(row.quantityOnHand)} {row.unit || ''}</TableCell>
                         <TableCell align="right" width={150}>
-                          <TextField size="small" type="number" value={actualQtyById[key] ?? ''} onChange={e => setActualQtyById(prev => ({ ...prev, [key]: e.target.value }))}
+                          <TextField size="small" type="text" value={formatQuantityInput(actualQtyById[key] ?? '')} onChange={e => setActualQtyById(prev => ({ ...prev, [key]: parseQuantityInput(e.target.value) }))}
                             inputRef={node => { if (node) inventoryCellRefs.current.actual[key] = node; else delete inventoryCellRefs.current.actual[key] }}
                             onKeyDown={event => {
                               if (event.nativeEvent.isComposing) return
@@ -643,7 +710,7 @@ export default function CounterShiftPage() {
                 <TextField label="Người nhận" size="small" value={paymentForm.recipientName} onChange={e => setPaymentForm(prev => ({ ...prev, recipientName: e.target.value }))} />
                 <TextField label="Địa chỉ" size="small" value={paymentForm.address} onChange={e => setPaymentForm(prev => ({ ...prev, address: e.target.value }))} />
                 <TextField label={paymentForm.noteType === 'RECEIPT' ? 'Nội dung thu' : 'Lý do chi'} size="small" required value={paymentForm.reason} onChange={e => setPaymentForm(prev => ({ ...prev, reason: e.target.value }))} />
-                <TextField label="Số tiền" size="small" required value={paymentForm.amount} onChange={e => setPaymentForm(prev => ({ ...prev, amount: digits(e.target.value) }))} inputMode="numeric" />
+                <TextField label="Số tiền" size="small" required value={formatIntegerInput(paymentForm.amount)} onChange={e => setPaymentForm(prev => ({ ...prev, amount: parseIntegerInput(e.target.value) }))} inputMode="numeric" />
                 <TextField select label="Thanh toán" size="small" value={paymentForm.paymentMethod} onChange={e => setPaymentForm(prev => ({ ...prev, paymentMethod: e.target.value }))} helperText={['UNPAID', 'BANK_LATER'].includes(paymentForm.paymentMethod) ? 'Ghi nhận công nợ, chưa cộng/trừ số dư ca' : ''}>
                   <MenuItem value="CASH">Tiền mặt</MenuItem>
                   <MenuItem value="BANK_QR">QR / chuyển khoản ngay</MenuItem>

@@ -10,6 +10,7 @@ import EventAvailableIcon from '@mui/icons-material/EventAvailable'
 import TableBarIcon from '@mui/icons-material/TableBar'
 import { useI18n } from '../../i18n/I18nContext'
 import { fetchDaySlots, createReservation } from '../../api/shopApi'
+import FormattedNumberField from '../../components/FormattedNumberField'
 
 const DURATION_OPTIONS = [60, 90, 120, 180]
 const TIME_STEP_MINUTES = 30
@@ -200,9 +201,9 @@ export default function ShopBookingPage() {
         </TextField>
       </Box>
 
-      <TextField
+      <FormattedNumberField
         label={t('booking.partySize') || 'Party size'}
-        type="number"
+        kind="integer"
         inputProps={{ min: 1, max: 50 }}
         value={partySize}
         onChange={e => setPartySize(e.target.value)}

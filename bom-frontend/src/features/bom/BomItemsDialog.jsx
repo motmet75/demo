@@ -25,6 +25,7 @@ import CloseIcon from '@mui/icons-material/Close'
 import PropTypes from 'prop-types'
 import { fetchBomItems, addBomItem, updateBomItem, deleteBomItem } from '../../api/bomApi'
 import { fetchMaterials } from '../../api/materialApi'
+import FormattedNumberField from '../../components/FormattedNumberField'
 
 const EMPTY_ROW = { materialId: '', quantity: '', level: 1 }
 
@@ -63,7 +64,7 @@ function ItemRow({ row, materials, onSave, onCancel, saving }) {
               sx={{ minWidth: 280 }}
               renderInput={params => <TextField {...params} label="Material *" size="small" placeholder="Type code or name" required />}
             />
-            <TextField label="Qty / Unit *" type="number" value={form.quantity}
+            <FormattedNumberField label="Qty / Unit *" value={form.quantity}
               onChange={ch('quantity')} size="small" sx={{ width: 120 }}
               inputProps={{ step: 'any', min: 0.0001 }} disabled={saving} />
             <TextField label="Level" type="number" value={form.level}

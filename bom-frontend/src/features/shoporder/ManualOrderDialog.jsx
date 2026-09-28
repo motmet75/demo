@@ -36,10 +36,11 @@ import MonitorIcon from '@mui/icons-material/Monitor'
 import PersonIcon from '@mui/icons-material/Person'
 import PersonAddIcon from '@mui/icons-material/PersonAdd'
 import AutorenewIcon from '@mui/icons-material/Autorenew'
-import { fetchShopTables, createStaffOrder, fetchOrderTagQr, fetchMenuOptions, fetchCustomers, linkOrderCustomer, createCustomer, redeemVoucher, fetchStaffMenuItems, fetchOrderTemplates, saveOrderTemplate, deleteOrderTemplate } from '../../api/shopApi'
+import { fetchShopTables, createStaffOrder, fetchOrderTagQr, fetchMenuOptions, fetchCustomers, linkOrderCustomer, createCustomer, redeemVoucher, fetchStaffMenuItems, fetchOrderTemplates, saveOrderTemplate, deleteOrderTemplate, switchToQrPayment, revertToCash, splitPayment } from '../../api/shopApi'
 import { printCounterOrderAlertTracked, printOrderReceiptTracked, printOrderTagTracked } from '../../utils/printWithHistory'
 import { broadcastToCounter } from '../shopboard/CounterDisplayPage'
 import VoucherQrScanDialog from './VoucherQrScanDialog'
+import PaymentMethodConfirmDialog from './PaymentMethodConfirmDialog'
 import ItemOptionsDialog from '../shopfront/ItemOptionsDialog'
 import { useI18n } from '../../i18n/I18nContext'
 import { decorateAllowedSideOptions, getAllowedSideMax } from '../../utils/sideItemConfig'
@@ -152,6 +153,8 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
 
   // post-create state
   const [createdOrder, setCreatedOrder] = useState(null)
+  const [receiptPaymentOpen, setReceiptPaymentOpen] = useState(false)
+  const [receiptPaymentBusy, setReceiptPaymentBusy] = useState(false)
   const [tagQr, setTagQr]               = useState('')
   const [tagLoading, setTagLoading]     = useState(false)
   const [imagePreview, setImagePreview]     = useState(null)
@@ -393,9 +396,26 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
     setConfiguringModel(null); setConfiguringOptions([]); setConfiguringOpen(false); setConfiguringLoading(false)
     setSelectedTemplate(null); setTemplateName(''); setTemplateSaving(false)
     setImagePreview(null)
+    setReceiptPaymentOpen(false); setReceiptPaymentBusy(false)
   }
 
   const handleClose = () => { reset(); onClose() }
+
+  const handleReceiptPayment = async ({ paymentMethod, splitCashAmount } = {}) => {
+    if (!createdOrder?.id) return
+    setReceiptPaymentBusy(true); setError('')
+    try {
+      let result
+      if (paymentMethod === 'BANK_QR') result = await switchToQrPayment(createdOrder.id)
+      else if (paymentMethod === 'SPLIT') result = await splitPayment(createdOrder.id, splitCashAmount)
+      else result = await revertToCash(createdOrder.id)
+      if (!result.res.ok) throw new Error(result.data?.message || result.data?.error || 'Không đổi được hình thức thanh toán')
+      setCreatedOrder(result.data)
+      await printOrderReceiptTracked(result.data, null, setError)
+      setReceiptPaymentOpen(false)
+    } catch (receiptError) { setError(receiptError.message || 'Không in được hóa đơn') }
+    finally { setReceiptPaymentBusy(false) }
+  }
 
   const applyOrderTemplate = template => {
     if (!template) return
@@ -887,7 +907,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                 <Button size="small" variant="outlined"
                   sx={{ color: '#fff', borderColor: 'rgba(255,255,255,0.3)', textTransform: 'none', fontSize: 12 }}
                   startIcon={<PrintIcon />}
-                  onClick={() => printOrderReceiptTracked(createdOrder, null, setError)}>
+                  onClick={() => setReceiptPaymentOpen(true)}>
                   Receipt
                 </Button>
                 {hasFullBusinessAccess && (
@@ -1705,6 +1725,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
           </>
         )}
       </Dialog>
+      {receiptPaymentOpen && createdOrder && <PaymentMethodConfirmDialog open order={createdOrder} action="print" busy={receiptPaymentBusy} onCancel={() => setReceiptPaymentOpen(false)} onConfirm={handleReceiptPayment} />}
     </>
   )
 }

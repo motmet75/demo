@@ -11,6 +11,7 @@ import Divider from '@mui/material/Divider'
 import CircularProgress from '@mui/material/CircularProgress'
 import PropTypes from 'prop-types'
 import { apiFetchJson } from '../../api/client'
+import FormattedNumberField from '../../components/FormattedNumberField'
 
 export default function ModelEditModal({ open, model, onClose, onSave, saving: parentSaving }) {
   const makeInitialForm = (m) => ({
@@ -127,9 +128,9 @@ export default function ModelEditModal({ open, model, onClose, onSave, saving: p
             <Divider sx={{ my: 1 }} />
             <Typography variant="subtitle2" color="text.secondary">Shop / Menu</Typography>
 
-            <TextField
+            <FormattedNumberField
               label="Selling Price (VND)"
-              type="number"
+              kind="money"
               value={form.sellingPrice}
               onChange={handleChange('sellingPrice')}
               fullWidth

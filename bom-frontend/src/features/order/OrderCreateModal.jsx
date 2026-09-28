@@ -21,6 +21,7 @@ import { fetchMaterials } from '../../api/materialApi'
 import { fetchBomsByModel } from '../../api/modelApi'
 import { fetchWarehouses } from '../../api/warehouseApi'
 import { apiFetchJson } from '../../api/client'
+import FormattedNumberField from '../../components/FormattedNumberField'
 
 const ORDER_TYPES = ['SALES', 'PRODUCTION', 'TRANSFER', 'INTERNAL']
 const LINE_TYPES  = ['MODEL', 'MATERIAL']
@@ -351,12 +352,12 @@ export default function OrderCreateModal({ open, onClose, onCreated }) {
                   </TextField>
                 )}
 
-                <TextField label="Planned Qty *" type="number" value={line.quantityOrdered}
+                <FormattedNumberField label="Planned Qty *" value={line.quantityOrdered}
                   onChange={handleLineChange(idx, 'quantityOrdered')} size="small"
                   disabled={saving} inputProps={{ min: 0, step: 'any' }} />
                 <TextField label="Unit *" value={line.unit}
                   onChange={handleLineChange(idx, 'unit')} size="small" disabled={saving} />
-                <TextField label="Unit Price" type="number" value={line.unitPrice}
+                <FormattedNumberField label="Unit Price" kind="money" value={line.unitPrice}
                   onChange={handleLineChange(idx, 'unitPrice')} size="small"
                   disabled={saving} inputProps={{ min: 0, step: 'any' }} />
                 <Tooltip title="Remove line">

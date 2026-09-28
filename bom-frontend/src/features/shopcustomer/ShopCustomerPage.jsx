@@ -25,6 +25,7 @@ import ReceiptLongIcon from '@mui/icons-material/ReceiptLong'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import { fetchCustomers, fetchCustomerHistory, fetchShopOrder, createCustomer, updateCustomer, deleteCustomer, addCustomerPoints, recalculateCustomerPoints } from '../../api/shopApi'
 import ShopOrderDetailModal from '../shoporder/ShopOrderDetailModal'
+import FormattedNumberField from '../../components/FormattedNumberField'
 
 const EMPTY = { name: '', phone: '', email: '', notes: '', customerCode: '' }
 
@@ -132,8 +133,8 @@ function AddPointsDialog({ open, customer, onClose, onUpdated }) {
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
           Current: <strong>{customer?.points ?? 0} pts</strong>. Enter positive to add, negative to deduct.
         </Typography>
-        <TextField
-          label="Points (+/-)" type="number" value={pts}
+        <FormattedNumberField
+          label="Points (+/-)" kind="integer" allowNegative value={pts}
           onChange={e => setPts(e.target.value)}
           size="small" fullWidth autoFocus
         />

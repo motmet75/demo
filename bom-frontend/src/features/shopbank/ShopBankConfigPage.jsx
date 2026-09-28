@@ -25,6 +25,7 @@ import ImageIcon from '@mui/icons-material/Image'
 import LocationOnIcon from '@mui/icons-material/LocationOn'
 import LocalPhoneIcon from '@mui/icons-material/LocalPhone'
 import { fetchBankConfig, updateBankConfig, rotateVoucherKey } from '../../api/shopApi'
+import FormattedNumberField from '../../components/FormattedNumberField'
 
 const POPULAR_BANKS = [
   { code: 'VCB',    name: 'Vietcombank', bin: '970436' },
@@ -383,9 +384,9 @@ export default function ShopBankConfigPage() {
                 <Typography variant="subtitle2" fontWeight={700}>Points / Loyalty Programme</Typography>
               </Box>
               <Stack spacing={2}>
-                <TextField
+                <FormattedNumberField
                   label="Conversion rate (VND per 1 point)"
-                  size="small" fullWidth type="number"
+                  size="small" fullWidth kind="money"
                   value={form.pointsConversionRate}
                   onChange={e => { setForm(f => ({ ...f, pointsConversionRate: Number(e.target.value) || 10000 })); setSuccess(false) }}
                   InputProps={{ startAdornment: <InputAdornment position="start">đ</InputAdornment> }}
@@ -410,9 +411,9 @@ export default function ShopBankConfigPage() {
                   sx={{ alignItems: 'flex-start', ml: 0 }}
                 />
                 <Divider />
-                <TextField
+                <FormattedNumberField
                   label="Discount starts at points"
-                  size="small" fullWidth type="number"
+                  size="small" fullWidth kind="integer"
                   value={form.loyaltyDiscountPointThreshold}
                   onChange={e => { setForm(f => ({ ...f, loyaltyDiscountPointThreshold: Math.max(0, Number(e.target.value) || 0) })); setSuccess(false) }}
                   helperText="Customer reaches this point total to unlock the loyalty percentage discount"

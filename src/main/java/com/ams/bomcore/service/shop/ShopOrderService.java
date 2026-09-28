@@ -582,6 +582,11 @@ public class ShopOrderService {
 
     @Transactional
     public ShopOrderResponseDto completeOrder(UUID orderId, String paymentMethod, UUID tenantId, UUID companyId) {
+        return completeOrder(orderId, paymentMethod, null, tenantId, companyId);
+    }
+
+    @Transactional
+    public ShopOrderResponseDto completeOrder(UUID orderId, String paymentMethod, BigDecimal splitCashAmount, UUID tenantId, UUID companyId) {
         counterShiftGuard.requireOpenForReceipt(tenantId,companyId);
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         requireStatus(order, ShopOrder.STATUS_READY);
@@ -590,7 +595,7 @@ public class ShopOrderService {
                 || ShopOrder.PAYMENT_PAY_LATER.equalsIgnoreCase(paymentMethod.trim()))) {
             throw new IllegalArgumentException("Chọn Tiền mặt hoặc QR / chuyển khoản trước khi hoàn tất đơn");
         }
-        if (!alreadyPaid) applySelectedPaymentMethod(order, paymentMethod, companyId);
+        if (!alreadyPaid) applySelectedPaymentMethod(order, paymentMethod, splitCashAmount, companyId);
         order.setStatus(ShopOrder.STATUS_COMPLETED);
         order.setCompletedAt(Instant.now());
         order.setPaymentStatus(ShopOrder.PAY_STATUS_PAID);
@@ -1204,12 +1209,17 @@ public class ShopOrderService {
 
     @Transactional
     public ShopOrderResponseDto markAsPaid(UUID orderId, String paymentMethod, UUID tenantId, UUID companyId) {
+        return markAsPaid(orderId, paymentMethod, null, tenantId, companyId);
+    }
+
+    @Transactional
+    public ShopOrderResponseDto markAsPaid(UUID orderId, String paymentMethod, BigDecimal splitCashAmount, UUID tenantId, UUID companyId) {
         counterShiftGuard.requireOpenForReceipt(tenantId,companyId);
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         if (ShopOrder.STATUS_CANCELLED.equals(order.getStatus())) {
             throw new IllegalStateException("Cannot mark a cancelled order as paid");
         }
-        applySelectedPaymentMethod(order, paymentMethod, companyId);
+        applySelectedPaymentMethod(order, paymentMethod, splitCashAmount, companyId);
         order.setPaymentStatus(ShopOrder.PAYMENT_PAY_LATER.equals(order.getPaymentMethod())
                 ? ShopOrder.PAY_STATUS_UNPAID : ShopOrder.PAY_STATUS_PAID);
         order.setPaymentRequestedAt(null);
@@ -1217,14 +1227,22 @@ public class ShopOrderService {
         return dto(order);
     }
 
-    private void applySelectedPaymentMethod(ShopOrder order, String paymentMethod, UUID companyId) {
+    private void applySelectedPaymentMethod(ShopOrder order, String paymentMethod, BigDecimal splitCashAmount, UUID companyId) {
         if (paymentMethod == null || paymentMethod.isBlank()) return;
         String method = paymentMethod.trim().toUpperCase(Locale.ROOT);
-        if (!Set.of(ShopOrder.PAYMENT_CASH, ShopOrder.PAYMENT_BANK_QR, ShopOrder.PAYMENT_PAY_LATER).contains(method)) {
-            throw new IllegalArgumentException("Payment method must be CASH, BANK_QR or PAY_LATER");
+        if (!Set.of(ShopOrder.PAYMENT_CASH, ShopOrder.PAYMENT_BANK_QR, ShopOrder.PAYMENT_SPLIT, ShopOrder.PAYMENT_PAY_LATER).contains(method)) {
+            throw new IllegalArgumentException("Payment method must be CASH, BANK_QR, SPLIT or PAY_LATER");
         }
         order.setPaymentMethod(method);
-        order.setSplitCashAmount(null);
+        if (ShopOrder.PAYMENT_SPLIT.equals(method)) {
+            BigDecimal total = payableAmount(order);
+            if (splitCashAmount == null || splitCashAmount.compareTo(BigDecimal.ZERO) <= 0 || splitCashAmount.compareTo(total) >= 0) {
+                throw new IllegalArgumentException("Tiền mặt phải lớn hơn 0 và nhỏ hơn tổng tiền của đơn");
+            }
+            order.setSplitCashAmount(splitCashAmount);
+        } else {
+            order.setSplitCashAmount(null);
+        }
         refreshPaymentQr(order, companyRepository.findById(companyId).orElse(null));
     }
 

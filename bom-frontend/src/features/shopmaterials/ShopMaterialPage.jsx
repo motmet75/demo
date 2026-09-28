@@ -30,6 +30,7 @@ import SaveIcon from '@mui/icons-material/Save'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import UploadFileIcon from '@mui/icons-material/UploadFile'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
+import FormattedNumberField from '../../components/FormattedNumberField'
 import * as XLSX from 'xlsx'
 import {
   deductOrderMaterialAudit,
@@ -473,9 +474,8 @@ export default function ShopMaterialPage() {
                       </TableCell>
                       <TableCell align="right">{row.hasBom ? fmtQty(row.calculatedAvailableUnits) : <Chip label="No BOM" size="small" />}</TableCell>
                       <TableCell align="right" sx={{ width: 150 }}>
-                        <TextField
+                        <FormattedNumberField
                           size="small"
-                          type="number"
                           value={overrideInputs[row.modelId] ?? ''}
                           onChange={e => setOverrideInputs(prev => ({ ...prev, [row.modelId]: e.target.value }))}
                           inputProps={{ min: 0, step: '0.001' }}

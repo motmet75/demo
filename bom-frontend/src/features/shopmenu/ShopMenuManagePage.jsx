@@ -37,6 +37,7 @@ import { fetchMenuOptions, createMenuOption, updateMenuOption, deleteMenuOption,
 import { MENU_TRANSLATION_LANGUAGES, compactTranslations, parseJsonObject, stringifyTranslations } from '../../i18n/menuLocalization'
 import { getLanguageMeta } from '../../i18n/translations'
 import { parseAllowedSideConfig, serializeAllowedSideConfig } from '../../utils/sideItemConfig'
+import FormattedNumberField from '../../components/FormattedNumberField'
 
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' d' : ''
 const fmtQty = (n) => n != null && n !== '' ? Number(n).toLocaleString('vi-VN', { maximumFractionDigits: 3 }) : '—'
@@ -294,9 +295,9 @@ function CloneDialog({ open, source, onClose, onCreated }) {
             autoFocus
           />
 
-          <TextField
+          <FormattedNumberField
             label="Selling price"
-            type="number" size="small" fullWidth
+            kind="money" size="small" fullWidth
             value={price}
             onChange={e => setPrice(e.target.value)}
             InputProps={{ endAdornment: <InputAdornment position="end">d</InputAdornment> }}
@@ -726,11 +727,11 @@ function EditDialog({ open, model, models, availabilityRow, onClose, onSave, onA
           <TextField label="Item Name" size="small" fullWidth
             value={form.modelName} onChange={set('modelName')}
             helperText="This is the main customer-facing name before language overrides." />
-          <TextField label="Selling Price" type="number" size="small" fullWidth
+          <FormattedNumberField label="Selling Price" kind="money" size="small" fullWidth
             value={form.sellingPrice} onChange={set('sellingPrice')}
             InputProps={{ endAdornment: <InputAdornment position="end">d</InputAdornment> }}
             helperText="Leave empty to hide from menu" />
-          <TextField label="Daily default quantity / portion" type="number" size="small" fullWidth
+          <FormattedNumberField label="Daily default quantity / portion" size="small" fullWidth
             value={form.shopAvailableUnitsOverride} onChange={set('shopAvailableUnitsOverride')}
             inputProps={{ min: 0, step: '0.001' }}
             InputProps={{ endAdornment: <InputAdornment position="end">unit</InputAdornment> }}
@@ -839,10 +840,10 @@ function EditDialog({ open, model, models, availabilityRow, onClose, onSave, onA
                         renderInput={params => <TextField {...params} label="Side / topping item" size="small" />}
                         noOptionsText="No menu items"
                       />
-                      <TextField
+                      <FormattedNumberField
                         label="Max per item"
                         size="small"
-                        type="number"
+                        kind="integer"
                         value={sideConfig?.maxQty || 1}
                         onChange={e => setAllowedSideMaxQty(side.id, e.target.value)}
                         inputProps={{ min: 1, max: 99, inputMode: 'numeric' }}
@@ -971,7 +972,7 @@ function EditDialog({ open, model, models, availabilityRow, onClose, onSave, onA
                         <TextField label="Choice label" size="small" sx={{ flex: 2 }}
                           value={row.label} onChange={e => setRow({ label: e.target.value })}
                           placeholder="e.g. Small / Medium / Large" />
-                        <TextField label="Price add-on" size="small" type="number" sx={{ flex: 1 }}
+                        <FormattedNumberField label="Price add-on" size="small" kind="money" sx={{ flex: 1 }}
                           value={row.price} onChange={e => setRow({ price: e.target.value })}
                           InputProps={{ endAdornment: <InputAdornment position="end">d</InputAdornment> }}
                           placeholder="0" />

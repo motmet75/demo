@@ -24,6 +24,7 @@ import { generateQueueQr, generateWalkUpQr } from '../../api/shopApi'
 import { printQueueQrTracked, printWalkUpQrTracked } from '../../utils/printWithHistory'
 import { useI18n } from '../../i18n/I18nContext'
 import { ORDERING_LANGUAGE_CODES, SUPPORTED_LANGUAGES } from '../../i18n/translations'
+import FormattedNumberField from '../../components/FormattedNumberField'
 
 function fmtDate(value) {
   if (!value) return ''
@@ -152,9 +153,9 @@ export default function QrOrderDialog({ open, onClose }) {
                 inputProps={{ min: 1 }}
                 helperText={seq ? t('shopOrder.qr.assignedNumber', { number: seq }) : t('shopOrder.qr.nextNumber')}
               />
-              <TextField
+              <FormattedNumberField
                 label={t('shopOrder.qr.maxOrders')}
-                type="number"
+                kind="integer"
                 size="small"
                 fullWidth
                 value={maxOrders}

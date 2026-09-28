@@ -1025,7 +1025,9 @@ public class ShopOrderController {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
         String paymentMethod = body == null ? null : stringValue(body.get("paymentMethod"));
-        return ResponseEntity.ok(shopOrderService.completeOrder(orderId, paymentMethod, tId, cId));
+        BigDecimal splitCashAmount = body == null || body.get("splitCashAmount") == null
+                ? null : new BigDecimal(body.get("splitCashAmount").toString());
+        return ResponseEntity.ok(shopOrderService.completeOrder(orderId, paymentMethod, splitCashAmount, tId, cId));
     }
 
     @PostMapping("/shop/staff/orders/sequence/reset")
@@ -1162,7 +1164,9 @@ public class ShopOrderController {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId);
         String paymentMethod = body == null ? null : stringValue(body.get("paymentMethod"));
-        return ResponseEntity.ok(shopOrderService.markAsPaid(orderId, paymentMethod, tId, cId));
+        BigDecimal splitCashAmount = body == null || body.get("splitCashAmount") == null
+                ? null : new BigDecimal(body.get("splitCashAmount").toString());
+        return ResponseEntity.ok(shopOrderService.markAsPaid(orderId, paymentMethod, splitCashAmount, tId, cId));
     }
 
     @PutMapping("/shop/staff/orders/{orderId}/items")

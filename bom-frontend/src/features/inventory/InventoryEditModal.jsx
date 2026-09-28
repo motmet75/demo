@@ -16,6 +16,7 @@ import { fetchWarehouses } from '../../api/warehouseApi'
 import { fetchAllInvoices } from '../../api/invoiceApi'
 import { useAppContext } from '../../context/AppContext'
 import { fmtNum } from '../../utils/format'
+import FormattedNumberField from '../../components/FormattedNumberField'
 
 export default function InventoryEditModal({ open, inventory, onClose, onSave, saving, defaultCurrency = 'USD', canViewPrices = true }) {
   const { tenantId, companyId } = useAppContext()
@@ -416,9 +417,8 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
             <TextField label="Batch No" value={form.batchNo} onChange={handleChange('batchNo')} disabled={isSubmitting} required />
             {!isEditing && (
               <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
-                <TextField
+                <FormattedNumberField
                   label="Warehouse Qty"
-                  type="number"
                   value={form.warehouseImportQuantity}
                   onChange={handleChange('warehouseImportQuantity')}
                   disabled={isSubmitting}
@@ -431,19 +431,18 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
                   disabled={isSubmitting}
                   placeholder="box"
                 />
-                <TextField
+                <FormattedNumberField
                   label="BOM Qty / Warehouse Unit"
                   helperText="Optional if one unique model BOM conversion exists"
-                  type="number"
                   value={form.bomUnitPerWarehouseUnit}
                   onChange={handleChange('bomUnitPerWarehouseUnit')}
                   disabled={isSubmitting}
                   inputProps={{ step: 'any', min: 0 }}
                 />
                 {canViewPrices && (
-                  <TextField
+                  <FormattedNumberField
                     label="Warehouse Unit Price"
-                    type="number"
+                    kind="money"
                     value={form.warehouseImportUnitPrice}
                     onChange={handleChange('warehouseImportUnitPrice')}
                     disabled={isSubmitting}
@@ -470,9 +469,8 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
                 </Typography>
               </Box>
             )}
-            <TextField
+            <FormattedNumberField
               label="Quantity On Hand"
-              type="number"
               value={quantityOnHandValue}
               onChange={hasWarehouseConversion ? undefined : handleChange('quantityOnHand')}
               disabled={isSubmitting || hasWarehouseConversion}
@@ -517,19 +515,19 @@ export default function InventoryEditModal({ open, inventory, onClose, onSave, s
 
             <Divider />
 
-            <TextField label="Quantity Reserved (info only)" type="number" value={form.quantityReserved}
+            <FormattedNumberField label="Quantity Reserved (info only)" value={form.quantityReserved}
               onChange={isEditing ? undefined : handleChange('quantityReserved')}
               disabled={isSubmitting || isEditing}
               InputProps={{ readOnly: isEditing }}
               helperText={isEditing ? 'Informational field from import - not used in availability checks' : 'Optional: informational reserved qty (not deducted from available)'} />
-            <TextField label="Quantity Locked (soft-reserve)" type="number" value={form.quantityLocked}
+            <FormattedNumberField label="Quantity Locked (soft-reserve)" value={form.quantityLocked}
               onChange={isEditing ? undefined : handleChange('quantityLocked')}
               disabled={isSubmitting || isEditing}
               InputProps={{ readOnly: isEditing }}
               helperText={isEditing ? 'Managed by Reserve/Release actions - Available = On Hand - Locked' : 'Qty blocked from use: Available = On Hand - Locked'} />
 
             <TextField label="Contract Code" value={form.contractCode} onChange={handleChange('contractCode')} disabled={isSubmitting} />
-            {canViewPrices && <TextField label="Unit Price" type="number" value={unitPriceValue} onChange={convertedUnitPrice !== null ? undefined : handleChange('unitPrice')} disabled={isSubmitting || convertedUnitPrice !== null} inputProps={{ step: 'any', min: 0 }} helperText={convertedUnitPrice !== null ? `Converted BOM unit price in ${form.currency || 'currency'}` : undefined} />}
+            {canViewPrices && <FormattedNumberField label="Unit Price" kind="money" value={unitPriceValue} onChange={convertedUnitPrice !== null ? undefined : handleChange('unitPrice')} disabled={isSubmitting || convertedUnitPrice !== null} inputProps={{ step: 'any', min: 0 }} helperText={convertedUnitPrice !== null ? `Converted BOM unit price in ${form.currency || 'currency'}` : undefined} />}
             <TextField label="Unit" value={form.unit || 'pcs'} disabled helperText="From selected material" InputProps={{ readOnly: true }} />
             {canViewPrices && <TextField label="Currency" value={form.currency || defaultCurrency} onChange={handleChange('currency')} disabled={isSubmitting || !isEditing} helperText={!isEditing ? 'From inventory main bar' : undefined} />}
 

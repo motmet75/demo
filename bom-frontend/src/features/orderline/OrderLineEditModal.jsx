@@ -14,6 +14,7 @@ import CircularProgress from '@mui/material/CircularProgress'
 import Autocomplete from '@mui/material/Autocomplete'
 import PropTypes from 'prop-types'
 import { fetchMaterials } from '../../api/materialApi'
+import FormattedNumberField from '../../components/FormattedNumberField'
 
 const LINE_TYPES   = ['MODEL', 'MATERIAL']
 const LINE_STATUSES = ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']
@@ -250,9 +251,8 @@ export default function OrderLineEditModal({ open, orderLine, orderId, onClose, 
           <Typography variant="subtitle2" color="text.secondary">Quantities</Typography>
 
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-            <TextField
+            <FormattedNumberField
               label="Qty Ordered"
-              type="number"
               value={form.quantityOrdered}
               onChange={set('quantityOrdered')}
               required
@@ -273,9 +273,8 @@ export default function OrderLineEditModal({ open, orderLine, orderId, onClose, 
           {isEditing && (
             <>
               <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-                <TextField
+                <FormattedNumberField
                   label="Qty Produced"
-                  type="number"
                   value={form.quantityProduced}
                   onChange={set('quantityProduced')}
                   disabled={busy}
@@ -283,18 +282,16 @@ export default function OrderLineEditModal({ open, orderLine, orderId, onClose, 
                   sx={{ flex: 1, minWidth: 130 }}
                   helperText="Updated by production process"
                 />
-                <TextField
+                <FormattedNumberField
                   label="Qty Delivered"
-                  type="number"
                   value={form.quantityDelivered}
                   onChange={set('quantityDelivered')}
                   disabled={busy}
                   inputProps={{ step: 'any', min: 0 }}
                   sx={{ flex: 1, minWidth: 130 }}
                 />
-                <TextField
+                <FormattedNumberField
                   label="Qty Cancelled"
-                  type="number"
                   value={form.quantityCancelled}
                   onChange={set('quantityCancelled')}
                   disabled={busy}
@@ -323,9 +320,9 @@ export default function OrderLineEditModal({ open, orderLine, orderId, onClose, 
 
           {/* ── Pricing & Status ─────────────────────────── */}
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-            <TextField
+            <FormattedNumberField
               label="Unit Price"
-              type="number"
+              kind="money"
               value={form.unitPrice}
               onChange={set('unitPrice')}
               disabled={busy}

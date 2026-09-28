@@ -7,6 +7,7 @@ import TextField from '@mui/material/TextField'
 import Button from '@mui/material/Button'
 import Box from '@mui/material/Box'
 import PropTypes from 'prop-types'
+import FormattedNumberField from '../../components/FormattedNumberField'
 
 export default function WarehouseEditModal({ open, warehouse, onClose, onSave, saving }) {
   // Helpers to convert between JS Date and the input[type=datetime-local] value (local time, no seconds)
@@ -155,7 +156,7 @@ export default function WarehouseEditModal({ open, warehouse, onClose, onSave, s
             <TextField label="Contact Name" value={form.contactName} onChange={handleChange('contactName')} disabled={isSubmitting} />
             <TextField label="Phone" value={form.phone} onChange={handleChange('phone')} disabled={isSubmitting} />
             <TextField label="Email" value={form.email} onChange={handleChange('email')} disabled={isSubmitting} />
-            <TextField label="Capacity" type="number" inputProps={{ step: '0.01' }} value={form.capacity} onChange={handleChange('capacity')} disabled={isSubmitting} />
+            <FormattedNumberField label="Capacity" maximumFractionDigits={2} inputProps={{ step: '0.01' }} value={form.capacity} onChange={handleChange('capacity')} disabled={isSubmitting} />
             <TextField label="Note" multiline rows={3} value={form.note} onChange={handleChange('note')} disabled={isSubmitting} />
             <div>
               <label>

@@ -20,6 +20,7 @@ import DeleteIcon from '@mui/icons-material/Delete'
 import RedeemIcon from '@mui/icons-material/Redeem'
 import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber'
 import { fetchVouchers, createVoucher, cancelVoucher, redeemVoucher } from '../../api/shopApi'
+import FormattedNumberField from '../../components/FormattedNumberField'
 
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : '—'
 const fmtDate = (value) => {
@@ -71,11 +72,11 @@ function CreateVoucherDialog({ open, onClose, onCreated }) {
       <DialogTitle fontWeight={800}>Create Voucher</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '8px !important' }}>
         {error && <Alert severity="error">{error}</Alert>}
-        <TextField label="Face Value *" size="small" fullWidth type="number"
+        <FormattedNumberField label="Face Value *" size="small" fullWidth kind="money"
           value={faceValue} onChange={e => setFaceValue(e.target.value)}
           InputProps={{ startAdornment: <InputAdornment position="start">đ</InputAdornment> }}
           helperText="Value customer can redeem against an order" />
-        <TextField label="Sale Price (optional)" size="small" fullWidth type="number"
+        <FormattedNumberField label="Sale Price (optional)" size="small" fullWidth kind="money"
           value={salePrice} onChange={e => setSalePrice(e.target.value)}
           InputProps={{ startAdornment: <InputAdornment position="start">đ</InputAdornment> }}
           helperText="How much you sold this voucher for" />

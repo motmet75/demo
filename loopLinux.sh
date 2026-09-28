@@ -6,7 +6,7 @@ databases="tuonghoa anhmedia nncminhchau minhmapshop thegioithan nlsjsc"
 # Thông tin đăng nhập PostgreSQL
 PG_USER="postgres"
 PG_PASSWORD="295hAhVyG5Manager"
-PG_HOST="localhost"
+PG_HOST="localhost"/
 PG_PORT="5432"
 
 # Xuất biến môi trường chứa mật khẩu để đăng nhập không cần tương tác

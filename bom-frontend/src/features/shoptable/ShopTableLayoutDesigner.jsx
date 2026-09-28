@@ -33,6 +33,7 @@ import {
   fetchShopTableDrawings,
   updateShopTableDrawing,
 } from '../../api/shopApi'
+import FormattedNumberField from '../../components/FormattedNumberField'
 
 const STAGE_WIDTH = 960
 const STAGE_HEIGHT = 430
@@ -642,9 +643,9 @@ export default function ShopTableLayoutDesigner({ tables = [], expanded = false,
                         <IconButton size="small" onClick={() => rotateSelectedTable(15)}><RotateRightIcon fontSize="small" /></IconButton>
                       </Tooltip>
                     </Box>
-                    <TextField
+                    <FormattedNumberField
                       size="small"
-                      type="number"
+                      kind="integer"
                       label="Chairs around"
                       value={normalizeChairCount(selectedItem.chairs, 0)}
                       onChange={event => updateItem(selectedItem.id, { chairs: normalizeChairCount(event.target.value, 0) })}

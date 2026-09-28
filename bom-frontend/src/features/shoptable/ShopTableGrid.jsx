@@ -5,6 +5,8 @@ import useMediaQuery from '@mui/material/useMediaQuery'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
+import Checkbox from '@mui/material/Checkbox'
+import FormControlLabel from '@mui/material/FormControlLabel'
 import Alert from '@mui/material/Alert'
 import CircularProgress from '@mui/material/CircularProgress'
 import IconButton from '@mui/material/IconButton'
@@ -35,7 +37,8 @@ import PushPinIcon from '@mui/icons-material/PushPin'
 import {
   fetchShopTables, deleteShopTable, fetchTableQr, fetchTableOrders, fetchShopOrders,
   confirmShopOrder, completeShopOrder, markOrderPaid, resetOrderSequence,
-  fetchShopTableDrawings, updateShopTableDrawing, setOrderTable, clearOrderTable, fetchTableOrderDrafts
+  fetchShopTableDrawings, updateShopTableDrawing, setOrderTable, clearOrderTable, fetchTableOrderDrafts,
+  switchToQrPayment, revertToCash, splitPayment
 } from '../../api/shopApi'
 import ShopTableEditModal from './ShopTableEditModal'
 import ShopTableLayoutDesigner from './ShopTableLayoutDesigner'
@@ -45,16 +48,17 @@ import ShopOrderDetailModal from '../shoporder/ShopOrderDetailModal'
 import PaymentMethodConfirmDialog from '../shoporder/PaymentMethodConfirmDialog'
 import { useAuth } from '../../context/useAuth'
 import { useAppContext } from '../../context/AppContext'
+import { printOrderReceiptTracked } from '../../utils/printWithHistory'
 
 const ACTIVE_STATUSES = new Set(['PENDING', 'CONFIRMED', 'PREPARING', 'READY'])
 const STATUS_CHIP = {
-  PENDING:   { label: 'Placed',    color: 'default' },
-  CONFIRMED: { label: 'Confirmed', color: 'success' },
-  PREPARING: { label: 'Preparing', color: 'warning' },
-  READY:     { label: 'Ready',     color: 'info' },
-  PICKED_UP: { label: 'Picked Up', color: 'success' },
-  COMPLETED: { label: 'Completed', color: 'success' },
-  CANCELLED: { label: 'Cancelled', color: 'error' },
+  PENDING:   { label: 'Chờ xác nhận', color: 'default' },
+  CONFIRMED: { label: 'Đã xác nhận', color: 'success' },
+  PREPARING: { label: 'Đang làm', color: 'warning' },
+  READY:     { label: 'Sẵn sàng', color: 'info' },
+  PICKED_UP: { label: 'Đã giao món', color: 'success' },
+  COMPLETED: { label: 'Đã trả món', color: 'success' },
+  CANCELLED: { label: 'Đã hủy', color: 'error' },
 }
 
 const fmtMoney = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' VND' : '-'
@@ -62,6 +66,8 @@ const dateFmt = (v) => v ? new Date(v).toLocaleString('vi-VN', { dateStyle: 'sho
 const orderLabel = (order) => order?.orderNumber != null ? `#${order.orderNumber}` : order?.orderCode || '-'
 const isActiveOrder = (order) => ACTIVE_STATUSES.has(order?.status)
 const isCompletableOrder = (order) => order?.status === 'READY'
+const isServedOrder = (order) => ['COMPLETED', 'PICKED_UP'].includes(order?.status)
+const clearableOrders = (table) => (table?.orders || []).filter(order => isServedOrder(order) && !order.tableClearedAt)
 const makeSelectionModel = (ids = []) => ({ type: 'include', ids: new Set(ids) })
 const normalizeSearch = value => String(value || '')
   .normalize('NFD')
@@ -111,7 +117,7 @@ function tableOrderBadge(order) {
   const mainItems = (order?.items || []).filter(item => !item.parentItemId)
   const item = mainItems.length === 1 ? mainItems[0] : null
   const itemLabel = item ? ` · ${Number(item.quantity || 1).toLocaleString('vi-VN')}× ${item.modelName || item.itemName || 'Món'}` : ''
-  return `${orderLabel(order)}${itemLabel} · ${order.paymentStatus === 'PAID' ? 'Đã trả' : 'Chưa trả'}`
+  return `${orderLabel(order)}${itemLabel} · ${isServedOrder(order) ? 'Đã trả món' : order.paymentStatus === 'PAID' ? 'Đã thanh toán' : 'Chưa thanh toán'}`
 }
 
 export default function ShopTableGrid() {
@@ -145,6 +151,9 @@ export default function ShopTableGrid() {
   const [moveTable, setMoveTable] = useState(null)
   const [movingOrder, setMovingOrder] = useState(false)
   const [paymentAction, setPaymentAction] = useState(null)
+  const [hideServedOrders, setHideServedOrders] = useState(true)
+  const [selectedTableIds, setSelectedTableIds] = useState([])
+  const [clearingTables, setClearingTables] = useState(false)
   const [pinnedTableIds, setPinnedTableIds] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(pinStorageKey) || '[]')
@@ -324,6 +333,25 @@ export default function ShopTableGrid() {
     setOrdersDialog({ table: row, orders: row.orders || [] })
   }
 
+  const clearSelectedTables = async () => {
+    const selected = rows.filter(table => selectedTableIds.includes(table.id))
+    const orders = selected.flatMap(clearableOrders)
+    if (!orders.length || clearingTables) return
+    if (!window.confirm(`Khách đã rời ${selected.length} bàn? Dọn ${orders.length} đơn đã trả món khỏi danh sách bàn.`)) return
+    setClearingTables(true); setError('')
+    try {
+      const results = await Promise.all(orders.map(order => clearOrderTable(order.id)))
+      const failed = results.find(result => !result.res.ok)
+      if (failed) throw new Error(failed.data?.message || failed.data?.error || 'Không dọn được một số bàn')
+      setSelectedTableIds([])
+      await load()
+    } catch (clearError) {
+      setError(clearError.message || 'Không dọn được các bàn đã chọn')
+    } finally {
+      setClearingTables(false)
+    }
+  }
+
   const assignCounterOrder = async () => {
     if (!assignOrder || !assignTable || assigning) return
     setAssigning(true); setError('')
@@ -360,13 +388,31 @@ export default function ShopTableGrid() {
     setPaymentAction({ action: 'complete-many', orders: selected, order: { orderNumber: `${selected.length} đơn`, totalAmount: selected.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0), paymentMethod: selected[0]?.paymentMethod } })
   }
 
-  const confirmPaymentAction = async paymentMethod => {
+  const confirmPaymentAction = async ({ paymentMethod, splitCashAmount } = {}) => {
     if (!paymentAction) return
     setCompletingSelected(true)
     try {
+      if (paymentAction.action === 'print') {
+        let result
+        if (paymentMethod === 'BANK_QR') result = await switchToQrPayment(paymentAction.order.id)
+        else if (paymentMethod === 'SPLIT') result = await splitPayment(paymentAction.order.id, splitCashAmount)
+        else result = await revertToCash(paymentAction.order.id)
+        if (!result.res.ok) throw new Error(result.data?.message || result.data?.error || 'Không đổi được hình thức thanh toán')
+        await printOrderReceiptTracked(result.data)
+        setPaymentAction(null)
+        await load()
+        return
+      }
       const selected = paymentAction.orders || [paymentAction.order]
-      if (paymentAction.action === 'paid') await markOrderPaid(paymentAction.order.id, paymentMethod)
-      else await Promise.all(selected.map(order => completeShopOrder(order.id, paymentMethod)))
+      if (paymentAction.action === 'paid') await markOrderPaid(paymentAction.order.id, paymentMethod, splitCashAmount)
+      else {
+        const aggregateTotal = selected.reduce((sum, order) => sum + Math.max(0, Number(order.totalAmount || 0) - Number(order.discountAmount || 0)), 0)
+        await Promise.all(selected.map(order => {
+          const orderTotal = Math.max(0, Number(order.totalAmount || 0) - Number(order.discountAmount || 0))
+          const orderCash = paymentMethod === 'SPLIT' && aggregateTotal > 0 ? Math.round(orderTotal * Number(splitCashAmount || 0) / aggregateTotal) : null
+          return completeShopOrder(order.id, paymentMethod, orderCash)
+        }))
+      }
       const completedIds = new Set(paymentAction.action === 'paid' ? [] : selected.map(order => order.id))
       const now = new Date().toISOString()
       setOrdersDialog(prev => prev ? {
@@ -388,6 +434,10 @@ export default function ShopTableGrid() {
   const selectedReadyCount = (ordersDialog?.orders || [])
     .filter(order => selectedOrderIds.includes(order.id) && isCompletableOrder(order)).length
   const selectedOrderModel = React.useMemo(() => makeSelectionModel(selectedOrderIds), [selectedOrderIds])
+  const selectedTableModel = React.useMemo(() => makeSelectionModel(selectedTableIds), [selectedTableIds])
+  const visibleOrders = useCallback(table => hideServedOrders
+    ? (table?.activeOrders || []).filter(order => !isServedOrder(order))
+    : (table?.activeOrders || []), [hideServedOrders])
   const filteredRows = React.useMemo(() => {
     const query = normalizeSearch(tableQuery.trim())
     const matches = !query ? rows : rows.filter(row => {
@@ -433,6 +483,7 @@ export default function ShopTableGrid() {
       {order.status === 'PENDING' && <Button size="small" variant="contained" disabled={!!orderActionId} onClick={() => runOrderAction(order, confirmShopOrder, 'xác nhận')}>Xác nhận</Button>}
       {order.paymentStatus !== 'PAID' && <Button size="small" variant="outlined" color="success" disabled={!!orderActionId} onClick={() => setPaymentAction({ order, action: 'paid' })}>Đã thanh toán</Button>}
       {order.status === 'READY' && <Button size="small" variant="contained" color="success" disabled={!!orderActionId} onClick={() => setPaymentAction({ order, action: 'complete' })}>Hoàn tất & trả món</Button>}
+      <Button size="small" variant="outlined" startIcon={<PrintIcon />} disabled={!!orderActionId} onClick={() => isServedOrder(order) ? printOrderReceiptTracked(order) : setPaymentAction({ order, action: 'print' })}>In hóa đơn</Button>
       {!['COMPLETED', 'PICKED_UP', 'CANCELLED'].includes(order.status) && <Button size="small" variant="outlined" startIcon={<TableBarIcon />} disabled={!!orderActionId} onClick={() => { setMoveOrder(order); setMoveTable(null) }}>Chuyển bàn</Button>}
       {['COMPLETED', 'PICKED_UP'].includes(order.status) && !order.tableClearedAt && <Button size="small" variant="outlined" color="warning" disabled={!!orderActionId} onClick={() => runOrderAction(order, clearOrderTable, 'dọn bàn')}>Khách đã rời · Dọn bàn</Button>}
       {orderActionId.endsWith(`:${order.id}`) && <CircularProgress size={18} />}
@@ -465,11 +516,13 @@ export default function ShopTableGrid() {
     {
       field: 'activeOrders', headerName: 'Đơn tại bàn · thanh toán', flex: 1, minWidth: 320,
       renderCell: ({ value, row }) => {
-        const list = value || []
-        if (!list.length && !row.draft) return <Typography variant="caption" color="text.disabled">Không có đơn tại bàn</Typography>
+        const list = visibleOrders(row)
+        const servedCount = (value || []).filter(isServedOrder).length
+        if (!list.length && !row.draft && !servedCount) return <Typography variant="caption" color="text.disabled">Không có đơn tại bàn</Typography>
         return (
           <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', overflow: 'hidden' }}>
             {row.draft && <Chip label={`Tạm: ${(row.draft.displayItems || []).map(item => `${item.quantity}× ${item.modelName}`).join(' · ')}`} size="small" color="warning" sx={{ maxWidth: 300, fontWeight: 800 }} />}
+            {hideServedOrders && servedCount > 0 && <Chip label={`${servedCount} đã trả món`} size="small" color="success" sx={{ fontWeight: 800 }} />}
             {list.slice(0, 3).map(order => (
               <Tooltip key={order.id} title={tableOrderBadge(order)}>
                 <Chip label={tableOrderBadge(order)} size="small" color={order.paymentStatus === 'PAID' ? 'success' : 'warning'} variant="outlined" sx={{ maxWidth: 280, fontWeight: 800 }} />
@@ -596,7 +649,8 @@ export default function ShopTableGrid() {
         {mobileTable && <Box sx={{ mt: 1.5 }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center"><Typography variant="h6" fontWeight={900}>{mobileTable.tableName}</Typography><Chip color={mobileTable.draft?'warning':mobileTable.activeOrderCount?'primary':'success'} label={mobileTable.draft?'Có đơn tạm':mobileTable.activeOrderCount?`${mobileTable.activeOrderCount} đơn chưa dọn`:'Bàn trống'} /></Stack>
           {mobileTable.draft && <Alert severity="warning" sx={{ mt: 1 }}><strong>Đơn tạm:</strong> {(mobileTable.draft.displayItems || []).map(item => `${item.quantity} × ${item.modelName}`).join(' · ')} · cập nhật bởi {mobileTable.draft.updatedBy}</Alert>}
-          {(mobileTable.activeOrders || []).map(order => <Paper key={order.id} variant="outlined" sx={{ p: 1, my: 1 }} onClick={()=>setDetailOrder(order)}>
+          {hideServedOrders && clearableOrders(mobileTable).length > 0 && <Alert severity="success" sx={{ mt: 1, py: 0 }}>{clearableOrders(mobileTable).length} đơn đã trả món đang chờ dọn bàn.</Alert>}
+          {visibleOrders(mobileTable).map(order => <Paper key={order.id} variant="outlined" sx={{ p: 1, my: 1 }} onClick={()=>setDetailOrder(order)}>
             <Stack direction="row" justifyContent="space-between" alignItems="center" gap={1}><Typography fontWeight={800}>#{order.orderNumber ?? order.dailySeq} · {order.staffName || 'Khách tự gọi'}</Typography><Chip size="small" label={order.paymentStatus === 'PAID' ? 'Đã trả' : 'Chưa trả'} color={order.paymentStatus === 'PAID' ? 'success' : 'warning'} /></Stack>
             <Typography variant="body2">{(order.items || []).filter(item=>!item.parentItemId).map(item=>`${item.quantity} × ${item.modelName}${item.itemNotes?` (${item.itemNotes})`:''}`).join(' · ')}</Typography>
             <Box sx={{ mt: 1 }} onClick={event => event.stopPropagation()}>{renderOrderActions(order)}</Box>
@@ -605,18 +659,25 @@ export default function ShopTableGrid() {
         </Box>}
       </Paper> : <ShopTableLayoutDesigner tables={rows} expanded onQuickOrder={setQuickOrderTarget} />)}
       {activeTab === 'list' && <Box sx={{ flex: 1, minHeight: 300, display: 'flex', flexDirection: 'column', gap: 1 }}>
-        <TextField
-          size="small"
-          label="Gõ tên bàn không dấu, số đơn, khách hoặc món để tìm"
-          value={tableQuery}
-          onChange={event => setTableQuery(event.target.value)}
-          autoFocus
-          sx={{ maxWidth: 520 }}
-        />
+        <Stack direction={{ xs: 'column', sm: 'row' }} gap={1} alignItems={{ sm: 'center' }}>
+          <TextField
+            size="small"
+            label="Gõ tên bàn không dấu, số đơn, khách hoặc món để tìm"
+            value={tableQuery}
+            onChange={event => setTableQuery(event.target.value)}
+            autoFocus
+            sx={{ width: '100%', maxWidth: 520 }}
+          />
+          <FormControlLabel control={<Checkbox checked={hideServedOrders} onChange={event => setHideServedOrders(event.target.checked)} />} label="Ẩn chi tiết đơn đã trả món" />
+          <Button variant="contained" color="warning" disabled={!selectedTableIds.length || clearingTables} onClick={clearSelectedTables}>
+            {clearingTables ? 'Đang dọn…' : `Khách đã rời · Dọn bàn (${selectedTableIds.length})`}
+          </Button>
+        </Stack>
         {mobile ? <Stack gap={1} sx={{ overflow: 'auto' }}>
           {filteredRows.map(table => <Paper key={table.id} variant="outlined" sx={{ p: 1.5, bgcolor: table.activeOrderCount ? '#eff6ff' : '#fff' }}>
             <Stack direction="row" justifyContent="space-between" alignItems="center" gap={1}>
               <Stack direction="row" alignItems="center" gap={0.5}>
+                <Checkbox size="small" disabled={!clearableOrders(table).length} checked={selectedTableIds.includes(table.id)} onChange={event => setSelectedTableIds(current => event.target.checked ? [...new Set([...current, table.id])] : current.filter(id => id !== table.id))} />
                 <Tooltip title={pinnedTableIds.includes(String(table.id)) ? 'Bỏ ghim bàn' : 'Ghim bàn lên đầu'}><IconButton size="small" color={pinnedTableIds.includes(String(table.id)) ? 'warning' : 'default'} onClick={() => toggleTablePin(table.id)}><PushPinIcon fontSize="small" /></IconButton></Tooltip>
                 <Typography variant="h6" fontWeight={900}>{table.tableName}</Typography>
               </Stack>
@@ -627,7 +688,8 @@ export default function ShopTableGrid() {
               </Stack>
             </Stack>
             {table.draft && <Typography variant="body2" fontWeight={800} color="warning.dark" sx={{ mt: 0.5 }}>Tạm: {(table.draft.displayItems || []).map(item => `${item.quantity} × ${item.modelName}`).join(' · ')} · {table.draft.updatedBy}</Typography>}
-            {(table.activeOrders || []).map(order => <Paper key={order.id} variant="outlined" sx={{ p: 1, mt: 1 }}>
+            {hideServedOrders && clearableOrders(table).length > 0 && <Alert severity="success" sx={{ mt: 1, py: 0 }}>Đã trả món: {clearableOrders(table).length} đơn · chọn bàn để dọn khi khách rời.</Alert>}
+            {visibleOrders(table).map(order => <Paper key={order.id} variant="outlined" sx={{ p: 1, mt: 1 }}>
               <Stack direction="row" alignItems="center" gap={0.5} flexWrap="wrap"><Typography fontWeight={900}>{orderLabel(order)}</Typography>{statusChip(order.status)}<Chip size="small" label={order.paymentStatus === 'PAID' ? 'Đã trả' : 'Chưa trả'} color={order.paymentStatus === 'PAID' ? 'success' : 'warning'} /></Stack>
               <Typography variant="body2">{(order.items || []).filter(item => !item.parentItemId).map(item => `${item.quantity} × ${item.modelName}`).join(' · ')}</Typography>
               <Typography variant="body2" fontWeight={800}>{fmtMoney(order.totalAmount)}</Typography>
@@ -642,6 +704,11 @@ export default function ShopTableGrid() {
           columns={columns}
           loading={loading}
           getRowId={r => r.id}
+          checkboxSelection
+          disableRowSelectionOnClick
+          isRowSelectable={({ row }) => clearableOrders(row).length > 0}
+          rowSelectionModel={selectedTableModel}
+          onRowSelectionModelChange={model => setSelectedTableIds(selectionIds(model))}
           pageSizeOptions={[25, 50]}
           density="compact"
           getRowClassName={({ row }) => row.activeOrderCount ? 'occupied-row' : ''}
@@ -731,12 +798,13 @@ export default function ShopTableGrid() {
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
           <TableBarIcon color="primary" />
           <Typography component="span" fontWeight={900}>{ordersDialog?.table?.tableName}</Typography>
-          <Chip label={`${ordersDialog?.orders?.length || 0} orders`} size="small" />
-          <Chip label={`${(ordersDialog?.orders || []).filter(isActiveOrder).length} open`} size="small" color="primary" variant="outlined" />
+          <Chip label={`${ordersDialog?.orders?.length || 0} đơn`} size="small" />
+          <Chip label={`${(ordersDialog?.orders || []).filter(isActiveOrder).length} đang làm`} size="small" color="primary" variant="outlined" />
+          <Chip label={`${(ordersDialog?.orders || []).filter(isServedOrder).length} đã trả món`} size="small" color="success" variant="outlined" />
         </DialogTitle>
         <DialogContent sx={{ height: 520 }}>
           <DataGrid
-            rows={ordersDialog?.orders || []}
+            rows={hideServedOrders ? (ordersDialog?.orders || []).filter(order => !isServedOrder(order)) : (ordersDialog?.orders || [])}
             columns={orderColumns}
             getRowId={row => row.id}
             checkboxSelection
@@ -748,9 +816,7 @@ export default function ShopTableGrid() {
             density="compact"
             initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
           />
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-            Only Ready orders can be selected for completion.
-          </Typography>
+          <FormControlLabel control={<Checkbox checked={hideServedOrders} onChange={event => setHideServedOrders(event.target.checked)} />} label="Ẩn đơn đã trả món" />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOrdersDialog(null)}>Close</Button>
@@ -769,7 +835,7 @@ export default function ShopTableGrid() {
       {paymentAction && <PaymentMethodConfirmDialog
         open
         order={paymentAction.order}
-        action={paymentAction?.action === 'paid' ? 'paid' : 'complete'}
+        action={paymentAction?.action === 'paid' ? 'paid' : paymentAction?.action === 'print' ? 'print' : 'complete'}
         busy={completingSelected}
         onCancel={() => setPaymentAction(null)}
         onConfirm={confirmPaymentAction}

@@ -16,6 +16,7 @@ import TableCell from '@mui/material/TableCell'
 import TableBody from '@mui/material/TableBody'
 import PropTypes from 'prop-types'
 import { fetchOrderById, finishOrder } from '../../api/orderApi'
+import FormattedNumberField from '../../components/FormattedNumberField'
 
 /**
  * FinishOrderModal – lets user input real consumption quantities per material,
@@ -105,9 +106,8 @@ export default function FinishOrderModal({ open, orderId, onClose, onFinished })
                           <TableCell>{l.unit}</TableCell>
                           <TableCell align="right">{l.quantityOrdered}</TableCell>
                           <TableCell>
-                            <TextField
+                            <FormattedNumberField
                               size="small"
-                              type="number"
                               placeholder={String(l.quantityOrdered)}
                               value={realQtys[l.materialId] ?? ''}
                               onChange={handleQtyChange(l.materialId)}

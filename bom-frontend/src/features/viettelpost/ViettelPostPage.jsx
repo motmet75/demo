@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import * as viettelpostApi from '../../api/viettelpostApi'
+import { formatIntegerInput, parseIntegerInput } from '../../utils/numberInput'
 
 const styles = {
   container: {
@@ -409,10 +410,11 @@ export default function ViettelPostPage() {
             <div style={styles.formGroup}>
               <label style={styles.label}>Weight (grams) *</label>
               <input
-                type="number"
+                type="text"
+                inputMode="numeric"
                 name="productWeight"
-                value={formData.productWeight}
-                onChange={handleInputChange}
+                value={formatIntegerInput(formData.productWeight)}
+                onChange={event => handleInputChange({ target: { name: 'productWeight', value: parseIntegerInput(event.target.value) } })}
                 style={styles.input}
                 min="1"
                 required
@@ -421,10 +423,11 @@ export default function ViettelPostPage() {
             <div style={styles.formGroup}>
               <label style={styles.label}>Product Value (VND)</label>
               <input
-                type="number"
+                type="text"
+                inputMode="numeric"
                 name="productPrice"
-                value={formData.productPrice}
-                onChange={handleInputChange}
+                value={formatIntegerInput(formData.productPrice)}
+                onChange={event => handleInputChange({ target: { name: 'productPrice', value: parseIntegerInput(event.target.value) } })}
                 style={styles.input}
                 min="0"
               />
@@ -432,10 +435,11 @@ export default function ViettelPostPage() {
             <div style={styles.formGroup}>
               <label style={styles.label}>COD Amount (VND)</label>
               <input
-                type="number"
+                type="text"
+                inputMode="numeric"
                 name="moneyCollection"
-                value={formData.moneyCollection}
-                onChange={handleInputChange}
+                value={formatIntegerInput(formData.moneyCollection)}
+                onChange={event => handleInputChange({ target: { name: 'moneyCollection', value: parseIntegerInput(event.target.value) } })}
                 style={styles.input}
                 min="0"
               />

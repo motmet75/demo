@@ -23,6 +23,7 @@ import { useAppContext } from '../../context/AppContext'
 import { fetchModelBomsByModel, createModelBom, updateModelBom, deleteModelBom } from '../../api/modelApi'
 import { fetchMaterials } from '../../api/materialApi'
 import { syncBomFromModelBoms } from '../../api/bomApi'
+import FormattedNumberField from '../../components/FormattedNumberField'
 
 // Inline form for add/edit a BOM item row
 function BomItemForm({ initial, materials, onSave, onCancel, saving }) {
@@ -83,7 +84,7 @@ function BomItemForm({ initial, materials, onSave, onCancel, saving }) {
           sx={{ minWidth: 260 }}
           renderInput={params => <TextField {...params} label="Material" size="small" placeholder="Type code or name" required />}
         />
-        <TextField
+        <FormattedNumberField
           label="Warehouse Qty"
           value={warehouseQty}
           onChange={e => setWarehouseQty(e.target.value)}
@@ -91,9 +92,8 @@ function BomItemForm({ initial, materials, onSave, onCancel, saving }) {
           sx={{ width: 130 }}
           disabled={saving}
           inputProps={{ step: 'any', min: 0 }}
-          type="number"
         />
-        <TextField
+        <FormattedNumberField
           label="Warehouse Unit"
           value={warehouseUnit}
           onChange={e => setWarehouseUnit(e.target.value)}
@@ -109,9 +109,8 @@ function BomItemForm({ initial, materials, onSave, onCancel, saving }) {
           sx={{ width: 150 }}
           disabled={saving}
           inputProps={{ step: 'any', min: 0 }}
-          type="number"
         />
-        <TextField
+        <FormattedNumberField
           label="Qty / Unit"
           value={convertedQty !== null ? String(convertedQty) : qtyPerUnit}
           onChange={convertedQty !== null ? undefined : e => setQtyPerUnit(e.target.value)}
@@ -119,7 +118,6 @@ function BomItemForm({ initial, materials, onSave, onCancel, saving }) {
           sx={{ width: 120 }}
           disabled={saving || convertedQty !== null}
           inputProps={{ step: 'any', min: 0 }}
-          type="number"
         />
         <Button type="submit" variant="contained" size="small" disabled={saving}>
           {saving ? <CircularProgress size={16} /> : (initial ? 'Update' : 'Add')}

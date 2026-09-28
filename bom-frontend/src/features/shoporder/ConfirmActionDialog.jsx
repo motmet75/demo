@@ -36,6 +36,7 @@ export default function ConfirmActionDialog({
   onConfirm,
   onCancel,
   children,
+  confirmDisabled = false,
 }) {
   const { t } = useI18n()
   const [reason, setReason]   = useState('')
@@ -46,7 +47,7 @@ export default function ConfirmActionDialog({
     if (open) { setReason(''); setBusy(false) }
   }, [open])
 
-  const canConfirm = !busy && (!requireReason || reason.trim().length > 0)
+  const canConfirm = !busy && !confirmDisabled && (!requireReason || reason.trim().length > 0)
 
   const handleConfirm = async () => {
     setBusy(true)

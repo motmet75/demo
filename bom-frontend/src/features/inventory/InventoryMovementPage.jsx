@@ -17,6 +17,7 @@ import { useAuth } from '../../context/useAuth'
 import { fetchMovements, recordMovementIn, recordMovementOut, recordMovementTransfer, recordMovementAdjustment } from '../../api/inventoryMovementApi'
 import { fetchMaterials } from '../../api/materialApi'
 import { fetchWarehouses } from '../../api/warehouseApi'
+import { formatQuantityInput, parseQuantityInput } from '../../utils/numberInput'
 
 const MOVEMENT_TYPES = ['IN', 'OUT', 'TRANSFER', 'ADJUSTMENT', 'IMPORT', 'IMPORT_UPDATE']
 const TYPE_COLORS = { IN: 'success', OUT: 'error', TRANSFER: 'info', ADJUSTMENT: 'warning', IMPORT: 'default', IMPORT_UPDATE: 'default' }
@@ -393,10 +394,10 @@ export default function InventoryMovementPage() {
             <Box sx={{ display: 'flex', gap: 1 }}>
               <TextField
                 label={form.movementType === 'ADJUSTMENT' ? 'Quantity (negative = decrease)' : 'Quantity'}
-                value={form.quantity}
-                onChange={handleChange('quantity')}
-                required disabled={saving} size="small" type="number"
-                inputProps={{ step: 'any', min: form.movementType === 'ADJUSTMENT' ? undefined : 0 }}
+                value={formatQuantityInput(form.quantity)}
+                onChange={event => setForm(current => ({ ...current, quantity: parseQuantityInput(event.target.value, { allowNegative: form.movementType === 'ADJUSTMENT' }) }))}
+                required disabled={saving} size="small" type="text"
+                inputProps={{ inputMode: 'decimal', step: 'any', min: form.movementType === 'ADJUSTMENT' ? undefined : 0 }}
                 helperText={form.movementType === 'ADJUSTMENT' ? 'Use negative to decrease stock, positive to increase' : undefined}
                 sx={{ flex: 1 }}
               />

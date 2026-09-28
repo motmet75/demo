@@ -11,6 +11,7 @@ import FormControlLabel from '@mui/material/FormControlLabel'
 import PropTypes from 'prop-types'
 import Autocomplete from '@mui/material/Autocomplete'
 import { useAppContext } from '../../context/AppContext'
+import FormattedNumberField from '../../components/FormattedNumberField'
 
 /**
  * MaterialEditModal
@@ -187,9 +188,9 @@ export default function MaterialEditModal({ open, material, onClose, onSave, sav
             />
 
             <FormControlLabel control={<Checkbox checked={form.manualShiftConsumption} disabled={isBusy} onChange={e=>setForm(prev=>({...prev,manualShiftConsumption:e.target.checked}))}/>} label="Xuất tiêu hao cuối ca (không tự trừ theo BOM khi bán)" />
-            <TextField
+            <FormattedNumberField
               label="Price"
-              type="number"
+              kind="money"
               value={form.price}
               onChange={handleChange('price')}
               fullWidth
@@ -208,9 +209,8 @@ export default function MaterialEditModal({ open, material, onClose, onSave, sav
                 )}
                 label="Inventory Alert"
               />
-              <TextField
+              <FormattedNumberField
                 label="Alert Qty"
-                type="number"
                 value={form.inventoryAlertQuantity}
                 onChange={handleChange('inventoryAlertQuantity')}
                 inputProps={{ step: 'any', min: 0 }}

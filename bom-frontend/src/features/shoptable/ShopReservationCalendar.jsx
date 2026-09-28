@@ -16,6 +16,7 @@ import {
   fetchStaffDaySlots, confirmReservation, seatReservation,
   completeReservation, cancelReservationStaff, markReservationNoShow, createStaffReservation, restoreReservation,
 } from '../../api/shopApi'
+import FormattedNumberField from '../../components/FormattedNumberField'
 
 const DAY_START_HOUR = 6
 const DAY_END_HOUR = 24
@@ -291,7 +292,7 @@ function QuickCreateDialog({ slot, date, busy, onClose, onCreate }) {
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}>
         <TextField label="Customer name" value={customerName} onChange={e => setCustomerName(e.target.value)} autoFocus />
         <TextField label="Phone" value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} />
-        <TextField label="Party size" type="number" inputProps={{ min: 1 }} value={partySize} onChange={e => setPartySize(e.target.value)} />
+        <FormattedNumberField label="Party size" kind="integer" inputProps={{ min: 1 }} value={partySize} onChange={e => setPartySize(e.target.value)} />
         <TextField label="Duration (min)" type="number" inputProps={{ min: 15, step: 15 }} value={duration} onChange={e => setDuration(e.target.value)} />
       </DialogContent>
       <DialogActions>

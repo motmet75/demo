@@ -63,7 +63,7 @@ import {
   fetchShopOrders, fetchActiveOrders, confirmShopOrder, prepareShopOrder, readyShopOrder,
   completeShopOrder, cancelShopOrder, resetOrderSequence, setShopOrderNumber,
   generateDisplayBoardToken, pickupShopOrder, revertShopOrder, markOrderPaid,
-  fetchBankConfig, switchToQrPayment, revertToCash, fetchOrderTagQr, fetchShopOrder,
+  fetchBankConfig, switchToQrPayment, revertToCash, splitPayment, fetchOrderTagQr, fetchShopOrder,
   fetchShopTables, setOrderTable, setOrderSeat, fetchPickupQr, fetchOrdersByToken,
   lockTokenSession, unlockTokenSession,
   fetchStaffCalls, dismissStaffCall, replyStaffCall, forceConfirmOrder,
@@ -86,6 +86,7 @@ import { useI18n } from '../../i18n/I18nContext'
 import { localizedCategory, localizedModelName, localizedSelectedOptions } from '../../i18n/menuLocalization'
 import { fetchModels } from '../../api/modelApi'
 import { apiFetchJson } from '../../api/client'
+import { formatIntegerInput, moneyInputSuggestions, parseIntegerInput } from '../../utils/numberInput'
 
 const BOARD_CHANNEL = 'shop_display_board'
 const ORDER_POLL_MS = 5000
@@ -100,13 +101,23 @@ const CUSTOMER_EDIT_HISTORY_KEY = 'shop.orders.customerEditHistory.v1'
 const DEFAULT_QUICK_CONFIRM = {
   paid: false,
   paymentMethod: 'CASH',
+  splitQrAmount: '',
   complete: false,
 }
 function readShopOrderPref(key, fallback) {
-  try { return localStorage.getItem(key) || fallback } catch { return fallback }
+  try {
+    const stored = localStorage.getItem(key)
+    if (stored) return stored
+  } catch { /* browser storage may be blocked */ }
+  try {
+    const prefix = `${encodeURIComponent(key)}=`
+    const cookie = document.cookie.split(';').map(item => item.trim()).find(item => item.startsWith(prefix))
+    return cookie ? decodeURIComponent(cookie.slice(prefix.length)) : fallback
+  } catch { return fallback }
 }
 function writeShopOrderPref(key, value) {
   try { localStorage.setItem(key, value) } catch { /* browser storage may be blocked */ }
+  try { document.cookie = `${encodeURIComponent(key)}=${encodeURIComponent(value)}; Max-Age=31536000; Path=/bom-inventory; SameSite=Lax` } catch { /* cookies may be blocked */ }
 }
 function readShopOrderSessionValue(key, fallback) {
   try { return sessionStorage.getItem(key) || fallback } catch { return fallback }
@@ -259,9 +270,23 @@ function mergeOrderSnapshots(...snapshots) {
   return Array.from(byId.values()).sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
 }
 
-function QuickConfirmOptions({ value, onChange }) {
+function QuickConfirmOptions({ value, onChange, order, bankConfig }) {
   const update = (patch) => onChange?.({ ...value, ...patch })
   const paid = Boolean(value?.paid || value?.complete)
+  const total = Math.max(0, Number(order?.totalAmount || 0) - Number(order?.discountAmount || 0))
+  const qrAmount = Number(String(value?.splitQrAmount || '').replace(/[^0-9]/g, ''))
+  const cashAmount = Math.max(0, total - qrAmount)
+  const split = value?.paymentMethod === 'SPLIT'
+  const bankQr = value?.paymentMethod === 'BANK_QR'
+  const paymentQrAmount = split ? qrAmount : total
+  const paymentQrReady = paid && paymentQrAmount > 0 && (bankQr || (split && qrAmount < total))
+  const paymentQrUrl = paymentQrReady && bankConfig?.bankBin && bankConfig?.bankAccountNumber
+    ? `https://img.vietqr.io/image/${bankConfig.bankBin}-${bankConfig.bankAccountNumber}-qr_only.png`
+      + `?amount=${Math.round(paymentQrAmount)}`
+      + `&addInfo=${encodeURIComponent(order?.orderCode || '')}`
+      + `&accountName=${encodeURIComponent(bankConfig.bankAccountName || '')}`
+    : null
+  const suggestions = moneyInputSuggestions(value?.splitQrAmount, total)
   return (
     <Box sx={{ mt: 1.5, p: 1.25, border: '1px solid #dbeafe', bgcolor: '#f8fbff', borderRadius: 1.5 }}>
       <Typography variant="caption" fontWeight={800} color="primary" sx={{ display: 'block', mb: 0.75 }}>
@@ -277,13 +302,38 @@ function QuickConfirmOptions({ value, onChange }) {
           select
           size="small"
           label="Thanh toán"
-          value={value?.paymentMethod === 'BANK_QR' ? 'BANK_QR' : 'CASH'}
-          onChange={e => update({ paymentMethod: e.target.value })}
+          value={['CASH', 'BANK_QR', 'SPLIT'].includes(value?.paymentMethod) ? value.paymentMethod : 'CASH'}
+          onChange={e => update({ paymentMethod: e.target.value, splitQrAmount: '' })}
+          disabled={!paid}
           sx={{ maxWidth: 220 }}
         >
           <MenuItem value="CASH">Tiền mặt</MenuItem>
           <MenuItem value="BANK_QR">CK QR</MenuItem>
+          <MenuItem value="SPLIT">Tiền mặt + QR</MenuItem>
         </TextField>
+        {paid && split && <>
+          <TextField size="small" label="Số tiền QR" value={formatIntegerInput(value?.splitQrAmount)} onChange={e => update({ splitQrAmount: parseIntegerInput(e.target.value) })} inputProps={{ inputMode: 'numeric' }} error={qrAmount <= 0 || qrAmount >= total} helperText="Nhập phần QR; tiền mặt được tự tính." sx={{ maxWidth: 220 }} />
+          {suggestions.length > 0 && <Stack direction="row" gap={0.5} flexWrap="wrap">{suggestions.map(amount => <Button key={amount} size="small" variant="outlined" onClick={() => update({ splitQrAmount: String(amount) })}>{amount.toLocaleString('vi-VN')}đ</Button>)}</Stack>}
+          <Typography variant="caption" fontWeight={800}>QR: {qrAmount.toLocaleString('vi-VN')}đ · Tiền mặt: {cashAmount.toLocaleString('vi-VN')}đ</Typography>
+        </>}
+        {paid && (bankQr || split) && paymentQrReady && (
+          paymentQrUrl ? (
+            <Box sx={{ textAlign: 'center', mt: 0.75, p: 1.25, bgcolor: '#fff', border: '2px solid #bfdbfe', borderRadius: 2 }}>
+              <Typography variant="caption" fontWeight={800} color="#15803d" sx={{ display: 'block', mb: 0.75 }}>
+                Khách quét QR để thanh toán
+              </Typography>
+              <img src={paymentQrUrl} alt="VietQR payment" style={{ width: 190, height: 190, maxWidth: '100%', display: 'block', margin: '0 auto', borderRadius: 6 }} />
+              <Typography variant="h6" fontWeight={900} color="primary" sx={{ mt: 0.75 }}>
+                {paymentQrAmount.toLocaleString('vi-VN')}đ
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Đơn #{order?.orderNumber ?? order?.dailySeq ?? order?.orderCode ?? '-'} · ref: {order?.orderCode || '-'}
+              </Typography>
+            </Box>
+          ) : (
+            <Alert severity="warning" sx={{ mt: 0.75 }}>Chưa cấu hình tài khoản ngân hàng để tạo QR.</Alert>
+          )
+        )}
         <FormControlLabel
           control={<Checkbox size="small" checked={Boolean(value?.complete)} onChange={e => update({ complete: e.target.checked, paid: e.target.checked ? true : value?.paid })} />}
           label="Hoàn tất đơn"
@@ -574,7 +624,7 @@ const BOARD_HIGH_CONTRAST_STYLE = {
   PICKED_UP:  { headerBg: '#e0f2fe', border: '#0369a1',  cardBg: '#ffffff',  color: '#0f172a',  numColor: '#0369a1' },
 }
 
-function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, onPayQr, onPickupQr, onSwitchQr, onRevertCash, onShowTrackQr, onPrintTag, onMergeBills, onChangeSeat, displaySize = 'normal', highContrast = false }) {
+function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, onPrintReceipt, onPayQr, onPickupQr, onSwitchQr, onRevertCash, onShowTrackQr, onPrintTag, onMergeBills, onChangeSeat, displaySize = 'normal', highContrast = false }) {
   const { language, t } = useI18n()
   // onAction(type, orderId, orderNumber)
   const large = displaySize === 'large'
@@ -615,7 +665,7 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
         const since = elapsed(order.confirmedAt || order.createdAt)
         const boardActionItems = [
           { key: 'detail', labelKey: 'shop.orderAction.viewDetail', icon: <VisibilityIcon />, color: 'primary', onClick: () => onDetail(order) },
-          { key: 'receipt', labelKey: 'shop.orderAction.printReceipt', icon: <ReceiptLongIcon />, color: 'primary', onClick: () => printOrderReceiptTracked(order) },
+          { key: 'receipt', labelKey: 'shop.orderAction.printReceipt', icon: <ReceiptLongIcon />, color: 'primary', onClick: () => onPrintReceipt?.(order) },
           { key: 'trackQr', labelKey: 'shop.orderAction.showTracking', icon: <QrCodeScannerIcon />, color: 'info', show: Boolean(onShowTrackQr), onClick: () => onShowTrackQr?.(order) },
           { key: 'trackingTag', labelKey: 'shop.orderAction.printTrackingTag', icon: <LocalOfferIcon />, color: 'secondary', show: Boolean(onPrintTag), onClick: () => onPrintTag?.(order) },
           { key: 'cupLabel', labelKey: 'shop.orderAction.printCupLabel', icon: <LocalCafeIcon />, color: 'warning', onClick: () => printCupLabelsTracked(order) },
@@ -873,7 +923,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
   })
   const orderActionItems = [
     { key: 'detail', labelKey: 'shop.orderAction.viewDetail', icon: <VisibilityIcon />, color: 'primary', onClick: () => actions.detail(order) },
-    { key: 'receipt', labelKey: 'shop.orderAction.printReceipt', icon: <ReceiptLongIcon />, color: 'primary', onClick: () => printOrderReceiptTracked(order) },
+    { key: 'receipt', labelKey: 'shop.orderAction.printReceipt', icon: <ReceiptLongIcon />, color: 'primary', onClick: () => actions.printReceipt(order) },
     { key: 'combinedReceipt', labelKey: 'shop.orderAction.combinedReceipt', icon: <PeopleAltIcon />, color: 'secondary', show: Boolean(order.sourceToken), onClick: () => actions.combinedReceipt(order.sourceToken) },
     { key: 'trackQr', labelKey: 'shop.orderAction.showTracking', icon: <QrCodeScannerIcon />, color: 'info', onClick: () => actions.showTrackQr(order) },
     { key: 'trackingTag', labelKey: 'shop.orderAction.printTrackingTag', icon: <LocalOfferIcon />, color: 'secondary', onClick: () => actions.printTag(order) },
@@ -964,7 +1014,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
               <IconButton size="small" onClick={() => actions.detail(order)} sx={{ p: 0.35 }}><VisibilityIcon sx={{ fontSize: large ? 20 : 17 }} /></IconButton>
             </Tooltip>
             <Tooltip title={t('shop.orderAction.printReceipt')}>
-              <IconButton size="small" color="primary" onClick={() => printOrderReceiptTracked(order)} sx={{ p: 0.35 }}><ReceiptLongIcon sx={{ fontSize: large ? 20 : 17 }} /></IconButton>
+              <IconButton size="small" color="primary" onClick={() => actions.printReceipt(order)} sx={{ p: 0.35 }}><ReceiptLongIcon sx={{ fontSize: large ? 20 : 17 }} /></IconButton>
             </Tooltip>
             {order.sourceToken && (
               <Tooltip title={t('shop.orderAction.combinedReceipt')}>
@@ -1308,7 +1358,7 @@ function OrderRowsGrid({ rows, tables, actions, selectedIds, onToggleSelect, dis
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                     {renderPrimaryAction(order)}
                     <Tooltip title={t('shopOrder.grid.viewDetail')}><IconButton size="small" onClick={() => actions.detail(order)}><VisibilityIcon sx={{ fontSize: large ? 20 : 17 }} /></IconButton></Tooltip>
-                    <Tooltip title={t('shopOrder.grid.printReceipt')}><IconButton size="small" color="primary" onClick={() => printOrderReceiptTracked(order)}><PrintIcon sx={{ fontSize: large ? 20 : 17 }} /></IconButton></Tooltip>
+                    <Tooltip title={t('shopOrder.grid.printReceipt')}><IconButton size="small" color="primary" onClick={() => actions.printReceipt(order)}><PrintIcon sx={{ fontSize: large ? 20 : 17 }} /></IconButton></Tooltip>
                     {order.paymentStatus !== 'PAID' && isActive && <Button size="small" variant="outlined" color="success" onClick={() => actions.markPaid(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 12 : 10 }}>{t('shopOrder.grid.markPaid')}</Button>}
                     {order.paymentStatus !== 'PAID' && order.status !== 'CANCELLED' && <Tooltip title={t('shopOrder.grid.paymentQr')}><IconButton size="small" color="primary" onClick={() => actions.payQr(order)}><QrCode2Icon sx={{ fontSize: large ? 20 : 17 }} /></IconButton></Tooltip>}
                     {isActive && <Button size="small" color="error" onClick={() => actions.cancel(order)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: large ? 12 : 10 }}>{t('shopOrder.edit.cancel')}</Button>}
@@ -1944,7 +1994,8 @@ export default function ShopOrderGrid() {
   const updateQuickConfirmPrefs = useCallback((next) => {
     const normalized = {
       paid: Boolean(next?.paid || next?.complete),
-      paymentMethod: next?.paymentMethod === 'BANK_QR' ? 'BANK_QR' : 'CASH',
+      paymentMethod: ['BANK_QR', 'SPLIT'].includes(next?.paymentMethod) ? next.paymentMethod : 'CASH',
+      splitQrAmount: String(next?.splitQrAmount || '').replace(/[^0-9]/g, ''),
       complete: Boolean(next?.complete),
     }
     quickConfirmPrefsRef.current = normalized
@@ -1960,18 +2011,29 @@ export default function ShopOrderGrid() {
     setPaymentAction({ order, action })
   }
 
-  const confirmPaymentAction = async (paymentMethod) => {
+  const confirmPaymentAction = async ({ paymentMethod, splitCashAmount } = {}) => {
     if (!paymentAction?.order?.id) return
     setPaymentActionBusy(true)
     try {
+      if (paymentAction.action === 'print') {
+        let result
+        if (paymentMethod === 'BANK_QR') result = await switchToQrPayment(paymentAction.order.id)
+        else if (paymentMethod === 'SPLIT') result = await splitPayment(paymentAction.order.id, splitCashAmount)
+        else result = await revertToCash(paymentAction.order.id)
+        const updated = await applyOrderResult(result, paymentAction.order.id, 'Không đổi được hình thức thanh toán')
+        if (updated) await printOrderReceiptTracked(updated)
+        setPaymentAction(null)
+        setPaymentActionBusy(false)
+        return
+      }
       if (paymentAction.action === 'complete') {
         let current = paymentAction.order
         if (current.status === 'PENDING') current = await applyOrderResult(await confirmShopOrder(current.id), current.id)
         if (current.status === 'CONFIRMED') current = await applyOrderResult(await prepareShopOrder(current.id), current.id)
         if (current.status === 'PREPARING') current = await applyOrderResult(await readyShopOrder(current.id), current.id)
-        if (current.status === 'READY') await applyOrderResult(await completeShopOrder(current.id, paymentMethod), current.id)
+        if (current.status === 'READY') await applyOrderResult(await completeShopOrder(current.id, paymentMethod, splitCashAmount), current.id)
       } else {
-        await applyOrderResult(await markOrderPaid(paymentAction.order.id, paymentMethod), paymentAction.order.id)
+        await applyOrderResult(await markOrderPaid(paymentAction.order.id, paymentMethod, splitCashAmount), paymentAction.order.id)
       }
       setPaymentAction(null)
     } catch (e) { setError(e.message || 'Không xử lý được thanh toán') }
@@ -2178,21 +2240,22 @@ export default function ShopOrderGrid() {
     const currentPrefs = quickConfirmPrefsRef.current || DEFAULT_QUICK_CONFIRM
     const prefs = {
       paid: Boolean(currentPrefs.paid || currentPrefs.complete),
-      paymentMethod: currentPrefs.paymentMethod === 'BANK_QR' ? 'BANK_QR' : 'CASH',
+      paymentMethod: ['BANK_QR', 'SPLIT'].includes(currentPrefs.paymentMethod) ? currentPrefs.paymentMethod : 'CASH',
+      splitQrAmount: Number(currentPrefs.splitQrAmount || 0),
       complete: Boolean(currentPrefs.complete),
     }
+    const payable = Math.max(0, Number(row.totalAmount || 0) - Number(row.discountAmount || 0))
+    const splitCashAmount = prefs.paymentMethod === 'SPLIT' ? payable - prefs.splitQrAmount : null
     try {
       await applyOrderResult(await confirmShopOrder(row.id), row.id)
-      if (prefs.paymentMethod === 'BANK_QR') {
-        await applyOrderResult(await switchToQrPayment(row.id), row.id, t('shopOrder.grid.switchPaymentMethodFailed'))
-      }
       if (prefs.paid || prefs.complete) {
-        await applyOrderResult(await markOrderPaid(row.id, prefs.paymentMethod), row.id)
+        if (prefs.paymentMethod === 'SPLIT' && (prefs.splitQrAmount <= 0 || prefs.splitQrAmount >= payable)) throw new Error('Nhập số tiền QR lớn hơn 0 và nhỏ hơn tổng đơn')
+        await applyOrderResult(await markOrderPaid(row.id, prefs.paymentMethod, splitCashAmount), row.id)
       }
       if (prefs.complete) {
         await applyOrderResult(await prepareShopOrder(row.id), row.id)
         await applyOrderResult(await readyShopOrder(row.id), row.id)
-        await applyOrderResult(await completeShopOrder(row.id, prefs.paymentMethod), row.id)
+        await applyOrderResult(await completeShopOrder(row.id, prefs.paymentMethod, splitCashAmount), row.id)
       }
     } catch (e) {
       setError(e.message || 'Action failed')
@@ -2287,8 +2350,10 @@ export default function ShopOrderGrid() {
       confirmLabel: 'Xác nhận',
       confirmColor: 'primary',
       quickConfirm: true,
+      quickConfirmOrder: row,
     }, () => handleQuickConfirm(row)),
     detail:          (row) => setDetailOrder(row),
+    printReceipt:    (row) => ['COMPLETED', 'PICKED_UP', 'CANCELLED'].includes(row.status) ? printOrderReceiptTracked(row) : openPaymentAction(row, 'print'),
     combinedReceipt: (token) => setCombinedToken(token),
     payQr:           handlePayQr,
     printTag:        handlePrintTrack,
@@ -2305,7 +2370,8 @@ export default function ShopOrderGrid() {
       message: t('shopOrder.confirm.confirmMessage', { order: row.orderNumber ?? row.orderCode }),
       confirmLabel: t('shopOrder.grid.confirm'),
       confirmColor: 'primary',
-      quickConfirm: true
+      quickConfirm: true,
+      quickConfirmOrder: row,
     }, () => handleQuickConfirm(row)),
     prepare:    (row) => askConfirm({ title: t('shopOrder.confirm.prepareTitle'), message: t('shopOrder.confirm.prepareMessage', { order: row.orderNumber ?? row.orderCode }), confirmLabel: t('shopOrder.confirm.startLabel'), confirmColor: 'warning' }, () => act(prepareShopOrder, row.id)),
     ready:      (row) => askConfirm({ title: t('shopOrder.confirm.readyTitle'), message: t('shopOrder.confirm.readyMessage', { order: row.orderNumber ?? row.orderCode }), confirmLabel: t('shopOrder.confirm.markReadyLabel'), confirmColor: 'success' }, () => act(readyShopOrder, row.id, () => broadcastReady())),
@@ -2748,10 +2814,10 @@ export default function ShopOrderGrid() {
             />
             </>
           )}
-          {tab === 1 && <StatusBoard status="CONFIRMED"  orders={confirmedOrders} modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} onShowTrackQr={handleShowTrackQr} onPrintTag={handlePrintTrack} onMergeBills={cardActions.mergeBills} onChangeSeat={handleChangeSeat} />}
-          {tab === 2 && <StatusBoard status="PREPARING"  orders={preparingOrders} modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} onShowTrackQr={handleShowTrackQr} onPrintTag={handlePrintTrack} onMergeBills={cardActions.mergeBills} onChangeSeat={handleChangeSeat} />}
-          {tab === 3 && <StatusBoard status="READY"      orders={readyOrders}     modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} onShowTrackQr={handleShowTrackQr} onPrintTag={handlePrintTrack} onMergeBills={cardActions.mergeBills} onChangeSeat={handleChangeSeat} />}
-          {tab === 4 && <StatusBoard status="PICKED_UP"  orders={pickedUpOrders}  modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} onShowTrackQr={handleShowTrackQr} onPrintTag={handlePrintTrack} onMergeBills={cardActions.mergeBills} onChangeSeat={handleChangeSeat} />}
+          {tab === 1 && <StatusBoard status="CONFIRMED"  orders={confirmedOrders} modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPrintReceipt={cardActions.printReceipt} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} onShowTrackQr={handleShowTrackQr} onPrintTag={handlePrintTrack} onMergeBills={cardActions.mergeBills} onChangeSeat={handleChangeSeat} />}
+          {tab === 2 && <StatusBoard status="PREPARING"  orders={preparingOrders} modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPrintReceipt={cardActions.printReceipt} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} onShowTrackQr={handleShowTrackQr} onPrintTag={handlePrintTrack} onMergeBills={cardActions.mergeBills} onChangeSeat={handleChangeSeat} />}
+          {tab === 3 && <StatusBoard status="READY"      orders={readyOrders}     modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPrintReceipt={cardActions.printReceipt} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} onShowTrackQr={handleShowTrackQr} onPrintTag={handlePrintTrack} onMergeBills={cardActions.mergeBills} onChangeSeat={handleChangeSeat} />}
+          {tab === 4 && <StatusBoard status="PICKED_UP"  orders={pickedUpOrders}  modelImageMap={modelImageMap} displaySize={cardDisplaySize} highContrast={highContrastCards} onAction={handleBoardAction} onDetail={setDetailOrder} onPrintReceipt={cardActions.printReceipt} onPayQr={handlePayQr} onPickupQr={handlePickupQr} onSwitchQr={cardActions.switchToQr} onRevertCash={cardActions.revertCash} onShowTrackQr={handleShowTrackQr} onPrintTag={handlePrintTrack} onMergeBills={cardActions.mergeBills} onChangeSeat={handleChangeSeat} />}
         </Box>
       </Box>
 
@@ -3185,9 +3251,10 @@ export default function ShopOrderGrid() {
           reasonLabel={confirmDlg.reasonLabel}
           onConfirm={confirmDlg.onConfirm}
           onCancel={() => setConfirmDlg(null)}
+          confirmDisabled={Boolean(confirmDlg.quickConfirm && (quickConfirmPrefs.paid || quickConfirmPrefs.complete) && quickConfirmPrefs.paymentMethod === 'SPLIT' && (() => { const total = Math.max(0, Number(confirmDlg.quickConfirmOrder?.totalAmount || 0) - Number(confirmDlg.quickConfirmOrder?.discountAmount || 0)); const qr = Number(quickConfirmPrefs.splitQrAmount || 0); return qr <= 0 || qr >= total })())}
         >
           {confirmDlg.quickConfirm && (
-            <QuickConfirmOptions value={quickConfirmPrefs} onChange={updateQuickConfirmPrefs} />
+            <QuickConfirmOptions value={quickConfirmPrefs} onChange={updateQuickConfirmPrefs} order={confirmDlg.quickConfirmOrder} bankConfig={bankConfig} />
           )}
           {confirmDlg.children}
         </ConfirmActionDialog>

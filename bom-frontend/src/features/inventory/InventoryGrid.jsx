@@ -20,6 +20,7 @@ import InventoryPatchCsv from './InventoryPatchCsv'
 import * as XLSX from 'xlsx'
 import { numFmt, dateFmt } from '../../utils/format'
 import { useAuth } from '../../context/useAuth'
+import FormattedNumberField from '../../components/FormattedNumberField'
 
 export default function InventoryGrid() {
   const { hasInventoryPriceAccess } = useAuth()
@@ -815,9 +816,8 @@ export default function InventoryGrid() {
               <div><strong>Available After</strong><br />{numFmt(disposalAvailableAfter)} {disposeRow?.unit || ''}</div>
             </Box>
             <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
-              <TextField
+              <FormattedNumberField
                 label="Disposal Qty"
-                type="number"
                 value={disposeQty}
                 onChange={e => setDisposeQty(e.target.value)}
                 required

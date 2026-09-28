@@ -34,6 +34,7 @@ import EditOrderDialog from './EditOrderDialog'
 import ConfirmActionDialog from './ConfirmActionDialog'
 import SplitBillDialog from './SplitBillDialog'
 import VoucherQrScanDialog from './VoucherQrScanDialog'
+import PaymentMethodConfirmDialog from './PaymentMethodConfirmDialog'
 import { useI18n } from '../../i18n/I18nContext'
 import { localizedModelName, localizedSelectedOptions } from '../../i18n/menuLocalization'
 import { useAuth } from '../../context/useAuth'
@@ -183,6 +184,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
   const [voucherDetail, setVoucherDetail]     = useState(null)
   const [voucherLoading, setVoucherLoading]   = useState(false)
   const [voucherRemoving, setVoucherRemoving] = useState(false)
+  const [receiptPayOpen, setReceiptPayOpen] = useState(false)
 
   const askConfirm = (cfg, fn) => setConfirmDlg({ ...cfg, onConfirm: async (reason) => { setConfirmDlg(null); await fn(reason) } })
 
@@ -254,6 +256,21 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
       onRefresh?.()
     } catch (e) { setError(e.message || 'Failed to revert payment') }
     setReverting2(false)
+  }
+
+  const handleReceiptPayment = async ({ paymentMethod, splitCashAmount } = {}) => {
+    setSwitching(true); setError('')
+    try {
+      let result
+      if (paymentMethod === 'BANK_QR') result = await switchToQrPayment(order.id)
+      else if (paymentMethod === 'SPLIT') result = await splitPayment(order.id, splitCashAmount)
+      else result = await revertToCash(order.id)
+      if (!result.res.ok) throw new Error(result.data?.message || 'Không đổi được hình thức thanh toán')
+      await printOrderReceiptTracked(result.data, tagQr)
+      setReceiptPayOpen(false)
+      onRefresh?.()
+    } catch (receiptError) { setError(receiptError.message || 'Không in được hóa đơn') }
+    finally { setSwitching(false) }
   }
 
   const handleApplyDiscount = async () => {
@@ -1077,7 +1094,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
               </Button>
             </Tooltip>
             <Button variant="outlined" color="primary" startIcon={<PrintIcon />}
-              onClick={() => printOrderReceiptTracked(order, tagQr)} sx={{ textTransform: 'none' }}>
+              onClick={() => isFinal ? printOrderReceiptTracked(order, tagQr) : setReceiptPayOpen(true)} sx={{ textTransform: 'none' }}>
               Print · Pay
             </Button>
             <Tooltip title={t('shopOrder.detail.cupTooltip')}>
@@ -1238,6 +1255,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
           <Button onClick={() => setVoucherDetailOpen(false)} sx={{ textTransform: 'none' }}>{t('common.close')}</Button>
         </DialogActions>
       </Dialog>
+      {receiptPayOpen && <PaymentMethodConfirmDialog open order={order} action="print" busy={switching} onCancel={() => setReceiptPayOpen(false)} onConfirm={handleReceiptPayment} />}
     </>
   )
 }
