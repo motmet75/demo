@@ -8,6 +8,10 @@ import IosShareRoundedIcon from '@mui/icons-material/IosShareRounded'
 import AddPhotoAlternateOutlinedIcon from '@mui/icons-material/AddPhotoAlternateOutlined'
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded'
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded'
+import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded'
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
+import { apiFetch } from '../../api/client'
 import './DocumentScannerPage.css'
 
 const DEFAULT_CORNERS = [
@@ -133,7 +137,7 @@ function correctPerspective(image, corners, filter) {
   const right = distance(corners[1], corners[2], sourceWidth, sourceHeight)
   const rawWidth = Math.max(1, Math.round((top + bottom) / 2))
   const rawHeight = Math.max(1, Math.round((left + right) / 2))
-  const scale = Math.min(1, 1800 / Math.max(rawWidth, rawHeight))
+  const scale = Math.min(1, 2048 / Math.max(rawWidth, rawHeight))
   const outputWidth = Math.max(1, Math.round(rawWidth * scale))
   const outputHeight = Math.max(1, Math.round(rawHeight * scale))
 
@@ -177,30 +181,57 @@ function dataUrlToBytes(dataUrl) {
   return Uint8Array.from(binary, character => character.charCodeAt(0))
 }
 
-function canvasToPdf(canvas) {
-  const jpegBytes = dataUrlToBytes(canvas.toDataURL('image/jpeg', 0.92))
+function imageObject(jpegBytes, width, height) {
+  const encoder = new TextEncoder()
+  const header = encoder.encode(`<< /Type /XObject /Subtype /Image /Width ${width} /Height ${height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.length} >>\nstream\n`)
+  const footer = encoder.encode('\nendstream')
+  const object = new Uint8Array(header.length + jpegBytes.length + footer.length)
+  object.set(header)
+  object.set(jpegBytes, header.length)
+  object.set(footer, header.length + jpegBytes.length)
+  return object
+}
+
+async function blobToJpegPage(blob) {
+  const url = URL.createObjectURL(blob)
+  try {
+    const image = await loadImage(url)
+    const canvas = document.createElement('canvas')
+    canvas.width = image.naturalWidth
+    canvas.height = image.naturalHeight
+    canvas.getContext('2d').drawImage(image, 0, 0)
+    return { bytes: dataUrlToBytes(canvas.toDataURL('image/jpeg', 0.94)), width: canvas.width, height: canvas.height }
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
+async function blobsToPdf(blobs) {
+  const pages = await Promise.all(blobs.map(blobToJpegPage))
   const pageWidth = 595.28
   const pageHeight = 841.89
-  const scale = Math.min(pageWidth / canvas.width, pageHeight / canvas.height)
-  const imageWidth = canvas.width * scale
-  const imageHeight = canvas.height * scale
-  const x = (pageWidth - imageWidth) / 2
-  const y = (pageHeight - imageHeight) / 2
-  const stream = `q\n${imageWidth.toFixed(2)} 0 0 ${imageHeight.toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)} cm\n/Im0 Do\nQ\n`
   const encoder = new TextEncoder()
+  const pageIds = pages.map((_, index) => 3 + index * 3)
   const objects = [
     encoder.encode('<< /Type /Catalog /Pages 2 0 R >>'),
-    encoder.encode('<< /Type /Pages /Kids [3 0 R] /Count 1 >>'),
-    encoder.encode(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>`),
-    encoder.encode(`<< /Length ${stream.length} >>\nstream\n${stream}endstream`),
-    null,
+    encoder.encode(`<< /Type /Pages /Kids [${pageIds.map(id => `${id} 0 R`).join(' ')}] /Count ${pages.length} >>`),
   ]
-  const imageHeader = encoder.encode(`<< /Type /XObject /Subtype /Image /Width ${canvas.width} /Height ${canvas.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.length} >>\nstream\n`)
-  const imageFooter = encoder.encode('\nendstream')
-  objects[4] = new Uint8Array(imageHeader.length + jpegBytes.length + imageFooter.length)
-  objects[4].set(imageHeader)
-  objects[4].set(jpegBytes, imageHeader.length)
-  objects[4].set(imageFooter, imageHeader.length + jpegBytes.length)
+  pages.forEach((page, index) => {
+    const pageId = pageIds[index]
+    const contentId = pageId + 1
+    const imageId = pageId + 2
+    const scale = Math.min(pageWidth / page.width, pageHeight / page.height)
+    const imageWidth = page.width * scale
+    const imageHeight = page.height * scale
+    const x = (pageWidth - imageWidth) / 2
+    const y = (pageHeight - imageHeight) / 2
+    const stream = `q\n${imageWidth.toFixed(2)} 0 0 ${imageHeight.toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)} cm\n/Im0 Do\nQ\n`
+    objects.push(
+      encoder.encode(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /XObject << /Im0 ${imageId} 0 R >> >> /Contents ${contentId} 0 R >>`),
+      encoder.encode(`<< /Length ${stream.length} >>\nstream\n${stream}endstream`),
+      imageObject(page.bytes, page.width, page.height),
+    )
+  })
 
   const chunks = [encoder.encode('%PDF-1.4\n% scan\n')]
   const offsets = [0]
@@ -213,32 +244,44 @@ function canvasToPdf(canvas) {
     length += header.length + object.length + footer.length
   })
   const xrefOffset = length
-  const xref = `xref\n0 6\n0000000000 65535 f \n${offsets.slice(1).map(offset => `${String(offset).padStart(10, '0')} 00000 n `).join('\n')}\ntrailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`
+  const objectCount = objects.length + 1
+  const xref = `xref\n0 ${objectCount}\n0000000000 65535 f \n${offsets.slice(1).map(offset => `${String(offset).padStart(10, '0')} 00000 n `).join('\n')}\ntrailer\n<< /Size ${objectCount} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`
   chunks.push(encoder.encode(xref))
   return new Blob(chunks, { type: 'application/pdf' })
 }
 
-function canvasToBlob(canvas, format) {
-  if (format === 'pdf') return Promise.resolve(canvasToPdf(canvas))
+function canvasToBlob(canvas, format = 'jpeg') {
   const mimeType = format === 'png' ? 'image/png' : 'image/jpeg'
   return new Promise(resolve => canvas.toBlob(resolve, mimeType, 0.94))
 }
 
 export default function DocumentScannerPage() {
-  const [sourceUrl, setSourceUrl] = useState('')
-  const [fileName, setFileName] = useState('scan')
-  const [corners, setCorners] = useState(DEFAULT_CORNERS)
-  const [filter, setFilter] = useState('document')
+  const [pages, setPages] = useState([])
+  const [activeId, setActiveId] = useState(null)
   const [format, setFormat] = useState('pdf')
   const [cameraOpen, setCameraOpen] = useState(false)
   const [cameraError, setCameraError] = useState('')
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
-  const [previewUrl, setPreviewUrl] = useState('')
+  const [view, setView] = useState('adjust')
+  const [magnifier, setMagnifier] = useState(null)
+  const pagesRef = useRef([])
   const videoRef = useRef(null)
   const streamRef = useRef(null)
   const editorRef = useRef(null)
   const fileInputRef = useRef(null)
+  const activePage = pages.find(page => page.id === activeId) || pages[0] || null
+
+  useEffect(() => {
+    pagesRef.current = pages
+  }, [pages])
+
+  useEffect(() => () => {
+    streamRef.current?.getTracks().forEach(track => track.stop())
+    pagesRef.current.forEach(page => {
+      if (page.previewUrl) URL.revokeObjectURL(page.previewUrl)
+    })
+  }, [])
 
   const closeCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach(track => track.stop())
@@ -246,45 +289,45 @@ export default function DocumentScannerPage() {
     setCameraOpen(false)
   }, [])
 
-  useEffect(() => () => {
-    streamRef.current?.getTracks().forEach(track => track.stop())
-    if (previewUrl) URL.revokeObjectURL(previewUrl)
-  }, [previewUrl])
-
-  const analyzeSource = useCallback(async url => {
-    const image = await loadImage(url)
-    setCorners(detectDocument(image))
-    setStatus('Edges detected — drag any corner to fine-tune.')
+  const updatePage = useCallback((pageId, changes) => {
+    setPages(current => current.map(page => page.id === pageId
+      ? { ...page, ...(typeof changes === 'function' ? changes(page) : changes) }
+      : page))
   }, [])
 
-  const applySource = useCallback(async (url, name = 'scan') => {
-    if (sourceUrl?.startsWith('blob:')) URL.revokeObjectURL(sourceUrl)
-    setSourceUrl(url)
-    setFileName(name.replace(/\.[^.]+$/, '') || 'scan')
-    setPreviewUrl(current => {
-      if (current) URL.revokeObjectURL(current)
-      return ''
-    })
+  const addSource = useCallback(async (url, name = 'scan') => {
     setBusy(true)
     try {
-      await analyzeSource(url)
+      const image = await loadImage(url)
+      const page = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        sourceUrl: url,
+        fileName: name.replace(/\.[^.]+$/, '') || 'scan',
+        corners: detectDocument(image),
+        filter: 'document',
+        previewUrl: '',
+      }
+      setPages(current => [...current, page])
+      setActiveId(page.id)
+      setView('adjust')
+      setStatus(`Page ${pagesRef.current.length + 1} added. Drag a corner for precise adjustment.`)
     } catch {
       setStatus('This image could not be opened. Please choose another file.')
     } finally {
       setBusy(false)
     }
-  }, [analyzeSource, sourceUrl])
+  }, [])
 
-  const handleFile = async event => {
-    const file = event.target.files?.[0]
+  const handleFiles = async event => {
+    const selectedFiles = [...(event.target.files || [])]
     event.target.value = ''
-    if (!file) return
-    if (!file.type.startsWith('image/')) {
-      setStatus('Choose an image file. PDF is available as an export format.')
-      return
+    for (const file of selectedFiles) {
+      if (!file.type.startsWith('image/')) {
+        setStatus('Choose image files. A combined PDF is created when you finish.')
+        continue
+      }
+      await addSource(await fileToDataUrl(file), file.name)
     }
-    const dataUrl = await fileToDataUrl(file)
-    applySource(dataUrl, file.name)
   }
 
   const openCamera = async () => {
@@ -292,7 +335,7 @@ export default function DocumentScannerPage() {
     setCameraOpen(true)
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 2560 }, height: { ideal: 1440 } },
         audio: false,
       })
       streamRef.current = stream
@@ -308,27 +351,47 @@ export default function DocumentScannerPage() {
   const capturePhoto = () => {
     const video = videoRef.current
     if (!video?.videoWidth) return
+    const maxCaptureSide = 2560
+    const scale = Math.min(1, maxCaptureSide / Math.max(video.videoWidth, video.videoHeight))
     const canvas = document.createElement('canvas')
-    canvas.width = video.videoWidth
-    canvas.height = video.videoHeight
-    canvas.getContext('2d').drawImage(video, 0, 0)
-    const url = canvas.toDataURL('image/jpeg', 0.95)
+    canvas.width = Math.round(video.videoWidth * scale)
+    canvas.height = Math.round(video.videoHeight * scale)
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height)
+    const url = canvas.toDataURL('image/jpeg', 0.96)
     closeCamera()
-    applySource(url, `scan-${new Date().toISOString().slice(0, 10)}`)
+    addSource(url, `scan-${new Date().toISOString().slice(0, 10)}-${pagesRef.current.length + 1}`)
+  }
+
+  const invalidatePreview = page => {
+    if (page.previewUrl) URL.revokeObjectURL(page.previewUrl)
+    return { previewUrl: '' }
+  }
+
+  const analyzeActivePage = async () => {
+    if (!activePage) return
+    setBusy(true)
+    try {
+      const image = await loadImage(activePage.sourceUrl)
+      updatePage(activePage.id, page => ({ corners: detectDocument(image), ...invalidatePreview(page) }))
+      setView('adjust')
+      setStatus('Edges detected again. Fine-tune them with the magnified corner handles.')
+    } finally {
+      setBusy(false)
+    }
   }
 
   const updateCorner = (index, clientX, clientY) => {
     const rect = editorRef.current?.getBoundingClientRect()
-    if (!rect) return
-    const nextPoint = {
+    if (!rect || !activePage) return
+    const point = {
       x: Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)),
       y: Math.max(0, Math.min(1, (clientY - rect.top) / rect.height)),
     }
-    setCorners(current => current.map((point, pointIndex) => pointIndex === index ? nextPoint : point))
-    setPreviewUrl(current => {
-      if (current) URL.revokeObjectURL(current)
-      return ''
-    })
+    updatePage(activePage.id, page => ({
+      corners: page.corners.map((corner, pointIndex) => pointIndex === index ? point : corner),
+      ...invalidatePreview(page),
+    }))
+    setMagnifier({ index, point, width: rect.width, height: rect.height })
   }
 
   const handleCornerPointerDown = (event, index) => {
@@ -336,82 +399,163 @@ export default function DocumentScannerPage() {
     updateCorner(index, event.clientX, event.clientY)
   }
 
-  const createOutput = async () => {
-    setBusy(true)
-    setStatus('Straightening and enhancing your document…')
+  const processPage = async page => {
+    const sourceBlob = await fetch(page.sourceUrl).then(response => response.blob())
+    const form = new FormData()
+    form.append('image', sourceBlob, `${page.fileName}.jpg`)
+    form.append('corners', JSON.stringify(page.corners))
+    form.append('mode', page.filter)
+    form.append('maxDimension', '2048')
     try {
-      const image = await loadImage(sourceUrl)
-      const canvas = correctPerspective(image, corners, filter)
-      const blob = await canvasToBlob(canvas, format)
-      const nextUrl = URL.createObjectURL(blob)
-      setPreviewUrl(current => {
-        if (current) URL.revokeObjectURL(current)
-        return nextUrl
-      })
-      setStatus('Your scan is ready to download or share.')
-      return { blob, url: nextUrl }
+      const response = await apiFetch('/bom/document-scanner/process', { method: 'POST', body: form })
+      if (response.ok) return { blob: await response.blob(), serverProcessed: true }
     } catch {
-      setStatus('We could not create this scan. Try moving the corners slightly inward.')
+      // The local high-resolution fallback below keeps scanning usable while the backend is unavailable.
+    }
+    const image = await loadImage(page.sourceUrl)
+    const canvas = correctPerspective(image, page.corners, page.filter)
+    return { blob: await canvasToBlob(canvas, 'jpeg'), serverProcessed: false }
+  }
+
+  const previewActivePage = async () => {
+    if (!activePage) return
+    setBusy(true)
+    setStatus('Applying 2K perspective correction and enhancement…')
+    try {
+      const result = await processPage(activePage)
+      const previewUrl = URL.createObjectURL(result.blob)
+      updatePage(activePage.id, page => {
+        if (page.previewUrl) URL.revokeObjectURL(page.previewUrl)
+        return { previewUrl }
+      })
+      setView('preview')
+      setStatus(result.serverProcessed
+        ? '2K preview processed by the OpenCV scan engine. Readjust if any edge is off.'
+        : '2K preview ready using the on-device fallback. Readjust if any edge is off.')
+    } catch {
+      setStatus('We could not create the preview. Move the corners slightly inward and try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const createDocument = async () => {
+    setBusy(true)
+    setStatus(`Processing ${pages.length} page${pages.length === 1 ? '' : 's'} at 2K…`)
+    try {
+      const results = []
+      for (let index = 0; index < pages.length; index += 1) {
+        setStatus(`Processing page ${index + 1} of ${pages.length}…`)
+        results.push(await processPage(pages[index]))
+      }
+      const baseName = pages[0]?.fileName || 'scanned-document'
+      if (format === 'pdf') {
+        return { blob: await blobsToPdf(results.map(result => result.blob)), fileName: `${baseName}-scanned.pdf` }
+      }
+      const converted = await Promise.all(results.map(async (result, index) => {
+        if (format === 'jpeg') return { blob: result.blob, fileName: `${baseName}-page-${index + 1}.jpg` }
+        const page = await blobToJpegPage(result.blob)
+        const imageBlob = new Blob([page.bytes], { type: 'image/jpeg' })
+        const imageUrl = URL.createObjectURL(imageBlob)
+        try {
+          const image = await loadImage(imageUrl)
+          const canvas = document.createElement('canvas')
+          canvas.width = image.naturalWidth
+          canvas.height = image.naturalHeight
+          canvas.getContext('2d').drawImage(image, 0, 0)
+          return { blob: await canvasToBlob(canvas, 'png'), fileName: `${baseName}-page-${index + 1}.png` }
+        } finally {
+          URL.revokeObjectURL(imageUrl)
+        }
+      }))
+      return converted.length === 1 ? converted[0] : { files: converted, fileName: baseName }
+    } catch {
+      setStatus('The document could not be completed. Review the page corners and try again.')
       return null
     } finally {
       setBusy(false)
     }
   }
 
-  const downloadScan = async () => {
-    const result = await createOutput()
-    if (!result) return
+  const downloadBlob = (blob, fileName) => {
+    const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
-    link.href = result.url
-    link.download = `${fileName}-scanned.${format === 'jpeg' ? 'jpg' : format}`
+    link.href = url
+    link.download = fileName
     link.click()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
+  const downloadScan = async () => {
+    const result = await createDocument()
+    if (!result) return
+    if (result.files) result.files.forEach(file => downloadBlob(file.blob, file.fileName))
+    else downloadBlob(result.blob, result.fileName)
+    setStatus(`${pages.length}-page document is ready.`)
   }
 
   const shareScan = async () => {
-    const result = await createOutput()
+    const result = await createDocument()
     if (!result) return
-    const extension = format === 'jpeg' ? 'jpg' : format
-    const file = new File([result.blob], `${fileName}-scanned.${extension}`, { type: result.blob.type })
-    if (navigator.share && navigator.canShare?.({ files: [file] })) {
+    const outputFiles = result.files || [result]
+    const files = outputFiles.map(output => new File([output.blob], output.fileName, { type: output.blob.type }))
+    if (navigator.share && navigator.canShare?.({ files })) {
       try {
-        await navigator.share({ title: 'Scanned document', files: [file] })
+        await navigator.share({ title: 'Scanned document', files })
         return
       } catch (error) {
         if (error.name === 'AbortError') return
       }
     }
-    setStatus('Sharing is not supported in this browser. Your scan has been downloaded instead.')
-    const link = document.createElement('a')
-    link.href = result.url
-    link.download = file.name
-    link.click()
+    outputFiles.forEach(file => downloadBlob(file.blob, file.fileName))
+    setStatus('File sharing is unavailable in this browser, so the document was downloaded.')
   }
 
-  const resetScan = () => {
-    if (sourceUrl?.startsWith('blob:')) URL.revokeObjectURL(sourceUrl)
-    setSourceUrl('')
-    setCorners(DEFAULT_CORNERS)
-    setStatus('')
-    setPreviewUrl(current => {
-      if (current) URL.revokeObjectURL(current)
-      return ''
-    })
+  const removePage = pageId => {
+    const removingIndex = pages.findIndex(page => page.id === pageId)
+    const removing = pages[removingIndex]
+    if (removing?.previewUrl) URL.revokeObjectURL(removing.previewUrl)
+    const remaining = pages.filter(page => page.id !== pageId)
+    setPages(remaining)
+    if (activeId === pageId) setActiveId(remaining[Math.max(0, removingIndex - 1)]?.id || null)
+    setView('adjust')
+    setStatus(remaining.length ? 'Page removed.' : '')
   }
 
-  const polygon = corners.map(point => `${point.x * 100},${point.y * 100}`).join(' ')
+  const selectPage = pageId => {
+    setActiveId(pageId)
+    setView('adjust')
+    setMagnifier(null)
+  }
+
+  const setActiveFilter = value => {
+    if (!activePage) return
+    updatePage(activePage.id, page => ({ filter: value, ...invalidatePreview(page) }))
+    setView('adjust')
+  }
+
+  const polygon = activePage?.corners.map(point => `${point.x * 100},${point.y * 100}`).join(' ') || ''
+  const magnifierStyle = magnifier && activePage ? {
+    left: `${magnifier.point.x * 100}%`,
+    top: `${magnifier.point.y * 100}%`,
+    backgroundImage: `url(${activePage.sourceUrl})`,
+    backgroundSize: `${magnifier.width * 3}px ${magnifier.height * 3}px`,
+    backgroundPosition: `${52 - magnifier.point.x * magnifier.width * 3}px ${52 - magnifier.point.y * magnifier.height * 3}px`,
+    transform: `translate(-50%, ${magnifier.point.y < 0.3 ? '34px' : '-132px'})`,
+  } : undefined
 
   return (
     <main className="document-scanner">
       <header className="scanner-header">
         <div>
-          <span className="scanner-eyebrow">Smart capture</span>
+          <span className="scanner-eyebrow">2K smart capture</span>
           <h1>Document Scanner</h1>
-          <p>Capture, straighten and share clean documents in seconds.</p>
+          <p>Crop, straighten and combine every page into one clean document.</p>
         </div>
-        <div className="scanner-privacy"><span>✓</span> Processed privately on this device</div>
+        <div className="scanner-privacy"><span>✓</span> Secure processing · images are not stored</div>
       </header>
 
-      {!sourceUrl ? (
+      {!activePage ? (
         <section className="scanner-start-card">
           <div className="scanner-illustration" aria-hidden="true">
             <div className="scanner-paper"><span /><span /><span /><span /></div>
@@ -419,106 +563,126 @@ export default function DocumentScannerPage() {
           </div>
           <div className="scanner-start-copy">
             <span className="step-pill">Step 1 of 3</span>
-            <h2>Add a document</h2>
-            <p>Place the whole page in view with good light. We’ll find its edges automatically.</p>
+            <h2>Add the first page</h2>
+            <p>Use your iPhone camera or select one or more photos. Each page is corrected at up to 2048 pixels.</p>
             <div className="scanner-primary-actions">
-              <button className="scanner-button scanner-button-primary" onClick={openCamera}>
-                <CameraAltRoundedIcon /> Open camera
-              </button>
-              <button className="scanner-button scanner-button-secondary" onClick={() => fileInputRef.current?.click()}>
-                <FileUploadOutlinedIcon /> Upload photo
-              </button>
+              <button className="scanner-button scanner-button-primary" onClick={openCamera}><CameraAltRoundedIcon /> Open camera</button>
+              <button className="scanner-button scanner-button-secondary" onClick={() => fileInputRef.current?.click()}><FileUploadOutlinedIcon /> Upload photos</button>
             </div>
-            <input ref={fileInputRef} className="scanner-file-input" type="file" accept="image/*" capture="environment" onChange={handleFile} />
-            <p className="scanner-file-help">JPG, PNG, WEBP or HEIC · up to your browser’s file limit</p>
+            <input ref={fileInputRef} className="scanner-file-input" type="file" accept="image/*" multiple onChange={handleFiles} />
+            <p className="scanner-file-help">JPG, PNG, WEBP or iPhone HEIC when supported by the browser</p>
             {status && <div className="scanner-message">{status}</div>}
           </div>
         </section>
       ) : (
-        <div className="scanner-workspace">
-          <section className="scanner-editor-card">
-            <div className="scanner-card-heading">
-              <div><span className="step-pill">Step 2 of 3</span><h2>Adjust the corners</h2></div>
-              <button className="scanner-icon-button" onClick={resetScan} title="Remove photo"><CloseRoundedIcon /></button>
-            </div>
-            <p className="scanner-instruction"><CropFreeRoundedIcon /> Drag the four handles so they sit exactly on the document.</p>
-            <div className="scanner-editor-stage">
-              <div className="scanner-image-wrap" ref={editorRef}>
-                <img src={sourceUrl} alt="Document to crop" draggable="false" />
-                <svg className="scanner-crop-overlay" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-                  <defs><mask id="crop-mask"><rect width="100" height="100" fill="white" /><polygon points={polygon} fill="black" /></mask></defs>
-                  <rect width="100" height="100" fill="rgba(4, 16, 35, .58)" mask="url(#crop-mask)" />
-                  <polygon points={polygon} fill="none" stroke="#5de1c3" strokeWidth="0.65" vectorEffect="non-scaling-stroke" />
-                </svg>
-                {corners.map((point, index) => (
-                  <button
-                    key={CORNER_LABELS[index]}
-                    className="scanner-corner-handle"
-                    aria-label={`Move ${CORNER_LABELS[index]} corner`}
-                    style={{ left: `${point.x * 100}%`, top: `${point.y * 100}%` }}
-                    onPointerDown={event => handleCornerPointerDown(event, index)}
-                    onPointerMove={event => {
-                      if (event.currentTarget.hasPointerCapture(event.pointerId)) updateCorner(index, event.clientX, event.clientY)
-                    }}
-                  />
-                ))}
+        <>
+          <div className="scanner-workspace">
+            <section className="scanner-editor-card">
+              <div className="scanner-card-heading">
+                <div><span className="step-pill">Page {pages.findIndex(page => page.id === activePage.id) + 1} of {pages.length}</span><h2>{view === 'preview' ? 'Review the result' : 'Adjust the corners'}</h2></div>
+                <button className="scanner-icon-button" onClick={() => removePage(activePage.id)} title="Remove page"><DeleteOutlineRoundedIcon /></button>
               </div>
-            </div>
-            <button className="scanner-auto-button" onClick={() => analyzeSource(sourceUrl)} disabled={busy}>
-              <AutoAwesomeOutlinedIcon /> Detect edges again
-            </button>
-          </section>
+              <p className="scanner-instruction">
+                {view === 'preview' ? <><VisibilityOutlinedIcon /> Check every edge, then readjust or add the next page.</> : <><CropFreeRoundedIcon /> Drag a handle. The 3× magnifier shows the exact corner under your finger.</>}
+              </p>
+              <div className="scanner-editor-stage">
+                {view === 'preview' && activePage.previewUrl ? (
+                  <div className="scanner-preview-wrap"><img src={activePage.previewUrl} alt="Corrected page preview" /></div>
+                ) : (
+                  <div className="scanner-image-wrap" ref={editorRef}>
+                    <img src={activePage.sourceUrl} alt="Document to crop" draggable="false" />
+                    <svg className="scanner-crop-overlay" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                      <defs><mask id="crop-mask"><rect width="100" height="100" fill="white" /><polygon points={polygon} fill="black" /></mask></defs>
+                      <rect width="100" height="100" fill="rgba(4, 16, 35, .58)" mask="url(#crop-mask)" />
+                      <polygon points={polygon} fill="none" stroke="#5de1c3" strokeWidth="0.65" vectorEffect="non-scaling-stroke" />
+                    </svg>
+                    {activePage.corners.map((point, index) => (
+                      <button
+                        key={CORNER_LABELS[index]}
+                        className="scanner-corner-handle"
+                        aria-label={`Move ${CORNER_LABELS[index]} corner`}
+                        style={{ left: `${point.x * 100}%`, top: `${point.y * 100}%` }}
+                        onPointerDown={event => handleCornerPointerDown(event, index)}
+                        onPointerMove={event => {
+                          if (event.currentTarget.hasPointerCapture(event.pointerId)) updateCorner(index, event.clientX, event.clientY)
+                        }}
+                        onPointerUp={event => { event.currentTarget.releasePointerCapture(event.pointerId); setMagnifier(null) }}
+                        onPointerCancel={() => setMagnifier(null)}
+                      />
+                    ))}
+                    {magnifier && <div className="scanner-magnifier" style={magnifierStyle} aria-hidden="true"><span /></div>}
+                  </div>
+                )}
+              </div>
+              <div className="scanner-editor-actions">
+                {view === 'preview' ? (
+                  <button className="scanner-auto-button" onClick={() => setView('adjust')}><EditOutlinedIcon /> Readjust corners</button>
+                ) : (
+                  <button className="scanner-auto-button" onClick={analyzeActivePage} disabled={busy}><AutoAwesomeOutlinedIcon /> Detect edges again</button>
+                )}
+                <button className="scanner-auto-button" onClick={openCamera}><CameraAltRoundedIcon /> Add next page</button>
+              </div>
+            </section>
 
-          <aside className="scanner-settings-card">
-            <div><span className="step-pill">Step 3 of 3</span><h2>Finish your scan</h2></div>
-            <div className="scanner-fieldset">
-              <label>Enhancement</label>
-              <div className="scanner-segmented">
-                {[
-                  ['document', 'Clean'], ['grayscale', 'B&W'], ['original', 'Original'],
-                ].map(([value, label]) => (
-                  <button key={value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}>
-                    {filter === value && <CheckRoundedIcon />} {label}
-                  </button>
-                ))}
+            <aside className="scanner-settings-card">
+              <div><span className="step-pill">Step 3 of 3</span><h2>Finish your document</h2></div>
+              <div className="scanner-quality-note"><strong>2K output</strong><span>OpenCV perspective correction · 2048 px</span></div>
+              <div className="scanner-fieldset">
+                <label>Page appearance</label>
+                <div className="scanner-segmented scanner-segmented-stacked">
+                  {[
+                    ['document', 'Enhanced color'], ['grayscale', 'High-contrast B&W'], ['original', 'Keep original'],
+                  ].map(([value, label]) => (
+                    <button key={value} className={activePage.filter === value ? 'active' : ''} onClick={() => setActiveFilter(value)}>
+                      {activePage.filter === value && <CheckRoundedIcon />} {label}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-            <div className="scanner-fieldset">
-              <label>Export as</label>
-              <div className="scanner-format-grid">
-                {[
-                  ['pdf', 'PDF', 'Best for documents'],
-                  ['jpeg', 'JPG', 'Small & compatible'],
-                  ['png', 'PNG', 'Highest detail'],
-                ].map(([value, label, hint]) => (
-                  <button key={value} className={format === value ? 'active' : ''} onClick={() => setFormat(value)}>
-                    <strong>{label}</strong><span>{hint}</span>
-                  </button>
-                ))}
+              <button className="scanner-button scanner-preview-button" onClick={previewActivePage} disabled={busy}>
+                <VisibilityOutlinedIcon /> {busy ? 'Processing…' : 'Preview this page'}
+              </button>
+              <div className="scanner-fieldset">
+                <label>Final document</label>
+                <div className="scanner-format-grid">
+                  {[
+                    ['pdf', 'PDF', `One document · ${pages.length} page${pages.length === 1 ? '' : 's'}`],
+                    ['jpeg', 'JPG', 'Separate high-quality images'],
+                    ['png', 'PNG', 'Separate lossless images'],
+                  ].map(([value, label, hint]) => (
+                    <button key={value} className={format === value ? 'active' : ''} onClick={() => setFormat(value)}><strong>{label}</strong><span>{hint}</span></button>
+                  ))}
+                </div>
               </div>
+              <div className="scanner-export-actions">
+                <button className="scanner-button scanner-button-primary" onClick={downloadScan} disabled={busy}><DownloadRoundedIcon /> {busy ? 'Creating…' : 'Finish & download'}</button>
+                <button className="scanner-button scanner-button-secondary" onClick={shareScan} disabled={busy}><IosShareRoundedIcon /> Share</button>
+                <button className="scanner-add-another" onClick={() => fileInputRef.current?.click()}><AddPhotoAlternateOutlinedIcon /> Add photos</button>
+                <input ref={fileInputRef} className="scanner-file-input" type="file" accept="image/*" multiple onChange={handleFiles} />
+              </div>
+              {status && <div className="scanner-message">{status}</div>}
+            </aside>
+          </div>
+
+          <section className="scanner-pages-panel">
+            <div className="scanner-pages-heading"><div><strong>Document pages</strong><span>{pages.length} page{pages.length === 1 ? '' : 's'} · select any page to readjust</span></div><button onClick={() => fileInputRef.current?.click()}><AddPhotoAlternateOutlinedIcon /> Add pages</button></div>
+            <div className="scanner-page-strip">
+              {pages.map((page, index) => (
+                <button key={page.id} className={`scanner-page-thumb ${page.id === activePage.id ? 'active' : ''}`} onClick={() => selectPage(page.id)}>
+                  <img src={page.previewUrl || page.sourceUrl} alt={`Page ${index + 1}`} />
+                  <span>Page {index + 1}</span>
+                  {page.previewUrl && <i><CheckRoundedIcon /></i>}
+                </button>
+              ))}
             </div>
-            <div className="scanner-export-actions">
-              <button className="scanner-button scanner-button-primary" onClick={downloadScan} disabled={busy}>
-                <DownloadRoundedIcon /> {busy ? 'Creating…' : 'Download scan'}
-              </button>
-              <button className="scanner-button scanner-button-secondary" onClick={shareScan} disabled={busy}>
-                <IosShareRoundedIcon /> Share
-              </button>
-              <button className="scanner-add-another" onClick={() => fileInputRef.current?.click()}><AddPhotoAlternateOutlinedIcon /> Choose another photo</button>
-              <input ref={fileInputRef} className="scanner-file-input" type="file" accept="image/*" capture="environment" onChange={handleFile} />
-            </div>
-            {status && <div className="scanner-message">{status}</div>}
-            {previewUrl && format !== 'pdf' && <img className="scanner-result-preview" src={previewUrl} alt="Corrected scan preview" />}
-          </aside>
-        </div>
+          </section>
+        </>
       )}
 
       <section className="scanner-how-it-works">
-        <div><b>1</b><span><strong>Capture</strong><small>Camera or photo</small></span></div>
-        <i />
-        <div><b>2</b><span><strong>Adjust</strong><small>Auto or manual edges</small></span></div>
-        <i />
-        <div><b>3</b><span><strong>Export</strong><small>PDF, JPG or PNG</small></span></div>
+        <div><b>1</b><span><strong>Capture</strong><small>One or many pages</small></span></div><i />
+        <div><b>2</b><span><strong>Adjust & preview</strong><small>3× corner magnifier</small></span></div><i />
+        <div><b>3</b><span><strong>Finish</strong><small>One combined PDF</small></span></div>
       </section>
 
       {cameraOpen && (
@@ -527,9 +691,9 @@ export default function DocumentScannerPage() {
             <button className="scanner-camera-close" onClick={closeCamera} aria-label="Close camera"><CloseRoundedIcon /></button>
             <video ref={videoRef} playsInline muted />
             <div className="scanner-camera-guide"><span /><span /><span /><span /></div>
-            <p>{cameraError || 'Keep the document inside the frame and hold steady.'}</p>
+            <p>{cameraError || `Page ${pages.length + 1} · keep the document inside the frame and hold steady.`}</p>
             {!cameraError && <button className="scanner-shutter" onClick={capturePhoto} aria-label="Take photo"><span /></button>}
-            {cameraError && <button className="scanner-button scanner-button-secondary" onClick={() => fileInputRef.current?.click()}>Upload a photo</button>}
+            {cameraError && <button className="scanner-button scanner-button-secondary" onClick={() => fileInputRef.current?.click()}>Upload photos</button>}
           </div>
         </div>
       )}

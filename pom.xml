@@ -113,6 +113,13 @@
 			<version>3.5.3</version>
 		</dependency>
 
+		<!-- OpenCV with bundled native libraries for document perspective correction and enhancement -->
+		<dependency>
+			<groupId>org.openpnp</groupId>
+			<artifactId>opencv</artifactId>
+			<version>4.9.0-0</version>
+		</dependency>
+
  	</dependencies>
 
 	<build>
