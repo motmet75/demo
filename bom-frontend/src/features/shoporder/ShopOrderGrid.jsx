@@ -64,7 +64,7 @@ import {
   completeShopOrder, cancelShopOrder, resetOrderSequence, setShopOrderNumber,
   generateDisplayBoardToken, pickupShopOrder, revertShopOrder, markOrderPaid,
   fetchBankConfig, switchToQrPayment, revertToCash, splitPayment, fetchOrderTagQr, fetchShopOrder,
-  fetchShopTables, setOrderTable, setOrderSeat, fetchPickupQr, fetchOrdersByToken,
+  fetchShopTables, fetchTableOrders, setOrderTable, setOrderSeat, fetchPickupQr, fetchOrdersByToken,
   lockTokenSession, unlockTokenSession,
   fetchStaffCalls, dismissStaffCall, replyStaffCall, forceConfirmOrder,
   confirmScannedOrder,fetchOrderingStatus, closeShopToday, reopenShop,
@@ -1524,6 +1524,7 @@ export default function ShopOrderGrid() {
   const { tenantId: ctxTenantId, companyId: ctxCompanyId } = useAppContext()
   const [rows, setRows]                 = useState([])
   const [boardRows, setBoardRows]       = useState([])   // for board tabs — unfiltered
+  const [quickCounterRows, setQuickCounterRows] = useState([]) // independent of order-list filters
   const [loading, setLoading]           = useState(false)
   const [error, setError]               = useState('')
   const [statusFilters, setStatusFilters] = useState(readShopOrderStatusFilters)
@@ -1692,6 +1693,7 @@ export default function ShopOrderGrid() {
     rememberOrders([order])
     setRows(prev => replaceOrderInList(prev, order, shouldShowInRows(order)))
     setBoardRows(prev => replaceOrderInList(prev, order, BOARD_VISIBLE_STATUSES.has(order.status)))
+    setQuickCounterRows(prev => replaceOrderInList(prev, order, order.status !== 'CANCELLED'))
     setDetailOrder(prev => prev?.id === order.id ? order : prev)
   }, [rememberOrders, shouldShowInRows])
 
@@ -1701,6 +1703,7 @@ export default function ShopOrderGrid() {
     else rememberOrders(list)
     setRows(list.filter(shouldShowInRows))
     setBoardRows(list.filter(order => BOARD_VISIBLE_STATUSES.has(order?.status)))
+    setQuickCounterRows(list.filter(order => order?.status !== 'CANCELLED'))
   }, [notifyNewOrders, rememberOrders, shouldShowInRows])
 
   const refreshOrderCard = useCallback(async (orderId) => {
@@ -1749,16 +1752,19 @@ export default function ShopOrderGrid() {
   const load = useCallback(async () => {
     setLoading(true); setError('')
     try {
-      const [rangeResult, activeResult] = await Promise.all([
+      const [rangeResult, activeResult, tableResult] = await Promise.all([
         fetchShopOrders(null, orderRangeParams),
         fetchActiveOrders(),
+        fetchTableOrders().catch(() => ({ res: { ok: false }, data: [] })),
       ])
       if (!rangeResult.res.ok) throw new Error(rangeResult.data?.message || rangeResult.data?.error || t('shopOrder.grid.loadOrdersFailed'))
       const list = mergeOrderSnapshots(
         Array.isArray(rangeResult.data) ? rangeResult.data : [],
         activeResult.res.ok && Array.isArray(activeResult.data) ? activeResult.data : [],
+        tableResult.res.ok && Array.isArray(tableResult.data) ? tableResult.data : [],
       )
       setRows(list.filter(shouldShowInRows))
+      setQuickCounterRows(list.filter(order => order?.status !== 'CANCELLED'))
       rememberOrders(list)
       orderPollReadyRef.current = true
     } catch (error) { setError(error.message || t('shopOrder.grid.loadOrdersFailed')) }
@@ -1874,14 +1880,16 @@ export default function ShopOrderGrid() {
     let cancelled = false
     const pollOrders = async () => {
       try {
-        const [rangeResult, activeResult] = await Promise.all([
+        const [rangeResult, activeResult, tableResult] = await Promise.all([
           fetchShopOrders(null, orderRangeParams),
           fetchActiveOrders(),
+          fetchTableOrders().catch(() => ({ res: { ok: false }, data: [] })),
         ])
         if (cancelled || !rangeResult.res.ok) return
         const list = mergeOrderSnapshots(
           Array.isArray(rangeResult.data) ? rangeResult.data : [],
           activeResult.res.ok && Array.isArray(activeResult.data) ? activeResult.data : [],
+          tableResult.res.ok && Array.isArray(tableResult.data) ? tableResult.data : [],
         )
         applyOrderSnapshot(list, { notify: true })
       } catch { /* silent */ }
@@ -2782,7 +2790,7 @@ export default function ShopOrderGrid() {
 
         {/* Tab content */}
         <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-          {tab === 5 && <QuickCounterDesk rows={Array.from(new Map([...boardRows,...rows].map(r=>[r.id,r])).values())} actions={cardActions} onNew={()=>setCustomerMenuOpen(true)} shiftState={counterShiftState} />}
+          {tab === 5 && <QuickCounterDesk rows={quickCounterRows} actions={cardActions} onNew={()=>setCustomerMenuOpen(true)} shiftState={counterShiftState} />}
           {tab === 0 && (
             <>
             {(visibleOrderTotals.tables.length > 0 || visibleOrderTotals.separateCount > 0) && (

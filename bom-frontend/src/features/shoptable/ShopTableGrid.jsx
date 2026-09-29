@@ -67,7 +67,8 @@ const orderLabel = (order) => order?.orderNumber != null ? `#${order.orderNumber
 const isActiveOrder = (order) => ACTIVE_STATUSES.has(order?.status)
 const isCompletableOrder = (order) => order?.status === 'READY'
 const isServedOrder = (order) => ['COMPLETED', 'PICKED_UP'].includes(order?.status)
-const clearableOrders = (table) => (table?.orders || []).filter(order => isServedOrder(order) && !order.tableClearedAt)
+const isServedUnpaid = (order) => isServedOrder(order) && order?.paymentStatus !== 'PAID' && !order?.tableClearedAt
+const clearableOrders = (table) => (table?.orders || []).filter(order => isServedOrder(order) && order.paymentStatus === 'PAID' && !order.tableClearedAt)
 const makeSelectionModel = (ids = []) => ({ type: 'include', ids: new Set(ids) })
 const normalizeSearch = value => String(value || '')
   .normalize('NFD')
@@ -117,7 +118,7 @@ function tableOrderBadge(order) {
   const mainItems = (order?.items || []).filter(item => !item.parentItemId)
   const item = mainItems.length === 1 ? mainItems[0] : null
   const itemLabel = item ? ` · ${Number(item.quantity || 1).toLocaleString('vi-VN')}× ${item.modelName || item.itemName || 'Món'}` : ''
-  return `${orderLabel(order)}${itemLabel} · ${isServedOrder(order) ? 'Đã trả món' : order.paymentStatus === 'PAID' ? 'Đã thanh toán' : 'Chưa thanh toán'}`
+  return `${orderLabel(order)}${itemLabel} · ${isServedUnpaid(order) ? 'Đã trả món · CHƯA THANH TOÁN' : isServedOrder(order) ? 'Đã trả món' : order.paymentStatus === 'PAID' ? 'Đã thanh toán' : 'Chưa thanh toán'}`
 }
 
 export default function ShopTableGrid() {
@@ -442,7 +443,7 @@ export default function ShopTableGrid() {
   const selectedOrderModel = React.useMemo(() => makeSelectionModel(selectedOrderIds), [selectedOrderIds])
   const selectedTableModel = React.useMemo(() => makeSelectionModel(selectedTableIds), [selectedTableIds])
   const visibleOrders = useCallback(table => hideServedOrders
-    ? (table?.activeOrders || []).filter(order => !isServedOrder(order))
+    ? (table?.activeOrders || []).filter(order => !isServedOrder(order) || isServedUnpaid(order))
     : (table?.activeOrders || []), [hideServedOrders])
   const filteredRows = React.useMemo(() => {
     const query = normalizeSearch(tableQuery.trim())
@@ -523,7 +524,7 @@ export default function ShopTableGrid() {
       field: 'activeOrders', headerName: 'Đơn tại bàn · thanh toán', flex: 1, minWidth: 320,
       renderCell: ({ value, row }) => {
         const list = visibleOrders(row)
-        const servedCount = (value || []).filter(isServedOrder).length
+        const servedCount = (value || []).filter(order => isServedOrder(order) && !isServedUnpaid(order)).length
         if (!list.length && !row.draft && !servedCount) return <Typography variant="caption" color="text.disabled">Không có đơn tại bàn</Typography>
         return (
           <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', overflow: 'hidden' }}>
@@ -531,7 +532,7 @@ export default function ShopTableGrid() {
             {hideServedOrders && servedCount > 0 && <Chip label={`${servedCount} đã trả món`} size="small" color="success" sx={{ fontWeight: 800 }} />}
             {list.slice(0, 3).map(order => (
               <Tooltip key={order.id} title={tableOrderBadge(order)}>
-                <Chip label={tableOrderBadge(order)} size="small" color={order.paymentStatus === 'PAID' ? 'success' : 'warning'} variant="outlined" sx={{ maxWidth: 280, fontWeight: 800 }} />
+                <Chip label={tableOrderBadge(order)} size="small" color={isServedUnpaid(order) ? 'error' : order.paymentStatus === 'PAID' ? 'success' : 'warning'} variant={isServedUnpaid(order) ? 'filled' : 'outlined'} sx={{ maxWidth: 320, fontWeight: 900 }} />
               </Tooltip>
             ))}
             {list.length > 3 && <Typography variant="caption" color="text.secondary">+{list.length - 3}</Typography>}
@@ -656,8 +657,8 @@ export default function ShopTableGrid() {
           <Stack direction="row" justifyContent="space-between" alignItems="center"><Typography variant="h6" fontWeight={900}>{mobileTable.tableName}</Typography><Chip color={mobileTable.draft?'warning':mobileTable.activeOrderCount?'primary':'success'} label={mobileTable.draft?'Có đơn tạm':mobileTable.activeOrderCount?`${mobileTable.activeOrderCount} đơn chưa dọn`:'Bàn trống'} /></Stack>
           {mobileTable.draft && <Alert severity="warning" sx={{ mt: 1 }}><strong>Đơn tạm:</strong> {(mobileTable.draft.displayItems || []).map(item => `${item.quantity} × ${item.modelName}`).join(' · ')} · cập nhật bởi {mobileTable.draft.updatedBy}</Alert>}
           {hideServedOrders && clearableOrders(mobileTable).length > 0 && <Alert severity="success" sx={{ mt: 1, py: 0 }}>{clearableOrders(mobileTable).length} đơn đã trả món đang chờ dọn bàn.</Alert>}
-          {visibleOrders(mobileTable).map(order => <Paper key={order.id} variant="outlined" sx={{ p: 1, my: 1 }} onClick={()=>setDetailOrder(order)}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" gap={1}><Typography fontWeight={800}>#{order.orderNumber ?? order.dailySeq} · {order.staffName || 'Khách tự gọi'}</Typography><Chip size="small" label={order.paymentStatus === 'PAID' ? 'Đã trả' : 'Chưa trả'} color={order.paymentStatus === 'PAID' ? 'success' : 'warning'} /></Stack>
+          {visibleOrders(mobileTable).map(order => <Paper key={order.id} variant="outlined" sx={{ p: 1, my: 1, bgcolor: isServedUnpaid(order) ? '#fff1f2' : 'background.paper', borderColor: isServedUnpaid(order) ? 'error.main' : undefined, borderWidth: isServedUnpaid(order) ? 2 : 1 }} onClick={()=>setDetailOrder(order)}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" gap={1}><Typography fontWeight={800}>#{order.orderNumber ?? order.dailySeq} · {order.staffName || 'Khách tự gọi'}</Typography><Chip size="small" label={isServedUnpaid(order) ? 'ĐÃ TRẢ MÓN · CHƯA THANH TOÁN' : order.paymentStatus === 'PAID' ? 'Đã trả' : 'Chưa trả'} color={isServedUnpaid(order) ? 'error' : order.paymentStatus === 'PAID' ? 'success' : 'warning'} /></Stack>
             <Typography variant="body2">{(order.items || []).filter(item=>!item.parentItemId).map(item=>`${item.quantity} × ${item.modelName}${item.itemNotes?` (${item.itemNotes})`:''}`).join(' · ')}</Typography>
             <Box sx={{ mt: 1 }} onClick={event => event.stopPropagation()}>{renderOrderActions(order)}</Box>
           </Paper>)}
@@ -680,7 +681,7 @@ export default function ShopTableGrid() {
           </Button>
         </Stack>
         {mobile ? <Stack gap={1} sx={{ overflow: 'auto' }}>
-          {filteredRows.map(table => <Paper key={table.id} variant="outlined" sx={{ p: 1.5, bgcolor: table.activeOrderCount ? '#eff6ff' : '#fff' }}>
+          {filteredRows.map(table => {const hasServedUnpaid=(table.activeOrders || []).some(isServedUnpaid);return <Paper key={table.id} variant="outlined" sx={{ p: 1.5, bgcolor: hasServedUnpaid ? '#fff1f2' : table.activeOrderCount ? '#eff6ff' : '#fff', borderColor: hasServedUnpaid ? 'error.main' : undefined, borderWidth: hasServedUnpaid ? 2 : 1 }}>
             <Stack direction="row" justifyContent="space-between" alignItems="center" gap={1}>
               <Stack direction="row" alignItems="center" gap={0.5}>
                 <Checkbox size="small" disabled={!clearableOrders(table).length} checked={selectedTableIds.includes(table.id)} onChange={event => setSelectedTableIds(current => event.target.checked ? [...new Set([...current, table.id])] : current.filter(id => id !== table.id))} />
@@ -690,19 +691,19 @@ export default function ShopTableGrid() {
               <Stack direction="row" gap={0.5} flexWrap="wrap" justifyContent="flex-end">
                 <Chip size="small" color={table.activeOrderCount ? 'primary' : 'success'} label={table.activeOrderCount ? `${table.activeOrderCount} đơn chưa dọn` : 'Bàn trống'} />
                 {table.draft && <Chip size="small" color="warning" label={`Đơn tạm · ${(table.draft.displayItems || []).length} dòng`} />}
-                {table.activeOrderCount > 0 && <Chip size="small" color={(table.activeOrders || []).some(order => order.paymentStatus !== 'PAID') ? 'warning' : 'success'} variant="outlined" label={`${(table.activeOrders || []).filter(order => order.paymentStatus === 'PAID').length} đã trả · ${(table.activeOrders || []).filter(order => order.paymentStatus !== 'PAID').length} chưa trả`} />}
+                {table.activeOrderCount > 0 && <Chip size="small" color={hasServedUnpaid ? 'error' : (table.activeOrders || []).some(order => order.paymentStatus !== 'PAID') ? 'warning' : 'success'} variant={hasServedUnpaid ? 'filled' : 'outlined'} label={hasServedUnpaid ? `${(table.activeOrders || []).filter(isServedUnpaid).length} ĐÃ TRẢ MÓN · CHƯA THANH TOÁN` : `${(table.activeOrders || []).filter(order => order.paymentStatus === 'PAID').length} đã trả · ${(table.activeOrders || []).filter(order => order.paymentStatus !== 'PAID').length} chưa trả`} />}
               </Stack>
             </Stack>
             {table.draft && <Typography variant="body2" fontWeight={800} color="warning.dark" sx={{ mt: 0.5 }}>Tạm: {(table.draft.displayItems || []).map(item => `${item.quantity} × ${item.modelName}`).join(' · ')} · {table.draft.updatedBy}</Typography>}
             {hideServedOrders && clearableOrders(table).length > 0 && <Alert severity="success" sx={{ mt: 1, py: 0 }}>Đã trả món: {clearableOrders(table).length} đơn · chọn bàn để dọn khi khách rời.</Alert>}
-            {visibleOrders(table).map(order => <Paper key={order.id} variant="outlined" sx={{ p: 1, mt: 1 }}>
-              <Stack direction="row" alignItems="center" gap={0.5} flexWrap="wrap"><Typography fontWeight={900}>{orderLabel(order)}</Typography>{statusChip(order.status)}<Chip size="small" label={order.paymentStatus === 'PAID' ? 'Đã trả' : 'Chưa trả'} color={order.paymentStatus === 'PAID' ? 'success' : 'warning'} /></Stack>
+            {visibleOrders(table).map(order => <Paper key={order.id} variant="outlined" sx={{ p: 1, mt: 1, bgcolor: isServedUnpaid(order) ? '#fff7f7' : 'background.paper', borderColor: isServedUnpaid(order) ? 'error.main' : undefined, borderWidth: isServedUnpaid(order) ? 2 : 1 }}>
+              <Stack direction="row" alignItems="center" gap={0.5} flexWrap="wrap"><Typography fontWeight={900}>{orderLabel(order)}</Typography>{statusChip(order.status)}<Chip size="small" label={isServedUnpaid(order) ? 'ĐÃ TRẢ MÓN · CHƯA THANH TOÁN' : order.paymentStatus === 'PAID' ? 'Đã trả' : 'Chưa trả'} color={isServedUnpaid(order) ? 'error' : order.paymentStatus === 'PAID' ? 'success' : 'warning'} /></Stack>
               <Typography variant="body2">{(order.items || []).filter(item => !item.parentItemId).map(item => `${item.quantity} × ${item.modelName}`).join(' · ')}</Typography>
               <Typography variant="body2" fontWeight={800}>{fmtMoney(order.totalAmount)}</Typography>
               <Box sx={{ mt: 1 }}>{renderOrderActions(order)}</Box>
             </Paper>)}
             <Stack direction="row" gap={1} flexWrap="wrap" sx={{ mt: 1 }}><Button size="small" variant="contained" onClick={() => openOrders(table)}>Xem đơn</Button><Button size="small" variant="outlined" onClick={() => openQuickOrderForTable(table)}>Tạo nhanh tại bàn</Button><Button size="small" onClick={() => setNewOrderTable(table)}>Đơn đầy đủ</Button></Stack>
-          </Paper>)}
+          </Paper>})}
           {!filteredRows.length && <Typography color="text.secondary">Không tìm thấy bàn phù hợp.</Typography>}
         </Stack> :
         <DataGrid
@@ -717,10 +718,12 @@ export default function ShopTableGrid() {
           onRowSelectionModelChange={model => setSelectedTableIds(selectionIds(model))}
           pageSizeOptions={[25, 50]}
           density="compact"
-          getRowClassName={({ row }) => row.activeOrderCount ? 'occupied-row' : ''}
+          getRowClassName={({ row }) => (row.activeOrders || []).some(isServedUnpaid) ? 'served-unpaid-row' : row.activeOrderCount ? 'occupied-row' : ''}
           sx={{
             '& .occupied-row': { bgcolor: '#e3f2fd' },
             '& .occupied-row:hover': { bgcolor: '#bbdefb !important' },
+            '& .served-unpaid-row': { bgcolor: '#fff1f2' },
+            '& .served-unpaid-row:hover': { bgcolor: '#ffe4e6 !important' },
           }}
         />}
       </Box>}
