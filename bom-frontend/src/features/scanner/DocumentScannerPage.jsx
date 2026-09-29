@@ -334,6 +334,7 @@ export default function DocumentScannerPage() {
     setCameraError('')
     setCameraOpen(true)
     try {
+      await new Promise(resolve => requestAnimationFrame(resolve))
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: 'environment' }, width: { ideal: 2560 }, height: { ideal: 1440 } },
         audio: false,

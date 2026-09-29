@@ -24,7 +24,7 @@ import java.util.Locale;
 @Service
 public class DocumentScanService {
 
-    private static final long MAX_UPLOAD_BYTES = 25L * 1024L * 1024L;
+    private static final long MAX_UPLOAD_BYTES = 20L * 1024L * 1024L;
     private static final int MIN_OUTPUT_SIDE = 240;
     private static final int MAX_OUTPUT_SIDE = 2048;
 
@@ -143,7 +143,7 @@ public class DocumentScanService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Image file is required");
         }
         if (file.getSize() > MAX_UPLOAD_BYTES) {
-            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "Image must be 25 MB or smaller");
+            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "Image must be 20 MB or smaller");
         }
         String contentType = file.getContentType();
         if (contentType != null && !contentType.startsWith("image/")) {
