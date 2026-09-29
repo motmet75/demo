@@ -81,6 +81,7 @@ export default function QuickTableOrderDialog({ open, table, favoriteIds = [], t
   const [orderActionId, setOrderActionId] = useState('')
   const [error, setError] = useState('')
   const [created, setCreated] = useState(null)
+  const [confirmedOrders, setConfirmedOrders] = useState([])
   const [orderUpdates, setOrderUpdates] = useState({})
   const [clearedOrderIds, setClearedOrderIds] = useState(new Set())
   const [editOrder, setEditOrder] = useState(null)
@@ -109,7 +110,7 @@ export default function QuickTableOrderDialog({ open, table, favoriteIds = [], t
 
   useEffect(() => {
     if (!open || !table?.id) return undefined
-    setFavorites(favoriteIds.map(String)); setFavoriteQuery(''); setConfigure(false); setSelected(null); setCreated(null); setOrderUpdates({}); setClearedOrderIds(new Set()); setPrintedOrderIds(new Set()); setEditOrder(null); setMoveOrder(null); setMoveTarget(null); setOrderActionId(''); setError('')
+    setFavorites(favoriteIds.map(String)); setFavoriteQuery(''); setConfigure(false); setSelected(null); setCreated(null); setConfirmedOrders([]); setOrderUpdates({}); setClearedOrderIds(new Set()); setPrintedOrderIds(new Set()); setEditOrder(null); setMoveOrder(null); setMoveTarget(null); setOrderActionId(''); setError('')
     setLoading(true)
     Promise.all([fetchShopTables(), fetchStaffMenuItems(), fetchTableOrderDraft(table.id)])
       .then(([tablesResult, menu, draftResult]) => {
@@ -125,15 +126,23 @@ export default function QuickTableOrderDialog({ open, table, favoriteIds = [], t
     return () => clearInterval(poll)
   }, [open, table?.id, favoriteIds])
 
+  useEffect(() => {
+    if (!open) return
+    setConfirmedOrders(current => {
+      const byId = new Map([...current, ...tableOrders].filter(order => order?.id).map(order => [order.id, order]))
+      return Array.from(byId.values()).sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+    })
+  }, [open, tableOrders])
+
   const favoriteModels = useMemo(() => favorites.map(id => models.find(model => String(model.id) === id)).filter(Boolean), [favorites, models])
   const filteredFavoriteModels = useMemo(() => {
     const query = normalizeSearch(favoriteQuery.trim())
     return query ? models.filter(model => normalizeSearch(`${model.modelCode || ''} ${model.modelName || ''}`).includes(query)) : models
   }, [favoriteQuery, models])
   const visibleOrders = useMemo(() => {
-    const list = created ? [created, ...tableOrders.filter(order => order.id !== created.id)] : tableOrders
+    const list = created ? [created, ...confirmedOrders.filter(order => order.id !== created.id)] : confirmedOrders
     return list.map(order => orderUpdates[order.id] || order).filter(order => !clearedOrderIds.has(order.id)).slice(0, 8)
-  }, [clearedOrderIds, created, orderUpdates, tableOrders])
+  }, [clearedOrderIds, confirmedOrders, created, orderUpdates])
   const otherOrders = visibleOrders.filter(order => order.id !== created?.id)
   const moveTableOptions = useMemo(() => tables.filter(item => String(item.id) !== String(table?.id)), [table?.id, tables])
   const draftTotal = draftItems.reduce((sum, item) => sum + Number(item.unitPrice || 0) * Number(item.quantity || 0) + (item.sideItems || []).reduce((sideSum, side) => sideSum + Number(side.unitPrice || 0) * Number(side.quantity || 0) * Number(item.quantity || 0), 0), 0)
@@ -209,7 +218,7 @@ export default function QuickTableOrderDialog({ open, table, favoriteIds = [], t
     try {
       const { res, data } = await confirmTableOrderDraft(table.id, draft.draftId)
       if (!res.ok) throw new Error(data?.message || 'Không xác nhận được đơn tạm')
-      applyDraft(null); setCreated(data); onCreated?.(data)
+      applyDraft(null); setCreated(data); setConfirmedOrders(current => [data, ...current.filter(order => order.id !== data.id)]); onCreated?.(data)
       await printCounterOrderAlertTracked(data, setError)
     } catch (actionError) { setError(actionError.message || 'Không xác nhận được đơn tạm') }
     finally { setSaving(false) }
@@ -218,6 +227,7 @@ export default function QuickTableOrderDialog({ open, table, favoriteIds = [], t
   const applyLocalOrder = order => {
     if (!order?.id) return
     setOrderUpdates(current => ({ ...current, [order.id]: order }))
+    setConfirmedOrders(current => current.map(item => item.id === order.id ? order : item))
     setCreated(current => current?.id === order.id ? order : current)
   }
   const callOrderAction = async (action, order, fallback, payment = {}) => {

@@ -748,9 +748,9 @@ export default function ShopTableGrid() {
 
       {quickOrderTarget && <QuickTableOrderDialog
         open
-        table={quickOrderTarget.table}
+        table={rows.find(item => item.id === quickOrderTarget.table.id) || quickOrderTarget.table}
         favoriteIds={quickOrderTarget.favoriteIds}
-        tableOrders={quickOrderTarget.table.activeOrders || []}
+        tableOrders={(rows.find(item => item.id === quickOrderTarget.table.id) || quickOrderTarget.table).activeOrders || []}
         onSaveFavorites={quickOrderTarget.onSaveFavorites}
         onCreated={() => { void load() }}
         onClose={() => setQuickOrderTarget(null)}

@@ -64,6 +64,7 @@ import ProfilePage from './features/profile/ProfilePage'
 import { I18nProvider, useI18n } from './i18n/I18nContext'
 import LanguageSelector from './components/LanguageSelector'
 import ShopBookingPage from './features/shopfront/ShopBookingPage'
+import DocumentScannerPage from './features/scanner/DocumentScannerPage'
 
 const SIDEBAR_FULL = 210
 const SIDEBAR_MINI = 52
@@ -110,6 +111,7 @@ const PATH_TITLES = {
   '/shop-printing':      'Printing Center',
   '/counter-shift':      'Bàn giao ca',
   '/profile':            'Profile',
+  '/document-scanner':   'Document Scanner',
   '/audit-history': 'Nhật ký thay đổi',
   '/admin':              'Admin',
   '/admin/users':        'Admin Users',
@@ -185,6 +187,14 @@ const NAV_GROUPS = [
     icon: '🏢',
     items: [
       { label: 'Companies', path: '/companies', icon: '🏢' },
+    ],
+  },
+  {
+    key: 'tools',
+    label: 'Tools',
+    icon: '✨',
+    items: [
+      { label: 'Document Scanner', path: '/document-scanner', icon: '📷' },
     ],
   },
   {
@@ -452,6 +462,7 @@ function MainShell({ user, logout, isAdmin, isSuperAdmin, hasFullBusinessAccess,
           <Routes>
             <Route path="/login" element={<LoginForm />} />
             <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
+            <Route path="/document-scanner" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><DocumentScannerPage /></RequireAuth>} />
             <Route path="/" element={<RequireAuth><HomeRedirect user={user} /></RequireAuth>} />
             <Route path="/materials" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><MaterialPage /></RequireContext></RequireAuth>} />
             <Route path="/models" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><ModelPage /></RequireAuth>} />
