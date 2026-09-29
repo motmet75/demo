@@ -84,11 +84,17 @@
 .scanner-pages-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 13px; }
 .scanner-pages-heading > div { display: flex; flex-direction: column; gap: 2px; }.scanner-pages-heading strong { font-size: 14px; }.scanner-pages-heading span { color: var(--scan-muted); font-size: 11px; }
 .scanner-pages-heading button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 11px; border: 1px solid #cbddea; border-radius: 8px; color: var(--scan-blue); background: white; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }.scanner-pages-heading svg { font-size: 17px; }
+.scanner-pages-heading .scanner-pages-tools { flex-direction: row; align-items: flex-end; gap: 8px; }
+.scanner-pages-tools label { display: flex; flex-direction: column; gap: 3px; color: #6a8195; font-size: 9px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.scanner-pages-tools select { min-width: 140px; height: 32px; padding: 0 25px 0 8px; border: 1px solid #cbddea; border-radius: 8px; color: #334e68; background: white; font: inherit; font-size: 11px; font-weight: 700; }
 .scanner-page-strip { display: flex; gap: 11px; padding: 2px 2px 7px; overflow-x: auto; }
-.scanner-page-thumb { position: relative; flex: 0 0 86px; height: 112px; overflow: hidden; padding: 0; border: 2px solid transparent; border-radius: 9px; background: #e8eff4; cursor: pointer; box-shadow: 0 2px 7px rgba(30,60,90,.1); }
+.scanner-page-thumb { position: relative; flex: 0 0 86px; height: 139px; overflow: hidden; padding: 0; border: 2px solid transparent; border-radius: 9px; background: #e8eff4; cursor: grab; box-shadow: 0 2px 7px rgba(30,60,90,.1); transition: opacity .15s, transform .15s; }
 .scanner-page-thumb.active { border-color: var(--scan-blue); box-shadow: 0 0 0 2px rgba(17,103,216,.14); }
+.scanner-page-thumb.dragging { opacity: .42; transform: scale(.96); }
 .scanner-page-thumb img { width: 100%; height: 84px; display: block; object-fit: cover; }.scanner-page-thumb > span { display: block; height: 26px; padding-top: 7px; box-sizing: border-box; color: #334e68; background: white; font-size: 10px; font-weight: 800; }
 .scanner-page-thumb i { position: absolute; top: 5px; right: 5px; display: grid; place-items: center; width: 19px; height: 19px; border-radius: 50%; color: white; background: var(--scan-mint); box-shadow: 0 1px 5px rgba(0,0,0,.25); }.scanner-page-thumb i svg { font-size: 13px; }
+.scanner-page-order-buttons { height: 27px; display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid #e3ebf1; background: white; }
+.scanner-page-order-buttons button { display: grid; place-items: center; padding: 0; border: 0; color: #447391; background: white; cursor: pointer; }.scanner-page-order-buttons button + button { border-left: 1px solid #e3ebf1; }.scanner-page-order-buttons button:disabled { color: #c7d3dc; cursor: default; }.scanner-page-order-buttons svg { font-size: 16px; }
 
 .scanner-how-it-works { display: flex; align-items: center; justify-content: center; gap: 22px; max-width: 780px; margin: 34px auto 0; color: #627d98; }.scanner-how-it-works > div { display: flex; align-items: center; gap: 10px; }.scanner-how-it-works b { display: grid; place-items: center; width: 30px; height: 30px; color: var(--scan-blue); border: 1px solid #bed6ef; border-radius: 50%; background: white; font-size: 12px; }.scanner-how-it-works span { display: flex; flex-direction: column; }.scanner-how-it-works strong { color: #334e68; font-size: 12px; }.scanner-how-it-works small { font-size: 10px; }.scanner-how-it-works > i { width: 60px; height: 1px; background: #ccdae6; }
 
@@ -110,4 +116,5 @@
   .scanner-primary-actions { flex-direction: column; }.scanner-primary-actions .scanner-button { width: 100%; }.scanner-editor-card, .scanner-settings-card { padding: 16px; border-radius: 13px; }.scanner-editor-stage { min-height: 270px; padding: 8px; }
   .scanner-export-actions { grid-template-columns: 1fr; }.scanner-export-actions .scanner-add-another { grid-column: auto; }.scanner-how-it-works { gap: 9px; }.scanner-how-it-works > i { width: 16px; }.scanner-how-it-works small { display: none; }
   .scanner-pages-panel { padding: 14px 12px; }.scanner-editor-actions { align-items: flex-start; flex-direction: column; gap: 0; }
+  .scanner-pages-heading { align-items: flex-start; flex-direction: column; }.scanner-pages-heading .scanner-pages-tools { width: 100%; align-items: flex-end; }.scanner-pages-tools label { flex: 1; }.scanner-pages-tools select { width: 100%; }.scanner-pages-tools > button { white-space: nowrap; }
 }

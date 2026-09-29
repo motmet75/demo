@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import CameraAltRoundedIcon from '@mui/icons-material/CameraAltRounded'
-import FileUploadOutlinedIcon from '@mui/icons-material/FileUploadOutlined'
 import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined'
 import CropFreeRoundedIcon from '@mui/icons-material/CropFreeRounded'
 import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded'
@@ -11,6 +10,10 @@ import CheckRoundedIcon from '@mui/icons-material/CheckRounded'
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded'
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
+import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded'
+import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded'
+import FolderZipOutlinedIcon from '@mui/icons-material/FolderZipOutlined'
+import { unzip } from 'fflate'
 import { apiFetch } from '../../api/client'
 import './DocumentScannerPage.css'
 
@@ -22,6 +25,11 @@ const DEFAULT_CORNERS = [
 ]
 
 const CORNER_LABELS = ['Top left', 'Top right', 'Bottom right', 'Bottom left']
+const IMAGE_EXTENSION = /\.(jpe?g|png|webp|gif|bmp|heic|heif)$/i
+const MAX_ZIP_BYTES = 200 * 1024 * 1024
+const MAX_ZIP_IMAGE_BYTES = 20 * 1024 * 1024
+const MAX_ZIP_IMAGES = 250
+const MAX_EXTRACTED_BYTES = 350 * 1024 * 1024
 
 function loadImage(src) {
   return new Promise((resolve, reject) => {
@@ -39,6 +47,104 @@ function fileToDataUrl(file) {
     reader.onerror = reject
     reader.readAsDataURL(file)
   })
+}
+
+function imageMimeType(name) {
+  const extension = name.split('.').pop()?.toLowerCase()
+  return {
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp',
+    gif: 'image/gif', bmp: 'image/bmp', heic: 'image/heic', heif: 'image/heif',
+  }[extension] || 'application/octet-stream'
+}
+
+function dosTimestamp(date, time) {
+  if (!date) return 0
+  const value = new Date(
+    ((date >> 9) & 0x7f) + 1980,
+    Math.max(0, ((date >> 5) & 0x0f) - 1),
+    date & 0x1f,
+    (time >> 11) & 0x1f,
+    (time >> 5) & 0x3f,
+    (time & 0x1f) * 2,
+  ).getTime()
+  return Number.isFinite(value) ? value : 0
+}
+
+function readZipMetadata(bytes) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  const minimum = Math.max(0, bytes.length - 65557)
+  let directoryEnd = -1
+  for (let offset = bytes.length - 22; offset >= minimum; offset -= 1) {
+    if (view.getUint32(offset, true) === 0x06054b50) {
+      directoryEnd = offset
+      break
+    }
+  }
+  if (directoryEnd < 0) throw new Error('ZIP directory not found')
+  const entryCount = view.getUint16(directoryEnd + 10, true)
+  let offset = view.getUint32(directoryEnd + 16, true)
+  const decoder = new TextDecoder('utf-8')
+  const metadata = new Map()
+  for (let index = 0; index < entryCount && offset + 46 <= bytes.length; index += 1) {
+    if (view.getUint32(offset, true) !== 0x02014b50) break
+    const time = view.getUint16(offset + 12, true)
+    const date = view.getUint16(offset + 14, true)
+    const nameLength = view.getUint16(offset + 28, true)
+    const extraLength = view.getUint16(offset + 30, true)
+    const commentLength = view.getUint16(offset + 32, true)
+    const name = decoder.decode(bytes.subarray(offset + 46, offset + 46 + nameLength))
+    metadata.set(name, { modifiedAt: dosTimestamp(date, time) })
+    offset += 46 + nameLength + extraLength + commentLength
+  }
+  return metadata
+}
+
+function unzipImages(file) {
+  if (file.size > MAX_ZIP_BYTES) return Promise.reject(new Error('ZIP files must be 200 MB or smaller.'))
+  return file.arrayBuffer().then(buffer => new Promise((resolve, reject) => {
+    const archive = new Uint8Array(buffer)
+    let metadata
+    try {
+      metadata = readZipMetadata(archive)
+    } catch {
+      metadata = new Map()
+    }
+    unzip(archive, {
+      filter(entry) {
+        return IMAGE_EXTENSION.test(entry.name)
+          && !entry.name.startsWith('__MACOSX/')
+          && entry.originalSize <= MAX_ZIP_IMAGE_BYTES
+      },
+    }, (error, extracted) => {
+      if (error) {
+        reject(new Error('The ZIP archive could not be extracted.'))
+        return
+      }
+      const entries = Object.entries(extracted)
+        .filter(([name]) => IMAGE_EXTENSION.test(name))
+        .map(([name, data]) => ({
+          name,
+          data,
+          modifiedAt: metadata.get(name)?.modifiedAt || file.lastModified || 0,
+        }))
+      const totalBytes = entries.reduce((sum, entry) => sum + entry.data.byteLength, 0)
+      if (entries.length > MAX_ZIP_IMAGES) {
+        reject(new Error(`This ZIP contains more than ${MAX_ZIP_IMAGES} images.`))
+      } else if (totalBytes > MAX_EXTRACTED_BYTES) {
+        reject(new Error('The extracted images are larger than 350 MB.'))
+      } else {
+        resolve(entries)
+      }
+    })
+  }))
+}
+
+function comparePages(first, second, mode) {
+  if (mode === 'time') {
+    const timeDifference = (first.modifiedAt || 0) - (second.modifiedAt || 0)
+    if (timeDifference) return timeDifference
+  }
+  return first.sortName.localeCompare(second.sortName, undefined, { numeric: true, sensitivity: 'base' })
 }
 
 function detectDocument(image) {
@@ -265,6 +371,8 @@ export default function DocumentScannerPage() {
   const [busy, setBusy] = useState(false)
   const [view, setView] = useState('adjust')
   const [magnifier, setMagnifier] = useState(null)
+  const [sortMode, setSortMode] = useState('manual')
+  const [draggedPageId, setDraggedPageId] = useState(null)
   const pagesRef = useRef([])
   const videoRef = useRef(null)
   const streamRef = useRef(null)
@@ -280,6 +388,7 @@ export default function DocumentScannerPage() {
     streamRef.current?.getTracks().forEach(track => track.stop())
     pagesRef.current.forEach(page => {
       if (page.previewUrl) URL.revokeObjectURL(page.previewUrl)
+      if (page.sourceUrl?.startsWith('blob:')) URL.revokeObjectURL(page.sourceUrl)
     })
   }, [])
 
@@ -295,7 +404,7 @@ export default function DocumentScannerPage() {
       : page))
   }, [])
 
-  const addSource = useCallback(async (url, name = 'scan') => {
+  const addSource = useCallback(async (url, name = 'scan', metadata = {}) => {
     setBusy(true)
     try {
       const image = await loadImage(url)
@@ -303,6 +412,8 @@ export default function DocumentScannerPage() {
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         sourceUrl: url,
         fileName: name.replace(/\.[^.]+$/, '') || 'scan',
+        sortName: metadata.sortName || name,
+        modifiedAt: metadata.modifiedAt || Date.now(),
         corners: detectDocument(image),
         filter: 'document',
         previewUrl: '',
@@ -312,6 +423,7 @@ export default function DocumentScannerPage() {
       setView('adjust')
       setStatus(`Page ${pagesRef.current.length + 1} added. Drag a corner for precise adjustment.`)
     } catch {
+      if (url.startsWith('blob:')) URL.revokeObjectURL(url)
       setStatus('This image could not be opened. Please choose another file.')
     } finally {
       setBusy(false)
@@ -322,11 +434,38 @@ export default function DocumentScannerPage() {
     const selectedFiles = [...(event.target.files || [])]
     event.target.value = ''
     for (const file of selectedFiles) {
-      if (!file.type.startsWith('image/')) {
-        setStatus('Choose image files. A combined PDF is created when you finish.')
+      const isZip = file.type === 'application/zip' || file.type === 'application/x-zip-compressed' || /\.zip$/i.test(file.name)
+      if (isZip) {
+        setBusy(true)
+        setStatus(`Extracting images from ${file.name}…`)
+        try {
+          const entries = await unzipImages(file)
+          if (!entries.length) {
+            setStatus('No supported images were found in this ZIP archive.')
+            continue
+          }
+          const ordered = [...entries].sort((first, second) => comparePages(
+            { ...first, sortName: first.name }, { ...second, sortName: second.name }, 'name'))
+          for (const entry of ordered) {
+            const url = URL.createObjectURL(new Blob([entry.data], { type: imageMimeType(entry.name) }))
+            await addSource(url, entry.name.split('/').pop(), { sortName: entry.name, modifiedAt: entry.modifiedAt })
+          }
+          setPages(current => [...current].sort((first, second) => comparePages(first, second, 'name')))
+          setSortMode('name')
+          setStatus(`${ordered.length} image${ordered.length === 1 ? '' : 's'} extracted from ${file.name} and sorted by filename.`)
+        } catch (error) {
+          setStatus(error.message || 'The ZIP archive could not be extracted.')
+        } finally {
+          setBusy(false)
+        }
         continue
       }
-      await addSource(await fileToDataUrl(file), file.name)
+      if (!file.type.startsWith('image/')) {
+        setStatus('Choose image files or a ZIP archive containing images.')
+        continue
+      }
+      await addSource(await fileToDataUrl(file), file.name, { sortName: file.name, modifiedAt: file.lastModified })
+      setSortMode('manual')
     }
   }
 
@@ -360,7 +499,9 @@ export default function DocumentScannerPage() {
     canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height)
     const url = canvas.toDataURL('image/jpeg', 0.96)
     closeCamera()
-    addSource(url, `scan-${new Date().toISOString().slice(0, 10)}-${pagesRef.current.length + 1}`)
+    const captureName = `scan-${new Date().toISOString().slice(0, 19).replaceAll(':', '-')}-${pagesRef.current.length + 1}`
+    addSource(url, captureName, { sortName: captureName, modifiedAt: Date.now() })
+    setSortMode('manual')
   }
 
   const invalidatePreview = page => {
@@ -516,6 +657,7 @@ export default function DocumentScannerPage() {
     const removingIndex = pages.findIndex(page => page.id === pageId)
     const removing = pages[removingIndex]
     if (removing?.previewUrl) URL.revokeObjectURL(removing.previewUrl)
+    if (removing?.sourceUrl?.startsWith('blob:')) URL.revokeObjectURL(removing.sourceUrl)
     const remaining = pages.filter(page => page.id !== pageId)
     setPages(remaining)
     if (activeId === pageId) setActiveId(remaining[Math.max(0, removingIndex - 1)]?.id || null)
@@ -527,6 +669,41 @@ export default function DocumentScannerPage() {
     setActiveId(pageId)
     setView('adjust')
     setMagnifier(null)
+  }
+
+  const applySort = mode => {
+    setSortMode(mode)
+    if (mode === 'manual') return
+    setPages(current => [...current].sort((first, second) => comparePages(first, second, mode)))
+  }
+
+  const movePage = (pageId, direction) => {
+    setPages(current => {
+      const from = current.findIndex(page => page.id === pageId)
+      const to = from + direction
+      if (from < 0 || to < 0 || to >= current.length) return current
+      const reordered = [...current]
+      const [page] = reordered.splice(from, 1)
+      reordered.splice(to, 0, page)
+      return reordered
+    })
+    setSortMode('manual')
+  }
+
+  const dropPage = targetId => {
+    if (!draggedPageId || draggedPageId === targetId) return
+    setPages(current => {
+      const reordered = [...current]
+      const from = reordered.findIndex(page => page.id === draggedPageId)
+      const target = reordered.findIndex(page => page.id === targetId)
+      if (from < 0 || target < 0) return current
+      const [page] = reordered.splice(from, 1)
+      const insertAt = reordered.findIndex(item => item.id === targetId)
+      reordered.splice(insertAt < 0 ? reordered.length : insertAt, 0, page)
+      return reordered
+    })
+    setSortMode('manual')
+    setDraggedPageId(null)
   }
 
   const setActiveFilter = value => {
@@ -565,13 +742,13 @@ export default function DocumentScannerPage() {
           <div className="scanner-start-copy">
             <span className="step-pill">Step 1 of 3</span>
             <h2>Add the first page</h2>
-            <p>Use your iPhone camera or select one or more photos. Each page is corrected at up to 2048 pixels.</p>
+            <p>Use your iPhone camera, select photos, or upload a ZIP. ZIP images are extracted and ordered automatically.</p>
             <div className="scanner-primary-actions">
               <button className="scanner-button scanner-button-primary" onClick={openCamera}><CameraAltRoundedIcon /> Open camera</button>
-              <button className="scanner-button scanner-button-secondary" onClick={() => fileInputRef.current?.click()}><FileUploadOutlinedIcon /> Upload photos</button>
+              <button className="scanner-button scanner-button-secondary" onClick={() => fileInputRef.current?.click()}><FolderZipOutlinedIcon /> Photos or ZIP</button>
             </div>
-            <input ref={fileInputRef} className="scanner-file-input" type="file" accept="image/*" multiple onChange={handleFiles} />
-            <p className="scanner-file-help">JPG, PNG, WEBP or iPhone HEIC when supported by the browser</p>
+            <input ref={fileInputRef} className="scanner-file-input" type="file" accept="image/*,.zip,application/zip" multiple onChange={handleFiles} />
+            <p className="scanner-file-help">JPG, PNG, WEBP, iPhone HEIC, or ZIP · up to 250 images per ZIP</p>
             {status && <div className="scanner-message">{status}</div>}
           </div>
         </section>
@@ -658,22 +835,48 @@ export default function DocumentScannerPage() {
               <div className="scanner-export-actions">
                 <button className="scanner-button scanner-button-primary" onClick={downloadScan} disabled={busy}><DownloadRoundedIcon /> {busy ? 'Creating…' : 'Finish & download'}</button>
                 <button className="scanner-button scanner-button-secondary" onClick={shareScan} disabled={busy}><IosShareRoundedIcon /> Share</button>
-                <button className="scanner-add-another" onClick={() => fileInputRef.current?.click()}><AddPhotoAlternateOutlinedIcon /> Add photos</button>
-                <input ref={fileInputRef} className="scanner-file-input" type="file" accept="image/*" multiple onChange={handleFiles} />
+                <button className="scanner-add-another" onClick={() => fileInputRef.current?.click()}><AddPhotoAlternateOutlinedIcon /> Add photos or ZIP</button>
+                <input ref={fileInputRef} className="scanner-file-input" type="file" accept="image/*,.zip,application/zip" multiple onChange={handleFiles} />
               </div>
               {status && <div className="scanner-message">{status}</div>}
             </aside>
           </div>
 
           <section className="scanner-pages-panel">
-            <div className="scanner-pages-heading"><div><strong>Document pages</strong><span>{pages.length} page{pages.length === 1 ? '' : 's'} · select any page to readjust</span></div><button onClick={() => fileInputRef.current?.click()}><AddPhotoAlternateOutlinedIcon /> Add pages</button></div>
+            <div className="scanner-pages-heading">
+              <div><strong>Document pages</strong><span>{pages.length} page{pages.length === 1 ? '' : 's'} · drag, sort, or use the arrows to reorder</span></div>
+              <div className="scanner-pages-tools">
+                <label>Order
+                  <select value={sortMode} onChange={event => applySort(event.target.value)}>
+                    <option value="manual">Manual</option>
+                    <option value="name">Filename sequence</option>
+                    <option value="time">Time sequence</option>
+                  </select>
+                </label>
+                <button onClick={() => fileInputRef.current?.click()}><FolderZipOutlinedIcon /> Add photos / ZIP</button>
+              </div>
+            </div>
             <div className="scanner-page-strip">
               {pages.map((page, index) => (
-                <button key={page.id} className={`scanner-page-thumb ${page.id === activePage.id ? 'active' : ''}`} onClick={() => selectPage(page.id)}>
-                  <img src={page.previewUrl || page.sourceUrl} alt={`Page ${index + 1}`} />
+                <div
+                  key={page.id}
+                  className={`scanner-page-thumb ${page.id === activePage.id ? 'active' : ''} ${page.id === draggedPageId ? 'dragging' : ''}`}
+                  draggable
+                  onDragStart={() => setDraggedPageId(page.id)}
+                  onDragEnd={() => setDraggedPageId(null)}
+                  onDragOver={event => event.preventDefault()}
+                  onDrop={() => dropPage(page.id)}
+                  onClick={() => selectPage(page.id)}
+                  title={page.sortName}
+                >
+                  <img src={page.previewUrl || page.sourceUrl} alt={`Page ${index + 1}`} draggable="false" />
                   <span>Page {index + 1}</span>
                   {page.previewUrl && <i><CheckRoundedIcon /></i>}
-                </button>
+                  <div className="scanner-page-order-buttons">
+                    <button disabled={index === 0} onClick={event => { event.stopPropagation(); movePage(page.id, -1) }} aria-label={`Move page ${index + 1} left`}><ArrowBackRoundedIcon /></button>
+                    <button disabled={index === pages.length - 1} onClick={event => { event.stopPropagation(); movePage(page.id, 1) }} aria-label={`Move page ${index + 1} right`}><ArrowForwardRoundedIcon /></button>
+                  </div>
+                </div>
               ))}
             </div>
           </section>
@@ -694,7 +897,7 @@ export default function DocumentScannerPage() {
             <div className="scanner-camera-guide"><span /><span /><span /><span /></div>
             <p>{cameraError || `Page ${pages.length + 1} · keep the document inside the frame and hold steady.`}</p>
             {!cameraError && <button className="scanner-shutter" onClick={capturePhoto} aria-label="Take photo"><span /></button>}
-            {cameraError && <button className="scanner-button scanner-button-secondary" onClick={() => fileInputRef.current?.click()}>Upload photos</button>}
+            {cameraError && <button className="scanner-button scanner-button-secondary" onClick={() => fileInputRef.current?.click()}>Upload photos or ZIP</button>}
           </div>
         </div>
       )}

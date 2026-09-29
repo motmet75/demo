@@ -69,15 +69,25 @@ const fmt    = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 const payableAmount = (order) => Math.max(0, Number(order?.totalAmount || 0) - Number(order?.discountAmount || 0))
 
 const STAFF_CALL_STORAGE_PREFIX = 'shop_customer_staff_call_v1'
+const SHOP_MENU_VIEW_PREF = 'shop.menu.viewMode'
 const SHOP_MENU_DISPLAY_SIZE_PREF = 'shop.menu.displaySize'
 const SHOP_MENU_CONTRAST_PREF = 'shop.menu.highContrast'
 
 function readShopMenuPref(key, fallback) {
-  try { return localStorage.getItem(key) || fallback } catch { return fallback }
+  try {
+    const stored = localStorage.getItem(key)
+    if (stored) return stored
+  } catch { /* local storage may be blocked */ }
+  try {
+    const prefix = `${encodeURIComponent(key)}=`
+    const cookie = document.cookie.split(';').map(item => item.trim()).find(item => item.startsWith(prefix))
+    return cookie ? decodeURIComponent(cookie.slice(prefix.length)) : fallback
+  } catch { return fallback }
 }
 
 function writeShopMenuPref(key, value) {
   try { localStorage.setItem(key, value) } catch { /* browser storage may be blocked */ }
+  try { document.cookie = `${encodeURIComponent(key)}=${encodeURIComponent(value)}; Max-Age=31536000; Path=/bom-inventory; SameSite=Lax` } catch { /* cookies may be blocked */ }
 }
 
 function staffCallStorageKey(token, ctx) {
@@ -646,7 +656,7 @@ export default function ShopMenuPage({ staffContext = null, onStaffCreated, onSt
 
   // ── New UI state ───────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery]         = useState(rawSearchQuery)
-  const [gridView, setGridView]               = useState(Boolean(staffContext))
+  const [gridView, setGridView]               = useState(() => readShopMenuPref(SHOP_MENU_VIEW_PREF, 'list') === 'thumbnail')
   const [displaySize, setDisplaySize]         = useState(() => readShopMenuPref(SHOP_MENU_DISPLAY_SIZE_PREF, 'normal'))
   const [highContrast, setHighContrast]       = useState(() => readShopMenuPref(SHOP_MENU_CONTRAST_PREF, 'false') === 'true')
   const [activeCategory, setActiveCategory]   = useState(null)
@@ -2164,12 +2174,12 @@ export default function ShopMenuPage({ staffContext = null, onStaffCreated, onSt
               sx: { borderRadius: 20, bgcolor: highContrast ? '#fff' : '#f5f5f5', '& fieldset': { border: 'none' }, fontSize: large ? 16 : 14 },
             }}
           />
-          <IconButton onClick={() => setGridView(v => !v)}
-            sx={{ bgcolor: gridView ? '#ff5722' : '#f0f0f0', color: gridView ? '#fff' : '#555',
-              borderRadius: 1.5, flexShrink: 0,
-              '&:hover': { bgcolor: gridView ? '#e64a19' : '#e0e0e0' } }}>
-            {gridView ? <ViewListIcon sx={{ fontSize: large ? 26 : 22 }} /> : <GridViewIcon sx={{ fontSize: large ? 26 : 22 }} />}
-          </IconButton>
+          <TextField select size="small" label="Kiểu hiển thị" value={gridView ? 'thumbnail' : 'list'}
+            onChange={event => { const mode = event.target.value; setGridView(mode === 'thumbnail'); writeShopMenuPref(SHOP_MENU_VIEW_PREF, mode) }}
+            sx={{ width: { xs: 142, sm: 170 }, flexShrink: 0, '& .MuiOutlinedInput-root': { borderRadius: 2 } }}>
+            <MenuItem value="list"><ViewListIcon sx={{ fontSize: 19, mr: 1, verticalAlign: 'middle' }} />Danh sách</MenuItem>
+            <MenuItem value="thumbnail"><GridViewIcon sx={{ fontSize: 19, mr: 1, verticalAlign: 'middle' }} />Hình thu nhỏ</MenuItem>
+          </TextField>
           <IconButton onClick={() => { const next = displaySize === 'large' ? 'normal' : 'large'; setDisplaySize(next); writeShopMenuPref(SHOP_MENU_DISPLAY_SIZE_PREF, next) }}
             sx={{ bgcolor: large ? '#1f2937' : '#f0f0f0', color: large ? '#fff' : '#555', borderRadius: 1.5, flexShrink: 0, width: large ? 42 : 36, height: large ? 42 : 36, fontWeight: 900, fontSize: large ? 18 : 15, '&:hover': { bgcolor: large ? '#111827' : '#e0e0e0' } }}>
             Aa
