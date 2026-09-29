@@ -24,8 +24,14 @@ const DEFAULT_CORNERS = [
   { x: 0.07, y: 0.93 },
 ]
 
+const FULL_IMAGE_CORNERS = [
+  { x: 0, y: 0 },
+  { x: 1, y: 0 },
+  { x: 1, y: 1 },
+  { x: 0, y: 1 },
+]
+
 const CORNER_LABELS = ['Top left', 'Top right', 'Bottom right', 'Bottom left']
-const IMAGE_EXTENSION = /\.(jpe?g|jpe|jfif|png|webp|gif|bmp|heic|heif)$/i
 const MAX_ZIP_BYTES = 200 * 1024 * 1024
 const MAX_ZIP_IMAGE_BYTES = 20 * 1024 * 1024
 const MAX_ZIP_IMAGES = 250
@@ -65,7 +71,7 @@ function detectedImageMimeType(data, name = '') {
   if (data.length >= 8 && data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47) return 'image/png'
   if (data.length >= 6 && data[0] === 0x47 && data[1] === 0x49 && data[2] === 0x46 && data[3] === 0x38) return 'image/gif'
   if (data.length >= 12 && data[0] === 0x52 && data[1] === 0x49 && data[2] === 0x46 && data[3] === 0x46
-    && data[8] === 0x57 && data[9] === 0x45 && data[10] === 0x42 && data[11] === 0x50) return 'image/webp'
+      && data[8] === 0x57 && data[9] === 0x45 && data[10] === 0x42 && data[11] === 0x50) return 'image/webp'
   if (data.length >= 2 && data[0] === 0x42 && data[1] === 0x4d) return 'image/bmp'
   if (data.length >= 12 && data[4] === 0x66 && data[5] === 0x74 && data[6] === 0x79 && data[7] === 0x70) {
     const brand = String.fromCharCode(data[8], data[9], data[10], data[11]).toLowerCase()
@@ -77,12 +83,12 @@ function detectedImageMimeType(data, name = '') {
 function dosTimestamp(date, time) {
   if (!date) return 0
   const value = new Date(
-    ((date >> 9) & 0x7f) + 1980,
-    Math.max(0, ((date >> 5) & 0x0f) - 1),
-    date & 0x1f,
-    (time >> 11) & 0x1f,
-    (time >> 5) & 0x3f,
-    (time & 0x1f) * 2,
+      ((date >> 9) & 0x7f) + 1980,
+      Math.max(0, ((date >> 5) & 0x0f) - 1),
+      date & 0x1f,
+      (time >> 11) & 0x1f,
+      (time >> 5) & 0x3f,
+      (time & 0x1f) * 2,
   ).getTime()
   return Number.isFinite(value) ? value : 0
 }
@@ -133,7 +139,7 @@ function unzipImages(file) {
         const isFile = !entry.name.endsWith('/') && !entry.name.startsWith('__MACOSX/')
         const fitsEntryLimit = entry.originalSize <= MAX_ZIP_IMAGE_BYTES
         const fitsArchiveLimits = acceptedEntries < MAX_ZIP_IMAGES
-          && acceptedBytes + entry.originalSize <= MAX_EXTRACTED_BYTES
+            && acceptedBytes + entry.originalSize <= MAX_EXTRACTED_BYTES
         if (!isFile || !fitsEntryLimit || !fitsArchiveLimits) return false
         acceptedEntries += 1
         acceptedBytes += entry.originalSize
@@ -359,9 +365,9 @@ async function blobsToPdf(blobs) {
     const y = (pageHeight - imageHeight) / 2
     const stream = `q\n${imageWidth.toFixed(2)} 0 0 ${imageHeight.toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)} cm\n/Im0 Do\nQ\n`
     objects.push(
-      encoder.encode(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /XObject << /Im0 ${imageId} 0 R >> >> /Contents ${contentId} 0 R >>`),
-      encoder.encode(`<< /Length ${stream.length} >>\nstream\n${stream}endstream`),
-      imageObject(page.bytes, page.width, page.height),
+        encoder.encode(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /XObject << /Im0 ${imageId} 0 R >> >> /Contents ${contentId} 0 R >>`),
+        encoder.encode(`<< /Length ${stream.length} >>\nstream\n${stream}endstream`),
+        imageObject(page.bytes, page.width, page.height),
     )
   })
 
@@ -426,8 +432,8 @@ export default function DocumentScannerPage() {
 
   const updatePage = useCallback((pageId, changes) => {
     setPages(current => current.map(page => page.id === pageId
-      ? { ...page, ...(typeof changes === 'function' ? changes(page) : changes) }
-      : page))
+        ? { ...page, ...(typeof changes === 'function' ? changes(page) : changes) }
+        : page))
   }, [])
 
   const addSource = useCallback(async (url, name = 'scan', metadata = {}) => {
@@ -440,14 +446,18 @@ export default function DocumentScannerPage() {
         fileName: name.replace(/\.[^.]+$/, '') || 'scan',
         sortName: metadata.sortName || name,
         modifiedAt: metadata.modifiedAt || Date.now(),
-        corners: detectDocument(image),
+        corners: metadata.detectEdges === false
+            ? FULL_IMAGE_CORNERS.map(point => ({ ...point }))
+            : detectDocument(image),
         filter: 'document',
         previewUrl: '',
       }
       setPages(current => [...current, page])
       setActiveId(page.id)
       setView('adjust')
-      setStatus(`Page ${pagesRef.current.length + 1} added. Drag a corner for precise adjustment.`)
+      setStatus(metadata.detectEdges === false
+          ? `Page ${pagesRef.current.length + 1} added using the whole image.`
+          : `Page ${pagesRef.current.length + 1} added. Drag a corner for precise adjustment.`)
     } catch {
       if (url.startsWith('blob:')) URL.revokeObjectURL(url)
       setStatus('This image could not be opened. Please choose another file.')
@@ -471,10 +481,10 @@ export default function DocumentScannerPage() {
             continue
           }
           const ordered = [...entries].sort((first, second) => comparePages(
-            { ...first, sortName: first.name }, { ...second, sortName: second.name }, 'name'))
+              { ...first, sortName: first.name }, { ...second, sortName: second.name }, 'name'))
           for (const entry of ordered) {
             const url = URL.createObjectURL(new Blob([entry.data], { type: entry.mimeType }))
-            await addSource(url, entry.name.split('/').pop(), { sortName: entry.name, modifiedAt: entry.modifiedAt })
+            await addSource(url, entry.name.split('/').pop(), { sortName: entry.name, modifiedAt: entry.modifiedAt, detectEdges: false })
           }
           setPages(current => [...current].sort((first, second) => comparePages(first, second, 'name')))
           setSortMode('name')
@@ -490,7 +500,7 @@ export default function DocumentScannerPage() {
         setStatus('Choose image files or a ZIP archive containing images.')
         continue
       }
-      await addSource(await fileToDataUrl(file), file.name, { sortName: file.name, modifiedAt: file.lastModified })
+      await addSource(await fileToDataUrl(file), file.name, { sortName: file.name, modifiedAt: file.lastModified, detectEdges: false })
       setSortMode('manual')
     }
   }
@@ -526,7 +536,7 @@ export default function DocumentScannerPage() {
     const url = canvas.toDataURL('image/jpeg', 0.96)
     closeCamera()
     const captureName = `scan-${new Date().toISOString().slice(0, 19).replaceAll(':', '-')}-${pagesRef.current.length + 1}`
-    addSource(url, captureName, { sortName: captureName, modifiedAt: Date.now() })
+    addSource(url, captureName, { sortName: captureName, modifiedAt: Date.now(), detectEdges: true })
     setSortMode('manual')
   }
 
@@ -546,6 +556,17 @@ export default function DocumentScannerPage() {
     } finally {
       setBusy(false)
     }
+  }
+
+  const useWholeImage = () => {
+    if (!activePage) return
+    updatePage(activePage.id, page => ({
+      corners: FULL_IMAGE_CORNERS.map(point => ({ ...point })),
+      ...invalidatePreview(page),
+    }))
+    setMagnifier(null)
+    setView('adjust')
+    setStatus('Using the whole image. No automatic corner crop will be applied.')
   }
 
   const updateCorner = (index, clientX, clientY) => {
@@ -598,8 +619,8 @@ export default function DocumentScannerPage() {
       })
       setView('preview')
       setStatus(result.serverProcessed
-        ? '2K preview processed by the OpenCV scan engine. Readjust if any edge is off.'
-        : '2K preview ready using the on-device fallback. Readjust if any edge is off.')
+          ? '2K preview processed by the OpenCV scan engine. Readjust if any edge is off.'
+          : '2K preview ready using the on-device fallback. Readjust if any edge is off.')
     } catch {
       setStatus('We could not create the preview. Move the corners slightly inward and try again.')
     } finally {
@@ -749,184 +770,187 @@ export default function DocumentScannerPage() {
   } : undefined
 
   return (
-    <main className="document-scanner">
-      <header className="scanner-header">
-        <div>
-          <span className="scanner-eyebrow">2K smart capture</span>
-          <h1>Document Scanner</h1>
-          <p>Crop, straighten and combine every page into one clean document.</p>
-        </div>
-        <div className="scanner-privacy"><span>✓</span> Secure processing · images are not stored</div>
-      </header>
+      <main className="document-scanner">
+        <header className="scanner-header">
+          <div>
+            <span className="scanner-eyebrow">2K smart capture</span>
+            <h1>Document Scanner</h1>
+            <p>Crop, straighten and combine every page into one clean document.</p>
+          </div>
+          <div className="scanner-privacy"><span>✓</span> Secure processing · images are not stored</div>
+        </header>
 
-      {!activePage ? (
-        <section className="scanner-start-card">
-          <div className="scanner-illustration" aria-hidden="true">
-            <div className="scanner-paper"><span /><span /><span /><span /></div>
-            <i className="corner corner-tl" /><i className="corner corner-tr" /><i className="corner corner-br" /><i className="corner corner-bl" />
-          </div>
-          <div className="scanner-start-copy">
-            <span className="step-pill">Step 1 of 3</span>
-            <h2>Add the first page</h2>
-            <p>Use your iPhone camera, select photos, or upload a ZIP. ZIP images are extracted and ordered automatically.</p>
-            <div className="scanner-primary-actions">
-              <button className="scanner-button scanner-button-primary" onClick={openCamera}><CameraAltRoundedIcon /> Open camera</button>
-              <button className="scanner-button scanner-button-secondary" onClick={() => fileInputRef.current?.click()}><FolderZipOutlinedIcon /> Photos or ZIP</button>
-            </div>
-            <input ref={fileInputRef} className="scanner-file-input" type="file" accept="image/*,.zip,application/zip" multiple onChange={handleFiles} />
-            <p className="scanner-file-help">JPG, PNG, WEBP, iPhone HEIC, or ZIP · up to 250 images per ZIP</p>
-            {status && <div className="scanner-message">{status}</div>}
-          </div>
-        </section>
-      ) : (
-        <>
-          <div className="scanner-workspace">
-            <section className="scanner-editor-card">
-              <div className="scanner-card-heading">
-                <div><span className="step-pill">Page {pages.findIndex(page => page.id === activePage.id) + 1} of {pages.length}</span><h2>{view === 'preview' ? 'Review the result' : 'Adjust the corners'}</h2></div>
-                <button className="scanner-icon-button" onClick={() => removePage(activePage.id)} title="Remove page"><DeleteOutlineRoundedIcon /></button>
+        {!activePage ? (
+            <section className="scanner-start-card">
+              <div className="scanner-illustration" aria-hidden="true">
+                <div className="scanner-paper"><span /><span /><span /><span /></div>
+                <i className="corner corner-tl" /><i className="corner corner-tr" /><i className="corner corner-br" /><i className="corner corner-bl" />
               </div>
-              <p className="scanner-instruction">
-                {view === 'preview' ? <><VisibilityOutlinedIcon /> Check every edge, then readjust or add the next page.</> : <><CropFreeRoundedIcon /> Drag a handle. The 3× magnifier shows the exact corner under your finger.</>}
-              </p>
-              <div className="scanner-editor-stage">
-                {view === 'preview' && activePage.previewUrl ? (
-                  <div className="scanner-preview-wrap"><img src={activePage.previewUrl} alt="Corrected page preview" /></div>
-                ) : (
-                  <div className="scanner-image-wrap" ref={editorRef}>
-                    <img src={activePage.sourceUrl} alt="Document to crop" draggable="false" />
-                    <svg className="scanner-crop-overlay" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-                      <defs><mask id="crop-mask"><rect width="100" height="100" fill="white" /><polygon points={polygon} fill="black" /></mask></defs>
-                      <rect width="100" height="100" fill="rgba(4, 16, 35, .58)" mask="url(#crop-mask)" />
-                      <polygon points={polygon} fill="none" stroke="#5de1c3" strokeWidth="0.65" vectorEffect="non-scaling-stroke" />
-                    </svg>
-                    {activePage.corners.map((point, index) => (
-                      <button
-                        key={CORNER_LABELS[index]}
-                        className="scanner-corner-handle"
-                        aria-label={`Move ${CORNER_LABELS[index]} corner`}
-                        style={{ left: `${point.x * 100}%`, top: `${point.y * 100}%` }}
-                        onPointerDown={event => handleCornerPointerDown(event, index)}
-                        onPointerMove={event => {
-                          if (event.currentTarget.hasPointerCapture(event.pointerId)) updateCorner(index, event.clientX, event.clientY)
-                        }}
-                        onPointerUp={event => { event.currentTarget.releasePointerCapture(event.pointerId); setMagnifier(null) }}
-                        onPointerCancel={() => setMagnifier(null)}
-                      />
-                    ))}
-                    {magnifier && <div className="scanner-magnifier" style={magnifierStyle} aria-hidden="true"><span /></div>}
-                  </div>
-                )}
-              </div>
-              <div className="scanner-editor-actions">
-                {view === 'preview' ? (
-                  <button className="scanner-auto-button" onClick={() => setView('adjust')}><EditOutlinedIcon /> Readjust corners</button>
-                ) : (
-                  <button className="scanner-auto-button" onClick={analyzeActivePage} disabled={busy}><AutoAwesomeOutlinedIcon /> Detect edges again</button>
-                )}
-                <button className="scanner-auto-button" onClick={openCamera}><CameraAltRoundedIcon /> Add next page</button>
+              <div className="scanner-start-copy">
+                <span className="step-pill">Step 1 of 3</span>
+                <h2>Add the first page</h2>
+                <p>Use your iPhone camera, select photos, or upload a ZIP. ZIP images are extracted and ordered automatically.</p>
+                <div className="scanner-primary-actions">
+                  <button className="scanner-button scanner-button-primary" onClick={openCamera}><CameraAltRoundedIcon /> Open camera</button>
+                  <button className="scanner-button scanner-button-secondary" onClick={() => fileInputRef.current?.click()}><FolderZipOutlinedIcon /> Photos or ZIP</button>
+                </div>
+                <input ref={fileInputRef} className="scanner-file-input" type="file" accept="image/*,.zip,application/zip" multiple onChange={handleFiles} />
+                <p className="scanner-file-help">JPG, PNG, WEBP, iPhone HEIC, or ZIP · up to 250 images per ZIP</p>
+                {status && <div className="scanner-message">{status}</div>}
               </div>
             </section>
+        ) : (
+            <>
+              <div className="scanner-workspace">
+                <section className="scanner-editor-card">
+                  <div className="scanner-card-heading">
+                    <div><span className="step-pill">Page {pages.findIndex(page => page.id === activePage.id) + 1} of {pages.length}</span><h2>{view === 'preview' ? 'Review the result' : 'Adjust the corners'}</h2></div>
+                    <button className="scanner-icon-button" onClick={() => removePage(activePage.id)} title="Remove page"><DeleteOutlineRoundedIcon /></button>
+                  </div>
+                  <p className="scanner-instruction">
+                    {view === 'preview' ? <><VisibilityOutlinedIcon /> Check every edge, then readjust or add the next page.</> : <><CropFreeRoundedIcon /> Drag a handle. The 3× magnifier shows the exact corner under your finger.</>}
+                  </p>
+                  <div className="scanner-editor-stage">
+                    {view === 'preview' && activePage.previewUrl ? (
+                        <div className="scanner-preview-wrap"><img src={activePage.previewUrl} alt="Corrected page preview" /></div>
+                    ) : (
+                        <div className="scanner-image-wrap" ref={editorRef}>
+                          <img src={activePage.sourceUrl} alt="Document to crop" draggable="false" />
+                          <svg className="scanner-crop-overlay" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                            <defs><mask id="crop-mask"><rect width="100" height="100" fill="white" /><polygon points={polygon} fill="black" /></mask></defs>
+                            <rect width="100" height="100" fill="rgba(4, 16, 35, .58)" mask="url(#crop-mask)" />
+                            <polygon points={polygon} fill="none" stroke="#5de1c3" strokeWidth="0.65" vectorEffect="non-scaling-stroke" />
+                          </svg>
+                          {activePage.corners.map((point, index) => (
+                              <button
+                                  key={CORNER_LABELS[index]}
+                                  className="scanner-corner-handle"
+                                  aria-label={`Move ${CORNER_LABELS[index]} corner`}
+                                  style={{ left: `${point.x * 100}%`, top: `${point.y * 100}%` }}
+                                  onPointerDown={event => handleCornerPointerDown(event, index)}
+                                  onPointerMove={event => {
+                                    if (event.currentTarget.hasPointerCapture(event.pointerId)) updateCorner(index, event.clientX, event.clientY)
+                                  }}
+                                  onPointerUp={event => { event.currentTarget.releasePointerCapture(event.pointerId); setMagnifier(null) }}
+                                  onPointerCancel={() => setMagnifier(null)}
+                              />
+                          ))}
+                          {magnifier && <div className="scanner-magnifier" style={magnifierStyle} aria-hidden="true"><span /></div>}
+                        </div>
+                    )}
+                  </div>
+                  <div className="scanner-editor-actions">
+                    {view === 'preview' ? (
+                        <button className="scanner-auto-button" onClick={() => setView('adjust')}><EditOutlinedIcon /> Readjust corners</button>
+                    ) : (
+                        <>
+                          <button className="scanner-auto-button" onClick={useWholeImage} disabled={busy}><CropFreeRoundedIcon /> Use whole image</button>
+                          <button className="scanner-auto-button" onClick={analyzeActivePage} disabled={busy}><AutoAwesomeOutlinedIcon /> Detect edges</button>
+                        </>
+                    )}
+                    <button className="scanner-auto-button" onClick={openCamera}><CameraAltRoundedIcon /> Add next page</button>
+                  </div>
+                </section>
 
-            <aside className="scanner-settings-card">
-              <div><span className="step-pill">Step 3 of 3</span><h2>Finish your document</h2></div>
-              <div className="scanner-quality-note"><strong>2K output</strong><span>OpenCV perspective correction · 2048 px</span></div>
-              <div className="scanner-fieldset">
-                <label>Page appearance</label>
-                <div className="scanner-segmented scanner-segmented-stacked">
-                  {[
-                    ['document', 'Enhanced color'], ['grayscale', 'High-contrast B&W'], ['original', 'Keep original'],
-                  ].map(([value, label]) => (
-                    <button key={value} className={activePage.filter === value ? 'active' : ''} onClick={() => setActiveFilter(value)}>
-                      {activePage.filter === value && <CheckRoundedIcon />} {label}
-                    </button>
-                  ))}
-                </div>
+                <aside className="scanner-settings-card">
+                  <div><span className="step-pill">Step 3 of 3</span><h2>Finish your document</h2></div>
+                  <div className="scanner-quality-note"><strong>2K output</strong><span>OpenCV perspective correction · 2048 px</span></div>
+                  <div className="scanner-fieldset">
+                    <label>Page appearance</label>
+                    <div className="scanner-segmented scanner-segmented-stacked">
+                      {[
+                        ['document', 'Enhanced color'], ['grayscale', 'High-contrast B&W'], ['original', 'Keep original'],
+                      ].map(([value, label]) => (
+                          <button key={value} className={activePage.filter === value ? 'active' : ''} onClick={() => setActiveFilter(value)}>
+                            {activePage.filter === value && <CheckRoundedIcon />} {label}
+                          </button>
+                      ))}
+                    </div>
+                  </div>
+                  <button className="scanner-button scanner-preview-button" onClick={previewActivePage} disabled={busy}>
+                    <VisibilityOutlinedIcon /> {busy ? 'Processing…' : 'Preview this page'}
+                  </button>
+                  <div className="scanner-fieldset">
+                    <label>Final document</label>
+                    <div className="scanner-format-grid">
+                      {[
+                        ['pdf', 'PDF', `One document · ${pages.length} page${pages.length === 1 ? '' : 's'}`],
+                        ['jpeg', 'JPG', 'Separate high-quality images'],
+                        ['png', 'PNG', 'Separate lossless images'],
+                      ].map(([value, label, hint]) => (
+                          <button key={value} className={format === value ? 'active' : ''} onClick={() => setFormat(value)}><strong>{label}</strong><span>{hint}</span></button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="scanner-export-actions">
+                    <button className="scanner-button scanner-button-primary" onClick={downloadScan} disabled={busy}><DownloadRoundedIcon /> {busy ? 'Creating…' : 'Finish & download'}</button>
+                    <button className="scanner-button scanner-button-secondary" onClick={shareScan} disabled={busy}><IosShareRoundedIcon /> Share</button>
+                    <button className="scanner-add-another" onClick={() => fileInputRef.current?.click()}><AddPhotoAlternateOutlinedIcon /> Add photos or ZIP</button>
+                    <input ref={fileInputRef} className="scanner-file-input" type="file" accept="image/*,.zip,application/zip" multiple onChange={handleFiles} />
+                  </div>
+                  {status && <div className="scanner-message">{status}</div>}
+                </aside>
               </div>
-              <button className="scanner-button scanner-preview-button" onClick={previewActivePage} disabled={busy}>
-                <VisibilityOutlinedIcon /> {busy ? 'Processing…' : 'Preview this page'}
-              </button>
-              <div className="scanner-fieldset">
-                <label>Final document</label>
-                <div className="scanner-format-grid">
-                  {[
-                    ['pdf', 'PDF', `One document · ${pages.length} page${pages.length === 1 ? '' : 's'}`],
-                    ['jpeg', 'JPG', 'Separate high-quality images'],
-                    ['png', 'PNG', 'Separate lossless images'],
-                  ].map(([value, label, hint]) => (
-                    <button key={value} className={format === value ? 'active' : ''} onClick={() => setFormat(value)}><strong>{label}</strong><span>{hint}</span></button>
-                  ))}
-                </div>
-              </div>
-              <div className="scanner-export-actions">
-                <button className="scanner-button scanner-button-primary" onClick={downloadScan} disabled={busy}><DownloadRoundedIcon /> {busy ? 'Creating…' : 'Finish & download'}</button>
-                <button className="scanner-button scanner-button-secondary" onClick={shareScan} disabled={busy}><IosShareRoundedIcon /> Share</button>
-                <button className="scanner-add-another" onClick={() => fileInputRef.current?.click()}><AddPhotoAlternateOutlinedIcon /> Add photos or ZIP</button>
-                <input ref={fileInputRef} className="scanner-file-input" type="file" accept="image/*,.zip,application/zip" multiple onChange={handleFiles} />
-              </div>
-              {status && <div className="scanner-message">{status}</div>}
-            </aside>
-          </div>
 
-          <section className="scanner-pages-panel">
-            <div className="scanner-pages-heading">
-              <div><strong>Document pages</strong><span>{pages.length} page{pages.length === 1 ? '' : 's'} · drag, sort, or use the arrows to reorder</span></div>
-              <div className="scanner-pages-tools">
-                <label>Order
-                  <select value={sortMode} onChange={event => applySort(event.target.value)}>
-                    <option value="manual">Manual</option>
-                    <option value="name">Filename sequence</option>
-                    <option value="time">Time sequence</option>
-                  </select>
-                </label>
-                <button onClick={() => fileInputRef.current?.click()}><FolderZipOutlinedIcon /> Add photos / ZIP</button>
-              </div>
-            </div>
-            <div className="scanner-page-strip">
-              {pages.map((page, index) => (
-                <div
-                  key={page.id}
-                  className={`scanner-page-thumb ${page.id === activePage.id ? 'active' : ''} ${page.id === draggedPageId ? 'dragging' : ''}`}
-                  draggable
-                  onDragStart={() => setDraggedPageId(page.id)}
-                  onDragEnd={() => setDraggedPageId(null)}
-                  onDragOver={event => event.preventDefault()}
-                  onDrop={() => dropPage(page.id)}
-                  onClick={() => selectPage(page.id)}
-                  title={page.sortName}
-                >
-                  <img src={page.previewUrl || page.sourceUrl} alt={`Page ${index + 1}`} draggable="false" />
-                  <span>Page {index + 1}</span>
-                  {page.previewUrl && <i><CheckRoundedIcon /></i>}
-                  <div className="scanner-page-order-buttons">
-                    <button disabled={index === 0} onClick={event => { event.stopPropagation(); movePage(page.id, -1) }} aria-label={`Move page ${index + 1} left`}><ArrowBackRoundedIcon /></button>
-                    <button disabled={index === pages.length - 1} onClick={event => { event.stopPropagation(); movePage(page.id, 1) }} aria-label={`Move page ${index + 1} right`}><ArrowForwardRoundedIcon /></button>
+              <section className="scanner-pages-panel">
+                <div className="scanner-pages-heading">
+                  <div><strong>Document pages</strong><span>{pages.length} page{pages.length === 1 ? '' : 's'} · drag, sort, or use the arrows to reorder</span></div>
+                  <div className="scanner-pages-tools">
+                    <label>Order
+                      <select value={sortMode} onChange={event => applySort(event.target.value)}>
+                        <option value="manual">Manual</option>
+                        <option value="name">Filename sequence</option>
+                        <option value="time">Time sequence</option>
+                      </select>
+                    </label>
+                    <button onClick={() => fileInputRef.current?.click()}><FolderZipOutlinedIcon /> Add photos / ZIP</button>
                   </div>
                 </div>
-              ))}
+                <div className="scanner-page-strip">
+                  {pages.map((page, index) => (
+                      <div
+                          key={page.id}
+                          className={`scanner-page-thumb ${page.id === activePage.id ? 'active' : ''} ${page.id === draggedPageId ? 'dragging' : ''}`}
+                          draggable
+                          onDragStart={() => setDraggedPageId(page.id)}
+                          onDragEnd={() => setDraggedPageId(null)}
+                          onDragOver={event => event.preventDefault()}
+                          onDrop={() => dropPage(page.id)}
+                          onClick={() => selectPage(page.id)}
+                          title={page.sortName}
+                      >
+                        <img src={page.previewUrl || page.sourceUrl} alt={`Page ${index + 1}`} draggable="false" />
+                        <span>Page {index + 1}</span>
+                        {page.previewUrl && <i><CheckRoundedIcon /></i>}
+                        <div className="scanner-page-order-buttons">
+                          <button disabled={index === 0} onClick={event => { event.stopPropagation(); movePage(page.id, -1) }} aria-label={`Move page ${index + 1} left`}><ArrowBackRoundedIcon /></button>
+                          <button disabled={index === pages.length - 1} onClick={event => { event.stopPropagation(); movePage(page.id, 1) }} aria-label={`Move page ${index + 1} right`}><ArrowForwardRoundedIcon /></button>
+                        </div>
+                      </div>
+                  ))}
+                </div>
+              </section>
+            </>
+        )}
+
+        <section className="scanner-how-it-works">
+          <div><b>1</b><span><strong>Capture</strong><small>One or many pages</small></span></div><i />
+          <div><b>2</b><span><strong>Adjust & preview</strong><small>3× corner magnifier</small></span></div><i />
+          <div><b>3</b><span><strong>Finish</strong><small>One combined PDF</small></span></div>
+        </section>
+
+        {cameraOpen && (
+            <div className="scanner-camera-modal" role="dialog" aria-modal="true" aria-label="Document camera">
+              <div className="scanner-camera-frame">
+                <button className="scanner-camera-close" onClick={closeCamera} aria-label="Close camera"><CloseRoundedIcon /></button>
+                <video ref={videoRef} playsInline muted />
+                <div className="scanner-camera-guide"><span /><span /><span /><span /></div>
+                <p>{cameraError || `Page ${pages.length + 1} · keep the document inside the frame and hold steady.`}</p>
+                {!cameraError && <button className="scanner-shutter" onClick={capturePhoto} aria-label="Take photo"><span /></button>}
+                {cameraError && <button className="scanner-button scanner-button-secondary" onClick={() => fileInputRef.current?.click()}>Upload photos or ZIP</button>}
+              </div>
             </div>
-          </section>
-        </>
-      )}
-
-      <section className="scanner-how-it-works">
-        <div><b>1</b><span><strong>Capture</strong><small>One or many pages</small></span></div><i />
-        <div><b>2</b><span><strong>Adjust & preview</strong><small>3× corner magnifier</small></span></div><i />
-        <div><b>3</b><span><strong>Finish</strong><small>One combined PDF</small></span></div>
-      </section>
-
-      {cameraOpen && (
-        <div className="scanner-camera-modal" role="dialog" aria-modal="true" aria-label="Document camera">
-          <div className="scanner-camera-frame">
-            <button className="scanner-camera-close" onClick={closeCamera} aria-label="Close camera"><CloseRoundedIcon /></button>
-            <video ref={videoRef} playsInline muted />
-            <div className="scanner-camera-guide"><span /><span /><span /><span /></div>
-            <p>{cameraError || `Page ${pages.length + 1} · keep the document inside the frame and hold steady.`}</p>
-            {!cameraError && <button className="scanner-shutter" onClick={capturePhoto} aria-label="Take photo"><span /></button>}
-            {cameraError && <button className="scanner-button scanner-button-secondary" onClick={() => fileInputRef.current?.click()}>Upload photos or ZIP</button>}
-          </div>
-        </div>
-      )}
-    </main>
+        )}
+      </main>
   )
 }
