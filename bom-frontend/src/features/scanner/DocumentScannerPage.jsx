@@ -25,7 +25,7 @@ const DEFAULT_CORNERS = [
 ]
 
 const CORNER_LABELS = ['Top left', 'Top right', 'Bottom right', 'Bottom left']
-const IMAGE_EXTENSION = /\.(jpe?g|png|webp|gif|bmp|heic|heif)$/i
+const IMAGE_EXTENSION = /\.(jpe?g|jpe|jfif|png|webp|gif|bmp|heic|heif)$/i
 const MAX_ZIP_BYTES = 200 * 1024 * 1024
 const MAX_ZIP_IMAGE_BYTES = 20 * 1024 * 1024
 const MAX_ZIP_IMAGES = 250
@@ -52,9 +52,26 @@ function fileToDataUrl(file) {
 function imageMimeType(name) {
   const extension = name.split('.').pop()?.toLowerCase()
   return {
-    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp',
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', jpe: 'image/jpeg', jfif: 'image/jpeg',
+    png: 'image/png', webp: 'image/webp',
     gif: 'image/gif', bmp: 'image/bmp', heic: 'image/heic', heif: 'image/heif',
   }[extension] || 'application/octet-stream'
+}
+
+function detectedImageMimeType(data, name = '') {
+  const namedType = imageMimeType(name)
+  if (namedType !== 'application/octet-stream') return namedType
+  if (data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) return 'image/jpeg'
+  if (data.length >= 8 && data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47) return 'image/png'
+  if (data.length >= 6 && data[0] === 0x47 && data[1] === 0x49 && data[2] === 0x46 && data[3] === 0x38) return 'image/gif'
+  if (data.length >= 12 && data[0] === 0x52 && data[1] === 0x49 && data[2] === 0x46 && data[3] === 0x46
+    && data[8] === 0x57 && data[9] === 0x45 && data[10] === 0x42 && data[11] === 0x50) return 'image/webp'
+  if (data.length >= 2 && data[0] === 0x42 && data[1] === 0x4d) return 'image/bmp'
+  if (data.length >= 12 && data[4] === 0x66 && data[5] === 0x74 && data[6] === 0x79 && data[7] === 0x70) {
+    const brand = String.fromCharCode(data[8], data[9], data[10], data[11]).toLowerCase()
+    if (['heic', 'heix', 'hevc', 'hevx', 'mif1', 'msf1'].includes(brand)) return 'image/heic'
+  }
+  return ''
 }
 
 function dosTimestamp(date, time) {
@@ -109,24 +126,33 @@ function unzipImages(file) {
     } catch {
       metadata = new Map()
     }
+    let acceptedEntries = 0
+    let acceptedBytes = 0
     unzip(archive, {
       filter(entry) {
-        return IMAGE_EXTENSION.test(entry.name)
-          && !entry.name.startsWith('__MACOSX/')
-          && entry.originalSize <= MAX_ZIP_IMAGE_BYTES
+        const isFile = !entry.name.endsWith('/') && !entry.name.startsWith('__MACOSX/')
+        const fitsEntryLimit = entry.originalSize <= MAX_ZIP_IMAGE_BYTES
+        const fitsArchiveLimits = acceptedEntries < MAX_ZIP_IMAGES
+          && acceptedBytes + entry.originalSize <= MAX_EXTRACTED_BYTES
+        if (!isFile || !fitsEntryLimit || !fitsArchiveLimits) return false
+        acceptedEntries += 1
+        acceptedBytes += entry.originalSize
+        return true
       },
     }, (error, extracted) => {
       if (error) {
         reject(new Error('The ZIP archive could not be extracted.'))
         return
       }
-      const entries = Object.entries(extracted)
-        .filter(([name]) => IMAGE_EXTENSION.test(name))
-        .map(([name, data]) => ({
+      const entries = Object.entries(extracted).flatMap(([name, data]) => {
+        const mimeType = detectedImageMimeType(data, name)
+        return mimeType ? [{
           name,
           data,
+          mimeType,
           modifiedAt: metadata.get(name)?.modifiedAt || file.lastModified || 0,
-        }))
+        }] : []
+      })
       const totalBytes = entries.reduce((sum, entry) => sum + entry.data.byteLength, 0)
       if (entries.length > MAX_ZIP_IMAGES) {
         reject(new Error(`This ZIP contains more than ${MAX_ZIP_IMAGES} images.`))
@@ -447,7 +473,7 @@ export default function DocumentScannerPage() {
           const ordered = [...entries].sort((first, second) => comparePages(
             { ...first, sortName: first.name }, { ...second, sortName: second.name }, 'name'))
           for (const entry of ordered) {
-            const url = URL.createObjectURL(new Blob([entry.data], { type: imageMimeType(entry.name) }))
+            const url = URL.createObjectURL(new Blob([entry.data], { type: entry.mimeType }))
             await addSource(url, entry.name.split('/').pop(), { sortName: entry.name, modifiedAt: entry.modifiedAt })
           }
           setPages(current => [...current].sort((first, second) => comparePages(first, second, 'name')))
