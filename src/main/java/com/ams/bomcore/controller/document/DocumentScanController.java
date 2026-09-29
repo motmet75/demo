@@ -24,11 +24,10 @@ import static org.springframework.http.HttpStatus.BAD_REQUEST;
 public class DocumentScanController {
 
     private final DocumentScanService scanService;
-    private final ObjectMapper objectMapper;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public DocumentScanController(DocumentScanService scanService, ObjectMapper objectMapper) {
+    public DocumentScanController(DocumentScanService scanService) {
         this.scanService = scanService;
-        this.objectMapper = objectMapper;
     }
 
     @PostMapping(path = "/bom/document-scanner/process", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
