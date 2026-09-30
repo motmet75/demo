@@ -285,8 +285,9 @@ function QuickConfirmOptions({ value, onChange, order, bankConfig }) {
   const split = value?.paymentMethod === 'SPLIT'
   const bankQr = value?.paymentMethod === 'BANK_QR'
   const cash = !split && !bankQr
+  const cashDue = split ? cashAmount : total
   const cashReceived = Number(String(value?.cashReceived || '').replace(/[^0-9]/g, ''))
-  const cashChange = cashReceived - total
+  const cashChange = cashReceived - cashDue
   const paymentQrAmount = split ? qrAmount : total
   const paymentQrReady = paid && paymentQrAmount > 0 && (bankQr || (split && qrAmount < total))
   const paymentQrUrl = paymentQrReady && bankConfig?.bankBin && bankConfig?.bankAccountNumber
@@ -325,12 +326,12 @@ function QuickConfirmOptions({ value, onChange, order, bankConfig }) {
           {suggestions.length > 0 && <Stack direction="row" gap={0.5} flexWrap="wrap">{suggestions.map(amount => <Button key={amount} size="small" variant="outlined" onClick={() => update({ splitQrAmount: String(amount) })}>{amount.toLocaleString('vi-VN')}đ</Button>)}</Stack>}
           <Typography variant="caption" fontWeight={800}>QR: {qrAmount.toLocaleString('vi-VN')}đ · Tiền mặt: {cashAmount.toLocaleString('vi-VN')}đ</Typography>
         </>}
-        {cash && <>
+        {(cash || (paid && split && qrAmount > 0 && qrAmount < total)) && <>
           <Button size="small" variant={value?.showCashChange ? 'contained' : 'outlined'} color="warning" onClick={() => update({ showCashChange: !value?.showCashChange })} sx={{alignSelf:'flex-start',fontWeight:800}}>
             Tính tiền thối
           </Button>
           {value?.showCashChange&&<Box sx={{p:1,bgcolor:'#fff7ed',border:'1px solid #fed7aa',borderRadius:1.5}}>
-            <Typography variant="body2" fontWeight={800} sx={{mb:0.75}}>Cần thu: {total.toLocaleString('vi-VN')}đ</Typography>
+            <Typography variant="body2" fontWeight={800} sx={{mb:0.75}}>{split?'Cần thu tiền mặt':'Cần thu'}: {cashDue.toLocaleString('vi-VN')}đ</Typography>
             <TextField
               autoFocus
               fullWidth
@@ -342,7 +343,7 @@ function QuickConfirmOptions({ value, onChange, order, bankConfig }) {
               placeholder="Ví dụ: 200.000"
             />
             <Stack direction="row" gap={0.5} flexWrap="wrap" sx={{mt:0.75}}>
-              {cashTenderSuggestions(total).map((amount,index)=><Button key={amount} size="small" variant="outlined" onClick={()=>update({cashReceived:String(amount)})}>{index===0?'Đúng số · ':''}{amount.toLocaleString('vi-VN')}đ</Button>)}
+              {cashTenderSuggestions(cashDue).map((amount,index)=><Button key={amount} size="small" variant="outlined" onClick={()=>update({cashReceived:String(amount)})}>{index===0?'Đúng số · ':''}{amount.toLocaleString('vi-VN')}đ</Button>)}
             </Stack>
             {cashReceived>0&&<Alert severity={cashChange>=0?'success':'error'} sx={{mt:0.75,py:0}}>
               <Typography fontWeight={900}>{cashChange>=0?`Tiền thối: ${cashChange.toLocaleString('vi-VN')}đ`:`Còn thiếu: ${Math.abs(cashChange).toLocaleString('vi-VN')}đ`}</Typography>

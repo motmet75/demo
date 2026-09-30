@@ -21,8 +21,9 @@ export default function PaymentMethodConfirmDialog({ open, order, action = 'paid
   const total = useMemo(() => Math.max(0, Number(order?.totalAmount || 0) - Number(order?.discountAmount || 0)), [order])
   const qrAmount = numericValue(qrInput)
   const cashAmount = Math.max(0, total - qrAmount)
+  const cashDue = paymentMethod === 'SPLIT' ? cashAmount : total
   const receivedAmount = numericValue(cashReceived)
-  const changeAmount = receivedAmount - total
+  const changeAmount = receivedAmount - cashDue
   const splitInvalid = paymentMethod === 'SPLIT' && (qrAmount <= 0 || qrAmount >= total)
   const suggestions = moneyInputSuggestions(qrInput, total)
   const availableTables = (Array.isArray(tables) ? tables : []).filter(table => table?.id && table.isActive !== false)
@@ -93,12 +94,12 @@ export default function PaymentMethodConfirmDialog({ open, order, action = 'paid
           <Typography>Tiền mặt: <strong>{money(cashAmount)}</strong></Typography>
         </Stack>
       </>}
-      {!alreadyPaid && paymentMethod === 'CASH' && <>
+      {!alreadyPaid && (paymentMethod === 'CASH' || (paymentMethod === 'SPLIT' && !splitInvalid)) && <>
         <Button size="small" variant={showCashChange ? 'contained' : 'outlined'} color="warning" onClick={() => setShowCashChange(value => !value)} sx={{ alignSelf: 'flex-start', fontWeight: 800 }}>
           Tính tiền thối
         </Button>
         {showCashChange && <Stack gap={1} sx={{ p: 1.25, bgcolor: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 1.5 }}>
-          <Typography fontWeight={800}>Cần thu: {money(total)}</Typography>
+          <Typography fontWeight={800}>{paymentMethod === 'SPLIT' ? 'Cần thu tiền mặt' : 'Cần thu'}: {money(cashDue)}</Typography>
           <TextField
             autoFocus
             fullWidth
@@ -110,7 +111,7 @@ export default function PaymentMethodConfirmDialog({ open, order, action = 'paid
             placeholder="Ví dụ: 200.000"
           />
           <Stack direction="row" gap={0.5} flexWrap="wrap">
-            {cashTenderSuggestions(total).map((amount, index) => <Button key={amount} size="small" variant="outlined" onClick={() => setCashReceived(String(amount))}>{index === 0 ? 'Đúng số · ' : ''}{money(amount)}</Button>)}
+            {cashTenderSuggestions(cashDue).map((amount, index) => <Button key={amount} size="small" variant="outlined" onClick={() => setCashReceived(String(amount))}>{index === 0 ? 'Đúng số · ' : ''}{money(amount)}</Button>)}
           </Stack>
           {receivedAmount > 0 && <Alert severity={changeAmount >= 0 ? 'success' : 'error'} sx={{ py: 0 }}>
             <Typography fontWeight={900}>{changeAmount >= 0 ? `Tiền thối: ${money(changeAmount)}` : `Còn thiếu: ${money(Math.abs(changeAmount))}`}</Typography>

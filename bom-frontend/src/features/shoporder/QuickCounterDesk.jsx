@@ -372,7 +372,17 @@ export default function QuickCounterDesk({ rows, actions, onNew, onCreated, shif
     </Paper>
     <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',md:'repeat(2,minmax(0,1fr))',xl:`repeat(${visibleGroups.length},minmax(0,1fr))`},gap:2}}>{visibleGroups.map(group=><Box key={group.title} sx={{bgcolor:group.color,p:1.5,borderRadius:2,border:group.title.includes('chưa thanh toán')?'2px solid #ef4444':'none'}}><Typography fontWeight={800} color={group.title.includes('chưa thanh toán')?'error.main':'inherit'} sx={{mb:1.5}}>{group.title} · {filtered.filter(group.matches).length}</Typography>{filtered.filter(group.matches).map(order=>{const unpaidServed=isServedUnpaid(order);return <Paper key={order.id} sx={{p:1.5,mb:1.5,borderRadius:2,border:unpaidServed?'2px solid #ef4444':'1px solid transparent',bgcolor:unpaidServed?'#fff7f7':'background.paper'}}>
       <Stack direction="row" justifyContent="space-between" alignItems="center"><Typography variant="h6" fontWeight={800}>{order.tableName || order.customerTableTag || 'Mang đi'} · #{order.orderNumber ?? order.dailySeq}</Typography><Chip size="small" color={unpaidServed?'error':order.paymentStatus==='PAID'?'success':'warning'} label={unpaidServed?'ĐÃ TRẢ MÓN · CHƯA THU':order.paymentStatus==='PAID'?'Đã thu':'Chưa thu'} /></Stack>
-      <Typography variant="body2" color="text.secondary">{(order.items||[]).map(i=>`${i.quantity} × ${i.modelName || i.name || ''}`).join(' · ')}</Typography>
+      <Stack gap={0.4} sx={{mt:0.5}}>{(order.items||[]).filter(item=>!item.parentItemId).map((item,index)=>{
+        const toppings=optionText(item.selectedOptions)
+        const sides=(order.items||[]).filter(side=>String(side.parentItemId||'')===String(item.id||''))
+        return <Box key={item.id||`${item.modelId||item.modelName}-${index}`} sx={{pl:0.75,borderLeft:'3px solid #cbd5e1'}}>
+          <Typography variant="body2" fontWeight={800}>{item.quantity} × {item.modelName||item.name||''}</Typography>
+          {toppings&&<Typography variant="caption" color="text.secondary" display="block">Topping / tùy chọn: {toppings}</Typography>}
+          {sides.length>0&&<Typography variant="caption" color="text.secondary" display="block">Món thêm: {sides.map(side=>`${side.quantity} × ${side.modelName||side.name||''}`).join(' · ')}</Typography>}
+          {item.itemNotes&&<Typography variant="caption" color="error.main" fontWeight={700} display="block">Ghi chú: {item.itemNotes}</Typography>}
+        </Box>
+      })}</Stack>
+      {order.notes&&<Typography variant="caption" color="error.main" fontWeight={800} display="block" sx={{mt:0.5}}>Ghi chú đơn: {order.notes}</Typography>}
       {timeFields.length>0&&<Stack direction="row" gap={0.5} flexWrap="wrap" sx={{my:0.75}}>{ORDER_TIME_FIELDS.filter(field=>timeFields.includes(field.key)).map(field=>{const value=field.key==='completedAt'?(order.completedAt||order.pickupScannedAt):order[field.key];return <Box key={field.key} sx={{px:0.75,py:0.35,borderRadius:1,bgcolor:value?'#ecfdf5':'#f1f5f9',border:'1px solid',borderColor:value?'#a7f3d0':'#e2e8f0'}}><Typography sx={{fontSize:10,color:'#64748b',lineHeight:1.1}}>{field.label}</Typography><Typography sx={{fontSize:12,fontWeight:900,color:value?'#047857':'#94a3b8',lineHeight:1.2}}>{shortTime(value)}</Typography></Box>})}</Stack>}
       <Typography sx={{my:1}} fontWeight={800}>{Math.max(0,Number(order.totalAmount||0)-Number(order.discountAmount||0)).toLocaleString('vi-VN')}đ · {order.paymentMethod==='BANK_QR'?'QR / chuyển khoản':order.paymentMethod==='SPLIT'?'Tiền mặt + QR':order.paymentMethod==='PAY_LATER'?'Trả sau':'Tiền mặt'}</Typography>
       <Stack direction="row" flexWrap="wrap" gap={1}><Button variant="outlined" onClick={()=>actions.detail(order)}>Chi tiết</Button>
