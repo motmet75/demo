@@ -155,6 +155,7 @@ export default function ShopTableGrid() {
   const [hideServedOrders, setHideServedOrders] = useState(true)
   const [selectedTableIds, setSelectedTableIds] = useState([])
   const [clearingTables, setClearingTables] = useState(false)
+  const [clearPlan, setClearPlan] = useState(null)
   const [pinnedTableIds, setPinnedTableIds] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(pinStorageKey) || '[]')
@@ -331,20 +332,48 @@ export default function ShopTableGrid() {
 
   const openOrders = (row) => {
     setSelectedOrderIds([])
+    setHideServedOrders(false)
     setOrdersDialog({ table: row, orders: row.orders || [] })
   }
 
-  const clearSelectedTables = async () => {
+  const makeClearPlan = (orders, scope, tableCount = 1) => {
+    const uniqueOrders = Array.from(new Map((orders || []).filter(order => order?.id && !order.tableClearedAt).map(order => [order.id, order])).values())
+    return {
+      scope,
+      tableCount,
+      orders: uniqueOrders,
+      eligible: uniqueOrders.filter(order => isServedOrder(order) && order.paymentStatus === 'PAID'),
+      unpaid: uniqueOrders.filter(order => order.paymentStatus !== 'PAID'),
+      unserved: uniqueOrders.filter(order => !isServedOrder(order)),
+    }
+  }
+
+  const requestClearSelectedTables = () => {
     const selected = rows.filter(table => selectedTableIds.includes(table.id))
-    const orders = selected.flatMap(clearableOrders)
-    if (!orders.length || clearingTables) return
-    if (!window.confirm(`Khách đã rời ${selected.length} bàn? Dọn ${orders.length} đơn đã trả món khỏi danh sách bàn.`)) return
+    if (!selected.length || clearingTables) return
+    setClearPlan(makeClearPlan(selected.flatMap(table => table.orders || []), 'tables', selected.length))
+  }
+
+  const requestClearSelectedOrders = () => {
+    if (!ordersDialog || !selectedOrderIds.length || clearingTables) return
+    const selected = ordersDialog.orders.filter(order => selectedOrderIds.includes(order.id))
+    setClearPlan(makeClearPlan(selected, 'orders', 1))
+  }
+
+  const confirmClearPlan = async () => {
+    if (!clearPlan?.eligible?.length || clearingTables) return
     setClearingTables(true); setError('')
     try {
-      const results = await Promise.all(orders.map(order => clearOrderTable(order.id)))
+      const results = await Promise.all(clearPlan.eligible.map(order => clearOrderTable(order.id)))
       const failed = results.find(result => !result.res.ok)
       if (failed) throw new Error(failed.data?.message || failed.data?.error || 'Không dọn được một số bàn')
-      setSelectedTableIds([])
+      const clearedIds = new Set(clearPlan.eligible.map(order => order.id))
+      if (clearPlan.scope === 'tables') setSelectedTableIds([])
+      else {
+        setSelectedOrderIds(current => current.filter(id => !clearedIds.has(id)))
+        setOrdersDialog(current => current ? { ...current, orders: current.orders.filter(order => !clearedIds.has(order.id)) } : current)
+      }
+      setClearPlan(null)
       await load()
     } catch (clearError) {
       setError(clearError.message || 'Không dọn được các bàn đã chọn')
@@ -440,6 +469,8 @@ export default function ShopTableGrid() {
 
   const selectedReadyCount = (ordersDialog?.orders || [])
     .filter(order => selectedOrderIds.includes(order.id) && isCompletableOrder(order)).length
+  const selectedClearableCount = (ordersDialog?.orders || [])
+    .filter(order => selectedOrderIds.includes(order.id) && isServedOrder(order) && order.paymentStatus === 'PAID' && !order.tableClearedAt).length
   const selectedOrderModel = React.useMemo(() => makeSelectionModel(selectedOrderIds), [selectedOrderIds])
   const selectedTableModel = React.useMemo(() => makeSelectionModel(selectedTableIds), [selectedTableIds])
   const visibleOrders = useCallback(table => hideServedOrders
@@ -676,7 +707,7 @@ export default function ShopTableGrid() {
             sx={{ width: '100%', maxWidth: 520 }}
           />
           <FormControlLabel control={<Checkbox checked={hideServedOrders} onChange={event => setHideServedOrders(event.target.checked)} />} label="Ẩn chi tiết đơn đã trả món" />
-          <Button variant="contained" color="warning" disabled={!selectedTableIds.length || clearingTables} onClick={clearSelectedTables}>
+          <Button variant="contained" color="warning" disabled={!selectedTableIds.length || clearingTables} onClick={requestClearSelectedTables}>
             {clearingTables ? 'Đang dọn…' : `Khách đã rời · Dọn bàn (${selectedTableIds.length})`}
           </Button>
         </Stack>
@@ -684,7 +715,7 @@ export default function ShopTableGrid() {
           {filteredRows.map(table => {const hasServedUnpaid=(table.activeOrders || []).some(isServedUnpaid);return <Paper key={table.id} variant="outlined" sx={{ p: 1.5, bgcolor: hasServedUnpaid ? '#fff1f2' : table.activeOrderCount ? '#eff6ff' : '#fff', borderColor: hasServedUnpaid ? 'error.main' : undefined, borderWidth: hasServedUnpaid ? 2 : 1 }}>
             <Stack direction="row" justifyContent="space-between" alignItems="center" gap={1}>
               <Stack direction="row" alignItems="center" gap={0.5}>
-                <Checkbox size="small" disabled={!clearableOrders(table).length} checked={selectedTableIds.includes(table.id)} onChange={event => setSelectedTableIds(current => event.target.checked ? [...new Set([...current, table.id])] : current.filter(id => id !== table.id))} />
+                <Checkbox size="small" disabled={!table.activeOrderCount} checked={selectedTableIds.includes(table.id)} onChange={event => setSelectedTableIds(current => event.target.checked ? [...new Set([...current, table.id])] : current.filter(id => id !== table.id))} />
                 <Tooltip title={pinnedTableIds.includes(String(table.id)) ? 'Bỏ ghim bàn' : 'Ghim bàn lên đầu'}><IconButton size="small" color={pinnedTableIds.includes(String(table.id)) ? 'warning' : 'default'} onClick={() => toggleTablePin(table.id)}><PushPinIcon fontSize="small" /></IconButton></Tooltip>
                 <Typography variant="h6" fontWeight={900}>{table.tableName}</Typography>
               </Stack>
@@ -713,7 +744,7 @@ export default function ShopTableGrid() {
           getRowId={r => r.id}
           checkboxSelection
           disableRowSelectionOnClick
-          isRowSelectable={({ row }) => clearableOrders(row).length > 0}
+          isRowSelectable={({ row }) => row.activeOrderCount > 0}
           rowSelectionModel={selectedTableModel}
           onRowSelectionModelChange={model => setSelectedTableIds(selectionIds(model))}
           pageSizeOptions={[25, 50]}
@@ -813,22 +844,29 @@ export default function ShopTableGrid() {
         </DialogTitle>
         <DialogContent sx={{ height: 520 }}>
           <DataGrid
-            rows={hideServedOrders ? (ordersDialog?.orders || []).filter(order => !isServedOrder(order)) : (ordersDialog?.orders || [])}
+            rows={hideServedOrders ? (ordersDialog?.orders || []).filter(order => !isServedOrder(order) || isServedUnpaid(order)) : (ordersDialog?.orders || [])}
             columns={orderColumns}
             getRowId={row => row.id}
             checkboxSelection
             disableRowSelectionOnClick
-            isRowSelectable={({ row }) => isCompletableOrder(row)}
             rowSelectionModel={selectedOrderModel}
             onRowSelectionModelChange={model => setSelectedOrderIds(selectionIds(model))}
             pageSizeOptions={[10, 25, 50]}
             density="compact"
             initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
           />
-          <FormControlLabel control={<Checkbox checked={hideServedOrders} onChange={event => setHideServedOrders(event.target.checked)} />} label="Ẩn đơn đã trả món" />
+          <FormControlLabel control={<Checkbox checked={hideServedOrders} onChange={event => setHideServedOrders(event.target.checked)} />} label="Ẩn đơn đã trả món và đã thanh toán" />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOrdersDialog(null)}>Close</Button>
+          <Button
+            variant="outlined"
+            color="warning"
+            disabled={!selectedOrderIds.length || clearingTables}
+            onClick={requestClearSelectedOrders}
+          >
+            Dọn đơn đã chọn{selectedClearableCount ? ` (${selectedClearableCount} hợp lệ)` : ''}
+          </Button>
           <Button
             variant="contained"
             color="success"
@@ -837,6 +875,29 @@ export default function ShopTableGrid() {
             onClick={completeSelectedOrders}
           >
             Complete Selected{selectedReadyCount ? ` (${selectedReadyCount})` : ''}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={Boolean(clearPlan)} onClose={clearingTables ? undefined : () => setClearPlan(null)} fullWidth maxWidth="sm">
+        <DialogTitle>{clearPlan?.scope === 'tables' ? `Dọn ${clearPlan?.tableCount || 0} bàn đã chọn` : 'Dọn các đơn đã chọn khỏi bàn'}</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.25, pt: '10px !important' }}>
+          <Alert severity="info">
+            Đã chọn <strong>{clearPlan?.orders?.length || 0}</strong> đơn. Chỉ đơn đã trả món và đã thanh toán mới được dọn.
+          </Alert>
+          {Boolean(clearPlan?.unpaid?.length) && <Alert severity="error"><strong>{clearPlan.unpaid.length} đơn chưa thanh toán.</strong> Các đơn này sẽ được giữ lại tại bàn để thu tiền.</Alert>}
+          {Boolean(clearPlan?.unserved?.length) && <Alert severity="warning"><strong>{clearPlan.unserved.length} đơn chưa trả món.</strong> Hãy hoàn tất/trả món trước khi dọn.</Alert>}
+          <Stack direction="row" gap={1} flexWrap="wrap">
+            <Chip color="success" label={`${clearPlan?.eligible?.length || 0} đơn đủ điều kiện dọn`} />
+            <Chip color="error" variant="outlined" label={`${clearPlan?.unpaid?.length || 0} chưa thanh toán`} />
+            <Chip color="warning" variant="outlined" label={`${clearPlan?.unserved?.length || 0} chưa trả món`} />
+          </Stack>
+          {!clearPlan?.eligible?.length && <Typography color="error" fontWeight={800}>Không có đơn nào đủ điều kiện để dọn.</Typography>}
+        </DialogContent>
+        <DialogActions>
+          <Button disabled={clearingTables} onClick={() => setClearPlan(null)}>Hủy</Button>
+          <Button variant="contained" color="warning" disabled={!clearPlan?.eligible?.length || clearingTables} onClick={confirmClearPlan}>
+            {clearingTables ? 'Đang dọn…' : `Dọn ${clearPlan?.eligible?.length || 0} đơn hợp lệ`}
           </Button>
         </DialogActions>
       </Dialog>

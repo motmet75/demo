@@ -1272,6 +1272,9 @@ public class ShopOrderService {
                 && !ShopOrder.STATUS_PICKED_UP.equals(order.getStatus())) {
             throw new IllegalStateException("Complete the order before clearing the table");
         }
+        if (!ShopOrder.PAY_STATUS_PAID.equals(order.getPaymentStatus())) {
+            throw new IllegalStateException("Collect payment before clearing the table");
+        }
         order.setTableClearedAt(Instant.now());
         shopOrderRepository.save(order);
         return dto(order);
