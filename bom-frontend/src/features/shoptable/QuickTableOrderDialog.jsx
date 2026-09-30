@@ -38,12 +38,13 @@ const optionText = value => {
 function OrderReadBack({ order, busy, printed, onPrint, onPrintAlert, onPaid, onComplete, onClear, onEdit, onMove }) {
   if (!order) return null
   const items = (order.items || []).filter(item => !item.parentItemId)
-  return <Paper variant="outlined" sx={{ p: 1.5, borderColor: '#86efac', bgcolor: '#f0fdf4' }}>
+  const servedUnpaid = ['COMPLETED', 'PICKED_UP'].includes(order.status) && order.paymentStatus !== 'PAID'
+  return <Paper variant="outlined" sx={{ p: 1.5, borderWidth: servedUnpaid ? 2 : 1, borderColor: servedUnpaid ? '#ef4444' : '#86efac', bgcolor: servedUnpaid ? '#fff1f2' : '#f0fdf4' }}>
     <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap" sx={{ mb: 1 }}>
-      <CheckCircleIcon color="success" />
+      <CheckCircleIcon color={servedUnpaid ? 'error' : 'success'} />
       <Typography fontWeight={900}>Đơn #{order.orderNumber ?? order.dailySeq} · {order.tableName}</Typography>
       <Chip size="small" label={order.status || '-'} color={order.status === 'READY' ? 'info' : 'default'} />
-      <Chip size="small" label={order.paymentStatus === 'PAID' ? 'Đã thanh toán' : 'Chưa thanh toán'} color={order.paymentStatus === 'PAID' ? 'success' : 'warning'} variant="outlined" />
+      <Chip size="small" label={servedUnpaid ? 'ĐÃ TRẢ MÓN · CHƯA THANH TOÁN' : order.paymentStatus === 'PAID' ? 'Đã thanh toán' : 'Chưa thanh toán'} color={servedUnpaid ? 'error' : order.paymentStatus === 'PAID' ? 'success' : 'warning'} variant={servedUnpaid ? 'filled' : 'outlined'} />
     </Stack>
     <Typography variant="body2" fontWeight={800}>Đọc lại với khách:</Typography>
     {items.map(item => {
@@ -63,7 +64,7 @@ function OrderReadBack({ order, busy, printed, onPrint, onPrintAlert, onPaid, on
       {order.status === 'PENDING' && <Button size="small" variant="outlined" startIcon={<EditIcon />} disabled={busy} onClick={() => onEdit(order)}>Sửa đơn</Button>}
       {!['COMPLETED', 'PICKED_UP', 'CANCELLED'].includes(order.status) && <Button size="small" variant="outlined" startIcon={<TableBarIcon />} disabled={busy} onClick={() => onMove(order)}>Chuyển bàn</Button>}
       {order.paymentStatus !== 'PAID' && <Button size="small" variant="outlined" color="success" disabled={busy} onClick={() => onPaid(order)}>Đã thanh toán</Button>}
-      {!['COMPLETED', 'PICKED_UP'].includes(order.status) && <Button size="small" variant="contained" color="success" disabled={busy} onClick={() => onComplete(order)}>Hoàn tất & trả món</Button>}
+      {!['COMPLETED', 'PICKED_UP'].includes(order.status) && <Button size="small" variant="contained" color="success" disabled={busy} onClick={() => onComplete(order)}>Hoàn tất</Button>}
       <Button size="small" variant="outlined" color="warning" disabled={busy} onClick={() => onClear(order)}>Khách đã rời bàn · Dọn đơn</Button>
       {busy && <CircularProgress size={18} />}
     </Stack>
