@@ -3023,13 +3023,14 @@ export default function ShopOrderGrid() {
       <EodAuditDialog open={eodOpen} onClose={() => setEodOpen(false)} />
       <QrOrderDialog open={qrOrderOpen} onClose={() => setQrOrderOpen(false)} />
       {detailOrder && (
-        <ShopOrderDetailModal open order={detailOrder} displaySize={cardDisplaySize} onClose={() => setDetailOrder(null)} onRefresh={async (updatedOrder) => {
+        <ShopOrderDetailModal open order={detailOrder} displaySize={cardDisplaySize} onClose={() => setDetailOrder(null)} onRefresh={async (updatedOrder, options = {}) => {
           try {
             if (updatedOrder?.id) mergeOrderIntoState(updatedOrder)
             else if (detailOrder?.id) await refreshOrderCard(detailOrder.id)
             else reload()
           } catch { reload() }
-          setDetailOrder(null)
+          if (options.keepOpen && updatedOrder?.id) setDetailOrder(updatedOrder)
+          else setDetailOrder(null)
         }} />
       )}
       {mergeOrder && (

@@ -1131,7 +1131,15 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
       {splitBillOpen && (
         <SplitBillDialog open={splitBillOpen} order={order}
           onClose={() => setSplitBillOpen(false)}
-          onSplit={(result) => { setSplitBillOpen(false); onRefresh?.(result?.original || result); onClose() }} />
+          onSplit={(result) => {
+            const updatedOrder = result?.original || result
+            const newestBill = [...(updatedOrder?.bills || [])]
+              .filter(bill => bill.status === 'ACTIVE')
+              .sort((a, b) => Number(b.billNumber || 0) - Number(a.billNumber || 0))[0]
+            setSplitBillOpen(false)
+            if (newestBill?.id) setSelectedBillId(newestBill.id)
+            onRefresh?.(updatedOrder, { keepOpen: true })
+          }} />
       )}
 
       {/* ── Split Payment Dialog ──────────────────────────────────── */}

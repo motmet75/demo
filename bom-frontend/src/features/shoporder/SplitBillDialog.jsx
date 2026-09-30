@@ -125,7 +125,7 @@ export default function SplitBillDialog({ open, order, onClose, onSplit }) {
         <Button variant="contained" onClick={handleSplit} disabled={loading || selected.size === 0}
           startIcon={loading ? <CircularProgress size={16} /> : <CallSplitIcon />}
           sx={{ textTransform: 'none', fontWeight: 700 }}>
-          {loading ? 'Splitting…' : `Split ${selected.size > 0 ? `(${selected.size} item${selected.size > 1 ? 's' : ''})` : ''}`}
+          {loading ? t('shopOrder.split.splitting') : t('shopOrder.split.action', { count: selected.size })}
         </Button>
       </DialogActions>
     </Dialog>

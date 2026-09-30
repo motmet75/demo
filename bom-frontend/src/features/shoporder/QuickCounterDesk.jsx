@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, FormControlLabel, IconButton, Menu, Paper, Stack, TextField, Typography } from '@mui/material'
+import { Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, FormControlLabel, IconButton, Menu, MenuItem, Paper, Stack, TextField, Typography, useMediaQuery, useTheme } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
 import EditIcon from '@mui/icons-material/Edit'
@@ -71,6 +71,8 @@ function currentShiftWindow(shiftState) {
 }
 
 export default function QuickCounterDesk({ rows, actions, onNew, onCreated, shiftState, tables = [], selectedTableId = '', onTableChange }) {
+  const theme=useTheme()
+  const isMobile=useMediaQuery(theme.breakpoints.down('sm'))
   const [search,setSearch]=useState('')
   const [showFinished,setShowFinished]=useState(false)
   const [menuItems,setMenuItems]=useState([])
@@ -285,27 +287,36 @@ export default function QuickCounterDesk({ rows, actions, onNew, onCreated, shif
   const categoryMenuItems=quickCategory==='FAVORITES'
     ? menuItems.filter(item=>quickFavoriteIds.includes(String(item.id)))
     : quickCategory==='ALL'?menuItems:menuItems.filter(item=>String(item.category||'Khác').trim()===quickCategory)
+  const quickMenuOptions=isMobile
+    ? [...categoryMenuItems].sort((a,b)=>Number(quickFavoriteIds.includes(String(b.id)))-Number(quickFavoriteIds.includes(String(a.id)))||String(a.modelName||'').localeCompare(String(b.modelName||''),'vi'))
+    : categoryMenuItems
   const activeDraft=drafts.find(item=>item.draftId===selectedDraftId)||null
   const draftItems=Array.isArray(activeDraft?.displayItems)?activeDraft.displayItems:[]
   const draftTotal=draftItems.reduce((sum,item)=>sum+draftItemTotal(item),0)
   return <Box sx={{p:2}}>
     <Stack direction={{xs:'column',sm:'row'}} gap={2} alignItems={{sm:'center'}} sx={{mb:2}}><Button variant="contained" size="large" onClick={()=>onNew?.(selectedTableId)}>+ Tạo đơn · chọn món & bàn</Button><Autocomplete size="small" options={tables} value={tables.find(table=>String(table.id)===String(selectedTableId))||null} onChange={(_,table)=>onTableChange?.(table?.id||'')} getOptionLabel={table=>table.tableName||''} isOptionEqualToValue={(a,b)=>String(a.id)===String(b.id)} filterOptions={(options,state)=>{const query=normalizeSearch(state.inputValue);return query?options.filter(table=>normalizeSearch(table.tableName).includes(query)):options}} autoHighlight sx={{minWidth:190}} renderInput={params=><TextField {...params} label="Bàn mặc định" placeholder="Gõ tên bàn" />} /><TextField size="small" label="Tìm bàn / số đơn / khách" value={search} onChange={e=>setSearch(e.target.value)} sx={{flex:1}}/><Chip color={servedUnpaid.length?'error':'default'} label={`${active.length} đang phục vụ · ${servedUnpaid.length} đã trả món chưa thu`} /><Chip color={waitingTableClear.length?'warning':'default'} label={`${waitingTableClear.length} chờ dọn bàn`} /><Button size="small" variant="outlined" onClick={event=>setTimeMenuAnchor(event.currentTarget)}>Mốc giờ{timeFields.length?` (${timeFields.length})`:''}</Button><Menu anchorEl={timeMenuAnchor} open={Boolean(timeMenuAnchor)} onClose={()=>setTimeMenuAnchor(null)}><Box sx={{px:1.5,py:0.75,minWidth:220}}><Typography variant="caption" fontWeight={800}>Hiện trên order card</Typography>{ORDER_TIME_FIELDS.map(field=><FormControlLabel key={field.key} sx={{display:'flex',m:0}} control={<Checkbox size="small" checked={timeFields.includes(field.key)} onChange={()=>toggleTimeField(field.key)}/>} label={field.label}/>)}</Box></Menu><FormControlLabel control={<Checkbox checked={showFinished} onChange={event=>setShowFinished(event.target.checked)} />} label={`Hiện đơn đã hoàn tất trong ca (${finished.length})`} /><Chip color={shiftWindow.active?'primary':'warning'} variant="outlined" label={shiftWindow.label} /></Stack>
     <Paper variant="outlined" sx={{p:1.5,mb:2,borderColor:'#93c5fd',bgcolor:'#f8fbff'}}>
-      <Stack direction="row" gap={0.75} flexWrap="wrap" sx={{mb:1}}>
+      {isMobile?<TextField select fullWidth size="small" label="Danh mục món" value={quickCategory} onChange={event=>setQuickCategory(event.target.value)} sx={{mb:1}}>
+        <MenuItem value="FAVORITES"><Stack direction="row" gap={0.75} alignItems="center"><StarIcon color="warning" fontSize="small"/><span>Yêu thích ({quickFavoriteIds.length})</span></Stack></MenuItem>
+        <MenuItem value="ALL">Tất cả món</MenuItem>
+        {menuCategories.map(category=><MenuItem key={category} value={category}>{category}</MenuItem>)}
+      </TextField>:<Stack direction="row" gap={0.75} flexWrap="wrap" sx={{mb:1}}>
         <Chip clickable color={quickCategory==='FAVORITES'?'warning':'default'} variant={quickCategory==='FAVORITES'?'filled':'outlined'} icon={<StarIcon/>} label={`Yêu thích (${quickFavoriteIds.length})`} onClick={()=>setQuickCategory('FAVORITES')}/>
         <Chip clickable color={quickCategory==='ALL'?'primary':'default'} variant={quickCategory==='ALL'?'filled':'outlined'} label="Tất cả" onClick={()=>setQuickCategory('ALL')}/>
         {menuCategories.map(category=><Chip key={category} clickable color={quickCategory===category?'primary':'default'} variant={quickCategory===category?'filled':'outlined'} label={category} onClick={()=>setQuickCategory(category)}/>)}
-      </Stack>
-      {categoryMenuItems.length>0&&<Box sx={{display:'grid',gridTemplateColumns:{xs:'repeat(2,minmax(0,1fr))',sm:'repeat(3,minmax(0,1fr))',lg:'repeat(6,minmax(0,1fr))'},gap:0.75,mb:1}}>{categoryMenuItems.slice(0,18).map(item=>{const favorite=quickFavoriteIds.includes(String(item.id));return <Paper key={item.id} variant="outlined" sx={{position:'relative',minWidth:0,overflow:'hidden',bgcolor:'#fff'}}><Button fullWidth disabled={!selectedTableId||!selectedDraftId||draftSaving} onClick={()=>void addQuickItem(item)} sx={{minHeight:58,pr:4,justifyContent:'space-between',textAlign:'left',textTransform:'none'}}><Typography fontWeight={800} noWrap sx={{minWidth:0}}>{item.modelName}</Typography><Typography variant="caption" fontWeight={800} color="primary">{money(item.sellingPrice)}</Typography></Button><IconButton size="small" color={favorite?'warning':'default'} onClick={()=>toggleQuickFavorite(item.id)} title={favorite?'Bỏ yêu thích':'Thêm yêu thích'} sx={{position:'absolute',right:2,top:2}}>{favorite?<StarIcon fontSize="small"/>:<StarBorderIcon fontSize="small"/>}</IconButton></Paper>})}</Box>}
+      </Stack>}
+      {!isMobile&&categoryMenuItems.length>0&&<Box sx={{display:'grid',gridTemplateColumns:{sm:'repeat(3,minmax(0,1fr))',lg:'repeat(6,minmax(0,1fr))'},gap:0.75,mb:1}}>{categoryMenuItems.slice(0,18).map(item=>{const favorite=quickFavoriteIds.includes(String(item.id));return <Paper key={item.id} variant="outlined" sx={{position:'relative',minWidth:0,overflow:'hidden',bgcolor:'#fff'}}><Button fullWidth disabled={!selectedTableId||!selectedDraftId||draftSaving} onClick={()=>void addQuickItem(item)} sx={{minHeight:58,pr:4,justifyContent:'space-between',textAlign:'left',textTransform:'none'}}><Typography fontWeight={800} noWrap sx={{minWidth:0}}>{item.modelName}</Typography><Typography variant="caption" fontWeight={800} color="primary">{money(item.sellingPrice)}</Typography></Button><IconButton size="small" color={favorite?'warning':'default'} onClick={()=>toggleQuickFavorite(item.id)} title={favorite?'Bỏ yêu thích':'Thêm yêu thích'} sx={{position:'absolute',right:2,top:2}}>{favorite?<StarIcon fontSize="small"/>:<StarBorderIcon fontSize="small"/>}</IconButton></Paper>})}</Box>}
       <Stack direction={{xs:'column',sm:'row'}} gap={1} alignItems={{xs:'stretch',sm:'center'}} sx={{minWidth:0}}>
         <Autocomplete
-          options={categoryMenuItems}
+          options={quickMenuOptions}
           value={quickItem}
           onChange={(_,item)=>{setQuickItem(item);if(item)void addQuickItem(item)}}
           getOptionLabel={item=>`${item.modelName||''} · ${money(item.sellingPrice)}`}
           isOptionEqualToValue={(a,b)=>String(a.id)===String(b.id)}
           filterOptions={(options,state)=>{const query=normalizeSearch(state.inputValue);return query?options.filter(item=>normalizeSearch(`${item.modelCode||''} ${item.modelName||''}`).includes(query)):options}}
           autoHighlight
+          openOnFocus={isMobile}
+          groupBy={isMobile?item=>quickFavoriteIds.includes(String(item.id))?'Yêu thích':'Món trong danh mục':undefined}
           disabled={!selectedTableId||!selectedDraftId||draftSaving}
           sx={{flex:'1 1 0',minWidth:0,width:{xs:'100%',sm:'auto'},'& .MuiInputBase-root':{minHeight:40}}}
           renderOption={(props,item)=>{const {key,...optionProps}=props;const image=item.imageUrl||item.thumbnailUrl;const favorite=quickFavoriteIds.includes(String(item.id));return <Box component="li" key={key||item.id} {...optionProps} sx={{display:'flex!important',gap:1.25,alignItems:'center'}}>{image?<Box component="img" src={image} alt="" sx={{width:46,height:46,objectFit:'cover',borderRadius:1,border:'1px solid #e2e8f0'}}/>:<Box sx={{width:46,height:46,borderRadius:1,bgcolor:'#e2e8f0'}}/>}<Box sx={{minWidth:0,flex:1}}><Typography fontWeight={800} noWrap>{item.modelName}</Typography><Typography variant="caption" color="text.secondary">{item.modelCode||''}{item.modelCode?' · ':''}{money(item.sellingPrice)}</Typography></Box><IconButton size="small" color={favorite?'warning':'default'} onMouseDown={event=>{event.preventDefault();event.stopPropagation()}} onClick={event=>{event.preventDefault();event.stopPropagation();toggleQuickFavorite(item.id)}}>{favorite?<StarIcon fontSize="small"/>:<StarBorderIcon fontSize="small"/>}</IconButton><AddIcon color="primary"/></Box>}}
