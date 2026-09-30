@@ -602,7 +602,7 @@ function parseOpts(selectedOptions) {
   try { return selectedOptions ? JSON.parse(selectedOptions) : {} } catch { return {} }
 }
 
-export default function ShopMenuPage({ staffContext = null, onStaffCreated, onStaffClose } = {}) {
+export default function ShopMenuPage({ staffContext = null, onStaffCreated, onStaffClose, onStaffTableSelected } = {}) {
   const [params] = useSearchParams()
   const navigate = useNavigate()
   const { language, setLanguage, t, formatMoney } = useI18n()
@@ -651,7 +651,7 @@ export default function ShopMenuPage({ staffContext = null, onStaffCreated, onSt
   const [voucherSnack, setVoucherSnack]     = useState({ open: false, message: '', severity: 'success' })
   const [form, setForm] = useState({
     fulfillmentType: 'DINE_IN', customerName: rawCustomerName, customerPhone: '',
-    deliveryAddress: '', customerTableTag: '', selectedTableId: '', requestedFulfillmentAt: '', paymentMethod: 'CASH',
+    deliveryAddress: '', customerTableTag: '', selectedTableId: staffContext?.defaultTableId || '', requestedFulfillmentAt: '', paymentMethod: 'CASH',
   })
 
   // ── New UI state ───────────────────────────────────────────────────────
@@ -839,7 +839,13 @@ export default function ShopMenuPage({ staffContext = null, onStaffCreated, onSt
       })
       setOptionsByModel(byModel)
       if (cfgRes.data) setShopConfig(cfgRes.data)
-      setPublicTables(Array.isArray(tablesRes.data) ? tablesRes.data : [])
+      const availableTables = Array.isArray(tablesRes.data) ? tablesRes.data : []
+      setPublicTables(availableTables)
+      setForm(current => {
+        if (!current.selectedTableId) return current
+        const selectedTableExists = availableTables.some(table => String(table.id) === String(current.selectedTableId))
+        return selectedTableExists ? current : { ...current, selectedTableId: '' }
+      })
       setLoading(false)
     }).catch(() => { setError(cText('checkout.cannotLoadMenu')); setLoading(false) })
   }, [cText, ctx])
@@ -1391,10 +1397,15 @@ export default function ShopMenuPage({ staffContext = null, onStaffCreated, onSt
       setError(cText('checkout.shopClosed') || 'The shop is closed right now.')
       return
     }
+    const rememberedStaffTableId = staffContext?.defaultTableId
+      && publicTables.some(table => String(table.id) === String(staffContext.defaultTableId))
+      ? staffContext.defaultTableId
+      : ''
+    const effectiveSelectedTableId = form.selectedTableId || rememberedStaffTableId
     if (!editingOrderCode) {
       const name = form.customerName.trim()
       const phone = form.customerPhone.trim()
-      if (form.fulfillmentType === 'DINE_IN' && !ctx?.tableId && !form.selectedTableId && !form.customerTableTag.trim()) {
+      if (form.fulfillmentType === 'DINE_IN' && !ctx?.tableId && !effectiveSelectedTableId && !form.customerTableTag.trim()) {
         setError('')
         window.alert(cText('checkout.needTable'))
         window.setTimeout(() => tableTagInputRef.current?.focus(), 0)
@@ -1442,7 +1453,7 @@ export default function ShopMenuPage({ staffContext = null, onStaffCreated, onSt
       } else {
         const body = {
           fulfillmentType: form.fulfillmentType,
-          tableId: form.fulfillmentType === 'DINE_IN' ? (ctx.tableId || form.selectedTableId || null) : null,
+          tableId: form.fulfillmentType === 'DINE_IN' ? (ctx.tableId || effectiveSelectedTableId || null) : null,
           customerName: form.customerName || null, customerPhone: form.customerPhone || null,
           deliveryAddress: form.fulfillmentType === 'DELIVERY' ? form.deliveryAddress : null,
           customerTableTag: form.fulfillmentType === 'DINE_IN' ? form.customerTableTag || null : null,
@@ -1453,7 +1464,10 @@ export default function ShopMenuPage({ staffContext = null, onStaffCreated, onSt
         }
         const { res, data } = await (staffContext ? createStaffOrder(body) : createOrder(ctx.tenantId, ctx.companyId, body))
         if (!res.ok) { closeTrackingTab(); setError(dailyLimitErrorText(data, 'checkout.cannotCreateOrder')); setSubmitting(false); return }
-        if (staffContext) { closeTrackingTab(); setCart({}); setCheckout(false); onStaffCreated?.(data); return }
+        if (staffContext) {
+          if (effectiveSelectedTableId) onStaffTableSelected?.(effectiveSelectedTableId)
+          closeTrackingTab(); setCart({}); setCheckout(false); onStaffCreated?.(data); return
+        }
         const finalOrder = await applyVoucherToOrder(data)
         rememberVisibleOrder(finalOrder)
         setCart({}); setSideForm({}); setNotes(''); setCheckout(false); setCartOpen(false)
@@ -2618,7 +2632,12 @@ export default function ShopMenuPage({ staffContext = null, onStaffCreated, onSt
                       <Autocomplete
                         options={publicTables}
                         value={publicTables.find(table => String(table.id) === String(form.selectedTableId)) || null}
-                        onChange={(_, table) => { setForm(f => ({ ...f, selectedTableId: table?.id || '', customerTableTag: '' })); setError('') }}
+                        onChange={(_, table) => {
+                          const tableId = table?.id || ''
+                          setForm(f => ({ ...f, selectedTableId: tableId, customerTableTag: '' }))
+                          if (tableId) onStaffTableSelected?.(tableId)
+                          setError('')
+                        }}
                         getOptionLabel={table => localizedTableName(table, language)}
                         isOptionEqualToValue={(a, b) => String(a.id) === String(b.id)}
                         autoHighlight

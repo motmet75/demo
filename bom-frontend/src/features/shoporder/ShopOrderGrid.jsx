@@ -95,6 +95,7 @@ const BOARD_VISIBLE_STATUSES = new Set(['CONFIRMED', 'PREPARING', 'READY', 'PICK
 const SHOP_ORDER_VIEW_PREF = 'shop.orders.viewMode'
 const SHOP_ORDER_CARD_SIZE_PREF = 'shop.orders.cardSize'
 const SHOP_ORDER_CONTRAST_PREF = 'shop.orders.highContrast'
+const QUICK_ORDER_TABLE_PREF_PREFIX = 'shop.orders.quick.defaultTable'
 const SHOP_ORDER_STATUS_FILTER_SESSION_KEY = 'shop.orders.statusFilter'
 const SHOP_ORDER_PAYMENT_FILTER_SESSION_KEY = 'shop.orders.paymentFilter'
 const CUSTOMER_EDIT_HISTORY_KEY = 'shop.orders.customerEditHistory.v1'
@@ -118,6 +119,9 @@ function readShopOrderPref(key, fallback) {
 function writeShopOrderPref(key, value) {
   try { localStorage.setItem(key, value) } catch { /* browser storage may be blocked */ }
   try { document.cookie = `${encodeURIComponent(key)}=${encodeURIComponent(value)}; Max-Age=31536000; Path=/bom-inventory; SameSite=Lax` } catch { /* cookies may be blocked */ }
+}
+function quickOrderTablePrefKey(tenantId, companyId) {
+  return `${QUICK_ORDER_TABLE_PREF_PREFIX}:${tenantId || 'tenant'}:${companyId || 'company'}`
 }
 function readShopOrderSessionValue(key, fallback) {
   try { return sessionStorage.getItem(key) || fallback } catch { return fallback }
@@ -1536,6 +1540,7 @@ export default function ShopOrderGrid() {
   const [resetTo, setResetTo]           = useState(0)
   const [resetting, setResetting]       = useState(false)
   const [customerMenuOpen, setCustomerMenuOpen] = useState(false)
+  const [customerMenuTableId, setCustomerMenuTableId] = useState('')
   const [manualOpen, setManualOpen]     = useState(false)
   const [manualDefaults, setManualDefaults] = useState(null)
   const [qrOrderOpen, setQrOrderOpen]   = useState(false)
@@ -1552,6 +1557,13 @@ export default function ShopOrderGrid() {
   const [payQrOrder, setPayQrOrder]     = useState(null)
   const [bankConfig, setBankConfig]     = useState(null)
   const [tables, setTables]             = useState([])
+  const quickOrderTableKey = useMemo(
+    () => quickOrderTablePrefKey(ctxTenantId, ctxCompanyId),
+    [ctxTenantId, ctxCompanyId],
+  )
+  const [quickOrderTableId, setQuickOrderTableId] = useState(() =>
+    readShopOrderPref(quickOrderTablePrefKey(ctxTenantId, ctxCompanyId), ''),
+  )
   const [selectedRows, setSelectedRows] = useState(new Set())
   const [moveTableOpen, setMoveTableOpen] = useState(false)
   const [moveTableTarget, setMoveTableTarget] = useState('')
@@ -1791,6 +1803,9 @@ export default function ShopOrderGrid() {
   useEffect(() => {
     fetchShopTables().then(({ data }) => setTables(Array.isArray(data) ? data : [])).catch(() => {})
   }, [])
+  useEffect(() => {
+    setQuickOrderTableId(readShopOrderPref(quickOrderTableKey, ''))
+  }, [quickOrderTableKey])
   useEffect(() => {
     fetchBankConfig().then(({ data }) => setBankConfig(data || {})).catch(() => setBankConfig({}))
   }, [])
@@ -2294,6 +2309,21 @@ export default function ShopOrderGrid() {
     setMoving(false)
   }
 
+  const rememberQuickOrderTable = useCallback((tableId) => {
+    const value = tableId == null ? '' : String(tableId)
+    setQuickOrderTableId(value)
+    if (value) writeShopOrderPref(quickOrderTableKey, value)
+  }, [quickOrderTableKey])
+
+  const openQuickOrder = useCallback((tableId = '') => {
+    const remembered = readShopOrderPref(quickOrderTableKey, '')
+    const requested = String(tableId || remembered || '')
+    const validTableId = tables.some(table => String(table.id) === requested) ? requested : ''
+    setCustomerMenuTableId(validTableId)
+    setQuickOrderTableId(validTableId)
+    setCustomerMenuOpen(true)
+  }, [quickOrderTableKey, tables])
+
   const handleInlineTableChange = async (orderId, tableId) => {
     try { await applyOrderResult(await setOrderTable(orderId, tableId || null), orderId, t('shopOrder.grid.setTableFailed')) }
     catch (e) { setError(e.message || t('shopOrder.grid.setTableFailed')) }
@@ -2606,7 +2636,7 @@ export default function ShopOrderGrid() {
               </IconButton>
             </Tooltip>
           )}
-          <Button variant="contained" color="success" onClick={() => setCustomerMenuOpen(true)}>Gọi món nhanh · chọn bàn</Button>
+          <Button variant="contained" color="success" onClick={() => openQuickOrder(quickOrderTableId)}>Gọi món nhanh · chọn bàn</Button>
           <Button startIcon={<AddCircleOutlineIcon />} onClick={() => { setManualDefaults(null); setManualOpen(true) }}
             variant="contained" size="small" color="success" sx={{ textTransform: 'none', fontWeight: 700, whiteSpace: 'nowrap', px: { xs: 1, sm: 1.25 }, '& .MuiButton-startIcon': { mr: { xs: 0.5, sm: 1 } } }}>{t('shopOrder.grid.newOrder')}</Button>
           <Button startIcon={<QrCode2Icon />} onClick={() => setQrOrderOpen(true)}
@@ -2796,7 +2826,7 @@ export default function ShopOrderGrid() {
 
         {/* Tab content */}
         <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-          {tab === 5 && <QuickCounterDesk rows={quickCounterRows} actions={cardActions} onNew={()=>setCustomerMenuOpen(true)} shiftState={counterShiftState} />}
+          {tab === 5 && <QuickCounterDesk rows={quickCounterRows} actions={cardActions} onNew={openQuickOrder} shiftState={counterShiftState} tables={tables} selectedTableId={quickOrderTableId} onTableChange={rememberQuickOrderTable} />}
           {tab === 0 && (
             <>
             {(visibleOrderTotals.tables.length > 0 || visibleOrderTotals.separateCount > 0) && (
@@ -2907,7 +2937,7 @@ export default function ShopOrderGrid() {
       </Dialog>
       <Dialog open={customerMenuOpen} onClose={() => setCustomerMenuOpen(false)} fullScreen>
         <DialogTitle sx={{display:'flex',justifyContent:'space-between'}}>1. Chọn món → 2. Chọn bàn → 3. Tạo đơn<Button onClick={() => setCustomerMenuOpen(false)}>Về quầy / thanh toán</Button></DialogTitle>
-        <DialogContent sx={{p:0}}>{customerMenuOpen && <ShopMenuPage staffContext={{tenantId:ctxTenantId,companyId:ctxCompanyId}} onStaffClose={()=>setCustomerMenuOpen(false)} onStaffCreated={order=>{setCustomerMenuOpen(false);mergeOrderIntoState(order);}} />}</DialogContent>
+        <DialogContent sx={{p:0}}>{customerMenuOpen && <ShopMenuPage staffContext={{tenantId:ctxTenantId,companyId:ctxCompanyId,defaultTableId:customerMenuTableId}} onStaffTableSelected={tableId=>{setCustomerMenuTableId(String(tableId || ''));rememberQuickOrderTable(tableId)}} onStaffClose={()=>setCustomerMenuOpen(false)} onStaffCreated={order=>{setCustomerMenuOpen(false);mergeOrderIntoState(order);}} />}</DialogContent>
       </Dialog>
       <ManualOrderDialog
         open={manualOpen}
