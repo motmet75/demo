@@ -86,7 +86,7 @@ import { useI18n } from '../../i18n/I18nContext'
 import { localizedCategory, localizedModelName, localizedSelectedOptions } from '../../i18n/menuLocalization'
 import { fetchModels } from '../../api/modelApi'
 import { apiFetchJson } from '../../api/client'
-import { formatIntegerInput, moneyInputSuggestions, parseIntegerInput } from '../../utils/numberInput'
+import { cashTenderSuggestions, formatIntegerInput, formatVietnameseIntegerInput, moneyInputSuggestions, parseIntegerInput } from '../../utils/numberInput'
 
 const BOARD_CHANNEL = 'shop_display_board'
 const ORDER_POLL_MS = 5000
@@ -103,6 +103,8 @@ const DEFAULT_QUICK_CONFIRM = {
   paid: false,
   paymentMethod: 'CASH',
   splitQrAmount: '',
+  cashReceived: '',
+  showCashChange: false,
   complete: false,
 }
 function readShopOrderPref(key, fallback) {
@@ -282,6 +284,9 @@ function QuickConfirmOptions({ value, onChange, order, bankConfig }) {
   const cashAmount = Math.max(0, total - qrAmount)
   const split = value?.paymentMethod === 'SPLIT'
   const bankQr = value?.paymentMethod === 'BANK_QR'
+  const cash = !split && !bankQr
+  const cashReceived = Number(String(value?.cashReceived || '').replace(/[^0-9]/g, ''))
+  const cashChange = cashReceived - total
   const paymentQrAmount = split ? qrAmount : total
   const paymentQrReady = paid && paymentQrAmount > 0 && (bankQr || (split && qrAmount < total))
   const paymentQrUrl = paymentQrReady && bankConfig?.bankBin && bankConfig?.bankAccountNumber
@@ -307,7 +312,7 @@ function QuickConfirmOptions({ value, onChange, order, bankConfig }) {
           size="small"
           label="Thanh toán"
           value={['CASH', 'BANK_QR', 'SPLIT'].includes(value?.paymentMethod) ? value.paymentMethod : 'CASH'}
-          onChange={e => update({ paymentMethod: e.target.value, splitQrAmount: '' })}
+          onChange={e => update({ paymentMethod: e.target.value, splitQrAmount: '', cashReceived: '', showCashChange: false })}
           disabled={!paid}
           sx={{ maxWidth: 220 }}
         >
@@ -319,6 +324,30 @@ function QuickConfirmOptions({ value, onChange, order, bankConfig }) {
           <TextField size="small" label="Số tiền QR" value={formatIntegerInput(value?.splitQrAmount)} onChange={e => update({ splitQrAmount: parseIntegerInput(e.target.value) })} inputProps={{ inputMode: 'numeric' }} error={qrAmount <= 0 || qrAmount >= total} helperText="Nhập phần QR; tiền mặt được tự tính." sx={{ maxWidth: 220 }} />
           {suggestions.length > 0 && <Stack direction="row" gap={0.5} flexWrap="wrap">{suggestions.map(amount => <Button key={amount} size="small" variant="outlined" onClick={() => update({ splitQrAmount: String(amount) })}>{amount.toLocaleString('vi-VN')}đ</Button>)}</Stack>}
           <Typography variant="caption" fontWeight={800}>QR: {qrAmount.toLocaleString('vi-VN')}đ · Tiền mặt: {cashAmount.toLocaleString('vi-VN')}đ</Typography>
+        </>}
+        {cash && <>
+          <Button size="small" variant={value?.showCashChange ? 'contained' : 'outlined'} color="warning" onClick={() => update({ showCashChange: !value?.showCashChange })} sx={{alignSelf:'flex-start',fontWeight:800}}>
+            Tính tiền thối
+          </Button>
+          {value?.showCashChange&&<Box sx={{p:1,bgcolor:'#fff7ed',border:'1px solid #fed7aa',borderRadius:1.5}}>
+            <Typography variant="body2" fontWeight={800} sx={{mb:0.75}}>Cần thu: {total.toLocaleString('vi-VN')}đ</Typography>
+            <TextField
+              autoFocus
+              fullWidth
+              size="small"
+              label="Tiền khách đưa"
+              value={formatVietnameseIntegerInput(value?.cashReceived)}
+              onChange={e => update({cashReceived:parseIntegerInput(e.target.value)})}
+              inputProps={{inputMode:'numeric'}}
+              placeholder="Ví dụ: 200.000"
+            />
+            <Stack direction="row" gap={0.5} flexWrap="wrap" sx={{mt:0.75}}>
+              {cashTenderSuggestions(total).map((amount,index)=><Button key={amount} size="small" variant="outlined" onClick={()=>update({cashReceived:String(amount)})}>{index===0?'Đúng số · ':''}{amount.toLocaleString('vi-VN')}đ</Button>)}
+            </Stack>
+            {cashReceived>0&&<Alert severity={cashChange>=0?'success':'error'} sx={{mt:0.75,py:0}}>
+              <Typography fontWeight={900}>{cashChange>=0?`Tiền thối: ${cashChange.toLocaleString('vi-VN')}đ`:`Còn thiếu: ${Math.abs(cashChange).toLocaleString('vi-VN')}đ`}</Typography>
+            </Alert>}
+          </Box>}
         </>}
         {paid && (bankQr || split) && paymentQrReady && (
           paymentQrUrl ? (
@@ -2025,6 +2054,8 @@ export default function ShopOrderGrid() {
       paid: Boolean(next?.paid || next?.complete),
       paymentMethod: ['BANK_QR', 'SPLIT'].includes(next?.paymentMethod) ? next.paymentMethod : 'CASH',
       splitQrAmount: String(next?.splitQrAmount || '').replace(/[^0-9]/g, ''),
+      cashReceived: String(next?.cashReceived || '').replace(/[^0-9]/g, ''),
+      showCashChange: Boolean(next?.showCashChange),
       complete: Boolean(next?.complete),
     }
     quickConfirmPrefsRef.current = normalized
@@ -2040,16 +2071,21 @@ export default function ShopOrderGrid() {
     setPaymentAction({ order, action })
   }
 
-  const confirmPaymentAction = async ({ paymentMethod, splitCashAmount } = {}) => {
+  const confirmPaymentAction = async ({ paymentMethod, splitCashAmount, tableId } = {}) => {
     if (!paymentAction?.order?.id) return
     setPaymentActionBusy(true)
     try {
       if (paymentAction.action === 'print') {
+        let current = paymentAction.order
+        if (current.status === 'PENDING') {
+          current = await applyOrderResult(await confirmShopOrder(current.id), current.id)
+          if (!current) throw new Error('Không xác nhận được đơn trước khi in')
+        }
         let result
-        if (paymentMethod === 'BANK_QR') result = await switchToQrPayment(paymentAction.order.id)
-        else if (paymentMethod === 'SPLIT') result = await splitPayment(paymentAction.order.id, splitCashAmount)
-        else result = await revertToCash(paymentAction.order.id)
-        const updated = await applyOrderResult(result, paymentAction.order.id, 'Không đổi được hình thức thanh toán')
+        if (paymentMethod === 'BANK_QR') result = await switchToQrPayment(current.id)
+        else if (paymentMethod === 'SPLIT') result = await splitPayment(current.id, splitCashAmount)
+        else result = await revertToCash(current.id)
+        const updated = await applyOrderResult(result, current.id, 'Không đổi được hình thức thanh toán')
         if (updated) await printOrderReceiptTracked(updated)
         setPaymentAction(null)
         setPaymentActionBusy(false)
@@ -2057,6 +2093,9 @@ export default function ShopOrderGrid() {
       }
       if (paymentAction.action === 'complete') {
         let current = paymentAction.order
+        if (String(current.tableId || '') !== String(tableId || '')) {
+          current = await applyOrderResult(await setOrderTable(current.id, tableId || null), current.id, t('shopOrder.grid.setTableFailed'))
+        }
         if (current.status === 'PENDING') current = await applyOrderResult(await confirmShopOrder(current.id), current.id)
         if (current.status === 'CONFIRMED') current = await applyOrderResult(await prepareShopOrder(current.id), current.id)
         if (current.status === 'PREPARING') current = await applyOrderResult(await readyShopOrder(current.id), current.id)
@@ -2297,6 +2336,19 @@ export default function ShopOrderGrid() {
     } catch (e) { setError(e.message || t('shopOrder.grid.revertPaymentFailed')) }
   }
 
+  const confirmAndPrintAlert = async (row) => {
+    try {
+      let printable = row
+      if (row.status === 'PENDING') {
+        printable = await applyOrderResult(await confirmShopOrder(row.id), row.id)
+        if (!printable) throw new Error('Không xác nhận được đơn trước khi in')
+      }
+      await printCounterOrderAlertTracked(printable, setError)
+    } catch (e) {
+      setError(e.message || 'Không xác nhận và in được đơn')
+    }
+  }
+
   const handleMoveTable = async () => {
     if (!selectedRows.size) return
     setMoving(true)
@@ -2397,12 +2449,13 @@ export default function ShopOrderGrid() {
       quickConfirmOrder: row,
     }, () => handleQuickConfirm(row)),
     detail:          (row) => setDetailOrder(row),
-    printAlert:      (row) => printCounterOrderAlertTracked(row, setError),
+    printAlert:      confirmAndPrintAlert,
     printReceipt:    (row) => ['COMPLETED', 'PICKED_UP', 'CANCELLED'].includes(row.status) ? printOrderReceiptTracked(row) : openPaymentAction(row, 'print'),
     combinedReceipt: (token) => setCombinedToken(token),
     payQr:           handlePayQr,
     printTag:        handlePrintTrack,
     setTable:        handleInlineTableChange,
+    moveTable:       (row) => { setSelectedRows(new Set([row.id])); setMoveTableTarget(row.tableId || ''); setMoveTableOpen(true) },
     changeSeat:      handleChangeSeat,
     setOrderNumber:  async (id, num) => {
       const n = parseInt(num, 10)
@@ -2826,7 +2879,7 @@ export default function ShopOrderGrid() {
 
         {/* Tab content */}
         <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-          {tab === 5 && <QuickCounterDesk rows={quickCounterRows} actions={cardActions} onNew={openQuickOrder} shiftState={counterShiftState} tables={tables} selectedTableId={quickOrderTableId} onTableChange={rememberQuickOrderTable} />}
+          {tab === 5 && <QuickCounterDesk rows={quickCounterRows} actions={cardActions} onNew={openQuickOrder} onCreated={mergeOrderIntoState} shiftState={counterShiftState} tables={tables} selectedTableId={quickOrderTableId} onTableChange={rememberQuickOrderTable} />}
           {tab === 0 && (
             <>
             {(visibleOrderTotals.tables.length > 0 || visibleOrderTotals.separateCount > 0) && (
@@ -3315,6 +3368,7 @@ export default function ShopOrderGrid() {
         order={paymentAction.order}
         action={paymentAction.action}
         busy={paymentActionBusy}
+        tables={tables}
         onCancel={() => setPaymentAction(null)}
         onConfirm={confirmPaymentAction}
       />}

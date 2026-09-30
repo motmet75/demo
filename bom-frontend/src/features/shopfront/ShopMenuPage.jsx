@@ -67,6 +67,7 @@ import { saveQrImage } from '../../utils/saveQrImage'
 const genUid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
 const fmt    = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
 const payableAmount = (order) => Math.max(0, Number(order?.totalAmount || 0) - Number(order?.discountAmount || 0))
+const normalizeSearch = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase()
 
 const STAFF_CALL_STORAGE_PREFIX = 'shop_customer_staff_call_v1'
 const SHOP_MENU_VIEW_PREF = 'shop.menu.viewMode'
@@ -380,13 +381,20 @@ function TrackingOverlay({ order: initialOrder, ctx, token, tables = [], onEdit,
 
   React.useEffect(() => {
     if (!order?.orderCode) return
-    const id = setInterval(() => {
+    let cancelled = false
+    const refresh = () => {
       fetchPublicOrder(order.orderCode)
-        .then(({ data }) => { if (data?.orderCode) { setOrder(data); onUpdated?.(data) } })
+        .then(({ data }) => {
+          if (!cancelled && data?.orderCode) { setOrder(data); onUpdated?.(data) }
+        })
         .catch(() => {})
-    }, 5000)
-    return () => clearInterval(id)
-  }, [order?.orderCode, ctx?.tenantId, ctx?.companyId]) // eslint-disable-line
+    }
+    void refresh()
+    // While the order only exists in Redis, poll faster so the database order
+    // number and payment QR appear promptly after the counter confirms it.
+    const id = setInterval(refresh, order.orderNumber ? 5000 : 2000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [order?.orderCode, order?.orderNumber, ctx?.tenantId, ctx?.companyId]) // eslint-disable-line
 
   const status     = order.status || 'PENDING'
   const style      = STATUS_STYLE[status] || STATUS_STYLE.PENDING
@@ -1072,7 +1080,7 @@ export default function ShopMenuPage({ staffContext = null, onStaffCreated, onSt
   const categories = Object.keys(grouped)
 
   const filteredItems = searchQuery.trim()
-    ? menu.filter(m => modelName(m).toLowerCase().includes(searchQuery.toLowerCase()))
+    ? menu.filter(m => normalizeSearch(modelName(m)).includes(normalizeSearch(searchQuery.trim())))
     : []
 
   // Items shown when a category chip is active (no search)

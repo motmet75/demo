@@ -454,8 +454,8 @@ export function markOrderPaid(orderId, paymentMethod, splitCashAmount) {
   })
 }
 
-export function fetchTableOrderDraft(tableId) {
-  return apiFetchJson(`/shop/staff/order-drafts/table/${encodeURIComponent(tableId)}`)
+export function fetchTableOrderDraft(tableId, draftId) {
+  return apiFetchJson(`/shop/staff/order-drafts/table/${encodeURIComponent(tableId)}${draftId ? `?draftId=${encodeURIComponent(draftId)}` : ''}`)
 }
 
 export function fetchTableOrderDrafts() {

@@ -64,6 +64,7 @@ public class ShopOrderService {
     private final ShopBillItemRepository shopBillItemRepository;
     private final ShopLocalizedLabelService shopLocalizedLabelService;
     private final ShopNewOrderNotificationService newOrderNotificationService;
+    private final ShopPendingOrderCache pendingOrderCache;
     private static final Instant DISTANT_PAST   = Instant.EPOCH;
     private static final Instant DISTANT_FUTURE = Instant.parse("9999-12-31T23:59:59Z");
 
@@ -90,7 +91,9 @@ public class ShopOrderService {
                             ShopBillRepository shopBillRepository,
                             ShopBillItemRepository shopBillItemRepository,
                             ShopLocalizedLabelService shopLocalizedLabelService,
-                            ShopNewOrderNotificationService newOrderNotificationService, CounterShiftGuard counterShiftGuard) {
+                            ShopNewOrderNotificationService newOrderNotificationService,
+                            ShopPendingOrderCache pendingOrderCache,
+                            CounterShiftGuard counterShiftGuard) {
         this.counterShiftGuard=counterShiftGuard;
         this.shopOrderRepository = shopOrderRepository;
         this.shopOrderItemRepository = shopOrderItemRepository;
@@ -110,6 +113,7 @@ public class ShopOrderService {
         this.shopBillItemRepository = shopBillItemRepository;
         this.shopLocalizedLabelService = shopLocalizedLabelService;
         this.newOrderNotificationService = newOrderNotificationService;
+        this.pendingOrderCache = pendingOrderCache;
     }
 
     // ── Menu ─────────────────────────────────────────────────────────
@@ -279,10 +283,71 @@ public class ShopOrderService {
 
     @Transactional
     public ShopOrderResponseDto createOrder(CreateOrderRequest req, UUID tenantId, UUID companyId, ZoneId orderZone) {
+        if (req == null || req.items() == null || req.items().isEmpty()) {
+            throw new IllegalArgumentException("Order must contain at least one item");
+        }
+        ZoneId zone = orderZone != null ? orderZone : ZoneId.systemDefault();
+        validateDailyMenuCaps(null, req.items(), tenantId, companyId, zone);
+        validatePendingTable(req, tenantId, companyId);
+
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String staffName = auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getName())
+                ? auth.getName() : null;
+        Instant now = Instant.now();
+        ShopPendingOrderCache.PendingOrder pending = new ShopPendingOrderCache.PendingOrder(
+                UUID.randomUUID(), nextPendingOrderCode(), tenantId, companyId, req, staffName,
+                now, now, null, false, null, false, null, null);
+        pendingOrderCache.save(pending);
+        return pendingDto(pending);
+    }
+
+    private String nextPendingOrderCode() {
+        return System.currentTimeMillis() + String.format(Locale.ROOT, "%03d", new Random().nextInt(1000));
+    }
+
+    private void validatePendingTable(CreateOrderRequest req, UUID tenantId, UUID companyId) {
+        if (!ShopOrder.FULFILLMENT_DINE_IN.equals(req.fulfillmentType()) || req.tableId() == null) return;
+        ShopTable table = shopTableRepository.findById(req.tableId())
+                .orElseThrow(() -> new IllegalArgumentException("Table not found"));
+        if (!tenantId.equals(table.getTenantId()) || !companyId.equals(table.getCompanyId())) {
+            throw new IllegalArgumentException("Table does not belong to this company");
+        }
+    }
+
+    private CreateOrderRequest pendingRequestWithItems(CreateOrderRequest req, List<ItemRequest> items) {
+        return new CreateOrderRequest(req.fulfillmentType(), req.tableId(), req.customerName(), req.customerPhone(),
+                req.deliveryProvider(), req.deliveryAddress(), req.deliveryFee(), req.paymentMethod(), req.notes(),
+                items, req.manualOrderNumber(), req.token(), req.customerTableTag(), req.requestedFulfillmentAt());
+    }
+
+    private CreateOrderRequest pendingRequestWithSeat(CreateOrderRequest req, UUID tableId,
+                                                       String customerTableTag, String fulfillmentType) {
+        return new CreateOrderRequest(
+                fulfillmentType != null ? fulfillmentType : req.fulfillmentType(), tableId,
+                req.customerName(), req.customerPhone(), req.deliveryProvider(), req.deliveryAddress(),
+                req.deliveryFee(), req.paymentMethod(), req.notes(), req.items(), req.manualOrderNumber(),
+                req.token(), customerTableTag, req.requestedFulfillmentAt());
+    }
+
+    private CreateOrderRequest pendingRequestWithPayment(CreateOrderRequest req, String paymentMethod) {
+        return new CreateOrderRequest(req.fulfillmentType(), req.tableId(), req.customerName(), req.customerPhone(),
+                req.deliveryProvider(), req.deliveryAddress(), req.deliveryFee(), paymentMethod, req.notes(),
+                req.items(), req.manualOrderNumber(), req.token(), req.customerTableTag(), req.requestedFulfillmentAt());
+    }
+
+    private ShopOrderResponseDto createPersistedOrder(CreateOrderRequest req, UUID tenantId, UUID companyId,
+                                                       ZoneId orderZone,
+                                                       ShopPendingOrderCache.PendingOrder pending,
+                                                       boolean confirmed) {
         ShopOrder order = new ShopOrder();
+        if (pending != null) {
+            order.setId(pending.id());
+            order.setOrderCode(pending.orderCode());
+            order.setCreatedAt(pending.createdAt());
+        }
         order.setTenantId(tenantId);
         order.setCompanyId(companyId);
-        order.setOrderCode(String.valueOf(System.currentTimeMillis()));
+        if (order.getOrderCode() == null) order.setOrderCode(String.valueOf(System.currentTimeMillis()));
 
         // Queue QR orders always take the next number from the counter sequence.
         // Ignore any client-provided seq/manualOrderNumber so an old/bookmarked URL
@@ -330,12 +395,19 @@ public class ShopOrderService {
             order.setSourceToken(req.token());
         }
 
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getName())) {
-            order.setStaffName(auth.getName());
+        if (pending != null && pending.staffName() != null) {
+            order.setStaffName(pending.staffName());
+        } else {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getName())) {
+                order.setStaffName(auth.getName());
+            }
         }
+        if (pending != null) order.setCustomerId(pending.customerId());
 
-        shopOrderRepository.save(order);
+        // Pending orders already have a UUID. Spring Data therefore uses merge()
+        // and returns the managed instance; items must reference that instance.
+        order = shopOrderRepository.save(order);
         validateDailyMenuCaps(order, req.items(), tenantId, companyId, zone);
 
         List<ShopOrderItem> items = new ArrayList<>();
@@ -349,11 +421,16 @@ public class ShopOrderService {
         // Generate payment QR immediately for prepayment (BANK_QR) orders
         refreshPaymentQr(order, companyRepository.findById(companyId).orElse(null));
 
+        if (confirmed) {
+            order.setStatus(ShopOrder.STATUS_CONFIRMED);
+            order.setConfirmedAt(Instant.now());
+        }
+
         shopOrderRepository.save(order);
         resetOrderBills(order, items);
 
         ShopOrderResponseDto response = dto(order);
-        newOrderNotificationService.notifyOrderCreated(response);
+        if (confirmed) newOrderNotificationService.notifyOrderCreated(response);
         return response;
     }
 
@@ -384,10 +461,38 @@ public class ShopOrderService {
         return createOrder(sessionRequest, tenantId, companyId, orderZone);
     }
 
+    @Transactional
+    public ShopOrderResponseDto createAndConfirmCounterOrder(CreateOrderRequest req, UUID tenantId, UUID companyId,
+                                                              ZoneId orderZone) {
+        ShopOrderResponseDto pending = createCounterOrder(req, tenantId, companyId, orderZone);
+        return confirmOrder(pending.getId(), tenantId, companyId);
+    }
+
     // ── Status transitions ────────────────────────────────────────────
 
     @Transactional
     public ShopOrderResponseDto confirmOrder(UUID orderId, UUID tenantId, UUID companyId) {
+        Optional<ShopPendingOrderCache.PendingOrder> cached = pendingOrderCache.take(tenantId, companyId, orderId);
+        if (cached.isPresent()) {
+            ShopPendingOrderCache.PendingOrder pending = cached.get();
+            if (pending.customerEditing()) {
+                pendingOrderCache.restoreIfAbsent(pending);
+                throw new IllegalStateException("Customer is currently editing this order - please wait.");
+            }
+            try {
+                ShopOrderResponseDto response = createPersistedOrder(
+                        pending.order(), tenantId, companyId, ZoneId.systemDefault(), pending, true);
+                ShopOrder order = requireOrder(orderId, tenantId, companyId);
+                Company company = companyRepository.findById(companyId).orElse(null);
+                if (company != null && Boolean.TRUE.equals(company.getRealtimeInventory())) {
+                    shopMaterialAuditService.recordOrderDemand(order, ShopMaterialAudit.SOURCE_CONFIRM);
+                }
+                return response;
+            } catch (RuntimeException error) {
+                pendingOrderCache.restoreIfAbsent(pending);
+                throw error;
+            }
+        }
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         requireStatus(order, ShopOrder.STATUS_PENDING);
         if (Boolean.TRUE.equals(order.getCustomerEditing()))
@@ -417,6 +522,20 @@ public class ShopOrderService {
 
     @Transactional
     public ShopOrderResponseDto changeTableByCustomer(String orderCode, UUID tableId, String token) {
+        Optional<ShopPendingOrderCache.PendingOrder> cached = pendingOrderCache.findByCode(orderCode);
+        if (cached.isPresent()) {
+            ShopPendingOrderCache.PendingOrder pending = cached.get();
+            String sourceToken = pending.order().token();
+            if (sourceToken != null && !sourceToken.isBlank() && !sourceToken.equals(token)) {
+                throw new IllegalArgumentException("Order session does not match");
+            }
+            CreateOrderRequest updatedRequest = pendingRequestWithSeat(
+                    pending.order(), tableId, pending.order().customerTableTag(), ShopOrder.FULFILLMENT_DINE_IN);
+            validatePendingTable(updatedRequest, pending.tenantId(), pending.companyId());
+            ShopPendingOrderCache.PendingOrder updated = pending.withOrder(updatedRequest);
+            pendingOrderCache.save(updated);
+            return pendingDto(updated);
+        }
         ShopOrder order = requireOrderByCode(orderCode);
         if (order.getSourceToken() != null && !order.getSourceToken().isBlank()
                 && !order.getSourceToken().equals(token)) {
@@ -432,6 +551,12 @@ public class ShopOrderService {
 
     @Transactional
     public ShopOrderResponseDto startCustomerEdit(String orderCode, UUID tenantId, UUID companyId) {
+        Optional<ShopPendingOrderCache.PendingOrder> cached = pendingOrderCache.findByCode(orderCode, tenantId, companyId);
+        if (cached.isPresent()) {
+            ShopPendingOrderCache.PendingOrder updated = cached.get().withCustomerEditing(true);
+            pendingOrderCache.save(updated);
+            return pendingDto(updated);
+        }
         ShopOrder order = shopOrderRepository.findByOrderCodeAndTenantIdAndCompanyId(orderCode, tenantId, companyId)
                 .orElseThrow(() -> new NoSuchElementException("Order not found"));
         if (!ShopOrder.STATUS_PENDING.equals(order.getStatus()))
@@ -444,6 +569,12 @@ public class ShopOrderService {
 
     @Transactional
     public ShopOrderResponseDto cancelCustomerEdit(String orderCode, UUID tenantId, UUID companyId) {
+        Optional<ShopPendingOrderCache.PendingOrder> cached = pendingOrderCache.findByCode(orderCode, tenantId, companyId);
+        if (cached.isPresent()) {
+            ShopPendingOrderCache.PendingOrder updated = cached.get().withCustomerEditing(false);
+            pendingOrderCache.save(updated);
+            return pendingDto(updated);
+        }
         ShopOrder order = shopOrderRepository.findByOrderCodeAndTenantIdAndCompanyId(orderCode, tenantId, companyId)
                 .orElseThrow(() -> new NoSuchElementException("Order not found"));
         order.setCustomerEditing(false);
@@ -454,6 +585,12 @@ public class ShopOrderService {
 
     @Transactional
     public ShopOrderResponseDto forceConfirmOrder(UUID orderId, UUID tenantId, UUID companyId) {
+        Optional<ShopPendingOrderCache.PendingOrder> cached = pendingOrderCache.get(tenantId, companyId, orderId);
+        if (cached.isPresent()) {
+            ShopPendingOrderCache.PendingOrder unlocked = cached.get().withCustomerEditing(false);
+            pendingOrderCache.save(unlocked);
+            return confirmOrder(orderId, tenantId, companyId);
+        }
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         requireStatus(order, ShopOrder.STATUS_PENDING);
         order.setCustomerEditing(false);
@@ -472,6 +609,14 @@ public class ShopOrderService {
 
     @Transactional
     public ShopOrderResponseDto updateOrderByCustomer(String orderCode, List<ItemRequest> newItems, UUID tenantId, UUID companyId, ZoneId zone) {
+        Optional<ShopPendingOrderCache.PendingOrder> cached = pendingOrderCache.findByCode(orderCode, tenantId, companyId);
+        if (cached.isPresent()) {
+            validateDailyMenuCaps(null, newItems, tenantId, companyId, zone);
+            ShopPendingOrderCache.PendingOrder updated = cached.get()
+                    .withOrder(pendingRequestWithItems(cached.get().order(), newItems));
+            pendingOrderCache.save(updated);
+            return pendingDto(updated);
+        }
         ShopOrder order = shopOrderRepository.findByOrderCodeAndTenantIdAndCompanyId(orderCode, tenantId, companyId)
                 .orElseThrow(() -> new NoSuchElementException("Order not found"));
         if (!ShopOrder.STATUS_PENDING.equals(order.getStatus()))
@@ -499,11 +644,17 @@ public class ShopOrderService {
 
     @Transactional(readOnly = true)
     public List<ShopOrderResponseDto> getActiveTableOrders(UUID tableId, UUID tenantId, UUID companyId) {
-        return shopOrderRepository.findAllByTable_IdAndTenantIdAndCompanyIdAndStatusIn(
+        List<ShopOrderResponseDto> result = new ArrayList<>(shopOrderRepository.findAllByTable_IdAndTenantIdAndCompanyIdAndStatusIn(
                 tableId, tenantId, companyId,
                 List.of(ShopOrder.STATUS_PENDING, ShopOrder.STATUS_CONFIRMED,
                         ShopOrder.STATUS_PREPARING, ShopOrder.STATUS_READY))
-                .stream().map(this::dto).toList();
+                .stream().map(this::dto).toList());
+        pendingOrderCache.list(tenantId, companyId).stream()
+                .filter(pending -> tableId.equals(pending.order().tableId()))
+                .map(this::pendingDto)
+                .forEach(result::add);
+        result.sort(Comparator.comparing(ShopOrderResponseDto::getCreatedAt).reversed());
+        return result;
     }
 
     @Transactional
@@ -607,6 +758,13 @@ public class ShopOrderService {
 
     @Transactional
     public ShopOrderResponseDto cancelOrder(UUID orderId, String reason, UUID tenantId, UUID companyId) {
+        Optional<ShopPendingOrderCache.PendingOrder> cached = pendingOrderCache.get(tenantId, companyId, orderId);
+        if (cached.isPresent()) {
+            ShopOrderResponseDto cancelled = pendingDto(cached.get());
+            cancelled.setStatus(ShopOrder.STATUS_CANCELLED);
+            pendingOrderCache.delete(tenantId, companyId, orderId);
+            return cancelled;
+        }
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         if (ShopOrder.STATUS_COMPLETED.equals(order.getStatus())
                 || ShopOrder.STATUS_PICKED_UP.equals(order.getStatus())
@@ -632,19 +790,33 @@ public class ShopOrderService {
                 ShopOrder.STATUS_PENDING, ShopOrder.STATUS_CONFIRMED,
                 ShopOrder.STATUS_PREPARING, ShopOrder.STATUS_READY
         );
-        return shopOrderRepository
+        List<ShopOrderResponseDto> result = new ArrayList<>(shopOrderRepository
                 .searchActiveOrders(tenantId, companyId, active, resolveFrom(fromTime), resolveTo(toTime))
-                .stream().map(this::dto).toList();
+                .stream().map(this::dto).toList());
+        pendingOrderCache.list(tenantId, companyId).stream()
+                .filter(pending -> pendingInRange(pending, fromTime, toTime))
+                .map(this::pendingDto)
+                .forEach(result::add);
+        result.sort(Comparator.comparing(ShopOrderResponseDto::getCreatedAt).reversed());
+        return result;
     }
 
     @Transactional(readOnly = true)
     public List<ShopOrderResponseDto> listTableVisibleOrders(UUID tenantId, UUID companyId) {
-        return shopOrderRepository.findTableVisibleOrders(tenantId, companyId)
-                .stream().map(this::dto).toList();
+        List<ShopOrderResponseDto> result = new ArrayList<>(shopOrderRepository.findTableVisibleOrders(tenantId, companyId)
+                .stream().map(this::dto).toList());
+        pendingOrderCache.list(tenantId, companyId).stream()
+                .filter(pending -> pending.order().tableId() != null)
+                .map(this::pendingDto)
+                .forEach(result::add);
+        result.sort(Comparator.comparing(ShopOrderResponseDto::getCreatedAt).reversed());
+        return result;
     }
 
     @Transactional(readOnly = true)
     public ShopOrderResponseDto getOrderByCode(String orderCode, UUID tenantId, UUID companyId) {
+        Optional<ShopPendingOrderCache.PendingOrder> pending = pendingOrderCache.findByCode(orderCode, tenantId, companyId);
+        if (pending.isPresent()) return pendingDto(pending.get());
         ShopOrder order = shopOrderRepository.findByOrderCodeAndTenantIdAndCompanyId(orderCode, tenantId, companyId)
                 .orElseThrow(() -> new NoSuchElementException("Order not found: " + orderCode));
         return dto(order);
@@ -652,6 +824,8 @@ public class ShopOrderService {
 
     @Transactional(readOnly = true)
     public ShopOrderResponseDto getOrder(UUID orderId, UUID tenantId, UUID companyId) {
+        Optional<ShopPendingOrderCache.PendingOrder> pending = pendingOrderCache.get(tenantId, companyId, orderId);
+        if (pending.isPresent()) return pendingDto(pending.get());
         return dto(requireOrder(orderId, tenantId, companyId));
     }
 
@@ -690,7 +864,15 @@ public class ShopOrderService {
         } else {
             orders = shopOrderRepository.findAllByTenantIdAndCompanyIdOrderByCreatedAtDesc(tenantId, companyId);
         }
-        return orders.stream().map(this::dto).toList();
+        List<ShopOrderResponseDto> result = new ArrayList<>(orders.stream().map(this::dto).toList());
+        if (normalizedStatus == null || ShopOrder.STATUS_PENDING.equals(normalizedStatus)) {
+            pendingOrderCache.list(tenantId, companyId).stream()
+                    .filter(pending -> pendingInRange(pending, fromTime, toTime))
+                    .map(this::pendingDto)
+                    .forEach(result::add);
+        }
+        result.sort(Comparator.comparing(ShopOrderResponseDto::getCreatedAt).reversed());
+        return result;
     }
 
     // ── Table management ──────────────────────────────────────────────
@@ -1122,6 +1304,15 @@ public class ShopOrderService {
     }
     @Transactional
     public ShopOrderResponseDto switchToQrPayment(UUID orderId, UUID tenantId, UUID companyId) {
+        Optional<ShopPendingOrderCache.PendingOrder> cached = pendingOrderCache.get(tenantId, companyId, orderId);
+        if (cached.isPresent()) {
+            Company company = companyRepository.findById(companyId).orElse(null);
+            if (!hasBankConfig(company)) throw new IllegalStateException("Bank payment is not configured for this shop");
+            ShopPendingOrderCache.PendingOrder updated = cached.get()
+                    .withOrder(pendingRequestWithPayment(cached.get().order(), ShopOrder.PAYMENT_BANK_QR));
+            pendingOrderCache.save(updated);
+            return pendingDto(updated);
+        }
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         if (isFinalStatus(order.getStatus())) {
             throw new IllegalStateException("Cannot change payment method of a completed or cancelled order");
@@ -1135,6 +1326,21 @@ public class ShopOrderService {
 
     @Transactional
     public ShopOrderResponseDto switchToQrPaymentByCustomer(String orderCode) {
+        Optional<ShopPendingOrderCache.PendingOrder> cached = pendingOrderCache.findByCode(orderCode);
+        if (cached.isPresent()) {
+            ShopPendingOrderCache.PendingOrder pending = cached.get();
+            String method = pending.order().paymentMethod() != null
+                    ? pending.order().paymentMethod() : ShopOrder.PAYMENT_CASH;
+            if (!ShopOrder.PAYMENT_CASH.equals(method)) {
+                throw new IllegalStateException("Only a cash order can be changed to bank payment");
+            }
+            Company company = companyRepository.findById(pending.companyId()).orElse(null);
+            if (!hasBankConfig(company)) throw new IllegalStateException("Bank payment is not configured for this shop");
+            ShopPendingOrderCache.PendingOrder updated = pending
+                    .withOrder(pendingRequestWithPayment(pending.order(), ShopOrder.PAYMENT_BANK_QR));
+            pendingOrderCache.save(updated);
+            return pendingDto(updated);
+        }
         ShopOrder order = requireOrderByCode(orderCode);
         if (isFinalStatus(order.getStatus())) {
             throw new IllegalStateException("Cannot change payment method of a completed or cancelled order");
@@ -1183,8 +1389,10 @@ public class ShopOrderService {
         if (ShopOrder.PAY_STATUS_PAID.equals(order.getPaymentStatus())) {
             throw new IllegalStateException("Cannot revert a paid order");
         }
-        order.setStatus(ShopOrder.STATUS_PENDING);
-        order.setConfirmedAt(null);
+        // New PENDING orders live only in Redis. Persisted orders revert to
+        // the first database-backed processing state instead.
+        order.setStatus(ShopOrder.STATUS_CONFIRMED);
+        if (order.getConfirmedAt() == null) order.setConfirmedAt(Instant.now());
         shopOrderRepository.save(order);
         return dto(order);
     }
@@ -1248,6 +1456,17 @@ public class ShopOrderService {
 
     @Transactional
     public ShopOrderResponseDto setOrderTable(UUID orderId, UUID tableId, UUID tenantId, UUID companyId) {
+        Optional<ShopPendingOrderCache.PendingOrder> cached = pendingOrderCache.get(tenantId, companyId, orderId);
+        if (cached.isPresent()) {
+            ShopPendingOrderCache.PendingOrder pending = cached.get();
+            String fulfillment = tableId != null ? ShopOrder.FULFILLMENT_DINE_IN : pending.order().fulfillmentType();
+            CreateOrderRequest request = pendingRequestWithSeat(
+                    pending.order(), tableId, pending.order().customerTableTag(), fulfillment);
+            validatePendingTable(request, tenantId, companyId);
+            ShopPendingOrderCache.PendingOrder updated = pending.withOrder(request);
+            pendingOrderCache.save(updated);
+            return pendingDto(updated);
+        }
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         if (tableId == null) {
             order.setTable(null);
@@ -1283,6 +1502,21 @@ public class ShopOrderService {
     @Transactional
     public ShopOrderResponseDto setOrderSeat(UUID orderId, UUID tableId, String customerTableTag, String fulfillmentType,
                                              UUID tenantId, UUID companyId) {
+        Optional<ShopPendingOrderCache.PendingOrder> cached = pendingOrderCache.get(tenantId, companyId, orderId);
+        if (cached.isPresent()) {
+            if (fulfillmentType != null && !Set.of(ShopOrder.FULFILLMENT_DINE_IN, ShopOrder.FULFILLMENT_PICKUP,
+                    ShopOrder.FULFILLMENT_DELIVERY).contains(fulfillmentType)) {
+                throw new IllegalArgumentException("Invalid fulfillment type");
+            }
+            ShopPendingOrderCache.PendingOrder pending = cached.get();
+            CreateOrderRequest request = pendingRequestWithSeat(pending.order(), tableId,
+                    customerTableTag == null || customerTableTag.isBlank() ? null : customerTableTag.trim(),
+                    fulfillmentType);
+            validatePendingTable(request, tenantId, companyId);
+            ShopPendingOrderCache.PendingOrder updated = pending.withOrder(request);
+            pendingOrderCache.save(updated);
+            return pendingDto(updated);
+        }
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         if (ShopOrder.STATUS_CANCELLED.equals(order.getStatus()) || ShopOrder.STATUS_COMPLETED.equals(order.getStatus())) {
             throw new IllegalStateException("Cannot change table for a finished order");
@@ -1314,6 +1548,14 @@ public class ShopOrderService {
 
     @Transactional
     public ShopOrderResponseDto updateOrderItems(UUID orderId, List<ItemRequest> newItems, UUID tenantId, UUID companyId, ZoneId zone) {
+        Optional<ShopPendingOrderCache.PendingOrder> cached = pendingOrderCache.get(tenantId, companyId, orderId);
+        if (cached.isPresent()) {
+            validateDailyMenuCaps(null, newItems, tenantId, companyId, zone);
+            ShopPendingOrderCache.PendingOrder updated = cached.get()
+                    .withOrder(pendingRequestWithItems(cached.get().order(), newItems));
+            pendingOrderCache.save(updated);
+            return pendingDto(updated);
+        }
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         requireStatus(order, ShopOrder.STATUS_PENDING);
 
@@ -1342,6 +1584,12 @@ public class ShopOrderService {
     private void buildItems(ShopOrder order, List<ItemRequest> requests, ShopOrderItem parent,
                              List<ShopOrderItem> accumulator, BigDecimal[] totals,
                              UUID tenantId, UUID companyId) {
+        buildItems(order, requests, parent, accumulator, totals, tenantId, companyId, true);
+    }
+
+    private void buildItems(ShopOrder order, List<ItemRequest> requests, ShopOrderItem parent,
+                             List<ShopOrderItem> accumulator, BigDecimal[] totals,
+                             UUID tenantId, UUID companyId, boolean persist) {
         if (requests == null) return;
         if (parent != null) validateSideItemRequests(parent, requests);
         for (var req : requests) {
@@ -1382,13 +1630,14 @@ public class ShopOrderService {
             item.setLineTotal(lineTotal);
             item.setSelectedOptions(req.selectedOptions());
             item.setItemNotes(req.itemNotes());
-            shopOrderItemRepository.save(item);
+            if (persist) shopOrderItemRepository.save(item);
+            else item.setId(UUID.randomUUID());
             accumulator.add(item);
 
             totals[0] = totals[0].add(lineTotal);
             totals[1] = totals[1].add(costBreakdown.total());
 
-            buildItems(order, req.sideItems(), item, accumulator, totals, tenantId, companyId);
+            buildItems(order, req.sideItems(), item, accumulator, totals, tenantId, companyId, persist);
         }
     }
 
@@ -1606,9 +1855,15 @@ public class ShopOrderService {
 
     public long countAcceptedOrdersForToken(String token) {
         if (token == null || token.isBlank()) return 0;
-        return shopOrderRepository.findAllBySourceTokenOrderByCreatedAtDesc(token).stream()
+        long persisted = shopOrderRepository.findAllBySourceTokenOrderByCreatedAtDesc(token).stream()
                 .filter(order -> !ShopOrder.STATUS_CANCELLED.equals(order.getStatus()))
                 .count();
+        ShopAccessToken access = shopAccessTokenRepository.findByToken(token).orElse(null);
+        if (access == null) return persisted;
+        long pending = pendingOrderCache.list(access.getTenantId(), access.getCompanyId()).stream()
+                .filter(order -> token.equals(order.order().token()))
+                .count();
+        return persisted + pending;
     }
 
     // Split / Merge bills
@@ -1950,13 +2205,19 @@ public class ShopOrderService {
 
     @Transactional
     public ShopOrderResponseDto linkCustomer(UUID orderId, UUID customerId, UUID tenantId, UUID companyId) {
-        ShopOrder order = requireOrder(orderId, tenantId, companyId);
         if (customerId != null) {
             ShopCustomer c = shopCustomerRepository.findById(customerId)
                 .orElseThrow(() -> new java.util.NoSuchElementException("Customer not found"));
             if (!c.getTenantId().equals(tenantId) || !c.getCompanyId().equals(companyId))
                 throw new IllegalArgumentException("Not your customer");
         }
+        Optional<ShopPendingOrderCache.PendingOrder> cached = pendingOrderCache.get(tenantId, companyId, orderId);
+        if (cached.isPresent()) {
+            ShopPendingOrderCache.PendingOrder updated = cached.get().withCustomerId(customerId);
+            pendingOrderCache.save(updated);
+            return pendingDto(updated);
+        }
+        ShopOrder order = requireOrder(orderId, tenantId, companyId);
         order.setCustomerId(customerId);
         shopOrderRepository.save(order);
         return dto(order);
@@ -2309,6 +2570,57 @@ public class ShopOrderService {
         return order.getOrderNumber() != null ? String.valueOf(order.getOrderNumber()) : order.getOrderCode();
     }
 
+    private ShopOrderResponseDto pendingDto(ShopPendingOrderCache.PendingOrder pending) {
+        CreateOrderRequest req = pending.order();
+        ShopOrder order = new ShopOrder();
+        order.setId(pending.id());
+        order.setOrderCode(pending.orderCode());
+        order.setTenantId(pending.tenantId());
+        order.setCompanyId(pending.companyId());
+        order.setFulfillmentType(req.fulfillmentType());
+        order.setCustomerName(req.customerName());
+        order.setCustomerPhone(req.customerPhone());
+        order.setDeliveryProvider(req.deliveryProvider());
+        order.setDeliveryAddress(req.deliveryAddress());
+        order.setCustomerTableTag(req.customerTableTag());
+        order.setRequestedFulfillmentAt(req.requestedFulfillmentAt());
+        order.setDeliveryFee(req.deliveryFee());
+        order.setPaymentMethod(req.paymentMethod() != null ? req.paymentMethod() : ShopOrder.PAYMENT_CASH);
+        order.setPaymentStatus(ShopOrder.PAY_STATUS_UNPAID);
+        order.setNotes(req.notes());
+        order.setSourceToken(req.token());
+        order.setStaffName(pending.staffName());
+        order.setStatus(ShopOrder.STATUS_PENDING);
+        order.setCreatedAt(pending.createdAt());
+        order.setCustomerEditing(pending.customerEditing());
+        order.setCustomerEditingSince(pending.customerEditingSince());
+        order.setCustomerCancelled(pending.customerCancelled());
+        order.setCustomerCancelNote(pending.customerCancelNote());
+        order.setCustomerId(pending.customerId());
+        order.setPickupScannedAt(pending.pickupScannedAt());
+        if (req.tableId() != null) {
+            shopTableRepository.findById(req.tableId())
+                    .filter(table -> pending.tenantId().equals(table.getTenantId())
+                            && pending.companyId().equals(table.getCompanyId()))
+                    .ifPresent(order::setTable);
+        }
+
+        BigDecimal[] totals = { BigDecimal.ZERO, BigDecimal.ZERO };
+        List<ShopOrderItem> items = new ArrayList<>();
+        buildItems(order, req.items(), null, items, totals, pending.tenantId(), pending.companyId(), false);
+        BigDecimal fee = req.deliveryFee() != null ? req.deliveryFee() : BigDecimal.ZERO;
+        order.setTotalAmount(totals[0].add(fee));
+        order.setTotalRawCost(totals[1]);
+        ShopOrderResponseDto response = ShopOrderResponseDto.from(order, items);
+        annotateDailyCapItems(response, order, items);
+        return shopLocalizedLabelService.applyToOrder(response);
+    }
+
+    private boolean pendingInRange(ShopPendingOrderCache.PendingOrder pending, Instant fromTime, Instant toTime) {
+        return (fromTime == null || !pending.createdAt().isBefore(fromTime))
+                && (toTime == null || pending.createdAt().isBefore(toTime));
+    }
+
     private ShopOrderResponseDto dto(ShopOrder order) {
         ShopOrderResponseDto response;
         List<ShopBill> ownedBills = shopBillRepository.findAllByOrder_IdOrderByCreatedAtAsc(order.getId());
@@ -2518,11 +2830,9 @@ public class ShopOrderService {
                         ShopOrder.FULFILLMENT_PICKUP, null, imported.customerName(), imported.customerPhone(),
                         source, null, BigDecimal.ZERO, ShopOrder.PAYMENT_CASH,
                         imported.notes(), imported.items(), null, importToken, null, null);
-                ShopOrderResponseDto dto = createOrder(create, tenantId, companyId);
+                ShopOrderResponseDto dto = createPersistedOrder(
+                        create, tenantId, companyId, ZoneId.systemDefault(), null, true);
                 ShopOrder order = shopOrderRepository.findById(dto.getId()).orElseThrow();
-                order.setStatus(ShopOrder.STATUS_CONFIRMED);
-                order.setConfirmedAt(Instant.now());
-                shopOrderRepository.save(order);
                 shopMaterialAuditService.recordOrderDemand(order, "IMPORT_" + source);
                 if (request.deductNow()) {
                     shopMaterialAuditService.deductOrderMaterials(order, "IMPORT_" + source);
@@ -2537,6 +2847,15 @@ public class ShopOrderService {
     }
 
     public String generateOrderTagQr(UUID orderId, UUID tenantId, UUID companyId) {
+        Optional<ShopPendingOrderCache.PendingOrder> pending = pendingOrderCache.get(tenantId, companyId, orderId);
+        if (pending.isPresent()) {
+            String url = publicBaseUrl + "/shop/order/" + pending.get().orderCode();
+            if (pending.get().order().token() != null && !pending.get().order().token().isBlank()) {
+                url += "?t=" + java.net.URLEncoder.encode(
+                        pending.get().order().token(), java.nio.charset.StandardCharsets.UTF_8);
+            }
+            return QrCodeUtil.generateBase64Png(url, 300);
+        }
         ShopOrder order = requireOrder(orderId, tenantId, companyId);
         String url = publicBaseUrl + "/shop/order/" + order.getOrderCode();
         if (order.getSourceToken() != null && !order.getSourceToken().isBlank()) {
@@ -2546,6 +2865,10 @@ public class ShopOrderService {
     }
 
     public String generateCounterOrderQr(String orderCode) {
+        Optional<ShopPendingOrderCache.PendingOrder> pending = pendingOrderCache.findByCode(orderCode);
+        if (pending.isPresent()) {
+            return QrCodeUtil.generateBase64Png("SHOP_ORDER:" + pending.get().orderCode(), 360);
+        }
         ShopOrder order = requireOrderByCode(orderCode);
         String payload = "SHOP_ORDER:" + order.getOrderCode();
         return QrCodeUtil.generateBase64Png(payload, 360);
@@ -2557,13 +2880,24 @@ public class ShopOrderService {
         int marker = clean.lastIndexOf("/shop/order/");
         if (marker >= 0) clean = clean.substring(marker + "/shop/order/".length()).split("[?&#]")[0];
         if (clean.startsWith("SHOP_ORDER:")) clean = clean.substring("SHOP_ORDER:".length());
-        return confirmOrder(requireOrderByCode(clean).getId(), tenantId, companyId);
+        Optional<ShopPendingOrderCache.PendingOrder> pending = pendingOrderCache.findByCode(clean, tenantId, companyId);
+        UUID orderId = pending.isPresent() ? pending.get().id() : requireOrderByCode(clean).getId();
+        return confirmOrder(orderId, tenantId, companyId);
     }
 
     // ── Customer self-cancel (separate from staff cancel) ────────────
 
     @Transactional
     public ShopOrderResponseDto cancelByCustomer(String orderCode, String note) {
+        Optional<ShopPendingOrderCache.PendingOrder> cached = pendingOrderCache.findByCode(orderCode);
+        if (cached.isPresent()) {
+            ShopPendingOrderCache.PendingOrder cancelled = cached.get()
+                    .withCustomerCancelled(note == null || note.isBlank() ? null : note.trim());
+            ShopOrderResponseDto response = pendingDto(cancelled);
+            response.setStatus(ShopOrder.STATUS_CANCELLED);
+            pendingOrderCache.delete(cancelled.tenantId(), cancelled.companyId(), cancelled.id());
+            return response;
+        }
         ShopOrder order = requireOrderByCode(orderCode);
         if (!ShopOrder.STATUS_PENDING.equals(order.getStatus())) {
             throw new IllegalStateException("Order can only be cancelled by customer while PENDING");
@@ -2602,10 +2936,16 @@ public class ShopOrderService {
         ShopAccessToken sat = shopAccessTokenRepository.findByToken(token)
                 .orElseThrow(() -> new NoSuchElementException("Token not found"));
         List<ShopOrder> sessionOrders = shopOrderRepository.findAllBySourceTokenOrderByCreatedAtDesc(token);
-        List<ShopOrderResponseDto> orders = sessionOrders.stream().map(this::dto).toList();
+        List<ShopOrderResponseDto> orders = new ArrayList<>(sessionOrders.stream().map(this::dto).toList());
+        List<ShopPendingOrderCache.PendingOrder> pendingOrders = pendingOrderCache
+                .list(sat.getTenantId(), sat.getCompanyId()).stream()
+                .filter(pending -> token.equals(pending.order().token()))
+                .toList();
+        pendingOrders.stream().map(this::pendingDto).forEach(orders::add);
+        orders.sort(Comparator.comparing(ShopOrderResponseDto::getCreatedAt).reversed());
         long acceptedOrderCount = sessionOrders.stream()
                 .filter(order -> !ShopOrder.STATUS_CANCELLED.equals(order.getStatus()))
-                .count();
+                .count() + pendingOrders.size();
         return new TokenSessionDto(token, sat.isValid(), sat.getExpiresAt(), sat.getCreatedAt(),
                 sat.getMaxOrders(), acceptedOrderCount, Boolean.TRUE.equals(sat.getCounterLocked()),
                 sat.getCounterLockedAt(), sat.getCounterLockedBy(), orders);
@@ -2616,11 +2956,18 @@ public class ShopOrderService {
     @Transactional(readOnly = true)
     public List<ShopOrderResponseDto> getOrdersByTokenForStaff(String token, UUID tenantId, UUID companyId,
                                                                Instant fromTime, Instant toTime) {
-        return shopOrderRepository.searchOrdersByToken(token, fromTime, toTime)
+        List<ShopOrderResponseDto> result = new ArrayList<>(shopOrderRepository.searchOrdersByToken(token, fromTime, toTime)
                 .stream()
                 .filter(o -> o.getTenantId().equals(tenantId) && o.getCompanyId().equals(companyId))
                 .map(this::dto)
-                .toList();
+                .toList());
+        pendingOrderCache.list(tenantId, companyId).stream()
+                .filter(pending -> token.equals(pending.order().token()))
+                .filter(pending -> pendingInRange(pending, fromTime, toTime))
+                .map(this::pendingDto)
+                .forEach(result::add);
+        result.sort(Comparator.comparing(ShopOrderResponseDto::getCreatedAt).reversed());
+        return result;
     }
 
     // ── Code-only public order methods (no tenant/company in URL) ─────
@@ -2632,11 +2979,19 @@ public class ShopOrderService {
 
     @Transactional(readOnly = true)
     public ShopOrderResponseDto getOrderByCode(String orderCode) {
+        Optional<ShopPendingOrderCache.PendingOrder> pending = pendingOrderCache.findByCode(orderCode);
+        if (pending.isPresent()) return pendingDto(pending.get());
         return dto(requireOrderByCode(orderCode));
     }
 
     @Transactional
     public ShopOrderResponseDto startCustomerEdit(String orderCode) {
+        Optional<ShopPendingOrderCache.PendingOrder> cached = pendingOrderCache.findByCode(orderCode);
+        if (cached.isPresent()) {
+            ShopPendingOrderCache.PendingOrder updated = cached.get().withCustomerEditing(true);
+            pendingOrderCache.save(updated);
+            return pendingDto(updated);
+        }
         ShopOrder order = requireOrderByCode(orderCode);
         if (!ShopOrder.STATUS_PENDING.equals(order.getStatus()))
             throw new IllegalStateException("Order can only be edited while PENDING");
@@ -2648,6 +3003,12 @@ public class ShopOrderService {
 
     @Transactional
     public ShopOrderResponseDto cancelCustomerEdit(String orderCode) {
+        Optional<ShopPendingOrderCache.PendingOrder> cached = pendingOrderCache.findByCode(orderCode);
+        if (cached.isPresent()) {
+            ShopPendingOrderCache.PendingOrder updated = cached.get().withCustomerEditing(false);
+            pendingOrderCache.save(updated);
+            return pendingDto(updated);
+        }
         ShopOrder order = requireOrderByCode(orderCode);
         order.setCustomerEditing(false);
         order.setCustomerEditingSince(null);
@@ -2662,6 +3023,15 @@ public class ShopOrderService {
 
     @Transactional
     public ShopOrderResponseDto updateOrderByCustomer(String orderCode, List<ItemRequest> newItems, ZoneId zone) {
+        Optional<ShopPendingOrderCache.PendingOrder> cached = pendingOrderCache.findByCode(orderCode);
+        if (cached.isPresent()) {
+            ShopPendingOrderCache.PendingOrder pending = cached.get();
+            validateDailyMenuCaps(null, newItems, pending.tenantId(), pending.companyId(), zone);
+            ShopPendingOrderCache.PendingOrder updated = pending
+                    .withOrder(pendingRequestWithItems(pending.order(), newItems));
+            pendingOrderCache.save(updated);
+            return pendingDto(updated);
+        }
         ShopOrder order = requireOrderByCode(orderCode);
         if (!ShopOrder.STATUS_PENDING.equals(order.getStatus()))
             throw new IllegalStateException("Order can only be updated while PENDING");
@@ -2689,6 +3059,12 @@ public class ShopOrderService {
 
     @Transactional
     public ShopOrderResponseDto markPickupScan(String orderCode) {
+        Optional<ShopPendingOrderCache.PendingOrder> cached = pendingOrderCache.findByCode(orderCode);
+        if (cached.isPresent()) {
+            ShopPendingOrderCache.PendingOrder updated = cached.get().withPickupScannedAt(Instant.now());
+            pendingOrderCache.save(updated);
+            return pendingDto(updated);
+        }
         ShopOrder order = requireOrderByCode(orderCode);
         order.setPickupScannedAt(Instant.now());
         return dto(shopOrderRepository.save(order));

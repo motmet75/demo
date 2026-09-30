@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -74,16 +75,35 @@ public class ShopOrderDraftCache {
         DraftView saved = new DraftView(draftId, tableId, payload.order(),
                 payload.displayItems() == null ? List.of() : List.copyOf(payload.displayItems()),
                 username, Instant.now());
-        redis.opsForValue().set(key(tenantId, companyId, tableId), encode(saved), TTL);
+        redis.opsForValue().set(key(tenantId, companyId, tableId, draftId), encode(saved), TTL);
+        String legacyKey = legacyKey(tenantId, companyId, tableId);
+        decode(redis.opsForValue().get(legacyKey))
+                .filter(legacy -> draftId.equals(legacy.draftId()))
+                .ifPresent(ignored -> redis.delete(legacyKey));
         return saved;
     }
 
     public Optional<DraftView> get(UUID tenantId, UUID companyId, UUID tableId) {
-        return decode(redis.opsForValue().get(key(tenantId, companyId, tableId)));
+        return list(tenantId, companyId, tableId).stream().findFirst();
     }
 
-    public Optional<DraftView> take(UUID tenantId, UUID companyId, UUID tableId) {
-        return decode(redis.opsForValue().getAndDelete(key(tenantId, companyId, tableId)));
+    public Optional<DraftView> get(UUID tenantId, UUID companyId, UUID tableId, String draftId) {
+        if (draftId == null || draftId.isBlank()) return get(tenantId, companyId, tableId);
+        Optional<DraftView> current = decode(redis.opsForValue().get(key(tenantId, companyId, tableId, draftId)));
+        if (current.isPresent()) return current;
+        return decode(redis.opsForValue().get(legacyKey(tenantId, companyId, tableId)))
+                .filter(draft -> draftId.equals(draft.draftId()));
+    }
+
+    public Optional<DraftView> take(UUID tenantId, UUID companyId, UUID tableId, String draftId) {
+        Optional<DraftView> selected = get(tenantId, companyId, tableId, draftId);
+        if (selected.isEmpty()) return Optional.empty();
+        DraftView draft = selected.get();
+        String currentKey = key(tenantId, companyId, tableId, draft.draftId());
+        Optional<DraftView> removed = decode(redis.opsForValue().getAndDelete(currentKey));
+        if (removed.isPresent()) return removed;
+        return decode(redis.opsForValue().getAndDelete(legacyKey(tenantId, companyId, tableId)))
+                .filter(value -> draft.draftId().equals(value.draftId()));
     }
 
     public List<DraftView> list(UUID tenantId, UUID companyId) {
@@ -91,29 +111,41 @@ public class ShopOrderDraftCache {
         if (keys == null || keys.isEmpty()) return List.of();
         List<String> values = redis.opsForValue().multiGet(keys);
         if (values == null) return List.of();
-        return values.stream()
+        Map<String,DraftView> unique = new LinkedHashMap<>();
+        values.stream()
                 .map(ShopOrderDraftCache::decode)
                 .flatMap(Optional::stream)
                 .sorted(Comparator.comparing(DraftView::updatedAt).reversed())
+                .forEach(draft -> unique.putIfAbsent(draft.tableId() + ":" + draft.draftId(), draft));
+        return List.copyOf(unique.values());
+    }
+
+    public List<DraftView> list(UUID tenantId, UUID companyId, UUID tableId) {
+        return list(tenantId, companyId).stream()
+                .filter(draft -> tableId.equals(draft.tableId()))
                 .toList();
     }
 
     public void restoreIfAbsent(UUID tenantId, UUID companyId, UUID tableId, DraftView draft) {
-        if (draft != null) redis.opsForValue().setIfAbsent(key(tenantId, companyId, tableId), encode(draft), TTL);
+        if (draft != null) redis.opsForValue().setIfAbsent(key(tenantId, companyId, tableId, draft.draftId()), encode(draft), TTL);
     }
 
     public boolean clear(UUID tenantId, UUID companyId, UUID tableId, String draftId) {
-        String key = key(tenantId, companyId, tableId);
-        if (draftId == null || draftId.isBlank()) return Boolean.TRUE.equals(redis.delete(key));
-        String removed = redis.opsForValue().getAndDelete(key);
-        Optional<DraftView> removedDraft = decode(removed);
-        if (removedDraft.isEmpty()) return false;
-        if (draftId.equals(removedDraft.get().draftId())) return true;
-        redis.opsForValue().setIfAbsent(key, removed, TTL);
-        return false;
+        Optional<DraftView> selected = get(tenantId, companyId, tableId, draftId);
+        if (selected.isEmpty()) return false;
+        DraftView draft = selected.get();
+        if (Boolean.TRUE.equals(redis.delete(key(tenantId, companyId, tableId, draft.draftId())))) return true;
+        Optional<DraftView> legacy = decode(redis.opsForValue().get(legacyKey(tenantId, companyId, tableId)));
+        return legacy.filter(value -> draft.draftId().equals(value.draftId()))
+                .map(value -> Boolean.TRUE.equals(redis.delete(legacyKey(tenantId, companyId, tableId))))
+                .orElse(false);
     }
 
-    private String key(UUID tenantId, UUID companyId, UUID tableId) {
+    private String key(UUID tenantId, UUID companyId, UUID tableId, String draftId) {
+        return scopePrefix(tenantId, companyId) + tableId + ":" + draftId;
+    }
+
+    private String legacyKey(UUID tenantId, UUID companyId, UUID tableId) {
         return scopePrefix(tenantId, companyId) + tableId;
     }
 

@@ -269,8 +269,6 @@ public class ShopOrderController {
         if (rejected != null) return rejected;
         try {
             ShopOrderResponseDto dto = shopOrderService.createOrder(req, tenantId, companyId, zone);
-            createNewOrderStaffCall(dto);
-            publishCustomerOrderPrintAlert(dto);
             return ResponseEntity.status(HttpStatus.CREATED).body(dto);
         } catch (ShopOrderService.DailyMenuLimitExceededException e) {
             return dailyLimitResponse(e);
@@ -507,7 +505,7 @@ public class ShopOrderController {
                 if (customerName.isEmpty()) customerName = null;
             }
 
-            ShopOrder order = resolveStaffCallOrder(
+            ShopOrderResponseDto order = resolveStaffCallOrder(
                     parseUuid(body.get("orderId")),
                     stringValue(body.get("orderCode")),
                     token,
@@ -777,13 +775,14 @@ public class ShopOrderController {
 
     @GetMapping("/shop/staff/order-drafts/table/{tableId}")
     public ResponseEntity<?> getTableOrderDraft(@PathVariable UUID tableId,
+                                                 @RequestParam(required = false) String draftId,
                                                  @RequestParam(required = false) UUID tenantId,
                                                  @RequestParam(required = false) UUID companyId,
                                                  @RequestHeader(value = "X-Tenant-Id", required = false) String hTenant,
                                                  @RequestHeader(value = "X-Company-Id", required = false) String hCompany) {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId); requireDraftTable(tableId, tId, cId);
-        return shopOrderDraftCache.get(tId, cId, tableId)
+        return shopOrderDraftCache.get(tId, cId, tableId, draftId)
                 .<ResponseEntity<?>>map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.noContent().build());
     }
@@ -844,16 +843,17 @@ public class ShopOrderController {
                                                      @RequestHeader(value = "X-Time-Zone", required = false) String timeZone) {
         UUID tId = resolve(tenantId, hTenant); UUID cId = resolve(companyId, hCompany);
         validateScope(tId, cId); requireDraftTable(tableId, tId, cId);
-        Optional<ShopOrderDraftCache.DraftView> taken = shopOrderDraftCache.take(tId, cId, tableId);
+        String requestedDraftId = body == null ? null : stringValue(body.get("draftId"));
+        Optional<ShopOrderDraftCache.DraftView> taken = shopOrderDraftCache.take(tId, cId, tableId, requestedDraftId);
         if (taken.isEmpty()) return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", "Đơn tạm đã được người khác xác nhận hoặc không còn tồn tại"));
         ShopOrderDraftCache.DraftView draft = taken.get();
-        String requestedDraftId = body == null ? null : stringValue(body.get("draftId"));
         if (requestedDraftId != null && !requestedDraftId.equals(draft.draftId())) {
             shopOrderDraftCache.restoreIfAbsent(tId, cId, tableId, draft);
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", "Đơn tạm vừa được cập nhật; tải lại trước khi xác nhận"));
         }
         try {
-            ShopOrderResponseDto created = shopOrderService.createCounterOrder(draft.order(), tId, cId, RequestTimeZone.resolve(timeZone));
+            ShopOrderResponseDto created = shopOrderService.createAndConfirmCounterOrder(
+                    draft.order(), tId, cId, RequestTimeZone.resolve(timeZone));
             return ResponseEntity.status(HttpStatus.CREATED).body(created);
         } catch (RuntimeException error) {
             shopOrderDraftCache.restoreIfAbsent(tId, cId, tableId, draft);
@@ -1356,8 +1356,10 @@ public class ShopOrderController {
                                                     @RequestBody List<ShopOrderService.ItemRequest> items,
                                                     @RequestHeader(value = "X-Time-Zone", required = false) String timeZone,
                                                     HttpServletRequest request) {
-        ShopOrder order = shopOrderRepository.findByOrderCode(orderCode).orElse(null);
-        if (order == null) {
+        ShopOrderResponseDto order;
+        try {
+            order = shopOrderService.getOrderByCode(orderCode);
+        } catch (NoSuchElementException error) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(Map.of("error", "Order not found", "message", "Order not found"));
         }
@@ -2667,41 +2669,46 @@ public class ShopOrderController {
         } catch (Exception ignored) {}
         return value.toLowerCase(Locale.ROOT);
     }
-    private ShopOrder resolveStaffCallOrder(UUID orderId, String orderCode, String token,
-                                            UUID tableId, UUID tenantId, UUID companyId) {
+    private ShopOrderResponseDto resolveStaffCallOrder(UUID orderId, String orderCode, String token,
+                                                       UUID tableId, UUID tenantId, UUID companyId) {
         if (orderId != null) {
-            ShopOrder order = shopOrderRepository.findById(orderId)
-                    .orElseThrow(() -> new IllegalArgumentException("Order not found"));
-            validateStaffCallOrderScope(order, tenantId, companyId);
-            return order;
+            try {
+                return shopOrderService.getOrder(orderId, tenantId, companyId);
+            } catch (NoSuchElementException error) {
+                throw new IllegalArgumentException("Order not found");
+            }
         }
         if (orderCode != null) {
-            return shopOrderRepository.findByOrderCodeAndTenantIdAndCompanyId(orderCode, tenantId, companyId)
-                    .orElse(null);
+            try {
+                return shopOrderService.getOrderByCode(orderCode, tenantId, companyId);
+            } catch (NoSuchElementException error) {
+                return null;
+            }
         }
         if (token != null) {
-            List<ShopOrder> orders = shopOrderRepository.findAllBySourceTokenOrderByCreatedAtDesc(token)
-                    .stream()
-                    .filter(o -> tenantId.equals(o.getTenantId()) && companyId.equals(o.getCompanyId()))
-                    .toList();
-            Optional<ShopOrder> active = orders.stream()
-                    .filter(ShopOrderController::isStaffCallActiveOrder)
+            List<ShopOrderResponseDto> orders = shopOrderService.getOrdersByTokenForStaff(
+                    token, tenantId, companyId, null, null);
+            Optional<ShopOrderResponseDto> active = orders.stream()
+                    .filter(order -> isStaffCallActiveStatus(order.getStatus()))
                     .findFirst();
             if (active.isPresent()) return active.get();
             if (!orders.isEmpty()) return orders.get(0);
         }
         if (tableId != null) {
-            return shopOrderRepository.findAllByTable_IdAndTenantIdAndCompanyIdAndStatusIn(
-                            tableId,
-                            tenantId,
-                            companyId,
-                            List.of(ShopOrder.STATUS_PENDING, ShopOrder.STATUS_CONFIRMED,
-                                    ShopOrder.STATUS_PREPARING, ShopOrder.STATUS_READY))
+            return shopOrderService.getActiveTableOrders(tableId, tenantId, companyId)
                     .stream()
-                    .max(Comparator.comparing(ShopOrder::getCreatedAt, Comparator.nullsFirst(Comparator.naturalOrder())))
+                    .max(Comparator.comparing(ShopOrderResponseDto::getCreatedAt,
+                            Comparator.nullsFirst(Comparator.naturalOrder())))
                     .orElse(null);
         }
         return null;
+    }
+
+    private static boolean isStaffCallActiveStatus(String status) {
+        return ShopOrder.STATUS_PENDING.equals(status)
+                || ShopOrder.STATUS_CONFIRMED.equals(status)
+                || ShopOrder.STATUS_PREPARING.equals(status)
+                || ShopOrder.STATUS_READY.equals(status);
     }
 
     private void validateStaffCallOrderScope(ShopOrder order, UUID tenantId, UUID companyId) {

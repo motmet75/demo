@@ -38,6 +38,7 @@ public class ShopOrderResponseDto {
     private String paymentMethod;
     private Map<String, String> paymentMethodLabels = Collections.emptyMap();
     private String paymentStatus;
+    private Instant paidAt;
     private Map<String, String> paymentStatusLabels = Collections.emptyMap();
     private Map<String, String> fulfillmentTypeLabels = Collections.emptyMap();
     private Instant paymentRequestedAt;
@@ -278,6 +279,7 @@ public class ShopOrderResponseDto {
         dto.totalAmount = order.getTotalAmount();
         dto.paymentMethod = order.getPaymentMethod();
         dto.paymentStatus = order.getPaymentStatus();
+        dto.paidAt = order.getPaidAt();
         dto.paymentRequestedAt = order.getPaymentRequestedAt();
         dto.paymentQr = order.getPaymentQr();
         dto.splitCashAmount = order.getSplitCashAmount();
@@ -338,6 +340,7 @@ public class ShopOrderResponseDto {
     public String getTableNameTranslations() { return tableNameTranslations; }
     public String getFulfillmentType() { return fulfillmentType; }
     public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
     public Map<String, String> getStatusLabels() { return statusLabels; }
     public void setStatusLabels(Map<String, String> statusLabels) { this.statusLabels = statusLabels != null ? statusLabels : Collections.emptyMap(); }
     public String getCustomerName() { return customerName; }
@@ -353,6 +356,7 @@ public class ShopOrderResponseDto {
     public Map<String, String> getPaymentMethodLabels() { return paymentMethodLabels; }
     public void setPaymentMethodLabels(Map<String, String> paymentMethodLabels) { this.paymentMethodLabels = paymentMethodLabels != null ? paymentMethodLabels : Collections.emptyMap(); }
     public String getPaymentStatus() { return paymentStatus; }
+    public Instant getPaidAt() { return paidAt; }
     public Map<String, String> getPaymentStatusLabels() { return paymentStatusLabels; }
     public void setPaymentStatusLabels(Map<String, String> paymentStatusLabels) { this.paymentStatusLabels = paymentStatusLabels != null ? paymentStatusLabels : Collections.emptyMap(); }
     public Map<String, String> getFulfillmentTypeLabels() { return fulfillmentTypeLabels; }

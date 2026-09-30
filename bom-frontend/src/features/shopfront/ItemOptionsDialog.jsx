@@ -81,7 +81,11 @@ export default function ItemOptionsDialog({ open, model, options = [], allowedSi
     if (initialCart) {
       const initialQty = initialCart.qty || 1
       setQty(effectiveMaxQty != null ? Math.max(1, Math.min(effectiveMaxQty || 1, initialQty)) : initialQty)
-      try { setSelected(initialCart.selectedOptions ? JSON.parse(initialCart.selectedOptions) : {}) } catch { setSelected({}) }
+      try {
+        setSelected(initialCart.selectedOptions
+          ? (typeof initialCart.selectedOptions === 'string' ? JSON.parse(initialCart.selectedOptions) : initialCart.selectedOptions)
+          : {})
+      } catch { setSelected({}) }
       setNote(initialCart.itemNotes || '')
     } else {
       setQty(effectiveMaxQty === 0 ? 0 : 1)

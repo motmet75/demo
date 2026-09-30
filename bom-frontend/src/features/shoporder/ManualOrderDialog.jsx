@@ -37,7 +37,7 @@ import PersonIcon from '@mui/icons-material/Person'
 import PersonAddIcon from '@mui/icons-material/PersonAdd'
 import AutorenewIcon from '@mui/icons-material/Autorenew'
 import { fetchShopTables, createStaffOrder, fetchOrderTagQr, fetchMenuOptions, fetchCustomers, linkOrderCustomer, createCustomer, redeemVoucher, fetchStaffMenuItems, fetchOrderTemplates, saveOrderTemplate, deleteOrderTemplate, switchToQrPayment, revertToCash, splitPayment } from '../../api/shopApi'
-import { printCounterOrderAlertTracked, printOrderReceiptTracked, printOrderTagTracked } from '../../utils/printWithHistory'
+import { printOrderReceiptTracked, printOrderTagTracked } from '../../utils/printWithHistory'
 import { broadcastToCounter } from '../shopboard/CounterDisplayPage'
 import VoucherQrScanDialog from './VoucherQrScanDialog'
 import PaymentMethodConfirmDialog from './PaymentMethodConfirmDialog'
@@ -787,8 +787,9 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
       }
       setCreatedOrder(orderData)
       onCreated?.(orderData)
-      await printCounterOrderAlertTracked(orderData, setError)
-      // broadcast real order (with order number), then again once tagQr is loaded
+      // A newly-created order is Redis-backed PENDING. Printing is intentionally
+      // deferred to the counter's Confirm & Print action, which materialises it
+      // in the database and returns the real order number.
       broadcastToCounter(orderData, null)
       setTagLoading(true)
       fetchOrderTagQr(orderData.id)

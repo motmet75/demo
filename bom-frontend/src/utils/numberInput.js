@@ -1,4 +1,5 @@
 const usInteger = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
+const viInteger = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 })
 
 export function formatIntegerInput(value) {
   if (value == null || value === '') return ''
@@ -14,6 +15,20 @@ export function parseIntegerInput(value, allowNegative = false) {
   const negative = allowNegative && raw.startsWith('-')
   const digits = raw.replace(/[^0-9]/g, '')
   return digits ? `${negative ? '-' : ''}${digits}` : negative ? '-' : ''
+}
+
+export function formatVietnameseIntegerInput(value) {
+  if (value == null || value === '') return ''
+  const digits = String(value).replace(/[^0-9]/g, '')
+  return digits ? viInteger.format(Number(digits)) : ''
+}
+
+export function cashTenderSuggestions(total) {
+  const amount = Number(total)
+  if (!Number.isFinite(amount) || amount <= 0) return []
+  const rounded = [10000, 20000, 50000, 100000, 200000, 500000]
+      .map(step => Math.ceil(amount / step) * step)
+  return [...new Set([Math.ceil(amount), ...rounded])].sort((a, b) => a - b).slice(0, 6)
 }
 
 export function formatQuantityInput(value, maximumFractionDigits = 4) {

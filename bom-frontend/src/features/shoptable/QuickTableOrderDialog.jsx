@@ -22,6 +22,8 @@ import EditOrderDialog from '../shoporder/EditOrderDialog'
 import PaymentMethodConfirmDialog from '../shoporder/PaymentMethodConfirmDialog'
 
 const money = value => Number(value || 0).toLocaleString('vi-VN') + 'đ'
+const EMPTY_FAVORITES = []
+const EMPTY_ORDERS = []
 const normalizeSearch = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase()
 const optionText = value => {
   if (!value) return ''
@@ -71,7 +73,7 @@ function OrderReadBack({ order, busy, printed, onPrint, onPrintAlert, onPaid, on
   </Paper>
 }
 
-export default function QuickTableOrderDialog({ open, table, favoriteIds = [], tableOrders = [], onClose, onCreated, onSaveFavorites }) {
+export default function QuickTableOrderDialog({ open, table, draftId = '', favoriteIds = EMPTY_FAVORITES, tableOrders = EMPTY_ORDERS, onClose, onCreated, onSaveFavorites }) {
   const [models, setModels] = useState([])
   const [selected, setSelected] = useState(null)
   const [favorites, setFavorites] = useState([])
@@ -111,9 +113,9 @@ export default function QuickTableOrderDialog({ open, table, favoriteIds = [], t
 
   useEffect(() => {
     if (!open || !table?.id) return undefined
-    setFavorites(favoriteIds.map(String)); setFavoriteQuery(''); setConfigure(false); setSelected(null); setCreated(null); setConfirmedOrders([]); setOrderUpdates({}); setClearedOrderIds(new Set()); setPrintedOrderIds(new Set()); setEditOrder(null); setMoveOrder(null); setMoveTarget(null); setOrderActionId(''); setError('')
+    setFavorites(favoriteIds.map(String)); setFavoriteQuery(''); setConfigure(false); setSelected(null); setCreated(null); setConfirmedOrders([]); setOrderUpdates({}); setClearedOrderIds(new Set()); setPrintedOrderIds(new Set()); setEditOrder(null); setMoveOrder(null); setMoveTarget(null); setConfiguring(null); setConfiguringOptions([]); setOrderActionId(''); setError('')
     setLoading(true)
-    Promise.all([fetchShopTables(), fetchStaffMenuItems(), fetchTableOrderDraft(table.id)])
+    Promise.all([fetchShopTables(), fetchStaffMenuItems(), fetchTableOrderDraft(table.id, draftId)])
       .then(([tablesResult, menu, draftResult]) => {
         setTables(Array.isArray(tablesResult.data) ? tablesResult.data.filter(item => item.isActive !== false) : [])
         setModels((menu || []).filter(model => model.sellingPrice != null && model.isActive !== false))
@@ -122,10 +124,10 @@ export default function QuickTableOrderDialog({ open, table, favoriteIds = [], t
       .catch(actionError => setError(actionError.message || 'Không tải được đơn tạm của bàn')).finally(() => setLoading(false))
     const poll = setInterval(() => {
       if (savingDraft.current || draftDirtyRef.current) return
-      fetchTableOrderDraft(table.id).then(({ res, data }) => applyDraft(res.status === 204 ? null : data)).catch(() => {})
+      fetchTableOrderDraft(table.id, draftId).then(({ res, data }) => applyDraft(res.status === 204 ? null : data)).catch(() => {})
     }, 4000)
     return () => clearInterval(poll)
-  }, [open, table?.id, favoriteIds])
+  }, [open, table?.id, draftId, favoriteIds])
 
   useEffect(() => {
     if (!open) return
@@ -213,14 +215,14 @@ export default function QuickTableOrderDialog({ open, table, favoriteIds = [], t
     void persistDraft(next)
   }
 
-  const confirmDraft = async () => {
+  const confirmDraft = async (shouldPrint = false) => {
     if (!draft?.draftId || !draftItems.length) return
     setSaving(true); setError('')
     try {
       const { res, data } = await confirmTableOrderDraft(table.id, draft.draftId)
       if (!res.ok) throw new Error(data?.message || 'Không xác nhận được đơn tạm')
       applyDraft(null); setCreated(data); setConfirmedOrders(current => [data, ...current.filter(order => order.id !== data.id)]); onCreated?.(data)
-      await printCounterOrderAlertTracked(data, setError)
+      if (shouldPrint) await printCounterOrderAlertTracked(data, setError)
     } catch (actionError) { setError(actionError.message || 'Không xác nhận được đơn tạm') }
     finally { setSaving(false) }
   }
@@ -252,25 +254,39 @@ export default function QuickTableOrderDialog({ open, table, favoriteIds = [], t
     setOrderActionId(action.order.id); setError('')
     try {
       let updated
+      let actionOrder = action.order
+      if (action.type === 'complete' && String(actionOrder.tableId || '') !== String(payment?.tableId || '')) {
+        const { res, data } = await setOrderTable(actionOrder.id, payment?.tableId || null)
+        if (!res.ok) throw new Error(data?.message || data?.error || 'Không chuyển được bàn')
+        applyLocalOrder(data)
+        actionOrder = data
+      }
       if (action.type === 'print') {
-        if (payment?.paymentMethod === 'BANK_QR') updated = await callOrderAction(switchToQrPayment, action.order, 'Không đổi được hình thức thanh toán')
+        if (actionOrder.status === 'PENDING') {
+          actionOrder = await callOrderAction(confirmShopOrder, actionOrder, 'Không xác nhận được đơn trước khi in')
+        }
+        if (payment?.paymentMethod === 'BANK_QR') updated = await callOrderAction(switchToQrPayment, actionOrder, 'Không đổi được hình thức thanh toán')
         else if (payment?.paymentMethod === 'SPLIT') {
-          const { res, data } = await splitPayment(action.order.id, payment.splitCashAmount)
+          const { res, data } = await splitPayment(actionOrder.id, payment.splitCashAmount)
           if (!res.ok) throw new Error(data?.message || data?.error || 'Không lưu được chia tiền')
           applyLocalOrder(data); updated = data
         }
-        else updated = await callOrderAction(revertToCash, action.order, 'Không đổi được hình thức thanh toán')
+        else updated = await callOrderAction(revertToCash, actionOrder, 'Không đổi được hình thức thanh toán')
         await printOrderReceiptTracked(updated, null, setError)
         setPrintedOrderIds(current => new Set([...current, action.order.id]))
-      } else if (action.type === 'paid') updated = await callOrderAction(markOrderPaid, action.order, 'Không đánh dấu được thanh toán', payment)
+      } else if (action.type === 'paid') updated = await callOrderAction(markOrderPaid, actionOrder, 'Không đánh dấu được thanh toán', payment)
       else {
-        updated = await advanceAndFinish(action.order, payment)
+        updated = await advanceAndFinish(actionOrder, payment)
         if (action.type === 'clear' && updated.paymentStatus !== 'PAID') {
           updated = await callOrderAction(markOrderPaid, updated, 'Không đánh dấu được thanh toán', payment)
         }
       }
       if (action.type === 'clear') {
         updated = await callOrderAction(clearOrderTable, updated, 'Không dọn được đơn khỏi bàn')
+        setClearedOrderIds(current => new Set([...current, action.order.id]))
+        setCreated(current => current?.id === action.order.id ? null : current)
+      }
+      if (action.type === 'complete' && payment?.tableId && String(payment.tableId) !== String(table?.id)) {
         setClearedOrderIds(current => new Set([...current, action.order.id]))
         setCreated(current => current?.id === action.order.id ? null : current)
       }
@@ -290,7 +306,10 @@ export default function QuickTableOrderDialog({ open, table, favoriteIds = [], t
   }
   const requestPrintAlert = order => {
     setOrderActionId(order.id); setError('')
-    printCounterOrderAlertTracked(order, setError)
+    Promise.resolve(order.status === 'PENDING'
+      ? callOrderAction(confirmShopOrder, order, 'Không xác nhận được đơn trước khi in')
+      : order)
+      .then(printable => printCounterOrderAlertTracked(printable, setError))
       .catch(actionError => setError(actionError.message || 'Không in lại được báo đơn'))
       .finally(() => setOrderActionId(''))
   }
@@ -351,7 +370,7 @@ export default function QuickTableOrderDialog({ open, table, favoriteIds = [], t
           </Stack>
         </Box>)}
         <TextField fullWidth size="small" sx={{ mt: 1 }} label="Ghi chú chung của đơn" value={draftNotes} onChange={event => { setDraftNotes(event.target.value); setDraftDirty(true); draftDirtyRef.current = true }} onBlur={() => { if (draftDirtyRef.current) void persistDraft(draftItems, draftNotes) }} />
-        <Stack direction="row" gap={1} alignItems="center" sx={{ mt: 1 }}><Typography fontWeight={900} sx={{ flex: 1 }}>Tạm tính: {money(draftTotal)}</Typography><Button color="error" disabled={saving} onClick={() => { if (window.confirm('Xóa toàn bộ đơn tạm của bàn này?')) void persistDraft([]) }}>Bỏ đơn tạm</Button><Button variant="contained" color="success" disabled={saving || draftDirty} onClick={confirmDraft}>{saving ? 'Đang xác nhận…' : 'Xác nhận & in báo đơn'}</Button></Stack>
+        <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap" sx={{ mt: 1 }}><Typography fontWeight={900} sx={{ flex: 1 }}>Tạm tính: {money(draftTotal)}</Typography><Button color="error" disabled={saving} onClick={() => { if (window.confirm('Xóa toàn bộ đơn tạm của bàn này?')) void persistDraft([]) }}>Bỏ đơn tạm</Button><Button variant="contained" disabled={saving || draftDirty} onClick={() => confirmDraft(false)}>{saving ? 'Đang xác nhận…' : 'Xác nhận'}</Button><Button variant="contained" color="success" startIcon={<PrintIcon />} disabled={saving || draftDirty} onClick={() => confirmDraft(true)}>{saving ? 'Đang xác nhận…' : 'Xác nhận & in báo đơn'}</Button></Stack>
       </Paper>}
 
       <OrderReadBack order={created} busy={orderActionId === created?.id} printed={printedOrderIds.has(created?.id)} onPrint={requestPrint} onPrintAlert={requestPrintAlert} onPaid={order => setPaymentAction({ order, type: 'paid' })} onComplete={order => setPaymentAction({ order, type: 'complete' })} onClear={requestClear} onEdit={setEditOrder} onMove={setMoveOrder} />
@@ -361,7 +380,7 @@ export default function QuickTableOrderDialog({ open, table, favoriteIds = [], t
   </Dialog>
   {configuring && <ItemOptionsDialog open model={configuring.model} options={configuringOptions} allowedSideOptions={decorateAllowedSideOptions(models, configuring.model.allowedSideIds)} initialCart={configuring.item ? { qty: configuring.item.quantity, selectedOptions: configuring.item.selectedOptions, itemNotes: configuring.item.itemNotes, sideItems: configuring.item.sideItems?.map(side => ({ modelId: side.modelId, qty: side.quantity })) } : null} onConfirm={saveConfiguredItem} onClose={() => setConfiguring(null)} />}
   {editOrder && <EditOrderDialog open order={orderUpdates[editOrder.id] || editOrder} onClose={() => setEditOrder(null)} onUpdated={updated => { applyLocalOrder(updated); setEditOrder(null); onCreated?.(updated) }} />}
-  {paymentAction && <PaymentMethodConfirmDialog open order={paymentAction.order} action={paymentAction.type === 'paid' ? 'paid' : paymentAction.type === 'print' ? 'print' : paymentAction.type === 'clear' ? 'clear' : 'complete'} busy={Boolean(orderActionId)} onCancel={() => setPaymentAction(null)} onConfirm={runPaymentAction} />}
+  {paymentAction && <PaymentMethodConfirmDialog open order={paymentAction.order} action={paymentAction.type === 'paid' ? 'paid' : paymentAction.type === 'print' ? 'print' : paymentAction.type === 'clear' ? 'clear' : 'complete'} busy={Boolean(orderActionId)} tables={tables} onCancel={() => setPaymentAction(null)} onConfirm={runPaymentAction} />}
   <Dialog open={Boolean(moveOrder)} onClose={orderActionId ? undefined : () => { setMoveOrder(null); setMoveTarget(null) }} fullWidth maxWidth="xs">
     <DialogTitle>Chuyển đơn #{moveOrder?.orderNumber ?? moveOrder?.dailySeq} sang bàn khác</DialogTitle>
     <DialogContent sx={{ pt: '10px !important' }}><Alert severity="info" sx={{ mb: 1.5 }}>Đơn sẽ rời {table?.tableName || 'bàn hiện tại'} và xuất hiện ngay tại bàn mới.</Alert><Autocomplete autoHighlight options={moveTableOptions} value={moveTarget} onChange={(_, value) => setMoveTarget(value)} getOptionLabel={item => item.tableName || ''} isOptionEqualToValue={(a,b)=>a.id===b.id} filterOptions={(options,state)=>{const query=normalizeSearch(state.inputValue);return query?options.filter(item=>normalizeSearch(item.tableName).includes(query)):options}} renderInput={params=><TextField {...params} autoFocus label="Gõ tên bàn đích để tìm" placeholder="Không cần gõ dấu" />} /></DialogContent>

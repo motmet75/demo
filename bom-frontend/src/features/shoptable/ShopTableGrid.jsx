@@ -415,10 +415,10 @@ export default function ShopTableGrid() {
       setError('Select at least one Ready order to complete')
       return
     }
-    setPaymentAction({ action: 'complete-many', orders: selected, order: { orderNumber: `${selected.length} đơn`, totalAmount: selected.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0), paymentMethod: selected[0]?.paymentMethod } })
+    setPaymentAction({ action: 'complete-many', orders: selected, order: { orderNumber: `${selected.length} đơn`, totalAmount: selected.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0), paymentMethod: selected[0]?.paymentMethod, tableId: selected[0]?.tableId, tableName: selected[0]?.tableName } })
   }
 
-  const confirmPaymentAction = async ({ paymentMethod, splitCashAmount } = {}) => {
+  const confirmPaymentAction = async ({ paymentMethod, splitCashAmount, tableId } = {}) => {
     if (!paymentAction) return
     setCompletingSelected(true)
     try {
@@ -434,6 +434,13 @@ export default function ShopTableGrid() {
         return
       }
       const selected = paymentAction.orders || [paymentAction.order]
+      if (!['paid', 'clear'].includes(paymentAction.action)) {
+        await Promise.all(selected.map(async order => {
+          if (String(order.tableId || '') === String(tableId || '')) return
+          const result = await setOrderTable(order.id, tableId || null)
+          if (!result.res.ok) throw new Error(result.data?.message || result.data?.error || 'Không chuyển được bàn')
+        }))
+      }
       if (paymentAction.action === 'paid') await markOrderPaid(paymentAction.order.id, paymentMethod, splitCashAmount)
       else if (paymentAction.action === 'clear') {
         const paidResult = await markOrderPaid(paymentAction.order.id, paymentMethod, splitCashAmount)
@@ -907,6 +914,7 @@ export default function ShopTableGrid() {
         order={paymentAction.order}
         action={paymentAction?.action === 'paid' ? 'paid' : paymentAction?.action === 'print' ? 'print' : paymentAction?.action === 'clear' ? 'clear' : 'complete'}
         busy={completingSelected}
+        tables={rows}
         onCancel={() => setPaymentAction(null)}
         onConfirm={confirmPaymentAction}
       />}
