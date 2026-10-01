@@ -2,6 +2,7 @@ import { createPrintHistory } from '../api/shopApi'
 import {
   printWalkUpQr,
   printQueueQr,
+  printOrderBill,
   printOrderReceipt,
   printOrderTag,
   printCupLabels,
@@ -73,14 +74,30 @@ export async function printQueueQrTracked(result, onError) {
   printQueueQr(result.qrBase64, result.qrUrl, { validDays: result.validDays, expiresAt: result.expiresAt }, meta)
 }
 
-export async function printOrderReceiptTracked(order, trackingQrBase64 = null, onError) {
+export async function printOrderReceiptTracked(order, trackingQrBase64OrOnError = null, onError) {
   if (!order) return
+  const reportError = onError || (typeof trackingQrBase64OrOnError === 'function' ? trackingQrBase64OrOnError : null)
   const meta = await recordPrint({
     printType: 'ORDER_RECEIPT',
     ...orderSource(order),
     title: `Order Receipt ${orderNum(order)}`,
+  }, reportError)
+  printOrderReceipt(order, meta)
+}
+
+export async function printOrderBillTracked(order, bill, onError) {
+  if (!order || !bill) return
+  const meta = await recordPrint({
+    printType: 'ORDER_RECEIPT',
+    ...orderSource(order),
+    sourceKey: `${order.id || order.orderCode}:bill:${bill.id || bill.billNumber}`,
+    amount: bill.netAmount != null
+      ? Number(bill.netAmount)
+      : Math.max(0, Number(bill.totalAmount || 0) - Number(bill.discountAmount || 0)),
+    title: `Bill #${bill.billNumber || '?'} · ${orderNum(order)}`,
+    notes: `Split bill ${bill.billNumber || '?'}`,
   }, onError)
-  printOrderReceipt(order, trackingQrBase64, meta)
+  printOrderBill(order, bill, meta)
 }
 
 export async function printOrderTagTracked(order, qrBase64 = null, onError) {

@@ -28,7 +28,7 @@ import UndoIcon from '@mui/icons-material/Undo'
 import LabelIcon from '@mui/icons-material/Label'
 import MonitorIcon from '@mui/icons-material/Monitor'
 import { fetchOrderTagQr, revertShopOrder, switchToQrPayment, splitPayment, revertToCash, patchOrderDiscount, redeemVoucher, fetchVoucherDetail, removeOrderVoucher, linkOrderCustomer, fetchCustomers, fetchCustomerHistory, earnOrderPoints, fetchBankConfig, undoMergeBills } from '../../api/shopApi'
-import { printOrderReceiptTracked, printOrderTagTracked, printCupLabelsTracked } from '../../utils/printWithHistory'
+import { printOrderBillTracked, printOrderReceiptTracked, printOrderTagTracked, printCupLabelsTracked } from '../../utils/printWithHistory'
 import { broadcastToCounter } from '../shopboard/CounterDisplayPage'
 import EditOrderDialog from './EditOrderDialog'
 import ConfirmActionDialog from './ConfirmActionDialog'
@@ -517,10 +517,15 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
     : order.paymentQr ? `data:image/png;base64,${order.paymentQr}` : null
 
   const bills = order.bills || []
-  const activeBills = bills.filter(b => b.status === 'ACTIVE')
+  const activeBills = bills.filter(b => b.status === 'ACTIVE' && (Array.isArray(b.itemIds) ? b.itemIds.length > 0 : Number(b.totalAmount || 0) !== 0))
   const selectedBill = activeBills.find(b => b.id === selectedBillId) || activeBills[0] || null
   const mergedBills = bills.filter(b => b.status === 'MERGED' && b.mergedIntoBillId)
   const showBillSummary = activeBills.length > 1 || mergedBills.length > 0
+  const displayingSingleBill = activeBills.length > 1 && Boolean(selectedBill)
+  const selectedBillItemIds = new Set(selectedBill?.itemIds || [])
+  const displayedItems = displayingSingleBill
+    ? (order.items || []).filter(item => selectedBillItemIds.has(item.id))
+    : (order.items || [])
 
   return (
     <>
@@ -579,6 +584,13 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
                     sx={{ height: 22, fontSize: 11, fontWeight: 700 }} />
                   )
                 })}
+                {displayingSingleBill && (
+                  <Button size="small" variant="contained" startIcon={<PrintIcon />}
+                    onClick={() => printOrderBillTracked(order, selectedBill)}
+                    sx={{ textTransform: 'none', fontWeight: 800, height: 24 }}>
+                    In Bill #{selectedBill.billNumber}
+                  </Button>
+                )}
                 {mergedBills.map(b => (
                   <Chip key={b.id} size="small" color="warning"
                     label={`Merged #${b.orderNumber ?? b.orderCode}`}
@@ -599,7 +611,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
               </TableRow>
             </TableHead>
             <TableBody>
-              {buildItemGroups(order.items || []).map(({ root, children, subtotal }) => [
+              {buildItemGroups(displayedItems).map(({ root, children, subtotal }) => [
                 /* ── Root item row ── */
                 <TableRow key={root.id} sx={{ verticalAlign: 'top' }}>
                   <TableCell>
@@ -669,11 +681,13 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
           </Table>
 
           {(() => {
-            const groups = buildItemGroups(order.items || [])
+            const groups = buildItemGroups(displayedItems)
             const itemsTotal = groups.reduce((s, g) => s + g.subtotal, 0)
-            const delivery   = Number(order.deliveryFee || 0)
-            const discount   = Number(order.discountAmount || 0)
-            const grandTotal = Math.max(0, itemsTotal + delivery - discount)
+            const delivery   = displayingSingleBill ? 0 : Number(order.deliveryFee || 0)
+            const discount   = displayingSingleBill ? Number(selectedBill?.discountAmount || 0) : Number(order.discountAmount || 0)
+            const grandTotal = displayingSingleBill && selectedBill?.netAmount != null
+              ? Number(selectedBill.netAmount)
+              : Math.max(0, itemsTotal + delivery - discount)
             const totalMainQty = groups.reduce((s, g) => s + Number(g.root.quantity || 1), 0)
             const totalLines   = groups.length
             return (
@@ -1030,7 +1044,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
                 </Button>
               </Tooltip>
             )}
-            {!isFinal && (order.items || []).filter(i => !i.parentItemId).length > 1 && (
+            {!isFinal && displayedItems.filter(i => !i.parentItemId).length > 1 && (
               <Tooltip title={t('shopOrder.detail.splitTooltip')}>
                 <Button variant="outlined" color="secondary" startIcon={<CallSplitIcon />}
                   onClick={() => setSplitBillOpen(true)} sx={{ textTransform: 'none', fontWeight: 700 }}>
@@ -1129,7 +1143,7 @@ export default function ShopOrderDetailModal({ open, order, onClose, onRefresh, 
       )}
 
       {splitBillOpen && (
-        <SplitBillDialog open={splitBillOpen} order={order}
+        <SplitBillDialog open={splitBillOpen} order={{ ...order, items: displayedItems }}
           onClose={() => setSplitBillOpen(false)}
           onSplit={(result) => {
             const updatedOrder = result?.original || result

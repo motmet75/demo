@@ -763,7 +763,7 @@ function billSectionHtml(order, bill, idx, count) {
       <div class="center title">BILL RECEIPT</div>
       <div class="divider"></div>
       <div class="big-num">${billOrderLabel(order)}</div>
-      <div class="center bold">Bill #${bill?.billNumber || idx + 1} / ${count}</div>
+      <div class="center bold">Bill #${bill?.billNumber || idx + 1}${count > 1 ? ` · ${idx + 1}/${count}` : ''}</div>
       <div class="center grey" style="font-size:12px">${order?.orderCode || ''}</div>
       ${linked ? `<div class="center grey" style="font-size:11px;margin-top:2px">Orders: ${linked}</div>` : ''}
       <div class="divider"></div>
@@ -782,9 +782,16 @@ function billSectionHtml(order, bill, idx, count) {
   `
 }
 
-function printSplitBillReceipts(order, trackingQrBase64 = null, printMeta = null) {
-  const bills = (order?.bills || []).filter(bill => bill.status === 'ACTIVE')
-  if (bills.length <= 1) return false
+const billHasItems = bill => Array.isArray(bill?.itemIds)
+  ? bill.itemIds.length > 0
+  : Number(bill?.totalAmount || 0) !== 0
+
+function printSplitBillReceipts(order, printMeta = null, selectedBill = null) {
+  const bills = selectedBill
+    ? [selectedBill].filter(billHasItems)
+    : (order?.bills || []).filter(bill => bill.status === 'ACTIVE' && billHasItems(bill))
+  if (!selectedBill && bills.length <= 1) return false
+  if (!bills.length) return false
   const time = new Date().toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
   const html = `<!DOCTYPE html>
 <html lang="vi">
@@ -835,9 +842,15 @@ function printSplitBillReceipts(order, trackingQrBase64 = null, printMeta = null
   win.onload = () => { win.focus(); win.print(); setTimeout(() => win.close(), 1000) }
   return true
 }
-export function printOrderReceipt(order, trackingQrBase64 = null, printMeta = null) {
+
+export function printOrderBill(order, bill, printMeta = null) {
+  if (!order || !bill) return
+  printSplitBillReceipts(order, printMeta, bill)
+}
+
+export function printOrderReceipt(order, printMeta = null) {
   if (!order) return
-  if (printSplitBillReceipts(order, trackingQrBase64, printMeta)) return
+  if (printSplitBillReceipts(order, printMeta)) return
 
   const num     = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
   const time    = order.createdAt
