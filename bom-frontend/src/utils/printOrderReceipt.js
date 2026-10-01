@@ -710,7 +710,8 @@ function billItemsForReceipt(order, bill) {
 }
 
 function billOrderLabel(order) {
-  return order?.orderNumber ? `#${order.orderNumber}` : order?.orderCode || ''
+  const sequence = order?.orderNumber ?? order?.dailySeq
+  return sequence != null ? `#${sequence}` : order?.orderCode || ''
 }
 
 function billSectionHtml(order, bill, idx, count) {
@@ -762,9 +763,9 @@ function billSectionHtml(order, bill, idx, count) {
     <section class="bill-section">
       <div class="center title">BILL RECEIPT</div>
       <div class="divider"></div>
-      <div class="big-num">${billOrderLabel(order)}</div>
+      <div class="big-num">Đơn ${billOrderLabel(order)}</div>
       <div class="center bold">Bill #${bill?.billNumber || idx + 1}${count > 1 ? ` · ${idx + 1}/${count}` : ''}</div>
-      <div class="center grey" style="font-size:12px">${order?.orderCode || ''}</div>
+      <div class="center grey" style="font-size:9px">${order?.orderCode || ''}</div>
       ${linked ? `<div class="center grey" style="font-size:11px;margin-top:2px">Orders: ${linked}</div>` : ''}
       <div class="divider"></div>
       ${itemsHtml || '<div class="center grey">No items</div>'}
@@ -807,7 +808,7 @@ function printSplitBillReceipts(order, printMeta = null, selectedBill = null) {
   .bold { font-weight: bold; }
   .grey { color: #555; }
   .title { font-size: 16px; font-weight: 900; letter-spacing: 2px; }
-  .big-num { font-size: 42px; font-weight: 900; text-align: center; line-height: 1.1; }
+  .big-num { font-size: 24px; font-weight: 800; text-align: center; line-height: 1.05; }
   .divider { border-top: 1px dashed #666; margin: 7px 0; }
   .row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 2px; }
   .item-row { margin-top: 5px; gap: 3px; }
@@ -852,7 +853,8 @@ export function printOrderReceipt(order, printMeta = null) {
   if (!order) return
   if (printSplitBillReceipts(order, printMeta)) return
 
-  const num     = order.orderNumber ? `#${order.orderNumber}` : order.orderCode
+  const sequence = order.orderNumber ?? order.dailySeq
+  const num     = sequence != null ? `#${sequence}` : order.orderCode
   const time    = order.createdAt
     ? new Date(order.createdAt).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
     : new Date().toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
@@ -976,7 +978,7 @@ export function printOrderReceipt(order, printMeta = null) {
   .grey       { color: #555; }
   .italic     { font-style: italic; }
   .title      { font-size: 16px; font-weight: 900; letter-spacing: 2px; }
-  .big-num    { font-size: 48px; font-weight: 900; text-align: center; line-height: 1.1; }
+  .big-num    { font-size: 24px; font-weight: 800; text-align: center; line-height: 1.05; }
   .divider    { border-top: 1px dashed #666; margin: 7px 0; }
   .row        { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 2px; }
   .item-row   { margin-top: 5px; gap: 3px; }
@@ -1003,8 +1005,8 @@ export function printOrderReceipt(order, printMeta = null) {
   <div class="center title">ORDER RECEIPT</div>
   <div class="divider"></div>
 
-  <div class="big-num">${num}</div>
-  <div class="center grey" style="font-size:12px">${order.orderCode}</div>
+  <div class="big-num">Đơn ${num}</div>
+  <div class="center grey" style="font-size:9px">${order.orderCode}</div>
   <div class="center grey" style="font-size:12px;margin-top:2px">${time}</div>
   ${printMetaHtml(printMeta)}
 

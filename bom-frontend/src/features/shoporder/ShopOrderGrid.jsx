@@ -326,7 +326,7 @@ function QuickConfirmOptions({ value, onChange, order, bankConfig }) {
           {suggestions.length > 0 && <Stack direction="row" gap={0.5} flexWrap="wrap">{suggestions.map(amount => <Button key={amount} size="small" variant="outlined" onClick={() => update({ splitQrAmount: String(amount) })}>{amount.toLocaleString('vi-VN')}đ</Button>)}</Stack>}
           <Typography variant="caption" fontWeight={800}>QR: {qrAmount.toLocaleString('vi-VN')}đ · Tiền mặt: {cashAmount.toLocaleString('vi-VN')}đ</Typography>
         </>}
-        {(cash || (paid && split && qrAmount > 0 && qrAmount < total)) && <>
+        {(cash || (paid && split)) && <>
           <Button size="small" variant={value?.showCashChange ? 'contained' : 'outlined'} color="warning" onClick={() => update({ showCashChange: !value?.showCashChange })} sx={{alignSelf:'flex-start',fontWeight:800}}>
             Tính tiền thối
           </Button>

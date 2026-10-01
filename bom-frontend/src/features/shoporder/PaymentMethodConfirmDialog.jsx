@@ -94,7 +94,7 @@ export default function PaymentMethodConfirmDialog({ open, order, action = 'paid
           <Typography>Tiền mặt: <strong>{money(cashAmount)}</strong></Typography>
         </Stack>
       </>}
-      {!alreadyPaid && (paymentMethod === 'CASH' || (paymentMethod === 'SPLIT' && !splitInvalid)) && <>
+      {!alreadyPaid && (paymentMethod === 'CASH' || paymentMethod === 'SPLIT') && <>
         <Button size="small" variant={showCashChange ? 'contained' : 'outlined'} color="warning" onClick={() => setShowCashChange(value => !value)} sx={{ alignSelf: 'flex-start', fontWeight: 800 }}>
           Tính tiền thối
         </Button>
