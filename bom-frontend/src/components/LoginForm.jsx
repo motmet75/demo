@@ -69,7 +69,7 @@ function fullAppUrl(path) {
 }
 
 export default function LoginForm() {
-  const { login, verifyLoginTotp, verifyLoginOtp, resendLoginOtp } = useAuth()
+  const { user, loading: authLoading, login, verifyLoginTotp, verifyLoginOtp, resendLoginOtp } = useAuth()
   const { language, setLanguage, t, tx } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
@@ -87,6 +87,12 @@ export default function LoginForm() {
   const loginLanguages = useMemo(() => LOGIN_LANGUAGE_CODES
     .map((code) => SUPPORTED_LANGUAGES.find((item) => item.code === code))
     .filter(Boolean), [])
+
+  useEffect(() => {
+    if (!authLoading && user) {
+      navigate(from, { replace: true })
+    }
+  }, [authLoading, from, navigate, user])
 
   useEffect(() => {
     if (new URLSearchParams(location.search).get('error') === 'oauth2') {

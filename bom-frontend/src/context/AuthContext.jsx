@@ -4,11 +4,35 @@ import AuthContext from './AuthContextValue'
 import { useAppContext } from './AppContext'
 
 const LOGIN_PATH = '/bom-inventory/login?expired=1'
+const AUTH_USER_CACHE_KEY = 'bom_authenticated_user_v1'
+
+function readCachedUser() {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.sessionStorage.getItem(AUTH_USER_CACHE_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function cacheUser(user) {
+  if (typeof window === 'undefined') return
+  try {
+    if (user) {
+      window.sessionStorage.setItem(AUTH_USER_CACHE_KEY, JSON.stringify(user))
+    } else {
+      window.sessionStorage.removeItem(AUTH_USER_CACHE_KEY)
+    }
+  } catch {
+    // Authentication still relies on the server cookie; caching is best-effort.
+  }
+}
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null)
+  const [user, setUser] = useState(readCachedUser)
   const [loading, setLoading] = useState(true)
-  const userRef = useRef(null)
+  const userRef = useRef(user)
   const { restoreFromUser } = useAppContext()
 
   useEffect(() => {
@@ -17,6 +41,7 @@ export function AuthProvider({ children }) {
 
   const handleSessionExpired = useCallback(() => {
     setUser(null)
+    cacheUser(null)
     setLiveUsername(null)
 
     if (typeof window === 'undefined') return
@@ -30,24 +55,39 @@ export function AuthProvider({ children }) {
   const refreshMe = useCallback(async (options = {}) => {
     const { promptExpired = false } = options
     const hadUser = !!userRef.current
-    const { res, data } = await apiFetchJson('/auth/me', {
-      credentials: 'include',
-      skipSessionExpiredHandler: true
-    })
-    if (!res.ok || !data?.authenticated) {
-      setUser(null)
-      setLiveUsername(null)
-      if (promptExpired && hadUser) {
-        handleSessionExpired()
+    try {
+      const { res, data } = await apiFetchJson('/auth/me', {
+        credentials: 'include',
+        skipSessionExpiredHandler: true
+      })
+
+      // Only an authoritative authentication response may clear the client.
+      // A proxy 5xx or a network error is expected while the main JAR restarts.
+      const sessionRejected = res.status === 401 || (res.ok && data?.authenticated === false)
+      if (sessionRejected) {
+        setUser(null)
+        cacheUser(null)
+        setLiveUsername(null)
+        if (promptExpired && hadUser) {
+          handleSessionExpired()
+        }
+        return null
       }
-      return null
+      if (!res.ok || !data?.authenticated) {
+        return userRef.current
+      }
+
+      const u = data.user || null
+      setUser(u)
+      cacheUser(u)
+      setLiveUsername(u?.username ?? null)
+      resetSessionExpiredNotice()
+      restoreFromUser(u)
+      return u
+    } catch {
+      // Preserve the last verified identity while the backend is unavailable.
+      return userRef.current
     }
-    const u = data.user || null
-    setUser(u)
-    setLiveUsername(u?.username ?? null)
-    resetSessionExpiredNotice()
-    restoreFromUser(u)
-    return u
   }, [handleSessionExpired, restoreFromUser])
 
   // Run once on mount to restore session.
@@ -97,6 +137,7 @@ export function AuthProvider({ children }) {
 
     const u = data.user || null
     setUser(u)
+    cacheUser(u)
     setLiveUsername(u?.username ?? null)
     resetSessionExpiredNotice()
     restoreFromUser(u)
@@ -122,6 +163,7 @@ export function AuthProvider({ children }) {
     if (!data?.authenticated) throw new Error(data?.message || 'Login failed')
     const u = data.user || null
     setUser(u)
+    cacheUser(u)
     setLiveUsername(u?.username ?? null)
     resetSessionExpiredNotice()
     restoreFromUser(u)
@@ -140,6 +182,7 @@ export function AuthProvider({ children }) {
     }
     const u = data.user || null
     setUser(u)
+    cacheUser(u)
     setLiveUsername(u?.username ?? null)
     resetSessionExpiredNotice()
     restoreFromUser(u)
@@ -162,6 +205,7 @@ export function AuthProvider({ children }) {
       skipSessionExpiredHandler: true
     })
     setUser(null)
+    cacheUser(null)
     setLiveUsername(null)
     resetSessionExpiredNotice()
   }, [])

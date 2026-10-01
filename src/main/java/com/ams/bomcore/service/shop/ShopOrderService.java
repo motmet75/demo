@@ -283,6 +283,21 @@ public class ShopOrderService {
 
     @Transactional
     public ShopOrderResponseDto createOrder(CreateOrderRequest req, UUID tenantId, UUID companyId, ZoneId orderZone) {
+        return createOrder(req, tenantId, companyId, orderZone, null);
+    }
+
+    @Transactional
+    public ShopOrderResponseDto createOrder(CreateOrderRequest req, UUID tenantId, UUID companyId,
+                                             ZoneId orderZone, UUID bufferRequestId) {
+        if (bufferRequestId != null) {
+            Optional<ShopPendingOrderCache.PendingOrder> existingPending =
+                    pendingOrderCache.get(tenantId, companyId, bufferRequestId);
+            if (existingPending.isPresent()) return pendingDto(existingPending.get());
+            Optional<ShopOrder> existingOrder = shopOrderRepository.findById(bufferRequestId)
+                    .filter(order -> tenantId.equals(order.getTenantId())
+                            && companyId.equals(order.getCompanyId()));
+            if (existingOrder.isPresent()) return dto(existingOrder.get());
+        }
         if (req == null || req.items() == null || req.items().isEmpty()) {
             throw new IllegalArgumentException("Order must contain at least one item");
         }
@@ -295,7 +310,8 @@ public class ShopOrderService {
                 ? auth.getName() : null;
         Instant now = Instant.now();
         ShopPendingOrderCache.PendingOrder pending = new ShopPendingOrderCache.PendingOrder(
-                UUID.randomUUID(), nextPendingOrderCode(), tenantId, companyId, req, staffName,
+                bufferRequestId != null ? bufferRequestId : UUID.randomUUID(),
+                nextPendingOrderCode(), tenantId, companyId, req, staffName,
                 now, now, null, false, null, false, null, null);
         pendingOrderCache.save(pending);
         return pendingDto(pending);

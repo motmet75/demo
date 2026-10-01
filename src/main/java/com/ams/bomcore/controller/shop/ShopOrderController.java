@@ -258,6 +258,7 @@ public class ShopOrderController {
     public ResponseEntity<?> createOrder(@RequestBody ShopOrderService.CreateOrderRequest req,
                                          @RequestParam UUID tenantId, @RequestParam UUID companyId,
                                          @RequestHeader(value = "X-Time-Zone", required = false) String timeZone,
+                                         @RequestHeader(value = "X-Order-Buffer-Id", required = false) UUID bufferRequestId,
                                          HttpServletRequest request) {
         validateScope(tenantId, companyId);
         ZoneId zone = RequestTimeZone.resolve(timeZone);
@@ -268,7 +269,8 @@ public class ShopOrderController {
         rejected = rejectPublicTokenOrder(req != null ? req.token() : null, tenantId, companyId);
         if (rejected != null) return rejected;
         try {
-            ShopOrderResponseDto dto = shopOrderService.createOrder(req, tenantId, companyId, zone);
+            ShopOrderResponseDto dto = shopOrderService.createOrder(
+                    req, tenantId, companyId, zone, bufferRequestId);
             return ResponseEntity.status(HttpStatus.CREATED).body(dto);
         } catch (ShopOrderService.DailyMenuLimitExceededException e) {
             return dailyLimitResponse(e);

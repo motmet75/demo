@@ -153,6 +153,10 @@ export function createOrder(tenantId, companyId, body) {
   })
 }
 
+export function fetchBufferedOrder(queueId) {
+  return apiFetchJsonNoContext(`/order-buffer/${encodeURIComponent(queueId)}`)
+}
+
 export function fetchDeliveryOptions(tenantId, companyId, weightKg) {
   return apiFetchJsonNoContext('/shop/public/delivery-options' + qs({ tenantId, companyId, weightKg }))
 }

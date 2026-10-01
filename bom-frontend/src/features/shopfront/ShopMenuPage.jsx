@@ -48,7 +48,7 @@ import RadioGroup from '@mui/material/RadioGroup'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Snackbar from '@mui/material/Snackbar'
 import EventAvailableIcon from '@mui/icons-material/EventAvailable'
-import { resolveToken, fetchMenu, createOrder, createStaffOrder, fetchPublicMenuOptions,
+import { resolveToken, fetchMenu, createOrder, createStaffOrder, fetchBufferedOrder, fetchPublicMenuOptions,
          fetchActiveTableOrders, startCustomerEdit, cancelCustomerEdit,
          updatePublicOrderItems, fetchPublicOrder, fetchTokenSession,
          cancelPublicOrder, fetchShopConfig, callStaff, fetchPublicStaffCall,
@@ -73,6 +73,33 @@ const STAFF_CALL_STORAGE_PREFIX = 'shop_customer_staff_call_v1'
 const SHOP_MENU_VIEW_PREF = 'shop.menu.viewMode'
 const SHOP_MENU_DISPLAY_SIZE_PREF = 'shop.menu.displaySize'
 const SHOP_MENU_CONTRAST_PREF = 'shop.menu.highContrast'
+
+const wait = milliseconds => new Promise(resolve => window.setTimeout(resolve, milliseconds))
+
+async function waitForBufferedOrder(queueReceipt, targetWindow) {
+  const queueId = queueReceipt?.queueId
+  if (!queueId) throw new Error('Đơn chưa có mã hàng đợi')
+  if (targetWindow) {
+    try {
+      targetWindow.document.title = 'Đơn đã được lưu an toàn'
+      targetWindow.document.body.innerHTML = '<main style="font-family:sans-serif;max-width:520px;margin:60px auto;padding:24px;text-align:center"><h2>Đơn đã được lưu an toàn</h2><p>Máy chủ đang cập nhật. Đơn sẽ tự động gửi lại khi hệ thống hoạt động.</p><p>Vui lòng giữ trang này mở…</p></main>'
+    } catch { /* popup may not be writable */ }
+  }
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    await wait(attempt === 0 ? 800 : 1500)
+    try {
+      const { res, data } = await fetchBufferedOrder(queueId)
+      if (!res.ok) continue
+      if (data?.state === 'COMPLETED' && data?.response) return data.response
+      if (data?.state === 'REJECTED') {
+        throw new Error(data?.response?.message || data?.response?.error || 'Đơn không hợp lệ sau khi máy chủ hoạt động lại')
+      }
+    } catch (error) {
+      if (error?.message && !/fetch|network/i.test(error.message)) throw error
+    }
+  }
+  throw new Error(`Đơn đã được lưu an toàn nhưng máy chủ chưa hoạt động lại. Mã hàng đợi: ${queueId}`)
+}
 
 function readShopMenuPref(key, fallback) {
   try {
@@ -698,7 +725,9 @@ export default function ShopMenuPage({ staffContext = null, onStaffCreated, onSt
     let cancelled = false
     const poll = () => {
       fetchOrderingStatus(ctx.tenantId, ctx.companyId)
-          .then(({ data }) => { if (!cancelled && data) setOrderingStatus(data) })
+          .then(({ res, data }) => {
+            if (!cancelled && res.ok && typeof data?.open === 'boolean') setOrderingStatus(data)
+          })
           .catch(() => {})
     }
     poll()
@@ -1470,8 +1499,14 @@ export default function ShopMenuPage({ staffContext = null, onStaffCreated, onSt
           deliveryFee: null, paymentMethod: form.paymentMethod, notes: notes || null,
           manualOrderNumber: seqParam ? Number(seqParam) : null, token: tokenParam || null, items,
         }
-        const { res, data } = await (staffContext ? createStaffOrder(body) : createOrder(ctx.tenantId, ctx.companyId, body))
-        if (!res.ok) { closeTrackingTab(); setError(dailyLimitErrorText(data, 'checkout.cannotCreateOrder')); setSubmitting(false); return }
+        const createResult = await (staffContext ? createStaffOrder(body) : createOrder(ctx.tenantId, ctx.companyId, body))
+        const { res } = createResult
+        let data = createResult.data
+        if (!staffContext && res.status === 202 && data?.queued) {
+          data = await waitForBufferedOrder(data, trackingTab)
+        } else if (!res.ok) {
+          closeTrackingTab(); setError(dailyLimitErrorText(data, 'checkout.cannotCreateOrder')); setSubmitting(false); return
+        }
         if (staffContext) {
           if (effectiveSelectedTableId) onStaffTableSelected?.(effectiveSelectedTableId)
           closeTrackingTab(); setCart({}); setCheckout(false); onStaffCreated?.(data); return
@@ -1487,7 +1522,7 @@ export default function ShopMenuPage({ staffContext = null, onStaffCreated, onSt
           setSessionOpen(true)
         }
       }
-    } catch { closeTrackingTab(); setError(cText('common.networkError')) } finally { setSubmitting(false) }
+    } catch (submitError) { closeTrackingTab(); setError(submitError?.message || cText('common.networkError')) } finally { setSubmitting(false) }
   }
 
   const handleEditOrder = async (order) => {
