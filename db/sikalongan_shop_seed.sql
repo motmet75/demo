@@ -1,6 +1,8 @@
 -- Sika Long An / Công ty TNHH MTV TM DV Huỳnh Toàn shop seed.
 -- PostgreSQL UTF-8; rerunnable after the BOM/shop/auth migrations.
--- Catalog and image sources checked from https://sikalongan.com/ on 2026-10-02.
+-- Catalog source: https://sikalongan.com/. Product images prefer exact-name
+-- matches from https://sikatiengiang.com/san-pham (checked 2026-10-02), with
+-- Sika Long An retained only where Sika Tiền Giang has no matching product.
 -- The source website publishes every item with price "Liên hệ". Therefore this
 -- seed uses selling_price = 0; replace it with the current quotation before sale.
 -- Login: sikalongan / sikalongan
@@ -113,43 +115,43 @@ WHERE tenant_id=(SELECT id FROM tenant WHERE tenant_code='sikalongan.com')
 -- appears once here so it cannot accidentally be added to an order twice.
 WITH catalog(ordinal, model_code, model_name, category, image_url) AS (
 VALUES
-    (1,  'SIKALA-WP-KANSHIELD-MAX',       'Chống thấm pha màu nội thất Kanshield Max',           'VẬT LIỆU CHỐNG THẤM', 'https://sikalongan.com/wp-content/uploads/2023/09/kanshield-max-1-300x300.jpg'),
-    (2,  'SIKALA-WP-KANSHIELD-PLUS',      'Chống thấm pha màu ngoại thất Kanshield Plus',         'VẬT LIỆU CHỐNG THẤM', 'https://sikalongan.com/wp-content/uploads/2023/09/kanshield-plus-300x300.jpg'),
-    (3,  'SIKALA-WP-SIKATOP-109',         'SikaTop 109 Seal VN',                                  'VẬT LIỆU CHỐNG THẤM', 'https://sikalongan.com/wp-content/uploads/2022/09/02-en_vi-sikatop-109-seal-vn-1x1_hybrisProductImages-300x300.webp'),
-    (4,  'SIKALA-WP-MONOTOP-166',         'Sika MonoTop 166 Migrating',                            'VẬT LIỆU CHỐNG THẤM', 'https://sikalongan.com/wp-content/uploads/2022/09/02-en_vi-sika-monotop-166-migrating-1x1_hybrisProductImages-300x300.webp'),
-    (5,  'SIKALA-WP-SIKALASTIC-632R',     'Sikalastic 632 R',                                     'VẬT LIỆU CHỐNG THẤM', 'https://sikalongan.com/wp-content/uploads/2022/09/02%E2%80%90en_VNSikalastic-632R-1x1_hybrisProductImages-300x300.webp'),
-    (6,  'SIKALA-WP-SIKALASTIC-590',      'Sikalastic 590',                                       'VẬT LIỆU CHỐNG THẤM', 'https://sikalongan.com/wp-content/uploads/2022/09/02%E2%80%90en_VNSikalastic-590-1x1_hybrisProductImages-300x300.webp'),
-    (7,  'SIKALA-WP-SIKALASTIC-110',      'Sikalastic 110',                                       'VẬT LIỆU CHỐNG THẤM', 'https://sikalongan.com/wp-content/uploads/2022/09/02%E2%80%90en_VNSikalastic-110-1x1_hybrisProductImages-300x300.webp'),
-    (8,  'SIKALA-WP-SIKACOAT-PLUS',       'SikaCoat Plus',                                        'VẬT LIỆU CHỐNG THẤM', 'https://sikalongan.com/wp-content/uploads/2022/09/02-en-vn-sika-coat-plus-2000x2000_hybrisProductImages-300x300.webp'),
-    (9,  'SIKALA-WP-WATERBAR-V20',        'Sika Waterbar V20 Eco',                                'VẬT LIỆU CHỐNG THẤM', 'https://sikalongan.com/wp-content/uploads/2022/09/sikawaterbar-2113-300x300.jpg'),
-    (10, 'SIKALA-WP-SEPAROL-25L',         'Separol 25L',                                          'VẬT LIỆU CHỐNG THẤM', 'https://sikalongan.com/wp-content/uploads/2022/09/separol25l-5157-300x300.jpg'),
-    (11, 'SIKALA-WP-SIKADUR-20-AB',       'Sikadur 20 Crack Seal A/B',                            'VẬT LIỆU CHỐNG THẤM', 'https://sikalongan.com/wp-content/uploads/2022/08/sikadur20crackseal-3502-300x300.jpg'),
-    (12, 'SIKALA-WP-SIKAFLEX-CONSTR',     'Sikaflex Construction J/G',                            'VẬT LIỆU CHỐNG THẤM', 'https://sikalongan.com/wp-content/uploads/2022/08/sikaflexconstruction-9789-300x300.jpg'),
-    (13, 'SIKALA-WP-TILEBOND-GP-25',      'Sika Tilebond GP 25kg',                                'VẬT LIỆU CHỐNG THẤM', 'https://sikalongan.com/wp-content/uploads/2022/08/sikatilebondgp-3442-300x300.jpg'),
-    (14, 'SIKALA-WP-SIKALASTIC-590-20',   'Sikalastic 590 20kg',                                  'VẬT LIỆU CHỐNG THẤM', 'https://sikalongan.com/wp-content/uploads/2022/08/sikalastic590-4366-300x300.jpg'),
-    (15, 'SIKALA-WP-SIKADUR-731',         'Sikadur 731',                                          'VẬT LIỆU CHỐNG THẤM', 'https://sikalongan.com/wp-content/uploads/2022/08/sika731-9721-300x300.jpg'),
-    (16, 'SIKALA-WP-SIKATOP-SEAL-107',    'SikaTop Seal 107',                                     'VẬT LIỆU CHỐNG THẤM', 'https://sikalongan.com/wp-content/uploads/2022/08/sikatopseal107-3400-300x300.jpg'),
+    (1,  'SIKALA-WP-KANSHIELD-MAX',       'Chống thấm pha màu nội thất Kanshield Max',           'VẬT LIỆU CHỐNG THẤM', 'https://sikatiengiang.com/wp-content/uploads/2023/09/kanshield-max-300x300.jpg'),
+    (2,  'SIKALA-WP-KANSHIELD-PLUS',      'Chống thấm pha màu ngoại thất Kanshield Plus',         'VẬT LIỆU CHỐNG THẤM', 'https://sikatiengiang.com/wp-content/uploads/2023/09/kanshield-plus-300x300.jpg'),
+    (3,  'SIKALA-WP-SIKATOP-109',         'SikaTop 109 Seal VN',                                  'VẬT LIỆU CHỐNG THẤM', 'https://sikatiengiang.com/wp-content/uploads/2022/09/02-en_vi-sikatop-109-seal-vn-1x1_hybrisProductImages-300x300.webp'),
+    (4,  'SIKALA-WP-MONOTOP-166',         'Sika MonoTop 166 Migrating',                            'VẬT LIỆU CHỐNG THẤM', 'https://sikatiengiang.com/wp-content/uploads/2022/09/02-en_vi-sika-monotop-166-migrating-1x1_hybrisProductImages-300x300.webp'),
+    (5,  'SIKALA-WP-SIKALASTIC-632R',     'Sikalastic 632 R',                                     'VẬT LIỆU CHỐNG THẤM', 'https://sikatiengiang.com/wp-content/uploads/2022/09/02%E2%80%90en_VNSikalastic-632R-1x1_hybrisProductImages-300x300.webp'),
+    (6,  'SIKALA-WP-SIKALASTIC-590',      'Sikalastic 590',                                       'VẬT LIỆU CHỐNG THẤM', 'https://sikatiengiang.com/wp-content/uploads/2022/09/02%E2%80%90en_VNSikalastic-590-1x1_hybrisProductImages-300x300.webp'),
+    (7,  'SIKALA-WP-SIKALASTIC-110',      'Sikalastic 110',                                       'VẬT LIỆU CHỐNG THẤM', 'https://sikatiengiang.com/wp-content/uploads/2022/09/02%E2%80%90en_VNSikalastic-110-1x1_hybrisProductImages-300x300.webp'),
+    (8,  'SIKALA-WP-SIKACOAT-PLUS',       'SikaCoat Plus',                                        'VẬT LIỆU CHỐNG THẤM', 'https://sikatiengiang.com/wp-content/uploads/2022/09/02-en-vn-sika-coat-plus-2000x2000_hybrisProductImages-300x300.webp'),
+    (9,  'SIKALA-WP-WATERBAR-V20',        'Sika Waterbar V20 Eco',                                'VẬT LIỆU CHỐNG THẤM', 'https://sikatiengiang.com/wp-content/uploads/2022/09/sikawaterbar-2113-300x300.jpg'),
+    (10, 'SIKALA-WP-SEPAROL-25L',         'Separol 25L',                                          'VẬT LIỆU CHỐNG THẤM', 'https://sikatiengiang.com/wp-content/uploads/2022/09/separol25l-5157-300x300.jpg'),
+    (11, 'SIKALA-WP-SIKADUR-20-AB',       'Sikadur 20 Crack Seal A/B',                            'VẬT LIỆU CHỐNG THẤM', 'https://sikatiengiang.com/wp-content/uploads/2022/08/sikadur20crackseal-3502-300x300.jpg'),
+    (12, 'SIKALA-WP-SIKAFLEX-CONSTR',     'Sikaflex Construction J/G',                            'VẬT LIỆU CHỐNG THẤM', 'https://sikatiengiang.com/wp-content/uploads/2022/08/sikaflexconstruction-9789-300x300.jpg'),
+    (13, 'SIKALA-WP-TILEBOND-GP-25',      'Sika Tilebond GP 25kg',                                'VẬT LIỆU CHỐNG THẤM', 'https://sikatiengiang.com/wp-content/uploads/2022/08/sikatilebondgp-3442-300x300.jpg'),
+    (14, 'SIKALA-WP-SIKALASTIC-590-20',   'Sikalastic 590 20kg',                                  'VẬT LIỆU CHỐNG THẤM', 'https://sikatiengiang.com/wp-content/uploads/2022/08/sikalastic590-4366-300x300.jpg'),
+    (15, 'SIKALA-WP-SIKADUR-731',         'Sikadur 731',                                          'VẬT LIỆU CHỐNG THẤM', 'https://sikatiengiang.com/wp-content/uploads/2022/08/sika731-9721-300x300.jpg'),
+    (16, 'SIKALA-WP-SIKATOP-SEAL-107',    'SikaTop Seal 107',                                     'VẬT LIỆU CHỐNG THẤM', 'https://sikatiengiang.com/wp-content/uploads/2022/08/sikatopseal107-3400-300x300.jpg'),
 
-    (17, 'SIKALA-PAINT-CURVED',           'Sơn lót chống kiềm cao cấp Kanshield Curved',          'SƠN KANSHIELD', 'https://sikalongan.com/wp-content/uploads/2023/09/kanshield-curved-1-300x300.jpg'),
+    (17, 'SIKALA-PAINT-CURVED',           'Sơn lót chống kiềm cao cấp Kanshield Curved',          'SƠN KANSHIELD', 'https://sikatiengiang.com/wp-content/uploads/2023/09/kanshield-curved-300x300.jpg'),
     (18, 'SIKALA-PAINT-PUTTY-INDOOR',     'Bột trét tường trong nhà Kanshield',                    'SƠN KANSHIELD', 'https://sikalongan.com/wp-content/uploads/2023/08/bot-tret-tuong-300x300.jpg'),
     (19, 'SIKALA-PAINT-PUTTY-OUTDOOR',    'Bột trét cao cấp ngoại thất Kanshield',                 'SƠN KANSHIELD', 'https://sikalongan.com/wp-content/uploads/2023/08/bot-tret-cao-cap-300x300.jpg'),
-    (20, 'SIKALA-PAINT-KS9999',           'Sơn chống thấm Kanshield KS9999',                       'SƠN KANSHIELD', 'https://sikalongan.com/wp-content/uploads/2023/08/ks9999-1-300x300.png'),
-    (21, 'SIKALA-PAINT-KS3333',           'Bột trét cao cấp Kanshield KS3333',                     'SƠN KANSHIELD', 'https://sikalongan.com/wp-content/uploads/2023/08/ks3333-300x300.png'),
+    (20, 'SIKALA-PAINT-KS9999',           'Sơn chống thấm Kanshield KS9999',                       'SƠN KANSHIELD', 'https://sikatiengiang.com/wp-content/uploads/2022/09/sonchongthamcaocapkanshieldks9999-1350-300x300.jpg'),
+    (21, 'SIKALA-PAINT-KS3333',           'Bột trét cao cấp Kanshield KS3333',                     'SƠN KANSHIELD', 'https://sikatiengiang.com/wp-content/uploads/2022/09/bottretcaocapkanshieldks3333-8602-300x300.jpg'),
     (22, 'SIKALA-PAINT-KS2222',           'Sơn nước ngoại thất cao cấp Kanshield KS2222',          'SƠN KANSHIELD', 'https://sikalongan.com/wp-content/uploads/2023/08/kanshiel-2222-300x300.jpg'),
     (23, 'SIKALA-PAINT-KS1111',           'Kanshield KS1111',                                     'SƠN KANSHIELD', 'https://sikalongan.com/wp-content/uploads/2023/08/kanshiel-111-300x300.jpg'),
-    (24, 'SIKALA-PAINT-KS6666',           'Sơn nội thất cao cấp Kanshield KS6666',                 'SƠN KANSHIELD', 'https://sikalongan.com/wp-content/uploads/2022/09/sonnoithatcaocapkanshieldks6666-6825-300x300.jpg'),
-    (25, 'SIKALA-PAINT-KS8888-5L',        'Sơn bóng cao cấp Kanshield KS8888 5L',                  'SƠN KANSHIELD', 'https://sikalongan.com/wp-content/uploads/2022/09/sonbongcaocapkanshieldks8888mau1-3183-300x300.jpg'),
+    (24, 'SIKALA-PAINT-KS6666',           'Sơn nội thất cao cấp Kanshield KS6666',                 'SƠN KANSHIELD', 'https://sikatiengiang.com/wp-content/uploads/2022/09/sonnoithatcaocapkanshieldks6666-6825-300x300.jpg'),
+    (25, 'SIKALA-PAINT-KS8888-5L',        'Sơn bóng cao cấp Kanshield KS8888 5L',                  'SƠN KANSHIELD', 'https://sikatiengiang.com/wp-content/uploads/2022/09/sonbongcaocapkanshieldks8888mau1-3183-300x300.jpg'),
 
-    (26, 'SIKALA-GROUT-212-11',           'SikaGrout 212-11',                                     'VỮA RÓT – ĐỊNH VỊ', 'https://sikalongan.com/wp-content/uploads/2022/09/SIKAGROUT-212-11-300x300.jpg'),
-    (27, 'SIKALA-GROUT-SIKADUR-42MP',     'Sikadur 42 MP',                                        'VỮA RÓT – ĐỊNH VỊ', 'https://sikalongan.com/wp-content/uploads/2022/09/sikadur42MPchat-ketdinhgocnhuaepoxytusanphang-300x300.jpg'),
-    (28, 'SIKALA-GROUT-214-11-HS',        'SikaGrout 214-11 HS',                                  'VỮA RÓT – ĐỊNH VỊ', 'https://sikalongan.com/wp-content/uploads/2022/09/SikaGrout-214-11-Hs-vua-khong-co-ngot-80Mpa-300x300.jpeg'),
-    (29, 'SIKALA-GROUT-214-11',           'SikaGrout 214-11',                                     'VỮA RÓT – ĐỊNH VỊ', 'https://sikalongan.com/wp-content/uploads/2022/09/02%E2%80%90en_VN-SikaGrout-214-11-1x1-Copy_hybrisProductImages-300x300.webp'),
-    (30, 'SIKALA-GROUT-GP',               'SikaGrout GP',                                         'VỮA RÓT – ĐỊNH VỊ', 'https://sikalongan.com/wp-content/uploads/2022/09/02%E2%80%90en_VN-SikaGrout%C2%AE-GP-1x1_hybrisProductImages-300x300.webp'),
+    (26, 'SIKALA-GROUT-212-11',           'SikaGrout 212-11',                                     'VỮA RÓT – ĐỊNH VỊ', 'https://sikatiengiang.com/wp-content/uploads/2022/09/SIKAGROUT-212-11-300x300.jpg'),
+    (27, 'SIKALA-GROUT-SIKADUR-42MP',     'Sikadur 42 MP',                                        'VỮA RÓT – ĐỊNH VỊ', 'https://sikatiengiang.com/wp-content/uploads/2022/09/sikadur42MPchat-ketdinhgocnhuaepoxytusanphang-300x300.jpg'),
+    (28, 'SIKALA-GROUT-214-11-HS',        'SikaGrout 214-11 HS',                                  'VỮA RÓT – ĐỊNH VỊ', 'https://sikatiengiang.com/wp-content/uploads/2022/09/SikaGrout-214-11-Hs-vua-khong-co-ngot-80Mpa-300x300.jpeg'),
+    (29, 'SIKALA-GROUT-214-11',           'SikaGrout 214-11',                                     'VỮA RÓT – ĐỊNH VỊ', 'https://sikatiengiang.com/wp-content/uploads/2022/09/02%E2%80%90en_VN-SikaGrout-214-11-1x1-Copy_hybrisProductImages-300x300.webp'),
+    (30, 'SIKALA-GROUT-GP',               'SikaGrout GP',                                         'VỮA RÓT – ĐỊNH VỊ', 'https://sikatiengiang.com/wp-content/uploads/2022/09/02%E2%80%90en_VN-SikaGrout%C2%AE-GP-1x1_hybrisProductImages-300x300.webp'),
 
-    (31, 'SIKALA-BOND-SIKADUR-732',       'Sikadur 732',                                          'CHẤT KẾT DÍNH CƯỜNG ĐỘ CAO', 'https://sikalongan.com/wp-content/uploads/2022/09/sika7-300x300.jpg'),
-    (32, 'SIKALA-BOND-SIKADUR-752',       'Sikadur 752',                                          'CHẤT KẾT DÍNH CƯỜNG ĐỘ CAO', 'https://sikalongan.com/wp-content/uploads/2022/09/sika6-300x300.jpg'),
-    (33, 'SIKALA-BOND-ANCHORFIX-3001',    'Sika AnchorFix 3001',                                  'CHẤT KẾT DÍNH CƯỜNG ĐỘ CAO', 'https://sikalongan.com/wp-content/uploads/2022/09/sika2-300x300.jpg'),
-    (34, 'SIKALA-BOND-ANCHORFIX-S',       'Sika AnchorFix S',                                     'CHẤT KẾT DÍNH CƯỜNG ĐỘ CAO', 'https://sikalongan.com/wp-content/uploads/2022/09/sika1-300x300.jpg')
+    (31, 'SIKALA-BOND-SIKADUR-732',       'Sikadur 732',                                          'CHẤT KẾT DÍNH CƯỜNG ĐỘ CAO', 'https://sikatiengiang.com/wp-content/uploads/2022/09/sika7-300x300.jpg'),
+    (32, 'SIKALA-BOND-SIKADUR-752',       'Sikadur 752',                                          'CHẤT KẾT DÍNH CƯỜNG ĐỘ CAO', 'https://sikatiengiang.com/wp-content/uploads/2022/09/sika6-300x300.jpg'),
+    (33, 'SIKALA-BOND-ANCHORFIX-3001',    'Sika AnchorFix 3001',                                  'CHẤT KẾT DÍNH CƯỜNG ĐỘ CAO', 'https://sikatiengiang.com/wp-content/uploads/2022/09/sika2-300x300.jpg'),
+    (34, 'SIKALA-BOND-ANCHORFIX-S',       'Sika AnchorFix S',                                     'CHẤT KẾT DÍNH CƯỜNG ĐỘ CAO', 'https://sikatiengiang.com/wp-content/uploads/2022/09/sika1-300x300.jpg')
 )
 INSERT INTO model (
     id, model_code, model_name, is_active, created_at, tenant_id, company_id,
