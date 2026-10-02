@@ -185,6 +185,8 @@ public class InventoryController {
             @RequestParam(value = "forecastDays", required = false) Integer forecastDays,
             @RequestParam(value = "forecastMode", required = false) String forecastMode,
             @RequestParam(value = "expirationDays", required = false) Integer expirationDays,
+            @RequestParam(value = "expirationFrom", required = false) LocalDate expirationFrom,
+            @RequestParam(value = "expirationTo", required = false) LocalDate expirationTo,
             @RequestHeader(value = "X-Tenant-Id", required = false) String headerTenantId,
             @RequestHeader(value = "X-Company-Id", required = false) String headerCompanyId) {
         tenantId = resolveTenant(tenantId, headerTenantId);
@@ -195,7 +197,8 @@ public class InventoryController {
         }
 
         return inventoryAlertReportService.buildReport(
-                tenantId, companyId, targetDate, lookbackDays, forecastDays, forecastMode, expirationDays);
+                tenantId, companyId, targetDate, lookbackDays, forecastDays, forecastMode,
+                expirationDays, expirationFrom, expirationTo);
     }
 
     // New view endpoint for grid display — returns DTO projection to avoid N+1 and lazy issues

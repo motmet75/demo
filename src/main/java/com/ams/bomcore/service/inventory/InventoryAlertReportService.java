@@ -56,6 +56,15 @@ public class InventoryAlertReportService {
     public InventoryAlertReport buildReport(UUID tenantId, UUID companyId, LocalDate targetDate,
                                             Integer lookbackDays, Integer forecastDays,
                                             String forecastMode, Integer expirationDays) {
+        return buildReport(tenantId, companyId, targetDate, lookbackDays, forecastDays,
+                forecastMode, expirationDays, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public InventoryAlertReport buildReport(UUID tenantId, UUID companyId, LocalDate targetDate,
+                                            Integer lookbackDays, Integer forecastDays,
+                                            String forecastMode, Integer expirationDays,
+                                            LocalDate expirationFrom, LocalDate expirationTo) {
         LocalDate effectiveTargetDate = targetDate != null ? targetDate : LocalDate.now(REPORT_ZONE).plusDays(1);
         int effectiveLookbackDays = clamp(lookbackDays == null ? 28 : lookbackDays, 1, 365);
         int effectiveForecastDays = clamp(forecastDays == null ? 1 : forecastDays, 1, 30);
@@ -74,7 +83,10 @@ public class InventoryAlertReportService {
 
         List<ExpirationRow> expirationRows = new ArrayList<>();
         LocalDate today = LocalDate.now(REPORT_ZONE);
-        LocalDate expirationCutoff = today.plusDays(effectiveExpirationDays);
+        LocalDate effectiveExpirationFrom = expirationFrom;
+        LocalDate effectiveExpirationTo = expirationTo != null
+                ? expirationTo
+                : today.plusDays(effectiveExpirationDays);
         for (InventoryEntity inventory : inventoryRepository.findAllByTenantIdAndCompanyId(tenantId, companyId)) {
             if (inventory.getMaterial() == null || !Boolean.TRUE.equals(inventory.getVisible())) {
                 continue;
@@ -92,7 +104,11 @@ public class InventoryAlertReportService {
 
             if (inventory.getExpirationDateTime() != null && onHand.compareTo(BigDecimal.ZERO) > 0) {
                 LocalDate expirationDate = inventory.getExpirationDateTime().atZone(REPORT_ZONE).toLocalDate();
-                if (!expirationDate.isAfter(expirationCutoff)) {
+                boolean insideStart = effectiveExpirationFrom == null
+                        || !expirationDate.isBefore(effectiveExpirationFrom);
+                boolean insideEnd = effectiveExpirationTo == null
+                        || !expirationDate.isAfter(effectiveExpirationTo);
+                if (insideStart && insideEnd) {
                     long daysUntilExpiration = ChronoUnit.DAYS.between(today, expirationDate);
                     expirationRows.add(new ExpirationRow(
                             inventory.getId(),
@@ -214,6 +230,8 @@ public class InventoryAlertReportService {
                 mode.name(),
                 mode.label(),
                 effectiveExpirationDays,
+                effectiveExpirationFrom,
+                effectiveExpirationTo,
                 summary,
                 materialRows,
                 expirationRows
@@ -422,6 +440,8 @@ public class InventoryAlertReportService {
                                        String forecastMode,
                                        String forecastModeLabel,
                                        int expirationDays,
+                                       LocalDate expirationFrom,
+                                       LocalDate expirationTo,
                                        Summary summary,
                                        List<MaterialAlertRow> materialRows,
                                        List<ExpirationRow> expirationRows) {

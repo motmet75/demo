@@ -31,6 +31,15 @@ const STATUS_OPTIONS = [
   { value: 'OK', label: 'OK' }
 ]
 
+const EXPIRATION_PRESETS = [
+  { value: 'ALL_DUE_30', label: 'All overdue + next 30 days' },
+  { value: 'PAST_12_DAYS', label: 'Expired in past 12 days' },
+  { value: 'EXPIRED_THIS_MONTH', label: 'Expired this month' },
+  { value: 'THIS_WEEK', label: 'This week' },
+  { value: 'NEXT_30_DAYS', label: 'Next 30 days' },
+  { value: 'CUSTOM', label: 'Custom date range' }
+]
+
 function dateInputValue(date = new Date()) {
   const pad = (n) => String(n).padStart(2, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
@@ -40,6 +49,38 @@ function defaultTargetDate() {
   const date = new Date()
   date.setDate(date.getDate() + 1)
   return dateInputValue(date)
+}
+
+function localDate(value = dateInputValue()) {
+  const [year, month, day] = String(value).split('-').map(Number)
+  return new Date(year, month - 1, day, 12, 0, 0, 0)
+}
+
+function addDateDays(value, days) {
+  const date = localDate(value)
+  date.setDate(date.getDate() + days)
+  return dateInputValue(date)
+}
+
+function expirationRangeForPreset(preset, currentFrom = '', currentTo = '') {
+  const today = dateInputValue()
+  if (preset === 'CUSTOM') return { from: currentFrom, to: currentTo }
+  if (preset === 'ALL_DUE_30') return { from: '', to: addDateDays(today, 30) }
+  if (preset === 'PAST_12_DAYS') return { from: addDateDays(today, -12), to: addDateDays(today, -1) }
+  if (preset === 'EXPIRED_THIS_MONTH') {
+    const date = localDate(today)
+    return {
+      from: dateInputValue(new Date(date.getFullYear(), date.getMonth(), 1, 12)),
+      to: addDateDays(today, -1)
+    }
+  }
+  if (preset === 'THIS_WEEK') {
+    const date = localDate(today)
+    const day = date.getDay()
+    const mondayOffset = day === 0 ? -6 : 1 - day
+    return { from: addDateDays(today, mondayOffset), to: addDateDays(today, mondayOffset + 6) }
+  }
+  return { from: today, to: addDateDays(today, 30) }
 }
 
 function asNumber(value) {
@@ -83,7 +124,10 @@ export default function InventoryAlertReport() {
   const [lookbackDays, setLookbackDays] = useState(28)
   const [forecastDays, setForecastDays] = useState(1)
   const [forecastMode, setForecastMode] = useState('DAILY_AVG')
-  const [expirationDays, setExpirationDays] = useState(30)
+  const [expirationPreset, setExpirationPreset] = useState('ALL_DUE_30')
+  const initialExpirationRange = expirationRangeForPreset('ALL_DUE_30')
+  const [expirationFrom, setExpirationFrom] = useState(initialExpirationRange.from)
+  const [expirationTo, setExpirationTo] = useState(initialExpirationRange.to)
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [refreshSeconds, setRefreshSeconds] = useState(60)
   const [search, setSearch] = useState('')
@@ -101,7 +145,9 @@ export default function InventoryAlertReport() {
         lookbackDays,
         forecastDays,
         forecastMode,
-        expirationDays
+        expirationDays: 30,
+        expirationFrom,
+        expirationTo
       })
       setReport(data || { materialRows: [], expirationRows: [], summary: {} })
     } catch (err) {
@@ -110,7 +156,7 @@ export default function InventoryAlertReport() {
     } finally {
       setLoading(false)
     }
-  }, [expirationDays, forecastDays, forecastMode, lookbackDays, targetDate])
+  }, [expirationFrom, expirationTo, forecastDays, forecastMode, lookbackDays, targetDate])
 
   useEffect(() => { load() }, [load])
 
@@ -196,6 +242,14 @@ export default function InventoryAlertReport() {
     XLSX.writeFile(workbook, `inventory_alert_report_${targetDate || dateInputValue()}.xlsx`)
   }
 
+  const handleExpirationPreset = (event) => {
+    const preset = event.target.value
+    const range = expirationRangeForPreset(preset, expirationFrom, expirationTo)
+    setExpirationPreset(preset)
+    setExpirationFrom(range.from)
+    setExpirationTo(range.to)
+  }
+
   const materialColumns = [
     {
       field: 'status',
@@ -263,7 +317,7 @@ export default function InventoryAlertReport() {
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
             <Chip label={`${summary.lowStockCount || 0} low`} color={summary.lowStockCount ? 'warning' : 'default'} />
             <Chip label={`${summary.forecastShortageCount || 0} forecast short`} color={summary.forecastShortageCount ? 'error' : 'default'} />
-            <Chip label={`${summary.expiringBatchCount || 0} expiring`} color={summary.expiringBatchCount ? 'warning' : 'default'} />
+            <Chip label={`${summary.expiringBatchCount || 0} expiry rows`} color={summary.expiringBatchCount ? 'warning' : 'default'} />
             <Chip label={`Net ${numFmt(totals.netAvailableQty)}`} />
             <Chip label={`Need ${numFmt(totals.forecastQty)}`} />
             <Button startIcon={<RefreshIcon />} variant="outlined" size="small" onClick={load} disabled={loading}>Refresh</Button>
@@ -280,11 +334,15 @@ export default function InventoryAlertReport() {
           <TextField label="Forecast Mode" select size="small" value={forecastMode} onChange={e => setForecastMode(e.target.value)} sx={{ minWidth: 170 }}>
             {FORECAST_MODES.map(option => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
           </TextField>
-          <TextField label="Expiration Days" type="number" size="small" value={expirationDays} onChange={e => setExpirationDays(e.target.value)} inputProps={{ min: 0, max: 3650 }} sx={{ width: 150 }} />
+          <TextField label="Expiry Range" select size="small" value={expirationPreset} onChange={handleExpirationPreset} sx={{ minWidth: 220 }}>
+            {EXPIRATION_PRESETS.map(option => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
+          </TextField>
+          <TextField label="Expiry From" type="date" size="small" value={expirationFrom} onChange={e => setExpirationFrom(e.target.value)} InputLabelProps={{ shrink: true }} disabled={expirationPreset !== 'CUSTOM'} />
+          <TextField label="Expiry To" type="date" size="small" value={expirationTo} onChange={e => setExpirationTo(e.target.value)} InputLabelProps={{ shrink: true }} disabled={expirationPreset !== 'CUSTOM'} />
           <TextField label="Status" select size="small" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} sx={{ minWidth: 150 }}>
             {STATUS_OPTIONS.map(option => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
           </TextField>
-          <TextField label="Search" size="small" value={search} onChange={e => setSearch(e.target.value)} sx={{ minWidth: { xs: '100%', sm: 240 } }} />
+          <TextField label="Product / batch search" size="small" value={search} onChange={e => setSearch(e.target.value)} sx={{ minWidth: { xs: '100%', sm: 240 } }} />
           <FormControlLabel
             control={<Switch checked={autoRefresh} onChange={e => setAutoRefresh(e.target.checked)} />}
             label="Auto Refresh"
@@ -315,7 +373,9 @@ export default function InventoryAlertReport() {
       </Box>
 
       <Paper variant="outlined" sx={{ px: 1.5, py: 0.75, borderRadius: 1 }}>
-        <Typography variant="subtitle2" fontWeight={800}>Expiration Report</Typography>
+        <Typography variant="subtitle2" fontWeight={800}>
+          Expiration Report · {expirationRows.length} rows · {expirationFrom || 'all past'} → {expirationTo || 'no end date'}
+        </Typography>
       </Paper>
       <Box sx={{ flex: 0.85, minHeight: 0 }}>
         <DataGrid

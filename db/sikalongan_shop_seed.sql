@@ -3,8 +3,10 @@
 -- Catalog source: https://sikalongan.com/. Product images prefer exact-name
 -- matches from https://sikatiengiang.com/san-pham (checked 2026-10-02), with
 -- Sika Long An retained only where Sika Tiền Giang has no matching product.
--- The source website publishes every item with price "Liên hệ". Therefore this
--- seed uses selling_price = 0; replace it with the current quotation before sale.
+-- The source websites publish every item with price "Liên hệ". For testing,
+-- deterministic sample prices are generated in these ranges:
+--   Sika: 500,000-2,000,000 VND; Kanshield: 3,000,000-6,000,000 VND.
+-- Replace the sample prices with current quotations before production use.
 -- Login: sikalongan / sikalongan
 -- Public ordering URL after deployment:
 --   https://YOUR_HOST/bom-inventory/shop/menu?t=sikalongan-menu-2026
@@ -162,7 +164,13 @@ SELECT
     model_code, model_name, TRUE, NOW(),
     (SELECT id FROM tenant WHERE tenant_code='sikalongan.com'),
     md5('sikalongan:company')::uuid,
-    0, category, image_url
+    CASE
+        WHEN category='SƠN KANSHIELD'
+          OR model_code IN ('SIKALA-WP-KANSHIELD-MAX', 'SIKALA-WP-KANSHIELD-PLUS')
+            THEN 3000000 + MOD(ordinal * 173, 301) * 10000
+        ELSE 500000 + MOD(ordinal * 137, 151) * 10000
+    END,
+    category, image_url
 FROM catalog
 ON CONFLICT (id) DO UPDATE SET
     model_code=EXCLUDED.model_code,
@@ -202,7 +210,10 @@ SELECT
     m.tenant_id, m.company_id,
     'MAT-' || m.model_code,
     m.model_name,
-    'Sản phẩm', 'FINISHED_GOOD', m.image_url, m.selling_price,
+    'Sản phẩm', 'FINISHED_GOOD', m.image_url,
+    ROUND(
+        m.selling_price * (65 + MOD(LENGTH(m.model_code), 16)) / 100 / 10000
+    ) * 10000,
     TRUE, 10,
     'Hàng bán lẻ liên kết trực tiếp với menu ' || m.model_code,
     TRUE, NOW(), FALSE
@@ -278,12 +289,53 @@ ON CONFLICT (id) DO UPDATE SET
     quantity=1,
     level=0;
 
--- Sample opening stock: 100 units of every listed product. ON CONFLICT does not
--- reset quantities, so rerunning the seed cannot restore stock already sold.
+-- Sample opening stock: 100 units of every listed product. Products are split
+-- approximately one-third per expiry test range:
+--   1) expired during the previous 1-12 days;
+--   2) expires between today and the end of this ISO week;
+--   3) expires 8-30 days from today.
+-- This supports expired-this-month, this-week, next-30-days, custom date-range,
+-- and days-to-expiry reports. Reruns update price/expiry metadata but preserve
+-- the real quantities already sold or adjusted.
+WITH seeded_inventory AS (
+    SELECT
+        m.*,
+        ROW_NUMBER() OVER (ORDER BY m.model_code)::int AS seed_sequence,
+        ROUND(
+            m.selling_price * (65 + MOD(LENGTH(m.model_code), 16)) / 100 / 10000
+        ) * 10000 AS sample_input_price
+    FROM model m
+    WHERE m.tenant_id=(SELECT id FROM tenant WHERE tenant_code='sikalongan.com')
+      AND m.company_id=md5('sikalongan:company')::uuid
+      AND m.model_code LIKE 'SIKALA-%'
+), dated_inventory AS (
+    SELECT
+        seeded_inventory.*,
+        CASE
+            WHEN MOD(seed_sequence, 3)=0 THEN
+                CURRENT_DATE - (MOD(seed_sequence / 3 - 1, 12) + 1)
+            WHEN MOD(seed_sequence, 3)=1 THEN
+                CURRENT_DATE + MOD(
+                    (seed_sequence - 1) / 3,
+                    GREATEST(1, 8 - EXTRACT(ISODOW FROM CURRENT_DATE)::int)
+                )
+            ELSE
+                CURRENT_DATE + 8 + MOD(((seed_sequence - 2) / 3) * 7, 23)
+        END AS sample_expiry_date,
+        CASE
+            WHEN MOD(seed_sequence, 3)=0 THEN 'SEED-EXPIRED-PAST-12-DAYS'
+            WHEN MOD(seed_sequence, 3)=1 THEN 'SEED-EXPIRES-THIS-WEEK'
+            ELSE 'SEED-EXPIRES-NEXT-30-DAYS'
+        END AS sample_batch_no
+    FROM seeded_inventory
+)
 INSERT INTO inventory (
     id, tenant_id, company_id, material_id, warehouse_id,
     material_code, warehouse_code, batch_no, user_name,
-    unit, unit_price, currency,
+    unit, unit_price,
+    warehouse_import_unit, warehouse_import_quantity,
+    bom_unit_per_warehouse_unit, warehouse_import_unit_price,
+    currency, purchase_date_time, production_date_time, expiration_date_time,
     quantity_on_hand, quantity_total, quantity_reserved, quantity_locked,
     visible, approved, locked, created_at
 )
@@ -292,14 +344,30 @@ SELECT
     m.tenant_id, m.company_id,
     md5('sikalongan:material:' || m.model_code)::uuid,
     md5('sikalongan:warehouse:main')::uuid,
-    'MAT-' || m.model_code, 'SIKALA-MAIN', 'SEED-OPENING-2026',
-    'sikalongan-seed', 'Sản phẩm', 0, 'VND',
+    'MAT-' || m.model_code, 'SIKALA-MAIN', m.sample_batch_no,
+    'sikalongan-seed', 'Sản phẩm', m.sample_input_price,
+    'Sản phẩm', 100, 1, m.sample_input_price,
+    'VND', NOW() - INTERVAL '30 days',
+    m.sample_expiry_date::timestamp - INTERVAL '180 days',
+    m.sample_expiry_date::timestamp + INTERVAL '17 hours',
     100, 100, 0, 0, TRUE, TRUE, FALSE, NOW()
-FROM model m
-WHERE m.tenant_id=(SELECT id FROM tenant WHERE tenant_code='sikalongan.com')
-  AND m.company_id=md5('sikalongan:company')::uuid
-  AND m.model_code LIKE 'SIKALA-%'
-ON CONFLICT (id) DO NOTHING;
+FROM dated_inventory m
+ON CONFLICT (id) DO UPDATE SET
+    material_code=EXCLUDED.material_code,
+    warehouse_code=EXCLUDED.warehouse_code,
+    batch_no=EXCLUDED.batch_no,
+    unit=EXCLUDED.unit,
+    unit_price=EXCLUDED.unit_price,
+    warehouse_import_unit=EXCLUDED.warehouse_import_unit,
+    bom_unit_per_warehouse_unit=EXCLUDED.bom_unit_per_warehouse_unit,
+    warehouse_import_unit_price=EXCLUDED.warehouse_import_unit_price,
+    currency=EXCLUDED.currency,
+    purchase_date_time=EXCLUDED.purchase_date_time,
+    production_date_time=EXCLUDED.production_date_time,
+    expiration_date_time=EXCLUDED.expiration_date_time,
+    visible=TRUE,
+    approved=TRUE,
+    locked=FALSE;
 
 -- A sample monthly quota mirrors the opening quantity. Consumed amounts survive
 -- reruns; only an allocation lower than 100 is raised back to the sample floor.
@@ -397,6 +465,9 @@ COMMIT;
 -- SELECT m.model_code, mat.unit, mb.qty_per_unit, mb.warehouse_unit FROM model m JOIN model_bom mb ON mb.model_id=m.id JOIN material mat ON mat.id=mb.material_id WHERE m.model_code LIKE 'SIKALA-%';
 -- SELECT COUNT(*) AS shop_bom_leaf_rows FROM bom_item bi JOIN bom b ON b.id=bi.bom_id JOIN model m ON m.id=b.model_id WHERE m.model_code LIKE 'SIKALA-%';
 -- SELECT COUNT(*) AS sample_inventory_rows, SUM(quantity_on_hand) AS sample_quantity FROM inventory WHERE warehouse_id=md5('sikalongan:warehouse:main')::uuid;
+-- SELECT m.model_code, m.selling_price, mat.price AS input_price FROM model m JOIN material mat ON mat.material_code='MAT-' || m.model_code AND mat.tenant_id=m.tenant_id AND mat.company_id=m.company_id WHERE m.model_code LIKE 'SIKALA-%' ORDER BY m.model_code;
+-- SELECT material_code, batch_no, expiration_date_time::date, expiration_date_time::date-CURRENT_DATE AS days_to_expiry FROM inventory WHERE warehouse_id=md5('sikalongan:warehouse:main')::uuid ORDER BY expiration_date_time;
+-- SELECT COUNT(*) FILTER (WHERE expiration_date_time::date<CURRENT_DATE) AS expired, COUNT(*) FILTER (WHERE expiration_date_time::date>=date_trunc('month',CURRENT_DATE)::date AND expiration_date_time::date<CURRENT_DATE) AS expired_this_month, COUNT(*) FILTER (WHERE expiration_date_time::date BETWEEN CURRENT_DATE AND CURRENT_DATE+(7-EXTRACT(ISODOW FROM CURRENT_DATE)::int)) AS expires_this_week, COUNT(*) FILTER (WHERE expiration_date_time::date BETWEEN CURRENT_DATE AND CURRENT_DATE+30) AS expires_next_30_days FROM inventory WHERE warehouse_id=md5('sikalongan:warehouse:main')::uuid;
 -- SELECT day_of_week, start_time, end_time FROM shop_shift WHERE company_id=md5('sikalongan:company')::uuid ORDER BY day_of_week;
 -- SELECT token, enabled FROM shop_access_token WHERE token='sikalongan-menu-2026';
 -- SELECT username, isenabled, assignedtenantid, assignedcompanyid FROM usertb WHERE username='sikalongan';
