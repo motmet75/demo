@@ -11,9 +11,17 @@ frontend_dir=${DEMO_FRONTEND_DIR:-$demo_home/bom-frontend}
 frontend_control_script="$demo_home/bin/bom-frontend-live.sh"
 frontend_dist_dir="$frontend_dir/dist"
 frontend_live_dir=/var/www/html/bom-inventory
+portal_home=${PORTAL_HOME:-/opt/tuonghoa/portal}
+portal_control_script=${PORTAL_CONTROL_SCRIPT:-$portal_home/bin/portal-live.sh}
+portal_shutdown_timeout=${PORTAL_SHUTDOWN_TIMEOUT:-30}
+portal_was_running=false
 
 if [[ ! $shutdown_timeout =~ ^[0-9]+$ ]] || (( shutdown_timeout < 1 )); then
     echo "DEMO_SHUTDOWN_TIMEOUT must be a positive integer." >&2
+    exit 2
+fi
+if [[ ! $portal_shutdown_timeout =~ ^[0-9]+$ ]] || (( portal_shutdown_timeout < 1 )); then
+    echo "PORTAL_SHUTDOWN_TIMEOUT must be a positive integer." >&2
     exit 2
 fi
 if [[ ! -x $control_script ]]; then
@@ -31,6 +39,46 @@ fi
 if [[ ! -x $frontend_control_script ]]; then
     echo "Frontend control script is missing or not executable: $frontend_control_script" >&2
     exit 1
+fi
+if [[ ! -x $portal_control_script ]]; then
+    echo "Portal control script is missing or not executable: $portal_control_script" >&2
+    exit 1
+fi
+
+restore_portal() {
+    local result=$?
+    trap - EXIT INT TERM
+    if [[ $portal_was_running == true ]]; then
+        echo "Restarting portal after demo build..."
+        if ! "$portal_control_script" start; then
+            echo "Failed to restart the portal." >&2
+            (( result == 0 )) && result=1
+        elif ! "$portal_control_script" status; then
+            echo "Portal was started but is not running." >&2
+            (( result == 0 )) && result=1
+        fi
+    fi
+    exit "$result"
+}
+
+trap restore_portal EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+if "$portal_control_script" status >/dev/null 2>&1; then
+    portal_was_running=true
+    echo "Temporarily stopping portal for the demo build..."
+    "$portal_control_script" stop
+    deadline=$((SECONDS + portal_shutdown_timeout))
+    while "$portal_control_script" status >/dev/null 2>&1; do
+        if (( SECONDS >= deadline )); then
+            echo "Portal did not stop within ${portal_shutdown_timeout}s; build cancelled." >&2
+            exit 1
+        fi
+        sleep 1
+    done
+else
+    echo "Portal is already stopped; it will remain stopped."
 fi
 
 declare -a demo_pids=()
