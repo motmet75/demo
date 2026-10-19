@@ -3,7 +3,9 @@ package com.ams.bomcore.repository;
 import com.ams.bomcore.domain.shop.ShopOrder;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.repository.query.Param;
+import jakarta.persistence.LockModeType;
 
 import java.time.Instant;
 import java.util.List;
@@ -11,6 +13,11 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface ShopOrderRepository extends JpaRepository<ShopOrder, UUID> {
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT o FROM ShopOrder o WHERE o.id IN :ids AND o.tenantId = :tenantId AND o.companyId = :companyId")
+    List<ShopOrder> lockAllForInvoice(@Param("ids") List<UUID> ids,
+                                      @Param("tenantId") UUID tenantId,
+                                      @Param("companyId") UUID companyId);
     @org.springframework.data.jpa.repository.Query("SELECT o FROM ShopOrder o WHERE o.tenantId=:tenantId AND o.companyId=:companyId AND ((o.createdAt >= :from AND o.createdAt < :to) OR (o.paidAt >= :from AND o.paidAt < :to))")
     java.util.List<com.ams.bomcore.domain.shop.ShopOrder> findShiftOrders(@org.springframework.data.repository.query.Param("tenantId") java.util.UUID tenantId, @org.springframework.data.repository.query.Param("companyId") java.util.UUID companyId, @org.springframework.data.repository.query.Param("from") java.time.Instant from, @org.springframework.data.repository.query.Param("to") java.time.Instant to);
 

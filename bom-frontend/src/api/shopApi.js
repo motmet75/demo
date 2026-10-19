@@ -1,4 +1,4 @@
-import { apiFetchJson, apiFetchJsonNoContext } from './client'
+import { apiFetch, apiFetchJson, apiFetchJsonNoContext } from './client'
 
 function qs(params) {
   const search = new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''))).toString()
@@ -262,6 +262,60 @@ export async function fetchShopOrders(status, range = {}) {
     from: range?.from || null,
     to: range?.to || null,
   })))
+}
+
+// ── VIN-HOADON fiscal invoices ─────────────────────────────────────
+export function fetchVinHoadonConfig() {
+  return apiFetchJson('/shop/staff/e-invoices/config')
+}
+
+export function saveVinHoadonConfig(payload) {
+  return apiFetchJson('/shop/staff/e-invoices/config', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  })
+}
+
+export function previewVinHoadonInvoice(payload) {
+  return apiFetchJson('/shop/staff/e-invoices/preview', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  })
+}
+
+export function fetchVinHoadonInvoiceStatuses(orderIds) {
+  return apiFetchJson('/shop/staff/e-invoices/status', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(orderIds),
+  })
+}
+
+export function issueVinHoadonInvoice(payload) {
+  return apiFetchJson('/shop/staff/e-invoices', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  })
+}
+
+export function retryVinHoadonInvoice(invoiceId) {
+  return apiFetchJson(`/shop/staff/e-invoices/${invoiceId}/retry`, { method: 'POST' })
+}
+
+export function syncVinHoadonInvoice(invoiceId) {
+  return apiFetchJson(`/shop/staff/e-invoices/${invoiceId}/sync`, { method: 'POST' })
+}
+
+export async function downloadVinHoadonInvoice(invoiceId, format = 'pdf') {
+  const res = await apiFetch(`/shop/staff/e-invoices/${invoiceId}/download/${format}`)
+  if (!res.ok) {
+    let message = `Download failed (${res.status})`
+    try { const data = await res.json(); message = data?.message || data?.error || message } catch { /* ignore */ }
+    throw new Error(message)
+  }
+  const blob = await res.blob()
+  const disposition = res.headers.get('Content-Disposition') || ''
+  const match = disposition.match(/filename="?([^";]+)"?/i)
+  const filename = match?.[1] || `vin-hoadon.${format}`
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url; link.download = filename; document.body.appendChild(link); link.click(); link.remove()
+  URL.revokeObjectURL(url)
 }
 
 export function fetchAllowedPublicIps() {

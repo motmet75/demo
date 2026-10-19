@@ -104,6 +104,8 @@ public class SecurityConfig {
                 .requestMatchers("/bom/**", "/orders/**", "/order-lines/**").hasAnyRole(FULL_BUSINESS_ROLES)
                 .requestMatchers("/shop/public/**").permitAll()
                 .requestMatchers("/shop/staff/counter/**").hasAnyRole(COUNTER_OPERATION_ROLES)
+                .requestMatchers(HttpMethod.PUT, "/shop/staff/e-invoices/config").hasAnyRole(FULL_BUSINESS_ROLES)
+                .requestMatchers("/shop/staff/e-invoices", "/shop/staff/e-invoices/**").hasAnyRole(COUNTER_OPERATION_ROLES)
                 .requestMatchers("/shop/staff/menu-options/**").hasAnyRole(COUNTER_OPERATION_ROLES)
                 .requestMatchers(HttpMethod.GET, "/shop/staff/materials/menu-availability/**").hasAnyRole(COUNTER_OPERATION_ROLES)
                 .requestMatchers(HttpMethod.PUT, "/shop/staff/materials/menu-availability/**").hasAnyRole(COUNTER_OPERATION_ROLES)

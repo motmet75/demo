@@ -1,6 +1,13 @@
 spring:
   config:
     import: "optional:file:./secrets/application-secrets.properties"
+  session:
+    timeout: 30m
+    data:
+      redis:
+        namespace: "${SPRING_SESSION_REDIS_NAMESPACE:anhmedia:http-session}"
+        # OTP/session objects are mutated after getAttribute(); persist those mutations too.
+        save-mode: on-get-attribute
   mail:
     host: "${SES_SMTP_HOST:email-smtp.ap-northeast-2.amazonaws.com}"
     port: "${SES_SMTP_PORT:587}"
@@ -22,3 +29,9 @@ app:
     email-otp-required: "${LOGIN_EMAIL_OTP_REQUIRED:false}"
   mail:
     from: "${MAIL_FROM:services@anhmedia.vn}"
+vin-hoadon:
+  enabled: "${VIN_HOADON_ENABLED:false}"
+  base-url: "${VIN_HOADON_BASE_URL:https://demows.vin-hoadon.com}"
+  connect-timeout-seconds: "${VIN_HOADON_CONNECT_TIMEOUT_SECONDS:10}"
+  request-timeout-seconds: "${VIN_HOADON_REQUEST_TIMEOUT_SECONDS:30}"
+  master-key: "${VIN_HOADON_MASTER_KEY:}"

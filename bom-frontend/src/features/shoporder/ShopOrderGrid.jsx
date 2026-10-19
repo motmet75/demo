@@ -58,6 +58,7 @@ import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive'
 import MergeTypeIcon from '@mui/icons-material/MergeType'
 import LockIcon from '@mui/icons-material/Lock'
 import LockOpenIcon from '@mui/icons-material/LockOpen'
+import SettingsIcon from '@mui/icons-material/Settings'
 
 import {
   fetchShopOrders, fetchActiveOrders, confirmShopOrder, prepareShopOrder, readyShopOrder,
@@ -77,11 +78,13 @@ import ShopMenuPage from '../shopfront/ShopMenuPage'
 import QuickCounterDesk from './QuickCounterDesk'
 import QrOrderDialog from './QrOrderDialog'
 import EodAuditDialog from './EodAuditDialog'
+import VinHoadonInvoiceDialog from './VinHoadonInvoiceDialog'
 import ConfirmActionDialog from './ConfirmActionDialog'
 import PaymentMethodConfirmDialog from './PaymentMethodConfirmDialog'
 import MergeBillsDialog from './MergeBillsDialog'
 import VoucherQrScanDialog from './VoucherQrScanDialog'
 import { useAppContext } from '../../context/AppContext'
+import { useAuth } from '../../context/useAuth'
 import { useI18n } from '../../i18n/I18nContext'
 import { localizedCategory, localizedModelName, localizedSelectedOptions } from '../../i18n/menuLocalization'
 import { fetchModels } from '../../api/modelApi'
@@ -1555,6 +1558,7 @@ function OrderCardGrid({ rows, loading, tables, actions, modelImageMap = {}, sel
 
 export default function ShopOrderGrid() {
   const { t } = useI18n()
+  const { hasFullBusinessAccess } = useAuth()
   const { tenantId: ctxTenantId, companyId: ctxCompanyId } = useAppContext()
   const [rows, setRows]                 = useState([])
   const [boardRows, setBoardRows]       = useState([])   // for board tabs — unfiltered
@@ -1595,6 +1599,12 @@ export default function ShopOrderGrid() {
     readShopOrderPref(quickOrderTablePrefKey(ctxTenantId, ctxCompanyId), ''),
   )
   const [selectedRows, setSelectedRows] = useState(new Set())
+  const [vinInvoiceOpen, setVinInvoiceOpen] = useState(false)
+  const [vinConfigOpen, setVinConfigOpen] = useState(false)
+  const selectedInvoiceOrders = useMemo(
+    () => rows.filter(order => selectedRows.has(order.id)),
+    [rows, selectedRows],
+  )
   const [moveTableOpen, setMoveTableOpen] = useState(false)
   const [moveTableTarget, setMoveTableTarget] = useState('')
   const [moving, setMoving]             = useState(false)
@@ -2721,13 +2731,22 @@ export default function ShopOrderGrid() {
           <Button startIcon={<QrCode2Icon />} onClick={() => { setQuickLoginData(null); setQuickLoginError(''); setQuickLoginHours(12); setQuickLoginOpen(true) }}
             variant="outlined" size="small" color="secondary" sx={{ display: { xs: 'none', sm: 'inline-flex' }, textTransform: 'none', fontWeight: 800 }}>Đăng nhập iPad</Button>
           {selectedRows.size > 0 && (
-            <Button
-              startIcon={<DriveFileMoveIcon />}
-              onClick={() => { setMoveTableTarget(''); setMoveTableOpen(true) }}
-              variant="contained" size="small" color="info"
-              sx={{ textTransform: 'none', fontWeight: 700 }}>
-              Move {selectedRows.size} order{selectedRows.size > 1 ? 's' : ''} → Table
-            </Button>
+            <>
+              <Button
+                startIcon={<ReceiptLongIcon />}
+                onClick={() => setVinInvoiceOpen(true)}
+                variant="contained" size="small" color="success"
+                sx={{ textTransform: 'none', fontWeight: 800 }}>
+                Xuất HĐĐT ({selectedRows.size})
+              </Button>
+              <Button
+                startIcon={<DriveFileMoveIcon />}
+                onClick={() => { setMoveTableTarget(''); setMoveTableOpen(true) }}
+                variant="contained" size="small" color="info"
+                sx={{ textTransform: 'none', fontWeight: 700 }}>
+                Move {selectedRows.size} order{selectedRows.size > 1 ? 's' : ''} → Table
+              </Button>
+            </>
           )}
           <Box sx={{ flex: 1, display: { xs: 'none', sm: 'block' } }} />
           <Button startIcon={<TvIcon />} onClick={handleOpenBoard} variant="outlined" size="small" color="info" sx={{ display: { xs: 'none', sm: 'inline-flex' } }}>{t('shopOrder.grid.displayBoard')}</Button>
@@ -2748,6 +2767,7 @@ export default function ShopOrderGrid() {
             </Button>
           </Tooltip>
           <Button startIcon={<AssessmentIcon />} onClick={() => setEodOpen(true)} variant="outlined" size="small" color="secondary" sx={{ display: { xs: 'none', sm: 'inline-flex' }, textTransform: 'none', fontWeight: 700 }}>{t('shopOrder.grid.shiftAudit')}</Button>
+          {hasFullBusinessAccess && <Tooltip title="Cấu hình hóa đơn điện tử VIN-HOADON"><IconButton size="small" color="primary" onClick={() => setVinConfigOpen(true)}><SettingsIcon /></IconButton></Tooltip>}
           <Button startIcon={<RestartAltIcon />} onClick={() => setResetOpen(true)} variant="outlined" size="small" color="warning" sx={{ display: { xs: 'none', sm: 'inline-flex' } }}>{t('shopOrder.grid.resetCounter')}</Button>
         </Box>
 
@@ -3345,6 +3365,22 @@ export default function ShopOrderGrid() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <VinHoadonInvoiceDialog
+        open={vinInvoiceOpen}
+        onClose={() => setVinInvoiceOpen(false)}
+        orders={selectedInvoiceOrders}
+        isAdmin={hasFullBusinessAccess}
+        onIssued={invoice => {
+          if (invoice?.status === 'ISSUED') setSelectedRows(new Set())
+        }}
+      />
+      <VinHoadonInvoiceDialog
+        open={vinConfigOpen}
+        onClose={() => setVinConfigOpen(false)}
+        configOnly
+        isAdmin={hasFullBusinessAccess}
+      />
 
       {confirmDlg && (
         <ConfirmActionDialog
