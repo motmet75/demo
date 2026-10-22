@@ -214,7 +214,7 @@ public class VinHoadonInvoiceService {
             try {
                 JsonNode lookup = client.lookupInvoice(new VinHoadonClient.InvoiceReference(
                         null, invoice.getExternalInvoiceId()), credentials);
-                if (lookupMatches(invoice, lookup)) return recordResponse(tenantId, companyId, invoiceId, lookup);
+                if (lookupMatches(invoice, lookup)) return recordSendResponse(tenantId, companyId, invoiceId, lookup);
                 if (!Set.of("11", "37").contains(text(lookup, "maketqua")))
                     return recordUncertain(tenantId, companyId, invoiceId, "VIN-HOADON lookup did not confirm whether the invoice was issued");
             } catch (RuntimeException exception) {
@@ -222,20 +222,26 @@ public class VinHoadonInvoiceService {
             }
         }
         try {
-            return recordResponse(tenantId, companyId, invoiceId,
-                    client.issueOriginalHsm(mapper.valueToTree(invoice.getRequestPayload()), credentials));
+            return recordSendResponse(tenantId, companyId, invoiceId,
+                    client.sendOriginal(mapper.valueToTree(invoice.getRequestPayload()), credentials));
         } catch (RuntimeException exception) {
             return recordUncertain(tenantId, companyId, invoiceId, safeMessage(exception));
         }
     }
 
-    private InvoiceView recordResponse(UUID tenantId, UUID companyId, UUID invoiceId, JsonNode response) {
+    private InvoiceView recordSendResponse(UUID tenantId, UUID companyId, UUID invoiceId, JsonNode response) {
         return transactions.execute(status -> {
             VinHoadonShopInvoice invoice = invoiceRepository.findWithLockByIdAndTenantIdAndCompanyId(invoiceId, tenantId, companyId)
                     .orElseThrow(() -> new NoSuchElementException("VIN-HOADON invoice not found"));
-            applyVendorResponse(invoice, response);
+            applySendResponse(invoice, response);
             return toView(invoice);
         });
+    }
+
+    void applySendResponse(VinHoadonShopInvoice invoice, JsonNode response) {
+        applyVendorResponse(invoice, response);
+        if ("PENDING".equals(invoice.getStatus()) && text(response, "trangthai") == null)
+            invoice.setStatus("DRAFT");
     }
 
     private InvoiceView recordUncertain(UUID tenantId, UUID companyId, UUID invoiceId, String message) {
@@ -430,7 +436,8 @@ public class VinHoadonInvoiceService {
         if ("01".equals(text(response, "maketqua"))) {
             boolean signed = "3".equals(text(response, "trangthai"))
                     || firstText(response, "sohoadon", "so_hoadon") != null;
-            invoice.setStatus(signed ? "ISSUED" : "PENDING");
+            String vendorStatus = text(response, "trangthai");
+            invoice.setStatus(signed ? "ISSUED" : "0".equals(vendorStatus) ? "DRAFT" : "PENDING");
             if (signed && invoice.getIssuedAt() == null) invoice.setIssuedAt(Instant.now());
         } else if ("03".equals(text(response, "maketqua"))) invoice.setStatus("RECONCILE");
         else invoice.setStatus("FAILED");

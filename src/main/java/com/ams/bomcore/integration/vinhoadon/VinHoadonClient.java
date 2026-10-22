@@ -35,6 +35,8 @@ public class VinHoadonClient {
     static final String TOKEN_PATH = "/api/services/hddtws/Authentication/GetToken";
     static final String ISSUE_ORIGINAL_HSM_PATH =
             "/api/services/hddtws/QuanLyHoaDon/GuiVaKyHoadonGocHSM";
+    static final String SEND_ORIGINAL_PATH =
+            "/api/services/hddtws/QuanLyHoaDon/LapHoaDonGoc";
     static final String ISSUE_REPLACEMENT_HSM_PATH =
             "/api/services/hddtws/QuanLyHoaDon/GuiVaKyHoaDonThayTheHSM";
     static final String ISSUE_ADJUSTMENT_HSM_PATH =
@@ -97,6 +99,11 @@ public class VinHoadonClient {
 
     public JsonNode issueOriginalHsm(JsonNode invoice, VinHoadonCredentials credentials) {
         return authorizedInvoicePost(ISSUE_ORIGINAL_HSM_PATH, invoice, credentials);
+    }
+
+    /** Saves an unsigned original invoice in VIN-HOADON for review and later signing. */
+    public JsonNode sendOriginal(JsonNode invoice, VinHoadonCredentials credentials) {
+        return authorizedInvoicePost(SEND_ORIGINAL_PATH, invoice, credentials);
     }
 
     public JsonNode issueReplacementHsm(JsonNode invoice, VinHoadonCredentials credentials) {

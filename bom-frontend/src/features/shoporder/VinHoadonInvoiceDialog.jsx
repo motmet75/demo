@@ -118,7 +118,7 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
     setBusy(true); setError('')
     try {
       const { res, data } = await issueVinHoadonInvoice(payload())
-      if (!res.ok) throw new Error(messageOf(res, data, 'Không thể phát hành hóa đơn'))
+      if (!res.ok) throw new Error(messageOf(res, data, 'Không thể gửi hóa đơn sang VIN-HOADON'))
       setInvoice(data); setPreview(null); onIssued?.(data)
     } catch (err) { setError(err.message) } finally { setBusy(false) }
   }
@@ -155,9 +155,9 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
         ) : invoice ? (
           <Stack spacing={2}>
             <Alert severity={invoice.status === 'ISSUED' ? 'success' : invoice.status === 'FAILED' ? 'error' : 'warning'}>
-              {invoice.status === 'ISSUED' ? 'Hóa đơn đã được ký.' : invoice.status === 'PENDING' ? 'VIN-HOADON đã nhận hóa đơn; đang chờ ký hoặc cấp số.' : invoice.status === 'RECONCILE' ? 'Chưa xác nhận được kết quả. Tra cứu trước khi thử gửi lại.' : `Phát hành chưa thành công: ${invoice.resultMessage || 'Lỗi VIN-HOADON'}`}
+              {invoice.status === 'ISSUED' ? 'Hóa đơn đã được ký.' : invoice.status === 'DRAFT' ? 'Đã gửi hóa đơn chưa ký lên VIN-HOADON. Kiểm tra danh sách hóa đơn trên VIN-HOADON và ký tại đó khi sẵn sàng.' : invoice.status === 'PENDING' ? 'VIN-HOADON đã nhận hóa đơn; đang chờ ký hoặc cấp số.' : invoice.status === 'RECONCILE' ? 'Chưa xác nhận được kết quả. Tra cứu trước khi thử gửi lại.' : `Gửi hóa đơn chưa thành công: ${invoice.resultMessage || 'Lỗi VIN-HOADON'}`}
             </Alert>
-            <Box><Chip label={invoice.status} color={invoice.status === 'ISSUED' ? 'success' : 'error'} /> <b>{invoice.invoiceSeries || ''} {invoice.invoiceNumber || invoice.externalInvoiceId}</b></Box>
+            <Box><Chip label={invoice.status} color={invoice.status === 'ISSUED' ? 'success' : invoice.status === 'DRAFT' ? 'info' : 'warning'} /> <b>{invoice.invoiceSeries || ''} {invoice.invoiceNumber || invoice.externalInvoiceId}</b></Box>
             <Typography>Tổng thanh toán: <b>{money(invoice.totalAmount)}</b></Typography>
             {invoice.taxAuthorityStatus != null && <Typography>Trạng thái cơ quan thuế: {({ 0: 'Chờ xác nhận', 1: 'Đã xác nhận', 2: 'Từ chối' })[invoice.taxAuthorityStatus] || invoice.taxAuthorityStatus}</Typography>}
             {invoice.status === 'ISSUED' ? <Stack direction="row" spacing={1}>
@@ -166,7 +166,7 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
               <Button variant="outlined" onClick={sync} disabled={busy}>Cập nhật trạng thái thuế</Button>
             </Stack> : <Stack direction="row" spacing={1}>
               <Button variant="outlined" onClick={sync} disabled={busy}>Tra cứu hóa đơn</Button>
-              {invoice.status !== 'PENDING' && <Button variant="contained" color="warning" onClick={retry} disabled={busy}>Thử lại cùng mã hóa đơn</Button>}
+              {!['PENDING', 'DRAFT'].includes(invoice.status) && <Button variant="contained" color="warning" onClick={retry} disabled={busy}>Thử lại cùng mã hóa đơn</Button>}
             </Stack>}
           </Stack>
         ) : <Stack spacing={2}>
@@ -198,7 +198,7 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
     {!showConfig && !invoice && <DialogActions>
       <Button onClick={onClose} disabled={busy}>Hủy</Button>
       <Button variant="outlined" onClick={runPreview} disabled={busy || !usable || existingConflict || ineligible.length > 0 || !orderIds.length}>Xem trước</Button>
-      <Button variant="contained" color="success" onClick={issue} disabled={busy || existingConflict || !preview}>{busy ? <CircularProgress size={20} /> : 'Phát hành & ký HSM'}</Button>
+      <Button variant="contained" color="success" onClick={issue} disabled={busy || existingConflict || !preview}>{busy ? <CircularProgress size={20} /> : 'Gửi sang VIN-HOADON (chưa ký)'}</Button>
     </DialogActions>}
     {(invoice || (showConfig && (!isAdmin || configOnly))) && <DialogActions><Button onClick={onClose} disabled={busy}>Đóng</Button></DialogActions>}
   </Dialog>
