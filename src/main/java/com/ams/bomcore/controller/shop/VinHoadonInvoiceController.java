@@ -2,6 +2,7 @@ package com.ams.bomcore.controller.shop;
 
 import com.ams.bomcore.repository.CompanyRepository;
 import com.ams.bomcore.repository.TenantRepository;
+import com.ams.bomcore.integration.vinhoadon.VinHoadonApiException;
 import com.ams.bomcore.service.shop.VinHoadonInvoiceService;
 import com.ams.bomcore.util.RequestTimeZone;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -128,6 +129,10 @@ public class VinHoadonInvoiceController {
     @ExceptionHandler(NoSuchElementException.class)
     ResponseEntity<Map<String, String>> notFound(NoSuchElementException exception) {
         return error(HttpStatus.NOT_FOUND, exception);
+    }
+    @ExceptionHandler(VinHoadonApiException.class)
+    ResponseEntity<Map<String, String>> vendorFailure(VinHoadonApiException exception) {
+        return error(HttpStatus.BAD_GATEWAY, exception);
     }
     private ResponseEntity<Map<String, String>> error(HttpStatus status, RuntimeException exception) {
         String message = exception.getMessage() == null ? status.getReasonPhrase() : exception.getMessage();

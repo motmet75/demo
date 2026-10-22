@@ -79,7 +79,15 @@ public class VinHoadonClient {
                 .put("doanhnghiep_mst", credentials.taxCode())
                 .put("username", credentials.username())
                 .put("password", credentials.password());
-        JsonNode response = post(TOKEN_PATH, request, null);
+        JsonNode response;
+        try {
+            response = post(TOKEN_PATH, request, null);
+        } catch (VinHoadonApiException exception) {
+            if (exception.getStatusCode() <= 0) throw exception;
+            throw new VinHoadonApiException(
+                    "VIN-HOADON token endpoint returned HTTP " + exception.getStatusCode(),
+                    exception.getStatusCode(), exception.getResponseBody());
+        }
         JsonNode payload = unwrapResult(response);
 
         String accessToken = requiredText(payload, "access_token");
