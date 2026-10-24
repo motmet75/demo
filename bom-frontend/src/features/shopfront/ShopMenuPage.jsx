@@ -2751,7 +2751,7 @@ export default function ShopMenuPage({ staffContext = null, onStaffCreated, onSt
                 <Box sx={{ display: 'flex', gap: 1 }}>
                   <TextField label="Mã số thuế / Tax ID" size="small" fullWidth value={form.buyerTaxCode}
                     onChange={e => { setForm(old => ({ ...old, buyerTaxCode: e.target.value })); setTaxLookupError('') }}
-                    onBlur={() => lookupBuyerTax()} inputProps={{ maxLength: 14 }} />
+                    inputProps={{ maxLength: 14 }} />
                   <Button variant="outlined" disabled={taxLookupBusy || !form.buyerTaxCode.trim()} onClick={() => lookupBuyerTax(true)} sx={{ whiteSpace: 'nowrap' }}>{taxLookupBusy ? 'Đang tra...' : 'Tra cứu'}</Button>
                 </Box>
                 {taxLookupError && <Alert severity="warning">{taxLookupError}</Alert>}

@@ -222,13 +222,13 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>{orders.map(order => <Chip key={order.id} label={`#${order.orderNumber || order.orderCode} · ${money(Number(order.totalAmount || 0) - Number(order.discountAmount || 0))}`} />)}</Box>
           <Divider />
           <Typography fontWeight={800}>Thông tin người mua</Typography>
-          <TextField select label="Ký hiệu hóa đơn" value={invoiceSeries} onChange={event => { setInvoiceSeries(event.target.value); setPreview(null) }} helperText="Chọn ký hiệu đã đăng ký trên VIN-HOADON cho hóa đơn này.">
+          <TextField select label="Ký hiệu hóa đơn" value={invoiceSeries} onChange={event => { setInvoiceSeries(event.target.value); setPreview(null) }} helperText="Chọn ký hiệu đã đăng ký phù hợp với người mua doanh nghiệp hoặc cá nhân.">
             {config?.invoiceSeries && !templates.some(option => option.series === config.invoiceSeries) && <MenuItem value={config.invoiceSeries}>{config.invoiceSeries} · Mẫu số {config.invoiceTemplateCode} (mặc định)</MenuItem>}
-            {templates.map(option => <MenuItem key={`${option.templateCode}-${option.series}`} value={option.series}>{option.series} · Mẫu số {option.templateCode}</MenuItem>)}
+            {templates.map(option => <MenuItem key={`${option.templateCode}-${option.series}`} value={option.series}>{option.series} · Mẫu số {option.templateCode}{option.name ? ` · ${option.name}` : ''}</MenuItem>)}
           </TextField>
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
             <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-              <TextField label="Mã số thuế người mua" fullWidth value={buyer.buyerTaxCode} onChange={field('buyerTaxCode')} onBlur={() => lookupTax()} inputProps={{ maxLength: 14 }} />
+              <TextField label="Mã số thuế người mua" fullWidth value={buyer.buyerTaxCode} onChange={field('buyerTaxCode')} inputProps={{ maxLength: 14 }} />
               <Button variant="outlined" onClick={() => lookupTax(true)} disabled={taxLookupBusy || !buyer.buyerTaxCode.trim()} sx={{ whiteSpace: 'nowrap', mt: 1 }}>{taxLookupBusy ? 'Đang tra...' : 'Tra cứu MST'}</Button>
             </Box>
             <TextField label="Tên đơn vị / tổ chức" value={buyer.buyerOrganizationName} onChange={field('buyerOrganizationName')} />
