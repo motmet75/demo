@@ -43,6 +43,8 @@ public class VinHoadonClient {
             "/api/services/hddtws/QuanLyHoaDon/GuiVaKyHoaDonDieuChinhHSM";
     static final String LOOKUP_PATH =
             "/api/services/hddtws/TraCuuHoaDon/TraThongTinHoaDon";
+    static final String TEMPLATES_PATH =
+            "/api/services/hddtws/QuanLyHoaDon/DSMauHoaDonThongBao";
     static final String DOWNLOAD_APPROVED_PDF_PATH =
             "/api/services/hddtws/TraCuuHoaDon/TaiHoaDonPdf";
     static final String DOWNLOAD_SIGNED_PDF_PATH =
@@ -124,6 +126,11 @@ public class VinHoadonClient {
 
     public JsonNode lookupInvoice(InvoiceReference reference, VinHoadonCredentials credentials) {
         return authorizedPost(LOOKUP_PATH, referencePayload(reference, credentials), credentials);
+    }
+
+    public JsonNode announcedTemplates(VinHoadonCredentials credentials) {
+        return authorizedPost(TEMPLATES_PATH,
+                objectMapper.createObjectNode().put("doanhnghiep_mst", credentials.taxCode()), credentials);
     }
 
     public JsonNode downloadApprovedPdf(InvoiceReference reference, VinHoadonCredentials credentials) {

@@ -63,6 +63,7 @@ import { localizedCategory, localizedChoiceLabel, localizedGroupName, localizedL
 import { shopCustomerText, shopStatusText } from '../../i18n/shopCustomerText'
 import { decorateAllowedSideOptions, getAllowedSideMax } from '../../utils/sideItemConfig'
 import { saveQrImage } from '../../utils/saveQrImage'
+import { lookupBusinessTaxCode } from '../../api/businessTaxApi'
 
 const genUid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
 const fmt    = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' đ' : ''
@@ -687,7 +688,11 @@ export default function ShopMenuPage({ staffContext = null, onStaffCreated, onSt
   const [form, setForm] = useState({
     fulfillmentType: 'DINE_IN', customerName: rawCustomerName, customerPhone: '',
     deliveryAddress: '', customerTableTag: '', selectedTableId: staffContext?.defaultTableId || '', requestedFulfillmentAt: '', paymentMethod: 'CASH',
+    buyerTaxCode: '', buyerOrganizationName: '', buyerAddress: '', buyerEmail: '', buyerPhone: '',
   })
+  const [taxLookupBusy, setTaxLookupBusy] = useState(false)
+  const [taxLookupError, setTaxLookupError] = useState('')
+  const lastTaxLookup = useRef('')
 
   // ── New UI state ───────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery]         = useState(rawSearchQuery)
@@ -1428,6 +1433,23 @@ export default function ShopMenuPage({ staffContext = null, onStaffCreated, onSt
     const remaining = Math.max(0, Math.floor(Number(data.remainingUnits ?? 0)))
     return soldOutMessage(cappedModel, remaining)
   }
+  const lookupBuyerTax = async (force = false) => {
+    const taxCode = form.buyerTaxCode.trim()
+    if (!taxCode || (!force && taxCode === lastTaxLookup.current)) return
+    if (!/^\d{10}(?:-\d{3})?$/.test(taxCode)) {
+      if (force) setTaxLookupError('Mã số thuế chưa đúng định dạng.')
+      return
+    }
+    setTaxLookupBusy(true); setTaxLookupError('')
+    try {
+      const result = await lookupBusinessTaxCode(taxCode)
+      setForm(old => old.buyerTaxCode.trim() === taxCode
+        ? { ...old, buyerOrganizationName: result.name, buyerAddress: result.address }
+        : old)
+      if (result.status && !/đang hoạt động/i.test(result.status)) setTaxLookupError(`Trạng thái MST: ${result.status}. Kiểm tra với người mua trước khi đặt hàng.`)
+      lastTaxLookup.current = taxCode
+    } catch (err) { setTaxLookupError(err.message) } finally { setTaxLookupBusy(false) }
+  }
   const handlePlaceOrder = async () => {
     if (!itemCount) return
     if (!orderingStatus.open && !editingOrderCode) {
@@ -1466,6 +1488,12 @@ export default function ShopMenuPage({ staffContext = null, onStaffCreated, onSt
       if (form.fulfillmentType === 'DELIVERY' && !form.deliveryAddress.trim()) {
         setError(cText('checkout.needDeliveryAddress')); return
       }
+      if (form.buyerTaxCode.trim() && !/^\d{10}(?:-\d{3})?$/.test(form.buyerTaxCode.trim())) {
+        setError('Mã số thuế xuất hóa đơn chưa đúng định dạng.'); return
+      }
+      if (form.buyerTaxCode.trim() && (!form.buyerOrganizationName.trim() || !form.buyerAddress.trim())) {
+        setError('Nhập tên doanh nghiệp và địa chỉ xuất hóa đơn.'); return
+      }
     }
     const trackingTab = !staffContext && !editingOrderCode && form.paymentMethod !== 'BANK_QR'
       ? window.open('about:blank', '_blank')
@@ -1493,6 +1521,11 @@ export default function ShopMenuPage({ staffContext = null, onStaffCreated, onSt
           tableId: form.fulfillmentType === 'DINE_IN' ? (ctx.tableId || effectiveSelectedTableId || null) : null,
           customerName: form.customerName || null, customerPhone: form.customerPhone || null,
           deliveryAddress: form.fulfillmentType === 'DELIVERY' ? form.deliveryAddress : null,
+          buyerTaxCode: form.buyerTaxCode.trim() || null,
+          buyerOrganizationName: form.buyerOrganizationName.trim() || null,
+          buyerAddress: form.buyerAddress.trim() || null,
+          buyerEmail: form.buyerEmail.trim() || null,
+          buyerPhone: form.buyerPhone.trim() || null,
           customerTableTag: form.fulfillmentType === 'DINE_IN' ? form.customerTableTag || null : null,
           requestedFulfillmentAt: form.fulfillmentType === 'DELIVERY' && form.requestedFulfillmentAt
             ? new Date(form.requestedFulfillmentAt).toISOString() : null,
@@ -1509,10 +1542,12 @@ export default function ShopMenuPage({ staffContext = null, onStaffCreated, onSt
         }
         if (staffContext) {
           if (effectiveSelectedTableId) onStaffTableSelected?.(effectiveSelectedTableId)
+          setForm(old => ({ ...old, buyerTaxCode: '', buyerOrganizationName: '', buyerAddress: '', buyerEmail: '', buyerPhone: '' }))
           closeTrackingTab(); setCart({}); setCheckout(false); onStaffCreated?.(data); return
         }
         const finalOrder = await applyVoucherToOrder(data)
         rememberVisibleOrder(finalOrder)
+        setForm(old => ({ ...old, buyerTaxCode: '', buyerOrganizationName: '', buyerAddress: '', buyerEmail: '', buyerPhone: '' }))
         setCart({}); setSideForm({}); setNotes(''); setCheckout(false); setCartOpen(false)
         refreshMenu()
         if (form.paymentMethod === 'BANK_QR' && finalOrder.paymentQr) {
@@ -2710,6 +2745,27 @@ export default function ShopMenuPage({ staffContext = null, onStaffCreated, onSt
                   value={form.deliveryAddress} onChange={e => { setForm(f => ({ ...f, deliveryAddress: e.target.value })); setError('') }} />
               </>
             )}
+            {!editingOrderCode && <Box sx={{ p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+              <Typography fontWeight={800} sx={{ mb: 1 }}>Thông tin xuất hóa đơn / Invoice details (tùy chọn)</Typography>
+              <Stack spacing={1.25}>
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <TextField label="Mã số thuế / Tax ID" size="small" fullWidth value={form.buyerTaxCode}
+                    onChange={e => { setForm(old => ({ ...old, buyerTaxCode: e.target.value })); setTaxLookupError('') }}
+                    onBlur={() => lookupBuyerTax()} inputProps={{ maxLength: 14 }} />
+                  <Button variant="outlined" disabled={taxLookupBusy || !form.buyerTaxCode.trim()} onClick={() => lookupBuyerTax(true)} sx={{ whiteSpace: 'nowrap' }}>{taxLookupBusy ? 'Đang tra...' : 'Tra cứu'}</Button>
+                </Box>
+                {taxLookupError && <Alert severity="warning">{taxLookupError}</Alert>}
+                <TextField label="Tên doanh nghiệp / Company name" size="small" fullWidth value={form.buyerOrganizationName}
+                  onChange={e => setForm(old => ({ ...old, buyerOrganizationName: e.target.value }))} />
+                <TextField label="Địa chỉ xuất hóa đơn / Invoice address" size="small" fullWidth multiline minRows={2} value={form.buyerAddress}
+                  onChange={e => setForm(old => ({ ...old, buyerAddress: e.target.value }))} />
+                <TextField label="Email nhận hóa đơn / Invoice email" size="small" fullWidth type="email" value={form.buyerEmail}
+                  onChange={e => setForm(old => ({ ...old, buyerEmail: e.target.value }))} />
+                <TextField label="Điện thoại trên hóa đơn / Invoice phone" size="small" fullWidth value={form.buyerPhone}
+                  onChange={e => setForm(old => ({ ...old, buyerPhone: e.target.value }))} />
+                <Typography variant="caption" color="text.secondary">Tên và địa chỉ tra cứu có thể chỉnh sửa trước khi đặt hàng.</Typography>
+              </Stack>
+            </Box>}
             <TextField label={t('shop.orderNote')} size="small" fullWidth multiline rows={2}
               placeholder={t('shop.specialRequest')}
               value={notes} onChange={e => setNotes(e.target.value)}

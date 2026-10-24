@@ -333,7 +333,8 @@ public class ShopOrderService {
     private CreateOrderRequest pendingRequestWithItems(CreateOrderRequest req, List<ItemRequest> items) {
         return new CreateOrderRequest(req.fulfillmentType(), req.tableId(), req.customerName(), req.customerPhone(),
                 req.deliveryProvider(), req.deliveryAddress(), req.deliveryFee(), req.paymentMethod(), req.notes(),
-                items, req.manualOrderNumber(), req.token(), req.customerTableTag(), req.requestedFulfillmentAt());
+                items, req.manualOrderNumber(), req.token(), req.customerTableTag(), req.requestedFulfillmentAt(),
+                req.buyerTaxCode(), req.buyerOrganizationName(), req.buyerAddress(), req.buyerEmail(), req.buyerPhone());
     }
 
     private CreateOrderRequest pendingRequestWithSeat(CreateOrderRequest req, UUID tableId,
@@ -342,13 +343,41 @@ public class ShopOrderService {
                 fulfillmentType != null ? fulfillmentType : req.fulfillmentType(), tableId,
                 req.customerName(), req.customerPhone(), req.deliveryProvider(), req.deliveryAddress(),
                 req.deliveryFee(), req.paymentMethod(), req.notes(), req.items(), req.manualOrderNumber(),
-                req.token(), customerTableTag, req.requestedFulfillmentAt());
+                req.token(), customerTableTag, req.requestedFulfillmentAt(), req.buyerTaxCode(),
+                req.buyerOrganizationName(), req.buyerAddress(), req.buyerEmail(), req.buyerPhone());
     }
 
     private CreateOrderRequest pendingRequestWithPayment(CreateOrderRequest req, String paymentMethod) {
         return new CreateOrderRequest(req.fulfillmentType(), req.tableId(), req.customerName(), req.customerPhone(),
                 req.deliveryProvider(), req.deliveryAddress(), req.deliveryFee(), paymentMethod, req.notes(),
-                req.items(), req.manualOrderNumber(), req.token(), req.customerTableTag(), req.requestedFulfillmentAt());
+                req.items(), req.manualOrderNumber(), req.token(), req.customerTableTag(), req.requestedFulfillmentAt(),
+                req.buyerTaxCode(), req.buyerOrganizationName(), req.buyerAddress(), req.buyerEmail(), req.buyerPhone());
+    }
+
+    private static void setInvoiceBuyerDetails(ShopOrder order, CreateOrderRequest req) {
+        String taxCode = invoiceBuyerField(req.buyerTaxCode(), 14, "Buyer tax code");
+        String organization = invoiceBuyerField(req.buyerOrganizationName(), 255, "Buyer organization name");
+        String address = invoiceBuyerField(req.buyerAddress(), 500, "Buyer invoice address");
+        String email = invoiceBuyerField(req.buyerEmail(), 100, "Buyer invoice email");
+        String phone = invoiceBuyerField(req.buyerPhone(), 30, "Buyer invoice phone");
+        if (taxCode != null && !taxCode.matches("[0-9]{10}(?:-[0-9]{3})?"))
+            throw new IllegalArgumentException("Buyer tax code must contain 10 digits, optionally followed by a 3-digit branch code");
+        if (taxCode != null && (organization == null || address == null))
+            throw new IllegalArgumentException("Buyer organization name and invoice address are required with a tax code");
+        if (email != null && !email.contains("@"))
+            throw new IllegalArgumentException("Buyer invoice email is invalid");
+        order.setBuyerTaxCode(taxCode);
+        order.setBuyerOrganizationName(organization);
+        order.setBuyerAddress(address);
+        order.setBuyerEmail(email);
+        order.setBuyerPhone(phone);
+    }
+
+    private static String invoiceBuyerField(String value, int maxLength, String label) {
+        if (value == null || value.isBlank()) return null;
+        String cleaned = value.trim();
+        if (cleaned.length() > maxLength) throw new IllegalArgumentException(label + " is too long");
+        return cleaned;
     }
 
     private ShopOrderResponseDto createPersistedOrder(CreateOrderRequest req, UUID tenantId, UUID companyId,
@@ -392,6 +421,7 @@ public class ShopOrderService {
         order.setCustomerPhone(req.customerPhone());
         order.setDeliveryProvider(req.deliveryProvider());
         order.setDeliveryAddress(req.deliveryAddress());
+        setInvoiceBuyerDetails(order, req);
         order.setCustomerTableTag(req.customerTableTag());
         order.setRequestedFulfillmentAt(req.requestedFulfillmentAt());
         order.setDeliveryFee(req.deliveryFee());
@@ -473,7 +503,8 @@ public class ShopOrderService {
                 req.fulfillmentType(), req.tableId(), req.customerName(), req.customerPhone(),
                 req.deliveryProvider(), req.deliveryAddress(), req.deliveryFee(), req.paymentMethod(),
                 req.notes(), req.items(), req.manualOrderNumber(), token.getToken(),
-                req.customerTableTag(), req.requestedFulfillmentAt());
+                req.customerTableTag(), req.requestedFulfillmentAt(), req.buyerTaxCode(),
+                req.buyerOrganizationName(), req.buyerAddress(), req.buyerEmail(), req.buyerPhone());
         return createOrder(sessionRequest, tenantId, companyId, orderZone);
     }
 
@@ -2598,6 +2629,7 @@ public class ShopOrderService {
         order.setCustomerPhone(req.customerPhone());
         order.setDeliveryProvider(req.deliveryProvider());
         order.setDeliveryAddress(req.deliveryAddress());
+        setInvoiceBuyerDetails(order, req);
         order.setCustomerTableTag(req.customerTableTag());
         order.setRequestedFulfillmentAt(req.requestedFulfillmentAt());
         order.setDeliveryFee(req.deliveryFee());
@@ -2800,7 +2832,12 @@ public class ShopOrderService {
             Integer manualOrderNumber,
             String token,
             String customerTableTag,
-            Instant requestedFulfillmentAt
+            Instant requestedFulfillmentAt,
+            String buyerTaxCode,
+            String buyerOrganizationName,
+            String buyerAddress,
+            String buyerEmail,
+            String buyerPhone
     ) {}
 
     public record BulkImportOrder(
@@ -2845,7 +2882,8 @@ public class ShopOrderService {
                 CreateOrderRequest create = new CreateOrderRequest(
                         ShopOrder.FULFILLMENT_PICKUP, null, imported.customerName(), imported.customerPhone(),
                         source, null, BigDecimal.ZERO, ShopOrder.PAYMENT_CASH,
-                        imported.notes(), imported.items(), null, importToken, null, null);
+                        imported.notes(), imported.items(), null, importToken, null, null,
+                        null, null, null, null, null);
                 ShopOrderResponseDto dto = createPersistedOrder(
                         create, tenantId, companyId, ZoneId.systemDefault(), null, true);
                 ShopOrder order = shopOrderRepository.findById(dto.getId()).orElseThrow();

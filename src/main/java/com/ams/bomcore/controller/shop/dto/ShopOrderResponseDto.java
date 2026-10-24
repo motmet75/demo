@@ -30,6 +30,11 @@ public class ShopOrderResponseDto {
     private String customerPhone;
     private String deliveryProvider;
     private String deliveryAddress;
+    private String buyerTaxCode;
+    private String buyerOrganizationName;
+    private String buyerAddress;
+    private String buyerEmail;
+    private String buyerPhone;
     private String customerTableTag;
     private Instant requestedFulfillmentAt;
     private BigDecimal deliveryFee;
@@ -272,6 +277,11 @@ public class ShopOrderResponseDto {
         dto.customerPhone = order.getCustomerPhone();
         dto.deliveryProvider = order.getDeliveryProvider();
         dto.deliveryAddress = order.getDeliveryAddress();
+        dto.buyerTaxCode = order.getBuyerTaxCode();
+        dto.buyerOrganizationName = order.getBuyerOrganizationName();
+        dto.buyerAddress = order.getBuyerAddress();
+        dto.buyerEmail = order.getBuyerEmail();
+        dto.buyerPhone = order.getBuyerPhone();
         dto.customerTableTag = order.getCustomerTableTag();
         dto.requestedFulfillmentAt = order.getRequestedFulfillmentAt();
         dto.deliveryFee = order.getDeliveryFee();
@@ -347,6 +357,11 @@ public class ShopOrderResponseDto {
     public String getCustomerPhone() { return customerPhone; }
     public String getDeliveryProvider() { return deliveryProvider; }
     public String getDeliveryAddress() { return deliveryAddress; }
+    public String getBuyerTaxCode() { return buyerTaxCode; }
+    public String getBuyerOrganizationName() { return buyerOrganizationName; }
+    public String getBuyerAddress() { return buyerAddress; }
+    public String getBuyerEmail() { return buyerEmail; }
+    public String getBuyerPhone() { return buyerPhone; }
     public String getCustomerTableTag() { return customerTableTag; }
     public Instant getRequestedFulfillmentAt() { return requestedFulfillmentAt; }
     public BigDecimal getDeliveryFee() { return deliveryFee; }

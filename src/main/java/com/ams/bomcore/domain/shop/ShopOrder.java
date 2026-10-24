@@ -70,6 +70,17 @@ public class ShopOrder {
     @Column(name = "delivery_address", columnDefinition = "TEXT")
     private String deliveryAddress;
 
+    @Column(name = "buyer_tax_code", length = 14)
+    private String buyerTaxCode;
+    @Column(name = "buyer_organization_name", length = 255)
+    private String buyerOrganizationName;
+    @Column(name = "buyer_address", columnDefinition = "TEXT")
+    private String buyerAddress;
+    @Column(name = "buyer_email", length = 100)
+    private String buyerEmail;
+    @Column(name = "buyer_phone", length = 30)
+    private String buyerPhone;
+
     @Column(name = "customer_table_tag", length = 100)
     private String customerTableTag;
 
@@ -203,6 +214,16 @@ public class ShopOrder {
     public void setDeliveryProvider(String deliveryProvider) { this.deliveryProvider = deliveryProvider; }
     public String getDeliveryAddress() { return deliveryAddress; }
     public void setDeliveryAddress(String deliveryAddress) { this.deliveryAddress = deliveryAddress; }
+    public String getBuyerTaxCode() { return buyerTaxCode; }
+    public void setBuyerTaxCode(String buyerTaxCode) { this.buyerTaxCode = buyerTaxCode; }
+    public String getBuyerOrganizationName() { return buyerOrganizationName; }
+    public void setBuyerOrganizationName(String buyerOrganizationName) { this.buyerOrganizationName = buyerOrganizationName; }
+    public String getBuyerAddress() { return buyerAddress; }
+    public void setBuyerAddress(String buyerAddress) { this.buyerAddress = buyerAddress; }
+    public String getBuyerEmail() { return buyerEmail; }
+    public void setBuyerEmail(String buyerEmail) { this.buyerEmail = buyerEmail; }
+    public String getBuyerPhone() { return buyerPhone; }
+    public void setBuyerPhone(String buyerPhone) { this.buyerPhone = buyerPhone; }
     public String getCustomerTableTag() { return customerTableTag; }
     public void setCustomerTableTag(String customerTableTag) { this.customerTableTag = customerTableTag; }
     public Instant getRequestedFulfillmentAt() { return requestedFulfillmentAt; }

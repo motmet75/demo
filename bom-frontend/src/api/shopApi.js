@@ -283,6 +283,10 @@ export function fetchVinHoadonConfig(scope) {
   return vinFetchJson('/shop/staff/e-invoices/config', {}, scope)
 }
 
+export function fetchVinHoadonTemplates(scope) {
+  return vinFetchJson('/shop/staff/e-invoices/templates', {}, scope)
+}
+
 export function saveVinHoadonConfig(payload, scope) {
   return vinFetchJson('/shop/staff/e-invoices/config', {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),

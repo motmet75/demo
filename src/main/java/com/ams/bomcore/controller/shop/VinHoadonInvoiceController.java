@@ -33,6 +33,13 @@ public class VinHoadonInvoiceController {
         return service.getConfig(tenantId, companyId);
     }
 
+    @GetMapping("/templates")
+    public List<VinHoadonInvoiceService.TemplateOption> templates(@RequestHeader("X-Tenant-Id") UUID tenantId,
+                                                                 @RequestHeader("X-Company-Id") UUID companyId) {
+        validateScope(tenantId, companyId);
+        return service.templates(tenantId, companyId);
+    }
+
     @PutMapping("/config")
     public VinHoadonInvoiceService.ConfigView saveConfig(@RequestHeader("X-Tenant-Id") UUID tenantId,
                                                          @RequestHeader("X-Company-Id") UUID companyId,

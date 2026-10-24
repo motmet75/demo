@@ -67,14 +67,16 @@ public class VinHoadonInvoiceService {
                              boolean pricesIncludeVat) {}
     public record IssueRequest(List<UUID> orderIds, String buyerTaxCode, String buyerOrganizationName,
                                String buyerName, String buyerAddress, String buyerPhone, String buyerEmail,
-                               Integer paymentMethod, Integer vatRate) {}
+                               Integer paymentMethod, Integer vatRate, Map<String, String> itemNames,
+                               String invoiceSeries) {}
+    public record TemplateOption(String templateCode, String series, String name) {}
     public record PreviewOrder(UUID id, String orderCode, Integer orderNumber, BigDecimal amount) {}
-    public record PreviewLine(String code, String name, String unit, BigDecimal quantity,
+    public record PreviewLine(String lineId, String code, String name, String unit, BigDecimal quantity,
                               BigDecimal unitPriceBeforeTax, BigDecimal subtotal,
                               BigDecimal taxAmount, BigDecimal total, int vatRate) {}
     public record Preview(List<PreviewOrder> orders, List<PreviewLine> lines, int paymentMethod, int vatRate,
                           boolean pricesIncludeVat, BigDecimal subtotal, BigDecimal taxAmount,
-                          BigDecimal totalAmount) {}
+                          BigDecimal totalAmount, String invoiceTemplateCode, String invoiceSeries) {}
     public record InvoiceView(UUID id, String status, String externalInvoiceId, String resultCode,
                               String resultMessage, String transactionId, String invoiceTemplateCode,
                               String invoiceSeries, String invoiceNumber, BigDecimal subtotal,
@@ -126,8 +128,13 @@ public class VinHoadonInvoiceService {
 
     public Preview preview(UUID tenantId, UUID companyId, IssueRequest request) {
         VinHoadonCompanyConfig config = requireUsableConfig(tenantId, companyId);
-        return buildPreview(loadEligibleOrders(tenantId, companyId, request), config,
-                requestedVat(request, config), requestedPayment(request));
+        TemplateOption template = selectedTemplate(request, config);
+        return withItemNames(buildPreview(loadEligibleOrders(tenantId, companyId, request), config,
+                requestedVat(request, config), requestedPayment(request), template), request.itemNames());
+    }
+
+    public List<TemplateOption> templates(UUID tenantId, UUID companyId) {
+        return announcedTemplates(requireUsableConfig(tenantId, companyId));
     }
 
     public InvoiceView issue(UUID tenantId, UUID companyId, IssueRequest request, String actor, ZoneId zoneId) {
@@ -141,7 +148,9 @@ public class VinHoadonInvoiceService {
         List<ShopOrder> orders = orderRepository.lockAllForInvoice(ids, tenantId, companyId);
         validateOrders(ids, orders);
         rejectAlreadyInvoiced(ids);
-        Preview preview = buildPreview(orders, config, requestedVat(request, config), requestedPayment(request));
+        TemplateOption template = selectedTemplate(request, config);
+        Preview preview = withItemNames(buildPreview(orders, config, requestedVat(request, config), requestedPayment(request), template),
+                request.itemNames());
 
         VinHoadonShopInvoice invoice = new VinHoadonShopInvoice();
         invoice.setTenantId(tenantId);
@@ -157,8 +166,8 @@ public class VinHoadonInvoiceService {
         invoice.setTaxAmount(preview.taxAmount());
         invoice.setTotalAmount(preview.totalAmount());
         invoice.setCreatedBy(trim(actor));
-        invoice.setInvoiceTemplateCode(config.getInvoiceTemplateCode());
-        invoice.setInvoiceSeries(config.getInvoiceSeries());
+        invoice.setInvoiceTemplateCode(template.templateCode());
+        invoice.setInvoiceSeries(template.series());
         invoiceRepository.saveAndFlush(invoice);
         for (ShopOrder order : orders) {
             VinHoadonShopInvoiceOrder link = new VinHoadonShopInvoiceOrder();
@@ -292,6 +301,40 @@ public class VinHoadonInvoiceService {
                 c.getInvoiceTemplateCode(), c.getInvoiceSeries(), c.getDefaultVatRate(), c.isPricesIncludeVat());
     }
 
+    private List<TemplateOption> announcedTemplates(VinHoadonCompanyConfig config) {
+        JsonNode response = client.announcedTemplates(credentials(config));
+        JsonNode rows = response.isArray() ? response : response.path("dsmauhoadon");
+        if (!rows.isArray()) throw new IllegalStateException("VIN-HOADON did not return invoice templates");
+        List<TemplateOption> options = new ArrayList<>();
+        for (JsonNode row : rows) {
+            if (row.isArray()) {
+                for (JsonNode nested : row) addTemplate(options, nested, config.getTaxCode());
+            } else addTemplate(options, row, config.getTaxCode());
+        }
+        return options.stream().distinct().toList();
+    }
+
+    private void addTemplate(List<TemplateOption> options, JsonNode row, String sellerTaxCode) {
+        String taxCode = firstText(row, "doanhnghiep_mst", "doanhNghiep_Mst");
+        if (taxCode != null && !sellerTaxCode.equals(taxCode)) return;
+        String templateCode = text(row, "mauso");
+        String series = text(row, "kyhieu");
+        if (templateCode != null && series != null)
+            options.add(new TemplateOption(templateCode, series, text(row, "ten")));
+    }
+
+    private TemplateOption selectedTemplate(IssueRequest request, VinHoadonCompanyConfig config) {
+        String requestedSeries = request == null ? null : trim(request.invoiceSeries());
+        if (requestedSeries == null || requestedSeries.equals(config.getInvoiceSeries()))
+            return new TemplateOption(config.getInvoiceTemplateCode(), config.getInvoiceSeries(), null);
+        if (requestedSeries.length() > 8) throw new IllegalArgumentException("Invoice series is too long");
+        List<TemplateOption> matches = announcedTemplates(config).stream()
+                .filter(option -> requestedSeries.equals(option.series())).toList();
+        if (matches.size() != 1)
+            throw new IllegalArgumentException("Ký hiệu hóa đơn không tìm thấy hoặc không duy nhất trên VIN-HOADON");
+        return matches.get(0);
+    }
+
     private VinHoadonCompanyConfig requireUsableConfig(UUID tenantId, UUID companyId) {
         VinHoadonCompanyConfig config = configRepository.findByTenantIdAndCompanyId(tenantId, companyId)
                 .orElseThrow(() -> new IllegalStateException("VIN-HOADON is not configured for this company"));
@@ -333,7 +376,8 @@ public class VinHoadonInvoiceService {
         return ids;
     }
 
-    private Preview buildPreview(List<ShopOrder> orders, VinHoadonCompanyConfig config, int vat, int paymentMethod) {
+    private Preview buildPreview(List<ShopOrder> orders, VinHoadonCompanyConfig config, int vat, int paymentMethod,
+                                 TemplateOption template) {
         List<UUID> ids = orders.stream().map(ShopOrder::getId).toList();
         List<ShopOrderItem> items = itemRepository.findAllByOrderIds(ids);
         List<SourceLine> sources = new ArrayList<>();
@@ -344,11 +388,11 @@ public class VinHoadonInvoiceService {
             String name = Optional.ofNullable(item.getModelName()).filter(s -> !s.isBlank()).orElse("Sản phẩm");
             if (item.getSelectedOptions() != null && !item.getSelectedOptions().isBlank() && !"{}".equals(item.getSelectedOptions()))
                 name += " (" + item.getSelectedOptions() + ")";
-            sources.add(new SourceLine(code, name, "cái", item.getQuantity(), nz(item.getLineTotal())));
+            sources.add(new SourceLine(item.getId().toString(), code, truncate(name, 255), "cái", item.getQuantity(), nz(item.getLineTotal())));
         }
         for (ShopOrder order : orders) {
             if (nz(order.getDeliveryFee()).signum() > 0)
-                sources.add(new SourceLine("DELIVERY", "Phí giao hàng " + order.getOrderCode(), "lần", BigDecimal.ONE, order.getDeliveryFee()));
+                sources.add(new SourceLine("delivery:" + order.getId(), "DELIVERY", "Phí giao hàng " + order.getOrderCode(), "lần", BigDecimal.ONE, order.getDeliveryFee()));
         }
         BigDecimal sourceTotal = sources.stream().map(SourceLine::total).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal payable = orders.stream().map(o -> nz(o.getTotalAmount()).subtract(nz(o.getDiscountAmount())).max(BigDecimal.ZERO))
@@ -374,7 +418,7 @@ public class VinHoadonInvoiceService {
                 subtotal = allocated; tax = subtotal.multiply(BigDecimal.valueOf(vat)).divide(BigDecimal.valueOf(100), 6, RoundingMode.HALF_UP);
                 total = subtotal.add(tax);
             }
-            lines.add(new PreviewLine(source.code(), source.name(), source.unit(), source.quantity(),
+            lines.add(new PreviewLine(source.lineId(), source.code(), source.name(), source.unit(), source.quantity(),
                     subtotal.divide(source.quantity(), 6, RoundingMode.HALF_UP), subtotal, tax, total, vat));
         }
         BigDecimal subtotal = lines.stream().map(PreviewLine::subtotal).reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -385,7 +429,30 @@ public class VinHoadonInvoiceService {
         List<PreviewOrder> summary = orders.stream().sorted(Comparator.comparing(ShopOrder::getCreatedAt))
                 .map(o -> new PreviewOrder(o.getId(), o.getOrderCode(), o.getOrderNumber(),
                         nz(o.getTotalAmount()).subtract(nz(o.getDiscountAmount())).max(BigDecimal.ZERO))).toList();
-        return new Preview(summary, lines, paymentMethod, vat, config.isPricesIncludeVat(), subtotal, tax, total);
+        return new Preview(summary, lines, paymentMethod, vat, config.isPricesIncludeVat(), subtotal, tax, total,
+                template.templateCode(), template.series());
+    }
+
+    Preview withItemNames(Preview preview, Map<String, String> itemNames) {
+        if (itemNames == null || itemNames.isEmpty()) return preview;
+        Set<String> matched = new HashSet<>();
+        List<PreviewLine> lines = new ArrayList<>(preview.lines().size());
+        for (PreviewLine line : preview.lines()) {
+            String name = line.name();
+            if (itemNames.containsKey(line.lineId())) {
+                name = required(itemNames.get(line.lineId()), "Invoice item name", 255);
+                if (name.chars().anyMatch(ch -> Character.isISOControl(ch)))
+                    throw new IllegalArgumentException("Invoice item name cannot contain control characters");
+                matched.add(line.lineId());
+            }
+            lines.add(new PreviewLine(line.lineId(), line.code(), name, line.unit(), line.quantity(),
+                    line.unitPriceBeforeTax(), line.subtotal(), line.taxAmount(), line.total(), line.vatRate()));
+        }
+        if (matched.size() != itemNames.size())
+            throw new IllegalArgumentException("Invoice item name does not match a selected order item");
+        return new Preview(preview.orders(), lines, preview.paymentMethod(), preview.vatRate(),
+                preview.pricesIncludeVat(), preview.subtotal(), preview.taxAmount(), preview.totalAmount(),
+                preview.invoiceTemplateCode(), preview.invoiceSeries());
     }
 
     private ObjectNode payload(VinHoadonShopInvoice invoice, IssueRequest request, Preview preview,
@@ -393,8 +460,8 @@ public class VinHoadonInvoiceService {
         ObjectNode root = mapper.createObjectNode();
         root.put("mtt_nguoiban_ky", 1);
         root.put("doanhnghiep_mst", config.getTaxCode());
-        root.put("mauso", config.getInvoiceTemplateCode());
-        root.put("kyhieu", config.getInvoiceSeries());
+        root.put("mauso", invoice.getInvoiceTemplateCode());
+        root.put("kyhieu", invoice.getInvoiceSeries());
         root.put("sophieu", preview.orders().stream().map(PreviewOrder::orderCode).limit(5).reduce((a, b) -> a + "," + b).orElse(""));
         root.put("ma_hoadon", invoice.getExternalInvoiceId());
         root.put("ngaylap", VIN_DATE.format(ZonedDateTime.now(zoneId)));
@@ -499,5 +566,5 @@ public class VinHoadonInvoiceService {
     private static String firstText(JsonNode node, String... names) { for (String name : names) { String value = text(node, name); if (value != null) return value; } return null; }
     private static String firstTextOr(String fallback, JsonNode node, String... names) { String value = firstText(node, names); return value == null ? fallback : value; }
     private static String safeMessage(Exception exception) { String value = exception.getMessage(); return truncate(value == null ? exception.getClass().getSimpleName() : value, 2000); }
-    private record SourceLine(String code, String name, String unit, BigDecimal quantity, BigDecimal total) {}
+    private record SourceLine(String lineId, String code, String name, String unit, BigDecimal quantity, BigDecimal total) {}
 }

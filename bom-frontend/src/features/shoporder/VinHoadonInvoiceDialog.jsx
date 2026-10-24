@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -19,8 +19,9 @@ import DownloadIcon from '@mui/icons-material/Download'
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong'
 import SettingsIcon from '@mui/icons-material/Settings'
 import { useAppContext } from '../../context/AppContext'
+import { lookupBusinessTaxCode } from '../../api/businessTaxApi'
 import {
-  downloadVinHoadonInvoice, fetchVinHoadonConfig, fetchVinHoadonInvoiceStatuses, issueVinHoadonInvoice,
+  downloadVinHoadonInvoice, fetchVinHoadonConfig, fetchVinHoadonInvoiceStatuses, fetchVinHoadonTemplates, issueVinHoadonInvoice,
   previewVinHoadonInvoice, retryVinHoadonInvoice, saveVinHoadonConfig, syncVinHoadonInvoice,
 } from '../../api/shopApi'
 
@@ -86,6 +87,13 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [preview, setPreview] = useState(null)
+  const [itemNames, setItemNames] = useState({})
+  const [templates, setTemplates] = useState([])
+  const [invoiceSeries, setInvoiceSeries] = useState('')
+  const [templateError, setTemplateError] = useState('')
+  const [taxLookupBusy, setTaxLookupBusy] = useState(false)
+  const [taxLookupError, setTaxLookupError] = useState('')
+  const lastTaxLookup = useRef('')
   const [invoice, setInvoice] = useState(null)
   const [existingConflict, setExistingConflict] = useState(false)
   const first = orders[0] || {}
@@ -97,18 +105,23 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
   useEffect(() => {
     if (!open) return
     let active = true
-    setLoading(true); setError(''); setConfig(null); setPreview(null); setInvoice(null); setExistingConflict(false); setShowConfig(configOnly)
+    setLoading(true); setError(''); setConfig(null); setPreview(null); setItemNames({}); setTemplates([]); setInvoiceSeries(''); setTemplateError(''); setTaxLookupError(''); lastTaxLookup.current = ''; setInvoice(null); setExistingConflict(false); setShowConfig(configOnly)
     if (!tenantId || !companyId) {
       setError('Chọn tenant và công ty trước khi cấu hình VIN-HOADON.')
       setLoading(false)
       return
     }
-    setBuyer(old => ({ ...old, buyerName: first.customerName || '', buyerAddress: first.deliveryAddress || '', buyerPhone: first.customerPhone || '' }))
+    setBuyer({ buyerTaxCode: first.buyerTaxCode || '', buyerOrganizationName: first.buyerOrganizationName || '', buyerName: first.customerName || '', buyerAddress: first.buyerAddress || first.deliveryAddress || '', buyerPhone: first.buyerPhone || first.customerPhone || '', buyerEmail: first.buyerEmail || '', paymentMethod: 3, vatRate: 8 })
     const currentScope = { tenantId, companyId }
     Promise.all([fetchVinHoadonConfig(currentScope), configOnly || !orderIds.length ? Promise.resolve(null) : fetchVinHoadonInvoiceStatuses(orderIds, currentScope)]).then(([{ res, data }, statuses]) => {
       if (!active) return
       if (!res.ok) throw new Error(messageOf(res, data, 'Không thể tải cấu hình VIN-HOADON'))
-      setConfig(data); setBuyer(old => ({ ...old, vatRate: data.defaultVatRate ?? 8 }))
+      setConfig(data); setInvoiceSeries(data.invoiceSeries || ''); setBuyer(old => ({ ...old, vatRate: data.defaultVatRate ?? 8 }))
+      if (data.configured && data.enabled && data.gatewayEnabled) fetchVinHoadonTemplates(currentScope).then(result => {
+        if (!active) return
+        if (!result.res.ok) throw new Error(messageOf(result.res, result.data, 'Không thể tải ký hiệu hóa đơn'))
+        setTemplates(Array.isArray(result.data) ? result.data : [])
+      }).catch(err => { if (active) setTemplateError(err.message) })
       if (statuses && !statuses.res.ok) throw new Error(messageOf(statuses.res, statuses.data, 'Không thể tải trạng thái hóa đơn'))
       const existing = Object.values(statuses?.data || {})
       if (existing.length && existing.length === orderIds.length && existing.every(item => item.id === existing[0].id)) setInvoice(existing[0])
@@ -118,7 +131,9 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
     return () => { active = false }
   }, [open, configOnly, first.id, orderKey, tenantId, companyId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const payload = () => ({ orderIds, ...buyer, paymentMethod: Number(buyer.paymentMethod), vatRate: Number(buyer.vatRate) })
+  const payload = () => ({ orderIds, ...buyer, paymentMethod: Number(buyer.paymentMethod), vatRate: Number(buyer.vatRate), itemNames, invoiceSeries })
+  const invalidItemName = Object.values(itemNames).some(name => !name.trim() || name.length > 255)
+  const lineIdsAvailable = !preview || preview.lines.every(line => Boolean(line.lineId))
   const runPreview = async () => {
     setBusy(true); setError(''); setInvoice(null)
     try {
@@ -152,6 +167,22 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
     } catch (err) { setError(err.message) } finally { setBusy(false) }
   }
   const field = key => event => { setBuyer(old => ({ ...old, [key]: event.target.value })); setPreview(null) }
+  const lookupTax = async (force = false) => {
+    const taxCode = buyer.buyerTaxCode.trim()
+    if (!taxCode || (!force && taxCode === lastTaxLookup.current)) return
+    if (!/^\d{10}(?:-\d{3})?$/.test(taxCode)) {
+      if (force) setTaxLookupError('Nhập mã số thuế hợp lệ để tra cứu.')
+      return
+    }
+    setTaxLookupBusy(true); setTaxLookupError('')
+    try {
+      const result = await lookupBusinessTaxCode(taxCode)
+      setBuyer(old => old.buyerTaxCode.trim() === taxCode ? { ...old, buyerOrganizationName: result.name, buyerAddress: result.address } : old)
+      if (result.status && !/đang hoạt động/i.test(result.status)) setTaxLookupError(`Trạng thái MST: ${result.status}. Kiểm tra với người mua trước khi gửi hóa đơn.`)
+      lastTaxLookup.current = taxCode
+      setPreview(null)
+    } catch (err) { setTaxLookupError(err.message) } finally { setTaxLookupBusy(false) }
+  }
   const usable = config?.configured && config?.enabled && config?.gatewayEnabled && config?.encryptionConfigured
 
   return <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="md">
@@ -186,25 +217,46 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
           </Stack>
         ) : <Stack spacing={2}>
           {!usable && <Alert severity="warning" action={isAdmin ? <Button color="inherit" onClick={() => setShowConfig(true)}>Cấu hình</Button> : null}>VIN-HOADON chưa sẵn sàng cho công ty này.</Alert>}
+          {templateError && <Alert severity="warning">{templateError}. Có thể dùng ký hiệu mặc định đã cấu hình.</Alert>}
           {ineligible.length > 0 && <Alert severity="error">Chỉ được chọn đơn đã thanh toán và có trạng thái Hoàn tất/Đã giao. Có {ineligible.length} đơn chưa đủ điều kiện.</Alert>}
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>{orders.map(order => <Chip key={order.id} label={`#${order.orderNumber || order.orderCode} · ${money(Number(order.totalAmount || 0) - Number(order.discountAmount || 0))}`} />)}</Box>
           <Divider />
           <Typography fontWeight={800}>Thông tin người mua</Typography>
+          <TextField select label="Ký hiệu hóa đơn" value={invoiceSeries} onChange={event => { setInvoiceSeries(event.target.value); setPreview(null) }} helperText="Chọn ký hiệu đã đăng ký trên VIN-HOADON cho hóa đơn này.">
+            {config?.invoiceSeries && !templates.some(option => option.series === config.invoiceSeries) && <MenuItem value={config.invoiceSeries}>{config.invoiceSeries} · Mẫu số {config.invoiceTemplateCode} (mặc định)</MenuItem>}
+            {templates.map(option => <MenuItem key={`${option.templateCode}-${option.series}`} value={option.series}>{option.series} · Mẫu số {option.templateCode}</MenuItem>)}
+          </TextField>
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
-            <TextField label="Mã số thuế người mua" value={buyer.buyerTaxCode} onChange={field('buyerTaxCode')} inputProps={{ maxLength: 14 }} />
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+              <TextField label="Mã số thuế người mua" fullWidth value={buyer.buyerTaxCode} onChange={field('buyerTaxCode')} onBlur={() => lookupTax()} inputProps={{ maxLength: 14 }} />
+              <Button variant="outlined" onClick={() => lookupTax(true)} disabled={taxLookupBusy || !buyer.buyerTaxCode.trim()} sx={{ whiteSpace: 'nowrap', mt: 1 }}>{taxLookupBusy ? 'Đang tra...' : 'Tra cứu MST'}</Button>
+            </Box>
             <TextField label="Tên đơn vị / tổ chức" value={buyer.buyerOrganizationName} onChange={field('buyerOrganizationName')} />
             <TextField label="Người mua hàng" value={buyer.buyerName} onChange={field('buyerName')} />
-            <TextField label="Địa chỉ" value={buyer.buyerAddress} onChange={field('buyerAddress')} />
+            <TextField label="Địa chỉ xuất hóa đơn" value={buyer.buyerAddress} onChange={field('buyerAddress')} multiline minRows={2} />
             <TextField label="Số điện thoại" value={buyer.buyerPhone} onChange={field('buyerPhone')} />
             <TextField label="Email nhận hóa đơn" value={buyer.buyerEmail} onChange={field('buyerEmail')} type="email" />
             <TextField select label="Hình thức thanh toán" value={buyer.paymentMethod} onChange={field('paymentMethod')}>{PAYMENT_OPTIONS.map(x => <MenuItem key={x.value} value={x.value}>{x.label}</MenuItem>)}</TextField>
             <TextField select label="Thuế suất" value={buyer.vatRate} onChange={field('vatRate')}>{VAT_OPTIONS.map(x => <MenuItem key={x.value} value={x.value}>{x.label}</MenuItem>)}</TextField>
           </Box>
+          {taxLookupError && <Alert severity="warning">{taxLookupError}. Bạn có thể nhập tên và địa chỉ thủ công.</Alert>}
+          {preview && !lineIdsAvailable && <Alert severity="error">Máy chủ cần cập nhật để sửa tên hàng trước khi gửi hóa đơn.</Alert>}
           {preview && <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, overflow: 'hidden' }}>
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 1, p: 1, bgcolor: 'grey.100', fontWeight: 800 }}><span>Hàng hóa</span><span>SL</span><span>Thành tiền</span></Box>
-            {preview.lines.map((line, index) => <Box key={`${line.code}-${index}`} sx={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 1, p: 1, borderTop: '1px solid', borderColor: 'divider' }}><span>{line.name}</span><span>{line.quantity}</span><b>{money(line.total)}</b></Box>)}
+            <Box sx={{ p: 1.5, bgcolor: 'grey.50' }}>
+              <Typography fontWeight={800}>Hóa đơn nháp · Mẫu số {preview.invoiceTemplateCode} · Ký hiệu {preview.invoiceSeries}</Typography>
+              <Typography variant="body2">Người mua: {buyer.buyerOrganizationName || buyer.buyerName || '—'}{buyer.buyerTaxCode ? ` · MST ${buyer.buyerTaxCode}` : ''}</Typography>
+              <Typography variant="body2">Địa chỉ: {buyer.buyerAddress || '—'}</Typography>
+              <Typography variant="body2">Điện thoại: {buyer.buyerPhone || '—'} · Email: {buyer.buyerEmail || '—'}</Typography>
+            </Box>
+            <Box sx={{ overflowX: 'auto' }}>
+              <Box sx={{ minWidth: 930, display: 'grid', gridTemplateColumns: 'minmax(250px, 2fr) 70px 120px 90px 120px 130px', gap: 1, p: 1, bgcolor: 'grey.100', fontWeight: 800 }}><span>Hàng hóa</span><span>SL</span><span>Đơn giá trước thuế</span><span>VAT</span><span>Tiền thuế</span><span>Thành tiền</span></Box>
+              {preview.lines.map(line => <Box key={line.lineId} sx={{ minWidth: 930, display: 'grid', gridTemplateColumns: 'minmax(250px, 2fr) 70px 120px 90px 120px 130px', gap: 1, p: 1, alignItems: 'center', borderTop: '1px solid', borderColor: 'divider' }}>
+                <TextField size="small" fullWidth disabled={!line.lineId} label="Tên hàng trên hóa đơn" value={itemNames[line.lineId] ?? line.name} onChange={event => setItemNames(old => ({ ...old, [line.lineId]: event.target.value }))} error={itemNames[line.lineId] != null && !itemNames[line.lineId].trim()} inputProps={{ maxLength: 255 }} />
+                <span>{line.quantity}</span><span>{money(line.unitPriceBeforeTax)}</span><span>{line.vatRate < 0 ? VAT_OPTIONS.find(option => option.value === line.vatRate)?.label : `${line.vatRate}%`}</span><span>{money(line.taxAmount)}</span><b>{money(line.total)}</b>
+              </Box>)}
+            </Box>
             <Stack sx={{ p: 1.5, borderTop: '2px solid', borderColor: 'divider', alignItems: 'flex-end' }}>
-              <Typography>Tiền trước thuế: {money(preview.subtotal)}</Typography><Typography>Thuế: {money(preview.taxAmount)}</Typography><Typography variant="h6" fontWeight={900}>Tổng: {money(preview.totalAmount)}</Typography>
+              <Typography>Tiền trước thuế: {money(preview.subtotal)}</Typography><Typography>Thuế: {money(preview.taxAmount)}</Typography><Typography variant="h6" fontWeight={900}>Tổng thanh toán: {money(preview.totalAmount)}</Typography>
             </Stack>
           </Box>}
         </Stack>}
@@ -213,7 +265,7 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
     {!showConfig && !invoice && <DialogActions>
       <Button onClick={onClose} disabled={busy}>Hủy</Button>
       <Button variant="outlined" onClick={runPreview} disabled={busy || !usable || existingConflict || ineligible.length > 0 || !orderIds.length}>Xem trước</Button>
-      <Button variant="contained" color="success" onClick={issue} disabled={busy || existingConflict || !preview}>{busy ? <CircularProgress size={20} /> : 'Gửi sang VIN-HOADON (chưa ký)'}</Button>
+      <Button variant="contained" color="success" onClick={issue} disabled={busy || existingConflict || !preview || !lineIdsAvailable || invalidItemName}>{busy ? <CircularProgress size={20} /> : 'Gửi sang VIN-HOADON (chưa ký)'}</Button>
     </DialogActions>}
     {(invoice || (showConfig && (!isAdmin || configOnly))) && <DialogActions><Button onClick={onClose} disabled={busy}>Đóng</Button></DialogActions>}
   </Dialog>
