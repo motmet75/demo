@@ -1,4 +1,4 @@
-import { apiFetch, apiFetchJson, apiFetchJsonNoContext } from './client'
+import { apiFetch, apiFetchNoContext, apiFetchJson, apiFetchJsonNoContext } from './client'
 
 function qs(params) {
   const search = new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ''))).toString()
@@ -265,44 +265,60 @@ export async function fetchShopOrders(status, range = {}) {
 }
 
 // ── VIN-HOADON fiscal invoices ─────────────────────────────────────
-export function fetchVinHoadonConfig() {
-  return apiFetchJson('/shop/staff/e-invoices/config')
+function vinScopedOptions(options, scope) {
+  if (!scope) return options
+  if (!scope.tenantId || !scope.companyId) throw new Error('Select a tenant and company for VIN-HOADON')
+  return {
+    ...options,
+    headers: { ...options?.headers, 'X-Tenant-Id': scope.tenantId, 'X-Company-Id': scope.companyId },
+  }
 }
 
-export function saveVinHoadonConfig(payload) {
-  return apiFetchJson('/shop/staff/e-invoices/config', {
+function vinFetchJson(url, options = {}, scope) {
+  const request = vinScopedOptions(options, scope)
+  return scope ? apiFetchJsonNoContext(url, request) : apiFetchJson(url, request)
+}
+
+export function fetchVinHoadonConfig(scope) {
+  return vinFetchJson('/shop/staff/e-invoices/config', {}, scope)
+}
+
+export function saveVinHoadonConfig(payload, scope) {
+  return vinFetchJson('/shop/staff/e-invoices/config', {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
-  })
+  }, scope)
 }
 
-export function previewVinHoadonInvoice(payload) {
-  return apiFetchJson('/shop/staff/e-invoices/preview', {
+export function previewVinHoadonInvoice(payload, scope) {
+  return vinFetchJson('/shop/staff/e-invoices/preview', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
-  })
+  }, scope)
 }
 
-export function fetchVinHoadonInvoiceStatuses(orderIds) {
-  return apiFetchJson('/shop/staff/e-invoices/status', {
+export function fetchVinHoadonInvoiceStatuses(orderIds, scope) {
+  return vinFetchJson('/shop/staff/e-invoices/status', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(orderIds),
-  })
+  }, scope)
 }
 
-export function issueVinHoadonInvoice(payload) {
-  return apiFetchJson('/shop/staff/e-invoices', {
+export function issueVinHoadonInvoice(payload, scope) {
+  return vinFetchJson('/shop/staff/e-invoices', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
-  })
+  }, scope)
 }
 
-export function retryVinHoadonInvoice(invoiceId) {
-  return apiFetchJson(`/shop/staff/e-invoices/${invoiceId}/retry`, { method: 'POST' })
+export function retryVinHoadonInvoice(invoiceId, scope) {
+  return vinFetchJson(`/shop/staff/e-invoices/${invoiceId}/retry`, { method: 'POST' }, scope)
 }
 
-export function syncVinHoadonInvoice(invoiceId) {
-  return apiFetchJson(`/shop/staff/e-invoices/${invoiceId}/sync`, { method: 'POST' })
+export function syncVinHoadonInvoice(invoiceId, scope) {
+  return vinFetchJson(`/shop/staff/e-invoices/${invoiceId}/sync`, { method: 'POST' }, scope)
 }
 
-export async function downloadVinHoadonInvoice(invoiceId, format = 'pdf') {
-  const res = await apiFetch(`/shop/staff/e-invoices/${invoiceId}/download/${format}`)
+export async function downloadVinHoadonInvoice(invoiceId, format = 'pdf', scope) {
+  const requestUrl = `/shop/staff/e-invoices/${invoiceId}/download/${format}`
+  const options = vinScopedOptions({}, scope)
+  const res = await (scope ? apiFetchNoContext(requestUrl, options) : apiFetch(requestUrl, options))
   if (!res.ok) {
     let message = `Download failed (${res.status})`
     try { const data = await res.json(); message = data?.message || data?.error || message } catch { /* ignore */ }

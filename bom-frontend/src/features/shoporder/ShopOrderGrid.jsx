@@ -3367,6 +3367,7 @@ export default function ShopOrderGrid() {
       </Dialog>
 
       <VinHoadonInvoiceDialog
+        key={`vin-invoice-${ctxTenantId || ''}-${ctxCompanyId || ''}`}
         open={vinInvoiceOpen}
         onClose={() => setVinInvoiceOpen(false)}
         orders={selectedInvoiceOrders}
@@ -3376,6 +3377,7 @@ export default function ShopOrderGrid() {
         }}
       />
       <VinHoadonInvoiceDialog
+        key={`vin-config-${ctxTenantId || ''}-${ctxCompanyId || ''}`}
         open={vinConfigOpen}
         onClose={() => setVinConfigOpen(false)}
         configOnly

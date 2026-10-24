@@ -18,6 +18,7 @@ import Typography from '@mui/material/Typography'
 import DownloadIcon from '@mui/icons-material/Download'
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong'
 import SettingsIcon from '@mui/icons-material/Settings'
+import { useAppContext } from '../../context/AppContext'
 import {
   downloadVinHoadonInvoice, fetchVinHoadonConfig, fetchVinHoadonInvoiceStatuses, issueVinHoadonInvoice,
   previewVinHoadonInvoice, retryVinHoadonInvoice, saveVinHoadonConfig, syncVinHoadonInvoice,
@@ -35,7 +36,7 @@ const PAYMENT_OPTIONS = [
 const money = value => Number(value || 0).toLocaleString('vi-VN', { maximumFractionDigits: 2 }) + ' ₫'
 const messageOf = (res, data, fallback) => data?.message || data?.error || (typeof data === 'string' ? data : '') || `${fallback} (${res?.status || '?'})`
 
-function ConfigForm({ config, onSaved, onCancel }) {
+function ConfigForm({ config, scope, onSaved, onCancel }) {
   const [form, setForm] = useState({
     enabled: config?.enabled || false, taxCode: config?.taxCode || '', apiUsername: config?.apiUsername || '', apiPassword: '',
     invoiceTemplateCode: config?.invoiceTemplateCode || '', invoiceSeries: config?.invoiceSeries || '',
@@ -47,7 +48,7 @@ function ConfigForm({ config, onSaved, onCancel }) {
   const save = async () => {
     setBusy(true); setError('')
     try {
-      const { res, data } = await saveVinHoadonConfig(form)
+      const { res, data } = await saveVinHoadonConfig(form, scope)
       if (!res.ok) throw new Error(messageOf(res, data, 'Không thể lưu cấu hình'))
       onSaved(data)
     } catch (err) { setError(err.message) } finally { setBusy(false) }
@@ -61,7 +62,7 @@ function ConfigForm({ config, onSaved, onCancel }) {
       <TextField label="Mã số thuế người bán" value={form.taxCode} onChange={change('taxCode')} required inputProps={{ maxLength: 14 }} />
       <TextField label="Tên đăng nhập VIN-HOADON" value={form.apiUsername} onChange={change('apiUsername')} required />
       <TextField label={config?.passwordConfigured ? 'Mật khẩu mới (để trống để giữ nguyên)' : 'Mật khẩu VIN-HOADON'} value={form.apiPassword} onChange={change('apiPassword')} type="password" required={!config?.passwordConfigured} />
-      <TextField label="Mã mẫu hóa đơn" value={form.invoiceTemplateCode} onChange={change('invoiceTemplateCode')} required inputProps={{ maxLength: 11 }} />
+      <TextField label="Mã mẫu hóa đơn" value={form.invoiceTemplateCode} onChange={change('invoiceTemplateCode')} required inputProps={{ maxLength: 11 }} helperText="Lấy ở cột Mẫu số trên VIN-HOADON; ví dụ 1, không phải C26MMC." error={Boolean(form.invoiceTemplateCode && form.invoiceTemplateCode.trim().toUpperCase() === form.invoiceSeries.trim().toUpperCase())} />
       <TextField label="Ký hiệu hóa đơn" value={form.invoiceSeries} onChange={change('invoiceSeries')} required inputProps={{ maxLength: 8 }} />
       <TextField select label="Thuế suất mặc định" value={form.defaultVatRate} onChange={e => setForm(old => ({ ...old, defaultVatRate: Number(e.target.value) }))}>
         {VAT_OPTIONS.map(option => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
@@ -77,6 +78,8 @@ function ConfigForm({ config, onSaved, onCancel }) {
 }
 
 export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], configOnly = false, isAdmin = false, onIssued }) {
+  const { tenantId, companyId, companyName } = useAppContext()
+  const scope = { tenantId, companyId }
   const [config, setConfig] = useState(null)
   const [showConfig, setShowConfig] = useState(configOnly)
   const [loading, setLoading] = useState(false)
@@ -88,13 +91,22 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
   const first = orders[0] || {}
   const [buyer, setBuyer] = useState({ buyerTaxCode: '', buyerOrganizationName: '', buyerName: '', buyerAddress: '', buyerPhone: '', buyerEmail: '', paymentMethod: 3, vatRate: 8 })
   const orderIds = useMemo(() => orders.map(order => order.id).filter(Boolean), [orders])
+  const orderKey = orderIds.join(',')
   const ineligible = orders.filter(order => order.paymentStatus !== 'PAID' || !['COMPLETED', 'PICKED_UP'].includes(order.status))
 
   useEffect(() => {
     if (!open) return
-    setLoading(true); setError(''); setPreview(null); setInvoice(null); setExistingConflict(false); setShowConfig(configOnly)
+    let active = true
+    setLoading(true); setError(''); setConfig(null); setPreview(null); setInvoice(null); setExistingConflict(false); setShowConfig(configOnly)
+    if (!tenantId || !companyId) {
+      setError('Chọn tenant và công ty trước khi cấu hình VIN-HOADON.')
+      setLoading(false)
+      return
+    }
     setBuyer(old => ({ ...old, buyerName: first.customerName || '', buyerAddress: first.deliveryAddress || '', buyerPhone: first.customerPhone || '' }))
-    Promise.all([fetchVinHoadonConfig(), configOnly || !orderIds.length ? Promise.resolve(null) : fetchVinHoadonInvoiceStatuses(orderIds)]).then(([{ res, data }, statuses]) => {
+    const currentScope = { tenantId, companyId }
+    Promise.all([fetchVinHoadonConfig(currentScope), configOnly || !orderIds.length ? Promise.resolve(null) : fetchVinHoadonInvoiceStatuses(orderIds, currentScope)]).then(([{ res, data }, statuses]) => {
+      if (!active) return
       if (!res.ok) throw new Error(messageOf(res, data, 'Không thể tải cấu hình VIN-HOADON'))
       setConfig(data); setBuyer(old => ({ ...old, vatRate: data.defaultVatRate ?? 8 }))
       if (statuses && !statuses.res.ok) throw new Error(messageOf(statuses.res, statuses.data, 'Không thể tải trạng thái hóa đơn'))
@@ -102,14 +114,15 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
       if (existing.length && existing.length === orderIds.length && existing.every(item => item.id === existing[0].id)) setInvoice(existing[0])
       else if (existing.length) { setExistingConflict(true); setError('Một số đơn đã thuộc hóa đơn VIN-HOADON khác. Chọn riêng các đơn thuộc cùng một hóa đơn.') }
       if (configOnly || !data.configured) setShowConfig(true)
-    }).catch(err => setError(err.message)).finally(() => setLoading(false))
-  }, [open, configOnly, first.id]) // eslint-disable-line react-hooks/exhaustive-deps
+    }).catch(err => { if (active) setError(err.message) }).finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [open, configOnly, first.id, orderKey, tenantId, companyId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const payload = () => ({ orderIds, ...buyer, paymentMethod: Number(buyer.paymentMethod), vatRate: Number(buyer.vatRate) })
   const runPreview = async () => {
     setBusy(true); setError(''); setInvoice(null)
     try {
-      const { res, data } = await previewVinHoadonInvoice(payload())
+      const { res, data } = await previewVinHoadonInvoice(payload(), scope)
       if (!res.ok) throw new Error(messageOf(res, data, 'Không thể xem trước hóa đơn'))
       setPreview(data)
     } catch (err) { setError(err.message); setPreview(null) } finally { setBusy(false) }
@@ -117,7 +130,7 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
   const issue = async () => {
     setBusy(true); setError('')
     try {
-      const { res, data } = await issueVinHoadonInvoice(payload())
+      const { res, data } = await issueVinHoadonInvoice(payload(), scope)
       if (!res.ok) throw new Error(messageOf(res, data, 'Không thể gửi hóa đơn sang VIN-HOADON'))
       setInvoice(data); setPreview(null); onIssued?.(data)
     } catch (err) { setError(err.message) } finally { setBusy(false) }
@@ -125,7 +138,7 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
   const retry = async () => {
     setBusy(true); setError('')
     try {
-      const { res, data } = await retryVinHoadonInvoice(invoice.id)
+      const { res, data } = await retryVinHoadonInvoice(invoice.id, scope)
       if (!res.ok) throw new Error(messageOf(res, data, 'Không thể thử lại'))
       setInvoice(data); onIssued?.(data)
     } catch (err) { setError(err.message) } finally { setBusy(false) }
@@ -133,7 +146,7 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
   const sync = async () => {
     setBusy(true); setError('')
     try {
-      const { res, data } = await syncVinHoadonInvoice(invoice.id)
+      const { res, data } = await syncVinHoadonInvoice(invoice.id, scope)
       if (!res.ok) throw new Error(messageOf(res, data, 'Không thể tra cứu hóa đơn'))
       setInvoice(data); onIssued?.(data)
     } catch (err) { setError(err.message) } finally { setBusy(false) }
@@ -147,10 +160,11 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
       {showConfig ? 'Cấu hình VIN-HOADON' : `Xuất hóa đơn điện tử · ${orders.length} đơn`}
     </DialogTitle>
     <DialogContent dividers>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>Cấu hình riêng cho công ty: {companyName || companyId || 'chưa chọn'}</Typography>
       {loading ? <Box sx={{ py: 5, textAlign: 'center' }}><CircularProgress /></Box> : <>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
         {showConfig ? (
-          isAdmin ? <ConfigForm config={config || {}} onSaved={saved => { setConfig(saved); if (!configOnly) setShowConfig(false) }} onCancel={!configOnly && config?.configured ? () => setShowConfig(false) : null} />
+          isAdmin ? <ConfigForm config={config || {}} scope={scope} onSaved={saved => { setConfig(saved); if (!configOnly) setShowConfig(false) }} onCancel={!configOnly && config?.configured ? () => setShowConfig(false) : null} />
             : <Alert severity="warning">Chỉ quản trị viên hoặc người dùng nghiệp vụ đầy đủ có thể cấu hình VIN-HOADON.</Alert>
         ) : invoice ? (
           <Stack spacing={2}>
@@ -158,11 +172,12 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
               {invoice.status === 'ISSUED' ? 'Hóa đơn đã được ký.' : invoice.status === 'DRAFT' ? 'Đã gửi hóa đơn chưa ký lên VIN-HOADON. Kiểm tra danh sách hóa đơn trên VIN-HOADON và ký tại đó khi sẵn sàng.' : invoice.status === 'PENDING' ? 'VIN-HOADON đã nhận hóa đơn; đang chờ ký hoặc cấp số.' : invoice.status === 'RECONCILE' ? 'Chưa xác nhận được kết quả. Tra cứu trước khi thử gửi lại.' : `Gửi hóa đơn chưa thành công: ${invoice.resultMessage || 'Lỗi VIN-HOADON'}`}
             </Alert>
             <Box><Chip label={invoice.status} color={invoice.status === 'ISSUED' ? 'success' : invoice.status === 'DRAFT' ? 'info' : 'warning'} /> <b>{invoice.invoiceSeries || ''} {invoice.invoiceNumber || invoice.externalInvoiceId}</b></Box>
+            <Typography variant="body2">Mẫu số đã gửi: <b>{invoice.invoiceTemplateCode || '—'}</b> · Ký hiệu: <b>{invoice.invoiceSeries || '—'}</b></Typography>
             <Typography>Tổng thanh toán: <b>{money(invoice.totalAmount)}</b></Typography>
             {invoice.taxAuthorityStatus != null && <Typography>Trạng thái cơ quan thuế: {({ 0: 'Chờ xác nhận', 1: 'Đã xác nhận', 2: 'Từ chối' })[invoice.taxAuthorityStatus] || invoice.taxAuthorityStatus}</Typography>}
             {invoice.status === 'ISSUED' ? <Stack direction="row" spacing={1}>
-              <Button startIcon={<DownloadIcon />} variant="outlined" onClick={() => downloadVinHoadonInvoice(invoice.id, 'pdf').catch(err => setError(err.message))}>Tải PDF</Button>
-              <Button startIcon={<DownloadIcon />} variant="outlined" onClick={() => downloadVinHoadonInvoice(invoice.id, 'xml').catch(err => setError(err.message))}>Tải XML</Button>
+              <Button startIcon={<DownloadIcon />} variant="outlined" onClick={() => downloadVinHoadonInvoice(invoice.id, 'pdf', scope).catch(err => setError(err.message))}>Tải PDF</Button>
+              <Button startIcon={<DownloadIcon />} variant="outlined" onClick={() => downloadVinHoadonInvoice(invoice.id, 'xml', scope).catch(err => setError(err.message))}>Tải XML</Button>
               <Button variant="outlined" onClick={sync} disabled={busy}>Cập nhật trạng thái thuế</Button>
             </Stack> : <Stack direction="row" spacing={1}>
               <Button variant="outlined" onClick={sync} disabled={busy}>Tra cứu hóa đơn</Button>

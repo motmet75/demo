@@ -98,6 +98,8 @@ public class VinHoadonInvoiceService {
         String username = required(request.apiUsername(), "VIN-HOADON username", 255);
         String template = required(request.invoiceTemplateCode(), "Invoice template code", 11);
         String series = required(request.invoiceSeries(), "Invoice series", 8);
+        if (template.equalsIgnoreCase(series))
+            throw new IllegalArgumentException("Mã mẫu hóa đơn phải là giá trị ở cột Mẫu số trên VIN-HOADON (ví dụ 1), không phải Ký hiệu hóa đơn");
         int vat = request.defaultVatRate() == null ? 8 : request.defaultVatRate();
         validateVat(vat);
 
