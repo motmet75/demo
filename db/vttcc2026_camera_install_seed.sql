@@ -32,7 +32,7 @@ SELECT ('0198f600-0000-7000-8400-'||RIGHT(m.id::text,12))::uuid, m.id, '0198f600
 FROM material m CROSS JOIN tenant t CROSS JOIN company c
 JOIN (VALUES ('CAM-4MP',20::numeric),('NVR-4CH',8::numeric),('CAT6-305',5::numeric),('HDD-4TB',10::numeric)) q(code,qty) ON q.code=m.material_code
 WHERE t.tenant_code='vttcc2026' AND c.company_code='VTTCC'
-ON CONFLICT (id) DO UPDATE SET quantity_on_hand=EXCLUDED.quantity_on_hand,quantity=EXCLUDED.quantity_on_hand;
+ON CONFLICT (id) DO UPDATE SET quantity_on_hand=EXCLUDED.quantity_on_hand,quantity_locked=EXCLUDED.quantity_locked,updated_at=NOW();
 
 INSERT INTO model_bom (id, model_id, material_id, qty_per_unit, tenant_id, company_id)
 VALUES
