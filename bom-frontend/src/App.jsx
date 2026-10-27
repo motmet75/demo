@@ -11,6 +11,7 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import LogoutIcon from '@mui/icons-material/Logout'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff'
 
 import MaterialPage from './features/material/MaterialPage'
 import ModelPage from './features/model/ModelPage'
@@ -340,7 +341,7 @@ function NavGroup({ group, collapsed }) {
 
 function Sidebar({ collapsed, onToggle, user, isAdmin, isSuperAdmin, hasFullBusinessAccess, hasShopOrderingAccess, hasCounterAccess }) {
   const { t } = useI18n()
-  const visibleGroups = hasFullBusinessAccess
+  const roleGroups = hasFullBusinessAccess
     ? NAV_GROUPS
     : hasCounterAccess
       ? NAV_GROUPS
@@ -353,6 +354,22 @@ function Sidebar({ collapsed, onToggle, user, isAdmin, isSuperAdmin, hasFullBusi
       : hasAnyRole(user, ['ROLE_INVOICE_DESK'])
         ? [{ key: 'invoice', label: 'Hóa đơn', items: [{ label: 'Xử lý hóa đơn', path: '/invoice-desk', icon: 'PDF' }] }]
         : []
+  const navPrefKey = `bom.nav.hidden.${user?.username || 'anonymous'}`
+  const [hiddenPaths, setHiddenPaths] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(navPrefKey) || '[]')) } catch { return new Set() }
+  })
+  const [customizingNav, setCustomizingNav] = useState(false)
+  useEffect(() => {
+    try { localStorage.setItem(navPrefKey, JSON.stringify([...hiddenPaths])) } catch { /* storage unavailable */ }
+  }, [hiddenPaths, navPrefKey])
+  const toggleHidden = path => setHiddenPaths(previous => {
+    const next = new Set(previous)
+    next.has(path) ? next.delete(path) : next.add(path)
+    return next
+  })
+  const visibleGroups = roleGroups
+    .map(group => ({ ...group, items: group.items.filter(item => !hiddenPaths.has(item.path)) }))
+    .filter(group => group.items.length)
   const visibleAdminItems = ADMIN_ITEMS.filter(item => {
     if (item.roles?.includes('ROLE_SUPER_ADMIN')) return isSuperAdmin
     return isAdmin && hasAnyRole(user, item.roles || [])
@@ -384,10 +401,27 @@ function Sidebar({ collapsed, onToggle, user, isAdmin, isSuperAdmin, hasFullBusi
             {t('app.name')}
           </Typography>
         )}
+        <Tooltip title="Ẩn/hiện liên kết menu">
+          <IconButton size="small" onClick={() => setCustomizingNav(value => !value)} sx={{ flexShrink: 0 }}>
+            <VisibilityOffIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
         <IconButton size="small" onClick={onToggle} sx={{ flexShrink: 0 }}>
           {collapsed ? <MenuIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
         </IconButton>
       </Box>
+
+      {!collapsed && customizingNav && (
+        <Box sx={{ p: 1, bgcolor: '#fffde7', borderBottom: '1px solid #e5e7eb', maxHeight: 260, overflowY: 'auto' }}>
+          <Typography variant="caption" fontWeight={800}>Hiện liên kết cần dùng</Typography>
+          {roleGroups.flatMap(group => group.items).map(item => (
+            <Box key={item.path} onClick={() => toggleHidden(item.path)} sx={{ display: 'flex', gap: 0.75, alignItems: 'center', cursor: 'pointer', py: 0.25, opacity: hiddenPaths.has(item.path) ? 0.55 : 1 }}>
+              <input type="checkbox" readOnly checked={!hiddenPaths.has(item.path)} />
+              <Typography variant="caption" noWrap>{item.label}</Typography>
+            </Box>
+          ))}
+        </Box>
+      )}
 
       {/* Scrollable nav */}
       <Box sx={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', py: 0.5 }}>
