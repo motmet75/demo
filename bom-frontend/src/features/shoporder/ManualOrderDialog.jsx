@@ -309,6 +309,11 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
     [models]
   )
 
+  const serviceQuickModels = useMemo(() => mainModels.filter(model => {
+    const text = `${model.category || ''} ${model.modelName || ''}`.toLowerCase()
+    return /(labor|labour|lao động|lao dong|food|ăn uống|an uong|dịch vụ|dich vu|service)/i.test(text)
+  }).slice(0, 8), [mainModels])
+
   // Load staff menu + tables when dialog opens
   useEffect(() => {
     if (!open) return
@@ -1194,6 +1199,20 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
                   Add
                 </Button>
               </Box>
+
+              {serviceQuickModels.length > 0 && (
+                <Box sx={{ mt: 0.75, p: 1, borderRadius: 1.5, bgcolor: '#fff8e1', border: '1px solid #f5d483' }}>
+                  <Typography variant="caption" fontWeight={800} color="text.secondary">Dịch vụ nhanh · Lao động / Ăn uống</Typography>
+                  <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mt: 0.5 }}>
+                    {serviceQuickModels.map(model => (
+                      <Button key={model.id} size="small" variant="outlined" onClick={() => addModelToOrder(model)} sx={{ textTransform: 'none', fontWeight: 700 }}>
+                        {model.modelName} · {fmt(model.sellingPrice)}
+                      </Button>
+                    ))}
+                  </Box>
+                  <Typography variant="caption" color="text.secondary">Có thể sửa giá từng dòng trước khi tạo đơn.</Typography>
+                </Box>
+              )}
 
               {mainModels.length > 0 && (
                 <Box sx={{

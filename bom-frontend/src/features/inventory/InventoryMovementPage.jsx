@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { DataGrid } from '@mui/x-data-grid'
+import { useSearchParams } from 'react-router-dom'
 import Button from '@mui/material/Button'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
@@ -23,6 +24,7 @@ const MOVEMENT_TYPES = ['IN', 'OUT', 'TRANSFER', 'ADJUSTMENT', 'IMPORT', 'IMPORT
 const TYPE_COLORS = { IN: 'success', OUT: 'error', TRANSFER: 'info', ADJUSTMENT: 'warning', IMPORT: 'default', IMPORT_UPDATE: 'default' }
 
 export default function InventoryMovementPage() {
+  const [searchParams] = useSearchParams()
   const { tenantId, companyId } = useAppContext()
   const { user } = useAuth()
   const currentUsername = user?.username || 'system'
@@ -44,8 +46,8 @@ export default function InventoryMovementPage() {
   const [loading, setLoading] = useState(false)
   const [materials, setMaterials] = useState([])
   const [warehouses, setWarehouses] = useState([])
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [form, setForm] = useState(makeEmptyForm)
+  const [dialogOpen, setDialogOpen] = useState(() => searchParams.get('invoice') === '1' || searchParams.get('type') === 'OUT')
+  const [form, setForm] = useState(() => ({ ...makeEmptyForm(), movementType: searchParams.get('type') === 'OUT' ? 'OUT' : 'IN' }))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [filterType, setFilterType] = useState('')
@@ -86,6 +88,13 @@ export default function InventoryMovementPage() {
   }, [tenantId, companyId, filterType])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    if (searchParams.get('type') === 'OUT') {
+      setForm(prev => ({ ...prev, movementType: 'OUT' }))
+      setDialogOpen(true)
+    }
+  }, [searchParams])
 
   useEffect(() => {
     if (!tenantId || !companyId) return

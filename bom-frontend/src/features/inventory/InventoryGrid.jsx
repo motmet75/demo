@@ -21,6 +21,7 @@ import * as XLSX from 'xlsx'
 import { numFmt, dateFmt } from '../../utils/format'
 import { useAuth } from '../../context/useAuth'
 import FormattedNumberField from '../../components/FormattedNumberField'
+import { useNavigate } from 'react-router-dom'
 
 const normalizeSearch = value => String(value ?? '')
   .normalize('NFD')
@@ -30,6 +31,7 @@ const normalizeSearch = value => String(value ?? '')
 
 export default function InventoryGrid() {
   const { hasInventoryPriceAccess } = useAuth()
+  const navigate = useNavigate()
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(false)
 
@@ -741,6 +743,7 @@ export default function InventoryGrid() {
       {/* Export controls and top small toolbar */}
       <div style={{ padding: '0 8px 8px 8px' }}>
         <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+          <button type="button" onClick={() => navigate('/inventory-movements?type=OUT&invoice=1')} style={{ fontWeight: 700 }}>Hóa đơn xuất</button>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
             Export
             <select value={exportGrouping} onChange={e => setExportGrouping(e.target.value)} style={{ fontSize: 12, padding: '3px 6px' }}>

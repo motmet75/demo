@@ -45,6 +45,7 @@ import ShopMenuPage from './features/shopfront/ShopMenuPage'
 import ShopQueuePage from './features/shopfront/ShopQueuePage'
 import ShopOrderStatusPage from './features/shopfront/ShopOrderStatusPage'
 import ShopOrderPage from './features/shoporder/ShopOrderPage'
+import ShopRepairPage from './features/shoporder/ShopRepairPage'
 import ShopTablePage from './features/shoptable/ShopTablePage'
 import ShopReservationCalendar from './features/shoptable/ShopReservationCalendar'
 import ShopMenuManagePage from './features/shopmenu/ShopMenuManagePage'
@@ -75,8 +76,8 @@ const SHOP_ORDERING_ROLES = ['ROLE_SUPER_ADMIN', 'ROLE_ADMIN', 'ROLE_USER', 'ROL
 const COUNTER_OPERATION_ROLES = ['ROLE_SUPER_ADMIN', 'ROLE_ADMIN', 'ROLE_USER', 'ROLE_COUNTER']
 const ADMIN_MANAGEMENT_ROLES = ['ROLE_SUPER_ADMIN', 'ROLE_ADMIN']
 const SUPER_ADMIN_ROLES = ['ROLE_SUPER_ADMIN']
-const SHOP_ORDERING_PATHS = new Set(['/shop-orders', '/shop-tables', '/shop-reservations', '/shop-printing'])
-const COUNTER_OPERATION_PATHS = new Set(['/counter-shift', '/inventory', '/warehouses', '/shop-menu', '/shop-orders', '/shop-tables', '/shop-reservations', '/shop-printing'])
+const SHOP_ORDERING_PATHS = new Set(['/shop-orders', '/shop-repair', '/shop-tables', '/shop-reservations', '/shop-printing'])
+const COUNTER_OPERATION_PATHS = new Set(['/counter-shift', '/inventory', '/warehouses', '/shop-menu', '/shop-orders', '/shop-repair', '/shop-tables', '/shop-reservations', '/shop-printing'])
 
 function hasAnyRole(user, roles) {
   return roles.some(role => user?.authorities?.includes(role))
@@ -103,6 +104,7 @@ const PATH_TITLES = {
   '/consumption-log':    'Consumption Log',
   '/companies':          'Companies',
   '/shop-orders':        'Shop Orders',
+  '/shop-repair':        'Sửa chữa & Bảo trì',
   '/shop-reservations':  'Reservations',
   '/shop-tables':        'Tables',
   '/shop-menu':          'Menu Setup',
@@ -210,6 +212,7 @@ const NAV_GROUPS = [
     items: [
       { label: 'Bàn giao ca', path: '/counter-shift',  icon: '💵' },
       { label: 'Shop Orders', path: '/shop-orders', icon: '🧋' },
+      { label: 'Sửa chữa & Bảo trì', path: '/shop-repair', icon: '🛠️' },
       { label: 'Tables',      path: '/shop-tables', icon: '🪑' },
       { label: 'Reservations', path: '/shop-reservations', icon: '📅' },
       { label: 'Menu Setup',  path: '/shop-menu',   icon: '🍽️' },
@@ -491,6 +494,7 @@ function MainShell({ user, logout, isAdmin, isSuperAdmin, hasFullBusinessAccess,
             <Route path="/service-boms" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><ServiceBomPage /></RequireContext></RequireAuth>} />
             <Route path="/viettelpost" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><ViettelPostPage /></RequireAuth>} />
             <Route path="/shop-orders" element={<RequireAuth roles={SHOP_ORDERING_ROLES}><RequireContext><ShopOrderPage /></RequireContext></RequireAuth>} />
+            <Route path="/shop-repair" element={<RequireAuth roles={SHOP_ORDERING_ROLES}><RequireContext><ShopRepairPage /></RequireContext></RequireAuth>} />
             <Route path="/shop-tables" element={<RequireAuth roles={SHOP_ORDERING_ROLES}><RequireContext><ShopTablePage /></RequireContext></RequireAuth>} />
             <Route path="/shop-reservations" element={<RequireAuth roles={SHOP_ORDERING_ROLES}><RequireContext><ShopReservationCalendar /></RequireContext></RequireAuth>} />
             <Route path="/shop-menu"   element={<RequireAuth roles={COUNTER_OPERATION_ROLES}><RequireContext><ShopMenuManagePage /></RequireContext></RequireAuth>} />
