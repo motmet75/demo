@@ -66,6 +66,7 @@ import LanguageSelector from './components/LanguageSelector'
 import ShopBookingPage from './features/shopfront/ShopBookingPage'
 import DocumentScannerPage from './features/scanner/DocumentScannerPage'
 import InvoiceDeskPage from './features/invoice/InvoiceDeskPage'
+import ServiceBomPage from './features/service/ServiceBomPage'
 
 const SIDEBAR_FULL = 210
 const SIDEBAR_MINI = 52
@@ -88,6 +89,7 @@ const PATH_TITLES = {
   '/materials':          'Materials',
   '/models':             'Models',
   '/boms':               'BOMs',
+  '/service-boms':       'Service BOMs',
   '/inventory':          'Inventory',
   '/inventory-movements':'Movements',
   '/warehouses':         'Warehouses',
@@ -150,6 +152,7 @@ const NAV_GROUPS = [
       { label: 'Materials', path: '/materials',           icon: '🧱' },
       { label: 'Models',    path: '/models',              icon: '📐' },
       { label: 'BOMs',      path: '/boms',                icon: '🧩' },
+      { label: 'Service BOMs', path: '/service-boms',      icon: '🛠️' },
     ],
   },
   {
@@ -344,7 +347,9 @@ function Sidebar({ collapsed, onToggle, user, isAdmin, isSuperAdmin, hasFullBusi
       ? NAV_GROUPS
           .map(group => ({ ...group, items: group.items.filter(item => SHOP_ORDERING_PATHS.has(item.path)) }))
           .filter(group => group.items.length)
-      : []
+      : hasAnyRole(user, ['ROLE_INVOICE_DESK'])
+        ? [{ key: 'invoice', label: 'Hóa đơn', items: [{ label: 'Xử lý hóa đơn', path: '/invoice-desk', icon: 'PDF' }] }]
+        : []
   const visibleAdminItems = ADMIN_ITEMS.filter(item => {
     if (item.roles?.includes('ROLE_SUPER_ADMIN')) return isSuperAdmin
     return isAdmin && hasAnyRole(user, item.roles || [])
@@ -438,6 +443,7 @@ function HeaderBar({ user, logout }) {
 
 function HomeRedirect({ user }) {
   if (!user) return <Navigate to="/login" replace />
+  if (hasAnyRole(user, ['ROLE_INVOICE_DESK'])) return <Navigate to="/invoice-desk" replace />
   if (hasAnyRole(user, FULL_BUSINESS_ROLES)) return <Navigate to="/materials" replace />
   if (hasAnyRole(user, ['ROLE_COUNTER'])) return <Navigate to="/counter-shift" replace />
   return <Navigate to="/shop-orders" replace />
@@ -478,10 +484,11 @@ function MainShell({ user, logout, isAdmin, isSuperAdmin, hasFullBusinessAccess,
             <Route path="/orders" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><OrderPage /></RequireContext></RequireAuth>} />
             <Route path="/order-lines" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><OrderLinePage /></RequireContext></RequireAuth>} />
             <Route path="/invoices" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><InvoicePage /></RequireContext></RequireAuth>} />
-            <Route path="/invoice-desk" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><InvoiceDeskPage /></RequireAuth>} />
+            <Route path="/invoice-desk" element={<RequireAuth roles={[...FULL_BUSINESS_ROLES, 'ROLE_INVOICE_DESK']}><InvoiceDeskPage /></RequireAuth>} />
             <Route path="/consumption" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><ConsumptionPage /></RequireContext></RequireAuth>} />
             <Route path="/consumption-log" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><ConsumptionLogPage /></RequireContext></RequireAuth>} />
             <Route path="/boms" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><BomPage /></RequireContext></RequireAuth>} />
+            <Route path="/service-boms" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><ServiceBomPage /></RequireContext></RequireAuth>} />
             <Route path="/viettelpost" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><ViettelPostPage /></RequireAuth>} />
             <Route path="/shop-orders" element={<RequireAuth roles={SHOP_ORDERING_ROLES}><RequireContext><ShopOrderPage /></RequireContext></RequireAuth>} />
             <Route path="/shop-tables" element={<RequireAuth roles={SHOP_ORDERING_ROLES}><RequireContext><ShopTablePage /></RequireContext></RequireAuth>} />
