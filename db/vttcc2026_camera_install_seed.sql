@@ -58,6 +58,21 @@ VALUES
 ('0198f600-0000-7000-8800-000000000004','0198f600-0000-7000-8700-000000000001','ACCOMMODATION','Overnight hotel',1,'night',550000,TRUE)
 ON CONFLICT (id) DO UPDATE SET quantity=EXCLUDED.quantity,unit_cost=EXCLUDED.unit_cost,optional=EXCLUDED.optional;
 
+-- Vietnamese-language example BOM for the service screen.
+INSERT INTO service_bom (id,tenant_id,company_id,service_code,service_name,service_type,active,notes)
+VALUES ('0198f600-0000-7000-8700-000000000002',(SELECT id FROM tenant WHERE tenant_code='vttcc2026'),'0198f600-0000-7000-8000-000000000002','CAM-INSTALL-VN','Gói lắp đặt camera tiêu chuẩn','CAMERA_INSTALLATION',TRUE,'Ví dụ tiếng Việt: chi phí nhân công, vật tư và phụ phí; lưu trú chỉ áp dụng khi làm qua đêm.')
+ON CONFLICT (tenant_id,company_id,service_code) DO UPDATE SET service_name=EXCLUDED.service_name,notes=EXCLUDED.notes,active=TRUE;
+
+INSERT INTO service_bom_item (id,service_bom_id,cost_type,description,quantity,unit,unit_cost,optional)
+VALUES
+('0198f600-0000-7000-8800-000000000005','0198f600-0000-7000-8700-000000000002','LABOUR','Nhân công kỹ thuật lắp đặt camera',2,'ngày công',900000,FALSE),
+('0198f600-0000-7000-8800-000000000006','0198f600-0000-7000-8700-000000000002','MATERIAL','Dây mạng CAT6 và vật tư phụ',1,'gói',350000,FALSE),
+('0198f600-0000-7000-8800-000000000007','0198f600-0000-7000-8700-000000000002','TRANSPORT','Chi phí vận chuyển và dụng cụ đến công trình',1,'chuyến',650000,FALSE),
+('0198f600-0000-7000-8800-000000000008','0198f600-0000-7000-8700-000000000002','OTHER','Cấu hình đầu ghi, ứng dụng và bàn giao',1,'ca',450000,FALSE),
+('0198f600-0000-7000-8800-000000000009','0198f600-0000-7000-8700-000000000002','FOOD','Suất ăn kỹ thuật viên',2,'người-ngày',180000,TRUE),
+('0198f600-0000-7000-8800-00000000000a','0198f600-0000-7000-8700-000000000002','ACCOMMODATION','Chi phí khách sạn qua đêm',1,'đêm',550000,TRUE)
+ON CONFLICT (id) DO UPDATE SET description=EXCLUDED.description,quantity=EXCLUDED.quantity,unit=EXCLUDED.unit,unit_cost=EXCLUDED.unit_cost,optional=EXCLUDED.optional;
+
 INSERT INTO order_header (id,order_number,order_type,status,customer_id,planned_start_date,planned_end_date,total_planned_qty,notes,tenant_id,company_id,created_at,created_by)
 VALUES ('0198f600-0000-7000-8900-000000000001','VTTCC-2026-0001','SALES','DRAFT',NULL,CURRENT_DATE+1,CURRENT_DATE+2,1,'Camera installation sample order for VTTCC customer; service installation is attached below.',(SELECT id FROM tenant WHERE tenant_code='vttcc2026'),'0198f600-0000-7000-8000-000000000002',NOW(),'vttcc2026')
 ON CONFLICT (id) DO UPDATE SET notes=EXCLUDED.notes,status='DRAFT';
