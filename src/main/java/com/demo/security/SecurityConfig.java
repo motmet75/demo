@@ -59,8 +59,9 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http, @org.springframework.beans.factory.annotation.Value("${app.oauth2.enabled:true}") boolean oauthEnabled) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http, @org.springframework.beans.factory.annotation.Value("${app.oauth2.enabled:true}") boolean oauthEnabled, org.springframework.jdbc.core.JdbcTemplate db) throws Exception {
         http
+            .addFilterBefore(new com.demo.invoicedesk.InvoiceDeskAccessFilter(db), org.springframework.security.web.access.intercept.AuthorizationFilter.class)
             .csrf(csrf -> csrf.disable())
             .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
             .cors(Customizer.withDefaults())
@@ -77,7 +78,7 @@ public class SecurityConfig {
             }))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                .requestMatchers("/api/invoice-desk/**").authenticated()
+                .requestMatchers("/api/invoice-desk/**").hasAnyRole("INVOICE_DESK", "SUPER_ADMIN", "ADMIN", "USER")
                 // The legacy iPad HTML/login shell is public. Its shop staff
                 // API calls remain protected by the /shop/staff/** rule below.
                 .requestMatchers("/bom-inventory/ipad4", "/bom-inventory/ipad4/**").permitAll()

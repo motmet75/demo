@@ -122,3 +122,4 @@ QR1.jpeg
 /secrets/*.p12
 !/bom-frontend/package.json
 !/bom-frontend/package-lock.json
+/tmp/invoice-browser/

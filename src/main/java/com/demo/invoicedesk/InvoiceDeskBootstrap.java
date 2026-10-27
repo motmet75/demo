@@ -26,6 +26,7 @@ public class InvoiceDeskBootstrap implements ApplicationRunner {
  }
  @Override @Transactional public void run(ApplicationArguments args){
   new ResourceDatabasePopulator(new ClassPathResource("db/schema/invoice_desk.sql")).execute(db.getDataSource());
+  new ResourceDatabasePopulator(new ClassPathResource("db/schema/invoice_desk_workspace.sql")).execute(db.getDataSource());
   // Never reset an existing login or claim its data during startup.
   if(users.findByUsernameIgnoreCase("anthony").isPresent())return;
   // New deployments must explicitly opt into provisioning a login.

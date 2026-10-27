@@ -376,6 +376,9 @@ public AuthController(AuthenticationManager authenticationManager,
         } catch (PasswordChangeOtpService.OtpException ex) {
             return ResponseEntity.status(ex.status()).body(new AuthResponse(false, null, ex.getMessage()));
         }
+        if (passwordEncoder.matches(request.newPassword(), user.getPassword())) {
+            return ResponseEntity.badRequest().body(new AuthResponse(false, null, "Mật khẩu mới phải khác mật khẩu hiện tại."));
+        }
         user.setPassword(passwordEncoder.encode(request.newPassword()));
         userRepository.save(user);
         return ResponseEntity.ok(new AuthResponse(true, null, "Password changed successfully"));
