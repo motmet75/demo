@@ -2,7 +2,7 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Invoice Desk</title><link rel="stylesheet" href="desk.css"></head>
 <body><header><div><span class="eyebrow">DOCUMENT OPERATIONS</span><h1>Invoice Desk</h1></div><div><span id="company"></span> <button id="logout" hidden>Sign out</button></div></header>
 <main><p id="message" role="status" aria-live="polite"></p>
-<form id="login" class="card"><h2>Sign in to your company</h2><label>Username<input name="username" autocomplete="username" required value="anthony"></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button>Sign in</button></form>
+<form id="login" class="card"><h2>Sign in to your company</h2><label>Username<input name="username" autocomplete="username" required ></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button>Sign in</button></form>
 <div id="workspace" hidden>
 <nav><button data-tab="documents">Documents</button><button data-tab="suppliers">Supplier rules</button><button data-tab="learning">Learning history</button><button data-tab="settings">OCR settings</button></nav>
 <section id="documents" class="tab"><div class="toolbar card"><div><h2>Import, review, export</h2><p>Upload PDF invoices or images. Verify the source before approving.</p></div><label class="upload">Import files<input id="files" type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp"></label><button id="draft">Draft Excel</button><button id="export">Approved Excel</button></div>
