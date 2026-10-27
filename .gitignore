@@ -109,3 +109,16 @@ QR1.jpeg
 /secrets/application-secrets.properties
 /bom-frontend-live.log
 /bom-frontend-live.pid
+/tmp/invoice-test-pg*/
+/tmp/invoice-test-pg*.log
+/tmp/InvoicePasswordHash.java
+/tmp/local-app/
+
+# Local database backups and OCR credentials
+/anhmedia_db_*.sql
+/tmp/db-restore/
+/secrets/*.json
+/secrets/*.pem
+/secrets/*.p12
+!/bom-frontend/package.json
+!/bom-frontend/package-lock.json

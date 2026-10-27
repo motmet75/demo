@@ -1,0 +1,21 @@
+server:
+  address: 127.0.0.1
+  port: 8081
+  ssl:
+    enabled: ${LOCAL_HTTPS_ENABLED:false}
+    key-store: ${LOCAL_TLS_KEY_STORE:file:./tmp/local-app/localhost.p12}
+    key-store-type: ${LOCAL_TLS_KEY_STORE_TYPE:PKCS12}
+    key-store-password: ${LOCAL_TLS_KEY_STORE_PASSWORD:local-test-only}
+    key-alias: ${LOCAL_TLS_KEY_ALIAS:localhost}
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.session.data.redis.autoconfigure.SessionDataRedisAutoConfiguration
+  jpa:
+    hibernate:
+      ddl-auto: none
+app:
+  oauth2:
+    enabled: false
+  login:
+    email-otp-required: false

@@ -65,6 +65,7 @@ import { I18nProvider, useI18n } from './i18n/I18nContext'
 import LanguageSelector from './components/LanguageSelector'
 import ShopBookingPage from './features/shopfront/ShopBookingPage'
 import DocumentScannerPage from './features/scanner/DocumentScannerPage'
+import InvoiceDeskPage from './features/invoice/InvoiceDeskPage'
 
 const SIDEBAR_FULL = 210
 const SIDEBAR_MINI = 52
@@ -95,6 +96,7 @@ const PATH_TITLES = {
   '/orders':             'Orders',
   '/order-lines':        'Order Lines',
   '/invoices':           'Invoices',
+  '/invoice-desk':       'Invoice Desk',
   '/consumption':        'Consumption',
   '/consumption-log':    'Consumption Log',
   '/companies':          'Companies',
@@ -177,6 +179,7 @@ const NAV_GROUPS = [
       { label: 'Orders',      path: '/orders',          icon: '🛒' },
       { label: 'Order Lines', path: '/order-lines',     icon: '📋' },
       { label: 'Invoices',    path: '/invoices',        icon: '🧾' },
+      { label: 'Invoice Desk', path: '/invoice-desk', icon: 'PDF' },
       { label: 'Consumption', path: '/consumption',     icon: '📊' },
       { label: 'Cons. Log',   path: '/consumption-log', icon: '🗒️' },
     ],
@@ -243,7 +246,7 @@ function NavItem({ item, collapsed, indent = false }) {
   return (
     <Tooltip title={collapsed ? label : ''} placement="right">
       <Link
-        to={item.path}
+        to={item.external ? new URL(item.path, window.location.origin).href : item.path} reloadDocument={!!item.external}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -475,6 +478,7 @@ function MainShell({ user, logout, isAdmin, isSuperAdmin, hasFullBusinessAccess,
             <Route path="/orders" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><OrderPage /></RequireContext></RequireAuth>} />
             <Route path="/order-lines" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><OrderLinePage /></RequireContext></RequireAuth>} />
             <Route path="/invoices" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><InvoicePage /></RequireContext></RequireAuth>} />
+            <Route path="/invoice-desk" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><InvoiceDeskPage /></RequireAuth>} />
             <Route path="/consumption" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><ConsumptionPage /></RequireContext></RequireAuth>} />
             <Route path="/consumption-log" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><ConsumptionLogPage /></RequireContext></RequireAuth>} />
             <Route path="/boms" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><BomPage /></RequireContext></RequireAuth>} />

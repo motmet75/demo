@@ -1,0 +1,14 @@
+[
+ {"id":"kenda-viettel-v1","taxId":"3600248720","nameContains":"KENDA","fields":{}},
+ {"id":"kmc-viettel-v1","taxId":"3600465041","nameContains":"XÍCH KMC","fields":{}},
+ {"id":"miyang-viettel-v1","taxId":"3801162858","nameContains":"MI YANG","fields":{}},
+ {"id":"leader-vnpt-v1","taxId":"3702780331","nameContains":"LEADER PACKING","fields":{}},
+ {"id":"yuanyue-cyberlotus-v1","taxId":"3703125424","nameContains":"YUAN YUE","fields":{}},
+ {"id":"proactive-misa-v1","taxId":"3702402467","nameContains":"PRO ACTIVE","fields":{}},
+ {"id":"kenstone-misa-v1","taxId":"3603656277","nameContains":"KENSTONE","fields":{}},
+ {"id":"vietmy-viettel-v1","taxId":"3702533364","nameContains":"SƠN VIỆT MỸ","fields":{}},
+ {"id":"asama-v1","taxId":"3700326669","nameContains":"ASAMA","fields":{}},
+ {"id":"sheanglih-vnpt-v1","taxId":"3700329405","nameContains":"SHEANG LIH","fields":{}},
+ {"id":"manhphat-v1","taxId":"3703223823","nameContains":"MẠNH PHÁT","fields":{}},
+ {"id":"takuya-v1","taxId":"1102058635","nameContains":"TAKUYA","fields":{}}
+]

@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 
 const mainApiProxy = {
@@ -19,7 +19,12 @@ const apiProxyRules = {
   '/sapi': mainApiProxy
 }
 
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  if (env.LOCAL_API_STRIP_PREFIX === 'true') {
+    mainApiProxy.rewrite = path => path.replace(/^\/sapi(?=\/|$)/, '')
+  }
+  return {
   plugins: [react()],
   base: '/bom-inventory/',
   build: {
@@ -45,5 +50,6 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     proxy: apiProxyRules
+  }
   }
 })

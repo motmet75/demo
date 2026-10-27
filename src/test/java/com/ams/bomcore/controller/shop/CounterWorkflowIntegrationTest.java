@@ -33,9 +33,9 @@ class CounterWorkflowIntegrationTest {
         new TransactionTemplate(new DataSourceTransactionManager(ds)).execute(status -> {
             status.setRollbackOnly();
             String shiftDate=java.time.LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toString();
-            assertNull(controller.state(t,c).get("active"),"Run only before a real shift opens");
+            assertNull(controller.state(t,c,auth).get("active"),"Run only before a real shift opens");
             assertThrows(ResponseStatusException.class,()->controller.open(t,c,auth,Map.of("openingCash",-1,"shiftNumber",1,"shiftDate",shiftDate)));
-            BigDecimal previous=controller.state(t,c).get("previousCash")==null?BigDecimal.ZERO:new BigDecimal(controller.state(t,c).get("previousCash").toString());
+            BigDecimal previous=controller.state(t,c,auth).get("previousCash")==null?BigDecimal.ZERO:new BigDecimal(controller.state(t,c,auth).get("previousCash").toString());
             var opening=previous.add(new BigDecimal("500000"));
             assertThrows(ResponseStatusException.class,()->controller.open(t,c,auth,Map.of("openingCash",opening,"shiftNumber",1,"shiftDate",shiftDate)));
             var state=controller.open(t,c,auth,Map.of("openingCash",opening,"reason","Rollback test","confirmed",true,"shiftNumber",1,"shiftDate",shiftDate));
@@ -73,6 +73,6 @@ class CounterWorkflowIntegrationTest {
             assertEquals(2,((List<?>)next.get("usedShifts")).size());
             return null;
         });
-        assertNull(controller.state(t,c).get("active"),"Test transaction must leave no open shift");
+        assertNull(controller.state(t,c,auth).get("active"),"Test transaction must leave no open shift");
     }
 }

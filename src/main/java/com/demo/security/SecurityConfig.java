@@ -59,9 +59,10 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http, @org.springframework.beans.factory.annotation.Value("${app.oauth2.enabled:true}") boolean oauthEnabled) throws Exception {
         http
             .csrf(csrf -> csrf.disable())
+            .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
             .cors(Customizer.withDefaults())
             .sessionManagement(session -> session
                 .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
@@ -76,6 +77,7 @@ public class SecurityConfig {
             }))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                .requestMatchers("/api/invoice-desk/**").authenticated()
                 // The legacy iPad HTML/login shell is public. Its shop staff
                 // API calls remain protected by the /shop/staff/** rule below.
                 .requestMatchers("/bom-inventory/ipad4", "/bom-inventory/ipad4/**").permitAll()
@@ -139,7 +141,8 @@ public class SecurityConfig {
                 .requestMatchers("/shop/staff/**").hasAnyRole(SHOP_ORDERING_ROLES)
                 .anyRequest().permitAll()
             )
-            .oauth2Login(oauth2 -> oauth2
+            ;
+        if (oauthEnabled) http.oauth2Login(oauth2 -> oauth2
                 .redirectionEndpoint(endpoint -> endpoint
                     .baseUri("/dang-nhap/oauth2/code/*")
                 )
@@ -153,7 +156,8 @@ public class SecurityConfig {
                     res.sendRedirect(origin(req) + oauth2ReturnTo(req, "/bom-inventory/login") + "?error=oauth2")
                 )
             )
-            .formLogin(form -> form.disable())
+            ;
+        http.formLogin(form -> form.disable())
             .httpBasic(basic -> basic.disable())
             .logout(logout -> logout.disable());
         return http.build();

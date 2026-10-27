@@ -1,6 +1,10 @@
 spring:
   config:
     import: "optional:file:./secrets/application-secrets.properties"
+  servlet:
+    multipart:
+      max-file-size: 25MB
+      max-request-size: 26MB
   session:
     timeout: 30m
     data:
