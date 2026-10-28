@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>BOM Vật tư cửa hàng - iPad</title>
+  <style>
+    html, body { margin: 0; padding: 0; background: #eef1f4; color: #20252b; font: 18px Arial, sans-serif; }
+    * { -webkit-box-sizing: border-box; box-sizing: border-box; }
+    .bar { position: fixed; z-index: 80; left: 0; right: 0; top: 0; min-height: 58px; background: #174a75; color: #fff; padding: 8px 12px; box-shadow: 0 3px 10px rgba(0,0,0,.25); }
+    .bar h1 { float: left; margin: 8px 8px 0 0; font-size: 18px; }
+    .bar .right { float: right; }
+    .page { width: 97%; max-width: 1180px; margin: 0 auto; padding-top: 72px; }
+    .panel, .item-card { background: #fff; border: 1px solid #cbd2d9; border-radius: 7px; padding: 14px; margin-bottom: 12px; }
+    h2, h3, p { margin-top: 0; }
+    label { display: block; margin: 10px 0 5px; font-weight: bold; }
+    input, select { display: block; width: 100%; min-height: 46px; padding: 8px 10px; border: 1px solid #929ca6; border-radius: 5px; font: 18px Arial, sans-serif; background: #fff; }
+    button { min-height: 44px; padding: 7px 14px; border: 0; border-radius: 5px; background: #1769aa; color: #fff; font-size: 17px; font-weight: bold; }
+    button:active { background: #0d4775; }
+    button.secondary { background: #65727e; }
+    button.success { background: #168447; }
+    button.danger { background: #a33b35; }
+    button.small { min-height: 36px; padding: 4px 9px; font-size: 14px; }
+    .top-action { min-height: 40px; padding: 5px 9px; font-size: 14px; margin-left: 3px; }
+    .message { display: none; padding: 11px; margin: 12px 0; border-radius: 5px; background: #ffe3e3; color: #8b1111; }
+    .notice { background: #fff5c7; color: #574800; }
+    .muted { color: #68727c; font-size: 15px; }
+    .filters { overflow: hidden; }
+    .filter-box { float: left; width: 31.8%; margin-right: 1.5%; }
+    .summary { clear: both; padding-top: 10px; color: #525d66; font-size: 15px; font-weight: bold; }
+    .stat { display: inline-block; border: 1px solid #cbd2d9; border-radius: 18px; padding: 6px 10px; margin: 0 6px 7px 0; background: #fff; font-size: 14px; font-weight: bold; }
+    .stat.bad { border-color: #e9a5a1; color: #9b1c16; background: #fff1f0; }
+    .stat.good { border-color: #9fd8b3; color: #116b36; background: #eefbf3; }
+    .item-card { border-left: 6px solid #1769aa; }
+    .item-card.soldout { border-left-color: #a33b35; }
+    .item-card.manual { border-left-color: #d87812; }
+    .item-head { overflow: hidden; }
+    .item-title { float: left; width: 38%; }
+    .item-title strong { display: block; font-size: 19px; }
+    .item-col { float: left; width: 15%; padding: 0 6px; }
+    .item-col.wide { width: 24%; }
+    .item-col.actions { width: 8%; }
+    .item-meta { clear: both; margin-top: 8px; color: #525d66; font-size: 14px; }
+    .pill { display: inline-block; padding: 4px 7px; margin: 3px 4px 0 0; border-radius: 12px; background: #e5eef7; color: #174a75; font-weight: bold; font-size: 13px; }
+    .pill.warn { background: #fff2c4; color: #835000; }
+    .pill.bad { background: #ffe1de; color: #9b1c16; }
+    .pill.good { background: #e7f7ee; color: #116b36; }
+    .limit-row { display: block; margin-top: 3px; font-size: 13px; color: #525d66; }
+    .clear { clear: both; }
+    @media (max-width: 760px) {
+      .bar h1 { display: none; }
+      .filter-box, .item-title, .item-col, .item-col.wide, .item-col.actions { float: none !important; width: 100% !important; padding: 0; }
+      .item-col.actions button { width: 49%; margin-top: 6px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bar">
+    <h1>Vật tư cửa hàng</h1>
+    <div class="right">
+      <button id="ordersButton" class="top-action secondary" type="button">← Đơn hàng</button>
+      <button id="menuButton" class="top-action" type="button">☰ Menu</button>
+      <button id="refreshButton" class="top-action" type="button">↻ Làm mới</button>
+    </div>
+    <div class="clear"></div>
+  </div>
+
+  <div class="page">
+    <div id="messageBox" class="message"></div>
+
+    <div id="contextBox" class="panel" style="display:none">
+      <h3>Chọn cửa hàng</h3>
+      <p class="muted">Không tìm thấy cửa hàng trong thiết bị này. Nhập ID hoặc đăng nhập ở trang Orders trước.</p>
+      <label for="tenantId">Tenant ID</label>
+      <input id="tenantId" type="text" autocapitalize="off">
+      <label for="companyId">Company ID</label>
+      <input id="companyId" type="text" autocapitalize="off">
+      <button id="saveContextButton" class="success" type="button">Mở vật tư</button>
+    </div>
+
+    <div id="loginBox" class="panel" style="display:none">
+      <h3>Cần đăng nhập</h3>
+      <p class="muted">Mở trang Orders trên iPad này, đăng nhập, sau đó quay lại Vật tư cửa hàng.</p>
+      <button id="loginButton" type="button">Mở Orders để đăng nhập</button>
+    </div>
+
+    <div id="mainBox" style="display:none">
+      <div class="panel">
+        <h2>Khả dụng theo món</h2>
+        <p class="muted">Nhập số còn bán hôm nay từ lúc lưu. Để trống = tự tính theo kho / không giới hạn thủ công. Nhập 0 = hết món hôm nay.</p>
+        <div id="stats"></div>
+      </div>
+
+      <div class="panel filters">
+        <div class="filter-box">
+          <label for="searchInput">Tìm món hoặc nguyên liệu</label>
+          <input id="searchInput" type="search" autocomplete="off" placeholder="Tên món, mã món, vật tư...">
+        </div>
+        <div class="filter-box">
+          <label for="stateFilter">Bộ lọc</label>
+          <select id="stateFilter">
+            <option value="all">Tất cả món</option>
+            <option value="available">Còn bán / không giới hạn</option>
+            <option value="soldout">Hết hôm nay</option>
+            <option value="manual">Đã nhập số còn lại</option>
+            <option value="materialLimited">Bị giới hạn bởi nguyên liệu</option>
+            <option value="bom">Có BOM</option>
+            <option value="noBom">Không có BOM</option>
+          </select>
+        </div>
+        <div class="filter-box">
+          <label>&nbsp;</label>
+          <button id="clearFiltersButton" class="secondary" type="button">Xóa lọc</button>
+        </div>
+        <div id="summary" class="summary"></div>
+      </div>
+
+      <div id="availabilityList"><div class="panel">Đang tải vật tư...</div></div>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    'use strict';
+    var tenantId = '';
+    var companyId = '';
+    var user = null;
+    var rows = [];
+
+    function byId(id) { return document.getElementById(id); }
+    function text(value) { return value === null || typeof value === 'undefined' ? '' : String(value); }
+    function escapeHtml(value) {
+      return text(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    function formatQty(value) {
+      if (value === null || typeof value === 'undefined' || value === '') return '—';
+      var n = Number(value);
+      if (isNaN(n)) return '—';
+      return String(Math.round(n * 1000) / 1000).replace('.', ',');
+    }
+    function message(id, value, notice) {
+      var box = byId(id);
+      box.className = notice ? 'message notice' : 'message';
+      box.innerHTML = escapeHtml(value);
+      box.style.display = value ? 'block' : 'none';
+    }
+    function request(method, url, body, callback) {
+      var xhr = new XMLHttpRequest();
+      xhr.open(method, url, true);
+      xhr.withCredentials = true;
+      xhr.setRequestHeader('Accept', 'application/json');
+      xhr.setRequestHeader('X-Time-Zone', 'Asia/Ho_Chi_Minh');
+      if (tenantId) xhr.setRequestHeader('X-Tenant-Id', tenantId);
+      if (companyId) xhr.setRequestHeader('X-Company-Id', companyId);
+      if (body !== null) xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.onreadystatechange = function () {
+        var data = null;
+        if (xhr.readyState !== 4) return;
+        try { data = xhr.responseText ? JSON.parse(xhr.responseText) : null; } catch (ignore) { data = xhr.responseText; }
+        callback(xhr.status, data);
+      };
+      xhr.onerror = function () { callback(0, null); };
+      xhr.send(body === null ? null : JSON.stringify(body));
+    }
+    function errorText(status, data) {
+      if (data && (data.message || data.error)) return text(data.message || data.error);
+      if (typeof data === 'string' && data) return data;
+      if (status === 0) return 'Không thể kết nối máy chủ.';
+      if (status === 401) return 'Phiên đăng nhập đã hết hạn.';
+      return 'Có lỗi xảy ra (' + status + ').';
+    }
+    function restoreContext() {
+      var saved;
+      try {
+        saved = JSON.parse(localStorage.getItem('bom_ipad_context_v1') || '{}');
+        tenantId = saved.tenantId || '';
+        companyId = saved.companyId || '';
+      } catch (ignore) {}
+      byId('tenantId').value = tenantId;
+      byId('companyId').value = companyId;
+    }
+    function saveContext() {
+      try { localStorage.setItem('bom_ipad_context_v1', JSON.stringify({ tenantId: tenantId, companyId: companyId })); } catch (ignore) {}
+    }
+    function chooseContext(authUser) {
+      user = authUser || {};
+      tenantId = user.assignedTenantId || user.lastTenantId || tenantId;
+      companyId = user.assignedCompanyId || user.lastCompanyId || companyId;
+      byId('tenantId').value = tenantId;
+      byId('companyId').value = companyId;
+      saveContext();
+    }
+    function numberOrNull(value) {
+      if (value === null || typeof value === 'undefined' || value === '') return null;
+      var n = Number(value);
+      return isNaN(n) ? null : n;
+    }
+    function statusFor(row) {
+      var effective = numberOrNull(row.effectiveAvailableUnits);
+      var calculated = numberOrNull(row.calculatedAvailableUnits);
+      var hasManual = row.manualAvailableUnits !== null && typeof row.manualAvailableUnits !== 'undefined';
+      var hasBom = !!row.hasBom;
+      var soldOut = effective !== null && effective <= 0;
+      var availableNow = effective === null || effective > 0;
+      var materialLimited = hasBom && calculated !== null && calculated <= 0;
+      return { effective: effective, calculated: calculated, hasManual: hasManual, hasBom: hasBom, soldOut: soldOut, availableNow: availableNow, materialLimited: materialLimited };
+    }
+    function rowMatches(row, query, filter) {
+      var s = statusFor(row), limits, parts, i;
+      if (filter === 'available' && !s.availableNow) return false;
+      if (filter === 'soldout' && !s.soldOut) return false;
+      if (filter === 'manual' && !s.hasManual) return false;
+      if (filter === 'materialLimited' && !s.materialLimited) return false;
+      if (filter === 'bom' && !s.hasBom) return false;
+      if (filter === 'noBom' && s.hasBom) return false;
+      if (!query) return true;
+      limits = row.materialLimits instanceof Array ? row.materialLimits : [];
+      parts = [row.modelName, row.modelCode, row.modelId];
+      for (i = 0; i < limits.length; i += 1) {
+        parts.push(limits[i].materialName);
+        parts.push(limits[i].materialCode);
+        parts.push(limits[i].materialUnit);
+      }
+      return parts.join(' ').toLowerCase().indexOf(query) >= 0;
+    }
+    function renderStats() {
+      var total = rows.length, soldOut = 0, manual = 0, limited = 0, noBom = 0, i, s;
+      for (i = 0; i < rows.length; i += 1) {
+        s = statusFor(rows[i]);
+        if (s.soldOut) soldOut += 1;
+        if (s.hasManual) manual += 1;
+        if (s.materialLimited) limited += 1;
+        if (!s.hasBom) noBom += 1;
+      }
+      byId('stats').innerHTML =
+        '<span class="stat">' + escapeHtml(total) + ' món</span>' +
+        '<span class="stat bad">' + escapeHtml(soldOut) + ' hết hôm nay</span>' +
+        '<span class="stat good">' + escapeHtml(manual) + ' nhập tay</span>' +
+        '<span class="stat bad">' + escapeHtml(limited) + ' bị giới hạn vật tư</span>' +
+        '<span class="stat">' + escapeHtml(noBom) + ' không BOM</span>';
+    }
+    function sortedLimits(row) {
+      var limits = row.materialLimits instanceof Array ? row.materialLimits.slice(0) : [];
+      limits.sort(function (a, b) { return Number(a.possibleUnits || 0) - Number(b.possibleUnits || 0); });
+      return limits;
+    }
+    function renderLimitText(row) {
+      var limits = sortedLimits(row), html = '', i, limit;
+      if (!limits.length) return '<span class="muted">Không giới hạn nguyên vật liệu</span>';
+      for (i = 0; i < limits.length && i < 3; i += 1) {
+        limit = limits[i];
+        html += '<span class="limit-row"><strong>' + escapeHtml(limit.materialCode || limit.materialName) + '</strong>: ' +
+          escapeHtml(formatQty(limit.availableQty)) + ' ' + escapeHtml(limit.materialUnit || '') + ' có / ' +
+          escapeHtml(formatQty(limit.requiredPerUnit)) + ' mỗi món = ' + escapeHtml(formatQty(limit.possibleUnits)) + ' món</span>';
+      }
+      return html;
+    }
+    function renderRows() {
+      var query = text(byId('searchInput').value).toLowerCase().replace(/^\s+|\s+$/g, '');
+      var filter = byId('stateFilter').value;
+      var html = '', shown = 0, i, row, s, manual, effectiveLabel, cls;
+      renderStats();
+      for (i = 0; i < rows.length; i += 1) {
+        row = rows[i];
+        if (!rowMatches(row, query, filter)) continue;
+        shown += 1;
+        s = statusFor(row);
+        manual = row.manualAvailableUnits !== null && typeof row.manualAvailableUnits !== 'undefined' ? row.manualAvailableUnits : '';
+        effectiveLabel = row.effectiveAvailableUnits === null || typeof row.effectiveAvailableUnits === 'undefined' ? 'Không giới hạn' : formatQty(row.effectiveAvailableUnits);
+        cls = 'item-card' + (s.soldOut ? ' soldout' : '') + (s.hasManual ? ' manual' : '');
+        html += '<div class="' + cls + '">';
+        html += '<div class="item-head">';
+        html += '<div class="item-title"><strong>' + escapeHtml(row.modelName || 'Món') + '</strong><span class="muted">' + escapeHtml(row.modelCode || row.modelId) + '</span></div>';
+        html += '<div class="item-col"><label>Calculated</label>' + (row.hasBom ? '<span class="pill">' + escapeHtml(formatQty(row.calculatedAvailableUnits)) + '</span>' : '<span class="pill warn">Không có BOM</span>') + '</div>';
+        html += '<div class="item-col"><label>Còn bán hôm nay</label><input id="left_' + escapeHtml(row.modelId) + '" type="number" inputmode="decimal" min="0" step="0.001" value="' + escapeHtml(manual) + '"></div>';
+        html += '<div class="item-col"><label>Effective</label><span class="pill ' + (s.soldOut ? 'bad' : 'good') + '">' + escapeHtml(effectiveLabel) + '</span></div>';
+        html += '<div class="item-col wide"><label>Nguyên vật liệu giới hạn</label>' + renderLimitText(row) + '</div>';
+        html += '<div class="item-col actions"><label>&nbsp;</label><button class="success small" data-save-id="' + escapeHtml(row.modelId) + '" type="button">Lưu</button><button class="small secondary" data-clear-id="' + escapeHtml(row.modelId) + '" type="button">Xóa</button></div>';
+        html += '<div class="clear"></div></div>';
+        html += '<div class="item-meta">';
+        html += s.hasManual ? '<span class="pill warn">Đã đặt: còn ' + escapeHtml(formatQty(row.manualAvailableUnits)) + '</span>' : '<span class="pill">Tự tính / không giới hạn tay</span>';
+        if (s.soldOut) html += '<span class="pill bad">Đã hết hôm nay</span>';
+        if (row.dailySoldUnits !== null && typeof row.dailySoldUnits !== 'undefined') html += '<span class="pill">Đã bán hôm nay: ' + escapeHtml(formatQty(row.dailySoldUnits)) + '</span>';
+        html += '</div></div>';
+      }
+      byId('summary').innerHTML = shown + ' / ' + rows.length + ' món đang hiển thị';
+      byId('availabilityList').innerHTML = html || '<div class="panel">Không có món phù hợp bộ lọc.</div>';
+    }
+    function loadAvailability() {
+      message('messageBox', 'Đang tải vật tư...', true);
+      request('GET', '/sapi/shop/staff/materials/menu-availability', null, function (status, data) {
+        if (status === 401) { byId('loginBox').style.display = 'block'; byId('mainBox').style.display = 'none'; message('messageBox', '', false); return; }
+        if (status < 200 || status >= 300) { message('messageBox', errorText(status, data), false); return; }
+        rows = data instanceof Array ? data : [];
+        byId('mainBox').style.display = 'block';
+        byId('contextBox').style.display = 'none';
+        byId('loginBox').style.display = 'none';
+        message('messageBox', '', false);
+        renderRows();
+      });
+    }
+    function loadAll() {
+      if (!tenantId || !companyId) { byId('contextBox').style.display = 'block'; byId('mainBox').style.display = 'none'; return; }
+      loadAvailability();
+    }
+    function updateRow(updated) {
+      var i;
+      if (!updated || !updated.modelId) return;
+      for (i = 0; i < rows.length; i += 1) {
+        if (text(rows[i].modelId) === text(updated.modelId)) { rows[i] = updated; return; }
+      }
+      rows.push(updated);
+    }
+    function saveOverride(modelId, rawValue) {
+      var units = text(rawValue).replace(/^\s+|\s+$/g, '') === '' ? null : Number(rawValue);
+      if (units !== null && (isNaN(units) || units < 0)) { message('messageBox', 'Số còn bán hôm nay phải >= 0 hoặc để trống.', false); return; }
+      message('messageBox', 'Đang lưu...', true);
+      request('PUT', '/sapi/shop/staff/materials/menu-availability/' + encodeURIComponent(modelId) + '/override', { units: units }, function (status, data) {
+        if (status < 200 || status >= 300) { message('messageBox', errorText(status, data), false); return; }
+        updateRow(data);
+        renderRows();
+        message('messageBox', 'Đã lưu số còn bán hôm nay.', true);
+      });
+    }
+
+    byId('ordersButton').onclick = function () { window.location.href = 'index.html'; };
+    byId('menuButton').onclick = function () { window.location.href = 'menu.html'; };
+    byId('loginButton').onclick = function () { window.location.href = 'index.html'; };
+    byId('refreshButton').onclick = loadAll;
+    byId('saveContextButton').onclick = function () {
+      tenantId = text(byId('tenantId').value).replace(/^\s+|\s+$/g, '');
+      companyId = text(byId('companyId').value).replace(/^\s+|\s+$/g, '');
+      if (!tenantId || !companyId) { message('messageBox', 'Cần nhập Tenant ID và Company ID.', false); return; }
+      saveContext();
+      loadAll();
+    };
+    byId('searchInput').oninput = renderRows;
+    byId('stateFilter').onchange = renderRows;
+    byId('clearFiltersButton').onclick = function () {
+      byId('searchInput').value = '';
+      byId('stateFilter').value = 'all';
+      renderRows();
+    };
+    byId('availabilityList').onclick = function (event) {
+      var target = event.target || event.srcElement, modelId;
+      while (target && target !== byId('availabilityList') && !target.getAttribute('data-save-id') && !target.getAttribute('data-clear-id')) target = target.parentNode;
+      if (!target || target === byId('availabilityList')) return;
+      modelId = target.getAttribute('data-save-id') || target.getAttribute('data-clear-id');
+      if (target.getAttribute('data-clear-id')) { saveOverride(modelId, ''); return; }
+      saveOverride(modelId, byId('left_' + modelId).value);
+    };
+
+    restoreContext();
+    request('GET', '/sapi/auth/me', null, function (status, data) {
+      if (status >= 200 && status < 300 && data && data.authenticated) {
+        chooseContext(data.user);
+        loadAll();
+      } else if (tenantId && companyId) {
+        loadAll();
+      } else {
+        byId('loginBox').style.display = 'block';
+      }
+    });
+  }());
+  </script>
+</body>
+</html>

@@ -1,6 +1,10 @@
 spring:
   config:
     import: "optional:file:./secrets/application-secrets.properties"
+  datasource:
+    url: "${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/anhmedia}"
+    username: "${SPRING_DATASOURCE_USERNAME:postgres}"
+    password: "${SPRING_DATASOURCE_PASSWORD:}"
   servlet:
     multipart:
       max-file-size: 25MB
@@ -27,6 +31,19 @@ spring:
           connectiontimeout: 10000
           timeout: 10000
           writetimeout: 10000
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: "${GOOGLE_CLIENT_ID:}"
+            client-secret: "${GOOGLE_CLIENT_SECRET:}"
+            scope: profile,email
+server:
+  port: "${PORT:8081}"
+  servlet:
+    context-path: /sapi
+  forward-headers-strategy: framework
 app:
   login:
     # Password login succeeds without an email OTP unless explicitly enabled.

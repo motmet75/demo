@@ -77,6 +77,22 @@ const SHOP_ORDERING_ROLES = ['ROLE_SUPER_ADMIN', 'ROLE_ADMIN', 'ROLE_USER', 'ROL
 const COUNTER_OPERATION_ROLES = ['ROLE_SUPER_ADMIN', 'ROLE_ADMIN', 'ROLE_USER', 'ROLE_COUNTER']
 const ADMIN_MANAGEMENT_ROLES = ['ROLE_SUPER_ADMIN', 'ROLE_ADMIN']
 const SUPER_ADMIN_ROLES = ['ROLE_SUPER_ADMIN']
+// Tenant-scoped navigation presets. Keep this in one place so a client can
+// receive a focused workspace without changing the shared platform menus.
+const TENANT_NAV_PRESETS = {
+  // VTTCC Camera & Security 2026
+  '0198f600-0000-7000-8000-000000000001': [
+    { key: 'vttcc', label: 'VTTCC', icon: '📹', items: [
+      { label: 'Tổng quan hoạt động', path: '/shop-orders?view=overview', icon: '▦' },
+      { label: 'Thi công Dự án Camera & Mạng', path: '/shop-repair?view=projects', icon: '📹' },
+      { label: 'Sửa chữa PC, Máy in & Bảo trì', path: '/shop-repair?view=repairs', icon: '🔧' },
+      { label: 'Bán lẻ Linh kiện & Thiết bị', path: '/shop-orders?view=retail', icon: '▣' },
+      { label: 'Kho Linh kiện & Báo cáo Tồn', path: '/inventory', icon: '📦' },
+      { label: 'Hóa đơn & Công nợ Hợp đồng', path: '/invoices', icon: '▤' },
+      { label: 'Báo cáo Thu Chi - Tồn - HĐ', path: '/shop-sales', icon: '▥' },
+    ] },
+  ],
+}
 const SHOP_ORDERING_PATHS = new Set(['/shop-orders', '/shop-repair', '/shop-tables', '/shop-reservations', '/shop-printing'])
 const COUNTER_OPERATION_PATHS = new Set(['/counter-shift', '/inventory', '/warehouses', '/shop-menu', '/shop-orders', '/shop-repair', '/shop-tables', '/shop-reservations', '/shop-printing'])
 
@@ -242,7 +258,9 @@ const ADMIN_ITEMS = [
 // ── Nav components ────────────────────────────────────────────────────────────
 
 function isActive(path, pathname) {
-  return pathname === path || (path !== '/' && pathname.startsWith(path))
+  const [routePath, query = ''] = path.split('?')
+  if (query) return pathname === routePath && window.location.search === `?${query}`
+  return pathname === routePath || (routePath !== '/' && pathname.startsWith(routePath))
 }
 
 function NavItem({ item, collapsed, indent = false }) {
@@ -341,7 +359,10 @@ function NavGroup({ group, collapsed }) {
 
 function Sidebar({ collapsed, onToggle, user, isAdmin, isSuperAdmin, hasFullBusinessAccess, hasShopOrderingAccess, hasCounterAccess }) {
   const { t } = useI18n()
-  const roleGroups = hasFullBusinessAccess
+  const tenantPreset = TENANT_NAV_PRESETS[String(user?.assignedTenantId || '')]
+  const roleGroups = tenantPreset
+    ? tenantPreset
+    : hasFullBusinessAccess
     ? NAV_GROUPS
     : hasCounterAccess
       ? NAV_GROUPS
