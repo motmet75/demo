@@ -88,6 +88,7 @@ const TENANT_NAV_PRESETS = {
       { label: 'Sửa chữa PC, Máy in & Bảo trì', path: '/shop-repair?view=repairs', icon: '🔧' },
       { label: 'Bán lẻ Linh kiện & Thiết bị', path: '/shop-orders?view=retail', icon: '▣' },
       { label: 'Kho Linh kiện & Báo cáo Tồn', path: '/inventory', icon: '📦' },
+      { label: 'Cấu hình giá bán / Menu', path: '/shop-menu', icon: '💲' },
       { label: 'Hóa đơn & Công nợ Hợp đồng', path: '/invoices', icon: '▤' },
       { label: 'Báo cáo Thu Chi - Tồn - HĐ', path: '/shop-sales', icon: '▥' },
     ] },

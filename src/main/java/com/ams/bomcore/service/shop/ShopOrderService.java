@@ -1597,6 +1597,7 @@ public class ShopOrderService {
     public ShopOrderResponseDto updateOrderItems(UUID orderId, List<ItemRequest> newItems, UUID tenantId, UUID companyId, ZoneId zone) {
         Optional<ShopPendingOrderCache.PendingOrder> cached = pendingOrderCache.get(tenantId, companyId, orderId);
         if (cached.isPresent()) {
+            validateUnitPriceOverrides(newItems, tenantId, companyId);
             validateDailyMenuCaps(null, newItems, tenantId, companyId, zone);
             ShopPendingOrderCache.PendingOrder updated = cached.get()
                     .withOrder(pendingRequestWithItems(cached.get().order(), newItems));
@@ -1651,6 +1652,7 @@ public class ShopOrderService {
             if (!tenantId.equals(model.getTenantId()) || !companyId.equals(model.getCompanyId())) {
                 throw new IllegalArgumentException("Model not found: " + req.modelId());
             }
+            validateUnitPriceOverride(req, model);
             BigDecimal qty = req.quantity();
             BigDecimal unitPrice = req.unitPriceOverride() != null
                     ? req.unitPriceOverride()
@@ -1686,6 +1688,39 @@ public class ShopOrderService {
 
             buildItems(order, req.sideItems(), item, accumulator, totals, tenantId, companyId, persist);
         }
+    }
+
+    private void validateUnitPriceOverride(ItemRequest request, Model model) {
+        BigDecimal override = request.unitPriceOverride();
+        if (override == null) return;
+        if (override.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("Selling price cannot be negative");
+        }
+        BigDecimal configuredPrice = model.getSellingPrice();
+        if (configuredPrice != null && override.compareTo(configuredPrice) < 0 && !canOverrideBelowMenuPrice()) {
+            throw new IllegalArgumentException("Staff cannot set a selling price below the configured menu price for " + model.getModelName());
+        }
+    }
+
+    private void validateUnitPriceOverrides(List<ItemRequest> requests, UUID tenantId, UUID companyId) {
+        if (requests == null) return;
+        for (ItemRequest request : requests) {
+            if (request == null || request.modelId() == null) continue;
+            Model model = modelRepository.findById(request.modelId())
+                    .orElseThrow(() -> new IllegalArgumentException("Model not found: " + request.modelId()));
+            if (!tenantId.equals(model.getTenantId()) || !companyId.equals(model.getCompanyId())) {
+                throw new IllegalArgumentException("Model not found: " + request.modelId());
+            }
+            validateUnitPriceOverride(request, model);
+            validateUnitPriceOverrides(request.sideItems(), tenantId, companyId);
+        }
+    }
+
+    private boolean canOverrideBelowMenuPrice() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) return false;
+        return auth.getAuthorities().stream().anyMatch(granted ->
+                "ROLE_ADMIN".equals(granted.getAuthority()) || "ROLE_SUPER_ADMIN".equals(granted.getAuthority()));
     }
 
     private void validateSideItemRequests(ShopOrderItem parent, List<ItemRequest> requests) {
