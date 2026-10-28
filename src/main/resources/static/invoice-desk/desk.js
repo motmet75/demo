@@ -70,9 +70,50 @@ async function reread(cached){if(!selected)return;if(!confirm(cached?'Khôi ph�
 async function showHistory(){const rows=await request(`/documents/${selected.id}/revisions`);$('#revisions').innerHTML=rows.map(r=>`<p>Phiên bản ${r.version} · ${esc(r.changed_by)} · ${esc(new Date(r.created_at).toLocaleString('vi-VN'))} <button data-revision="${r.id}">Khôi phục bản nháp</button></p>`).join('')||'<p>Chưa có phiên bản trước.</p>';$('#revisions').querySelectorAll('[data-revision]').forEach(b=>b.onclick=()=>action(async()=>{if(!confirm('Khôi phục phiên bản này thành bản nháp? Phiên bản hiện tại vẫn được giữ trong lịch sử.'))return;await flush();updateDoc(await request(`/documents/${selected.id}/revisions/${b.dataset.revision}`,{method:'POST',body:JSON.stringify({version:selected.version})}));renderReview();}));}
 $('#bulk-approve').onclick=()=>action(async()=>{await flush();let ok=0;const failed=[];for(const d of documents.filter(d=>checked.has(d.id)&&!d.invoice.approved)){try{updateDoc(await request('/documents/'+d.id,{method:'PUT',body:JSON.stringify({version:d.version,fields:d.invoice.fields,items:d.invoice.items,approve:true})}));ok++;}catch{failed.push(d.invoice.source);}}if(selected)renderReview();message(`Đã duyệt ${ok} hóa đơn.`+(failed.length?' Cần kiểm tra: '+failed.join(', '):''),failed.length>0);});
 $('#export').onclick=()=>action(async()=>{await flush();const ds=workDocs().filter(d=>d.invoice.approved&&(!checked.size||checked.has(d.id)));if(!ds.length)return;const blob=await request('/export?ids='+ds.map(d=>d.id).join(','));const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='hoa-don-'+new Date().toISOString().replace(/[:.]/g,'-')+'.xlsx';a.click();setTimeout(()=>URL.revokeObjectURL(url),3000);});
-async function loadPreview(){if(!selected)return;const generation=++previewGeneration,id=selected.id;$('#preview').hidden=true;const info=await request(`/documents/${id}/preview`);if(generation!==previewGeneration)return;pages=info.pages;page=Math.max(1,Math.min(page,pages));$('#pages').textContent='/ '+pages;$('#page').value=page;$('#page').max=pages;$('#original').href=base+`/api/invoice-desk/documents/${id}/source`;const blob=await request(`/documents/${id}/pages/${page}`);if(generation!==previewGeneration)return;if(previewUrl)URL.revokeObjectURL(previewUrl);previewUrl=URL.createObjectURL(blob);$('#preview').src=previewUrl;$('#preview').hidden=false;transformPreview();}
-function transformPreview(){$('#preview').style.width=(zoom*100)+'%';$('#preview').style.transform=`rotate(${rotation}deg)`;}
+let previewObserver=null,previewUrls=[];
+async function loadPreview(){
+ if(!selected)return;
+ const generation=++previewGeneration,id=selected.id,scroller=$('#preview-scroll');
+ previewObserver?.disconnect();previewUrls.forEach(url=>URL.revokeObjectURL(url));previewUrls=[];
+ scroller.replaceChildren();scroller.scrollTop=0;
+ const info=await request(`/documents/${id}/preview`);if(generation!==previewGeneration)return;
+ pages=info.pages;page=1;$('#pages').textContent='/ '+pages;$('#page').value=page;$('#page').max=pages;
+ $('#original').href=base+`/api/invoice-desk/documents/${id}/source`;
+ let pending=Promise.resolve();
+ previewObserver=new IntersectionObserver(entries=>{
+  for(const entry of entries){if(!entry.isIntersecting)continue;const sheet=entry.target;previewObserver.unobserve(sheet);
+   pending=pending.then(async()=>{
+    if(generation!==previewGeneration)return;
+    const label=sheet.querySelector('figcaption'),img=sheet.querySelector('img');
+    try{const blob=await request(`/documents/${id}/pages/${sheet.dataset.page}`);if(generation!==previewGeneration)return;
+     const url=URL.createObjectURL(blob);previewUrls.push(url);img.src=url;img.hidden=false;
+     img.onload=()=>{if(generation===previewGeneration)transformPreview();};label.textContent='Trang '+sheet.dataset.page;
+    }catch(e){if(generation!==previewGeneration)return;label.textContent='Không tải được trang '+sheet.dataset.page+'. ';
+     const retry=document.createElement('button');retry.textContent='Thử lại';retry.onclick=()=>{retry.remove();previewObserver.observe(sheet);};label.append(retry);
+    }
+   });
+  }
+ },{root:scroller,rootMargin:'600px'});
+ for(let n=1;n<=pages;n++){
+  const sheet=document.createElement('figure');sheet.className='preview-page';sheet.dataset.page=n;sheet.style.margin='0 0 24px';
+  const label=document.createElement('figcaption');label.textContent='Trang '+n+' — đang tải';
+  const frame=document.createElement('div');frame.className='preview-frame';frame.style.cssText='position:relative;min-height:400px;background:white';
+  const img=document.createElement('img');img.alt='Trang '+n+' hóa đơn gốc';img.hidden=true;img.style.cssText='position:absolute;max-width:none;transform-origin:center';
+  frame.append(img);sheet.append(label,frame);scroller.append(sheet);previewObserver.observe(sheet);
+ }
+ transformPreview();
+}
+function transformPreview(){const width=Math.max(100,$('#preview-scroll').clientWidth-36)*zoom;
+ document.querySelectorAll('.preview-frame').forEach(frame=>{const img=frame.querySelector('img'),height=img.naturalWidth?width*img.naturalHeight/img.naturalWidth:width*1.414,sideways=rotation%180!==0;
+  frame.style.width=(sideways?height:width)+'px';frame.style.height=(sideways?width:height)+'px';frame.style.minHeight='0';
+  img.style.width=width+'px';img.style.left='50%';img.style.top='50%';img.style.transform=`translate(-50%,-50%) rotate(${rotation}deg)`;
+ });}
 $('#prev').onclick=()=>{if(page>1){page--;action(loadPreview);}};$('#next').onclick=()=>{if(page<pages){page++;action(loadPreview);}};$('#go').onclick=()=>{const n=Number($('#page').value);if(!Number.isInteger(n)||n<1||n>pages){message('Số trang không hợp lệ.',true);return;}page=n;action(loadPreview);};$('#zoom-in').onclick=()=>{zoom=Math.min(4,zoom+.25);transformPreview();};$('#zoom-out').onclick=()=>{zoom=Math.max(.25,zoom-.25);transformPreview();};$('#fit').onclick=()=>{zoom=1;rotation=0;transformPreview();};$('#rotate').onclick=()=>{rotation=(rotation+90)%360;transformPreview();};$('#show-data').onclick=()=>$('#editor-layout').classList.remove('source-only');$('#show-source').onclick=()=>$('#editor-layout').classList.add('source-only');
+function goToPreviewPage(n){if(!Number.isInteger(n)||n<1||n>pages)return;const sheet=$(`#preview-scroll [data-page="${n}"]`);if(!sheet)return;page=n;$('#page').value=n;const scroller=$('#preview-scroll');scroller.scrollTop+=sheet.getBoundingClientRect().top-scroller.getBoundingClientRect().top-18;}
+$('#prev').onclick=()=>goToPreviewPage(page-1);$('#next').onclick=()=>goToPreviewPage(page+1);$('#go').onclick=()=>goToPreviewPage(Number($('#page').value));
+$('#preview-scroll').addEventListener('scroll',()=>{const top=$('#preview-scroll').getBoundingClientRect().top;const sheets=[...document.querySelectorAll('.preview-page')];const current=sheets.find(sheet=>sheet.getBoundingClientRect().bottom>top+40);if(current){page=Number(current.dataset.page);if(document.activeElement!==$('#page'))$('#page').value=page;}},{passive:true});
+window.addEventListener('resize',transformPreview);
+$('#show-source').onclick=()=>{$('#editor-layout').classList.add('source-only');transformPreview();};
 document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(el=>el.hidden=el.id!==b.dataset.tab);document.querySelectorAll('[data-tab]').forEach(el=>el.classList.toggle('active',el===b));if(b.dataset.tab==='learning')action(loadLearning);if(b.dataset.tab==='settings')action(loadOcrSettings);});
 function renderSuppliers(){$('#supplier-list').innerHTML=suppliers.map((s,i)=>`<button data-index="${i}">${esc(s.name)} · ${esc(s.taxId)}</button>`).join('');$('#supplier-list').querySelectorAll('button').forEach(b=>b.onclick=()=>editSupplier(suppliers[Number(b.dataset.index)]));}
 function editSupplier(s={taxId:'',name:'',notes:'',rules:[]}){for(const key of ['taxId','name','notes'])$('#supplier-form').elements[key].value=s[key];$('#rules').replaceChildren();s.rules.forEach(addRule);}
