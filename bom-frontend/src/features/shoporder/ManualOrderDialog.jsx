@@ -103,6 +103,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
   const { hasFullBusinessAccess } = useAuth()
   const [models, setModels]         = useState([])
   const [tables, setTables]         = useState([])
+  const tableOptions = [{ id: '', tableName: 'Không chọn quầy / bàn' }, ...tables]
   const [loading, setLoading]       = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError]           = useState('')
@@ -989,7 +990,7 @@ export default function ManualOrderDialog({ open, onClose, onCreated, defaultTab
               {/* Table */}
               {fulfillment === 'DINE_IN' && (
                 <Autocomplete
-                  options={tables}
+                  options={tableOptions}
                   value={tables.find(table => String(table.id) === String(tableId)) || null}
                   onChange={(_, table) => setTableId(table?.id || '')}
                   getOptionLabel={table => table.tableName || ''}

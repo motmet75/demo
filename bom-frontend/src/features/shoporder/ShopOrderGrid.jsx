@@ -113,7 +113,7 @@ const DEFAULT_QUICK_CONFIRM = {
 function readShopOrderPref(key, fallback) {
   try {
     const stored = localStorage.getItem(key)
-    if (stored) return stored
+    if (stored !== null) return stored
   } catch { /* browser storage may be blocked */ }
   try {
     const prefix = `${encodeURIComponent(key)}=`
@@ -1841,10 +1841,24 @@ export default function ShopOrderGrid() {
   useEffect(() => { load() }, [load])
   useEffect(() => { loadBoard() }, [loadBoard])
   useEffect(() => {
-    fetchShopTables().then(({ data }) => setTables(Array.isArray(data) ? data : [])).catch(() => {})
+    fetchShopTables().then(({ data }) => {
+      const nextTables = Array.isArray(data) ? data : []
+      setTables(nextTables)
+      setQuickOrderTableId(current => {
+        const saved = readShopOrderPref(quickOrderTableKey, null)
+        if (saved !== null) {
+          return nextTables.some(table => String(table.id) === String(saved)) ? String(saved) : ''
+        }
+        const counterTable = nextTables.find(table => /^(quầy|counter)(\s|$)/i.test(String(table.tableName || '').trim()))
+        const selected = counterTable?.id ? String(counterTable.id) : current
+        if (selected) writeShopOrderPref(quickOrderTableKey, selected)
+        return selected
+      })
+    }).catch(() => {})
   }, [])
   useEffect(() => {
-    setQuickOrderTableId(readShopOrderPref(quickOrderTableKey, ''))
+    const saved = readShopOrderPref(quickOrderTableKey, null)
+    if (saved !== null) setQuickOrderTableId(saved)
   }, [quickOrderTableKey])
   useEffect(() => {
     fetchBankConfig().then(({ data }) => setBankConfig(data || {})).catch(() => setBankConfig({}))
@@ -2375,7 +2389,7 @@ export default function ShopOrderGrid() {
   const rememberQuickOrderTable = useCallback((tableId) => {
     const value = tableId == null ? '' : String(tableId)
     setQuickOrderTableId(value)
-    if (value) writeShopOrderPref(quickOrderTableKey, value)
+    writeShopOrderPref(quickOrderTableKey, value)
   }, [quickOrderTableKey])
 
   const openQuickOrder = useCallback((tableId = '') => {

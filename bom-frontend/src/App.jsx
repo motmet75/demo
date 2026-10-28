@@ -94,6 +94,13 @@ const TENANT_NAV_PRESETS = {
     ] },
   ],
 }
+TENANT_NAV_PRESETS['0198f600-0000-7000-8000-000000000001'][0].items.splice(4, 0,
+  { label: 'Nguyên vật liệu', path: '/materials', icon: '🧱' },
+  { label: 'Models', path: '/models', icon: '📐' },
+)
+TENANT_NAV_PRESETS['0198f600-0000-7000-8000-000000000001'][0].items.push(
+  { label: 'Admin - Quản lý user', path: '/admin/users', icon: '🔧' },
+)
 const SHOP_ORDERING_PATHS = new Set(['/shop-orders', '/shop-repair', '/shop-tables', '/shop-reservations', '/shop-printing'])
 const COUNTER_OPERATION_PATHS = new Set(['/counter-shift', '/inventory', '/warehouses', '/shop-menu', '/shop-orders', '/shop-repair', '/shop-tables', '/shop-reservations', '/shop-printing'])
 
