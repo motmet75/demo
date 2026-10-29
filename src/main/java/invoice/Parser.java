@@ -28,6 +28,7 @@ public class Parser {
   if(r.get("serial").isBlank())r.put("serial",match(text,"Ký hiệu[ \\t]+([A-Z0-9]+)"));
   r.put("number",match(text,"(?:^|\\s)Số(?:[ \\t]*\\([^\\n)]*\\))?[ \\t]*:[ \\t]*(\\d+)"));
   if(r.get("number").isBlank())r.put("number",match(text,"^Số[ \\t]+(\\d+)"));
+  if(r.get("number").isBlank())r.put("number",match(text,"(?is)Số(?:[ \\t]*\\([^\\n)]*\\))?[ \\t]*:[ \\t]*\\R[^\\d\\n]*(\\d+)"));
   var d=Pattern.compile("ngay[^\\d\\n]*(\\d{1,2})[^\\d\\n]+(\\d{1,2})[^\\d\\n]+(\\d{4})").matcher(t);
   if(d.find())try{r.put("date",LocalDate.of(Integer.parseInt(d.group(3)),Integer.parseInt(d.group(2)),Integer.parseInt(d.group(1))).toString());}catch(Exception e){r.warnings.add("Invalid invoice date");}
   String seller=match(text,"(?:Đơn vị bán hàng|Tên đơn vị[ \\t]*\\(Seller\\))[^:\\n]*:[ \\t]*(.+)");
@@ -55,7 +56,9 @@ public class Parser {
   String n="(-?\\d[\\d.,]*)";
   Pattern row=Pattern.compile("^(\\d{1,4})\\s+(?:(.*?)\\s+)?(\\S+)\\s+"+n+"\\s+"+n+"\\s+"+n+"$");
   boolean table=false;String pending="",prefix="";Map<String,String> last=null;
-  for(String raw:r.text.split("\\R")){
+  String[] lines=r.text.split("\\R");
+  for(int lineIndex=0;lineIndex<lines.length;lineIndex++){
+   String raw=lines[lineIndex];
    String l=raw.trim(),f=fold(l);
    if(f.startsWith("stt")){table=true;pending="";prefix="";last=null;continue;}
    if(f.contains("cong tien hang")||f.matches("^(tong cong|tong tien|thue suat|tien thue|so tien viet|nguoi mua|nguoi ban|ky boi|tra cuu|tiep theo|trang |don vi cung cap|hoa don).*$")){table=false;pending="";prefix="";last=null;}
@@ -68,7 +71,17 @@ public class Parser {
    else if(!pending.isEmpty()&&pending.length()<1200)pending=candidate;
    else if(last==null&&l.matches(".*\\p{L}.*")){prefix=(prefix+" "+l).trim();}
    else if(f.matches("(?iu)^(?:[AB]\\d{2}\\.\\d{2}\\.|khung suon\\b|FRAMESET\\b).*")||!prefix.isEmpty()){prefix=(prefix+" "+l).trim();}
-   else if(last!=null&&l.matches(".*\\p{L}.*")){String before=last.get("description");if(before.startsWith("[Wrapped"))before="";last.put("description",(before+" "+l).trim());}
+   else if(last!=null&&l.matches(".*\\p{L}.*")){
+    boolean nextIsRow=false;
+    for(int next=lineIndex+1;next<lines.length;next++){
+     String nextLine=lines[next].trim();
+     if(nextLine.isEmpty())continue;
+     nextIsRow=nextLine.matches("^\\d{1,4}\\s+.*");
+     break;
+    }
+    if(nextIsRow)prefix=(prefix+" "+l).trim();
+    else{String before=last.get("description");if(before.startsWith("[Wrapped"))before="";last.put("description",(before+" "+l).trim());}
+   }
   }
  }
  public void profiles(Invoice r,Settings settings)throws Exception{
