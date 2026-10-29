@@ -13,6 +13,12 @@ public class Excel {
    var appendices=book.createSheet("Appendices");var appendixItems=book.createSheet("Appendix items");row(appendices,columns);row(appendixItems,List.of("sellerTaxId","serial","number","line","description","unit","HS code","M\u00e3 NVL","quantity","unitPrice","amount","source","Biển số xe","Ghi chú","Mô tả gốc"));
    var debitNotes=book.createSheet("Debit notes");var debitItems=book.createSheet("Debit items");row(debitNotes,columns);row(debitItems,List.of("sellerTaxId","serial","number","line","description","unit","HS code","Mã NVL","quantity","unitPrice","amount","source","Biển số xe","Ghi chú","Mô tả gốc"));
    row(audit,List.of("source","type","approved","warnings"));
+   for(Sheet sheet:List.of(items,appendixItems,debitItems)){
+    Row header=sheet.getRow(0);
+    header.createCell(15).setCellValue("Thuế suất GTGT");
+    header.createCell(16).setCellValue("Tiền thuế GTGT");
+    header.createCell(17).setCellValue("Thành tiền gồm GTGT");
+   }
    for(Invoice r:invoices){
     row(audit,List.of(r.source,r.type,String.valueOf(r.approved),String.join("; ",r.warnings)));
     if(!List.of("INVOICE","APPENDIX","DEBIT_NOTE").contains(r.type)||(approvedOnly&&!r.approved))continue;
@@ -24,6 +30,10 @@ public class Excel {
     Row record=row(summary,values);for(String k:List.of("subtotal","vat","total"))numeric(record.getCell(columns.indexOf(k)));
     if(target!=summary){Row typed=row(target,values);for(String k:List.of("subtotal","vat","total"))numeric(typed.getCell(columns.indexOf(k)));}
     for(var i:r.items){List<String> itemValues=List.of(r.get("sellerTaxId"),r.get("serial"),r.get("number"),i.getOrDefault("line",""),i.getOrDefault("description",""),i.getOrDefault("unit",""),i.getOrDefault("hsCode",""),i.getOrDefault("materialCode",""),i.getOrDefault("quantity",""),i.getOrDefault("unitPrice",""),i.getOrDefault("amount",""),r.source,i.getOrDefault("truckPlate",""),i.getOrDefault("notes",""),i.getOrDefault("originalDescription",""));Row ir=row(items,itemValues);for(int n=8;n<=10;n++)numeric(ir.getCell(n));if(itemTarget!=items){Row typedItem=row(itemTarget,itemValues);for(int n=8;n<=10;n++)numeric(typedItem.getCell(n));}}
+    for(int n=0;n<r.items.size();n++){
+     vatCells(items.getRow(items.getLastRowNum()-r.items.size()+1+n),r,r.items.get(n));
+     if(itemTarget!=items)vatCells(itemTarget.getRow(itemTarget.getLastRowNum()-r.items.size()+1+n),r,r.items.get(n));
+    }
    }
    Map<Integer,CellStyle> numberFormats=new HashMap<>();
    for(Sheet sheet:book)for(Row row:sheet)for(Cell cell:row)if(cell.getCellType()==CellType.NUMERIC){int scale=Math.max(0,java.math.BigDecimal.valueOf(cell.getNumericCellValue()).stripTrailingZeros().scale());scale=Math.min(15,scale);CellStyle style=numberFormats.get(scale);if(style==null){style=book.createCellStyle();style.setDataFormat(book.createDataFormat().getFormat("#,##0"+(scale>0?"."+"0".repeat(scale):"")));numberFormats.put(scale,style);}cell.setCellStyle(style);}
@@ -34,5 +44,21 @@ public class Excel {
   }
  }
  static Row row(Sheet sheet,List<String> values){Row row=sheet.createRow(sheet.getPhysicalNumberOfRows());for(int i=0;i<values.size();i++){String v=values.get(i);row.createCell(i,CellType.STRING).setCellValue(v.substring(0,Math.min(v.length(),32767)));}return row;}
+ static void vatCells(Row row,Invoice invoice,Map<String,String> item){
+  String rate=item.getOrDefault("taxRate","");if(rate.isBlank())rate=invoice.get("taxRate");
+  row.createCell(15).setCellValue(rate);
+  row.createCell(16).setCellValue("");row.createCell(17).setCellValue("");
+  try{
+   String normalized=rate.trim().toUpperCase(Locale.ROOT);
+   java.math.BigDecimal percent;
+   if(Set.of("KCT","KHONG CHIU THUE","KHÔNG CHỊU THUẾ").contains(normalized))percent=java.math.BigDecimal.ZERO;
+   else percent=new java.math.BigDecimal(normalized.replace("%","").replace(",",".").trim());
+   if(percent.signum()<0||percent.compareTo(new java.math.BigDecimal("100"))>0)return;
+   var amount=new java.math.BigDecimal(item.get("amount"));
+   var vat=amount.multiply(percent).movePointLeft(2).setScale("VND".equalsIgnoreCase(invoice.get("currency"))?0:2,java.math.RoundingMode.HALF_UP);
+   row.getCell(16).setCellValue(vat.toPlainString());numeric(row.getCell(16));
+   row.getCell(17).setCellValue(amount.add(vat).toPlainString());numeric(row.getCell(17));
+  }catch(IllegalArgumentException|NullPointerException ignored){} // Unknown rates remain blank.
+ }
  static void numeric(Cell c){try{var n=new java.math.BigDecimal(c.getStringCellValue());if(n.precision()<=15)c.setCellValue(n.doubleValue());}catch(Exception ignored){}}
 }
