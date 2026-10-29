@@ -21,4 +21,6 @@ CREATE TABLE IF NOT EXISTS invoice_desk_learning (
  sha256 varchar(64) NOT NULL, before_payload text NOT NULL, approved_payload text NOT NULL,
  reviewed_by text NOT NULL, created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+ALTER TABLE invoice_desk_learning ADD COLUMN IF NOT EXISTS serial varchar(80) NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS invoice_desk_learning_source ON invoice_desk_learning(tenant_id,sha256,created_at);
+CREATE INDEX IF NOT EXISTS invoice_desk_learning_key ON invoice_desk_learning(tenant_id,tax_id,serial,created_at);

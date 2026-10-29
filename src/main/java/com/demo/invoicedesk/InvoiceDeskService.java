@@ -155,6 +155,14 @@ public class InvoiceDeskService {
   String tax;try{tax=SupplierRules.taxId(invoice.get("sellerTaxId"));}catch(IllegalArgumentException e){return;}
   for(Supplier supplier:suppliers(scope))if(supplier.taxId().equals(tax)){SupplierRules.apply(invoice,supplier.rules());invoice.profile="sql-supplier:"+tax;}
  }
+ private void applyLearned(Scope scope,Invoice invoice){
+  String tax;try{tax=SupplierRules.taxId(invoice.get("sellerTaxId"));}catch(IllegalArgumentException e){return;}
+  String serial=invoice.get("serial");if(serial.isBlank())return;
+  var learned=db.query("SELECT approved_payload FROM invoice_desk_learning WHERE tenant_id=? AND tax_id=? AND serial=? ORDER BY created_at DESC LIMIT 1",(rs,n)->decode(rs.getString(1)),scope.tenantId(),tax,serial).stream().findFirst().orElse(null);
+  if(learned==null)return;
+  for(String key:List.of("seller","sellerTaxId","currency","taxRate"))if(invoice.get(key).isBlank()&&!learned.get(key).isBlank())invoice.put(key,learned.get(key));
+  invoice.profile="learned:"+tax+":"+serial;
+ }
  public Document upload(Scope scope,MultipartFile file)throws Exception{
   String name=Objects.toString(file.getOriginalFilename(),"invoice.pdf").replace('\\','/');name=name.substring(name.lastIndexOf('/')+1);
   if(file.isEmpty()||file.getSize()>25L*1024*1024||!name.toLowerCase(Locale.ROOT).matches(".*\\.(pdf|png|jpe?g|tiff?|bmp)"))throw new IllegalArgumentException("Upload PDF or image files up to 25 MB each");
@@ -166,7 +174,7 @@ public class InvoiceDeskService {
    Path source=workspace.resolve("source"+name.substring(name.lastIndexOf('.')).toLowerCase(Locale.ROOT));Files.write(source,bytes);
    Settings settings=extractionSettings(workspace);
    Engine engine=new Engine(settings);InvoiceDeskTasks.bind(engine);Invoice invoice=engine.read(source);InvoiceDeskTasks.check();invoice.source=name;invoice.sha256=hash;
-   Parser.validate(invoice);applyRules(scope,invoice);
+   Parser.validate(invoice);applyRules(scope,invoice);applyLearned(scope,invoice);
    UUID id=UUID.randomUUID();
    db.update("INSERT INTO invoice_desk_document(id,tenant_id,filename,sha256,source,payload,extracted_payload,ocr_cache,updated_by) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(tenant_id,sha256) DO NOTHING",id,scope.tenantId(),name,hash,bytes,encode(invoice),encode(invoice),captureCache(workspace),scope.username());
    UUID stored=db.queryForObject("SELECT id FROM invoice_desk_document WHERE tenant_id=? AND sha256=?",UUID.class,scope.tenantId(),hash);
@@ -193,7 +201,7 @@ public class InvoiceDeskService {
    else invoice=cached?engine.readOffline(input):engine.readFresh(input);
    InvoiceDeskTasks.check();
    if(invoice.text==null||invoice.text.isBlank()||"ERROR".equals(invoice.type)||invoice.warnings.stream().anyMatch(w->w.startsWith("OCR ")))throw new IllegalArgumentException("OCR did not complete successfully. Check the provider credentials, executable, language packs and source image. Existing draft preserved.");
-   invoice.source=name;invoice.sha256=old.invoice().sha256;Parser.validate(invoice);applyRules(scope,invoice);
+   invoice.source=name;invoice.sha256=old.invoice().sha256;Parser.validate(invoice);applyRules(scope,invoice);applyLearned(scope,invoice);
    archive(scope,id);
    int updated=db.update("UPDATE invoice_desk_document SET payload=?,extracted_payload=?,ocr_cache=?,updated_at=CURRENT_TIMESTAMP,updated_by=?,version=version+1 WHERE tenant_id=? AND id=? AND version=?",encode(invoice),encode(invoice),captureCache(workspace),scope.username(),scope.tenantId(),id,version);
    if(updated!=1)throw new ResponseStatusException(HttpStatus.CONFLICT,"Document changed; reload before running OCR");
@@ -224,10 +232,10 @@ public class InvoiceDeskService {
   archive(scope,id);
   int updated=db.update("UPDATE invoice_desk_document SET payload=?,updated_at=CURRENT_TIMESTAMP,updated_by=?,version=version+1 WHERE tenant_id=? AND id=? AND version=?",encode(invoice),scope.username(),scope.tenantId(),id,change.version());
   if(updated!=1)throw new ResponseStatusException(HttpStatus.CONFLICT,"Document changed; reload before saving");
-  if(change.approve())db.update("INSERT INTO invoice_desk_learning(id,tenant_id,document_id,tax_id,sha256,before_payload,approved_payload,reviewed_by) VALUES (?,?,?,?,?,?,?,?)",UUID.randomUUID(),scope.tenantId(),id,tax,invoice.sha256,before,encode(invoice),scope.username());
+  if(change.approve())db.update("INSERT INTO invoice_desk_learning(id,tenant_id,document_id,tax_id,serial,sha256,before_payload,approved_payload,reviewed_by) VALUES (?,?,?,?,?,?,?,?,?)",UUID.randomUUID(),scope.tenantId(),id,tax,invoice.get("serial"),invoice.sha256,before,encode(invoice),scope.username());
   return document(scope,id);
  }
- public List<Map<String,Object>> learning(Scope scope){return db.queryForList("SELECT id,document_id,tax_id,sha256,reviewed_by,created_at,approved_payload FROM invoice_desk_learning WHERE tenant_id=? ORDER BY created_at DESC LIMIT 200",scope.tenantId());}
+ public List<Map<String,Object>> learning(Scope scope){return db.queryForList("SELECT id,document_id,tax_id,serial,sha256,reviewed_by,created_at,approved_payload FROM invoice_desk_learning WHERE tenant_id=? ORDER BY created_at DESC LIMIT 200",scope.tenantId());}
  public byte[] export(Scope scope,boolean draft)throws Exception{return export(scope,draft,null);}
  public byte[] export(Scope scope,boolean draft,List<UUID> ids)throws Exception{
   if(draft)throw new IllegalArgumentException("Chỉ xuất hóa đơn đã duyệt.");
