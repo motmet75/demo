@@ -154,6 +154,13 @@ public class AdminUserService {
     }
 
     private List<String> replaceAuthoritiesInternal(String username, List<String> authorities) {
+        // gototp is managed by the OTP provisioning flow. The admin user form only
+        // submits roles, so replacing the submitted roles must not delete the OTP
+        // secret (stored in authorities.description).
+        List<Authority> protectedAuthorities = authorityRepository.findByUsername(username).stream()
+                .filter(authority -> isGototp(authority.getAuthority()))
+                .map(this::copyAuthority)
+                .toList();
         authorityRepository.deleteByUsername(username);
         Set<String> normalized = normalizeAuthorities(authorities);
         List<Authority> saved = new ArrayList<>();
@@ -165,7 +172,19 @@ public class AdminUserService {
             authority.setVisible(Boolean.TRUE);
             saved.add(authorityRepository.save(authority));
         }
+        for (Authority authority : protectedAuthorities) {
+            saved.add(authorityRepository.save(authority));
+        }
         return saved.stream().map(Authority::getAuthority).toList();
+    }
+
+    private Authority copyAuthority(Authority source) {
+        Authority copy = new Authority();
+        copy.setUsername(source.getUsername());
+        copy.setAuthority(source.getAuthority());
+        copy.setDescription(source.getDescription());
+        copy.setVisible(source.getVisible());
+        return copy;
     }
 
     /** Admin-only: assign or clear a tenant for a user. */
@@ -203,10 +222,14 @@ public class AdminUserService {
 
     private List<String> authoritiesForSave(List<String> requested, boolean superAdmin) {
         if (superAdmin) {
-            Set<String> normalized = normalizeAuthorities(requested);
+            Set<String> normalized = normalizeAuthorities(requested).stream()
+                    .filter(role -> !isGototp(role))
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
             return normalized.isEmpty() ? List.of(ROLE_SHOP_ORDERING) : List.copyOf(normalized);
         }
-        Set<String> normalized = normalizeAuthorities(requested);
+        Set<String> normalized = normalizeAuthorities(requested).stream()
+                .filter(role -> !isGototp(role))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
         List<String> staffRoles = normalized.stream()
                 .filter(role -> ROLE_USER.equals(role) || ROLE_COUNTER.equals(role) || ROLE_SHOP_ORDERING.equals(role))
                 .toList();
@@ -272,6 +295,12 @@ public class AdminUserService {
 
     private boolean isElevatedRole(String role) {
         return ROLE_SUPER_ADMIN.equals(role) || ROLE_ADMIN.equals(role);
+    }
+
+    private boolean isGototp(String authority) {
+        if (authority == null) return false;
+        String normalized = authority.trim().toUpperCase(Locale.ROOT);
+        return "GOTOTP".equals(normalized) || "ROLE_GOTOTP".equals(normalized);
     }
 
     private String trimToNull(String value) {
