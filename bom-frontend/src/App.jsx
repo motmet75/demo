@@ -509,8 +509,8 @@ function HeaderBar({ user, logout }) {
 
 function HomeRedirect({ user }) {
   if (!user) return <Navigate to="/login" replace />
-  if (hasAnyRole(user, ['ROLE_INVOICE_DESK'])) return <Navigate to="/invoice-desk" replace />
   if (hasAnyRole(user, FULL_BUSINESS_ROLES)) return <Navigate to="/materials" replace />
+  if (hasAnyRole(user, ['ROLE_INVOICE_DESK'])) return <Navigate to="/invoice-desk" replace />
   if (hasAnyRole(user, ['ROLE_COUNTER'])) return <Navigate to="/counter-shift" replace />
   return <Navigate to="/shop-orders" replace />
 }

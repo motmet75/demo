@@ -225,6 +225,9 @@ public class AdminUserService {
             Set<String> normalized = normalizeAuthorities(requested).stream()
                     .filter(role -> !isGototp(role))
                     .collect(Collectors.toCollection(LinkedHashSet::new));
+            if (normalized.stream().anyMatch(this::isFullBusinessRole)) {
+                normalized.remove("ROLE_INVOICE_DESK");
+            }
             return normalized.isEmpty() ? List.of(ROLE_SHOP_ORDERING) : List.copyOf(normalized);
         }
         Set<String> normalized = normalizeAuthorities(requested).stream()
@@ -295,6 +298,10 @@ public class AdminUserService {
 
     private boolean isElevatedRole(String role) {
         return ROLE_SUPER_ADMIN.equals(role) || ROLE_ADMIN.equals(role);
+    }
+
+    private boolean isFullBusinessRole(String role) {
+        return ROLE_SUPER_ADMIN.equals(role) || ROLE_ADMIN.equals(role) || ROLE_USER.equals(role);
     }
 
     private boolean isGototp(String authority) {

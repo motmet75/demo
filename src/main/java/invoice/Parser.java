@@ -66,6 +66,7 @@ public class Parser {
     try{Map<String,String> item=new LinkedHashMap<>();item.put("line",m.group(1));String desc=(prefix+" "+Objects.toString(m.group(2),"")).trim();item.put("description",desc.isEmpty()?"[Wrapped description - check source]":desc);item.put("unit",m.group(3));item.put("quantity",number(m.group(4),r.text).toPlainString());item.put("unitPrice",number(m.group(5),r.text).toPlainString());item.put("amount",number(m.group(6),r.text).toPlainString());r.items.add(item);last=item;}catch(Exception ignored){}pending="";prefix="";
    }else if(l.matches("^\\d{1,4}\\s+.*"))pending=l;
    else if(!pending.isEmpty()&&pending.length()<1200)pending=candidate;
+   else if(last==null&&l.matches(".*\\p{L}.*")){prefix=(prefix+" "+l).trim();}
    else if(f.matches("(?iu)^(?:[AB]\\d{2}\\.\\d{2}\\.|khung suon\\b|FRAMESET\\b).*")||!prefix.isEmpty()){prefix=(prefix+" "+l).trim();}
    else if(last!=null&&l.matches(".*\\p{L}.*")){String before=last.get("description");if(before.startsWith("[Wrapped"))before="";last.put("description",(before+" "+l).trim());}
   }

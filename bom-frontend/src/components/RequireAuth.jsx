@@ -5,8 +5,8 @@ import { useAuth } from '../context/useAuth'
 
 function defaultPathForUser(user) {
   const roles = user?.authorities || []
-  if (roles.includes('ROLE_INVOICE_DESK')) return '/invoice-desk'
   if (['ROLE_SUPER_ADMIN', 'ROLE_ADMIN', 'ROLE_USER'].some(role => roles.includes(role))) return '/materials'
+  if (roles.includes('ROLE_INVOICE_DESK')) return '/invoice-desk'
   if (roles.includes('ROLE_COUNTER')) return '/counter-shift'
   if (roles.includes('ROLE_SHOP_ORDERING')) return '/shop-orders'
   return '/materials'
