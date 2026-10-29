@@ -128,7 +128,14 @@ public class InvoiceDeskService {
   if(rows.size()!=1)throw new ResponseStatusException(HttpStatus.FORBIDDEN,"No invoice company assigned to this account");
   return rows.get(0);
  }
- private Invoice decode(String json){try{return Engine.JSON.readValue(json,Invoice.class);}catch(Exception e){throw new IllegalStateException("Invalid stored document",e);}}
+ private Invoice decode(String json){try{Invoice invoice=Engine.JSON.readValue(json,Invoice.class);repairStoredInvoice(invoice);return invoice;}catch(Exception e){throw new IllegalStateException("Invalid stored document",e);}}
+ private static void repairStoredInvoice(Invoice invoice){
+  for(var item:invoice.items){String description=item.getOrDefault("description","");String marker="tính số lượng đơn giá thành tiền";int at=description.toLowerCase(Locale.ROOT).indexOf(marker);if(at>=0)item.put("description",description.substring(at+marker.length()).trim());}
+  if(invoice.get("taxRate").isBlank()){
+   var match=java.util.regex.Pattern.compile("thue suat(?: gtgt)?[^:\\n]*:[ \\t]*([0-9]+(?:[.,][0-9]+)?%|kct|khong chiu thue|khong ke khai)").matcher(Parser.fold(invoice.text));
+   if(match.find())invoice.put("taxRate",match.group(1));
+  }
+ }
  private String encode(Object value){try{return Engine.JSON.writeValueAsString(value);}catch(Exception e){throw new IllegalArgumentException("Invalid document",e);}}
  public List<Document> documents(Scope scope){return db.query("SELECT id,version,payload,updated_at,updated_by FROM invoice_desk_document WHERE tenant_id=? ORDER BY created_at DESC",(rs,n)->new Document(rs.getObject(1,UUID.class),rs.getLong(2),decode(rs.getString(3)),rs.getString(4),rs.getString(5)),scope.tenantId());}
  public Document document(Scope scope,UUID id){return db.query("SELECT id,version,payload,updated_at,updated_by FROM invoice_desk_document WHERE tenant_id=? AND id=?",(rs,n)->new Document(rs.getObject(1,UUID.class),rs.getLong(2),decode(rs.getString(3)),rs.getString(4),rs.getString(5)),scope.tenantId(),id).stream().findFirst().orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND));}
