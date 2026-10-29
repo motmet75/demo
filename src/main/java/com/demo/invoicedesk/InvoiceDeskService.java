@@ -171,7 +171,8 @@ public class InvoiceDeskService {
   Document old=document(scope,id);
   if(old.version()!=version)throw new ResponseStatusException(HttpStatus.CONFLICT,"Document changed; reload before running OCR");
   if(old.invoice().approved)throw new IllegalArgumentException("Save as a draft before re-running OCR on an approved invoice");
-  if(!cached&&"off".equals(ocr))throw new IllegalArgumentException("OCR is disabled; configure the server OCR provider first");
+  boolean textPdf=old.invoice().source.toLowerCase(Locale.ROOT).endsWith(".pdf");
+  if(!cached&&"off".equals(ocr)&&!textPdf)throw new IllegalArgumentException("OCR is disabled; configure the server OCR provider first");
   Path workspace=Files.createTempDirectory("invoice-desk-");
   try{
    String name=old.invoice().source;Path input=workspace.resolve("source"+name.substring(name.lastIndexOf('.')).toLowerCase(Locale.ROOT));Files.write(input,source(scope,id));
