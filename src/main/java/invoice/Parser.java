@@ -43,6 +43,7 @@ public class Parser {
   if(idList.isEmpty()){var plain=Pattern.compile("(?iu)Mã số thuế[ \\t]+([0-9-]+)").matcher(text);if(plain.find())r.put("sellerTaxId",plain.group(1));if(plain.find())r.put("buyerTaxId",plain.group(1));}
   r.put("currency",match(text,"(?:Currency unit|Đồng tiền thanh toán|Đơn vị tiền tệ)[^:\\n]*:[ \\t]*([A-Z]{3})"));
   if(r.get("currency").isBlank()&&(t.contains("dong")||t.contains("vnd")))r.put("currency","VND");
+  r.put("taxRate",match(t,"thue suat(?: gtgt)?[^:\\n]*:[ \\t]*([0-9]+(?:[.,][0-9]+)?%|kct|khong chiu thue|khong ke khai)"));
   r.put("subtotal",amount(t,"cong tien hang")); r.put("vat",amount(t,"tien thue (?:gtgt|gia tri gia tang)"));
   r.put("total",amount(t,"tong\\s*(?:cong)?\\s*tien thanh toan"));
   readItems(r);
@@ -62,7 +63,7 @@ public class Parser {
    String l=raw.trim(),f=fold(l);
    if(f.startsWith("stt")){table=true;pending="";prefix="";last=null;continue;}
    if(f.contains("cong tien hang")||f.matches("^(tong cong|tong tien|thue suat|tien thue|so tien viet|nguoi mua|nguoi ban|ky boi|tra cuu|tiep theo|trang |don vi cung cap|hoa don).*$")){table=false;pending="";prefix="";last=null;}
-   if(!table||l.isEmpty()||l.matches("[\\d\\s= xA-Fa-f]+")||l.startsWith("(No")||l.startsWith("(1)")||f.matches("^(vi tinh|don vi tinh|\\(unit.*|\\(description.*|\\(quantity.*)$"))continue;
+   if(!table||l.isEmpty()||l.matches("[\\d\\s= xA-Fa-f]+")||l.startsWith("(No")||l.startsWith("(1)")||f.matches("^(vi tinh|don vi tinh|\\(unit.*|\\(description.*|\\(quantity.*)$")||f.contains("so luong")&&f.contains("don gia")&&f.contains("thanh tien"))continue;
    String candidate=pending.isEmpty()?l:pending+" "+l;
    var m=row.matcher(candidate);
    if(m.matches()){

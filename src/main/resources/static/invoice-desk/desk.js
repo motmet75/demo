@@ -1,7 +1,7 @@
 'use strict';
 const $=s=>document.querySelector(s),base=location.pathname.split('/invoice-desk')[0];
-const labels={seller:'Nhà cung cấp',sellerTaxId:'Mã số thuế bên bán',buyer:'Bên mua',buyerTaxId:'Mã số thuế bên mua',serial:'Ký hiệu',number:'Số hóa đơn',date:'Ngày hóa đơn',currency:'Tiền tệ',subtotal:'Tiền trước thuế',vat:'Tiền thuế',total:'Tổng tiền',line:'STT',description:'Tên hàng / dịch vụ',unit:'Đơn vị',hsCode:'Mã HS',materialCode:'Mã vật liệu',quantity:'Số lượng',unitPrice:'Đơn giá',amount:'Thành tiền',truckPlate:'Biển số xe',notes:'Ghi chú',originalDescription:'Mô tả gốc',taxRate:'Thuế suất'};
-const keys=['seller','sellerTaxId','buyer','buyerTaxId','serial','number','date','currency','subtotal','vat','total'];
+const labels={seller:'Nhà cung cấp',sellerTaxId:'Mã số thuế bên bán',buyer:'Bên mua',buyerTaxId:'Mã số thuế bên mua',serial:'Ký hiệu',number:'Số hóa đơn',date:'Ngày hóa đơn',currency:'Tiền tệ',taxRate:'Thuế suất GTGT',subtotal:'Tiền trước thuế',vat:'Tiền thuế',total:'Tổng tiền',line:'STT',description:'Tên hàng / dịch vụ',unit:'Đơn vị',hsCode:'Mã HS',materialCode:'Mã vật liệu',quantity:'Số lượng',unitPrice:'Đơn giá',amount:'Thành tiền',truckPlate:'Biển số xe',notes:'Ghi chú',originalDescription:'Mô tả gốc'};
+const keys=['seller','sellerTaxId','buyer','buyerTaxId','serial','number','date','currency','taxRate','subtotal','vat','total'];
 const itemKeys=['line','description','unit','hsCode','materialCode','quantity','unitPrice','amount','truckPlate','notes','originalDescription'];
 const numeric=new Set(['quantity','unitPrice','amount','taxRate','subtotal','vat','total']);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
