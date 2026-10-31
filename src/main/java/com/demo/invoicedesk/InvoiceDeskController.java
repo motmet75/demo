@@ -9,7 +9,8 @@ import org.springframework.web.multipart.MultipartFile;
 @RestController @RequestMapping("/api/invoice-desk")
 public class InvoiceDeskController {
  private final InvoiceDeskService service;
- public InvoiceDeskController(InvoiceDeskService service){this.service=service;}
+ private final GdtReportService reports;
+ public InvoiceDeskController(InvoiceDeskService service,GdtReportService reports){this.service=service;this.reports=reports;}
  @GetMapping("/context") public Object context(Authentication auth){if(service.passwordChangeRequired(auth))return Map.of("passwordChangeRequired",true);return service.scope(auth);}
  @GetMapping("/settings") public Object settings(Authentication auth){service.scope(auth);return service.ocrStatus();}
  @GetMapping("/documents") public Object documents(Authentication auth){return service.documents(service.scope(auth));}
@@ -33,6 +34,12 @@ public class InvoiceDeskController {
  @PostMapping(value="/documents/{id}/rules",headers="X-Invoice-Desk=true") public Object applyRules(Authentication auth,@PathVariable UUID id,@RequestBody RuleRequest request){return service.applySupplierRules(service.scope(auth),id,request.version());}
  @PutMapping(value="/suppliers",headers="X-Invoice-Desk=true") public void supplier(Authentication auth,@RequestBody InvoiceDeskService.Supplier supplier){service.saveSupplier(service.scope(auth),supplier);}
  @GetMapping("/learning") public Object learning(Authentication auth){return service.learning(service.scope(auth));}
+ @GetMapping("/gdt-reports") public Object gdtReports(Authentication auth){return reports.reports(service.scope(auth));}
+ @PostMapping(value="/gdt-reports",headers="X-Invoice-Desk=true") public Object uploadGdtReport(Authentication auth,@RequestParam MultipartFile file)throws Exception{return reports.upload(service.scope(auth),file);}
+ @DeleteMapping(value="/gdt-reports/{id}",headers="X-Invoice-Desk=true") public ResponseEntity<Void> deleteGdtReport(Authentication auth,@PathVariable UUID id){reports.delete(service.scope(auth),id);return ResponseEntity.noContent().build();}
+ @GetMapping("/gdt-reports/{id}/workbook") public ResponseEntity<byte[]> gdtWorkbook(Authentication auth,@PathVariable UUID id){return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename=gdt-invoice-review.xlsx").contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")).body(reports.workbook(service.scope(auth),id));}
+ @GetMapping("/gdt-reports/{id}/package") public ResponseEntity<byte[]> gdtPackage(Authentication auth,@PathVariable UUID id){return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename=gdt-review-package.zip").contentType(MediaType.parseMediaType("application/zip")).body(reports.packageFile(service.scope(auth),id));}
+ @GetMapping("/gdt-reports/{id}/manifest") public ResponseEntity<byte[]> gdtManifest(Authentication auth,@PathVariable UUID id){return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename=gdt-manifest.json").contentType(MediaType.APPLICATION_JSON).body(reports.manifest(service.scope(auth),id));}
  @GetMapping("/export") public ResponseEntity<byte[]> export(Authentication auth,@RequestParam(defaultValue="false") boolean draft,@RequestParam(required=false) List<UUID> ids)throws Exception{
   return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename=hoa-don-"+java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))+".xlsx").contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")).body(service.export(service.scope(auth),draft,ids));
  }

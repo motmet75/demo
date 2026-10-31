@@ -7,8 +7,8 @@ spring:
     password: "${SPRING_DATASOURCE_PASSWORD:}"
   servlet:
     multipart:
-      max-file-size: 25MB
-      max-request-size: 26MB
+      max-file-size: 100MB
+      max-request-size: 101MB
   session:
     timeout: 30m
     data:
