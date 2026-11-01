@@ -107,9 +107,12 @@ public class ProfileController {
 
     @GetMapping("/profile")
     public ResponseEntity<ProfileResponse> getProfile(Authentication authentication) {
-        if (authentication == null || !(authentication.getPrincipal() instanceof User user)) {
+        if (authentication == null || !(authentication.getPrincipal() instanceof User sessionUser)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
+        User user = userRepository.findByUsernameIgnoreCase(sessionUser.getUsername()).orElse(sessionUser);
+        sessionUser.setAssignedTenantId(user.getAssignedTenantId());sessionUser.setAssignedCompanyId(user.getAssignedCompanyId());
+        sessionUser.setLastTenantId(user.getLastTenantId());sessionUser.setLastCompanyId(user.getLastCompanyId());
 
         ProfileUser profileUser = new ProfileUser(
                 user.getId(), user.getUsername(), user.getEmail(),
