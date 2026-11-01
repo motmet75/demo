@@ -39,3 +39,82 @@ CREATE TABLE IF NOT EXISTS invoice_desk_desktop_session (
  created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS invoice_desk_desktop_session_expiry ON invoice_desk_desktop_session(expires_at);
+
+CREATE TABLE IF NOT EXISTS invoice_desk_gdt_defaults (
+ singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton),
+ trial_days integer NOT NULL DEFAULT 30 CHECK(trial_days BETWEEN 1 AND 3650),
+ monthly_invoice_limit integer NOT NULL DEFAULT 100 CHECK(monthly_invoice_limit >= 0),
+ monthly_ocr_limit integer NOT NULL DEFAULT 50 CHECK(monthly_ocr_limit >= 0),
+ daily_ocr_limit integer NOT NULL DEFAULT 20 CHECK(daily_ocr_limit >= 0),
+ max_invoices_per_job integer NOT NULL DEFAULT 100 CHECK(max_invoices_per_job >= 1),
+ max_devices integer NOT NULL DEFAULT 2 CHECK(max_devices >= 1),
+ local_ocr_enabled boolean NOT NULL DEFAULT true,
+ online_ocr_enabled boolean NOT NULL DEFAULT true,
+ telemetry_retention_days integer NOT NULL DEFAULT 90 CHECK(telemetry_retention_days BETWEEN 1 AND 730),
+ updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ updated_by text NOT NULL DEFAULT 'system'
+);
+ALTER TABLE invoice_desk_gdt_defaults ADD COLUMN IF NOT EXISTS invoice_quota_mode varchar(16) NOT NULL DEFAULT 'RUN';
+ALTER TABLE invoice_desk_gdt_defaults ALTER COLUMN invoice_quota_mode SET DEFAULT 'RUN';
+ALTER TABLE invoice_desk_gdt_defaults ADD COLUMN IF NOT EXISTS monthly_run_limit integer NOT NULL DEFAULT 3;
+INSERT INTO invoice_desk_gdt_defaults(singleton) VALUES (true) ON CONFLICT(singleton) DO NOTHING;
+UPDATE invoice_desk_gdt_defaults SET invoice_quota_mode='RUN',monthly_run_limit=3,updated_at=CURRENT_TIMESTAMP
+WHERE singleton=true AND updated_by='system';
+
+CREATE TABLE IF NOT EXISTS invoice_desk_gdt_policy (
+ tenant_id uuid PRIMARY KEY REFERENCES tenant(id),
+ trial_started_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ trial_ends_at timestamptz,
+ monthly_invoice_limit integer CHECK(monthly_invoice_limit >= 0),
+ monthly_ocr_limit integer CHECK(monthly_ocr_limit >= 0),
+ daily_ocr_limit integer CHECK(daily_ocr_limit >= 0),
+ max_invoices_per_job integer CHECK(max_invoices_per_job >= 1),
+ max_devices integer CHECK(max_devices >= 1),
+ local_ocr_enabled boolean,
+ online_ocr_enabled boolean,
+ suspended boolean NOT NULL DEFAULT false,
+ updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ updated_by text NOT NULL DEFAULT ''
+);
+ALTER TABLE invoice_desk_gdt_policy ADD COLUMN IF NOT EXISTS invoice_quota_mode varchar(16);
+ALTER TABLE invoice_desk_gdt_policy ADD COLUMN IF NOT EXISTS monthly_run_limit integer;
+
+CREATE TABLE IF NOT EXISTS invoice_desk_gdt_usage (
+ tenant_id uuid NOT NULL REFERENCES tenant(id), usage_month date NOT NULL,
+ ocr_attempts integer NOT NULL DEFAULT 0, ocr_successes integer NOT NULL DEFAULT 0,
+ invoice_downloads integer NOT NULL DEFAULT 0, updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ PRIMARY KEY(tenant_id,usage_month)
+);
+ALTER TABLE invoice_desk_gdt_usage ADD COLUMN IF NOT EXISTS report_runs integer NOT NULL DEFAULT 0;
+CREATE TABLE IF NOT EXISTS invoice_desk_gdt_daily_usage (
+ tenant_id uuid NOT NULL REFERENCES tenant(id), usage_day date NOT NULL,
+ ocr_attempts integer NOT NULL DEFAULT 0, updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ PRIMARY KEY(tenant_id,usage_day)
+);
+CREATE TABLE IF NOT EXISTS invoice_desk_gdt_invoice_charge (
+ tenant_id uuid NOT NULL REFERENCES tenant(id), invoice_hash varchar(64) NOT NULL,
+ reservation_id uuid NOT NULL, state varchar(16) NOT NULL CHECK(state IN ('RESERVED','COMPLETED')),
+ charged_month date NOT NULL, created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ PRIMARY KEY(tenant_id,invoice_hash)
+);
+CREATE INDEX IF NOT EXISTS invoice_desk_gdt_invoice_reservation ON invoice_desk_gdt_invoice_charge(reservation_id,state);
+CREATE TABLE IF NOT EXISTS invoice_desk_gdt_run_reservation (
+ id uuid PRIMARY KEY, tenant_id uuid NOT NULL REFERENCES tenant(id), charged_month date NOT NULL,
+ state varchar(16) NOT NULL CHECK(state IN ('RESERVED','COMPLETED')),
+ created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS invoice_desk_gdt_login_guard (
+ tenant_id uuid NOT NULL REFERENCES tenant(id), account_hash varchar(64) NOT NULL,
+ consecutive_failures integer NOT NULL DEFAULT 0, blocked_until timestamptz,
+ updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ PRIMARY KEY(tenant_id,account_hash)
+);
+
+CREATE TABLE IF NOT EXISTS invoice_desk_gdt_event (
+ id uuid PRIMARY KEY, tenant_id uuid NOT NULL REFERENCES tenant(id), company_id uuid NOT NULL,
+ event_type varchar(40) NOT NULL, stage varchar(60) NOT NULL, error_category varchar(60) NOT NULL DEFAULT '',
+ http_status integer, correlation_id varchar(80) NOT NULL DEFAULT '', client_version varchar(40) NOT NULL DEFAULT '',
+ detail varchar(500) NOT NULL DEFAULT '', created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS invoice_desk_gdt_event_scope ON invoice_desk_gdt_event(tenant_id,company_id,created_at DESC);

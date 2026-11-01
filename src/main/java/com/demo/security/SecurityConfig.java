@@ -78,7 +78,8 @@ public class SecurityConfig {
             }))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/invoice-desk/desktop/handshake", "/api/invoice-desk/desktop/heartbeat", "/api/invoice-desk/desktop/reports").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/invoice-desk/desktop/handshake", "/api/invoice-desk/desktop/heartbeat", "/api/invoice-desk/desktop/reports", "/api/invoice-desk/desktop/ocr", "/api/invoice-desk/desktop/events", "/api/invoice-desk/desktop/login-gate", "/api/invoice-desk/desktop/login-result", "/api/invoice-desk/desktop/invoice-reservations", "/api/invoice-desk/desktop/invoice-reservations/*/finish").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/invoice-desk/desktop/usage").permitAll()
                 .requestMatchers("/api/invoice-desk/**").hasAnyRole("INVOICE_DESK", "SUPER_ADMIN", "ADMIN", "USER")
                 // The legacy iPad HTML/login shell is public. Its shop staff
                 // API calls remain protected by the /shop/staff/** rule below.

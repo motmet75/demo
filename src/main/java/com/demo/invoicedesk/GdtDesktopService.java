@@ -14,8 +14,8 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class GdtDesktopService {
  private static final SecureRandom RANDOM=new SecureRandom();
- private final JdbcTemplate db;
- public GdtDesktopService(JdbcTemplate db){this.db=db;}
+ private final JdbcTemplate db;private final GdtControlService control;
+ public GdtDesktopService(JdbcTemplate db,GdtControlService control){this.db=db;this.control=control;}
  public record Pairing(String token,String expiresAt){}
  public record Handshake(String sessionToken,String expiresAt,String company,String username){}
  public record HandshakeRequest(String pairingToken,String clientNonce,String appVersion){}
@@ -32,6 +32,7 @@ public class GdtDesktopService {
   if(!pairing.matches("gdtp_[A-Za-z0-9_-]{43}"))throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"Mã ghép nối không hợp lệ hoặc đã hết hạn.");
   var rows=db.query("UPDATE invoice_desk_desktop_pairing SET consumed_at=CURRENT_TIMESTAMP WHERE token_hash=? AND consumed_at IS NULL AND expires_at>CURRENT_TIMESTAMP RETURNING tenant_id,company_id,username",(rs,n)->new Object[]{rs.getObject(1,UUID.class),rs.getObject(2,UUID.class),rs.getString(3)},hash(pairing));
   if(rows.size()!=1)throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"Mã ghép nối không hợp lệ hoặc đã hết hạn.");UUID tenant=(UUID)rows.get(0)[0],company=(UUID)rows.get(0)[1];String username=(String)rows.get(0)[2];
+  var policy=control.policy(tenant);Boolean known=db.queryForObject("SELECT EXISTS(SELECT 1 FROM invoice_desk_desktop_session WHERE tenant_id=? AND client_nonce=? AND expires_at>CURRENT_TIMESTAMP)",Boolean.class,tenant,nonce);Integer devices=db.queryForObject("SELECT COUNT(DISTINCT client_nonce) FROM invoice_desk_desktop_session WHERE tenant_id=? AND expires_at>CURRENT_TIMESTAMP",Integer.class,tenant);if(!Boolean.TRUE.equals(known)&&devices>=policy.maxDevices())throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Device allowance exhausted (maximum "+policy.maxDevices()+").");
   String session=token("gdts_");Instant expires=Instant.now().plusSeconds(8*3600);db.update("INSERT INTO invoice_desk_desktop_session(id,tenant_id,company_id,username,token_hash,client_nonce,app_version,expires_at) VALUES (?,?,?,?,?,?,?,?)",UUID.randomUUID(),tenant,company,username,hash(session),nonce,version,Timestamp.from(expires));
   String companyName=db.queryForObject("SELECT company_name FROM company WHERE id=? AND tenant_id=?",String.class,company,tenant);return new Handshake(session,expires.toString(),companyName,username);
  }
