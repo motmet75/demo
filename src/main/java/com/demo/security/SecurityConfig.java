@@ -90,7 +90,7 @@ public class SecurityConfig {
                 .requestMatchers("/dang-nhap/oauth2/**").permitAll()
                 .requestMatchers(HttpMethod.PATCH, "/auth/profile/email").authenticated()
                 .requestMatchers(HttpMethod.PATCH, "/auth/profile/order-notification").hasAnyRole(FULL_BUSINESS_ROLES)
-                .requestMatchers("/auth/shop/reset", "/auth/shop/setup").hasAnyRole(FULL_BUSINESS_ROLES)
+                .requestMatchers("/auth/shop/reset", "/auth/shop/setup", "/auth/shop/initialize").hasAnyRole(FULL_BUSINESS_ROLES)
                 .requestMatchers("/auth/password-otp/**").authenticated()
                 .requestMatchers("/auth/admin/**").hasRole("SUPER_ADMIN")
                 .requestMatchers("/auth/login", "/auth/login-otp/**", "/auth/login-totp/**", "/auth/logout", "/auth/me", "/auth/change-password", "/auth/last-context", "/auth/profile", "/error").permitAll()

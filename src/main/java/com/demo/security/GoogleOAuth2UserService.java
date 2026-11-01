@@ -21,6 +21,7 @@ import com.ams.bomcore.repository.AuthorityRepository;
 import com.ams.bomcore.repository.CompanyRepository;
 import com.ams.bomcore.repository.TenantRepository;
 import com.ams.bomcore.repository.UserRepository;
+import com.demo.invoicedesk.InvoiceDeskRoleAccessService;
 
 @Service
 public class GoogleOAuth2UserService implements OAuth2UserService<OAuth2UserRequest, OAuth2User> {
@@ -30,17 +31,20 @@ public class GoogleOAuth2UserService implements OAuth2UserService<OAuth2UserRequ
     private final CompanyRepository companyRepository;
     private final AuthorityRepository authorityRepository;
     private final NewUserNotificationService newUserNotificationService;
+    private final InvoiceDeskRoleAccessService invoiceDeskRoleAccess;
 
     public GoogleOAuth2UserService(UserRepository userRepository,
                                    TenantRepository tenantRepository,
                                    CompanyRepository companyRepository,
                                    AuthorityRepository authorityRepository,
-                                   NewUserNotificationService newUserNotificationService) {
+                                   NewUserNotificationService newUserNotificationService,
+                                   InvoiceDeskRoleAccessService invoiceDeskRoleAccess) {
         this.userRepository = userRepository;
         this.tenantRepository = tenantRepository;
         this.companyRepository = companyRepository;
         this.authorityRepository = authorityRepository;
         this.newUserNotificationService = newUserNotificationService;
+        this.invoiceDeskRoleAccess = invoiceDeskRoleAccess;
     }
 
     @Override
@@ -67,10 +71,12 @@ public class GoogleOAuth2UserService implements OAuth2UserService<OAuth2UserRequ
         if (authorities.isEmpty()) {
             Authority auth = new Authority();
             auth.setUsername(user.getUsername());
-            auth.setAuthority("ROLE_user");
+            auth.setAuthority("ROLE_USER");
             authorityRepository.save(auth);
             authorities = List.of(auth);
         }
+        authorityRepository.flush();
+        invoiceDeskRoleAccess.sync(user.getUsername());
         user.setAuthorities(authorities);
         return user;
     }

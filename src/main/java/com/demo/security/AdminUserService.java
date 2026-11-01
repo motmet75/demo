@@ -19,6 +19,7 @@ import com.ams.bomcore.domain.user.Authority;
 import com.ams.bomcore.domain.user.User;
 import com.ams.bomcore.repository.AuthorityRepository;
 import com.ams.bomcore.repository.UserRepository;
+import com.demo.invoicedesk.InvoiceDeskRoleAccessService;
 
 @Service
 @Transactional
@@ -34,15 +35,18 @@ public class AdminUserService {
     private final AuthorityRepository authorityRepository;
     private final PasswordEncoder passwordEncoder;
     private final NewUserNotificationService newUserNotificationService;
+    private final InvoiceDeskRoleAccessService invoiceDeskRoleAccess;
 
     public AdminUserService(UserRepository userRepository,
                             AuthorityRepository authorityRepository,
                             PasswordEncoder passwordEncoder,
-                            NewUserNotificationService newUserNotificationService) {
+                            NewUserNotificationService newUserNotificationService,
+                            InvoiceDeskRoleAccessService invoiceDeskRoleAccess) {
         this.userRepository = userRepository;
         this.authorityRepository = authorityRepository;
         this.passwordEncoder = passwordEncoder;
         this.newUserNotificationService = newUserNotificationService;
+        this.invoiceDeskRoleAccess = invoiceDeskRoleAccess;
     }
 
     public List<AuthUserView> findAllUsers() {
@@ -175,6 +179,8 @@ public class AdminUserService {
         for (Authority authority : protectedAuthorities) {
             saved.add(authorityRepository.save(authority));
         }
+        authorityRepository.flush();
+        invoiceDeskRoleAccess.sync(username);
         return saved.stream().map(Authority::getAuthority).toList();
     }
 

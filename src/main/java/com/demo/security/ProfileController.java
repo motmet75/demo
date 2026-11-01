@@ -4,6 +4,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -21,7 +23,10 @@ import com.ams.bomcore.domain.tenant.Tenant;
 import com.ams.bomcore.domain.user.User;
 import com.ams.bomcore.repository.CompanyRepository;
 import com.ams.bomcore.repository.TenantRepository;
+import com.ams.bomcore.repository.UserRepository;
 import com.ams.bomcore.service.shop.ShopSetupService;
+import com.demo.invoicedesk.InvoiceDeskRoleAccessService;
+import org.springframework.transaction.annotation.Transactional;
 
 @RestController
 @RequestMapping("/auth")
@@ -30,14 +35,20 @@ public class ProfileController {
 
     private final TenantRepository tenantRepository;
     private final CompanyRepository companyRepository;
+    private final UserRepository userRepository;
     private final ShopSetupService shopSetupService;
+    private final InvoiceDeskRoleAccessService invoiceDeskRoleAccess;
 
     public ProfileController(TenantRepository tenantRepository,
                              CompanyRepository companyRepository,
-                             ShopSetupService shopSetupService) {
+                             UserRepository userRepository,
+                             ShopSetupService shopSetupService,
+                             InvoiceDeskRoleAccessService invoiceDeskRoleAccess) {
         this.tenantRepository = tenantRepository;
         this.companyRepository = companyRepository;
+        this.userRepository = userRepository;
         this.shopSetupService = shopSetupService;
+        this.invoiceDeskRoleAccess = invoiceDeskRoleAccess;
     }
 
     public record ProfileUser(Integer id, String username, String email, String firstName, String lastName, String avatar) {}
@@ -51,8 +62,48 @@ public class ProfileController {
                                             String newOrderNotificationEmails) {}
     public record ShopSetupRequest(String type) {}
     public record ShopSetupResponse(boolean success, String message) {}
+    public record ShopInitializeResponse(boolean success, String message, String tenantId, String companyId) {}
     public record ShopResetResponse(boolean success, String message) {}
     private record EmailList(List<String> emails, String invalid) {}
+
+    @PostMapping("/shop/initialize")
+    @PreAuthorize("hasRole('USER')")
+    @Transactional
+    public ResponseEntity<ShopInitializeResponse> initializeShop(Authentication authentication) {
+        if (authentication == null || !(authentication.getPrincipal() instanceof User sessionUser)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        User user = userRepository.findByUsernameIgnoreCase(sessionUser.getUsername()).orElse(null);
+        if (user == null) return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        if (user.getAssignedTenantId() != null && !user.getAssignedTenantId().isBlank()
+                && user.getAssignedCompanyId() != null && !user.getAssignedCompanyId().isBlank()) {
+            invoiceDeskRoleAccess.sync(user.getUsername());
+            return ResponseEntity.ok(new ShopInitializeResponse(true, "Shop and Invoice Desk are already active",
+                    user.getAssignedTenantId(), user.getAssignedCompanyId()));
+        }
+        if ((user.getAssignedTenantId() != null && !user.getAssignedTenantId().isBlank())
+                || (user.getAssignedCompanyId() != null && !user.getAssignedCompanyId().isBlank())) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(new ShopInitializeResponse(false,
+                    "The account has an incomplete tenant/company assignment. Ask an administrator to correct it.", null, null));
+        }
+
+        String shortId = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
+        String displayName = user.getFirstName() != null && !user.getFirstName().isBlank()
+                ? user.getFirstName().trim() : user.getUsername().split("@",2)[0];
+        Tenant tenant = new Tenant();
+        tenant.setTenantCode("shop-" + shortId);tenant.setTenantName(displayName + "'s Shop");
+        tenant.setTenantType("SHOP_OWNER");tenant.setMaxCompanies(1);tenant=tenantRepository.saveAndFlush(tenant);
+        Company company = new Company();
+        company.setTenant(tenant);company.setCompanyCode("co-" + shortId);company.setCompanyName(displayName + "'s Company");
+        company.setValidUntil(Instant.now().plus(15, ChronoUnit.DAYS));company=companyRepository.saveAndFlush(company);
+        user.setAssignedTenantId(tenant.getId().toString());user.setAssignedCompanyId(company.getId().toString());
+        user.setLastTenantId(tenant.getId().toString());user.setLastCompanyId(company.getId().toString());userRepository.saveAndFlush(user);
+        sessionUser.setAssignedTenantId(user.getAssignedTenantId());sessionUser.setAssignedCompanyId(user.getAssignedCompanyId());
+        sessionUser.setLastTenantId(user.getLastTenantId());sessionUser.setLastCompanyId(user.getLastCompanyId());
+        invoiceDeskRoleAccess.sync(user.getUsername());
+        return ResponseEntity.ok(new ShopInitializeResponse(true,
+                "Shop created. GDT PDF Invoice Desk is active.", tenant.getId().toString(), company.getId().toString()));
+    }
 
     @GetMapping("/profile")
     public ResponseEntity<ProfileResponse> getProfile(Authentication authentication) {

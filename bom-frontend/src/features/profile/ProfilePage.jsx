@@ -158,6 +158,7 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState(null)
   const [loadingProfile, setLoadingProfile] = useState(true)
   const [setupLoading, setSetupLoading] = useState('')
+  const [initializeLoading, setInitializeLoading] = useState(false)
   const [resetConfirm, setResetConfirm] = useState(false)
   const [resetLoading, setResetLoading] = useState(false)
   const resetTimerRef = useRef(null)
@@ -241,6 +242,21 @@ export default function ProfilePage() {
       setTimeout(() => navigate('/shop-orders'), 1200)
     } else {
       setSnack({ open: true, message: data?.message || 'Setup failed', severity: 'error' })
+    }
+  }
+
+  const handleInitializeShop = async () => {
+    setInitializeLoading(true)
+    const { res, data } = await apiFetchJson('/auth/shop/initialize', {
+      method: 'POST', credentials: 'include'
+    })
+    setInitializeLoading(false)
+    if (res.ok && data?.success) {
+      await refreshMe()
+      await loadProfile()
+      setSnack({ open: true, message: data.message, severity: 'success' })
+    } else {
+      setSnack({ open: true, message: data?.message || 'Could not create the shop', severity: 'error' })
     }
   }
 
@@ -441,6 +457,24 @@ export default function ProfilePage() {
           </Button>
         </Box>
       </Paper>
+
+      {hasFullBusinessAccess && (!p?.tenant || !p?.company) && (
+        <Paper variant="outlined" sx={{ mb: 3, p: 3, borderWidth: 2, borderColor: 'primary.main', bgcolor: '#f4f9ff' }}>
+          <Typography variant="h6" color="primary.main" fontWeight={800} gutterBottom>
+            Bắt đầu với tài khoản Google
+          </Typography>
+          <Box component="ol" sx={{ mt: 1, mb: 2, pl: 3, '& li': { mb: 1 } }}>
+            <li>Kiểm tra tên và email đăng nhập Google.</li>
+            <li>Tạo tenant và công ty dùng thử bằng nút bên dưới.</li>
+            <li>GDT PDF Invoice Desk được kích hoạt tự động cho ROLE_USER.</li>
+            <li>Mở Invoice Desk và ghép nối GDT Client để tải hóa đơn.</li>
+          </Box>
+          <Button variant="contained" size="large" onClick={handleInitializeShop} disabled={initializeLoading}
+            startIcon={initializeLoading ? <CircularProgress size={18} color="inherit" /> : <StoreIcon />}>
+            {initializeLoading ? 'Đang tạo cửa hàng…' : 'Tạo cửa hàng và kích hoạt Invoice Desk'}
+          </Button>
+        </Paper>
+      )}
 
       {hasFullBusinessAccess && p?.company && (
         <Paper elevation={1} sx={{ p: 2.5, mb: 3 }}>
