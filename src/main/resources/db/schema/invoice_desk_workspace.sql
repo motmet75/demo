@@ -140,12 +140,26 @@ WHERE EXISTS (SELECT 1 FROM authorities a WHERE lower(a.username)=lower(u.userna
               WHERE c.id=CASE WHEN u.assigned_company_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN u.assigned_company_id::uuid END
                 AND c.tenant_id=CASE WHEN u.assigned_tenant_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN u.assigned_tenant_id::uuid END);
 
+UPDATE usertb u SET
+ assigned_tenant_id=u.assignedtenantid,
+ assigned_company_id=u.assignedcompanyid
+WHERE EXISTS (SELECT 1 FROM authorities a WHERE lower(a.username)=lower(u.username) AND a.authority='ROLE_USER')
+  AND (u.assigned_tenant_id IS NULL OR u.assigned_tenant_id='')
+  AND (u.assigned_company_id IS NULL OR u.assigned_company_id='')
+  AND u.assignedtenantid ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  AND u.assignedcompanyid ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  AND EXISTS (SELECT 1 FROM company c
+              WHERE c.id=u.assignedcompanyid::uuid
+                AND c.tenant_id=u.assignedtenantid::uuid);
+
 INSERT INTO invoice_desk_company(tenant_id,company_id)
 SELECT DISTINCT ids.tenant_id,ids.company_id
 FROM usertb u
 CROSS JOIN LATERAL (SELECT
- CASE WHEN u.assignedtenantid ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN u.assignedtenantid::uuid END tenant_id,
- CASE WHEN u.assignedcompanyid ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN u.assignedcompanyid::uuid END company_id
+ CASE WHEN COALESCE(NULLIF(u.assigned_tenant_id,''),NULLIF(u.assignedtenantid,'')) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      THEN COALESCE(NULLIF(u.assigned_tenant_id,''),NULLIF(u.assignedtenantid,''))::uuid END tenant_id,
+ CASE WHEN COALESCE(NULLIF(u.assigned_company_id,''),NULLIF(u.assignedcompanyid,'')) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      THEN COALESCE(NULLIF(u.assigned_company_id,''),NULLIF(u.assignedcompanyid,''))::uuid END company_id
 ) ids
 JOIN tenant t ON t.id=ids.tenant_id AND t.is_active=true
 JOIN company c ON c.id=ids.company_id AND c.tenant_id=t.id
