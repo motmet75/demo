@@ -134,18 +134,18 @@ UPDATE usertb u SET
 WHERE EXISTS (SELECT 1 FROM authorities a WHERE lower(a.username)=lower(u.username) AND a.authority='ROLE_USER')
   AND (u.assignedtenantid IS NULL OR u.assignedtenantid='')
   AND (u.assignedcompanyid IS NULL OR u.assignedcompanyid='')
-  AND u.assigned_tenant_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
-  AND u.assigned_company_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+  AND u.assigned_tenant_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  AND u.assigned_company_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
   AND EXISTS (SELECT 1 FROM company c
-              WHERE c.id=CASE WHEN u.assigned_company_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' THEN u.assigned_company_id::uuid END
-                AND c.tenant_id=CASE WHEN u.assigned_tenant_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' THEN u.assigned_tenant_id::uuid END);
+              WHERE c.id=CASE WHEN u.assigned_company_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN u.assigned_company_id::uuid END
+                AND c.tenant_id=CASE WHEN u.assigned_tenant_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN u.assigned_tenant_id::uuid END);
 
 INSERT INTO invoice_desk_company(tenant_id,company_id)
 SELECT DISTINCT ids.tenant_id,ids.company_id
 FROM usertb u
 CROSS JOIN LATERAL (SELECT
- CASE WHEN u.assignedtenantid ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' THEN u.assignedtenantid::uuid END tenant_id,
- CASE WHEN u.assignedcompanyid ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' THEN u.assignedcompanyid::uuid END company_id
+ CASE WHEN u.assignedtenantid ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN u.assignedtenantid::uuid END tenant_id,
+ CASE WHEN u.assignedcompanyid ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN u.assignedcompanyid::uuid END company_id
 ) ids
 JOIN tenant t ON t.id=ids.tenant_id AND t.is_active=true
 JOIN company c ON c.id=ids.company_id AND c.tenant_id=t.id

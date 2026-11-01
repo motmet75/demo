@@ -458,7 +458,7 @@ export default function ProfilePage() {
         </Box>
       </Paper>
 
-      {hasFullBusinessAccess && (!p?.tenant || !p?.company) && (
+      {hasFullBusinessAccess && (!user?.assignedTenantId || !user?.assignedCompanyId) && (
         <Paper variant="outlined" sx={{ mb: 3, p: 3, borderWidth: 2, borderColor: 'primary.main', bgcolor: '#f4f9ff' }}>
           <Typography variant="h6" color="primary.main" fontWeight={800} gutterBottom>
             Bắt đầu với tài khoản Google
