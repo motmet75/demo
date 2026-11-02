@@ -15,6 +15,9 @@ export const updateGdtDefaults = (value) => jsonRequest('/admin/gdt-control/defa
 })
 export const fetchGdtTenantPolicy = (tenantId) => jsonRequest(`/admin/gdt-control/tenants/${encodeURIComponent(tenantId)}`)
 export const fetchGdtTenantUsage = (tenantId) => jsonRequest(`/admin/gdt-control/tenants/${encodeURIComponent(tenantId)}/usage`)
+export const resetGdtTenantUsage = (tenantId, scope) => jsonRequest(`/admin/gdt-control/tenants/${encodeURIComponent(tenantId)}/usage/reset-${scope}`, {
+  method: 'POST'
+})
 export const updateGdtTenantPolicy = (tenantId, value) => jsonRequest(`/admin/gdt-control/tenants/${encodeURIComponent(tenantId)}`, {
   method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value)
 })

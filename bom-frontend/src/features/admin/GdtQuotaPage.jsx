@@ -5,9 +5,11 @@ import {
 } from '@mui/material'
 import SaveIcon from '@mui/icons-material/Save'
 import RefreshIcon from '@mui/icons-material/Refresh'
+import RestartAltIcon from '@mui/icons-material/RestartAlt'
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
 import { fetchAdminUsers } from '../../api/adminUserApi'
 import {
-  fetchGdtDefaults, fetchGdtTenantPolicy, fetchGdtTenantUsage,
+  fetchGdtDefaults, fetchGdtTenantPolicy, fetchGdtTenantUsage, resetGdtTenantUsage,
   updateGdtDefaults, updateGdtTenantPolicy
 } from '../../api/gdtControlApi'
 
@@ -125,6 +127,21 @@ export default function GdtQuotaPage() {
     finally { setSaving('') }
   }
 
+  const resetUsage = async (scope) => {
+    if (!selected?.assignedTenantId) return
+    const all = scope === 'all'
+    const message = all
+      ? `Reset ALL GDT usage history for this tenant and its ${tenantUsers.length} user(s)? Limits, login credentials, and audit events will be kept.`
+      : `Reset all GDT usage for the current month for this tenant and its ${tenantUsers.length} user(s)?`
+    if (!window.confirm(message)) return
+    setSaving(`reset-${scope}`); setError(''); setNotice('')
+    try {
+      setUsage(await resetGdtTenantUsage(selected.assignedTenantId, scope))
+      setNotice(all ? 'All customer GDT usage was reset.' : 'Current-month customer GDT usage was reset.')
+    } catch (e) { setError(e.message || 'Cannot reset customer usage') }
+    finally { setSaving('') }
+  }
+
   if (loading && !defaults && !selected) return <Box sx={{ p: 4, textAlign: 'center' }}><CircularProgress /></Box>
 
   return <Box sx={{ p: { xs: 1, md: 3 } }}>
@@ -162,6 +179,10 @@ export default function GdtQuotaPage() {
           <UsageChip label="Invoices this month" used={usage.invoiceUsed} limit={usage.policy?.monthlyInvoiceLimit} remaining={usage.invoiceRemaining} />
           <UsageChip label="OCR this month" used={usage.ocrUsed} limit={usage.policy?.monthlyOcrLimit} remaining={usage.ocrRemaining} />
           <UsageChip label="OCR today" used={usage.ocrToday} limit={usage.policy?.dailyOcrLimit} remaining={usage.ocrTodayRemaining} />
+        </Stack>}
+        {usage && <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mb: 2 }}>
+          <Button color="warning" variant="outlined" startIcon={<RestartAltIcon />} onClick={() => resetUsage('month')} disabled={Boolean(saving)}>{saving === 'reset-month' ? 'Resetting…' : 'Reset this month'}</Button>
+          <Button color="error" variant="outlined" startIcon={<DeleteSweepIcon />} onClick={() => resetUsage('all')} disabled={Boolean(saving)}>{saving === 'reset-all' ? 'Resetting…' : 'Reset all usage'}</Button>
         </Stack>}
         <Divider sx={{ mb: 2 }} />
         {loading && !policy ? <CircularProgress /> : policy && <>
