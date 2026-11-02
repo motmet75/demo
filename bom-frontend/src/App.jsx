@@ -40,6 +40,7 @@ import LoginForm from './components/LoginForm'
 import RequireAuth from './components/RequireAuth'
 import AuditHistoryPage from './features/audit/AuditHistoryPage'
 import AdminPage from './features/admin/AdminPage'
+import GdtQuotaPage from './features/admin/GdtQuotaPage'
 import TenantsPage from './features/tenant/TenantsPage'
 import ETLPage from './features/etl/ETLPage'
 import ShopMenuPage from './features/shopfront/ShopMenuPage'
@@ -146,6 +147,7 @@ const PATH_TITLES = {
   '/audit-history': 'Nhật ký thay đổi',
   '/admin':              'Admin',
   '/admin/users':        'Admin Users',
+  '/admin/gdt-quotas':   'GDT OCR & Download Quotas',
   '/tenants':            'Tenants',
   '/etl':                'ETL',
   '/login':              'Login',
@@ -259,6 +261,7 @@ const BOTTOM_ITEMS = [
 const ADMIN_ITEMS = [
   { label: 'Nhật ký thay đổi', path: '/audit-history', icon: '📋', roles: ADMIN_MANAGEMENT_ROLES },
   { label: 'Admin',   path: '/admin',   icon: '🔧', roles: ADMIN_MANAGEMENT_ROLES },
+  { label: 'GDT Quotas', path: '/admin/gdt-quotas', icon: '🎛️', roles: SUPER_ADMIN_ROLES },
   { label: 'Tenants', path: '/tenants', icon: '🏗️', roles: SUPER_ADMIN_ROLES },
   { label: 'ETL',     path: '/etl',     icon: '🔬', roles: SUPER_ADMIN_ROLES },
 ]
@@ -572,6 +575,7 @@ function MainShell({ user, logout, isAdmin, isSuperAdmin, hasFullBusinessAccess,
             <Route path="/audit-history" element={<RequireAuth roles={ADMIN_MANAGEMENT_ROLES}><RequireContext><AuditHistoryPage /></RequireContext></RequireAuth>} />
             <Route path="/admin" element={<RequireAuth roles={ADMIN_MANAGEMENT_ROLES}><AdminPage /></RequireAuth>} />
             <Route path="/admin/users" element={<RequireAuth roles={ADMIN_MANAGEMENT_ROLES}><AdminPage /></RequireAuth>} />
+            <Route path="/admin/gdt-quotas" element={<RequireAuth roles={SUPER_ADMIN_ROLES}><GdtQuotaPage /></RequireAuth>} />
             <Route path="/tenants" element={<RequireAuth roles={SUPER_ADMIN_ROLES}><TenantsPage /></RequireAuth>} />
             <Route path="/etl"     element={<RequireAuth roles={SUPER_ADMIN_ROLES}><ETLPage /></RequireAuth>} />
           </Routes>
