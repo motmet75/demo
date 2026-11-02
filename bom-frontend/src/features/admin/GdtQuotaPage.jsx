@@ -104,7 +104,19 @@ export default function GdtQuotaPage() {
     if (!selected?.assignedTenantId || !policy) return
     setSaving('tenant'); setError(''); setNotice('')
     try {
-      const payload = { ...policy, trialEndsAt: policy.trialEndsAt ? new Date(policy.trialEndsAt).toISOString() : null }
+      const payload = {
+        trialEndsAt: policy.trialEndsAt ? new Date(policy.trialEndsAt).toISOString() : null,
+        invoiceQuotaMode: policy.invoiceQuotaMode,
+        monthlyRunLimit: policy.monthlyRunLimit,
+        monthlyInvoiceLimit: policy.monthlyInvoiceLimit,
+        monthlyOcrLimit: policy.monthlyOcrLimit,
+        dailyOcrLimit: policy.dailyOcrLimit,
+        maxInvoicesPerJob: policy.maxInvoicesPerJob,
+        maxDevices: policy.maxDevices,
+        localOcrEnabled: policy.localOcrEnabled,
+        onlineOcrEnabled: policy.onlineOcrEnabled,
+        suspended: policy.suspended,
+      }
       const saved = await updateGdtTenantPolicy(selected.assignedTenantId, payload)
       setPolicy({ ...saved, trialEndsAt: toLocalInput(saved.trialEndsAt) })
       setUsage(await fetchGdtTenantUsage(selected.assignedTenantId))
