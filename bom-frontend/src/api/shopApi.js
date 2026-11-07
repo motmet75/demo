@@ -392,6 +392,25 @@ export function readShopInvoiceDocument(file, scope) {
   return vinFetchJson('/shop/staff/documents/invoice', { method: 'POST', body }, scope)
 }
 
+// Shared address-directory suggestions; import actions require ROLE_SUPER_ADMIN.
+export function suggestVnInvoiceAddress(query, scope) {
+  return vinFetchJson('/shop/staff/addresses/suggest' + qs({ q: query }), {}, scope)
+}
+export function getVnAddressDirectoryStatus(scope) {
+  return vinFetchJson('/shop/staff/addresses/status', {}, scope)
+}
+export function syncVnAddressDirectory(scope) {
+  return vinFetchJson('/shop/staff/addresses/admin/sync-current', { method: 'POST' }, scope)
+}
+export function listViettelPostAddressProvinces(scope) {
+  return vinFetchJson('/shop/staff/addresses/admin/viettelpost-provinces', {}, scope)
+}
+export function syncViettelPostAddressProvince(provinceId, scope) {
+  return vinFetchJson('/shop/staff/addresses/admin/sync-viettelpost' + qs({ provinceId }), {
+    method: 'POST',
+  }, scope)
+}
+
 export function fetchVinHoadonTemplates(scope) {
   return vinFetchJson('/shop/staff/e-invoices/templates', {}, scope)
 }

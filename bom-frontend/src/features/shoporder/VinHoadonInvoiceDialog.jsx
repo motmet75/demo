@@ -24,7 +24,9 @@ import { lookupBusinessTaxCode } from '../../api/businessTaxApi'
 import {
   downloadVinHoadonInvoice, fetchVinHoadonConfig, fetchVinHoadonInvoiceStatuses, fetchVinHoadonTemplates, issueVinHoadonInvoice,
   previewVinHoadonInvoice, retryVinHoadonInvoice, saveVinHoadonConfig, syncVinHoadonInvoice,
-  readVinHoadonCccdName,
+  readVinHoadonCccdName, suggestVnInvoiceAddress,
+  getVnAddressDirectoryStatus, syncVnAddressDirectory,
+  listViettelPostAddressProvinces, syncViettelPostAddressProvince,
 } from '../../api/shopApi'
 
 const VAT_OPTIONS = [
@@ -90,7 +92,64 @@ function ConfigForm({ config, scope, onSaved, onCancel }) {
       {onCancel && <Button onClick={onCancel}>Quay lại</Button>}
       <Button variant="contained" onClick={save} disabled={busy || !config?.encryptionConfigured}>{busy ? <CircularProgress size={20} /> : 'Lưu cấu hình'}</Button>
     </DialogActions>
+    <AddressDirectoryAdminTools scope={scope} />
   </Stack>
+}
+
+function AddressDirectoryAdminTools({ scope }) {
+  const [busy, setBusy] = useState(false)
+  const [status, setStatus] = useState('')
+  const [error, setError] = useState('')
+  const [provinces, setProvinces] = useState([])
+  const [selectedProvince, setSelectedProvince] = useState('')
+  const refreshStatus = async () => {
+    const { res, data } = await getVnAddressDirectoryStatus(scope)
+    if (!res.ok) throw new Error(messageOf(res, data, 'Chưa tạo bảng danh mục hành chính'))
+    setStatus((data?.counts || []).map(x => `${x.source} ${x.type}: ${x.count}`).join(' · ') || 'Danh mục chưa có dữ liệu.')
+  }
+  const work = async action => {
+    setBusy(true); setError(''); setStatus('')
+    try {
+      const { res, data } = await action()
+      if (!res.ok) throw new Error(messageOf(res, data, 'Không thể cập nhật danh mục'))
+      await refreshStatus()
+    } catch (err) { setError(err.message) } finally { setBusy(false) }
+  }
+  return <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2, mt: 2 }}>
+    <Typography fontWeight={700}>Danh mục địa chỉ Việt Nam (dùng chung)</Typography>
+    <Typography variant="caption" color="text.secondary">
+      Chỉ SUPER_ADMIN được nạp dữ liệu. Danh mục hiện hành (2 cấp) tách biệt với dữ liệu giao hàng ViettelPost (3 cấp cũ). Chỉ gợi ý, không tự sửa địa chỉ trên CCCD.
+    </Typography>
+    {error && <Alert severity="error" sx={{ my: 1 }}>{error}</Alert>}
+    {status && <Alert severity="info" sx={{ my: 1 }}>{status}</Alert>}
+    <Stack direction="row" flexWrap="wrap" gap={1} sx={{ mt: 1.5 }}>
+      <Button variant="outlined" disabled={busy} onClick={() => work(() => syncVnAddressDirectory(scope))}>
+        Nạp tỉnh/phường xã hiện hành
+      </Button>
+      <Button variant="outlined" disabled={busy} onClick={() => work(async () => {
+        const result = await listViettelPostAddressProvinces(scope)
+        if (!result.res.ok) return result
+        setProvinces(Array.isArray(result.data) ? result.data : [])
+        setStatus('Đã tải danh sách tỉnh ViettelPost. Chọn một tỉnh để nhập dữ liệu lịch sử.')
+        return result
+      })}>
+        Chọn tỉnh ViettelPost cũ
+      </Button>
+      <Button disabled={busy} onClick={() => work(async () => {
+        await refreshStatus()
+        return { res: { ok: true }, data: {} }
+      })}>Kiểm tra dữ liệu</Button>
+    </Stack>
+    {provinces.length > 0 && <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 2 }}>
+      <TextField select size="small" label="Tỉnh ViettelPost" sx={{ minWidth: 220 }}
+        value={selectedProvince} onChange={e => setSelectedProvince(e.target.value)}>
+        {provinces.map(p => <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>)}
+      </TextField>
+      <Button disabled={busy || !selectedProvince} onClick={() => work(() => syncViettelPostAddressProvince(selectedProvince, scope))}>
+        Nạp dữ liệu tỉnh
+      </Button>
+    </Stack>}
+  </Box>
 }
 
 export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], configOnly = false, isAdmin = false, onIssued }) {
@@ -113,6 +172,7 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
   const [cccdBusy, setCccdBusy] = useState(false)
   const [cccdError, setCccdError] = useState('')
   const [cccdSuccess, setCccdSuccess] = useState('')
+  const [addressSuggestions, setAddressSuggestions] = useState([])
   const lastTaxLookup = useRef('')
   const [invoice, setInvoice] = useState(null)
   const [existingConflict, setExistingConflict] = useState(false)
@@ -190,6 +250,24 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
     } catch (err) { setError(err.message) } finally { setBusy(false) }
   }
   const field = key => event => { setBuyer(old => ({ ...old, [key]: event.target.value })); setPreview(null) }
+  // Debounced local PostgreSQL lookup; does not send customer address to
+  // third-party providers. Suggestions are only applied after a user click.
+  useEffect(() => {
+    const value = buyer.buyerAddress.trim()
+    if (!open || value.length < 6 || !tenantId || !companyId) {
+      setAddressSuggestions([])
+      return
+    }
+    let cancelled = false
+    const timeout = setTimeout(async () => {
+      try {
+        const { res, data } = await suggestVnInvoiceAddress(value, { tenantId, companyId })
+        if (!cancelled) setAddressSuggestions(res.ok && Array.isArray(data)
+          ? data.filter(item => item.suggestedAddress && item.suggestedAddress !== value).slice(0, 5) : [])
+      } catch { if (!cancelled) setAddressSuggestions([]) }
+    }, 450)
+    return () => { cancelled = true; clearTimeout(timeout) }
+  }, [open, buyer.buyerAddress, tenantId, companyId])
   const scanCccd = async event => {
     const images = Array.from(event.target.files || [])
     event.target.value = ''
@@ -328,6 +406,18 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
               </Button>
             </Box>
             <TextField label="Địa chỉ xuất hóa đơn" value={buyer.buyerAddress} onChange={field('buyerAddress')} multiline minRows={2} />
+            {addressSuggestions.length > 0 && <Box sx={{ gridColumn: '1 / -1' }}>
+              <Typography variant="caption" color="text.secondary">
+                Gợi ý chuẩn hóa địa chỉ (không dấu / TP / HCM). Bấm để áp dụng, giữ nguyên phần thôn/đường đã nhận dạng.
+              </Typography>
+              <Stack spacing={0.5} sx={{ mt: 0.5 }}>
+                {addressSuggestions.map(item => <Button key={item.source + ':' + item.wardCode}
+                  variant="outlined" size="small" sx={{ justifyContent: 'flex-start', textTransform: 'none', whiteSpace: 'normal', textAlign: 'left' }}
+                  onClick={() => { setBuyer(old => ({ ...old, buyerAddress: item.suggestedAddress })); setPreview(null); setAddressSuggestions([]) }}>
+                  {item.suggestedAddress}{item.historical ? ' (ViettelPost - địa chỉ cũ)' : ' (Danh mục 2 cấp)'}
+                </Button>)}
+              </Stack>
+            </Box>
             <TextField label="Số điện thoại" value={buyer.buyerPhone} onChange={field('buyerPhone')} />
             <TextField label="Email nhận hóa đơn" value={buyer.buyerEmail} onChange={field('buyerEmail')} type="email" />
             <TextField select label="Hình thức thanh toán" value={buyer.paymentMethod} onChange={field('paymentMethod')}>{PAYMENT_OPTIONS.map(x => <MenuItem key={x.value} value={x.value}>{x.label}</MenuItem>)}</TextField>
