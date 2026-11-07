@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VIN-HOADON Relay</title>
+<style>
+body{font:14px system-ui,sans-serif;width:330px;margin:0;padding:17px;color:#182235;background:#fff}
+h1{font-size:17px;margin:0 0 7px} p{line-height:1.5;margin:7px 0;color:#556277}
+label{display:block;margin:14px 0 5px;font-weight:650}
+input{box-sizing:border-box;width:100%;padding:11px;border:1px solid #aab4c5;border-radius:7px;letter-spacing:2px}
+button{border:0;border-radius:7px;padding:10px 13px;cursor:pointer;background:#1259b0;color:white;font-weight:650;margin-top:10px}
+button.secondary{background:#edf1f7;color:#1b3557;margin-left:6px}
+#state{margin:14px 0 0;padding:10px;border:1px solid #d7deea;border-radius:7px;white-space:pre-wrap;line-height:1.5}
+small{color:#607089}
+</style></head><body>
+<h1>VIN-HOADON · Vietnam Relay</h1>
+<p>Use Chrome on a trusted computer with a Vietnam internet connection. The browser must remain open.</p>
+<label for="code">One-time pairing code</label><input id="code" inputmode="numeric" maxlength="8" placeholder="8 digits" autocomplete="off">
+<button id="pair">Pair & enable</button><button id="disconnect" class="secondary">Disconnect</button>
+<div id="state">Checking...</div>
+<p><small>Demo API: anhmedia.vn · VIN endpoint: ws.vin-hoadon.com</small></p>
+<script src="popup.js"></script></body></html>

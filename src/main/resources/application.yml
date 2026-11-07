@@ -56,3 +56,7 @@ vin-hoadon:
   connect-timeout-seconds: "${VIN_HOADON_CONNECT_TIMEOUT_SECONDS:10}"
   request-timeout-seconds: "${VIN_HOADON_REQUEST_TIMEOUT_SECONDS:30}"
   master-key: "${VIN_HOADON_MASTER_KEY:}"
+  relay:
+    enabled: "${VIN_HOADON_RELAY_ENABLED:false}"
+    secret: "${VIN_HOADON_RELAY_SECRET:}"
+    timeout-seconds: "${VIN_HOADON_RELAY_TIMEOUT_SECONDS:120}"

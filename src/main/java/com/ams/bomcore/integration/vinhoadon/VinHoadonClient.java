@@ -59,6 +59,12 @@ public class VinHoadonClient {
     private final HttpClient httpClient;
     private final Clock clock;
     private final Map<String, CachedToken> tokenCache = new ConcurrentHashMap<>();
+    private volatile VinHoadonRelayService relay;
+
+    @Autowired(required = false)
+    public void setRelay(VinHoadonRelayService relay) {
+        this.relay = relay;
+    }
 
     @Autowired
     public VinHoadonClient(Optional<ObjectMapper> objectMapper, VinHoadonProperties properties) {
@@ -205,6 +211,18 @@ public class VinHoadonClient {
     }
 
     private JsonNode post(String path, JsonNode payload, String bearerToken) {
+        if (relay != null && relay.isEnabled()) {
+            VinHoadonRelayService.Reply reply = relay.forward(path, payload, bearerToken);
+            if (reply.status() < 200 || reply.status() >= 300) {
+                throw new VinHoadonApiException("VIN-HOADON returned HTTP " + reply.status(),
+                        reply.status(), truncate(reply.body()));
+            }
+            try {
+                return objectMapper.readTree(reply.body());
+            } catch (JsonProcessingException exception) {
+                throw new VinHoadonApiException("VIN-HOADON relay returned invalid JSON", exception);
+            }
+        }
         HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(resolve(path))
                 .timeout(properties.getRequestTimeout())
                 .header("Accept", "application/json")
