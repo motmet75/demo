@@ -283,10 +283,17 @@ export function fetchVinHoadonConfig(scope) {
   return vinFetchJson('/shop/staff/e-invoices/config', {}, scope)
 }
 
-// Upload only the front image for temporary name extraction; do not send to VIN-HOADON.
-export function readVinHoadonCccdName(image, scope) {
+// Read one or both sides of the same ID; return suggested name and multi-line residence.
+export function readVinHoadonCccdName(images, scope) {
+  const items = Array.isArray(images) ? images : images ? [images] : []
+  if (items.length < 1 || items.length > 2 || !items.every(item => item instanceof Blob)) {
+    return Promise.resolve({
+      res: { ok: false, status: 400 },
+      data: { message: 'Chọn 1 hoặc 2 ảnh mặt trước/mặt sau của cùng một CCCD.' },
+    })
+  }
   const body = new FormData()
-  body.append('image', image)
+  items.forEach((image, i) => body.append('image', image, image.name || `cccd-side-${i + 1}.jpg`))
   return vinFetchJson('/shop/staff/e-invoices/cccd-ocr', { method: 'POST', body }, scope)
 }
 
@@ -295,19 +302,50 @@ export function readVinHoadonCccdName(image, scope) {
  * The backend expects repeated multipart fields named "file" and returns
  * the buyer draft (name, address, etc.) for user review.
  */
-export function readShopBuyerDocument(files, scope) {
+export async function readShopBuyerDocument(files, scope) {
   const items = files instanceof FormData
     ? files.getAll('file')
     : Array.isArray(files) ? files : files ? [files] : []
   if (items.length < 1 || items.length > 4 || !items.every(file => file instanceof Blob)) {
-    return Promise.resolve({
+    return {
       res: { ok: false, status: 400 },
       data: { message: 'Chọn từ 1 đến 4 tệp CCCD/Căn cước để nhận dạng.' },
-    })
+    }
   }
   const body = new FormData()
   items.forEach((file, index) => body.append('file', file, file.name || `cccd-${index + 1}`))
-  return vinFetchJson('/shop/staff/documents/buyer', { method: 'POST', body }, scope)
+  const primary = await vinFetchJson('/shop/staff/documents/buyer', { method: 'POST', body }, scope)
+  if (!primary.res.ok || !primary.data || typeof primary.data !== 'object') return primary
+
+  // Keep the original OCR's full buyer draft. For 1-2 image uploads only,
+  // supplement the address from both sides when Google Vision splits
+  // "Nơi thường trú / Nơi cư trú" across two OCR lines.
+  if (items.length > 2 || !items.every(file => ['image/jpeg', 'image/png', 'image/webp'].includes(file.type))) {
+    return primary
+  }
+  try {
+    const detail = await readVinHoadonCccdName(items, scope)
+    if (!detail.res.ok) {
+      // Never silently combine two cards if the additional reader detects a name mismatch.
+      if (detail.res.status === 400) return detail
+      return primary
+    }
+    const address = String(detail.data?.buyerAddress || '').trim()
+    const current = String(primary.data?.buyerAddress || '').trim()
+    const fullName = String(detail.data?.fullName || '').trim()
+    if (!address && !fullName) return primary
+    return {
+      ...primary,
+      data: {
+        ...primary.data,
+        buyerName: primary.data.buyerName || fullName || '',
+        buyerAddress: address && address.length > current.length ? address : current,
+      },
+    }
+  } catch {
+    // Existing document recognition remains available if the supplementary OCR fails.
+    return primary
+  }
 }
 
 /**

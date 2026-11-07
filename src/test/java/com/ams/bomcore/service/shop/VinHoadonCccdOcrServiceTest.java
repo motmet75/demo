@@ -35,6 +35,44 @@ class VinHoadonCccdOcrServiceTest {
     }
 
     @Test
+    void extractsTwoLinePermanentResidenceOnOldCardFront() {
+        String text = """
+                Quê quán / Place of origin:
+                Bình Hải, Đất Đỏ
+                Nơi thường trú / Place of residence: KP Lộc An
+                Phước Hải, Đất Đỏ, Bà Rịa - Vũng Tàu
+                Có giá trị đến / Date of expiry: 01/01/2032
+                """;
+        assertEquals("KP Lộc An, Phước Hải, Đất Đỏ, Bà Rịa - Vũng Tàu",
+                VinHoadonCccdOcrService.extractResidence(text));
+    }
+
+    @Test
+    void extractsTwoLineResidenceOnNewCardBack() {
+        String text = """
+                Nơi cư trú / Place of residence
+                Thôn Xuân Thanh Nam
+                Phù Mỹ Đông, Gia Lai
+                Nơi đăng ký khai sinh / Place of birth
+                Quy Nhơn, Gia Lai
+                Ngày, tháng, năm cấp / Date of issue
+                30/07/2026
+                """;
+        assertEquals("Thôn Xuân Thanh Nam, Phù Mỹ Đông, Gia Lai",
+                VinHoadonCccdOcrService.extractResidence(text));
+    }
+
+    @Test
+    void ignoresPlaceOfOriginWithoutResidenceLabel() {
+        String text = """
+                Quê quán / Place of origin:
+                Phước Hải, Đất Đỏ, Bà Rịa - Vũng Tàu
+                Ngày sinh / Date of birth: 01/01/2000
+                """;
+        assertNull(VinHoadonCccdOcrService.extractResidence(text));
+    }
+
+    @Test
     void doesNotInventANameWhenTextIsIncomplete() {
         assertNull(VinHoadonCccdOcrService.extractFullName(
                 "CĂN CƯỚC CÔNG DÂN\nFull name\nNgày, tháng, năm sinh / Date of birth\nViệt Nam"));

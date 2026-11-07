@@ -191,26 +191,35 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
   }
   const field = key => event => { setBuyer(old => ({ ...old, [key]: event.target.value })); setPreview(null) }
   const scanCccd = async event => {
-    const image = event.target.files?.[0]
+    const images = Array.from(event.target.files || [])
     event.target.value = ''
-    if (!image) return
+    if (!images.length) return
     setCccdError(''); setCccdSuccess('')
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(image.type) || image.size > 5 * 1024 * 1024) {
-      setCccdError('Chọn ảnh JPG, PNG hoặc WebP mặt trước CCCD/Căn cước, tối đa 5 MB.')
+    if (images.length > 2 || images.some(image =>
+      !['image/jpeg', 'image/png', 'image/webp'].includes(image.type) || image.size > 5 * 1024 * 1024)) {
+      setCccdError('Chọn tối đa 2 ảnh JPG, PNG hoặc WebP (mặt trước + mặt sau), mỗi ảnh tối đa 5 MB.')
       return
     }
     setCccdBusy(true)
     try {
-      const { res, data } = await readVinHoadonCccdName(image, scope)
+      const { res, data } = await readVinHoadonCccdName(images, scope)
       if (!res.ok) throw new Error(messageOf(res, data, 'Không thể nhận dạng CCCD'))
       const fullName = String(data?.fullName || '').trim()
-      if (!data?.recognized || !fullName) {
-        setCccdError('Không đọc được họ tên. Hãy chụp rõ mặt trước CCCD/Căn cước hoặc nhập tên thủ công.')
+      const address = String(data?.buyerAddress || '').trim()
+      if (!data?.recognized || (!fullName && !address)) {
+        setCccdError('Không đọc được họ tên hoặc nơi thường trú/cư trú. Chụp rõ hai mặt và kiểm tra thủ công.')
         return
       }
-      setBuyer(old => ({ ...old, buyerName: fullName }))
+      setBuyer(old => ({
+        ...old,
+        buyerName: fullName || old.buyerName,
+        buyerAddress: address || old.buyerAddress,
+      }))
       setPreview(null)
-      setCccdSuccess('Đã tự điền họ tên từ CCCD: ' + fullName + '. Vui lòng kiểm tra và sửa nếu cần trước khi gửi.')
+      setCccdSuccess('Đã nhận dạng ' + [
+        fullName ? 'họ tên' : '',
+        address ? 'địa chỉ thường trú/cư trú (gồm các dòng địa chỉ)' : '',
+      ].filter(Boolean).join(' và ') + '. Vui lòng kiểm tra thông tin trước khi gửi hóa đơn.')
     } catch (error) {
       setCccdError(error.message || 'Không thể nhận dạng ảnh CCCD.')
     } finally {
@@ -311,8 +320,8 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
               <TextField label="Người mua hàng" fullWidth value={buyer.buyerName} onChange={field('buyerName')} />
               <Button component="label" variant="outlined" startIcon={cccdBusy ? <CircularProgress size={16} /> : <BadgeOutlinedIcon />}
                 disabled={busy || cccdBusy} sx={{ whiteSpace: 'nowrap', minHeight: 55, flexShrink: 0 }}>
-                {cccdBusy ? 'Đang đọc...' : 'Tải ảnh CCCD'}
-                <input type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={scanCccd} />
+                {cccdBusy ? 'Đang đọc...' : 'Tải 1–2 ảnh CCCD'}
+                <input type="file" accept="image/jpeg,image/png,image/webp" multiple hidden onChange={scanCccd} />
               </Button>
             </Box>
             <TextField label="Địa chỉ xuất hóa đơn" value={buyer.buyerAddress} onChange={field('buyerAddress')} multiline minRows={2} />
@@ -327,7 +336,7 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
               ? 'Giá đã bao gồm VAT: tách VAT từ số tiền đơn hàng, giữ nguyên tổng tiền thanh toán.'
               : 'Giá chưa bao gồm VAT: tính VAT cộng thêm vào giá trị đơn hàng; tổng tiền trên hóa đơn có thể cao hơn số tiền khách đã thanh toán. Vui lòng xác nhận với khách trước khi gửi.'}
           </Alert>
-          <Typography variant="caption" color="text.secondary">Ảnh mặt trước CCCD/Căn cước được gửi tới Google Vision để gợi ý họ tên; không lưu ảnh hay số định danh trong hóa đơn. Kiểm tra lại tên trước khi gửi.</Typography>
+          <Typography variant="caption" color="text.secondary">Chọn một hoặc hai ảnh mặt trước/mặt sau của CÙNG một CCCD. Google Vision gợi ý họ tên và nơi thường trú/cư trú (có thể trải trên hai dòng). Ảnh không được lưu cùng hóa đơn. Kiểm tra kỹ trước khi gửi.</Typography>
           {cccdError && <Alert severity="warning">{cccdError}</Alert>}
           {cccdSuccess && <Alert severity="success">{cccdSuccess}</Alert>}
           {taxLookupError && <Alert severity="warning">{taxLookupError}. Bạn có thể nhập tên và địa chỉ thủ công.</Alert>}

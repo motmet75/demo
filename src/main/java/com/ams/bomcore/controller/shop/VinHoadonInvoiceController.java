@@ -45,9 +45,9 @@ public class VinHoadonInvoiceController {
     public ResponseEntity<VinHoadonCccdOcrService.NameResult> scanCccd(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @RequestHeader("X-Company-Id") UUID companyId,
-            @RequestParam("image") MultipartFile image) {
+            @RequestParam("image") List<MultipartFile> images) {
         validateScope(tenantId, companyId);
-        return ResponseEntity.ok().cacheControl(org.springframework.http.CacheControl.noStore()).body(cccdOcr.read(image));
+        return ResponseEntity.ok().cacheControl(org.springframework.http.CacheControl.noStore()).body(cccdOcr.read(images));
     }
 
     @GetMapping("/templates")
