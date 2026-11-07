@@ -130,6 +130,89 @@ class VinHoadonCccdOcrServiceTest {
     }
 
     @Test
+    void oldCardKeepsSecondResidenceRowAfterInterleavedExpiryField() {
+        String text = """
+                Quê quán / Place of origin:
+                Phường Bình Minh, Bà Rịa - Vũng Tàu
+                Nơi thường trú / Place of residence: KP Hoa Mai
+                Có giá trị đến / Date of expiry
+                01/03/2029
+                Phường Bình Minh, Đất Đỏ, Bà Rịa - Vũng Tàu
+                """;
+        assertEquals("KP Hoa Mai, Phường Bình Minh, Đất Đỏ, Bà Rịa - Vũng Tàu",
+                VinHoadonCccdOcrService.extractResidence(text));
+    }
+
+    @Test
+    void oldCardKeepsSecondRowWhenMergedWithExpiryLabel() {
+        String text = """
+                Nơi thường trú / Place of residence: KP Hoa Mai
+                Phường Bình Minh, Bà Rịa - Vũng Tàu Có giá trị đến / Date of expiry
+                01/03/2029
+                """;
+        assertEquals("KP Hoa Mai, Phường Bình Minh, Bà Rịa - Vũng Tàu",
+                VinHoadonCccdOcrService.extractResidence(text));
+    }
+
+    @Test
+    void newerCardDoesNotDiscardFirstRowBeforeEnglishLabel() {
+        String text = """
+                Thôn Sao Mai / Nơi cư trú / Pate of residence.
+                Phường Đông Nam, TP. HCM
+                Nơi đăng ký khai sinh / Place of birth
+                """;
+        assertEquals("Thôn Sao Mai, Phường Đông Nam, TP. HCM",
+                VinHoadonCccdOcrService.extractResidence(text));
+    }
+
+    @Test
+    void newerCardLooksBackWhenOcrReadsFirstRowBeforeLabel() {
+        String text = """
+                Thôn Sao Mai
+                Nơi cư trú / Place of residence:
+                Phường Đông Nam, Gia Lai
+                Nơi đăng ký khai sinh / Place of birth
+                """;
+        assertEquals("Thôn Sao Mai, Phường Đông Nam, Gia Lai",
+                VinHoadonCccdOcrService.extractResidence(text));
+    }
+
+    @Test
+    void recognizesCityAbbreviationsAndHistoricalProvinceNames() {
+        assertEquals(true, VinHoadonCccdOcrService.endsWithProvince("Phường Bình An, TP.HCM"));
+        assertEquals(true, VinHoadonCccdOcrService.endsWithProvince("Thủ Đức, TP Hồ Chí Minh"));
+        assertEquals(true, VinHoadonCccdOcrService.endsWithProvince("Thủ Đức, Thành phố Hồ Chí Minh"));
+        assertEquals(true, VinHoadonCccdOcrService.endsWithProvince("Phường Bình An, HCM"));
+        assertEquals(true, VinHoadonCccdOcrService.endsWithProvince("Đất Đỏ, Bà Rịa - Vũng Tàu"));
+        assertEquals(false, VinHoadonCccdOcrService.endsWithProvince("Khu phố Sao Mai, TP."));
+    }
+
+    @Test
+    void residenceDoesNotPullQuEQuanWhenResidenceLabelFollowsOrigin() {
+        String text = """
+                Quê quán / Place of origin
+                Phú Mỹ, Bà Rịa - Vũng Tàu
+                Nơi thường trú / Place of residence
+                KP Hồng Hoa
+                Thủ Đức, TP HCM
+                """;
+        assertEquals("KP Hồng Hoa, Thủ Đức, TP HCM",
+                VinHoadonCccdOcrService.extractResidence(text));
+    }
+
+    @Test
+    void provincePrintedBeforeHamletInOcrTextIsReordered() {
+        String text = """
+                Nơi cư trú / Place of residence
+                Phường Đông Nam, Gia Lai
+                Thôn Sao Mai
+                Nơi đăng ký khai sinh / Place of birth
+                """;
+        assertEquals("Thôn Sao Mai, Phường Đông Nam, Gia Lai",
+                VinHoadonCccdOcrService.extractResidence(text));
+    }
+
+    @Test
     void ignoresPlaceOfOriginWithoutResidenceLabel() {
         String text = """
                 Quê quán / Place of origin:

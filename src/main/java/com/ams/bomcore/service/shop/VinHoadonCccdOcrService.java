@@ -42,7 +42,7 @@ public class VinHoadonCccdOcrService {
         this.credentialsFile = credentialsFile == null ? "" : credentialsFile.trim();
     }
 
-    public record NameResult(String fullName, String buyerAddress, boolean recognized) {}
+    public record NameResult(String fullName, String buyerAddress, boolean recognized, boolean addressComplete) {}
 
     public NameResult read(MultipartFile image) {
         return read(image == null ? List.of() : List.of(image));
@@ -91,7 +91,7 @@ public class VinHoadonCccdOcrService {
                 throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Google Vision OCR HTTP " + response.statusCode());
             JsonNode results = mapper.readTree(response.body()).path("responses");
             String name = null;
-            String residence = null;
+            ResidenceMatch residence = new ResidenceMatch(null, 0, false);
             for (JsonNode result : results) {
                 if (result.has("error"))
                     throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Google Vision không xử lý được một trong các ảnh.");
@@ -104,12 +104,18 @@ public class VinHoadonCccdOcrService {
                                 "Hai ảnh có họ tên khác nhau. Vui lòng chỉ tải 2 mặt của cùng một CCCD.");
                     name = foundName;
                 }
-                String foundAddress = extractResidence(text);
-                if (foundAddress != null && (residence == null || foundAddress.length() > residence.length()))
-                    residence = foundAddress;
+                ResidenceMatch found = parseResidence(text);
+                if (found.value() != null
+                        && ((found.complete() && !residence.complete())
+                        || (found.complete() == residence.complete() && found.segments() > residence.segments())
+                        || (found.complete() == residence.complete() && found.segments() == residence.segments()
+                            && (residence.value() == null || found.value().length() > residence.value().length()))))
+                    residence = found;
             }
-            return new NameResult(name == null ? "" : name, residence == null ? "" : residence,
-                    name != null || residence != null);
+            return new NameResult(name == null ? "" : name,
+                    residence.value() == null ? "" : residence.value(),
+                    name != null || residence.value() != null,
+                    residence.complete());
         } catch (ResponseStatusException error) {
             throw error;
         } catch (InterruptedException interrupted) {
@@ -126,53 +132,125 @@ public class VinHoadonCccdOcrService {
      * The value often starts on the label line and continues over a second line.
      * Never confuse it with Quê quán / Place of origin.
      */
+    /**
+     * Address extraction is anchored to Nơi thường trú / Nơi cư trú, and
+     * preferably ends at a verified Vietnamese province/city name. Vision's
+     * OCR text order may interleave the expiry date or put a locality BEFORE
+     * the bilingual label, so the parser must not assume adjacent lines.
+     */
     static String extractResidence(String text) {
-        if (text == null || text.isBlank()) return null;
+        return parseResidence(text).value();
+    }
+
+    private record ResidenceMatch(String value, int segments, boolean complete) {}
+
+    private static ResidenceMatch parseResidence(String text) {
+        ResidenceMatch empty = new ResidenceMatch(null, 0, false);
+        if (text == null || text.isBlank()) return empty;
         String[] lines = text.replace("\r", "").split("\n");
-        String best = null;
+        ResidenceMatch best = empty;
         for (int i = 0; i < lines.length; i++) {
             if (!isResidenceLabel(fold(lines[i]))) continue;
             List<String> parts = new ArrayList<>();
-            String initial = stripResidenceLabel(lines[i]);
+            String initial = cleanAddressValue(cutBeforeNextField(lines[i]));
             if (looksLikeAddressSegment(initial)) parts.add(initial);
-            for (int j = i + 1; j < Math.min(lines.length, i + 7) && parts.size() < 3; j++) {
-                String candidate = lines[j].trim();
-                if (candidate.isBlank()) continue;
-                if (isResidenceLabel(fold(candidate))) {
-                    candidate = stripResidenceLabel(candidate);
-                    if (candidate.isBlank()) continue; // Bilingual label on separate OCR line.
+
+            // OCR sometimes puts "Thôn ..." immediately BEFORE the label, with
+            // the province line after it. Never pull in the preceding quê quán.
+            if (parts.isEmpty() && i > 0) {
+                String prior = cleanAddressValue(lines[i - 1]);
+                String previousContext = i > 1 ? fold(lines[i - 2]) : "";
+                if (looksLikeAddressSegment(prior) && !endsWithProvince(prior)
+                        && !isOriginLabel(fold(lines[i - 1]))
+                        && !isOriginLabel(previousContext)
+                        && !isResidenceLabel(fold(lines[i - 1]))
+                        && !NEXT_ID_FIELD.matcher(lines[i - 1]).find()
+                        && looksLikeHamletOrStreet(prior)) {
+                    parts.add(prior);
                 }
-                // Vision sometimes merges the second address line with the NEXT
-                // field label: "Phường..., Gia Lai Nơi đăng ký khai sinh".
-                // Preserve the address prefix instead of dropping that line.
-                java.util.regex.Matcher nextField = NEXT_ID_FIELD.matcher(candidate);
-                boolean endsHere = nextField.find();
-                if (endsHere) candidate = candidate.substring(0, nextField.start()).trim();
-                if (!looksLikeAddressSegment(candidate)) break;
-                parts.add(candidate.replaceAll("\\s+", " ").trim());
-                if (endsHere) break;
             }
-            if (!parts.isEmpty()) {
-                String value = String.join(", ", parts).replaceAll(",\\s*,", ",").trim();
-                // A longer labeled address normally has the second locality line.
-                if (best == null || value.length() > best.length()) best = value;
+
+            // Trace FORWARD from the residence label until province/city or
+            // the next real field. A few unrelated date lines may be interleaved.
+            int skipped = 0;
+            for (int j = i + 1; j < Math.min(lines.length, i + 10) && parts.size() < 3; j++) {
+                String raw = lines[j].trim();
+                if (raw.isBlank()) continue;
+                String folded = fold(raw);
+                if (isResidenceLabel(folded) && cleanAddressValue(raw).isBlank()) continue;
+                java.util.regex.Matcher boundary = NEXT_ID_FIELD.matcher(raw);
+                boolean stopsHere = boundary.find();
+                // A date field may interrupt the address in Vision's reading
+                // order, especially on old CCCDs with expiry beside the photo.
+                // When a label is merged AFTER the address, keep its prefix.
+                if (stopsHere && boundary.start() == 0) {
+                    if (isDateOrExpiryField(folded) && ++skipped <= 3) continue;
+                    break;
+                }
+                if (isDateOnly(raw)) {
+                    if (++skipped <= 3) continue;
+                    break;
+                }
+                if (isOriginLabel(folded) && !stopsHere) break;
+                String segment = cleanAddressValue(stopsHere ? raw.substring(0, boundary.start()) : raw);
+                if (!looksLikeAddressSegment(segment)) break;
+                if (!parts.isEmpty() && fold(parts.get(parts.size() - 1)).equals(fold(segment))) continue;
+                parts.add(segment);
+                if (stopsHere || endsWithProvince(segment)) break;
+            }
+
+            // A province line can be emitted BEFORE the street/hamlet row
+            // by OCR reading-order heuristics. Trace back to the residence
+            // label, then look just after the province for a nearby hamlet
+            // without crossing another labeled field.
+            if (parts.size() == 1 && endsWithProvince(parts.get(0))) {
+                for (int j = i + 1; j < Math.min(lines.length, i + 6); j++) {
+                    String candidate = lines[j].trim();
+                    String folded = fold(candidate);
+                    if (isOriginLabel(folded)) break;
+                    if (isDateOrExpiryField(folded) || isDateOnly(candidate)
+                            || isResidenceLabel(folded)) continue;
+                    if (NEXT_ID_FIELD.matcher(candidate).find()) break;
+                    candidate = cleanAddressValue(candidate);
+                    if (looksLikeHamletOrStreet(candidate) && looksLikeAddressSegment(candidate)
+                            && !endsWithProvince(candidate) && !fold(candidate).equals(fold(parts.get(0)))) {
+                        parts.add(0, candidate);
+                        break;
+                    }
+                }
+            }
+
+            if (parts.isEmpty()) continue;
+            String value = String.join(", ", parts).replaceAll(",\\s*,", ",").trim();
+            boolean complete = endsWithProvince(parts.get(parts.size() - 1));
+            ResidenceMatch current = new ResidenceMatch(value, parts.size(), complete);
+            if ((current.complete() && !best.complete())
+                    || (current.complete() == best.complete() && current.segments() > best.segments())
+                    || (current.complete() == best.complete() && current.segments() == best.segments()
+                        && (best.value() == null || current.value().length() > best.value().length()))) {
+                best = current;
             }
         }
         return best;
     }
 
-    // Google Vision can misread "Place of residence" as "Pate of residence"
-    // or "Pace of residence". Strip bilingual labels before considering a
-    // line as part of the address, including OCR's period after the label.
-    private static final String RESIDENCE_LABEL =
-            "(?:nơi\\s+(?:thường\\s+trú|cư\\s+trú)|(?:place|pate|pace)\\s+of\\s+residence)";
-    private static final String RESIDENCE_LABEL_SEPARATOR = "[\\s/.:：-]*";
+    // Both Vietnamese and English text can be OCR'd in either order.
+    // The English label is occasionally read as "Pate/Pace of residence".
+    private static final java.util.regex.Pattern RESIDENCE_LABEL_PATTERN =
+            java.util.regex.Pattern.compile(
+                    "(?:nơi\\s+(?:thường\\s+trú|cư\\s+trú)|(?:place|pate|pace)\\s+of\\s+residence)",
+                    java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
 
-    private static String stripResidenceLabel(String line) {
-        String value = line.trim()
-                .replaceFirst("(?iu)^.*?" + RESIDENCE_LABEL + RESIDENCE_LABEL_SEPARATOR, "")
-                .replaceFirst("(?iu)^" + RESIDENCE_LABEL + RESIDENCE_LABEL_SEPARATOR, "");
-        return value.replaceAll("\\s+", " ").trim();
+    private static String cutBeforeNextField(String line) {
+        java.util.regex.Matcher boundary = NEXT_ID_FIELD.matcher(line);
+        // Only cut a following field; leave an address preceding it intact.
+        return boundary.find() ? line.substring(0, boundary.start()) : line;
+    }
+
+    private static String cleanAddressValue(String value) {
+        String cleaned = RESIDENCE_LABEL_PATTERN.matcher(value).replaceAll(" ");
+        return cleaned.replaceAll("^[\\s/.:：,;-]+", "").replaceAll("[\\s/.:：,;-]+$", "")
+                .replaceAll("\\s+", " ").trim();
     }
 
     private static boolean isResidenceLabel(String key) {
@@ -181,8 +259,64 @@ public class VinHoadonCccdOcrService {
                 || key.contains("PACE OF RESIDENCE");
     }
 
-    // Boundaries that Google Vision may merge into the end of a locality line.
-    // The prefix (before the next field label) is still part of the residence.
+    private static boolean isOriginLabel(String key) {
+        return key.contains("QUE QUAN") || key.contains("PLACE OF ORIGIN")
+                || key.contains("NOI DANG KY KHAI SINH") || key.contains("PLACE OF BIRTH");
+    }
+
+    private static boolean isDateOrExpiryField(String key) {
+        return key.contains("CO GIA TRI DEN") || key.contains("DATE OF EXPIRY")
+                || key.contains("NGAY HET HAN") || key.contains("NGAY CAP")
+                || key.contains("DATE OF ISSUE");
+    }
+
+    private static boolean isDateOnly(String raw) {
+        return raw.matches("\\s*[0-9]{1,2}\\s*[/.-]\\s*[0-9]{1,2}\\s*[/.-]\\s*[0-9]{2,4}\\s*");
+    }
+
+    private static boolean looksLikeHamletOrStreet(String s) {
+        String x = fold(s);
+        return x.startsWith("THON ") || x.startsWith("AP ") || x.startsWith("KP ")
+                || x.startsWith("KHU PHO ") || x.startsWith("TO ")
+                || x.startsWith("TDP ") || x.startsWith("DUONG ")
+                || x.startsWith("SO ") || x.startsWith("PHUONG ") || x.startsWith("XA ");
+    }
+
+    // Old CCCDs may contain pre-2025 province names. Retain both old and new
+    // names and normalize "Thành phố" => "TP", "Hồ Chí Minh" => "HCM".
+    // A bare "TP" is NOT an endpoint: it must be followed by a city name.
+    private static final java.util.Set<String> PROVINCE_ENDINGS = java.util.Set.of(
+            "HA NOI", "TP HA NOI", "HAI PHONG", "TP HAI PHONG",
+            "DA NANG", "TP DA NANG", "CAN THO", "TP CAN THO",
+            "HO CHI MINH", "THANH PHO HO CHI MINH", "TP HO CHI MINH",
+            "TP HCM", "TPHCM", "HCM",
+            "HUE", "THUA THIEN HUE",
+            "AN GIANG", "BA RIA VUNG TAU", "BAC GIANG", "BAC KAN",
+            "BAC LIEU", "BAC NINH", "BEN TRE", "BINH DINH",
+            "BINH DUONG", "BINH PHUOC", "BINH THUAN", "CA MAU",
+            "CAO BANG", "DAK LAK", "DAK NONG", "DIEN BIEN",
+            "DONG NAI", "DONG THAP", "GIA LAI", "HA GIANG",
+            "HA NAM", "HA TINH", "HAI DUONG", "HAU GIANG",
+            "HOA BINH", "HUNG YEN", "KHANH HOA", "KIEN GIANG",
+            "KON TUM", "LAI CHAU", "LAM DONG", "LANG SON",
+            "LAO CAI", "LONG AN", "NAM DINH", "NGHE AN",
+            "NINH BINH", "NINH THUAN", "PHU THO", "PHU YEN",
+            "QUANG BINH", "QUANG NAM", "QUANG NGAI",
+            "QUANG NINH", "QUANG TRI", "SOC TRANG", "SON LA",
+            "TAY NINH", "THAI BINH", "THAI NGUYEN", "THANH HOA",
+            "TIEN GIANG", "TRA VINH", "TUYEN QUANG", "VINH LONG",
+            "VINH PHUC", "YEN BAI"
+    );
+
+    static boolean endsWithProvince(String value) {
+        if (value == null || value.isBlank()) return false;
+        String normal = fold(value);
+        for (String name : PROVINCE_ENDINGS) {
+            if (normal.equals(name) || normal.endsWith(" " + name)) return true;
+        }
+        return false;
+    }
+
     private static final java.util.regex.Pattern NEXT_ID_FIELD = java.util.regex.Pattern.compile(
             "(?iu)(?:nơi\\s+đăng\\s+ký\\s+khai\\s+sinh|place\\s+of\\s+birth"
             + "|quê\\s+quán|place\\s+of\\s+origin"
@@ -191,23 +325,13 @@ public class VinHoadonCccdOcrService {
             + "|có\\s+giá\\s+trị\\s+đến|giới\\s+tính|sex\\s*[:：]"
             + "|quốc\\s+tịch|nationality|bộ\\s+công\\s+an|ministry\\s+of\\s+public\\s+security)");
 
-    private static boolean isAddressFieldBoundary(String key) {
-        return key.contains("QUE QUAN") || key.contains("PLACE OF ORIGIN")
-                || key.contains("DATE OF ISSUE") || key.contains("NGAY CAP")
-                || key.contains("DATE OF EXPIRY") || key.contains("NGAY HET HAN")
-                || key.contains("CO GIA TRI DEN") || key.contains("DATE OF BIRTH")
-                || key.contains("NGAY SINH") || key.contains("GIOI TINH")
-                || key.contains("QUOC TICH") || key.contains("NATIONALITY")
-                || key.contains("BO CONG AN") || key.contains("MINISTRY OF PUBLIC SECURITY")
-                || key.contains("NOI DANG KY KHAI SINH") || key.contains("PLACE OF BIRTH")
-                || key.contains("HO VA TEN") || key.contains("FULL NAME")
-                || key.contains("DINH DANH CA NHAN");
-    }
-
     private static boolean looksLikeAddressSegment(String text) {
         if (text == null || text.isBlank()) return false;
         String key = fold(text);
-        if (key.isBlank() || isAddressFieldBoundary(key) || isResidenceLabel(key)) return false;
+        if (key.isBlank() || isOriginLabel(key) || isResidenceLabel(key)
+                || NEXT_ID_FIELD.matcher(text).find()
+                || key.contains("HO VA TEN") || key.contains("FULL NAME")
+                || key.contains("DATE OF BIRTH") || key.contains("NGAY SINH")) return false;
         if (text.indexOf('<') >= 0 || key.startsWith("IDVNM") || key.matches("[0-9 ]+")) return false;
         return text.codePoints().filter(Character::isLetter).count() >= 3;
     }

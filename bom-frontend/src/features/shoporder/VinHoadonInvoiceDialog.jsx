@@ -218,8 +218,11 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
       setPreview(null)
       setCccdSuccess('Đã nhận dạng ' + [
         fullName ? 'họ tên' : '',
-        address ? 'địa chỉ thường trú/cư trú (gồm các dòng địa chỉ)' : '',
+        address ? 'địa chỉ thường trú/cư trú' : '',
       ].filter(Boolean).join(' và ') + '. Vui lòng kiểm tra thông tin trước khi gửi hóa đơn.')
+      if (address && data?.addressComplete === false) {
+        setCccdError('OCR chưa xác định được tỉnh/thành phố ở cuối địa chỉ. Có thể còn thiếu một dòng: vui lòng kiểm tra và bổ sung trước khi xuất hóa đơn.')
+      }
     } catch (error) {
       setCccdError(error.message || 'Không thể nhận dạng ảnh CCCD.')
     } finally {
