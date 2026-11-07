@@ -417,7 +417,7 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
                   {item.suggestedAddress}{item.historical ? ' (ViettelPost - địa chỉ cũ)' : ' (Danh mục 2 cấp)'}
                 </Button>)}
               </Stack>
-            </Box>
+            </Box>}
             <TextField label="Số điện thoại" value={buyer.buyerPhone} onChange={field('buyerPhone')} />
             <TextField label="Email nhận hóa đơn" value={buyer.buyerEmail} onChange={field('buyerEmail')} type="email" />
             <TextField select label="Hình thức thanh toán" value={buyer.paymentMethod} onChange={field('paymentMethod')}>{PAYMENT_OPTIONS.map(x => <MenuItem key={x.value} value={x.value}>{x.label}</MenuItem>)}</TextField>
