@@ -63,6 +63,32 @@ class VinHoadonCccdOcrServiceTest {
     }
 
     @Test
+    void keepsSecondAddressLineMergedWithFollowingBirthplaceLabel() {
+        String text = """
+                Nơi cư trú / Pate of residence.
+                Thôn Minh Tân
+                Phường Hòa Lạc, Gia Lai Nơi đăng ký khai sinh / Place of birth
+                Quy Nhơn, Gia Lai
+                Ngày, tháng, năm cấp / Date of issue
+                """;
+        assertEquals("Thôn Minh Tân, Phường Hòa Lạc, Gia Lai",
+                VinHoadonCccdOcrService.extractResidence(text));
+    }
+
+    @Test
+    void doesNotAppendPlaceOfBirthAsAnAddressContinuation() {
+        String text = """
+                Nơi cư trú / Place of residence
+                Thôn Minh Tân
+                Phường Hòa Lạc, Gia Lai
+                Nơi đăng ký khai sinh / Place of birth
+                Quy Nhơn, Gia Lai
+                """;
+        assertEquals("Thôn Minh Tân, Phường Hòa Lạc, Gia Lai",
+                VinHoadonCccdOcrService.extractResidence(text));
+    }
+
+    @Test
     void stripsMisreadEnglishResidenceLabelBeforeTwoLineAddress() {
         String text = """
                 Nơi cư trú / Pate of residence.
