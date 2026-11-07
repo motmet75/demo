@@ -63,6 +63,47 @@ class VinHoadonCccdOcrServiceTest {
     }
 
     @Test
+    void stripsMisreadEnglishResidenceLabelBeforeTwoLineAddress() {
+        String text = """
+                Nơi cư trú / Pate of residence.
+                Thôn Bình Minh
+                Phường An Phú, Gia Lai
+                Ngày, tháng, năm cấp / Date of issue
+                30/07/2026
+                """;
+        assertEquals("Thôn Bình Minh, Phường An Phú, Gia Lai",
+                VinHoadonCccdOcrService.extractResidence(text));
+    }
+
+    @Test
+    void stripsMisreadEnglishLabelWhenFirstAddressLineIsInline() {
+        String text = """
+                Nơi cư trú / Pate of residence. Thôn Bình Minh
+                Phường An Phú, Gia Lai
+                Ngày, tháng, năm cấp / Date of issue
+                """;
+        assertEquals("Thôn Bình Minh, Phường An Phú, Gia Lai",
+                VinHoadonCccdOcrService.extractResidence(text));
+    }
+
+    @Test
+    void stripsEnglishOnlyMisreadResidenceLabel() {
+        String text = """
+                Pate of residence. Thôn Bình Minh
+                Phường An Phú, Gia Lai
+                Date of issue
+                """;
+        assertEquals("Thôn Bình Minh, Phường An Phú, Gia Lai",
+                VinHoadonCccdOcrService.extractResidence(text));
+    }
+
+    @Test
+    void doesNotTreatMisreadLabelAloneAsAddress() {
+        assertNull(VinHoadonCccdOcrService.extractResidence(
+                "Nơi cư trú / Pate of residence.\nDate of issue"));
+    }
+
+    @Test
     void ignoresPlaceOfOriginWithoutResidenceLabel() {
         String text = """
                 Quê quán / Place of origin:
