@@ -18,11 +18,13 @@ import Typography from '@mui/material/Typography'
 import DownloadIcon from '@mui/icons-material/Download'
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong'
 import SettingsIcon from '@mui/icons-material/Settings'
+import BadgeOutlinedIcon from '@mui/icons-material/BadgeOutlined'
 import { useAppContext } from '../../context/AppContext'
 import { lookupBusinessTaxCode } from '../../api/businessTaxApi'
 import {
   downloadVinHoadonInvoice, fetchVinHoadonConfig, fetchVinHoadonInvoiceStatuses, fetchVinHoadonTemplates, issueVinHoadonInvoice,
   previewVinHoadonInvoice, retryVinHoadonInvoice, saveVinHoadonConfig, syncVinHoadonInvoice,
+  readVinHoadonCccdName,
 } from '../../api/shopApi'
 
 const VAT_OPTIONS = [
@@ -108,6 +110,9 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
   const [templateError, setTemplateError] = useState('')
   const [taxLookupBusy, setTaxLookupBusy] = useState(false)
   const [taxLookupError, setTaxLookupError] = useState('')
+  const [cccdBusy, setCccdBusy] = useState(false)
+  const [cccdError, setCccdError] = useState('')
+  const [cccdSuccess, setCccdSuccess] = useState('')
   const lastTaxLookup = useRef('')
   const [invoice, setInvoice] = useState(null)
   const [existingConflict, setExistingConflict] = useState(false)
@@ -120,7 +125,7 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
   useEffect(() => {
     if (!open) return
     let active = true
-    setLoading(true); setError(''); setConfig(null); setPreview(null); setItemNames({}); setTemplates([]); setInvoiceSeries(''); setInvoiceType('POS'); setPricesIncludeVat(true); setTemplateError(''); setTaxLookupError(''); lastTaxLookup.current = ''; setInvoice(null); setExistingConflict(false); setShowConfig(configOnly)
+    setLoading(true); setError(''); setConfig(null); setPreview(null); setItemNames({}); setTemplates([]); setInvoiceSeries(''); setInvoiceType('POS'); setPricesIncludeVat(true); setTemplateError(''); setTaxLookupError(''); lastTaxLookup.current = ''; setInvoice(null); setExistingConflict(false); setCccdError(''); setCccdSuccess(''); setShowConfig(configOnly)
     if (!tenantId || !companyId) {
       setError('Chọn tenant và công ty trước khi cấu hình VIN-HOADON.')
       setLoading(false)
@@ -185,6 +190,34 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
     } catch (err) { setError(err.message) } finally { setBusy(false) }
   }
   const field = key => event => { setBuyer(old => ({ ...old, [key]: event.target.value })); setPreview(null) }
+  const scanCccd = async event => {
+    const image = event.target.files?.[0]
+    event.target.value = ''
+    if (!image) return
+    setCccdError(''); setCccdSuccess('')
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(image.type) || image.size > 5 * 1024 * 1024) {
+      setCccdError('Chọn ảnh JPG, PNG hoặc WebP mặt trước CCCD/Căn cước, tối đa 5 MB.')
+      return
+    }
+    setCccdBusy(true)
+    try {
+      const { res, data } = await readVinHoadonCccdName(image, scope)
+      if (!res.ok) throw new Error(messageOf(res, data, 'Không thể nhận dạng CCCD'))
+      const fullName = String(data?.fullName || '').trim()
+      if (!data?.recognized || !fullName) {
+        setCccdError('Không đọc được họ tên. Hãy chụp rõ mặt trước CCCD/Căn cước hoặc nhập tên thủ công.')
+        return
+      }
+      setBuyer(old => ({ ...old, buyerName: fullName }))
+      setPreview(null)
+      setCccdSuccess('Đã tự điền họ tên từ CCCD: ' + fullName + '. Vui lòng kiểm tra và sửa nếu cần trước khi gửi.')
+    } catch (error) {
+      setCccdError(error.message || 'Không thể nhận dạng ảnh CCCD.')
+    } finally {
+      setCccdBusy(false)
+    }
+  }
+
   const lookupTax = async (force = false) => {
     const taxCode = buyer.buyerTaxCode.trim()
     if (!taxCode || (!force && taxCode === lastTaxLookup.current)) return
@@ -274,7 +307,14 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
               <Button variant="outlined" onClick={() => lookupTax(true)} disabled={taxLookupBusy || !buyer.buyerTaxCode.trim()} sx={{ whiteSpace: 'nowrap', mt: 1 }}>{taxLookupBusy ? 'Đang tra...' : 'Tra cứu MST'}</Button>
             </Box>
             <TextField label="Tên đơn vị / tổ chức" value={buyer.buyerOrganizationName} onChange={field('buyerOrganizationName')} />
-            <TextField label="Người mua hàng" value={buyer.buyerName} onChange={field('buyerName')} />
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, minWidth: 0 }}>
+              <TextField label="Người mua hàng" fullWidth value={buyer.buyerName} onChange={field('buyerName')} />
+              <Button component="label" variant="outlined" startIcon={cccdBusy ? <CircularProgress size={16} /> : <BadgeOutlinedIcon />}
+                disabled={busy || cccdBusy} sx={{ whiteSpace: 'nowrap', minHeight: 55, flexShrink: 0 }}>
+                {cccdBusy ? 'Đang đọc...' : 'Tải ảnh CCCD'}
+                <input type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={scanCccd} />
+              </Button>
+            </Box>
             <TextField label="Địa chỉ xuất hóa đơn" value={buyer.buyerAddress} onChange={field('buyerAddress')} multiline minRows={2} />
             <TextField label="Số điện thoại" value={buyer.buyerPhone} onChange={field('buyerPhone')} />
             <TextField label="Email nhận hóa đơn" value={buyer.buyerEmail} onChange={field('buyerEmail')} type="email" />
@@ -287,6 +327,9 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
               ? 'Giá đã bao gồm VAT: tách VAT từ số tiền đơn hàng, giữ nguyên tổng tiền thanh toán.'
               : 'Giá chưa bao gồm VAT: tính VAT cộng thêm vào giá trị đơn hàng; tổng tiền trên hóa đơn có thể cao hơn số tiền khách đã thanh toán. Vui lòng xác nhận với khách trước khi gửi.'}
           </Alert>
+          <Typography variant="caption" color="text.secondary">Ảnh mặt trước CCCD/Căn cước được gửi tới Google Vision để gợi ý họ tên; không lưu ảnh hay số định danh trong hóa đơn. Kiểm tra lại tên trước khi gửi.</Typography>
+          {cccdError && <Alert severity="warning">{cccdError}</Alert>}
+          {cccdSuccess && <Alert severity="success">{cccdSuccess}</Alert>}
           {taxLookupError && <Alert severity="warning">{taxLookupError}. Bạn có thể nhập tên và địa chỉ thủ công.</Alert>}
           {preview && !lineIdsAvailable && <Alert severity="error">Máy chủ cần cập nhật để sửa tên hàng trước khi gửi hóa đơn.</Alert>}
           {preview && <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, overflow: 'hidden' }}>

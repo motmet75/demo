@@ -283,6 +283,13 @@ export function fetchVinHoadonConfig(scope) {
   return vinFetchJson('/shop/staff/e-invoices/config', {}, scope)
 }
 
+// Upload only the front image for temporary name extraction; do not send to VIN-HOADON.
+export function readVinHoadonCccdName(image, scope) {
+  const body = new FormData()
+  body.append('image', image)
+  return vinFetchJson('/shop/staff/e-invoices/cccd-ocr', { method: 'POST', body }, scope)
+}
+
 export function fetchVinHoadonTemplates(scope) {
   return vinFetchJson('/shop/staff/e-invoices/templates', {}, scope)
 }

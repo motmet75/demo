@@ -4,11 +4,13 @@ import com.ams.bomcore.repository.CompanyRepository;
 import com.ams.bomcore.repository.TenantRepository;
 import com.ams.bomcore.integration.vinhoadon.VinHoadonApiException;
 import com.ams.bomcore.service.shop.VinHoadonInvoiceService;
+import com.ams.bomcore.service.shop.VinHoadonCccdOcrService;
 import com.ams.bomcore.util.RequestTimeZone;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.*;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.*;
 
@@ -16,12 +18,14 @@ import java.util.*;
 @RequestMapping("/shop/staff/e-invoices")
 public class VinHoadonInvoiceController {
     private final VinHoadonInvoiceService service;
+    private final VinHoadonCccdOcrService cccdOcr;
     private final TenantRepository tenantRepository;
     private final CompanyRepository companyRepository;
 
-    public VinHoadonInvoiceController(VinHoadonInvoiceService service, TenantRepository tenantRepository,
-                                      CompanyRepository companyRepository) {
+    public VinHoadonInvoiceController(VinHoadonInvoiceService service, VinHoadonCccdOcrService cccdOcr,
+                                      TenantRepository tenantRepository, CompanyRepository companyRepository) {
         this.service = service;
+        this.cccdOcr = cccdOcr;
         this.tenantRepository = tenantRepository;
         this.companyRepository = companyRepository;
     }
@@ -31,6 +35,19 @@ public class VinHoadonInvoiceController {
                                                      @RequestHeader("X-Company-Id") UUID companyId) {
         validateScope(tenantId, companyId);
         return service.getConfig(tenantId, companyId);
+    }
+
+    /**
+     * Extract only the customer's suggested full name from the front of an ID card.
+     * Upload is never attached to an invoice or stored in the database.
+     */
+    @PostMapping(value = "/cccd-ocr", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<VinHoadonCccdOcrService.NameResult> scanCccd(
+            @RequestHeader("X-Tenant-Id") UUID tenantId,
+            @RequestHeader("X-Company-Id") UUID companyId,
+            @RequestParam("image") MultipartFile image) {
+        validateScope(tenantId, companyId);
+        return ResponseEntity.ok().cacheControl(org.springframework.http.CacheControl.noStore()).body(cccdOcr.read(image));
     }
 
     @GetMapping("/templates")
