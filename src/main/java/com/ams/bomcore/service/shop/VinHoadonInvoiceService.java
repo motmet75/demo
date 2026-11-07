@@ -60,15 +60,17 @@ public class VinHoadonInvoiceService {
 
     public record ConfigRequest(boolean enabled, String taxCode, String apiUsername, String apiPassword,
                                 String invoiceTemplateCode, String invoiceSeries, Integer defaultVatRate,
-                                Boolean pricesIncludeVat) {}
+                                Boolean pricesIncludeVat, String posInvoiceTemplateCode, String posInvoiceSeries,
+                                String normalInvoiceTemplateCode, String normalInvoiceSeries) {}
     public record ConfigView(boolean configured, boolean enabled, boolean gatewayEnabled, boolean encryptionConfigured,
                              String taxCode, String apiUsername, boolean passwordConfigured,
                              String invoiceTemplateCode, String invoiceSeries, int defaultVatRate,
-                             boolean pricesIncludeVat) {}
+                             boolean pricesIncludeVat, String posInvoiceTemplateCode, String posInvoiceSeries,
+                             String normalInvoiceTemplateCode, String normalInvoiceSeries) {}
     public record IssueRequest(List<UUID> orderIds, String buyerTaxCode, String buyerOrganizationName,
                                String buyerName, String buyerAddress, String buyerPhone, String buyerEmail,
                                Integer paymentMethod, Integer vatRate, Map<String, String> itemNames,
-                               String invoiceSeries) {}
+                               String invoiceSeries, String invoiceType, Boolean pricesIncludeVat) {}
     public record TemplateOption(String templateCode, String series, String name) {}
     public record PreviewOrder(UUID id, String orderCode, Integer orderNumber, BigDecimal amount) {}
     public record PreviewLine(String lineId, String code, String name, String unit, BigDecimal quantity,
@@ -89,21 +91,16 @@ public class VinHoadonInvoiceService {
         return configRepository.findByTenantIdAndCompanyId(tenantId, companyId)
                 .map(config -> view(config, true))
                 .orElse(new ConfigView(false, false, properties.isEnabled(), cipher.isConfigured(),
-                        "", "", false, "", "", 8, true));
+                        "", "", false, "", "", 8, true, "", "", "", ""));
     }
 
     @Transactional
     public ConfigView saveConfig(UUID tenantId, UUID companyId, ConfigRequest request) {
         if (request == null) throw new IllegalArgumentException("Configuration is required");
         String taxCode = required(request.taxCode(), "Seller tax code", 14);
-        if (!TAX_CODE.matcher(taxCode).matches()) throw new IllegalArgumentException("Seller tax code must contain 10 digits, optionally followed by a 3-digit branch code");
+        if (!TAX_CODE.matcher(taxCode).matches())
+            throw new IllegalArgumentException("Seller tax code must contain 10 digits, optionally followed by a 3-digit branch code");
         String username = required(request.apiUsername(), "VIN-HOADON username", 255);
-        String template = required(request.invoiceTemplateCode(), "Invoice template code", 11);
-        String series = required(request.invoiceSeries(), "Invoice series", 8);
-        if (template.equalsIgnoreCase(series))
-            throw new IllegalArgumentException("Mã mẫu hóa đơn phải là giá trị ở cột Mẫu số trên VIN-HOADON (ví dụ 1), không phải Ký hiệu hóa đơn");
-        int vat = request.defaultVatRate() == null ? 8 : request.defaultVatRate();
-        validateVat(vat);
 
         VinHoadonCompanyConfig config = configRepository.findByTenantIdAndCompanyId(tenantId, companyId)
                 .orElseGet(VinHoadonCompanyConfig::new);
@@ -111,6 +108,43 @@ public class VinHoadonInvoiceService {
             config.setTenantId(tenantId);
             config.setCompanyId(companyId);
         }
+
+        // New clients send both typed series, old clients can still update the legacy default.
+        // A blank typed field explicitly clears it; an omitted typed field preserves its value.
+        boolean typedUpdate = request.posInvoiceTemplateCode() != null || request.posInvoiceSeries() != null
+                || request.normalInvoiceTemplateCode() != null || request.normalInvoiceSeries() != null;
+        String posTemplate = request.posInvoiceTemplateCode() == null
+                ? config.getPosInvoiceTemplateCode() : trim(request.posInvoiceTemplateCode());
+        String posSeries = request.posInvoiceSeries() == null
+                ? config.getPosInvoiceSeries() : trim(request.posInvoiceSeries());
+        String normalTemplate = request.normalInvoiceTemplateCode() == null
+                ? config.getNormalInvoiceTemplateCode() : trim(request.normalInvoiceTemplateCode());
+        String normalSeries = request.normalInvoiceSeries() == null
+                ? config.getNormalInvoiceSeries() : trim(request.normalInvoiceSeries());
+        if (typedUpdate) {
+            validateTypedPair("POS", posTemplate, posSeries);
+            validateTypedPair("NORMAL", normalTemplate, normalSeries);
+            if (posSeries == null && normalSeries == null)
+                throw new IllegalArgumentException("Cần cấu hình ít nhất một loại hóa đơn: máy tính tiền hoặc thông thường.");
+        }
+
+        String legacyTemplate = trim(request.invoiceTemplateCode());
+        String legacySeries = trim(request.invoiceSeries());
+        if (legacyTemplate == null && config.getInvoiceTemplateCode() != null)
+            legacyTemplate = config.getInvoiceTemplateCode();
+        if (legacySeries == null && config.getInvoiceSeries() != null)
+            legacySeries = config.getInvoiceSeries();
+        if (legacyTemplate == null || legacySeries == null) {
+            legacyTemplate = posSeries != null ? posTemplate : normalTemplate;
+            legacySeries = posSeries != null ? posSeries : normalSeries;
+        }
+        legacyTemplate = required(legacyTemplate, "Invoice template code", 11);
+        legacySeries = required(legacySeries, "Invoice series", 8);
+        if (legacyTemplate.equalsIgnoreCase(legacySeries))
+            throw new IllegalArgumentException("Mã mẫu hóa đơn là cột Mẫu số, không phải Ký hiệu.");
+
+        int vat = request.defaultVatRate() == null ? 8 : request.defaultVatRate();
+        validateVat(vat);
         if (request.apiPassword() != null && !request.apiPassword().isBlank()) {
             config.setEncryptedApiPassword(cipher.encrypt(request.apiPassword(), tenantId, companyId));
         } else if (config.getEncryptedApiPassword() == null) {
@@ -119,18 +153,43 @@ public class VinHoadonInvoiceService {
         config.setEnabled(request.enabled());
         config.setTaxCode(taxCode);
         config.setApiUsername(username);
-        config.setInvoiceTemplateCode(template);
-        config.setInvoiceSeries(series);
+        config.setInvoiceTemplateCode(legacyTemplate);
+        config.setInvoiceSeries(legacySeries);
+        if (typedUpdate) {
+            config.setPosInvoiceTemplateCode(posTemplate);
+            config.setPosInvoiceSeries(posSeries);
+            config.setNormalInvoiceTemplateCode(normalTemplate);
+            config.setNormalInvoiceSeries(normalSeries);
+        }
         config.setDefaultVatRate(vat);
         config.setPricesIncludeVat(!Boolean.FALSE.equals(request.pricesIncludeVat()));
         return view(configRepository.save(config), true);
+    }
+
+    static void validateTypedPair(String type, String template, String series) {
+        if (template == null && series == null) return; // A company can register only one type.
+        if (template == null || series == null)
+            throw new IllegalArgumentException("Mẫu số và Ký hiệu của " + type + " phải đi cùng nhau.");
+        if (template.length() > 11 || template.equalsIgnoreCase(series))
+            throw new IllegalArgumentException("Mã mẫu số không hợp lệ cho " + type);
+        // C26MMC (POS) and C26TMC (normal); the two-digit year is part of the series.
+        if (series.length() > 8 || !series.matches("^[A-Z][0-9]{2}" + ("POS".equals(type) ? "M" : "T") + "[A-Z0-9]{2}$"))
+            throw new IllegalArgumentException("Ký hiệu " + type + " không hợp lệ: " + series);
+    }
+
+    static void requireCurrentYear(String series) {
+        String year = String.format(Locale.ROOT, "%02d", Year.now(ZoneId.of("Asia/Ho_Chi_Minh")).getValue() % 100);
+        if (!series.substring(1, 3).equals(year)) {
+            throw new IllegalStateException("Ký hiệu " + series
+                    + " không thuộc năm hiện tại (20" + year + "). Hãy cập nhật ký hiệu đã đăng ký trên VIN-HOADON.");
+        }
     }
 
     public Preview preview(UUID tenantId, UUID companyId, IssueRequest request) {
         VinHoadonCompanyConfig config = requireUsableConfig(tenantId, companyId);
         TemplateOption template = selectedTemplate(request, config);
         return withItemNames(buildPreview(loadEligibleOrders(tenantId, companyId, request), config,
-                requestedVat(request, config), requestedPayment(request), template), request.itemNames());
+                requestedVat(request, config), requestedPayment(request), template, invoicePricesIncludeVat(request)), request.itemNames());
     }
 
     public List<TemplateOption> templates(UUID tenantId, UUID companyId) {
@@ -149,7 +208,7 @@ public class VinHoadonInvoiceService {
         validateOrders(ids, orders);
         rejectAlreadyInvoiced(ids);
         TemplateOption template = selectedTemplate(request, config);
-        Preview preview = withItemNames(buildPreview(orders, config, requestedVat(request, config), requestedPayment(request), template),
+        Preview preview = withItemNames(buildPreview(orders, config, requestedVat(request, config), requestedPayment(request), template, invoicePricesIncludeVat(request)),
                 request.itemNames());
 
         VinHoadonShopInvoice invoice = new VinHoadonShopInvoice();
@@ -296,9 +355,17 @@ public class VinHoadonInvoiceService {
     }
 
     private ConfigView view(VinHoadonCompanyConfig c, boolean configured) {
+        String legacySeries = c.getInvoiceSeries();
+        boolean legacyOnly = c.getPosInvoiceSeries() == null && c.getNormalInvoiceSeries() == null;
+        boolean legacyPos = legacyOnly && legacySeries != null && legacySeries.matches("^[A-Z][0-9]{2}M[A-Z0-9]{2}$");
+        boolean legacyNormal = legacyOnly && legacySeries != null && legacySeries.matches("^[A-Z][0-9]{2}T[A-Z0-9]{2}$");
         return new ConfigView(configured, c.isEnabled(), properties.isEnabled(), cipher.isConfigured(), c.getTaxCode(),
                 c.getApiUsername(), c.getEncryptedApiPassword() != null && !c.getEncryptedApiPassword().isBlank(),
-                c.getInvoiceTemplateCode(), c.getInvoiceSeries(), c.getDefaultVatRate(), c.isPricesIncludeVat());
+                c.getInvoiceTemplateCode(), c.getInvoiceSeries(), c.getDefaultVatRate(), c.isPricesIncludeVat(),
+                Optional.ofNullable(c.getPosInvoiceTemplateCode()).orElse(legacyPos ? c.getInvoiceTemplateCode() : ""),
+                Optional.ofNullable(c.getPosInvoiceSeries()).orElse(legacyPos ? legacySeries : ""),
+                Optional.ofNullable(c.getNormalInvoiceTemplateCode()).orElse(legacyNormal ? c.getInvoiceTemplateCode() : ""),
+                Optional.ofNullable(c.getNormalInvoiceSeries()).orElse(legacyNormal ? legacySeries : ""));
     }
 
     private List<TemplateOption> announcedTemplates(VinHoadonCompanyConfig config) {
@@ -324,15 +391,47 @@ public class VinHoadonInvoiceService {
     }
 
     private TemplateOption selectedTemplate(IssueRequest request, VinHoadonCompanyConfig config) {
+        String invoiceType = request == null ? null : trim(request.invoiceType());
         String requestedSeries = request == null ? null : trim(request.invoiceSeries());
-        if (requestedSeries == null || requestedSeries.equals(config.getInvoiceSeries()))
-            return new TemplateOption(config.getInvoiceTemplateCode(), config.getInvoiceSeries(), null);
-        if (requestedSeries.length() > 8) throw new IllegalArgumentException("Invoice series is too long");
-        List<TemplateOption> matches = announcedTemplates(config).stream()
-                .filter(option -> requestedSeries.equals(option.series())).toList();
-        if (matches.size() != 1)
-            throw new IllegalArgumentException("Ký hiệu hóa đơn không tìm thấy hoặc không duy nhất trên VIN-HOADON");
-        return matches.get(0);
+        if (invoiceType != null && !Set.of("POS", "NORMAL").contains(invoiceType))
+            throw new IllegalArgumentException("Invoice type must be POS or NORMAL");
+
+        String posSeries = trim(config.getPosInvoiceSeries());
+        String posTemplate = trim(config.getPosInvoiceTemplateCode());
+        String normalSeries = trim(config.getNormalInvoiceSeries());
+        String normalTemplate = trim(config.getNormalInvoiceTemplateCode());
+        // Previous company defaults are the fallback only before any typed pair is configured.
+        boolean legacyOnly = posSeries == null && normalSeries == null;
+        if (legacyOnly && posSeries == null && config.getInvoiceSeries() != null
+                && config.getInvoiceSeries().matches("^[A-Z][0-9]{2}M[A-Z0-9]{2}$")) {
+            posSeries = config.getInvoiceSeries();
+            posTemplate = config.getInvoiceTemplateCode();
+        }
+        if (legacyOnly && normalSeries == null && config.getInvoiceSeries() != null
+                && config.getInvoiceSeries().matches("^[A-Z][0-9]{2}T[A-Z0-9]{2}$")) {
+            normalSeries = config.getInvoiceSeries();
+            normalTemplate = config.getInvoiceTemplateCode();
+        }
+
+        if (invoiceType == null) {
+            if (requestedSeries != null) {
+                if (requestedSeries.equals(posSeries)) invoiceType = "POS";
+                else if (requestedSeries.equals(normalSeries)) invoiceType = "NORMAL";
+                else throw new IllegalArgumentException("Ký hiệu chưa được lưu trong cấu hình công ty.");
+            } else {
+                // Shop orders default to POS if registered, otherwise use the normal series.
+                invoiceType = posSeries != null ? "POS" : "NORMAL";
+            }
+        }
+        String selectedSeries = "POS".equals(invoiceType) ? posSeries : normalSeries;
+        String selectedTemplate = "POS".equals(invoiceType) ? posTemplate : normalTemplate;
+        if (selectedSeries == null || selectedTemplate == null)
+            throw new IllegalStateException("Chưa cấu hình Mẫu số + Ký hiệu cho loại hóa đơn " + invoiceType);
+        if (requestedSeries != null && !requestedSeries.equals(selectedSeries))
+            throw new IllegalArgumentException("Ký hiệu phải khớp với loại hóa đơn " + invoiceType);
+        validateTypedPair(invoiceType, selectedTemplate, selectedSeries);
+        requireCurrentYear(selectedSeries);
+        return new TemplateOption(selectedTemplate, selectedSeries, invoiceType.equals("POS") ? "Máy tính tiền" : "Thông thường");
     }
 
     private VinHoadonCompanyConfig requireUsableConfig(UUID tenantId, UUID companyId) {
@@ -376,8 +475,22 @@ public class VinHoadonInvoiceService {
         return ids;
     }
 
+    record VatAmounts(BigDecimal subtotal, BigDecimal tax, BigDecimal total) {}
+
+    static VatAmounts calculateVat(BigDecimal allocated, int vat, boolean pricesIncludeVat) {
+        if (vat <= 0) return new VatAmounts(allocated, BigDecimal.ZERO, allocated);
+        if (pricesIncludeVat) {
+            BigDecimal subtotal = allocated.multiply(BigDecimal.valueOf(100))
+                    .divide(BigDecimal.valueOf(100L + vat), 6, RoundingMode.HALF_UP);
+            return new VatAmounts(subtotal, allocated.subtract(subtotal), allocated);
+        }
+        BigDecimal tax = allocated.multiply(BigDecimal.valueOf(vat))
+                .divide(BigDecimal.valueOf(100), 6, RoundingMode.HALF_UP);
+        return new VatAmounts(allocated, tax, allocated.add(tax));
+    }
+
     private Preview buildPreview(List<ShopOrder> orders, VinHoadonCompanyConfig config, int vat, int paymentMethod,
-                                 TemplateOption template) {
+                                 TemplateOption template, boolean pricesIncludeVat) {
         List<UUID> ids = orders.stream().map(ShopOrder::getId).toList();
         List<ShopOrderItem> items = itemRepository.findAllByOrderIds(ids);
         List<SourceLine> sources = new ArrayList<>();
@@ -407,29 +520,23 @@ public class VinHoadonInvoiceService {
             BigDecimal allocated = i == sources.size() - 1
                     ? payable.subtract(used) : source.total().multiply(factor).setScale(6, RoundingMode.HALF_UP);
             used = used.add(allocated);
-            BigDecimal subtotal;
-            BigDecimal tax;
-            BigDecimal total;
-            if (vat <= 0) { subtotal = allocated; tax = BigDecimal.ZERO; total = allocated; }
-            else if (config.isPricesIncludeVat()) {
-                subtotal = allocated.multiply(BigDecimal.valueOf(100)).divide(BigDecimal.valueOf(100L + vat), 6, RoundingMode.HALF_UP);
-                tax = allocated.subtract(subtotal); total = allocated;
-            } else {
-                subtotal = allocated; tax = subtotal.multiply(BigDecimal.valueOf(vat)).divide(BigDecimal.valueOf(100), 6, RoundingMode.HALF_UP);
-                total = subtotal.add(tax);
-            }
+            VatAmounts calculated = calculateVat(allocated, vat, pricesIncludeVat);
+            BigDecimal subtotal = calculated.subtotal();
+            BigDecimal tax = calculated.tax();
+            BigDecimal total = calculated.total();
             lines.add(new PreviewLine(source.lineId(), source.code(), source.name(), source.unit(), source.quantity(),
                     subtotal.divide(source.quantity(), 6, RoundingMode.HALF_UP), subtotal, tax, total, vat));
         }
         BigDecimal subtotal = lines.stream().map(PreviewLine::subtotal).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal tax = lines.stream().map(PreviewLine::taxAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal total = lines.stream().map(PreviewLine::total).reduce(BigDecimal.ZERO, BigDecimal::add);
-        if (total.subtract(payable).abs().compareTo(new BigDecimal("0.01")) > 0)
-            throw new IllegalStateException("Invoice total does not match the amount paid by the selected orders");
+        BigDecimal expectedTotal = pricesIncludeVat || vat <= 0 ? payable : payable.add(tax);
+        if (total.subtract(expectedTotal).abs().compareTo(new BigDecimal("0.01")) > 0)
+            throw new IllegalStateException("Invoice VAT calculation differs from the selected price basis");
         List<PreviewOrder> summary = orders.stream().sorted(Comparator.comparing(ShopOrder::getCreatedAt))
                 .map(o -> new PreviewOrder(o.getId(), o.getOrderCode(), o.getOrderNumber(),
                         nz(o.getTotalAmount()).subtract(nz(o.getDiscountAmount())).max(BigDecimal.ZERO))).toList();
-        return new Preview(summary, lines, paymentMethod, vat, config.isPricesIncludeVat(), subtotal, tax, total,
+        return new Preview(summary, lines, paymentMethod, vat, pricesIncludeVat, subtotal, tax, total,
                 template.templateCode(), template.series());
     }
 
@@ -535,6 +642,12 @@ public class VinHoadonInvoiceService {
         return new VinHoadonCredentials(config.getTaxCode(), config.getApiUsername(),
                 cipher.decrypt(config.getEncryptedApiPassword(), config.getTenantId(), config.getCompanyId()));
     }
+    // Per-invoice choice independent of the company's historical default.
+    // Legacy clients that omit it use VAT-inclusive prices, the shop-POS default.
+    static boolean invoicePricesIncludeVat(IssueRequest request) {
+        return request == null || !Boolean.FALSE.equals(request.pricesIncludeVat());
+    }
+
     private int requestedVat(IssueRequest request, VinHoadonCompanyConfig config) {
         int value = request != null && request.vatRate() != null ? request.vatRate() : config.getDefaultVatRate(); validateVat(value); return value;
     }

@@ -17,6 +17,11 @@ public class VinHoadonCompanyConfig {
     @Column(name = "encrypted_api_password", nullable = false, columnDefinition = "text") private String encryptedApiPassword;
     @Column(name = "invoice_template_code", nullable = false, length = 11) private String invoiceTemplateCode;
     @Column(name = "invoice_series", nullable = false, length = 8) private String invoiceSeries;
+    // One company/login, two independently registered invoice template/series pairs.
+    @Column(name = "pos_invoice_template_code", length = 11) private String posInvoiceTemplateCode;
+    @Column(name = "pos_invoice_series", length = 8) private String posInvoiceSeries;
+    @Column(name = "normal_invoice_template_code", length = 11) private String normalInvoiceTemplateCode;
+    @Column(name = "normal_invoice_series", length = 8) private String normalInvoiceSeries;
     @Column(name = "default_vat_rate", nullable = false) private int defaultVatRate = 8;
     @Column(name = "prices_include_vat", nullable = false) private boolean pricesIncludeVat = true;
     @Column(name = "created_at", nullable = false) private Instant createdAt;
@@ -43,6 +48,14 @@ public class VinHoadonCompanyConfig {
     public void setInvoiceTemplateCode(String value) { this.invoiceTemplateCode = value; }
     public String getInvoiceSeries() { return invoiceSeries; }
     public void setInvoiceSeries(String invoiceSeries) { this.invoiceSeries = invoiceSeries; }
+    public String getPosInvoiceTemplateCode() { return posInvoiceTemplateCode; }
+    public void setPosInvoiceTemplateCode(String value) { this.posInvoiceTemplateCode = value; }
+    public String getPosInvoiceSeries() { return posInvoiceSeries; }
+    public void setPosInvoiceSeries(String value) { this.posInvoiceSeries = value; }
+    public String getNormalInvoiceTemplateCode() { return normalInvoiceTemplateCode; }
+    public void setNormalInvoiceTemplateCode(String value) { this.normalInvoiceTemplateCode = value; }
+    public String getNormalInvoiceSeries() { return normalInvoiceSeries; }
+    public void setNormalInvoiceSeries(String value) { this.normalInvoiceSeries = value; }
     public int getDefaultVatRate() { return defaultVatRate; }
     public void setDefaultVatRate(int value) { this.defaultVatRate = value; }
     public boolean isPricesIncludeVat() { return pricesIncludeVat; }

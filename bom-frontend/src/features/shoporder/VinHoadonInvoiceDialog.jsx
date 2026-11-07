@@ -41,6 +41,10 @@ function ConfigForm({ config, scope, onSaved, onCancel }) {
   const [form, setForm] = useState({
     enabled: config?.enabled || false, taxCode: config?.taxCode || '', apiUsername: config?.apiUsername || '', apiPassword: '',
     invoiceTemplateCode: config?.invoiceTemplateCode || '', invoiceSeries: config?.invoiceSeries || '',
+    posInvoiceTemplateCode: config?.posInvoiceTemplateCode || '',
+    posInvoiceSeries: config?.posInvoiceSeries || '',
+    normalInvoiceTemplateCode: config?.normalInvoiceTemplateCode || '',
+    normalInvoiceSeries: config?.normalInvoiceSeries || '',
     defaultVatRate: config?.defaultVatRate ?? 8, pricesIncludeVat: config?.pricesIncludeVat !== false,
   })
   const [busy, setBusy] = useState(false)
@@ -63,13 +67,22 @@ function ConfigForm({ config, scope, onSaved, onCancel }) {
       <TextField label="Mã số thuế người bán" value={form.taxCode} onChange={change('taxCode')} required inputProps={{ maxLength: 14 }} />
       <TextField label="Tên đăng nhập VIN-HOADON" value={form.apiUsername} onChange={change('apiUsername')} required />
       <TextField label={config?.passwordConfigured ? 'Mật khẩu mới (để trống để giữ nguyên)' : 'Mật khẩu VIN-HOADON'} value={form.apiPassword} onChange={change('apiPassword')} type="password" required={!config?.passwordConfigured} />
-      <TextField label="Mã mẫu hóa đơn" value={form.invoiceTemplateCode} onChange={change('invoiceTemplateCode')} required inputProps={{ maxLength: 11 }} helperText="Lấy ở cột Mẫu số trên VIN-HOADON; ví dụ 1, không phải C26MMC." error={Boolean(form.invoiceTemplateCode && form.invoiceTemplateCode.trim().toUpperCase() === form.invoiceSeries.trim().toUpperCase())} />
-      <TextField label="Ký hiệu hóa đơn" value={form.invoiceSeries} onChange={change('invoiceSeries')} required inputProps={{ maxLength: 8 }} />
+    </Box>
+    <Alert severity="info">Một công ty dùng chung tài khoản VIN-HOADON nhưng lưu riêng 2 loại hóa đơn. Ký hiệu thay đổi theo năm và phải được VIN-HOADON đăng ký trước khi sử dụng. Không tự đổi C26 thành C27.</Alert>
+    <Typography fontWeight={800}>Hóa đơn khởi tạo từ máy tính tiền (POS)</Typography>
+    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
+      <TextField label="Mẫu số POS" value={form.posInvoiceTemplateCode} onChange={change('posInvoiceTemplateCode')} inputProps={{ maxLength: 11 }} helperText="Mẫu số tại VIN-HOADON (ví dụ 1)" />
+      <TextField label="Ký hiệu POS" value={form.posInvoiceSeries} onChange={change('posInvoiceSeries')} inputProps={{ maxLength: 8 }} placeholder="C26MMC" helperText="Chữ M = máy tính tiền" />
+    </Box>
+    <Typography fontWeight={800}>Hóa đơn điện tử thông thường</Typography>
+    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
+      <TextField label="Mẫu số thông thường" value={form.normalInvoiceTemplateCode} onChange={change('normalInvoiceTemplateCode')} inputProps={{ maxLength: 11 }} helperText="Có thể khác mẫu số POS" />
+      <TextField label="Ký hiệu thông thường" value={form.normalInvoiceSeries} onChange={change('normalInvoiceSeries')} inputProps={{ maxLength: 8 }} placeholder="C26TMC" helperText="Chữ T = hóa đơn thông thường" />
       <TextField select label="Thuế suất mặc định" value={form.defaultVatRate} onChange={e => setForm(old => ({ ...old, defaultVatRate: Number(e.target.value) }))}>
         {VAT_OPTIONS.map(option => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
       </TextField>
     </Box>
-    <FormControlLabel control={<Switch checked={form.pricesIncludeVat} onChange={e => setForm(old => ({ ...old, pricesIncludeVat: e.target.checked }))} />} label="Giá bán trong đơn đã bao gồm VAT" />
+    <Typography variant="caption" color="text.secondary">Cách tính VAT được chọn riêng khi tạo từng hóa đơn, không phụ thuộc cấu hình công ty.</Typography>
     <Typography variant="caption" color="text.secondary">Mật khẩu được mã hóa AES-GCM theo công ty và không bao giờ trả lại trình duyệt.</Typography>
     <DialogActions sx={{ px: 0 }}>
       {onCancel && <Button onClick={onCancel}>Quay lại</Button>}
@@ -90,6 +103,8 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
   const [itemNames, setItemNames] = useState({})
   const [templates, setTemplates] = useState([])
   const [invoiceSeries, setInvoiceSeries] = useState('')
+  const [invoiceType, setInvoiceType] = useState('POS')
+  const [pricesIncludeVat, setPricesIncludeVat] = useState(true)
   const [templateError, setTemplateError] = useState('')
   const [taxLookupBusy, setTaxLookupBusy] = useState(false)
   const [taxLookupError, setTaxLookupError] = useState('')
@@ -105,7 +120,7 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
   useEffect(() => {
     if (!open) return
     let active = true
-    setLoading(true); setError(''); setConfig(null); setPreview(null); setItemNames({}); setTemplates([]); setInvoiceSeries(''); setTemplateError(''); setTaxLookupError(''); lastTaxLookup.current = ''; setInvoice(null); setExistingConflict(false); setShowConfig(configOnly)
+    setLoading(true); setError(''); setConfig(null); setPreview(null); setItemNames({}); setTemplates([]); setInvoiceSeries(''); setInvoiceType('POS'); setPricesIncludeVat(true); setTemplateError(''); setTaxLookupError(''); lastTaxLookup.current = ''; setInvoice(null); setExistingConflict(false); setShowConfig(configOnly)
     if (!tenantId || !companyId) {
       setError('Chọn tenant và công ty trước khi cấu hình VIN-HOADON.')
       setLoading(false)
@@ -116,7 +131,10 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
     Promise.all([fetchVinHoadonConfig(currentScope), configOnly || !orderIds.length ? Promise.resolve(null) : fetchVinHoadonInvoiceStatuses(orderIds, currentScope)]).then(([{ res, data }, statuses]) => {
       if (!active) return
       if (!res.ok) throw new Error(messageOf(res, data, 'Không thể tải cấu hình VIN-HOADON'))
-      setConfig(data); setInvoiceSeries(data.invoiceSeries || ''); setBuyer(old => ({ ...old, vatRate: data.defaultVatRate ?? 8 }))
+      setConfig(data);
+      setInvoiceType(data.posInvoiceSeries ? 'POS' : 'NORMAL');
+      setInvoiceSeries(data.posInvoiceSeries || data.normalInvoiceSeries || '');
+      setBuyer(old => ({ ...old, vatRate: data.defaultVatRate ?? 8 }))
       if (data.configured && data.enabled && data.gatewayEnabled) fetchVinHoadonTemplates(currentScope).then(result => {
         if (!active) return
         if (!result.res.ok) throw new Error(messageOf(result.res, result.data, 'Không thể tải ký hiệu hóa đơn'))
@@ -131,7 +149,7 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
     return () => { active = false }
   }, [open, configOnly, first.id, orderKey, tenantId, companyId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const payload = () => ({ orderIds, ...buyer, paymentMethod: Number(buyer.paymentMethod), vatRate: Number(buyer.vatRate), itemNames, invoiceSeries })
+  const payload = () => ({ orderIds, ...buyer, paymentMethod: Number(buyer.paymentMethod), vatRate: Number(buyer.vatRate), itemNames, invoiceSeries, invoiceType, pricesIncludeVat })
   const invalidItemName = Object.values(itemNames).some(name => !name.trim() || name.length > 255)
   const lineIdsAvailable = !preview || preview.lines.every(line => Boolean(line.lineId))
   const runPreview = async () => {
@@ -184,6 +202,14 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
     } catch (err) { setTaxLookupError(err.message) } finally { setTaxLookupBusy(false) }
   }
   const usable = config?.configured && config?.enabled && config?.gatewayEnabled && config?.encryptionConfigured
+  const validYear = Boolean(invoiceSeries && invoiceSeries.slice(1, 3) === String(new Date().getFullYear()).slice(-2))
+  const selectedConfigured = Boolean(invoiceSeries && (
+    (invoiceType === 'POS' && invoiceSeries === config?.posInvoiceSeries && config?.posInvoiceTemplateCode) ||
+    (invoiceType === 'NORMAL' && invoiceSeries === config?.normalInvoiceSeries && config?.normalInvoiceTemplateCode)
+  ))
+  const registeredMatch = !templates.length || templates.some(option =>
+    option.series === invoiceSeries && option.templateCode === (invoiceType === 'POS' ? config?.posInvoiceTemplateCode : config?.normalInvoiceTemplateCode))
+  const readyToSend = usable && selectedConfigured && validYear && registeredMatch
 
   return <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="md">
     <DialogTitle sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
@@ -195,7 +221,14 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
       {loading ? <Box sx={{ py: 5, textAlign: 'center' }}><CircularProgress /></Box> : <>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
         {showConfig ? (
-          isAdmin ? <ConfigForm config={config || {}} scope={scope} onSaved={saved => { setConfig(saved); if (!configOnly) setShowConfig(false) }} onCancel={!configOnly && config?.configured ? () => setShowConfig(false) : null} />
+          isAdmin ? <ConfigForm config={config || {}} scope={scope} onSaved={saved => {
+              setConfig(saved)
+              const nextType = saved.posInvoiceSeries ? 'POS' : 'NORMAL'
+              setInvoiceType(nextType)
+              setInvoiceSeries(nextType === 'POS' ? saved.posInvoiceSeries : saved.normalInvoiceSeries || '')
+              setPreview(null)
+              if (!configOnly) setShowConfig(false)
+            }} onCancel={!configOnly && config?.configured ? () => setShowConfig(false) : null} />
             : <Alert severity="warning">Chỉ quản trị viên hoặc người dùng nghiệp vụ đầy đủ có thể cấu hình VIN-HOADON.</Alert>
         ) : invoice ? (
           <Stack spacing={2}>
@@ -217,15 +250,24 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
           </Stack>
         ) : <Stack spacing={2}>
           {!usable && <Alert severity="warning" action={isAdmin ? <Button color="inherit" onClick={() => setShowConfig(true)}>Cấu hình</Button> : null}>VIN-HOADON chưa sẵn sàng cho công ty này.</Alert>}
-          {templateError && <Alert severity="warning">{templateError}. Có thể dùng ký hiệu mặc định đã cấu hình.</Alert>}
+          {templateError && <Alert severity="warning">{templateError}. Kiểm tra ký hiệu đã đăng ký trên VIN-HOADON trước khi gửi.</Alert>}
+          {!readyToSend && usable && <Alert severity="warning">Chưa cấu hình ký hiệu {invoiceType === 'POS' ? 'máy tính tiền' : 'thông thường'} hợp lệ cho năm hiện tại. Cần cập nhật cấu hình trước khi lập hóa đơn.</Alert>}
           {ineligible.length > 0 && <Alert severity="error">Chỉ được chọn đơn đã thanh toán và có trạng thái Hoàn tất/Đã giao. Có {ineligible.length} đơn chưa đủ điều kiện.</Alert>}
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>{orders.map(order => <Chip key={order.id} label={`#${order.orderNumber || order.orderCode} · ${money(Number(order.totalAmount || 0) - Number(order.discountAmount || 0))}`} />)}</Box>
           <Divider />
           <Typography fontWeight={800}>Thông tin người mua</Typography>
-          <TextField select label="Ký hiệu hóa đơn" value={invoiceSeries} onChange={event => { setInvoiceSeries(event.target.value); setPreview(null) }} helperText="Chọn ký hiệu đã đăng ký phù hợp với người mua doanh nghiệp hoặc cá nhân.">
-            {config?.invoiceSeries && !templates.some(option => option.series === config.invoiceSeries) && <MenuItem value={config.invoiceSeries}>{config.invoiceSeries} · Mẫu số {config.invoiceTemplateCode} (mặc định)</MenuItem>}
-            {templates.map(option => <MenuItem key={`${option.templateCode}-${option.series}`} value={option.series}>{option.series} · Mẫu số {option.templateCode}{option.name ? ` · ${option.name}` : ''}</MenuItem>)}
+          <TextField select label="Loại hóa đơn" value={invoiceType} onChange={event => {
+            const type = event.target.value
+            setInvoiceType(type)
+            setInvoiceSeries(type === 'POS' ? config?.posInvoiceSeries || '' : config?.normalInvoiceSeries || '')
+            setPreview(null)
+          }} helperText="Loại hóa đơn được chọn theo nghiệp vụ POS hoặc thông thường, không theo người mua.">
+            <MenuItem value="POS">Máy tính tiền (POS) · {config?.posInvoiceSeries || 'Chưa cấu hình'}</MenuItem>
+            <MenuItem value="NORMAL">Hóa đơn thông thường · {config?.normalInvoiceSeries || 'Chưa cấu hình'}</MenuItem>
           </TextField>
+          <Typography variant="body2">Mẫu số: <b>{invoiceType === 'POS' ? config?.posInvoiceTemplateCode || '—' : config?.normalInvoiceTemplateCode || '—'}</b> · Ký hiệu: <b>{invoiceSeries || '—'}</b></Typography>
+          {Array.isArray(templates) && templates.length > 0 && invoiceSeries && !templates.some(option => option.series === invoiceSeries && option.templateCode === (invoiceType === 'POS' ? config?.posInvoiceTemplateCode : config?.normalInvoiceTemplateCode)) &&
+            <Alert severity="warning">Ký hiệu hoặc Mẫu số đã lưu chưa khớp với danh sách VIN-HOADON. Vui lòng kiểm tra trước khi gửi.</Alert>}
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
             <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
               <TextField label="Mã số thuế người mua" fullWidth value={buyer.buyerTaxCode} onChange={field('buyerTaxCode')} inputProps={{ maxLength: 14 }} />
@@ -239,6 +281,12 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
             <TextField select label="Hình thức thanh toán" value={buyer.paymentMethod} onChange={field('paymentMethod')}>{PAYMENT_OPTIONS.map(x => <MenuItem key={x.value} value={x.value}>{x.label}</MenuItem>)}</TextField>
             <TextField select label="Thuế suất" value={buyer.vatRate} onChange={field('vatRate')}>{VAT_OPTIONS.map(x => <MenuItem key={x.value} value={x.value}>{x.label}</MenuItem>)}</TextField>
           </Box>
+          <FormControlLabel control={<Switch checked={pricesIncludeVat} onChange={event => { setPricesIncludeVat(event.target.checked); setPreview(null) }} />} label="Giá trị đơn hàng đã bao gồm VAT" />
+          <Alert severity={pricesIncludeVat ? 'info' : 'warning'} sx={{ mb: 1 }}>
+            {pricesIncludeVat
+              ? 'Giá đã bao gồm VAT: tách VAT từ số tiền đơn hàng, giữ nguyên tổng tiền thanh toán.'
+              : 'Giá chưa bao gồm VAT: tính VAT cộng thêm vào giá trị đơn hàng; tổng tiền trên hóa đơn có thể cao hơn số tiền khách đã thanh toán. Vui lòng xác nhận với khách trước khi gửi.'}
+          </Alert>
           {taxLookupError && <Alert severity="warning">{taxLookupError}. Bạn có thể nhập tên và địa chỉ thủ công.</Alert>}
           {preview && !lineIdsAvailable && <Alert severity="error">Máy chủ cần cập nhật để sửa tên hàng trước khi gửi hóa đơn.</Alert>}
           {preview && <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, overflow: 'hidden' }}>
@@ -256,7 +304,8 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
               </Box>)}
             </Box>
             <Stack sx={{ p: 1.5, borderTop: '2px solid', borderColor: 'divider', alignItems: 'flex-end' }}>
-              <Typography>Tiền trước thuế: {money(preview.subtotal)}</Typography><Typography>Thuế: {money(preview.taxAmount)}</Typography><Typography variant="h6" fontWeight={900}>Tổng thanh toán: {money(preview.totalAmount)}</Typography>
+              <Typography>Giá đầu vào: {preview.pricesIncludeVat ? 'Đã gồm VAT' : 'Chưa gồm VAT'}</Typography>
+              <Typography>Tiền trước thuế: {money(preview.subtotal)}</Typography><Typography>Thuế: {money(preview.taxAmount)}</Typography><Typography variant="h6" fontWeight={900}>Tổng tiền hóa đơn: {money(preview.totalAmount)}</Typography>
             </Stack>
           </Box>}
         </Stack>}
@@ -264,8 +313,8 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
     </DialogContent>
     {!showConfig && !invoice && <DialogActions>
       <Button onClick={onClose} disabled={busy}>Hủy</Button>
-      <Button variant="outlined" onClick={runPreview} disabled={busy || !usable || existingConflict || ineligible.length > 0 || !orderIds.length}>Xem trước</Button>
-      <Button variant="contained" color="success" onClick={issue} disabled={busy || existingConflict || !preview || !lineIdsAvailable || invalidItemName}>{busy ? <CircularProgress size={20} /> : 'Gửi sang VIN-HOADON (chưa ký)'}</Button>
+      <Button variant="outlined" onClick={runPreview} disabled={busy || !readyToSend || existingConflict || ineligible.length > 0 || !orderIds.length}>Xem trước</Button>
+      <Button variant="contained" color="success" onClick={issue} disabled={busy || !readyToSend || existingConflict || !preview || !lineIdsAvailable || invalidItemName}>{busy ? <CircularProgress size={20} /> : 'Gửi sang VIN-HOADON (chưa ký)'}</Button>
     </DialogActions>}
     {(invoice || (showConfig && (!isAdmin || configOnly))) && <DialogActions><Button onClick={onClose} disabled={busy}>Đóng</Button></DialogActions>}
   </Dialog>
