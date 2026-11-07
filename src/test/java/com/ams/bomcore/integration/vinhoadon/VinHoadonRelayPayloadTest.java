@@ -22,8 +22,7 @@ class VinHoadonRelayPayloadTest {
         ObjectMapper mapper = new ObjectMapper();
         VinHoadonRelayService service = new VinHoadonRelayService(
                 true, "test-only-relay-signing-secret-at-least-32-bytes", 30,
-                new VinHoadonProperties(true, "https://ws.vin-hoadon.com", 10, 30),
-                mapper);
+                new VinHoadonProperties(true, "https://ws.vin-hoadon.com", 10, 30));
         String code = service.generatePairCode().code();
         VinHoadonRelayService.Tokens tokens = service.pair(code, UUID.randomUUID().toString());
         String bearer = "Bearer " + tokens.accessToken();

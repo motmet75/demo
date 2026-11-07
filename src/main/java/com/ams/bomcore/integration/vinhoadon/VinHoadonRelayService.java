@@ -43,7 +43,9 @@ public class VinHoadonRelayService {
     private static final Duration ACCESS_LIFE = Duration.ofMinutes(20);
     private static final Duration WORKER_LIFE = Duration.ofDays(45);
     private static final SecureRandom RNG = new SecureRandom();
-    private final ObjectMapper objectMapper;
+    // The application may use Gson as its MVC converter and has no Spring ObjectMapper bean.
+    // Keep a private Jackson mapper to convert JsonNode to plain Java Maps for relay serialization.
+    private final ObjectMapper objectMapper = new ObjectMapper();
     private final boolean enabled;
     private final byte[] secret;
     private final int timeoutSeconds;
@@ -73,9 +75,7 @@ public class VinHoadonRelayService {
             @Value("${vin-hoadon.relay.enabled:false}") boolean enabled,
             @Value("${vin-hoadon.relay.secret:}") String signingSecret,
             @Value("${vin-hoadon.relay.timeout-seconds:120}") int timeoutSeconds,
-            VinHoadonProperties vinProperties,
-            ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
+            VinHoadonProperties vinProperties) {
         this.enabled = enabled;
         this.secret = (signingSecret == null ? "" : signingSecret).getBytes(StandardCharsets.UTF_8);
         this.timeoutSeconds = timeoutSeconds;
