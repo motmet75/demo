@@ -15,15 +15,22 @@ Append to `/opt/tuonghoa/demo/secrets/application-secrets.properties`:
 
 ```properties
 VIN_HOADON_RELAY_ENABLED=true
+VIN_HOADON_RELAY_EXTENSION_ID=<the-32-letter-ID-from-chrome-extensions>
 VIN_HOADON_RELAY_SECRET=replace-with-long-random-secret
 VIN_HOADON_RELAY_TIMEOUT_SECONDS=120
 ```
+
+**Before configuring the server:** On your Vietnam computer open `chrome://extensions`, enable Developer mode, and copy the **ID** shown under `VIN-HOADON Vietnam Relay`. It is 32 lowercase characters. Put exactly this ID in `VIN_HOADON_RELAY_EXTENSION_ID` and restart Demo. Only that extension origin is allowed to call `/sapi/api/vin-hoadon/relay/**`. If you reinstall from a different folder and the ID changes, update the property and restart.
 
 Generate a suitable secret locally with `openssl rand -hex 32`. Do not publish it. Keep `VIN_HOADON_MASTER_KEY` unchanged. Rebuild and restart Demo. If your deployed website is not `https://anhmedia.vn`, adjust both `API` in background.js and the manifest host permission, then reinstall the extension.
 
 ## Install extension
 
 In Chrome navigate to `chrome://extensions`, switch on Developer mode, click **Load unpacked**, and select this directory (`chrome-extension/vin-hoadon-relay`). Keep Chrome open on the Vietnam machine. Chrome MV3 polls every 30 seconds; each job is taken once, never automatically requeued after a timeout.
+
+## Handshake HTTP 403
+
+If the popup says `Demo relay /handshake HTTP 403`, check that `VIN_HOADON_RELAY_EXTENSION_ID` matches the exact ID of the installed extension and restart Demo. The extension origin is `chrome-extension://<ID>`; it is not `https://anhmedia.vn`. Check browser Network for the server's `Invalid CORS request` message. Also ensure that `https://anhmedia.vn/sapi/api/vin-hoadon/relay/handshake` reaches the Spring Boot app (not the frontend static server).
 
 ## Create pairing code
 

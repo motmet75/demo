@@ -58,5 +58,6 @@ vin-hoadon:
   master-key: "${VIN_HOADON_MASTER_KEY:}"
   relay:
     enabled: "${VIN_HOADON_RELAY_ENABLED:false}"
+    extension-id: "${VIN_HOADON_RELAY_EXTENSION_ID:}"
     secret: "${VIN_HOADON_RELAY_SECRET:}"
     timeout-seconds: "${VIN_HOADON_RELAY_TIMEOUT_SECONDS:120}"
