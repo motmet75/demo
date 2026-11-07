@@ -1,4 +1,4 @@
-const API = "https://anhmedia.vn/api/vin-hoadon/relay";
+const API = "https://anhmedia.vn/sapi/api/vin-hoadon/relay";
 const VIN = "https://ws.vin-hoadon.com";
 const PERIOD_MIN = 0.5;
 let running = false;
