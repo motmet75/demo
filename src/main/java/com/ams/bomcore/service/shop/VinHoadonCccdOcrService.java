@@ -157,17 +157,24 @@ public class VinHoadonCccdOcrService {
         return best;
     }
 
+    // Google Vision can misread "Place of residence" as "Pate of residence"
+    // or "Pace of residence". Strip bilingual labels before considering a
+    // line as part of the address, including OCR's period after the label.
+    private static final String RESIDENCE_LABEL =
+            "(?:nơi\\s+(?:thường\\s+trú|cư\\s+trú)|(?:place|pate|pace)\\s+of\\s+residence)";
+    private static final String RESIDENCE_LABEL_SEPARATOR = "[\\s/.:：-]*";
+
     private static String stripResidenceLabel(String line) {
         String value = line.trim()
-                .replaceFirst("(?iu)^.*?(?:nơi\\s+thường\\s+trú|nơi\\s+cư\\s+trú|place\\s+of\\s+residence)\\s*[/\\s:：-]*", "")
-                .replaceFirst("(?iu)^place\\s+of\\s+residence\\s*[:：-]?\\s*", "")
-                .replaceFirst("(?iu)^nơi\\s+(?:thường\\s+trú|cư\\s+trú)\\s*[:：-]?\\s*", "");
+                .replaceFirst("(?iu)^.*?" + RESIDENCE_LABEL + RESIDENCE_LABEL_SEPARATOR, "")
+                .replaceFirst("(?iu)^" + RESIDENCE_LABEL + RESIDENCE_LABEL_SEPARATOR, "");
         return value.replaceAll("\\s+", " ").trim();
     }
 
     private static boolean isResidenceLabel(String key) {
         return key.contains("NOI THUONG TRU") || key.contains("NOI CU TRU")
-                || key.contains("PLACE OF RESIDENCE");
+                || key.contains("PLACE OF RESIDENCE") || key.contains("PATE OF RESIDENCE")
+                || key.contains("PACE OF RESIDENCE");
     }
 
     private static boolean isAddressFieldBoundary(String key) {
