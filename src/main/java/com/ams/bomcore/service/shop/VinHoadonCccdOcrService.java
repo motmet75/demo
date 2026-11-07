@@ -135,18 +135,22 @@ public class VinHoadonCccdOcrService {
             List<String> parts = new ArrayList<>();
             String initial = stripResidenceLabel(lines[i]);
             if (looksLikeAddressSegment(initial)) parts.add(initial);
-            for (int j = i + 1; j < Math.min(lines.length, i + 5) && parts.size() < 3; j++) {
+            for (int j = i + 1; j < Math.min(lines.length, i + 7) && parts.size() < 3; j++) {
                 String candidate = lines[j].trim();
                 if (candidate.isBlank()) continue;
-                String folded = fold(candidate);
-                if (isResidenceLabel(folded)) {
+                if (isResidenceLabel(fold(candidate))) {
                     candidate = stripResidenceLabel(candidate);
                     if (candidate.isBlank()) continue; // Bilingual label on separate OCR line.
-                } else if (isAddressFieldBoundary(folded)) {
-                    break;
                 }
+                // Vision sometimes merges the second address line with the NEXT
+                // field label: "Phường..., Gia Lai Nơi đăng ký khai sinh".
+                // Preserve the address prefix instead of dropping that line.
+                java.util.regex.Matcher nextField = NEXT_ID_FIELD.matcher(candidate);
+                boolean endsHere = nextField.find();
+                if (endsHere) candidate = candidate.substring(0, nextField.start()).trim();
                 if (!looksLikeAddressSegment(candidate)) break;
                 parts.add(candidate.replaceAll("\\s+", " ").trim());
+                if (endsHere) break;
             }
             if (!parts.isEmpty()) {
                 String value = String.join(", ", parts).replaceAll(",\\s*,", ",").trim();
@@ -176,6 +180,16 @@ public class VinHoadonCccdOcrService {
                 || key.contains("PLACE OF RESIDENCE") || key.contains("PATE OF RESIDENCE")
                 || key.contains("PACE OF RESIDENCE");
     }
+
+    // Boundaries that Google Vision may merge into the end of a locality line.
+    // The prefix (before the next field label) is still part of the residence.
+    private static final java.util.regex.Pattern NEXT_ID_FIELD = java.util.regex.Pattern.compile(
+            "(?iu)(?:nơi\\s+đăng\\s+ký\\s+khai\\s+sinh|place\\s+of\\s+birth"
+            + "|quê\\s+quán|place\\s+of\\s+origin"
+            + "|ngày(?:,?\\s*tháng,?\\s*năm)?\\s+cấp|date\\s+of\\s+issue"
+            + "|ngày(?:,?\\s*tháng,?\\s*năm)?\\s+hết\\s+hạn|date\\s+of\\s+expiry"
+            + "|có\\s+giá\\s+trị\\s+đến|giới\\s+tính|sex\\s*[:：]"
+            + "|quốc\\s+tịch|nationality|bộ\\s+công\\s+an|ministry\\s+of\\s+public\\s+security)");
 
     private static boolean isAddressFieldBoundary(String key) {
         return key.contains("QUE QUAN") || key.contains("PLACE OF ORIGIN")
