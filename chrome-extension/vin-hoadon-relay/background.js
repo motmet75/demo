@@ -4,7 +4,7 @@ const PERIOD_MIN = 0.5;
 let running = false;
 
 async function state() {
-  return chrome.storage.local.get(["agentId", "accessToken", "workerToken", "accessExpiresAt", "enabled", "lastError", "lastSuccessAt"]);
+  return chrome.storage.local.get(["agentId", "accessToken", "workerToken", "accessExpiresAt", "enabled", "lastError", "lastSuccessAt", "lastPollAt", "lastJobAt", "lastJobPath", "lastVinHttpStatus", "lastJobError"]);
 }
 async function setError(message) {
   await chrome.storage.local.set({lastError: String(message || "Unknown error").slice(0, 200)});
@@ -57,8 +57,26 @@ async function processJob(job, token) {
   } catch (e) {
     error = e && e.name === "AbortError" ? "VIN request timed out" : (e?.message || "VIN network error");
   }
-  await api("/result", "POST", token, {id: job.id, status, body, error});
-  await chrome.storage.local.set({lastSuccessAt: Date.now(), lastError: error || ""});
+  // Store diagnostics without sensitive invoice payloads, passwords or access tokens.
+  const jobTime = Date.now();
+  await chrome.storage.local.set({
+    lastJobAt: jobTime,
+    lastJobPath: job.path,
+    lastVinHttpStatus: status || null,
+    lastJobError: error || ""
+  });
+  try {
+    await api("/result", "POST", token, {id: job.id, status, body, error});
+  } catch (e) {
+    const reportError = "Failed reporting VIN response to Demo: " + (e?.message || "unknown");
+    await chrome.storage.local.set({lastError: reportError, lastJobError: reportError});
+    throw e;
+  }
+  if (error) await setError(error);
+  else await chrome.storage.local.set({
+    lastSuccessAt: jobTime,
+    lastError: status >= 400 ? "VIN-HOADON returned HTTP " + status : ""
+  });
 }
 async function poll() {
   if (running) return;
@@ -72,7 +90,7 @@ async function poll() {
       if (!job) break;
       await processJob(job, s.accessToken);
     }
-    await chrome.storage.local.set({lastPollAt: Date.now(), lastError: ""});
+    await chrome.storage.local.set({lastPollAt: Date.now()});
   } catch(e) {
     await setError(e?.message || "Relay polling failed");
   } finally {

@@ -17,7 +17,11 @@ async function update() {
     "Paired: " + (paired ? "Yes" : "No") +
     "\nEnabled: " + (s.enabled ? "Yes" : "No") +
     "\nLast poll: " + poll +
-    (s.lastError ? "\nError: " + s.lastError : "");
+    "\nLast VIN request: " + (s.lastJobPath ? s.lastJobPath.split("/").pop() : "None") +
+    "\nLast VIN HTTP status: " + (s.lastVinHttpStatus || "No response") +
+    "\nLast VIN job at: " + (s.lastJobAt ? new Date(s.lastJobAt).toLocaleTimeString() : "None") +
+    (s.lastJobError ? "\nVIN request error: " + s.lastJobError : "") +
+    (s.lastError ? "\nRelay error: " + s.lastError : "");
 }
 $("pair").addEventListener("click", async () => {
   $("state").textContent = "Pairing...";

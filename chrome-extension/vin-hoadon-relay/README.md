@@ -48,6 +48,10 @@ Only use the pairing code in your own extension. Enter the eight digits into the
 
 Wait up to 30 seconds for poll to show an updated time. Then, using your normal authenticated shop UI, open VIN-HOADON configuration and request invoice templates. If that succeeds, the relay can reach the real VIN service. Do **not** retry old invoices with RECONCILE until their remote status has been checked.
 
+## Confirm requests actually reach VIN-HOADON
+
+The extension popup shows **Last poll**, **Last VIN request**, **Last VIN HTTP status**, and **Last VIN job at**. Last poll alone only confirms the browser is connected to Demo. If Last VIN request stays None, Demo has not dispatched a VIN request to that Chrome instance. Use VIN-HOADON's **invoice template lookup** as a safe read-only end-to-end check before trying an invoice. The extension now preserves VIN request errors instead of clearing them during idle polling. A status of HTTP 200 only confirms the provider responded; the application still needs to validate the response.
+
 ## Troubleshooting
 
 - `relay offline`: Chrome/extension not paired or polling, incorrect Demo origin, or backend not enabled.
