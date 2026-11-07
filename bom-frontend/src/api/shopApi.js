@@ -334,12 +334,29 @@ export async function readShopBuyerDocument(files, scope) {
     const current = String(primary.data?.buyerAddress || '').trim()
     const fullName = String(detail.data?.fullName || '').trim()
     if (!address && !fullName) return primary
+
+    // The original OCR can include a mistaken header such as "Pate of
+    // residence." at the start. It should not win simply for being longer.
+    // Compare CLEAN addresses so we keep the two locality lines when present.
+    const cleanResidence = value => {
+      let cleaned = String(value || '').trim()
+      const label = /^(?:nơi\s+(?:thường\s+trú|cư\s+trú)|(?:place|pate|pace)\s+of\s+residence)\s*[/.:：-]*\s*/iu
+      for (let i = 0; i < 3; i++) {
+        if (!label.test(cleaned)) break
+        cleaned = cleaned.replace(label, '').trim()
+      }
+      return cleaned
+    }
+    const cleanOriginal = cleanResidence(current)
+    const cleanSupplement = cleanResidence(address)
+    const selectedAddress = cleanSupplement.length >= cleanOriginal.length
+      ? cleanSupplement || cleanOriginal : cleanOriginal
     return {
       ...primary,
       data: {
         ...primary.data,
         buyerName: primary.data.buyerName || fullName || '',
-        buyerAddress: address && address.length > current.length ? address : current,
+        buyerAddress: selectedAddress,
       },
     }
   } catch {
