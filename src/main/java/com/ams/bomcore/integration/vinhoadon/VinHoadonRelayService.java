@@ -1,6 +1,8 @@
 package com.ams.bomcore.integration.vinhoadon;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -33,7 +35,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public class VinHoadonRelayService {
     public record PairCode(String code, long expiresAt) {}
     public record Tokens(String accessToken, String workerToken, long expiresAt) {}
-    public record Job(String id, String path, JsonNode payload, String bearerToken) {}
+    public record Job(String id, String path, Map<String, Object> payload, String bearerToken) {}
     public record Result(String id, int status, String body, String error) {}
     public record Reply(int status, String body) {}
     public record Status(boolean active, long lastPollAt, int pendingJobs) {}
@@ -41,6 +43,7 @@ public class VinHoadonRelayService {
     private static final Duration ACCESS_LIFE = Duration.ofMinutes(20);
     private static final Duration WORKER_LIFE = Duration.ofDays(45);
     private static final SecureRandom RNG = new SecureRandom();
+    private final ObjectMapper objectMapper;
     private final boolean enabled;
     private final byte[] secret;
     private final int timeoutSeconds;
@@ -70,7 +73,9 @@ public class VinHoadonRelayService {
             @Value("${vin-hoadon.relay.enabled:false}") boolean enabled,
             @Value("${vin-hoadon.relay.secret:}") String signingSecret,
             @Value("${vin-hoadon.relay.timeout-seconds:120}") int timeoutSeconds,
-            VinHoadonProperties vinProperties) {
+            VinHoadonProperties vinProperties,
+            ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
         this.enabled = enabled;
         this.secret = (signingSecret == null ? "" : signingSecret).getBytes(StandardCharsets.UTF_8);
         this.timeoutSeconds = timeoutSeconds;
@@ -166,8 +171,16 @@ public class VinHoadonRelayService {
                     new IOException("No agent polling"));
         }
         if (pending.size() >= 100) throw new IllegalStateException("VIN-HOADON relay queue is full");
+        if (payload == null || !payload.isObject()) {
+            throw new IllegalArgumentException("VIN-HOADON relay payload must be a JSON object");
+        }
+        // Always convert JsonNode to ordinary JSON values before Spring serializes
+        // the /next response. A non-Jackson MVC serializer otherwise treats
+        // JsonNode like a Java bean and emits nodeType/isObject/isArray metadata.
+        Map<String, Object> requestPayload = objectMapper.convertValue(
+                payload, new TypeReference<Map<String, Object>>() {});
         String id = UUID.randomUUID().toString();
-        Pending p = new Pending(new Job(id, path, payload.deepCopy(), bearerToken));
+        Pending p = new Pending(new Job(id, path, requestPayload, bearerToken));
         pending.put(id, p);
         queue.add(p);
         try {
