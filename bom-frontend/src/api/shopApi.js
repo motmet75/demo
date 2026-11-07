@@ -290,6 +290,59 @@ export function readVinHoadonCccdName(image, scope) {
   return vinFetchJson('/shop/staff/e-invoices/cccd-ocr', { method: 'POST', body }, scope)
 }
 
+/**
+ * Backwards-compatible API used by the local ShopDocumentUpload component.
+ * The current backend accepts ID-card image uploads and returns a name suggestion.
+ * File/Blob, FormData and {file}/{image} arguments are supported.
+ *
+ * This helper never sends an invoice.
+ */
+export function readShopBuyerDocument(document, typeOrScope, maybeScope) {
+  const isScope = value => Boolean(value && typeof value === 'object' && value.tenantId && value.companyId)
+  const scope = isScope(maybeScope) ? maybeScope : isScope(typeOrScope) ? typeOrScope : undefined
+  const form = document instanceof FormData ? document : new FormData()
+  if (!(document instanceof FormData)) {
+    const file = Array.isArray(document) ? document[0] :
+      document?.file || document?.image || document?.files?.[0] || document
+    if (!(file instanceof Blob)) {
+      return Promise.resolve({
+        res: { ok: false, status: 400 },
+        data: { message: 'Vui lòng tải ảnh CCCD/Căn cước (JPG, PNG hoặc WebP).' },
+      })
+    }
+    form.append('image', file, file.name || 'id-card.jpg')
+  } else if (!form.has('image')) {
+    const file = form.get('file') || form.get('document') || form.get('files')
+    if (file instanceof Blob) form.append('image', file, file.name || 'id-card.jpg')
+  }
+  return vinFetchJson('/shop/staff/e-invoices/cccd-ocr', { method: 'POST', body: form }, scope)
+}
+
+/**
+ * Keep any extracted buyer address unchanged until a verified administrative
+ * mapping is available. This is NOT an automatic old-to-new ward conversion.
+ * Return the standard {res,data} API wrapper for ShopDocumentUpload callers.
+ */
+export async function convertShopBuyerAddress(addressOrPayload) {
+  const input = typeof addressOrPayload === 'string' ? addressOrPayload :
+    addressOrPayload?.address || addressOrPayload?.buyerAddress || addressOrPayload?.originalAddress || ''
+  const original = String(input).trim()
+  return {
+    res: { ok: Boolean(original), status: original ? 200 : 400 },
+    data: {
+      originalAddress: original,
+      convertedAddress: original,
+      address: original,
+      buyerAddress: original,
+      converted: false,
+      needsReview: true,
+      message: original
+        ? 'Chưa có bảng đối chiếu địa giới hành chính được xác minh. Giữ nguyên địa chỉ và kiểm tra thủ công.'
+        : 'Chưa có địa chỉ để kiểm tra.',
+    },
+  }
+}
+
 export function fetchVinHoadonTemplates(scope) {
   return vinFetchJson('/shop/staff/e-invoices/templates', {}, scope)
 }
