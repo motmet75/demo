@@ -74,29 +74,22 @@ public class VinHoadonCccdOcrService {
         if (!Files.isRegularFile(credentials) || !Files.isReadable(credentials))
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Không đọc được tệp Google Vision credentials.");
         try {
-            var requests = new ArrayList<Map<String, Object>>();
-            for (MultipartFile image : images) {
-                requests.add(Map.of(
-                        "image", Map.of("content", Base64.getEncoder().encodeToString(image.getBytes())),
-                        "features", List.of(Map.of("type", "DOCUMENT_TEXT_DETECTION"))));
-            }
-            var req = HttpRequest.newBuilder(GOOGLE_VISION)
-                    .timeout(Duration.ofSeconds(50))
-                    .header("Content-Type", "application/json")
-                    .header("Authorization", "Bearer " + googleAuth.token(credentials))
-                    .POST(HttpRequest.BodyPublishers.ofByteArray(mapper.writeValueAsBytes(Map.of("requests", requests))))
-                    .build();
-            HttpResponse<String> response = http.send(req, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() != 200)
-                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Google Vision OCR HTTP " + response.statusCode());
-            JsonNode results = mapper.readTree(response.body()).path("responses");
+            List<byte[]> originals = new ArrayList<>(images.size());
+            for (MultipartFile image : images) originals.add(image.getBytes());
+            JsonNode results = annotate(originals, credentials);
+            if (!results.isArray() || results.size() != originals.size())
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Google Vision trả về số ảnh không hợp lệ.");
+
             String name = null;
             ResidenceMatch residence = new ResidenceMatch(null, 0, false);
-            for (JsonNode result : results) {
+            List<byte[]> residenceCrops = new ArrayList<>();
+            for (int i = 0; i < results.size(); i++) {
+                JsonNode result = results.get(i);
                 if (result.has("error"))
                     throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Google Vision không xử lý được một trong các ảnh.");
-                String text = result.path("fullTextAnnotation").path("text").asText("");
-                if (text.isBlank()) text = result.path("textAnnotations").path(0).path("description").asText("");
+
+                // Use full-card OCR for the name and as a safe fallback.
+                String text = visionText(result);
                 String foundName = extractFullName(text);
                 if (foundName != null) {
                     if (name != null && !fold(name).equals(fold(foundName)))
@@ -104,13 +97,37 @@ public class VinHoadonCccdOcrService {
                                 "Hai ảnh có họ tên khác nhau. Vui lòng chỉ tải 2 mặt của cùng một CCCD.");
                     name = foundName;
                 }
-                ResidenceMatch found = parseResidence(text);
-                if (found.value() != null
-                        && ((found.complete() && !residence.complete())
-                        || (found.complete() == residence.complete() && found.segments() > residence.segments())
-                        || (found.complete() == residence.complete() && found.segments() == residence.segments()
-                            && (residence.value() == null || found.value().length() > residence.value().length()))))
-                    residence = found;
+                residence = betterResidence(residence, parseResidence(text));
+
+                // Find the label's actual pixels on the original card. A narrow
+                // second pass focuses on the two lines below it.
+                try {
+                    byte[] cropped = VinHoadonResidenceCropper.cropResidence(originals.get(i), result);
+                    if (cropped != null && cropped.length <= MAX_IMAGE_BYTES) residenceCrops.add(cropped);
+                } catch (Exception ignored) {
+                    // Image decoding, unsupported WebP or invalid Vision boxes:
+                    // keep full-card OCR. Never log private identity images.
+                }
+            }
+
+            // The second Google Vision request is only made when a valid
+            // residence-label bounding box was found (at most two crops).
+            // A crop failure must NEVER lose the name/address from pass one.
+            if (!residenceCrops.isEmpty()) {
+                try {
+                    JsonNode croppedResults = annotate(residenceCrops, credentials);
+                    if (croppedResults.isArray()) {
+                        for (JsonNode cropped : croppedResults) {
+                            if (cropped.has("error")) continue;
+                            ResidenceMatch candidate = parseCroppedResidence(visionText(cropped));
+                            residence = betterResidence(residence, candidate);
+                        }
+                    }
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                } catch (Exception ignored) {
+                    // Google Vision crop pass is optional; the original result survives.
+                }
             }
             return new NameResult(name == null ? "" : name,
                     residence.value() == null ? "" : residence.value(),
@@ -125,6 +142,73 @@ public class VinHoadonCccdOcrService {
             // Never log or expose the uploaded ID image, ID number, raw OCR text or credentials.
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Không thể nhận dạng ảnh CCCD. Kiểm tra Google Vision OCR.");
         }
+    }
+
+    private JsonNode annotate(List<byte[]> images, Path credentials) throws Exception {
+        var requests = new ArrayList<Map<String, Object>>();
+        for (byte[] image : images) {
+            requests.add(Map.of(
+                    "image", Map.of("content", Base64.getEncoder().encodeToString(image)),
+                    "features", List.of(Map.of("type", "DOCUMENT_TEXT_DETECTION"))));
+        }
+        var req = HttpRequest.newBuilder(GOOGLE_VISION)
+                .timeout(Duration.ofSeconds(50))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + googleAuth.token(credentials))
+                .POST(HttpRequest.BodyPublishers.ofByteArray(mapper.writeValueAsBytes(Map.of("requests", requests))))
+                .build();
+        HttpResponse<String> response = http.send(req, HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() != 200)
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Google Vision OCR HTTP " + response.statusCode());
+        return mapper.readTree(response.body()).path("responses");
+    }
+
+    private static String visionText(JsonNode result) {
+        String text = result.path("fullTextAnnotation").path("text").asText("");
+        return text.isBlank() ? result.path("textAnnotations").path(0).path("description").asText("") : text;
+    }
+
+    private static ResidenceMatch betterResidence(ResidenceMatch current, ResidenceMatch candidate) {
+        if (candidate == null || candidate.value() == null) return current;
+        if (current == null || current.value() == null) return candidate;
+        if (candidate.complete() != current.complete())
+            return candidate.complete() ? candidate : current;
+        if (candidate.segments() != current.segments())
+            return candidate.segments() > current.segments() ? candidate : current;
+        return candidate.value().length() > current.value().length() ? candidate : current;
+    }
+
+    // The crop is already positioned using the first pass's labeled bounding
+    // polygon. If the tighter OCR loses the printed label, only accept two
+    // locality lines ending with a recognized province/city.
+    static String extractCroppedResidence(String text) {
+        return parseCroppedResidence(text).value();
+    }
+
+    private static ResidenceMatch parseCroppedResidence(String text) {
+        ResidenceMatch labeled = parseResidence(text);
+        if (labeled.value() != null) return labeled;
+        if (text == null || text.isBlank()) return new ResidenceMatch(null, 0, false);
+        List<String> address = new ArrayList<>();
+        for (String line : text.split("\\R")) {
+            String raw = line.trim();
+            String key = fold(raw);
+            if (raw.isBlank() || isResidenceLabel(key)) continue;
+            if (isOriginLabel(key)) break;
+            if (isDateOrExpiryField(key) || isDateOnly(raw)) continue;
+            java.util.regex.Matcher nextField = NEXT_ID_FIELD.matcher(raw);
+            if (nextField.find()) raw = raw.substring(0, nextField.start()).trim();
+            if (!looksLikeAddressSegment(raw)) continue;
+            if (address.isEmpty() && !looksLikeHamletOrStreet(raw)) continue;
+            address.add(raw);
+            if (endsWithProvince(raw)) {
+                if (address.size() >= 2)
+                    return new ResidenceMatch(String.join(", ", address), address.size(), true);
+                break;
+            }
+            if (address.size() >= 3) break;
+        }
+        return new ResidenceMatch(null, 0, false);
     }
 
     /**

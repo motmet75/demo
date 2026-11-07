@@ -213,6 +213,19 @@ class VinHoadonCccdOcrServiceTest {
     }
 
     @Test
+    void croppedOcrRecoversAddressWithoutTheLabel() {
+        assertEquals("Thôn Xuân Thanh Nam, Phù Mỹ Đông, Gia Lai",
+                VinHoadonCccdOcrService.extractCroppedResidence(
+                        "Thôn Xuân Thanh Nam\nPhù Mỹ Đông, Gia Lai"));
+    }
+
+    @Test
+    void croppedOcrDoesNotUsePlaceOfOriginAsResidence() {
+        assertNull(VinHoadonCccdOcrService.extractCroppedResidence(
+                "Quê quán / Place of origin\nPhú Mỹ, Gia Lai"));
+    }
+
+    @Test
     void ignoresPlaceOfOriginWithoutResidenceLabel() {
         String text = """
                 Quê quán / Place of origin:
