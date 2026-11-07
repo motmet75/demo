@@ -30,7 +30,7 @@ In Chrome navigate to `chrome://extensions`, switch on Developer mode, click **L
 On a *logged-in* `https://anhmedia.vn` tab as ADMIN or SUPER_ADMIN, open Developer Tools > Console and execute:
 
 ```js
-fetch('/api/vin-hoadon/relay/pair-code', {method: 'POST', credentials: 'include'})
+fetch('/sapi/api/vin-hoadon/relay/pair-code', {method: 'POST', credentials: 'include'})
   .then(async r => { const data = await r.json(); if (!r.ok) throw Error(data.message || r.status); console.log('Pair code:', data.code); })
   .catch(console.error);
 ```
