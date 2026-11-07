@@ -291,56 +291,51 @@ export function readVinHoadonCccdName(image, scope) {
 }
 
 /**
- * Backwards-compatible API used by the local ShopDocumentUpload component.
- * The current backend accepts ID-card image uploads and returns a name suggestion.
- * File/Blob, FormData and {file}/{image} arguments are supported.
- *
- * This helper never sends an invoice.
+ * Read the front/back of a buyer's CCCD/Căn cước using the existing ShopDocumentService.
+ * The backend expects repeated multipart fields named "file" and returns
+ * the buyer draft (name, address, etc.) for user review.
  */
-export function readShopBuyerDocument(document, typeOrScope, maybeScope) {
-  const isScope = value => Boolean(value && typeof value === 'object' && value.tenantId && value.companyId)
-  const scope = isScope(maybeScope) ? maybeScope : isScope(typeOrScope) ? typeOrScope : undefined
-  const form = document instanceof FormData ? document : new FormData()
-  if (!(document instanceof FormData)) {
-    const file = Array.isArray(document) ? document[0] :
-      document?.file || document?.image || document?.files?.[0] || document
-    if (!(file instanceof Blob)) {
-      return Promise.resolve({
-        res: { ok: false, status: 400 },
-        data: { message: 'Vui lòng tải ảnh CCCD/Căn cước (JPG, PNG hoặc WebP).' },
-      })
-    }
-    form.append('image', file, file.name || 'id-card.jpg')
-  } else if (!form.has('image')) {
-    const file = form.get('file') || form.get('document') || form.get('files')
-    if (file instanceof Blob) form.append('image', file, file.name || 'id-card.jpg')
+export function readShopBuyerDocument(files, scope) {
+  const items = files instanceof FormData
+    ? files.getAll('file')
+    : Array.isArray(files) ? files : files ? [files] : []
+  if (items.length < 1 || items.length > 4 || !items.every(file => file instanceof Blob)) {
+    return Promise.resolve({
+      res: { ok: false, status: 400 },
+      data: { message: 'Chọn từ 1 đến 4 tệp CCCD/Căn cước để nhận dạng.' },
+    })
   }
-  return vinFetchJson('/shop/staff/e-invoices/cccd-ocr', { method: 'POST', body: form }, scope)
+  const body = new FormData()
+  items.forEach((file, index) => body.append('file', file, file.name || `cccd-${index + 1}`))
+  return vinFetchJson('/shop/staff/documents/buyer', { method: 'POST', body }, scope)
 }
 
 /**
- * Keep any extracted buyer address unchanged until a verified administrative
- * mapping is available. This is NOT an automatic old-to-new ward conversion.
- * Return the standard {res,data} API wrapper for ShopDocumentUpload callers.
+ * Convert an OCR-extracted buyer address via the backend's configured
+ * address conversion service. The backend returns {converted, notSure, message}.
  */
-export async function convertShopBuyerAddress(addressOrPayload) {
-  const input = typeof addressOrPayload === 'string' ? addressOrPayload :
-    addressOrPayload?.address || addressOrPayload?.buyerAddress || addressOrPayload?.originalAddress || ''
-  const original = String(input).trim()
-  return {
-    res: { ok: Boolean(original), status: original ? 200 : 400 },
-    data: {
-      originalAddress: original,
-      convertedAddress: original,
-      address: original,
-      buyerAddress: original,
-      converted: false,
-      needsReview: true,
-      message: original
-        ? 'Chưa có bảng đối chiếu địa giới hành chính được xác minh. Giữ nguyên địa chỉ và kiểm tra thủ công.'
-        : 'Chưa có địa chỉ để kiểm tra.',
-    },
+export function convertShopBuyerAddress(address, scope) {
+  return vinFetchJson('/shop/staff/documents/address', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ address: String(address || '') }),
+  }, scope)
+}
+
+/**
+ * Extract invoice line items and buyer fields from an uploaded invoice
+ * using the existing ShopDocumentService (XML, PDF or image).
+ */
+export function readShopInvoiceDocument(file, scope) {
+  if (!(file instanceof Blob)) {
+    return Promise.resolve({
+      res: { ok: false, status: 400 },
+      data: { message: 'Vui lòng chọn tệp hóa đơn hợp lệ.' },
+    })
   }
+  const body = new FormData()
+  body.append('file', file, file.name || 'invoice')
+  return vinFetchJson('/shop/staff/documents/invoice', { method: 'POST', body }, scope)
 }
 
 export function fetchVinHoadonTemplates(scope) {
