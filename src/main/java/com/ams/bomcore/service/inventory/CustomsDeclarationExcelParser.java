@@ -20,7 +20,17 @@ public class CustomsDeclarationExcelParser {
     public record Item(int lineIndex, String hsCode, String description,
                        BigDecimal quantity, String unit,
                        BigDecimal unitPrice, String currency,
-                       String originCountry) {}
+                       String originCountry,
+                       BigDecimal invoiceValue,
+                       BigDecimal importTaxableValueVnd,
+                       BigDecimal importTaxRate,
+                       BigDecimal importTaxAmountVnd,
+                       BigDecimal vatTaxableValueVnd,
+                       BigDecimal vatRate,
+                       BigDecimal vatAmountVnd,
+                       BigDecimal importTaxUnitPriceVnd,
+                       String importTariffCode,
+                       String vatTariffCode) {}
     public record Parsed(String declarationNumber, String declarationDate,
                          String fileName, List<Item> items) {}
 
@@ -53,6 +63,31 @@ public class CustomsDeclarationExcelParser {
     }
     public static BigDecimal parseVietnameseNumber(String raw) {return number(raw);}
 
+    private static String nearbyCurrency(Row row,int position,DataFormatter formatter) {
+        for(int column=position+1;column<Math.min(position+21,row.getLastCellNum());column++) {
+            Cell cell=row.getCell(column);
+            if(cell==null)continue;
+            String candidate=formatter.formatCellValue(cell).trim().toUpperCase(Locale.ROOT);
+            if(Set.of("VND","USD","EUR","JPY","CNY","HKD","KRW","SGD","AUD","GBP","THB")
+                .contains(candidate))return candidate;
+        }
+        return "";
+    }
+
+    private static BigDecimal percentage(Row row,int position,DataFormatter formatter) {
+        for(int column=position+1;column<Math.min(position+14,row.getLastCellNum());column++) {
+            Cell cell=row.getCell(column);
+            if(cell==null)continue;
+            String candidate=formatter.formatCellValue(cell).trim();
+            if(candidate.endsWith("%")) {
+                BigDecimal value=number(candidate);
+                if(value!=null&&value.signum()>=0&&value.compareTo(new BigDecimal("100"))<=0)
+                    return value;
+            }
+        }
+        return null;
+    }
+
     public Parsed parse(byte[] bytes,String fileName) throws Exception {
         if(bytes==null||bytes.length==0||bytes.length>10_000_000)throw new IllegalArgumentException("Tờ khai Excel phải dưới 10 MB.");
         if(fileName==null||!fileName.toLowerCase(Locale.ROOT).matches(".*\\.(xls|xlsx)"))
@@ -63,6 +98,7 @@ public class CustomsDeclarationExcelParser {
             List<Item> items=new ArrayList<>();
             Map<String,String> current=null;
             String number="",date="";
+            String taxSection="NONE";
             Sheet sheet=book.getSheetAt(0);
             if(sheet.getLastRowNum()>10_000)throw new IllegalArgumentException("Tờ khai có quá nhiều dòng.");
             for(Row row:sheet){
@@ -76,6 +112,7 @@ public class CustomsDeclarationExcelParser {
                     if("<imp>".equalsIgnoreCase(label)){
                         if(current!=null)append(items,current);
                         current=new LinkedHashMap<>();
+                        taxSection="NONE";
                         continue;
                     }
                     String value=nearby(row,c,formatter,1);
@@ -88,9 +125,37 @@ public class CustomsDeclarationExcelParser {
                         current.put("quantity",value);
                         current.put("unit",nearby(row,c,formatter,2));
                     }
-                    else if(key.startsWith("don gia hoa don"))current.put("unitPrice",value);
+                    else if(key.startsWith("don gia hoa don")) {
+                        current.put("unitPrice",value);
+                        String unitCurrency=nearbyCurrency(row,c,formatter);
+                        if(!unitCurrency.isBlank())current.put("currency",unitCurrency);
+                    }
                     else if(key.equals("currency")||key.startsWith("dong tien"))current.put("currency",value);
                     else if(key.startsWith("nuoc xuat xu"))current.put("originCountry",value);
+                    else if(key.equals("tri gia hoa don"))current.put("invoiceValue",value);
+                    else if(key.equals("thue nhap khau"))taxSection="IMPORT";
+                    else if(key.startsWith("thue va thu khac"))taxSection="OTHER";
+                    else if(key.equals("ten")&&taxSection.equals("VAT"))taxSection="OTHER";
+                    else if(key.equals("thue gtgt"))taxSection="VAT";
+                    else if(key.equals("tri gia tinh thue(s)")&&taxSection.equals("IMPORT"))
+                        current.put("importTaxableValueVnd",value);
+                    else if(key.equals("don gia tinh thue")&&taxSection.equals("IMPORT"))
+                        current.put("importTaxUnitPriceVnd",value);
+                    else if(key.equals("tri gia tinh thue")&&taxSection.equals("VAT"))
+                        current.put("vatTaxableValueVnd",value);
+                    else if(key.equals("thue suat")&&(taxSection.equals("IMPORT")||taxSection.equals("VAT"))) {
+                        BigDecimal rate=percentage(row,c,formatter);
+                        if(rate!=null)current.put(taxSection.equals("IMPORT")?"importTaxRate":"vatRate",
+                                rate.toPlainString());
+                        if(taxSection.equals("IMPORT")&&!value.equals("")&&!value.endsWith("%"))
+                            current.put("importTariffCode",value);
+                    }
+                    else if(key.equals("so tien thue")&&taxSection.equals("IMPORT"))
+                        current.put("importTaxAmountVnd",value);
+                    else if(key.equals("so tien thue")&&taxSection.equals("VAT"))
+                        current.put("vatAmountVnd",value);
+                    else if(key.equals("ma ap dung thue suat")&&taxSection.equals("VAT"))
+                        current.put("vatTariffCode",value);
                 }
             }
             if(current!=null)append(items,current);
@@ -112,6 +177,16 @@ public class CustomsDeclarationExcelParser {
                 qty,Objects.toString(item.get("unit"),"").trim(),
                 number(item.get("unitPrice")),
                 Objects.toString(item.getOrDefault("currency",""),"").trim(),
-                Objects.toString(item.getOrDefault("originCountry",""),"").trim()));
+                Objects.toString(item.getOrDefault("originCountry",""),"").trim(),
+                number(item.get("invoiceValue")),
+                number(item.get("importTaxableValueVnd")),
+                number(item.get("importTaxRate")),
+                number(item.get("importTaxAmountVnd")),
+                number(item.get("vatTaxableValueVnd")),
+                number(item.get("vatRate")),
+                number(item.get("vatAmountVnd")),
+                number(item.get("importTaxUnitPriceVnd")),
+                Objects.toString(item.getOrDefault("importTariffCode",""),"").trim(),
+                Objects.toString(item.getOrDefault("vatTariffCode",""),"").trim()));
     }
 }
