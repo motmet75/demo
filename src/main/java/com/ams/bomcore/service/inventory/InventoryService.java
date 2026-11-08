@@ -258,6 +258,26 @@ public class InventoryService {
                                           BigDecimal unitPrice, String currency, String warehouseImportUnit,
                                           BigDecimal warehouseImportQuantity, BigDecimal bomUnitPerWarehouseUnit,
                                           BigDecimal warehouseImportUnitPrice) {
+        return addStockByIds(materialId,warehouseId,qty,batchNo,expirationDateTime,productionDateTime,
+                quantityReserved,quantityLocked,orderToDeduction,materialQuotaPercentage,
+                tenantId,companyId,reason,createdBy,notes,invoiceId,
+                unitPrice,currency,warehouseImportUnit,warehouseImportQuantity,bomUnitPerWarehouseUnit,
+                warehouseImportUnitPrice,null,null);
+    }
+
+    /** Additional audited stock source (e.g. customs declaration), without
+     * changing legacy invoice or manual receiving call sites. */
+    @Transactional(rollbackFor = Exception.class)
+    public InventoryEntity addStockByIds(UUID materialId, UUID warehouseId, BigDecimal qty, String batchNo,
+                                          Instant expirationDateTime, Instant productionDateTime,
+                                          BigDecimal quantityReserved, BigDecimal quantityLocked,
+                                          String orderToDeduction, BigDecimal materialQuotaPercentage,
+                                          UUID tenantId, UUID companyId,
+                                          String reason, String createdBy, String notes, UUID invoiceId,
+                                          BigDecimal unitPrice, String currency, String warehouseImportUnit,
+                                          BigDecimal warehouseImportQuantity, BigDecimal bomUnitPerWarehouseUnit,
+                                          BigDecimal warehouseImportUnitPrice,
+                                          String stockSourceType, UUID stockSourceId) {
         if (batchNo == null || batchNo.trim().isEmpty()) {
 			throw new InventoryException("batchNo is required");
 		}
@@ -346,8 +366,8 @@ public class InventoryService {
                 batchNo,
                 reason != null ? reason : "Manual add stock",
                 createdBy != null ? createdBy : "system",
-                invoiceId != null ? "INVOICE" : "INVENTORY",
-                invoiceId != null ? invoiceId : savedById.getId(),
+                stockSourceType != null ? stockSourceType : invoiceId != null ? "INVOICE" : "INVENTORY",
+                stockSourceId != null ? stockSourceId : invoiceId != null ? invoiceId : savedById.getId(),
                 notes,
                 tenantId, companyId);
 

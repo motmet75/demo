@@ -13,6 +13,8 @@ import FormControlLabel from '@mui/material/FormControlLabel'
 import IconButton from '@mui/material/IconButton'
 import Switch from '@mui/material/Switch'
 import TextField from '@mui/material/TextField'
+import MenuItem from '@mui/material/MenuItem'
+import Stack from '@mui/material/Stack'
 import ToggleButton from '@mui/material/ToggleButton'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import Typography from '@mui/material/Typography'
@@ -28,7 +30,9 @@ import { createInvoice, deleteInvoice, recordInvoicePayment } from '../../api/in
 import { addStock, fetchInventoryView } from '../../api/inventoryApi'
 import { fetchModelBoms } from '../../api/modelApi'
 import { receivingDefaults, lineCalc, hasLineInput } from './invoiceEntry'
-import { fetchMaterials } from '../../api/materialApi'
+import { fetchMaterials, createMaterial } from '../../api/materialApi'
+import { listReceivingDocuments, getReceivingDocument, uploadReceivingPdf, confirmPdfReceiving } from '../../api/invoicePdfReceiveApi'
+import { formatVnNumber, parseVnNumber, parseMachineNumber } from '../../utils/vietnameseNumbers'
 import { fetchWarehouses } from '../../api/warehouseApi'
 import { useAppContext } from '../../context/AppContext'
 import { fmtNum } from '../../utils/format'
@@ -64,7 +68,16 @@ const newLine = () => ({
   warehouseImportUnit: '',
   warehouseImportUnitPrice: '',
   bomUnitPerWarehouseUnit: '',
-  notes: ''
+  notes: '',
+  invoiceItemName: '',
+  pdfLineIndex: null,
+  pdfUnit: '',
+  newMaterial: false,
+  newMaterialCode: '',
+  newMaterialName: '',
+  newMaterialUnit: '',
+  newMaterialType: 'MATERIAL',
+  vatRate: '0'
 })
 
 const normalizeMaterial = item => {
@@ -282,11 +295,35 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
   const [form, setForm] = useState({ invoiceNumber: invoiceNumberSeed(), partyName: '', invoiceDate: todayLocalDate(), notes: '' })
   const [lines, setLines] = useState([newLine()])
   const [sharedLocation, setSharedLocation] = useState({ warehouse: null, batchNo: '' })
+  const [pdfDocuments, setPdfDocuments] = useState([])
+  const [pdfDocument, setPdfDocument] = useState(null)
+  const [pdfBusy, setPdfBusy] = useState(false)
+  const [materialCreateId, setMaterialCreateId] = useState(null)
+  const [pdfMismatchAcknowledged, setPdfMismatchAcknowledged] = useState(false)
+  const [pdfSerial, setPdfSerial] = useState('')
+  const [pdfSupplierTaxId, setPdfSupplierTaxId] = useState('')
+  const [pdfCurrency, setPdfCurrency] = useState('VND')
 
-  const currency = defaultCurrency === 'USD' ? 'USD' : 'VND'
+  const currency = pdfDocument ? pdfCurrency : (defaultCurrency === 'USD' ? 'USD' : 'VND')
   const materialOptions = useMemo(() => materials.filter(m => m.materialCode || m.materialName), [materials])
   const enteredLines = lines.filter(hasLineInput)
-  const invoiceTotal = enteredLines.reduce((sum, line) => sum + lineCalc(line).total, 0)
+  const computeLine = line => pdfDocument
+      ? lineCalc({...line,
+          warehouseImportQuantity:parseVnNumber(line.warehouseImportQuantity),
+          warehouseImportUnitPrice:parseVnNumber(line.warehouseImportUnitPrice),
+          bomUnitPerWarehouseUnit:parseVnNumber(line.bomUnitPerWarehouseUnit)})
+      : lineCalc(line)
+  const invoiceTotal = enteredLines.reduce((sum, line) => sum + computeLine(line).total, 0)
+  const pdfSubtotal = pdfDocument ? parseMachineNumber(pdfDocument.subtotal) : NaN
+  const pdfVat = pdfDocument ? parseMachineNumber(pdfDocument.vat) : NaN
+  const pdfTotal = pdfDocument ? parseMachineNumber(pdfDocument.total) : NaN
+  const computedVat = enteredLines.reduce((sum,line)=>
+      sum+computeLine(line).total*(Number(line.vatRate)||0)/100,0)
+  const pdfDifference = Boolean(pdfDocument) && (
+    (Number.isFinite(pdfSubtotal) && Math.abs(invoiceTotal-pdfSubtotal)>1) ||
+    (Number.isFinite(pdfVat) && Math.abs(computedVat-pdfVat)>1) ||
+    (Number.isFinite(pdfTotal) && Math.abs(invoiceTotal+computedVat-pdfTotal)>1)
+  )
 
   useEffect(() => {
     if (!open) return
@@ -297,6 +334,14 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
     setPaymentDialogOpen(false)
     setPayment({ method: 'CASH', createPaymentNote: true, notes: '' })
     setSavedInvoice(null)
+    setPdfDocument(null)
+    setPdfBusy(false)
+    setMaterialCreateId(null)
+    setPdfMismatchAcknowledged(false)
+    setPdfSerial('')
+    setPdfSupplierTaxId('')
+    setPdfCurrency('VND')
+    setPdfDocuments([])
     setForm({ invoiceNumber: invoiceNumberSeed(), partyName: '', invoiceDate: todayLocalDate(), notes: '' })
     try { remembered.current = JSON.parse(sessionStorage.getItem(sessionKey) || '{}') } catch { remembered.current = {} }
     setSharedLocation({ warehouse: null, batchNo: remembered.current.batchNo || '' })
@@ -309,9 +354,13 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
     setLoadingRefs(true)
     ;(async () => {
       try {
-        const [materialList, warehouseList, inventoryList, bomList] = await Promise.all([fetchMaterials(), fetchWarehouses(), fetchInventoryView(), fetchModelBoms()])
+        const [materialList, warehouseList, inventoryList, bomList, documents] = await Promise.all([
+          fetchMaterials(), fetchWarehouses(), fetchInventoryView(), fetchModelBoms(),
+          listReceivingDocuments().catch(() => [])
+        ])
         if (!mounted) return
         setInventory(inventoryList)
+        setPdfDocuments(Array.isArray(documents) ? documents : [])
         setBoms(bomList.filter(row => String(row.tenantId ?? row.tenant?.id) === String(tenantId) && String(row.companyId ?? row.company?.id) === String(companyId)))
         setMaterials(Array.isArray(materialList) ? materialList.map(normalizeMaterial) : [])
         const options=Array.isArray(warehouseList) ? warehouseList.map(normalizeWarehouseOption) : []
@@ -346,7 +395,8 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
     setLines(prev => prev.map(line => ({
       ...line,
       warehouse,
-      ...receivingDefaults(line.material, warehouse, inventory, boms, currency),
+      ...(pdfDocument || line.newMaterial ? {} :
+          receivingDefaults(line.material, warehouse, inventory, boms, currency)),
     })))
   }
   const applyBatchToAll = batchNo => {
@@ -356,6 +406,7 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
     setLines(prev => prev.map(line => ({ ...line, batchNo })))
   }
   const addLine = (afterId = lines.at(-1)?.id) => {
+    if (pdfDocument) return // All PDF lines must be matched exactly once.
     const index = lines.findIndex(line => line.id === afterId)
     const existing = lines[index + 1]
     const defaults = {
@@ -373,16 +424,100 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
   }
   const selectMaterial = (line, material) => {
     const warehouse = sharedLocation.warehouse || line.warehouse || warehouses.find(w=>w.id===remembered.current.warehouseId) || (warehouses.length === 1 ? warehouses[0] : null)
-    updateLine(line.id, { material, warehouse, materialInput: material ? `${material.materialCode} - ${material.materialName}` : '', batchNo: sharedLocation.batchNo,
-      ...receivingDefaults(material, warehouse, inventory, boms, currency) })
+    const defaults=receivingDefaults(material, warehouse, inventory, boms, currency)
+    const pdf=Boolean(pdfDocument)
+    const invoiceUnit=line.pdfUnit||line.warehouseImportUnit
+    const choice=defaults.options.find(option=>option.unit===invoiceUnit)
+    updateLine(line.id, {
+      material, warehouse, newMaterial:false,
+      materialInput: material ? `${material.materialCode} - ${material.materialName}` : '',
+      batchNo: line.batchNo||sharedLocation.batchNo,
+      ...(pdf ? {
+        warehouseImportUnit:invoiceUnit || defaults.warehouseImportUnit || '',
+        bomUnitPerWarehouseUnit: choice?.ratio ||
+          (material?.unit===invoiceUnit ? 1 : ''),
+        warehouseImportQuantity:line.warehouseImportQuantity,
+        warehouseImportUnitPrice:line.warehouseImportUnitPrice,
+      } : defaults)
+    })
+  }
+  const useNewMaterial = line => {
+    clearValidation()
+    const unit=line.pdfUnit||line.warehouseImportUnit||'cái'
+    updateLine(line.id,{
+      newMaterial:true,material:null,materialInput:'',
+      newMaterialCode:line.newMaterialCode||'',
+      newMaterialName:line.newMaterialName||line.invoiceItemName||'',
+      newMaterialUnit:line.newMaterialUnit||unit,
+      newMaterialType:line.newMaterialType||'MATERIAL',
+      warehouseImportUnit:line.warehouseImportUnit||unit,
+      bomUnitPerWarehouseUnit:line.bomUnitPerWarehouseUnit||'1',
+    })
+  }
+  const applyPdfDocument = doc => {
+    if(!doc)return
+    if(!doc.items?.length) {
+      setError('Invoice Desk chưa đọc được dòng hàng. Vui lòng mở Invoice Desk để sửa PDF.')
+      return
+    }
+    const nextRows=doc.items.map((item,index)=>{
+      const normalizedUnit=String(item.unit||'').trim()||'cái'
+      const unitPrice=parseMachineNumber(item.unitPrice)
+      const qty=parseMachineNumber(item.quantity)
+      return {
+        ...newLine(),pdfLineIndex:index,
+        invoiceItemName:item.description||'',pdfUnit:normalizedUnit,
+        warehouse:sharedLocation.warehouse || (warehouses.length===1?warehouses[0]:null),
+        batchNo:sharedLocation.batchNo||'',
+        warehouseImportQuantity:formatVnNumber(qty,6),
+        warehouseImportUnit:normalizedUnit,
+        bomUnitPerWarehouseUnit:'1',
+        warehouseImportUnitPrice:formatVnNumber(unitPrice,4),
+        vatRate:(String(doc.vatRate||'').match(/\d+(?:[.,]\d+)?/)||[])[0]?.replace(',','.')||'0'
+      }
+    })
+    setPdfDocument(doc)
+    setPdfSerial(doc.serial||'')
+    setPdfSupplierTaxId(doc.sellerTaxId||'')
+    setPdfCurrency(doc.currency||'VND')
+    setPdfMismatchAcknowledged(false)
+    setForm(prev=>({
+      ...prev,invoiceNumber:doc.number||'',partyName:doc.seller||'',
+      invoiceDate:doc.date||'',notes:prev.notes
+    }))
+    setLines(nextRows)
+    setError('')
+  }
+  const loadPdfDocument = async id => {
+    if(!id)return
+    setPdfBusy(true);setError('')
+    try {applyPdfDocument(await getReceivingDocument(id))}
+    catch(error){setError(error.message||'Không thể tải hóa đơn OCR.')}
+    finally{setPdfBusy(false)}
+  }
+  const handlePdfUpload = async event => {
+    const file=event.target.files?.[0]
+    event.target.value=''
+    if(!file)return
+    setPdfBusy(true);setError('')
+    try{
+      const document=await uploadReceivingPdf(file)
+      setPdfDocuments(prev=>[document,...prev.filter(x=>x.id!==document.id)])
+      applyPdfDocument(document)
+    }catch(error){setError(error.message||'Không đọc được PDF.')}
+    finally{setPdfBusy(false)}
   }
   const rowKeyDown = (event, line) => {
     if (event.key !== 'Enter' || event.nativeEvent.isComposing || event.target.tagName !== 'INPUT' || event.target.getAttribute('aria-expanded') === 'true') return
+    if (pdfDocument) return
     event.preventDefault()
     addLine(line.id)
   }
   const cellProps = (line, field, label) => ({ size: 'small', fullWidth: true, inputRef: node => { cells.current[`${line.id}:${field}`] = node }, inputProps: { 'aria-label': `${label} dòng ${lines.indexOf(line)+1}` } })
-  const removeLine = id => setLines(prev => prev.length <= 1 ? prev : prev.filter(line => line.id !== id))
+  const removeLine = id => {
+    if(pdfDocument)return
+    setLines(prev => prev.length <= 1 ? prev : prev.filter(line => line.id !== id))
+  }
 
   const openScannerForLine = id => {
     setScanLineId(id)
@@ -403,17 +538,30 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
   }
 
   const validateLine = (line, index) => {
-    const { warehouseQty, warehouseUnitPrice, ratio } = lineCalc(line)
+    const { warehouseQty, warehouseUnitPrice, ratio, bomQty } = computeLine(line)
     const prefix = `Dòng ${index + 1}`
     const issue = (field, message) => ({ lineId: line.id, field, message: `${prefix}: ${message}` })
-    if (!line.material) return issue('material', 'bắt buộc chọn vật tư bằng mã, tên hoặc QR.')
-    if (!line.material.unit) return issue('material', 'vật tư chưa cấu hình đơn vị BOM.')
+    if (line.newMaterial && pdfDocument) {
+      if (!line.newMaterialCode.trim() || line.newMaterialCode.length>50) return issue('material', 'nhập mã vật tư mới (≤ 50 ký tự).')
+      if (!line.newMaterialName.trim()) return issue('material', 'nhập tên nguyên vật liệu gốc.')
+      if (!line.newMaterialUnit.trim()) return issue('unit', 'nhập đơn vị vật tư mới.')
+    } else if (!line.material) return issue('material',
+      line.newMaterial ? 'Bấm Tạo vật tư tại dòng này trước khi lưu hóa đơn nhập tay.' :
+        'bắt buộc chọn vật tư gốc hoặc Tạo mới tại dòng.')
+    if (line.material && !line.material.unit) return issue('material', 'vật tư chưa có đơn vị BOM.')
     if (!line.warehouse) return issue('warehouse', 'bắt buộc chọn kho.')
     if (!line.batchNo.trim()) return issue('batch', 'bắt buộc nhập số lô.')
-    if (!line.warehouseImportUnit.trim()) return issue('unit', 'bắt buộc chọn đơn vị kho.')
-    if (warehouseQty === null || warehouseQty <= 0) return issue('quantity', 'số lượng nhập phải lớn hơn 0.')
-    if (warehouseUnitPrice === null || warehouseUnitPrice < 0) return issue('price', 'đơn giá không được âm.')
-    if (ratio === null || ratio <= 0) return issue('unit', 'hệ số quy đổi phải lớn hơn 0.')
+    if (!line.warehouseImportUnit.trim()) return issue('unit', 'bắt buộc nhập đơn vị trên hóa đơn.')
+    if (warehouseQty === null || warehouseQty <= 0 || !Number.isFinite(warehouseQty)) return issue('quantity', 'số lượng nhập không hợp lệ.')
+    if (warehouseUnitPrice === null || warehouseUnitPrice < 0 || !Number.isFinite(warehouseUnitPrice)) return issue('price', 'đơn giá không hợp lệ.')
+    if (ratio === null || ratio <= 0 || !Number.isFinite(ratio) || !Number.isFinite(bomQty)) return issue('unit', 'hệ số quy đổi không hợp lệ.')
+    if (pdfDocument) {
+      const quantityFromPdf=parseMachineNumber(pdfDocument.items[line.pdfLineIndex]?.quantity)
+      if (!Number.isFinite(quantityFromPdf) || Math.abs(quantityFromPdf-warehouseQty)>0.000001)
+        return issue('quantity', 'SL phải trùng PDF; hãy sửa số lượng trong Invoice Desk nếu OCR sai.')
+      if (!Number.isFinite(Number(line.vatRate)) || Number(line.vatRate)<0 || Number(line.vatRate)>100)
+        return issue('price', 'VAT phải nằm trong khoảng 0–100%.')
+    }
     return null
   }
 
@@ -421,6 +569,12 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
     if (!tenantId || !companyId) return { message: 'Vui lòng chọn đơn vị và công ty trước.' }
     if (!form.invoiceNumber.trim()) return { field: 'invoiceNumber', message: 'Bắt buộc nhập số hóa đơn.' }
     if (!enteredLines.length) return { message: 'Nhập ít nhất một dòng hàng.' }
+    if (pdfDocument && (
+      !pdfSerial.trim() || !form.partyName.trim() || !form.invoiceDate ||
+      enteredLines.length!==pdfDocument.items.length
+    )) return { message:'PDF chưa đủ thông tin ký hiệu, ngày, nhà cung cấp hoặc dòng hàng.' }
+    if (pdfDifference && !pdfMismatchAcknowledged)
+      return { message:'Tiền hàng/VAT khác PDF. Vui lòng đối chiếu và xác nhận chênh lệch.' }
     for (let i = 0; i < enteredLines.length; i++) {
       const issue = validateLine(enteredLines[i], i)
       if (issue) return issue
@@ -451,6 +605,27 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
     setPaymentDialogOpen(true)
   }
 
+  const createMaterialInline = async line => {
+    if(pdfDocument)return // PDF materials are created atomically on confirmation.
+    const code=line.newMaterialCode.trim()
+    const name=line.newMaterialName.trim()
+    const unit=line.newMaterialUnit.trim()
+    if(!code||!name||!unit){setError('Cần nhập mã, tên và đơn vị cho nguyên vật liệu mới.');return}
+    if(materialOptions.some(m=>m.materialCode===code)){
+      setError('Mã vật tư đã có. Hãy chọn mã có sẵn.');return
+    }
+    setMaterialCreateId(line.id);setError('')
+    try{
+      const saved=normalizeMaterial(await createMaterial({
+        materialCode:code,materialName:name,unit,materialType:line.newMaterialType||'MATERIAL',
+        isActive:true
+      }))
+      setMaterials(prev=>[...prev,saved])
+      selectMaterial(line,saved)
+    }catch(e){setError(e?.message||'Không tạo được vật tư.')}
+    finally{setMaterialCreateId(null)}
+  }
+
   const handleSave = async () => {
     if (savingRef.current) return
     const validation = validate()
@@ -461,7 +636,35 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
     setError('')
     let createdInvoice = savedInvoice
     let inventoryCreatedCount = 0
+    let pdfCommitted = false
     try {
+      if (!createdInvoice && pdfDocument) {
+        const receipt=await confirmPdfReceiving({
+          documentId:pdfDocument.id,invoiceDate:form.invoiceDate,
+          invoiceSerial:pdfSerial,invoiceNumber:form.invoiceNumber,
+          supplierName:form.partyName,supplierTaxId:pdfSupplierTaxId,
+          currency,acknowledgeMismatch:pdfMismatchAcknowledged,
+          lines:enteredLines.map(line=>{
+            const calculation=computeLine(line)
+            return {
+              invoiceLineIndex:line.pdfLineIndex,
+              materialId:line.newMaterial?null:line.material?.id||null,
+              newMaterialCode:line.newMaterial?line.newMaterialCode:null,
+              newMaterialName:line.newMaterial?line.newMaterialName:null,
+              newMaterialUnit:line.newMaterial?line.newMaterialUnit:null,
+              newMaterialType:line.newMaterial?line.newMaterialType:null,
+              warehouseId:line.warehouse.id,batchNo:line.batchNo,
+              quantity:calculation.warehouseQty,invoiceUnit:line.warehouseImportUnit,
+              bomUnitPerInvoiceUnit:calculation.ratio,
+              unitPrice:calculation.warehouseUnitPrice,
+              vatRate:Number(line.vatRate),
+            }
+          })
+        })
+        createdInvoice={id:receipt.invoiceId}
+        pdfCommitted=true
+        setSavedInvoice(createdInvoice)
+      }
       if (!createdInvoice) {
         createdInvoice = await createInvoice({
           invoiceType: 'PURCHASE',
@@ -476,7 +679,7 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
         }, { tenantId, companyId })
 
         for (const [index, line] of enteredLines.entries()) {
-          const { warehouseQty, warehouseUnitPrice, ratio, bomQty, bomUnitPrice } = lineCalc(line)
+          const { warehouseQty, warehouseUnitPrice, ratio, bomQty, bomUnitPrice } = computeLine(line)
           await addStock({
             materialId: line.material.id || undefined,
             materialCode: line.material.materialCode,
@@ -511,8 +714,8 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
       setPaymentDialogOpen(false)
       onClose?.()
     } catch (e) {
-      const receiptReady = Boolean(savedInvoice) || inventoryCreatedCount === enteredLines.length
-      if (createdInvoice?.id && inventoryCreatedCount === 0 && !savedInvoice) {
+      const receiptReady = Boolean(savedInvoice) || pdfCommitted || (inventoryCreatedCount===enteredLines.length && !pdfDocument)
+      if (createdInvoice?.id && inventoryCreatedCount === 0 && !savedInvoice && !pdfCommitted) {
         try { await deleteInvoice(createdInvoice.id, { tenantId, companyId }) } catch { /* best-effort rollback */ }
       }
       if (receiptReady) setSavedInvoice(createdInvoice)
@@ -537,10 +740,50 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
           </DialogTitle>
           <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '12px !important' }}>
             {error && <Alert severity="error">{error}</Alert>}
+            <Box sx={{p:1.5,border:'1px solid #bae6fd',borderRadius:1.5,bgcolor:'#f0f9ff'}}>
+              <Stack direction={{xs:'column',sm:'row'}} gap={1} alignItems="center" flexWrap="wrap">
+                <Typography fontWeight={800}>Nhập kho từ hóa đơn PDF (OCR)</Typography>
+                <Button variant="contained" size="small" component="label"
+                  disabled={saving||pdfBusy||Boolean(savedInvoice)}>
+                  {pdfBusy?'Đang đọc PDF...':'Tải PDF vào hóa đơn này'}
+                  <input hidden type="file" accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp"
+                    onChange={e=>void handlePdfUpload(e)} />
+                </Button>
+                <TextField size="small" select label="Hoặc chọn PDF đã đọc bằng Invoice Desk"
+                  value={pdfDocument?.id||''} sx={{minWidth:250,flex:1}}
+                  disabled={saving||pdfBusy||Boolean(savedInvoice)}
+                  onChange={e=>void loadPdfDocument(e.target.value)}>
+                  <MenuItem value="">Chọn hóa đơn</MenuItem>
+                  {pdfDocuments.map(doc=><MenuItem key={doc.id} value={doc.id}>
+                    {[doc.serial,doc.number,doc.seller||doc.source].filter(Boolean).join(' · ')}
+                  </MenuItem>)}
+                </TextField>
+                {pdfBusy&&<CircularProgress size={20}/>}
+                {pdfDocument&&<Button size="small" variant="outlined" disabled={saving||Boolean(savedInvoice)}
+                  onClick={()=>{setPdfDocument(null);setPdfMismatchAcknowledged(false);setLines([newLine()]);setForm({invoiceNumber:invoiceNumberSeed(),partyName:'',invoiceDate:todayLocalDate(),notes:''})}}>
+                  Nhập tay thay vì PDF
+                </Button>}
+              </Stack>
+              {pdfDocument&&<Alert severity="info" sx={{mt:1}}>
+                Giữ tên hàng theo PDF, chọn <strong>vật tư gốc</strong> đã có hoặc <strong>Tạo mới ngay tại dòng</strong>.
+                Chỉ xác nhận mới cộng tồn kho.
+                {pdfDocument.warnings?.length>0&&<Typography variant="caption" display="block">
+                  Cần kiểm tra OCR: {pdfDocument.warnings.slice(0,4).join(' · ')}
+                </Typography>}
+              </Alert>}
+            </Box>
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 130px' }, gap: 1.5 }}>
               <TextField label="Số hóa đơn" size="small" value={form.invoiceNumber} onChange={setFormField('invoiceNumber')} required error={validationIssue?.field==='invoiceNumber'} helperText={validationIssue?.field==='invoiceNumber'?'Bắt buộc nhập số hóa đơn.':''} />
               <TextField label="Nhà cung cấp" size="small" value={form.partyName} onChange={setFormField('partyName')} />
               <TextField label="Ngày hóa đơn" type="date" size="small" value={form.invoiceDate} onChange={setFormField('invoiceDate')} InputLabelProps={{ shrink: true }} />
+            </Box>
+            {pdfDocument&&<Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',sm:'1fr 1fr 1fr'},gap:1}}>
+              <TextField label="Ký hiệu hóa đơn" size="small" value={pdfSerial} onChange={e=>setPdfSerial(e.target.value)}/>
+              <TextField label="MST nhà cung cấp" size="small" value={pdfSupplierTaxId} onChange={e=>setPdfSupplierTaxId(e.target.value)}/>
+              <TextField select label="Tiền tệ PDF" size="small" value={pdfCurrency}
+                onChange={e=>setPdfCurrency(e.target.value)}>
+                {['VND','USD','EUR','JPY','CNY'].map(c=><MenuItem value={c} key={c}>{c}</MenuItem>)}
+              </TextField>
             </Box>
 
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'minmax(260px, 1fr) minmax(220px, 1fr)' }, gap: 1.5, p: 1.5, border: '1px solid #bfdbfe', borderRadius: 1, bgcolor: '#eff6ff' }}>
@@ -550,23 +793,50 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
               <TextField size="small" label="Số lô chung · áp dụng tất cả dòng" value={sharedLocation.batchNo} onChange={e => applyBatchToAll(e.target.value)} />
             </Box>
 
-            <Alert severity="info">Kho và số lô phía trên là mặc định chung. Đổi tại ô chung hoặc tại bất kỳ dòng nào sẽ áp dụng ngay cho tất cả dòng hiện tại và dòng mới. Tab / Shift+Tab chuyển ô · Tab chọn vật tư đầu tiên · Enter thêm dòng.</Alert>
-            <Box component="fieldset" disabled={saving || loadingRefs} sx={{border:0,p:0,m:0,minWidth:0}}>
+            <Alert severity="info">Kho và số lô phía trên là mặc định chung.
+              {pdfDocument?' Đối chiếu tên PDF với tên vật tư gốc; giá sử dụng định dạng Việt Nam (1.000.000,50).':' Tab / Shift+Tab chuyển ô · Enter thêm dòng.'}
+            </Alert>
+            <Box component="fieldset" disabled={saving || loadingRefs || pdfBusy || Boolean(savedInvoice)} sx={{border:0,p:0,m:0,minWidth:0}}>
               <TableContainer sx={{maxHeight:'55vh',border:'1px solid #cbd5e1',borderRadius:1}}>
-                <Table stickyHeader size="small" sx={{minWidth:1600,'& th':{fontWeight:800,bgcolor:'#eff6ff',whiteSpace:'nowrap'},'& td':{p:0.5,verticalAlign:'top'},'& .MuiOutlinedInput-root':{borderRadius:0.5}}}>
-                  <TableHead><TableRow>{['#','QR / Xóa','Mã / tên vật tư','SL nhập','Đơn vị kho','Hệ số → BOM','Đơn vị BOM','SL quy đổi','Đơn giá nhập','Thành tiền','Kho','Số lô','Ghi chú'].map((label,index)=><TableCell key={index}>{label}</TableCell>)}</TableRow></TableHead>
+                <Table stickyHeader size="small" sx={{minWidth:pdfDocument?2050:1600,'& th':{fontWeight:800,bgcolor:'#eff6ff',whiteSpace:'nowrap'},'& td':{p:0.5,verticalAlign:'top'},'& .MuiOutlinedInput-root':{borderRadius:0.5}}}>
+                  <TableHead><TableRow>{['#','QR / Xóa',...(pdfDocument?['Tên hàng theo PDF']:[]),'Mã / Tên vật tư gốc','SL nhập','Đơn vị kho','Hệ số → BOM','Đơn vị BOM','SL quy đổi','Đơn giá nhập','Thành tiền','Kho','Số lô','Ghi chú'].map((label,index)=><TableCell key={index}>{label}</TableCell>)}</TableRow></TableHead>
                   <TableBody>{lines.map((line,index)=>{
-                    const calc=lineCalc(line)
+                    const calc=computeLine(line)
                     const defaults=receivingDefaults(line.material,line.warehouse,inventory,boms,currency)
                     const materialQuery=normalizeSearch(line.materialInput)
                     const matches=materialOptions.filter(m=>normalizeSearch(`${m.materialCode} ${m.materialName}`).includes(materialQuery)).slice(0,80)
                     const conversionKey=defaults.options.find(o=>o.unit===line.warehouseImportUnit && o.ratio===Number(line.bomUnitPerWarehouseUnit))?.key || ''
                     return <TableRow key={line.id} onKeyDown={e=>rowKeyDown(e,line)} sx={{'&:focus-within':{bgcolor:'#f0f9ff'}}}>
                       <TableCell>{index+1}</TableCell>
-                      <TableCell sx={{whiteSpace:'nowrap'}}><IconButton tabIndex={-1} aria-label={`Quét QR dòng ${index+1}`} size="small" onClick={()=>openScannerForLine(line.id)}><QrCode2Icon fontSize="small"/></IconButton><IconButton tabIndex={-1} aria-label={`Xóa dòng ${index+1}`} size="small" color="error" disabled={saving || lines.length<=1} onClick={()=>removeLine(line.id)}><DeleteIcon fontSize="small"/></IconButton></TableCell>
-                      <TableCell sx={{minWidth:280}}>
+                      <TableCell sx={{whiteSpace:'nowrap'}}><IconButton tabIndex={-1} aria-label={`Quét QR dòng ${index+1}`} size="small" onClick={()=>openScannerForLine(line.id)}><QrCode2Icon fontSize="small"/></IconButton><IconButton tabIndex={-1} aria-label={`Xóa dòng ${index+1}`} size="small" color="error" disabled={saving || Boolean(pdfDocument) || lines.length<=1} onClick={()=>removeLine(line.id)}><DeleteIcon fontSize="small"/></IconButton></TableCell>
+                      {pdfDocument&&<TableCell sx={{minWidth:265}}>
+                        <Typography variant="body2" fontWeight={800} sx={{whiteSpace:'normal'}}>{line.invoiceItemName||'Chưa có tên OCR'}</Typography>
+                        <Typography variant="caption">SL PDF: {formatVnNumber(parseMachineNumber(pdfDocument.items[line.pdfLineIndex]?.quantity),6)} {line.pdfUnit}</Typography>
+                      </TableCell>}
+                      <TableCell sx={{minWidth:320}}>
+                        {line.newMaterial?<Box sx={{display:'flex',flexDirection:'column',gap:0.7}}>
+                          <Chip color="primary" size="small" label="Tạo nguyên vật liệu mới tại đây" sx={{alignSelf:'flex-start'}}/>
+                          <TextField size="small" label="Mã vật tư mới" value={line.newMaterialCode} onChange={e=>updateLine(line.id,{newMaterialCode:e.target.value})}/>
+                          <TextField size="small" label="Tên nguyên vật liệu gốc" value={line.newMaterialName} onChange={e=>updateLine(line.id,{newMaterialName:e.target.value})}/>
+                          <Stack direction="row" spacing={0.5}>
+                            <TextField size="small" label="Đơn vị vật tư" value={line.newMaterialUnit} sx={{flex:1}}
+                              onChange={e=>updateLine(line.id,{newMaterialUnit:e.target.value})}/>
+                            <TextField select size="small" label="Loại" value={line.newMaterialType} sx={{minWidth:110}}
+                              onChange={e=>updateLine(line.id,{newMaterialType:e.target.value})}>
+                              {['MATERIAL','MACHINE','RAW','SEMI','FINISHED','OTHER'].map(t=><MenuItem key={t} value={t}>{t}</MenuItem>)}
+                            </TextField>
+                          </Stack>
+                          {pdfDocument?<Typography variant="caption">Vật tư mới tạo cùng phiếu nhập kho khi xác nhận.</Typography>:
+                            <Button size="small" variant="contained" disabled={materialCreateId===line.id}
+                              onClick={()=>void createMaterialInline(line)}>{materialCreateId===line.id?'Đang tạo...':'Tạo vật tư'}</Button>}
+                          <Button size="small" onClick={()=>updateLine(line.id,{newMaterial:false})}>Chọn mã có sẵn</Button>
+                        </Box>:<>
+
                         <Autocomplete autoHighlight options={materialOptions} loading={loadingRefs} value={line.material} inputValue={line.materialInput}
-                                      onInputChange={(_,value,reason)=>{if(reason==='input') updateLine(line.id,{materialInput:value,material:null,warehouseImportUnit:'',bomUnitPerWarehouseUnit:'',warehouseImportUnitPrice:''})}}
+                                      onInputChange={(_,value,reason)=>{if(reason==='input') updateLine(line.id,{
+  materialInput:value,material:null,
+  ...(pdfDocument?{}:{warehouseImportUnit:'',bomUnitPerWarehouseUnit:'',warehouseImportUnitPrice:''})
+})}}
                                       onChange={(_,option)=>selectMaterial(line,option)}
                                       filterOptions={()=>line.material ? materialOptions.slice(0,80) : matches}
                                       getOptionLabel={option=>`${option.materialCode} - ${option.materialName}`}
@@ -576,16 +846,32 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
                                       renderInput={params=><TextField {...params} size="small" placeholder="Gõ mã / tên, không cần dấu" error={validationIssue?.lineId===line.id&&validationIssue?.field==='material'} helperText={validationIssue?.lineId===line.id&&validationIssue?.field==='material'?'Bắt buộc':''} inputRef={node=>{cells.current[`${line.id}:material`]=node}}
                                                                       inputProps={{...params.inputProps,'aria-label':`Vật tư dòng ${index+1}`}}
                                                                       onKeyDown={event=>{if(event.key==='Tab' && !event.shiftKey && !line.material && matches[0]) {event.preventDefault();event.defaultMuiPrevented=true;selectMaterial(line,matches[0]);cells.current[`${line.id}:quantity`]?.focus()}}}/>}/>
+                      
+                        <Button size="small" variant="outlined" onClick={()=>useNewMaterial(line)}>+ Tạo mới tại dòng</Button>
+                        {line.material&&<Typography variant="caption" display="block">Tên gốc: {line.material.materialName} · Mã: {line.material.materialCode}</Typography>}
+                        </>}
                       </TableCell>
-                      <TableCell sx={{minWidth:110}}><TextField {...cellProps(line,'quantity','SL nhập')} type="text" value={formatQuantityInput(line.warehouseImportQuantity)} error={validationIssue?.lineId===line.id&&validationIssue?.field==='quantity'} helperText={validationIssue?.lineId===line.id&&validationIssue?.field==='quantity'?'Bắt buộc':''} onChange={e=>updateLine(line.id,{warehouseImportQuantity:parseQuantityInput(e.target.value)})} inputProps={{...cellProps(line,'quantity','SL nhập').inputProps,inputMode:'decimal',min:0,step:'any'}}/></TableCell>
-                      <TableCell sx={{minWidth:170}}><TextField {...cellProps(line,'unit','Đơn vị kho')} select value={conversionKey} error={validationIssue?.lineId===line.id&&validationIssue?.field==='unit'} helperText={validationIssue?.lineId===line.id&&validationIssue?.field==='unit'?'Bắt buộc':''} SelectProps={{native:true}} onChange={e=>{const option=defaults.options.find(o=>o.key===e.target.value);if(option)updateLine(line.id,{warehouseImportUnit:option.unit,bomUnitPerWarehouseUnit:option.ratio,warehouseImportUnitPrice:defaults.priceFor(option.unit,option.ratio)})}}>
-                        <option value="" disabled>{defaults.options.length?'Chọn quy đổi':'Chọn vật tư'}</option>{defaults.options.map(option=><option key={option.key} value={option.key}>{option.unit} · ×{option.ratio} ({option.source})</option>)}
-                      </TextField></TableCell>
+                      <TableCell sx={{minWidth:110}}><TextField {...cellProps(line,'quantity','SL nhập')} type="text" value={pdfDocument?line.warehouseImportQuantity:formatQuantityInput(line.warehouseImportQuantity)} error={validationIssue?.lineId===line.id&&validationIssue?.field==='quantity'} helperText={validationIssue?.lineId===line.id&&validationIssue?.field==='quantity'?'Bắt buộc':''} onChange={e=>updateLine(line.id,{warehouseImportQuantity:pdfDocument?e.target.value:parseQuantityInput(e.target.value)})} inputProps={{...cellProps(line,'quantity','SL nhập').inputProps,inputMode:'decimal',min:0,step:'any'}}/></TableCell>
+                      <TableCell sx={{minWidth:170}}>
+                        {pdfDocument?<Box sx={{display:'flex',flexDirection:'column',gap:0.5}}>
+                          <TextField size="small" label="Đơn vị theo HĐ" value={line.warehouseImportUnit}
+                            onChange={e=>updateLine(line.id,{warehouseImportUnit:e.target.value})}/>
+                          <TextField size="small" label="Đơn vị gốc / 1 ĐV HĐ" value={line.bomUnitPerWarehouseUnit}
+                            onChange={e=>updateLine(line.id,{bomUnitPerWarehouseUnit:e.target.value})}/>
+                        </Box>:<TextField {...cellProps(line,'unit','Đơn vị kho')} select value={conversionKey}
+                          error={validationIssue?.lineId===line.id&&validationIssue?.field==='unit'} SelectProps={{native:true}}
+                          onChange={e=>{const option=defaults.options.find(o=>o.key===e.target.value);if(option)updateLine(line.id,{
+                            warehouseImportUnit:option.unit,bomUnitPerWarehouseUnit:option.ratio,warehouseImportUnitPrice:defaults.priceFor(option.unit,option.ratio)
+                          })}}>
+                          <option value="" disabled>{defaults.options.length?'Chọn quy đổi':'Chọn vật tư'}</option>
+                          {defaults.options.map(option=><option key={option.key} value={option.key}>{option.unit} · ×{option.ratio} ({option.source})</option>)}
+                        </TextField>}
+                      </TableCell>
                       <TableCell sx={{minWidth:95}}><Typography sx={{pt:1}}>{line.bomUnitPerWarehouseUnit || '—'}</Typography></TableCell>
-                      <TableCell><Typography sx={{pt:1}}>{line.material?.unit || '—'}</Typography></TableCell>
-                      <TableCell><Typography sx={{pt:1}}>{calc.bomQty==null?'—':fmtNum(calc.bomQty,9)}</Typography></TableCell>
-                      <TableCell sx={{minWidth:130}}><TextField {...cellProps(line,'price','Đơn giá nhập')} type="text" value={formatQuantityInput(line.warehouseImportUnitPrice, 2)} error={validationIssue?.lineId===line.id&&validationIssue?.field==='price'} helperText={validationIssue?.lineId===line.id&&validationIssue?.field==='price'?'Không hợp lệ':''} onChange={e=>updateLine(line.id,{warehouseImportUnitPrice:parseQuantityInput(e.target.value,{maximumFractionDigits:2})})} inputProps={{...cellProps(line,'price','Đơn giá nhập').inputProps,inputMode:'decimal',min:0,step:'any'}}/></TableCell>
-                      <TableCell><Typography sx={{pt:1,whiteSpace:'nowrap'}}>{fmtNum(calc.total,2)}</Typography></TableCell>
+                      <TableCell><Typography sx={{pt:1}}>{line.material?.unit || (line.newMaterial?line.newMaterialUnit:'—')}</Typography></TableCell>
+                      <TableCell><Typography sx={{pt:1}}>{calc.bomQty==null?'—':formatVnNumber(calc.bomQty,6)}</Typography></TableCell>
+                      <TableCell sx={{minWidth:130}}><TextField {...cellProps(line,'price','Đơn giá nhập')} type="text" value={pdfDocument?line.warehouseImportUnitPrice:formatQuantityInput(line.warehouseImportUnitPrice, 2)} error={validationIssue?.lineId===line.id&&validationIssue?.field==='price'} helperText={validationIssue?.lineId===line.id&&validationIssue?.field==='price'?'Không hợp lệ':''} onChange={e=>updateLine(line.id,{warehouseImportUnitPrice:pdfDocument?e.target.value:parseQuantityInput(e.target.value,{maximumFractionDigits:2})})} inputProps={{...cellProps(line,'price','Đơn giá nhập').inputProps,inputMode:'decimal',min:0,step:'any'}}/></TableCell>
+                      <TableCell><Typography sx={{pt:1,whiteSpace:'nowrap'}}>{pdfDocument?formatVnNumber(calc.total,2):fmtNum(calc.total,2)}</Typography></TableCell>
                       <TableCell sx={{minWidth:190}}><TextField {...cellProps(line,'warehouse','Kho')} select SelectProps={{native:true}} value={line.warehouse?.id || ''} error={validationIssue?.lineId===line.id&&validationIssue?.field==='warehouse'} helperText={validationIssue?.lineId===line.id&&validationIssue?.field==='warehouse'?'Bắt buộc':''} onChange={e=>applyWarehouseToAll(warehouses.find(w=>w.id===e.target.value)||null)}><option value="">Chọn kho</option>{warehouses.map(w=><option key={w.id} value={w.id}>{w.code} · {w.name}</option>)}</TextField></TableCell>
                       <TableCell sx={{minWidth:170}}><TextField {...cellProps(line,'batch','Số lô')} required value={line.batchNo} error={validationIssue?.lineId===line.id&&validationIssue?.field==='batch'} helperText={validationIssue?.lineId===line.id&&validationIssue?.field==='batch'?'Bắt buộc nhập số lô':''} onChange={e=>applyBatchToAll(e.target.value)}/></TableCell>
                       <TableCell sx={{minWidth:170}}><TextField {...cellProps(line,'notes','Ghi chú')} value={line.notes} onChange={e=>updateLine(line.id,{notes:e.target.value})}/></TableCell>
@@ -595,16 +881,27 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
               </TableContainer>
             </Box>
 
-            <Button variant="outlined" startIcon={<AddIcon />} onClick={()=>addLine()} disabled={saving} sx={{ alignSelf: 'flex-start', fontWeight: 800 }}>Thêm dòng · Enter</Button>
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <Chip label={`Tổng hóa đơn ${fmtNum(invoiceTotal, 2)} ${currency}`} color="primary" sx={{ fontWeight: 900 }} />
+            <Button variant="outlined" startIcon={<AddIcon />} onClick={()=>addLine()} disabled={saving || Boolean(pdfDocument)} sx={{ alignSelf: 'flex-start', fontWeight: 800 }}>Thêm dòng · Enter</Button>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', flexWrap:'wrap',gap:1 }}>
+              <Chip label={`Tiền hàng ${formatVnNumber(invoiceTotal,2)} ${currency}`} color="primary" sx={{fontWeight:800}}/>
+              {pdfDocument&&<>
+                <Chip label={`VAT ${formatVnNumber(computedVat,2)} ${currency}`}/>
+                <Chip label={`Tổng ${formatVnNumber(invoiceTotal+computedVat,2)} ${currency}`} color="success"/>
+                <Chip label={`PDF: ${formatVnNumber(pdfTotal,2)} ${currency}`} variant="outlined"/>
+              </>}
             </Box>
+            {pdfDifference&&<Alert severity="warning">
+              Tổng tiền hoặc VAT tính lại khác PDF. Kiểm tra đơn giá, VAT, đơn vị quy đổi và số lượng.
+              <FormControlLabel control={<Switch checked={pdfMismatchAcknowledged}
+                onChange={e=>setPdfMismatchAcknowledged(e.target.checked)}/>}
+                label="Đã kiểm tra và đồng ý chênh lệch với PDF"/>
+            </Alert>}
             <TextField label="Ghi chú hóa đơn" size="small" value={form.notes} onChange={setFormField('notes')} multiline minRows={2} />
           </DialogContent>
           <DialogActions>
             <Button onClick={onClose} disabled={saving}>Hủy</Button>
             <Button variant="contained" onClick={requestSave} disabled={saving || loadingRefs}>
-              {saving ? 'Đang lưu...' : savedInvoice ? 'Tiếp tục ghi thanh toán' : 'Lưu hóa đơn & nhập kho'}
+              {saving ? 'Đang lưu...' : savedInvoice ? 'Tiếp tục ghi thanh toán' : pdfDocument ? 'Đối chiếu xong · Lưu PDF & nhập kho' : 'Lưu hóa đơn & nhập kho'}
             </Button>
           </DialogActions>
         </Dialog>

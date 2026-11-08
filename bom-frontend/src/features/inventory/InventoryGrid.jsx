@@ -15,6 +15,7 @@ import Box from '@mui/material/Box'
 import { fetchInventoryView, addStock, updateInventory, reserveInventory, releaseInventory, deleteInventory } from '../../api/inventoryApi'
 import InventoryEditModal from './InventoryEditModal'
 import InventoryInvoiceReceiveDialog from './InventoryInvoiceReceiveDialog'
+import CustomsDeclarationStockDialog from './CustomsDeclarationStockDialog'
 import InventoryImport from './InventoryImport'
 import InventoryPatchCsv from './InventoryPatchCsv'
 import * as XLSX from 'xlsx'
@@ -68,6 +69,8 @@ export default function InventoryGrid({ onInvoiceStockOut }) {
   const [importOpen, setImportOpen] = useState(false)
   const [patchOpen, setPatchOpen]   = useState(false)
   const [invoiceReceiveOpen, setInvoiceReceiveOpen] = useState(false)
+  const [customsOpen,setCustomsOpen] = useState(false)
+  const [customsDirection,setCustomsDirection] = useState('IN')
 
   const [defaultCurrency, setDefaultCurrency] = useState(() => {
     try {
@@ -613,9 +616,19 @@ export default function InventoryGrid({ onInvoiceStockOut }) {
               disabled={saving}
               sx={{ textTransform: 'none', fontWeight: 800 }}
             >
-              New Invoice
+              Hóa đơn mới · Nhập kho
             </Button>
           )}
+          {hasInventoryPriceAccess && <>
+            <Button variant="outlined" color="primary" size="small" disabled={saving}
+              onClick={()=>{setCustomsDirection('IN');setCustomsOpen(true)}}>
+              Nhập kho · Tờ khai HQ
+            </Button>
+            <Button variant="outlined" color="warning" size="small" disabled={saving}
+              onClick={()=>{setCustomsDirection('OUT');setCustomsOpen(true)}}>
+              Xuất kho · Tờ khai HQ
+            </Button>
+          </>}
           {hasInventoryPriceAccess && (
             <button onClick={() => { setImportOpen(o => !o); setPatchOpen(false) }} disabled={saving}>
               {importOpen ? '✕ Close Import' : 'Import Inventory'}
@@ -804,6 +817,12 @@ export default function InventoryGrid({ onInvoiceStockOut }) {
        </div>
 
       <InventoryEditModal key={modalKey} open={editOpen} inventory={selected} onClose={closeEdit} onSave={handleSave} saving={saving} defaultCurrency={defaultCurrency} canViewPrices={hasInventoryPriceAccess} />
+      <CustomsDeclarationStockDialog
+        open={customsOpen}
+        initialDirection={customsDirection}
+        onClose={()=>setCustomsOpen(false)}
+        onComplete={()=>{load();setCustomsOpen(false)}}
+      />
       <InventoryInvoiceReceiveDialog
         open={invoiceReceiveOpen}
         defaultCurrency={defaultCurrency}
