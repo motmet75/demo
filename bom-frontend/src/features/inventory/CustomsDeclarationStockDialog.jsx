@@ -10,7 +10,7 @@ import {fetchWarehouses} from '../../api/warehouseApi'
 import {fetchInventoryView} from '../../api/inventoryApi'
 import {formatVnNumber,parseVnNumber} from '../../utils/vietnameseNumbers'
 import {generateMaterialCode} from '../../utils/materialCode'
-import {matchMaterialByDescription} from '../../utils/materialBulkMatching'
+import {matchMaterialByDescription,normalizeMaterialDescription} from '../../utils/materialBulkMatching'
 
 const norm=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
   .replace(/[đĐ]/g,'d').toLowerCase().trim()
@@ -199,7 +199,7 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
 
   const bulkMatchMaterials=()=>{
     if(!bulkAllowed)return
-    let matched=0,ambiguous=0,missing=0,skipped=0,insufficient=0
+    let matched=0,ambiguous=0,missing=0,skipped=0,insufficient=0,needsConversion=0
     const allocated=new Map()
     if(direction==='OUT'){
       rows.forEach((r,i)=>{
@@ -219,8 +219,18 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
         else missing++
         return row
       }
-      if(direction==='IN'){matched++;return {...row,newMaterial:false,materialId:String(result.material.id)}}
-      // OUT requires a unique eligible warehouse/batch, not merely a material.
+      const sourceUnit=normalizeMaterialDescription(source.unit)
+      const materialUnit=normalizeMaterialDescription(result.material.unit)
+      const conversionNeeded=!sourceUnit||!materialUnit||sourceUnit!==materialUnit
+      if(direction==='IN'){
+        matched++
+        if(conversionNeeded)needsConversion++
+        return {...row,newMaterial:false,materialId:String(result.material.id),
+          conversionRatio:conversionNeeded?'':row.conversionRatio}
+      }
+      // OUT requires a unique eligible warehouse/batch AND known units;
+      // never estimate a ratio before stock availability is verified.
+      if(conversionNeeded){needsConversion++;return row}
       const lot=result.material
       const id=String(lot.inventoryId||lot.id)
       const free=Number(lot.quantityOnHand||0)-Number(lot.quantityReserved||0)-
@@ -238,7 +248,8 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
     setShowValidation(false)
     setNotice('Đã tự chọn '+matched+' dòng theo TÊN TRÙNG CHÍNH XÁC (không dấu/không phân biệt hoa thường). '+
       'Bỏ qua: '+ambiguous+' tên trùng nhiều mã/lô, '+missing+' không tìm thấy, '+
-      insufficient+' không đủ tồn, '+skipped+' đã chọn trước. Hãy kiểm tra từng dòng.')
+      insufficient+' không đủ tồn, '+skipped+' đã chọn trước, '+
+      needsConversion+' cần kiểm tra hệ số quy đổi. Hãy kiểm tra từng dòng.')
     setError('')
   }
 
