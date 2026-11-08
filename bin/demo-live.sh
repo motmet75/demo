@@ -32,6 +32,22 @@ case "${1:-}" in
         fi
         rm -f -- "$pid_file"
         cd "$demo_home"
+
+        # Keep Google Vision OCR enabled for both Invoice Desk and CCCD OCR.
+        # The service account remains outside Git and is NEVER logged.
+        # Override the path with DEMO_GOOGLE_CREDENTIALS if necessary.
+        if [[ ${DEMO_GOOGLE_OCR_ENABLED:-true} == true ]]; then
+            google_credentials=${DEMO_GOOGLE_CREDENTIALS:-/opt/tuonghoa/secrets/google-service-account.json}
+            if [[ ! -f $google_credentials || ! -r $google_credentials ]]; then
+                echo "Google Vision credential is not readable: $google_credentials" >&2
+                echo "Set DEMO_GOOGLE_CREDENTIALS or fix its file permissions before starting Demo." >&2
+                exit 1
+            fi
+            export GOOGLE_APPLICATION_CREDENTIALS="$google_credentials"
+            export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:+$JAVA_TOOL_OPTIONS }-Dinvoice-desk.ocr=google -Dinvoice-desk.google-credentials=$google_credentials"
+            echo "Google Vision OCR enabled for Demo (Invoice Desk + CCCD)."
+        fi
+
         nohup java "-Duser.timezone=$timezone" -jar "$jar_file" >>"$log_file" 2>&1 &
         pid=$!
         echo "$pid" > "$pid_file"
