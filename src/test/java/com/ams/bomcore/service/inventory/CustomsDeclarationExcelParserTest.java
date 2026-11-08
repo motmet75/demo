@@ -67,4 +67,63 @@ class CustomsDeclarationExcelParserTest {
         assertThrows(IllegalArgumentException.class,
             ()->parser.parse(bytes.toByteArray(),"customs.xlsx"));
     }
+
+    // Layout copied from customs declaration 103847745300, page 3 (Excel BIFF8):
+    // the value and the field label are in different, non-adjacent columns.
+    // This verifies that 22% is read after tariff code "A" (not as "A"),
+    // and that the declared customs VAT base is not the USD invoice value.
+    @Test void readsOriginalCustomsDeclaredInvoiceDutyAndVatFromLegacyXls() throws Exception {
+        var book = new HSSFWorkbook();
+        Sheet sheet = book.createSheet("HQ");
+        cell(sheet,0,2,"<IMP>");     // page 1 (cover, not a goods line)
+        cell(sheet,1,2,"Số tờ khai");cell(sheet,1,4,"103847745300");
+        cell(sheet,2,2,"Ngày đăng ký");cell(sheet,2,6,"19/02/2021 14:23:21");
+        cell(sheet,5,2,"<IMP>");     // page 3, goods line <01>
+        cell(sheet,10,2,"Mã số hàng hóa");cell(sheet,10,6,"39249090");
+        cell(sheet,11,2,"Mô tả hàng hóa");cell(sheet,11,6,"Kệ để dao làm bằng nhựa");
+        cell(sheet,12,18,"Số lượng (1)");cell(sheet,12,21,"400");cell(sheet,12,30,"PCE");
+        cell(sheet,13,2,"Trị giá hóa đơn");cell(sheet,13,8,"303");
+        cell(sheet,13,18,"Đơn giá hóa đơn");cell(sheet,13,21,"0,7575");
+        cell(sheet,13,28,"USD");cell(sheet,13,30,"PCE");
+        cell(sheet,14,2,"Thuế nhập khẩu");
+        cell(sheet,15,3,"Trị giá tính thuế(S)");cell(sheet,15,8,"6.941.730");
+        cell(sheet,16,18,"Đơn giá tính thuế");cell(sheet,16,21,"17.354,325");
+        cell(sheet,17,3,"Thuế suất");cell(sheet,17,7,"A");cell(sheet,17,8,"22%");
+        cell(sheet,18,3,"Số tiền thuế");cell(sheet,18,8,"1.527.180,6");
+        cell(sheet,18,18,"Nước xuất xứ");cell(sheet,18,23,"CN");
+        cell(sheet,19,2,"Thuế và thu khác");
+        cell(sheet,20,3,"Tên");cell(sheet,20,7,"Thuế GTGT");
+        cell(sheet,20,18,"Mã áp dụng thuế suất");cell(sheet,20,22,"VB901");
+        cell(sheet,21,3,"Trị giá tính thuế");cell(sheet,21,8,"8.468.910,6");
+        cell(sheet,22,3,"Thuế suất");cell(sheet,22,8,"10%");
+        cell(sheet,23,3,"Số tiền thuế");cell(sheet,23,8,"846.891");
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (book) {book.write(bytes);}
+        var parsed = parser.parse(bytes.toByteArray(), "ToKhaiHQ7N.xls");
+        assertEquals("103847745300", parsed.declarationNumber());
+        assertEquals(1, parsed.items().size());
+        var item = parsed.items().get(0);
+        assertEquals("39249090", item.hsCode());
+        assertEquals(new BigDecimal("400"),item.quantity());
+        assertEquals("PCE",item.unit());
+        assertEquals("USD",item.currency());
+        assertEquals(new BigDecimal("0.7575"),item.unitPrice());
+        assertEquals(new BigDecimal("303"),item.invoiceValue());
+        assertEquals(new BigDecimal("6941730"),item.importTaxableValueVnd());
+        assertEquals(new BigDecimal("17354.325"),item.importTaxUnitPriceVnd());
+        assertEquals(new BigDecimal("22"),item.importTaxRate());
+        assertEquals("A",item.importTariffCode());
+        assertEquals(new BigDecimal("1527180.6"),item.importTaxAmountVnd());
+        assertEquals(new BigDecimal("8468910.6"),item.vatTaxableValueVnd());
+        assertEquals(new BigDecimal("10"),item.vatRate());
+        assertEquals(new BigDecimal("846891"),item.vatAmountVnd());
+        assertEquals("VB901",item.vatTariffCode());
+        assertEquals("CN",item.originCountry());
+    }
+    private static void cell(Sheet sheet,int rowIndex,int column,String value) {
+        Row row=sheet.getRow(rowIndex);
+        if(row==null)row=sheet.createRow(rowIndex);
+        row.createCell(column).setCellValue(value);
+    }
+
 }
