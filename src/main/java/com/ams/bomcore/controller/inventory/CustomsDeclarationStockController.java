@@ -122,9 +122,11 @@ public class CustomsDeclarationStockController {
         for (Throwable cause = error; cause != null; cause = cause.getCause()) {
             String message = cause.getMessage();
             if (message == null) continue;
-            int start = message.indexOf("constraint \\"");
+            int start = message.indexOf("constraint ");
             if (start < 0) continue;
-            start += "constraint \\"".length();
+            start += "constraint ".length();
+            if (start >= message.length() || message.charAt(start) != '"') continue;
+            start++;
             int end = message.indexOf('"', start);
             if (end > start) return message.substring(start, end);
         }
