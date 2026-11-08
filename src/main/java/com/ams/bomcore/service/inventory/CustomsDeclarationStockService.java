@@ -22,6 +22,7 @@ import java.time.LocalDate;
 import java.util.*;
 import java.util.HexFormat;
 import org.springframework.http.HttpStatus;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -167,13 +168,21 @@ public class CustomsDeclarationStockService {
         if(!Set.of("VND","USD","EUR","JPY","CNY").contains(currency))
             throw fail("Chọn loại tiền hợp lệ.");
         List<Map<String,Object>> rows=jdbc.queryForList("""
-            SELECT source_json::text AS payload,status
+            SELECT source_json::text AS payload,status,
+                   declaration_number, direction, confirmed_by, confirmed_at
             FROM public.inventory_customs_declaration
             WHERE id=? AND tenant_id=? AND company_id=? FOR UPDATE
             """,req.documentId(),scope.tenantId(),scope.companyId());
         if(rows.size()!=1)throw fail("Tờ khai không tồn tại trong công ty.");
-        if("POSTED".equals(rows.get(0).get("status")))
-            throw new ResponseStatusException(HttpStatus.CONFLICT,"Tờ khai này đã ghi tồn kho; không thể nhập/xuất hai lần.");
+        if("POSTED".equals(rows.get(0).get("status"))) {
+            var posted = rows.get(0);
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Tờ khai số " + Objects.toString(posted.get("declaration_number"),number) +
+                " đã xác nhận " + ("OUT".equals(posted.get("direction"))?"XUẤT":"NHẬP") +
+                " kho" + (posted.get("confirmed_by")==null?"":(" bởi " + posted.get("confirmed_by"))) +
+                (posted.get("confirmed_at")==null?"":(" lúc " + posted.get("confirmed_at"))) +
+                ". Không thể ghi kho hai lần; kiểm tra lịch sử tờ khai.");
+        }
         var parsed=decode((String)rows.get(0).get("payload"));
         if(req.lines()==null||req.lines().size()!=parsed.items().size())
             throw fail("Đối chiếu từng dòng hàng trên tờ khai trước khi xác nhận.");
@@ -192,6 +201,7 @@ public class CustomsDeclarationStockService {
         Set<String> reservedCodes=new HashSet<>();
         Map<Integer,WarehouseEntity> selectedWarehouses=new TreeMap<>();
         Map<UUID,BigDecimal> outQuantities=new TreeMap<>();
+        Map<UUID,List<Integer>> outLineNumbers=new HashMap<>();
         Map<Integer,BigDecimal> taxAmountByLine=new HashMap<>();
         BigDecimal declaredSubtotal=BigDecimal.ZERO;
         BigDecimal declaredVat=BigDecimal.ZERO;
@@ -200,7 +210,8 @@ public class CustomsDeclarationStockService {
         for(Line line:req.lines()) {
             if(line==null||line.lineIndex()<0||line.lineIndex()>=parsed.items().size()
                 ||selected.putIfAbsent(line.lineIndex(),line)!=null)
-                throw fail("Dòng tờ khai bị thiếu hoặc trùng.");
+                throw fail("Dòng tờ khai số " + (line==null?"không xác định":line.lineIndex()+1) +
+                    " bị thiếu, trùng hoặc nằm ngoài phạm vi tờ khai. Hãy tải lại và đối chiếu các dòng.");
             var item=parsed.items().get(line.lineIndex());
             String lineCurrency=Objects.toString(item.currency(),"").trim().toUpperCase(Locale.ROOT);
             if(!lineCurrency.isBlank()&&!lineCurrency.equals(currency))
@@ -245,6 +256,8 @@ public class CustomsDeclarationStockService {
                     throw fail("Mã vật tư không khớp tồn kho.");
                 inventories.put(line.lineIndex(),inventory);
                 outQuantities.merge(line.inventoryId(),bomQty,BigDecimal::add);
+                outLineNumbers.computeIfAbsent(line.inventoryId(),unused->new ArrayList<>())
+                    .add(line.lineIndex()+1);
                 existingMaterials.put(line.lineIndex(),inventory.getMaterial());
             } else if(line.materialId()!=null) {
                 Material m=materialRepo.findById(line.materialId())
@@ -266,12 +279,17 @@ public class CustomsDeclarationStockService {
                 if(first!=null) {
                     if(!name.equals(first.newMaterialName().trim())
                         ||!unit.equals(first.newMaterialUnit().trim()))
-                        throw fail("Mã vật tư "+code+" đang dùng cho hai vật tư khác nhau.");
+                        throw fail("Dòng " + (line.lineIndex()+1) + ": mã vật tư " + code +
+                            " đang dùng đồng thời ở dòng " + (first.lineIndex()+1) +
+                            " nhưng tên hoặc đơn vị khác nhau. Chọn cùng mã và cùng đơn vị, hoặc tạo mã mới.");
                     code=canonicalCodes.get(normalized);
                 } else {
                     if(materialRepo.existsByMaterialCodeIgnoreCaseAndTenantIdAndCompanyId(
                            code,scope.tenantId(),scope.companyId()))
-                        throw fail("Mã vật tư "+code+" đã tồn tại; chọn mã có sẵn.");
+                        throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "Dòng " + (line.lineIndex()+1) + " (" + item.description() +
+                            "): mã vật tư " + code + " đã tồn tại trong Materials. " +
+                            "Hãy chọn mã có sẵn hoặc bật Tự sinh mã để tạo mã khác.");
                     newDefinitions.put(normalized,line);
                     canonicalCodes.put(normalized,code);
                     reservedCodes.add(code);
@@ -297,20 +315,40 @@ public class CustomsDeclarationStockService {
                 BigDecimal available=((BigDecimal)row.get("quantity_on_hand"))
                     .subtract(Objects.requireNonNullElse((BigDecimal)row.get("quantity_reserved"),BigDecimal.ZERO))
                     .subtract(Objects.requireNonNullElse((BigDecimal)row.get("quantity_locked"),BigDecimal.ZERO));
-                if(available.compareTo(e.getValue())<0)
+                if(available.compareTo(e.getValue())<0) {
+                    InventoryEntity inventory = inventories.values().stream()
+                        .filter(record->record.getId().equals(e.getKey()))
+                        .findFirst().orElse(null);
+                    String batch = inventory==null?e.getKey().toString():inventory.getBatchNo();
+                    String code = inventory==null?"":inventory.getMaterial().getMaterialCode();
                     throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "Không đủ hàng trong lô "+e.getKey()+"; khả dụng "+available);
+                        "Dòng " + outLineNumbers.get(e.getKey()) + ": không đủ tồn kho cho vật tư " +
+                        code + ", lô " + batch + ". Tổng cần xuất " + e.getValue() +
+                        ", khả dụng " + available +
+                        ". Hãy giảm số lượng hoặc chọn lô khác.");
+                }
             }
         }
         // Concurrency-safe number+direction unique check. The DRAFT itself is
         // locked; the unique index blocks posting the same declaration from
         // a second upload regardless of filename.
-        int clashes=Objects.requireNonNullElse(jdbc.queryForObject("""
-            SELECT count(*) FROM public.inventory_customs_declaration
+        var clashes=jdbc.queryForList("""
+            SELECT id,file_name,confirmed_by,confirmed_at
+            FROM public.inventory_customs_declaration
             WHERE tenant_id=? AND company_id=? AND declaration_number=?
                 AND direction=? AND status='POSTED'
-            """,Integer.class,scope.tenantId(),scope.companyId(),number,direction),0);
-        if(clashes>0)throw new ResponseStatusException(HttpStatus.CONFLICT,"Số tờ khai này đã nhập/xuất kho.");
+            ORDER BY confirmed_at DESC LIMIT 1
+            """,scope.tenantId(),scope.companyId(),number,direction);
+        if(!clashes.isEmpty()){
+            var previous=clashes.get(0);
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Số tờ khai " + number + " đã được xác nhận " +
+                ("OUT".equals(direction)?"XUẤT":"NHẬP") + " kho từ file " +
+                Objects.toString(previous.get("file_name"),"khác") +
+                (previous.get("confirmed_by")==null?"":(" bởi " + previous.get("confirmed_by"))) +
+                (previous.get("confirmed_at")==null?"":(" lúc " + previous.get("confirmed_at"))) +
+                ". Không nhập/xuất trùng; kiểm tra lịch sử tờ khai trước khi tiếp tục.");
+        }
         int updated=jdbc.update("""
             UPDATE public.inventory_customs_declaration SET status='POSTED',direction=?,
                declaration_number=?,declaration_date=?,confirmed_by=?,confirmed_at=now(),
@@ -321,7 +359,9 @@ public class CustomsDeclarationStockService {
             allLinesPriced?declaredVat:null,
             allLinesPriced?declaredSubtotal.add(declaredVat):null,
             req.documentId(),scope.tenantId(),scope.companyId());
-        if(updated!=1)throw new ResponseStatusException(HttpStatus.CONFLICT,"Tờ khai đã thay đổi.");
+        if(updated!=1)throw new ResponseStatusException(HttpStatus.CONFLICT,
+            "Trạng thái tờ khai " + number +
+            " đã thay đổi hoặc người khác đã xác nhận. Tải lại lịch sử và chọn chứng từ chưa ghi kho.");
 
         List<Map<String,Object>> results=new ArrayList<>();
         for(var item:parsed.items()){
@@ -336,7 +376,15 @@ public class CustomsDeclarationStockService {
                     material.setUnit(line.newMaterialUnit().trim());
                     material.setMaterialType("MATERIAL");
                     material.setIsActive(true);
-                    material=materialService.createForCompany(material,company,tenant);
+                    try {
+                        material=materialService.createForCompany(material,company,tenant);
+                    } catch (DataIntegrityViolationException conflict) {
+                        throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "Dòng " + (item.lineIndex()+1) + " (" + item.description() +
+                            "): không tạo được vật tư mã " + code +
+                            " vì mã đã bị trùng trong Materials. Tải lại và chọn mã có sẵn hoặc sinh mã mới.",
+                            conflict);
+                    }
                     createdMaterials.put(code,material);
                 }
             }
