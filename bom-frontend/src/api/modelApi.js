@@ -81,6 +81,17 @@ export async function updateModel(id, payload) {
   return data
 }
 
+// Only admins can persist a draft-line price change to the menu.
+export async function updateModelSellingPrice(id, sellingPrice) {
+  const { res, data } = await apiFetchJson(`/bom/models/${encodeURIComponent(id)}/selling-price`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sellingPrice }),
+  })
+  if (!res.ok) throw new Error(data?.message || data?.error || `Không cập nhật được giá menu (HTTP ${res.status})`)
+  return data
+}
+
 export async function deleteModel(id) {
   const url = `/bom/models/${encodeURIComponent(id)}`
   const res = await apiFetch(url, { method: 'DELETE' })

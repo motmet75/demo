@@ -1,6 +1,7 @@
 package com.ams.bomcore.controller.model;
 
 import java.io.InputStream;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -13,10 +14,12 @@ import org.apache.poi.ss.usermodel.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.ams.bomcore.domain.company.Company;
+import com.ams.bomcore.domain.user.User;
 import com.ams.bomcore.domain.model.Model;
 import com.ams.bomcore.domain.tenant.Tenant;
 import com.ams.bomcore.repository.CompanyRepository;
@@ -168,6 +171,54 @@ public class ModelController {
         }
         Model saved = modelService.updateForTenantAndCompany(model, tenant.getId(), company.getId());
         return ResponseEntity.ok(saved);
+    }
+
+    /**
+     * Small, scoped update: counter admins may optionally save a one-line
+     * selling-price edit back to the menu, without overwriting model metadata.
+     * Editing a draft order's price does not call this endpoint.
+     */
+    @PatchMapping(path = "/{id}/selling-price", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> updateSellingPrice(
+            @PathVariable("id") UUID id,
+            @RequestHeader("X-Tenant-Id") UUID tenantId,
+            @RequestHeader("X-Company-Id") UUID companyId,
+            @RequestBody Map<String, BigDecimal> body,
+            Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated())
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Vui lòng đăng nhập."));
+        boolean superAdmin = authentication.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_SUPER_ADMIN".equals(a.getAuthority()));
+        boolean admin = superAdmin || authentication.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+        if (!admin)
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", "Chỉ quản trị viên được sửa giá menu."));
+        if (!superAdmin) {
+            if (!(authentication.getPrincipal() instanceof User user)
+                    || !tenantId.toString().equals(user.getAssignedTenantId())
+                    || (user.getAssignedCompanyId() != null && !user.getAssignedCompanyId().isBlank()
+                        && !companyId.toString().equals(user.getAssignedCompanyId())))
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", "Không có quyền sửa giá của công ty này."));
+        }
+
+        BigDecimal newPrice = body == null ? null : body.get("sellingPrice");
+        if (newPrice == null || newPrice.signum() < 0 || newPrice.scale() > 2
+                || newPrice.compareTo(new BigDecimal("1000000000000")) > 0)
+            return ResponseEntity.badRequest().body(Map.of("message", "Giá bán phải từ 0 đến 1.000 tỷ và tối đa 2 chữ số thập phân."));
+
+        Company company = companyRepository.findById(companyId).orElse(null);
+        if (company == null || company.getTenant() == null
+                || !tenantId.equals(company.getTenant().getId()))
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", "Công ty không thuộc tenant đã chọn."));
+
+        Model model = modelRepository.findById(id)
+                .filter(found -> tenantId.equals(found.getTenantId()) && companyId.equals(found.getCompanyId()))
+                .orElse(null);
+        if (model == null) return ResponseEntity.notFound().build();
+
+        model.setSellingPrice(newPrice);
+        Model saved = modelRepository.save(model);
+        return ResponseEntity.ok(Map.of("id", saved.getId(), "sellingPrice", saved.getSellingPrice()));
     }
 
     private void normalizeAllowedSideConfig(Model model, UUID tenantId, UUID companyId) {
