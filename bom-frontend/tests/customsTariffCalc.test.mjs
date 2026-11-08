@@ -56,3 +56,25 @@ test('does not fabricate VND, duty or VAT where FX or tariff missing',()=>{
   assert.equal(unknownVat.noCo,null)
   assert.equal(unknownVat.withCo,null)
 })
+
+
+test('2021 original XLS customs tax base reproduces 22% import duty and 10% VAT for comparison',()=>{
+  // Source: declaration 103847745300, row <01>, 19/02/2021.
+  // Original VAT amount is 846,891 VND as rounded by customs; calculations
+  // can show 846,891.06, but never overwrite the original imported amount.
+  const r=estimateCustomsTax({
+    quantity:400,unitPrice:0.7575,currency:'USD',exchangeRate:'',
+    taxableValueVnd:'6.941.730',noCoRate:22,ftaRate:0,vatRate:10,
+    extraTaxesVnd:0
+  })
+  assert.equal(r.invoiceValue,303)
+  assert.equal(r.customsValue,6941730)
+  assert.equal(r.valuationSource,'CUSTOMS_ENTERED')
+  assert.equal(r.noCo.duty,1527180.6)
+  assert.equal(r.noCo.vatBase,8468910.6)
+  assert.equal(r.noCo.vatAmount,846891.06)
+  assert.equal(r.withCo.duty,0)
+  assert.equal(r.withCo.vatBase,6941730)
+  assert.equal(r.withCo.vatAmount,694173)
+})
+
