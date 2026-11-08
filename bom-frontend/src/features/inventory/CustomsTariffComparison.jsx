@@ -22,7 +22,7 @@ export default function CustomsTariffComparison({doc,direction,currency,date}) {
   const [lookup,setLookup]=useState({})
   const [loading,setLoading]=useState(false)
   const [fx,setFx]=useState(currency==='VND'?'1':'')
-  const [withoutCo,setWithoutCo]=useState('MFN')
+  const [withoutCo,setWithoutCo]=useState('DECLARED')
   const [lines,setLines]=useState({})
   const change=(index,patch)=>setLines(prev=>({...prev,[index]:{...prev[index],...patch}}))
 
@@ -62,14 +62,19 @@ export default function CustomsTariffComparison({doc,direction,currency,date}) {
     const edit=lines[index]||{}
     const tariff=lookup[normalizeHs(item.hsCode)]||{}
     const sourceCurrency=item.currency||currency
-    const baseline=withoutCo==='NORMAL'?tariff.normalImport:tariff.mfn
+    const baseline=withoutCo==='DECLARED'?item.importTaxRate:
+      withoutCo==='NORMAL'?tariff.normalImport:tariff.mfn
     const selectedFta=edit.fta||''
     const selectedFtaRate=selectedFta?tariff.fta?.[selectedFta]:null
+    // The original registered VAT rate takes priority over a tariff table
+    // that may have changed since the customs declaration date.
     const vatRate=edit.vatOverride!==undefined&&edit.vatOverride!==''?
-      edit.vatOverride:tariff.vat
+      edit.vatOverride:item.vatRate??tariff.vat
     const data=estimateCustomsTax({
       quantity:item.quantity,unitPrice:item.unitPrice,currency:sourceCurrency,
-      exchangeRate:fx,taxableValueVnd:edit.customsValue??'',
+      exchangeRate:fx,
+      taxableValueVnd:edit.customsValue??(item.importTaxableValueVnd==null
+        ?'':String(item.importTaxableValueVnd)),
       noCoRate:baseline,ftaRate:selectedFtaRate,vatRate,
       extraTaxesVnd:edit.extraTaxes??'0'
     })
@@ -107,10 +112,11 @@ export default function CustomsTariffComparison({doc,direction,currency,date}) {
           <TextField size="small" label="Tỷ giá tính thuế HQ (VND / 1 đơn vị tiền)" value={fx}
             onChange={e=>setFx(e.target.value)} placeholder="Ví dụ: 25.800"
             helperText="Nhập tỷ giá HQ áp dụng vào ngày đăng ký tờ khai" sx={{width:310}}/>
-          <TextField select size="small" label="Không có C/O · Biểu thuế" value={withoutCo}
-            onChange={e=>setWithoutCo(e.target.value)} sx={{minWidth:235}}>
-            <MenuItem value="MFN">Nhập khẩu ưu đãi (MFN, nếu đủ điều kiện)</MenuItem>
-            <MenuItem value="NORMAL">Nhập khẩu thông thường</MenuItem>
+          <TextField select size="small" label="Mức thuế cơ sở để đối chiếu" value={withoutCo}
+            onChange={e=>setWithoutCo(e.target.value)} sx={{minWidth:250}}>
+            <MenuItem value="DECLARED">Thuế suất gốc trên tờ khai (không suy luận C/O)</MenuItem>
+            <MenuItem value="MFN">MFN từ biểu thuế Portal (nếu đủ điều kiện)</MenuItem>
+            <MenuItem value="NORMAL">Thuế thông thường từ biểu thuế Portal</MenuItem>
           </TextField>
           <Chip color="default" label={`Tổng thuế dự kiến: ${fmt(totals.actual)} VND (${totals.validActual}/${results.length} dòng)`}/>
         </Stack>
@@ -118,9 +124,10 @@ export default function CustomsTariffComparison({doc,direction,currency,date}) {
           <Table stickyHeader size="small" sx={{minWidth:1620}}>
             <TableHead><TableRow>
               <TableCell sx={{minWidth:245}}>Dòng / HS / Tên hàng</TableCell>
-              <TableCell sx={{minWidth:135}}>Trị giá hóa đơn</TableCell>
-              <TableCell sx={{minWidth:175}}>Trị giá tính thuế (VND)</TableCell>
-              <TableCell sx={{minWidth:115}}>Thuế suất không C/O</TableCell>
+              <TableCell sx={{minWidth:160}}>SL × đơn giá hóa đơn · Trị giá gốc</TableCell>
+              <TableCell sx={{minWidth:175}}>Trị giá tính thuế NK gốc / điều chỉnh (VND)</TableCell>
+              <TableCell sx={{minWidth:170}}>Thuế NK/VAT đã khai gốc</TableCell>
+              <TableCell sx={{minWidth:115}}>Thuế suất cơ sở</TableCell>
               <TableCell sx={{minWidth:180}}>FTA có C/O (giả định)</TableCell>
               <TableCell sx={{minWidth:120}}>VAT (%)</TableCell>
               <TableCell sx={{minWidth:155}}>TTĐB + BVMT (VND)</TableCell>
@@ -141,16 +148,44 @@ export default function CustomsTariffComparison({doc,direction,currency,date}) {
                       statusLabel[r.tariff.status]||r.tariff.message||'Đang tra HS…'}
                   </Typography>
                 </TableCell>
-                <TableCell>{fmt(r.invoiceValue)} {r.sourceCurrency}</TableCell>
                 <TableCell>
-                  <TextField size="small" fullWidth value={r.edit.customsValue??''}
+                  <Typography variant="caption" display="block">
+                    {fmt(r.item.quantity)} × {fmt(r.item.unitPrice)} {r.sourceCurrency}
+                  </Typography>
+                  <Typography fontWeight={700}>
+                    {fmt(r.item.invoiceValue??r.invoiceValue)} {r.sourceCurrency}
+                  </Typography>
+                  {r.item.invoiceValue!=null&&r.invoiceValue!=null&&
+                    Math.abs(Number(r.item.invoiceValue)-r.invoiceValue)>0.02&&
+                    <Typography variant="caption" color="warning.main">
+                      Lệch SL × đơn giá: {fmt(r.invoiceValue)} {r.sourceCurrency}
+                    </Typography>}
+                </TableCell>
+                <TableCell>
+                  <TextField size="small" fullWidth
+                    value={r.edit.customsValue??(r.item.importTaxableValueVnd==null?'':
+                      formatVnNumber(Number(r.item.importTaxableValueVnd),2))}
                     placeholder={r.customsValue!=null?fmt(r.customsValue):'Nhập trị giá'}
-                    helperText={r.valuationSource==='CUSTOMS_ENTERED'?'Giá trị đã nhập':'Ước từ hóa đơn × tỷ giá'}
+                    helperText={r.edit.customsValue!==undefined?'Giá trị tạm điều chỉnh':
+                      r.item.importTaxableValueVnd!=null?'Tờ khai gốc · VND':
+                        'Ước từ hóa đơn × tỷ giá (chưa xác minh)'}
                     onChange={e=>change(r.index,{customsValue:e.target.value})}/>
                 </TableCell>
                 <TableCell>
+                  <Typography variant="caption" display="block">
+                    NK: {fmt(r.item.importTaxAmountVnd)} VND ({r.item.importTaxRate??'—'}%)
+                    {r.item.importTariffCode?' · mã '+r.item.importTariffCode:''}
+                  </Typography>
+                  <Typography variant="caption" display="block">
+                    VAT: {fmt(r.item.vatAmountVnd)} VND ({r.item.vatRate??'—'}%)
+                  </Typography>
+                  <Typography variant="caption" display="block">
+                    Giá VAT gốc: {fmt(r.item.vatTaxableValueVnd)} VND
+                  </Typography>
+                </TableCell>
+                <TableCell>
                   {r.baseline==null||r.baseline===''?'—':String(r.baseline)+'%'}
-                  <Typography variant="caption" display="block">{withoutCo}</Typography>
+                  <Typography variant="caption" display="block">{withoutCo==='DECLARED'?'Gốc tờ khai':withoutCo}</Typography>
                 </TableCell>
                 <TableCell>
                   <TextField size="small" select fullWidth label="FTA" value={r.selectedFta}
@@ -164,8 +199,9 @@ export default function CustomsTariffComparison({doc,direction,currency,date}) {
                 </TableCell>
                 <TableCell>
                   <TextField size="small" value={r.edit.vatOverride??''}
-                    label={r.tariff.vat?'Biểu: '+r.tariff.vat+'%':'Chưa có mức VAT'}
-                    placeholder={r.tariff.vat||'Nhập %'}
+                    label={r.item.vatRate!=null?'Gốc tờ khai: '+r.item.vatRate+'%':
+                      r.tariff.vat?'Biểu: '+r.tariff.vat+'%':'Chưa có mức VAT'}
+                    placeholder={String(r.item.vatRate??r.tariff.vat??'Nhập %')}
                     onChange={e=>change(r.index,{vatOverride:e.target.value})}
                     error={r.edit.vatOverride!==undefined&&r.edit.vatOverride!==''&&ratePercent(r.edit.vatOverride)===null}
                     helperText="Tự đối chiếu 5/8/10%"/>
@@ -202,18 +238,20 @@ export default function CustomsTariffComparison({doc,direction,currency,date}) {
           </Table>
         </TableContainer>
         <Stack direction="row" gap={1} flexWrap="wrap">
-          <Chip label={`Không C/O: ${fmt(totals.noCo)} VND (${totals.validNoCo}/${results.length})`}/>
+          <Chip label={`Theo mức cơ sở: ${fmt(totals.noCo)} VND (${totals.validNoCo}/${results.length})`}/>
           <Chip label={`Có C/O giả định: ${fmt(totals.withCo)} VND (${totals.validFta}/${results.length})`}/>
           <Chip color="success" label={`Đã chọn áp dụng: ${fmt(totals.actual)} VND (${totals.validActual}/${results.length})`}/>
         </Stack>
         {totals.estimatedValuations>0&&<Alert severity="info">
-          Có {totals.estimatedValuations} dòng chưa nhập trị giá tính thuế HQ chính thức.
+          Có {totals.estimatedValuations} dòng chưa có trị giá tính thuế gốc từ file hoặc do người dùng nhập.
           Giá trị được ước tính từ đơn giá hóa đơn và tỷ giá (nếu có), có thể thiếu CIF,
           điều chỉnh trị giá, thuế TTĐB/BVMT và các khoản cộng/trừ. Tổng thuế chỉ cộng
           các dòng tính được; không phải số thuế nộp chính thức.
         </Alert>}
         <Typography variant="caption" color="text.secondary">
-          Tỷ giá phải lấy theo quy định hải quan tại thời điểm đăng ký; FTA tính theo năm,
+          Giá tính VAT nhập khẩu trên tờ khai khác với trị giá hóa đơn. Số liệu gốc được
+          giữ nguyên để đối chiếu; tính lại FTA/VAT chỉ là kịch bản, không thay đổi
+          chứng từ đã khai. Tỷ giá phải lấy theo quy định hải quan tại thời điểm đăng ký; FTA tính theo năm,
           C/O và điều kiện cụ thể; biểu thuế không chứng minh xuất xứ. Bảng này chỉ
           dùng đối chiếu và không thay đổi dữ liệu VAT đang lưu trong phiếu nhập kho.
         </Typography>
