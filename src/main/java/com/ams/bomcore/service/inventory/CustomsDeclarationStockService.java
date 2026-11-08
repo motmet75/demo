@@ -43,7 +43,10 @@ public class CustomsDeclarationStockService {
 
     private final CustomsDeclarationExcelParser parser;
     private final JdbcTemplate jdbc;
-    private final ObjectMapper mapper;
+    // Spring Boot 4 may auto-configure Jackson 3 but not the Jackson 2
+    // com.fasterxml.jackson.databind.ObjectMapper used for this legacy JSON.
+    // Keep the customs document mapper local; no global Jackson changes.
+    private final ObjectMapper mapper = new ObjectMapper();
     private final MaterialRepository materialRepo;
     private final MaterialService materialService;
     private final CompanyRepository companies;
@@ -55,12 +58,12 @@ public class CustomsDeclarationStockService {
     private final InventoryMovementRepository movementRepo;
 
     public CustomsDeclarationStockService(CustomsDeclarationExcelParser parser,
-            JdbcTemplate jdbc,ObjectMapper mapper,MaterialRepository materialRepo,
+            JdbcTemplate jdbc,MaterialRepository materialRepo,
             MaterialService materialService,CompanyRepository companies,TenantRepository tenants,
             WarehouseRepository warehouses,InventoryRepository inventoryRepo,
             InventoryService inventoryService,InventoryMovementService movements,
             InventoryMovementRepository movementRepo) {
-        this.parser=parser;this.jdbc=jdbc;this.mapper=mapper;this.materialRepo=materialRepo;
+        this.parser=parser;this.jdbc=jdbc;this.materialRepo=materialRepo;
         this.materialService=materialService;this.companies=companies;this.tenants=tenants;
         this.warehouses=warehouses;this.inventoryRepo=inventoryRepo;this.inventoryService=inventoryService;
         this.movements=movements;this.movementRepo=movementRepo;
