@@ -649,6 +649,10 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
                       Giá tính NK: {item.importTaxableValueVnd==null?'—':
                         formatVnNumber(Number(item.importTaxableValueVnd),2)} VND
                     </Typography>
+                    {item.importTaxUnitPriceVnd!=null&&
+                      <Typography variant="caption" display="block">
+                        Đơn giá tính NK: {formatVnNumber(Number(item.importTaxUnitPriceVnd),3)} VND/{item.unit}
+                      </Typography>}
                     <Typography variant="caption" display="block">
                       {item.importTaxRate==null?'—':item.importTaxRate+'%'}
                       {item.importTariffCode?' · mã '+item.importTariffCode:''}
