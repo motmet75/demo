@@ -482,11 +482,13 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
         (warehouses.length===1?warehouses[0]:null)
       const defaults=receivingDefaults(material,warehouse,inventory,boms,currency)
       const originalUnit=line.pdfUnit||line.warehouseImportUnit
-      const matchedUnit=defaults.options.find(option=>
+      const conversions=defaults.options.filter(option=>
         normalizeMaterialDescription(option.unit)===normalizeMaterialDescription(originalUnit))
       const sameUnit=normalizeMaterialDescription(originalUnit)===
         normalizeMaterialDescription(material.unit)
-      const conversion=matchedUnit?.ratio ?? (sameUnit?1:'')
+      // Never guess when the same invoice unit has multiple configured ratios.
+      const conversion=conversions.length===1?conversions[0].ratio:
+        conversions.length===0&&sameUnit?1:''
       if(!conversion)needsConversion++
       matched++
       return {...line,material,warehouse,newMaterial:false,
