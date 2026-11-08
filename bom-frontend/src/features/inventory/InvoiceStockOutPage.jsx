@@ -11,7 +11,7 @@ import {
   confirmInvoiceStockOut, openInvoiceStockOutPdf
 } from '../../api/invoiceStockOutApi'
 import {useAuth} from '../../context/useAuth'
-import InvoiceInventoryPickerDialog, {inventorySupplierLabels, stockAvailable} from './InvoiceInventoryPickerDialog'
+import InvoiceInventoryPickerDialog, {inventorySupplierLabels, stockAvailable, inventoryPurchasePrices, formatPurchasePrice} from './InvoiceInventoryPickerDialog'
 import {formatVnNumber, parseVnNumber, parseMachineNumber} from '../../utils/vietnameseNumbers'
 
 const amount = value => formatVnNumber(Number(value||0),2)
@@ -270,6 +270,12 @@ export default function InvoiceStockOutPage(){
                         </Typography>
                         <Typography variant="caption" display="block">
                           NCC: {sources.join(' / ')} · Khả dụng: {formatVnNumber(stockAvailable(selected),6)}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" display="block">
+                          Giá nhập kho: {formatPurchasePrice(inventoryPurchasePrices(selected).warehouseImportUnitPrice)}
+                          {' '}{selected.currency||'—'}/{selected.warehouseImportUnit||selected.unit||'—'}
+                          {' · '}Giá nhập/ĐV tồn: {formatPurchasePrice(selected.unitPrice)}
+                          {' '}{selected.currency||'—'}/{selected.unit||'—'}
                         </Typography>
                       </Box>}
                     </TableCell>

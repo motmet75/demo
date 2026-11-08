@@ -12,6 +12,20 @@ const fold = value => String(value ?? '').normalize('NFD')
   .toLowerCase().replace(/\s+/g,' ').trim()
 
 const stockId = row => String(row.inventoryId ?? row.id ?? '')
+// Purchase prices are stored on the inventory record, not on each
+// receiving invoice/supplier. Keep both prices and their units distinct.
+export const inventoryPurchasePrices = row => ({
+  warehouseImportUnitPrice: row.warehouseImportUnitPrice,
+  warehouseImportUnit: row.warehouseImportUnit || row.unit || '',
+  unitPrice: row.unitPrice,
+  unit: row.unit || '',
+  currency: row.currency || '',
+})
+export const formatPurchasePrice = value => {
+  if(value === null || value === undefined || value === '') return 'Chưa nhập giá'
+  const parsed=Number(value)
+  return Number.isFinite(parsed) ? formatVnNumber(parsed,4) : 'Chưa nhập giá'
+}
 export const stockAvailable = row => {
   const onHand=Number(row.quantityOnHand||0)
   const reserved=Number(row.quantityReserved||0)
@@ -125,6 +139,7 @@ export default function InvoiceInventoryPickerDialog({
       <Alert severity="info">
         Nhà cung cấp được lấy từ <strong>hóa đơn nhập kho đã ghi nhận</strong>.
         Nếu một lô có nhiều hóa đơn nhập, hệ thống hiển thị tất cả nhà cung cấp.
+        Giá nhập hiển thị là giá đang lưu trên <strong>bản ghi tồn kho</strong>, không phải giá riêng của từng nhà cung cấp.
         Chọn đúng lô hàng; việc chọn không tự trừ tồn kho.
       </Alert>
       <Stack direction={{xs:'column',md:'row'}} spacing={1}>
@@ -153,7 +168,7 @@ export default function InvoiceInventoryPickerDialog({
         </Typography>
       </Stack>
       <TableContainer sx={{flex:1,minHeight:120,border:1,borderColor:'divider',borderRadius:1}}>
-        <Table size="small" stickyHeader sx={{minWidth:1150}}>
+        <Table size="small" stickyHeader sx={{minWidth:1460}}>
           <TableHead><TableRow>
             <TableCell sx={{fontWeight:700}}>Mã hàng / Tên hàng</TableCell>
             <TableCell sx={{fontWeight:700}}>Nhà cung cấp</TableCell>
@@ -163,12 +178,15 @@ export default function InvoiceInventoryPickerDialog({
             <TableCell sx={{fontWeight:700}} align="right">Tồn kho</TableCell>
             <TableCell sx={{fontWeight:700}} align="right">Khả dụng</TableCell>
             <TableCell sx={{fontWeight:700}}>Đơn vị</TableCell>
+            <TableCell sx={{fontWeight:700}} align="right">Giá nhập kho / ĐV nhập</TableCell>
+            <TableCell sx={{fontWeight:700}} align="right">Giá nhập / ĐV tồn</TableCell>
             <TableCell align="right">Chọn</TableCell>
           </TableRow></TableHead>
           <TableBody>
             {paged.map(row=>{
               const isCurrent=row.inventoryId===String(currentInventoryId)
               const insufficient=Number.isFinite(required) && row.remaining<required
+              const prices=inventoryPurchasePrices(row)
               return <TableRow key={row.inventoryId} hover selected={isCurrent}>
                 <TableCell>
                   <Typography variant="body2" fontWeight={700}>{row.materialName||'—'}</Typography>
@@ -193,6 +211,22 @@ export default function InvoiceInventoryPickerDialog({
                 </TableCell>
                 <TableCell>{row.unit||'—'}</TableCell>
                 <TableCell align="right">
+                  <Typography variant="body2" fontWeight={700} sx={{whiteSpace:'nowrap'}}>
+                    {formatPurchasePrice(prices.warehouseImportUnitPrice)}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {prices.currency||'—'} / {prices.warehouseImportUnit||'—'}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right">
+                  <Typography variant="body2" fontWeight={700} sx={{whiteSpace:'nowrap'}}>
+                    {formatPurchasePrice(prices.unitPrice)}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {prices.currency||'—'} / {prices.unit||'—'}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right">
                   <Button size="small" variant={isCurrent?'contained':'outlined'}
                     onClick={()=>onSelect(row)}
                     disabled={insufficient||row.remaining<=0}>
@@ -201,7 +235,7 @@ export default function InvoiceInventoryPickerDialog({
                 </TableCell>
               </TableRow>
             })}
-            {paged.length===0&&<TableRow><TableCell colSpan={9}>
+            {paged.length===0&&<TableRow><TableCell colSpan={11}>
               Không tìm thấy lô khả dụng. Thử chọn nhà cung cấp khác hoặc kiểm tra hàng nhập kho.
             </TableCell></TableRow>}
           </TableBody>
