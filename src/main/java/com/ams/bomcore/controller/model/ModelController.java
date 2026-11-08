@@ -221,6 +221,59 @@ public class ModelController {
         return ResponseEntity.ok(Map.of("id", saved.getId(), "sellingPrice", saved.getSellingPrice()));
     }
 
+    /**
+     * Admin-only targeted menu update. The SKU/model UUID is never changed:
+     * existing inventory, BOM and orders must keep their original references.
+     */
+    public record MenuLabelPriceUpdate(String modelName, BigDecimal sellingPrice) {}
+
+    @PatchMapping(path = "/{id}/menu-label-price", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> updateMenuLabelAndPrice(
+            @PathVariable("id") UUID id,
+            @RequestHeader("X-Tenant-Id") UUID tenantId,
+            @RequestHeader("X-Company-Id") UUID companyId,
+            @RequestBody MenuLabelPriceUpdate request,
+            Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated())
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Vui lòng đăng nhập."));
+        boolean superAdmin = authentication.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_SUPER_ADMIN".equals(a.getAuthority()));
+        boolean admin = superAdmin || authentication.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+        if (!admin)
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", "Chỉ quản trị viên được sửa tên/giá menu."));
+        if (!superAdmin) {
+            if (!(authentication.getPrincipal() instanceof User user)
+                    || !tenantId.toString().equals(user.getAssignedTenantId())
+                    || (user.getAssignedCompanyId() != null && !user.getAssignedCompanyId().isBlank()
+                        && !companyId.toString().equals(user.getAssignedCompanyId())))
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(Map.of("message", "Không có quyền sửa menu của công ty này."));
+        }
+        Company company = companyRepository.findById(companyId).orElse(null);
+        if (company == null || company.getTenant() == null
+                || !tenantId.equals(company.getTenant().getId()))
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", "Công ty không thuộc tenant đã chọn."));
+        if (request == null || request.modelName() == null || request.modelName().isBlank()
+                || request.modelName().trim().length() > 255
+                || request.modelName().contains("<") || request.modelName().contains(">"))
+            return ResponseEntity.badRequest().body(Map.of("message", "Tên menu phải từ 1 đến 255 ký tự."));
+        BigDecimal price = request.sellingPrice();
+        if (price == null || price.signum() < 0 || price.scale() > 2
+                || price.compareTo(new BigDecimal("1000000000000")) > 0)
+            return ResponseEntity.badRequest().body(Map.of("message", "Giá menu không hợp lệ."));
+
+        Model model = modelRepository.findById(id)
+                .filter(found -> tenantId.equals(found.getTenantId()) && companyId.equals(found.getCompanyId()))
+                .orElse(null);
+        if (model == null) return ResponseEntity.notFound().build();
+        model.setModelName(request.modelName().trim().replaceAll("\\s+", " "));
+        model.setSellingPrice(price);
+        Model saved = modelRepository.save(model);
+        return ResponseEntity.ok(Map.of("id", saved.getId(),
+                "modelName", saved.getModelName(), "sellingPrice", saved.getSellingPrice()));
+    }
+
     private void normalizeAllowedSideConfig(Model model, UUID tenantId, UUID companyId) {
         String raw = model.getAllowedSideIds();
         if (raw == null || raw.isBlank()) {

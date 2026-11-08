@@ -1671,7 +1671,17 @@ public class ShopOrderService {
             item.setOrder(order);
             item.setParentItem(parent);
             item.setModel(model);
-            item.setModelName(model.getModelName());
+            String customName = req.displayNameOverride();
+            if (customName != null && !customName.isBlank()) {
+                customName = customName.trim().replaceAll("\\s+", " ");
+                if (customName.length() > 255 || customName.contains("<") || customName.contains(">"))
+                    throw new IllegalArgumentException("Tên hàng tùy chỉnh không hợp lệ (tối đa 255 ký tự).");
+                if (!customName.equals(model.getModelName()) && !canOverrideOrderItemName())
+                    throw new IllegalArgumentException("Chỉ nhân viên đăng nhập được đổi tên hàng trong đơn.");
+                item.setModelName(customName);
+            } else {
+                item.setModelName(model.getModelName());
+            }
             item.setQuantity(qty);
             item.setUnitPrice(unitPrice);
             item.setUnitRawCost(unitRawCost);
@@ -1688,6 +1698,14 @@ public class ShopOrderService {
 
             buildItems(order, req.sideItems(), item, accumulator, totals, tenantId, companyId, persist);
         }
+    }
+
+    private boolean canOverrideOrderItemName() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) return false;
+        return auth.getAuthorities().stream().anyMatch(granted ->
+                Set.of("ROLE_SUPER_ADMIN", "ROLE_ADMIN", "ROLE_USER", "ROLE_COUNTER",
+                        "ROLE_SHOP_ORDERING").contains(granted.getAuthority()));
     }
 
     private void validateUnitPriceOverride(ItemRequest request, Model model) {
@@ -2811,6 +2829,7 @@ public class ShopOrderService {
         private BigDecimal quantity;
         private String selectedOptions;
         private String itemNotes;
+        private String displayNameOverride;
         private BigDecimal unitPriceOverride;
         private List<ItemRequest> sideItems;
 
@@ -2818,6 +2837,7 @@ public class ShopOrderService {
         public BigDecimal quantity() { return quantity; }
         public String selectedOptions() { return selectedOptions; }
         public String itemNotes() { return itemNotes; }
+        public String displayNameOverride() { return displayNameOverride; }
         public BigDecimal unitPriceOverride() { return unitPriceOverride; }
         public List<ItemRequest> sideItems() { return sideItems != null ? sideItems : Collections.emptyList(); }
 
@@ -2825,6 +2845,7 @@ public class ShopOrderService {
         public void setQuantity(BigDecimal v) { this.quantity = v; }
         public void setSelectedOptions(String v) { this.selectedOptions = v; }
         public void setItemNotes(String v) { this.itemNotes = v; }
+        public void setDisplayNameOverride(String v) { this.displayNameOverride = v; }
         public void setUnitPriceOverride(BigDecimal v) { this.unitPriceOverride = v; }
         public void setSideItems(List<ItemRequest> v) { this.sideItems = v; }
     }

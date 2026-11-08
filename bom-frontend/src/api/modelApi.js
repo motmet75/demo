@@ -92,6 +92,17 @@ export async function updateModelSellingPrice(id, sellingPrice) {
   return data
 }
 
+// Admin-only: change menu name and price without overwriting other model fields.
+export async function updateModelMenuLabelPrice(id, modelName, sellingPrice) {
+  const { res, data } = await apiFetchJson(`/bom/models/${encodeURIComponent(id)}/menu-label-price`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ modelName, sellingPrice }),
+  })
+  if (!res.ok) throw new Error(data?.message || data?.error || `Không cập nhật được tên/giá menu (HTTP ${res.status})`)
+  return data
+}
+
 export async function deleteModel(id) {
   const url = `/bom/models/${encodeURIComponent(id)}`
   const res = await apiFetch(url, { method: 'DELETE' })

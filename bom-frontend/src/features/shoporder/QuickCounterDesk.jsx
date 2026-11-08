@@ -8,7 +8,7 @@ import StarIcon from '@mui/icons-material/Star'
 import StarBorderIcon from '@mui/icons-material/StarBorder'
 import { clearTableOrderDraft, confirmTableOrderDraft, fetchMenuOptions, fetchStaffMenuItems, fetchTableOrderDraft, fetchTableOrderDrafts, saveTableOrderDraft } from '../../api/shopApi'
 import { printCounterOrderAlertTracked } from '../../utils/printWithHistory'
-import { updateModelSellingPrice } from '../../api/modelApi'
+import { updateModelMenuLabelPrice } from '../../api/modelApi'
 import { useAuth } from '../../context/useAuth'
 import { decorateAllowedSideOptions } from '../../utils/sideItemConfig'
 import ItemOptionsDialog from '../shopfront/ItemOptionsDialog'
@@ -169,8 +169,9 @@ export default function QuickCounterDesk({ rows, actions, onNew, onCreated, shif
 
   const orderItemsFromDraft=items=>items.map(item=>({
     modelId:item.modelId,quantity:Number(item.quantity||1),selectedOptions:item.selectedOptions||null,itemNotes:item.itemNotes||null,
+    displayNameOverride:item.modelName||null,
     unitPriceOverride:item.unitPrice == null ? null : Number(item.unitPrice),
-    sideItems:(item.sideItems||[]).map(side=>({modelId:side.modelId,quantity:Number(side.quantity||1)*Number(item.quantity||1),selectedOptions:null,itemNotes:null,unitPriceOverride:side.unitPrice == null ? null : Number(side.unitPrice),sideItems:[]})),
+    sideItems:(item.sideItems||[]).map(side=>({modelId:side.modelId,quantity:Number(side.quantity||1)*Number(item.quantity||1),selectedOptions:null,itemNotes:null,displayNameOverride:side.modelName||null,unitPriceOverride:side.unitPrice == null ? null : Number(side.unitPrice),sideItems:[]})),
   }))
 
   const addQuickItem=async selectedItem=>{
@@ -182,7 +183,7 @@ export default function QuickCounterDesk({ rows, actions, onNew, onCreated, shif
       if(!latest.res.ok&&latest.res.status!==204)throw new Error(latest.data?.message||latest.data?.error||'Không tải được đơn tạm')
       const latestDraft=latest.res.status===204?null:latest.data
       const currentItems=Array.isArray(latestDraft?.displayItems)?latestDraft.displayItems:[]
-      const simpleLine=currentItems.find(item=>String(item.modelId)===String(itemToAdd.id)&&!item.selectedOptions&&!item.itemNotes&&!(item.sideItems||[]).length&&Number(item.unitPrice)===Number(itemToAdd.sellingPrice))
+      const simpleLine=currentItems.find(item=>String(item.modelId)===String(itemToAdd.id)&&!item.selectedOptions&&!item.itemNotes&&!(item.sideItems||[]).length&&Number(item.unitPrice)===Number(itemToAdd.sellingPrice)&&item.modelName===itemToAdd.modelName)
       const nextItems=simpleLine
         ? currentItems.map(item=>item.lineId===simpleLine.lineId?{...item,quantity:Number(item.quantity||1)+1}:item)
         : [...currentItems,{lineId:crypto.randomUUID(),modelId:itemToAdd.id,modelName:itemToAdd.modelName,quantity:1,unitPrice:Number(itemToAdd.sellingPrice||0),imageUrl:itemToAdd.imageUrl||itemToAdd.thumbnailUrl||null,selectedOptions:null,itemNotes:null,sideItems:[]}]
@@ -244,7 +245,7 @@ export default function QuickCounterDesk({ rows, actions, onNew, onCreated, shif
       if(!currentItems.some(item=>item.lineId===quickEditing.item.lineId))throw new Error('Món này không còn trong đơn tạm')
       const model=quickEditing.model
       const nextItem={
-        lineId:quickEditing.item.lineId,modelId:model.id,modelName:model.modelName,
+        lineId:quickEditing.item.lineId,modelId:model.id,modelName:quickEditing.item.modelName||model.modelName,
         quantity:Number(configured.qty||1),unitPrice:Number(quickEditing.item.unitPrice ?? model.sellingPrice ?? 0),
         imageUrl:model.imageUrl||model.thumbnailUrl||quickEditing.item.imageUrl||quickEditing.item.thumbnailUrl||null,
         selectedOptions:configured.selectedOptions||null,itemNotes:configured.itemNotes||null,
@@ -268,8 +269,11 @@ export default function QuickCounterDesk({ rows, actions, onNew, onCreated, shif
     setPriceError('')
     setPriceEditing({
       lineId:item.lineId,modelId:item.modelId,modelName:item.modelName,
+      productCode:menuItem?.modelCode||'',
+      menuName:menuItem?.modelName||item.modelName,
       menuPrice:menuItem?.sellingPrice == null ? null : Number(menuItem.sellingPrice),
       priceDigits:String(Math.round(Number(item.unitPrice ?? 0))),
+      notes:item.itemNotes||'',
       updateMenu:false,
     })
   }
@@ -278,6 +282,12 @@ export default function QuickCounterDesk({ rows, actions, onNew, onCreated, shif
     if(!editing||!selectedTableId||!activeDraft?.draftId||draftSaving)return
     const digits=editing.priceDigits
     const nextPrice=Number(digits)
+    const newName=String(editing.modelName||'').trim().replace(/\s+/g,' ')
+    const newNotes=String(editing.notes||'').trim()
+    if(!newName||newName.length>255||/[<>]/.test(newName)||newNotes.length>1000){
+      setPriceError('Tên hàng phải từ 1–255 ký tự, ghi chú tối đa 1.000 ký tự và không chứa dấu < >.')
+      return
+    }
     if(!/^\d{1,13}$/.test(digits)||!Number.isSafeInteger(nextPrice)||nextPrice>1000000000000){
       setPriceError('Giá phải là số nguyên từ 0 đến 1.000 tỷ đồng.')
       return
@@ -298,7 +308,7 @@ export default function QuickCounterDesk({ rows, actions, onNew, onCreated, shif
       const latestDraft=latest.data
       const currentItems=Array.isArray(latestDraft?.displayItems)?latestDraft.displayItems:[]
       if(!currentItems.some(item=>item.lineId===editing.lineId))throw new Error('Món này không còn trong đơn tạm, vui lòng tải lại.')
-      const nextItems=currentItems.map(item=>item.lineId===editing.lineId?{...item,unitPrice:nextPrice}:item)
+      const nextItems=currentItems.map(item=>item.lineId===editing.lineId?{...item,unitPrice:nextPrice,modelName:newName,itemNotes:newNotes||null}:item)
       const payload={
         draftId:latestDraft.draftId,
         order:{...(latestDraft.order||{}),fulfillmentType:'DINE_IN',tableId:selectedTableId,paymentMethod:latestDraft.order?.paymentMethod||'CASH',items:orderItemsFromDraft(nextItems)},
@@ -309,10 +319,10 @@ export default function QuickCounterDesk({ rows, actions, onNew, onCreated, shif
       upsertDraft(data)
       draftSaved=true
       // Optional, independent menu update. Other drafts/orders are untouched.
-      if(editing.updateMenu&&nextPrice!==editing.menuPrice){
-        const updated=await updateModelSellingPrice(editing.modelId,nextPrice)
+      if(editing.updateMenu&&(nextPrice!==editing.menuPrice||newName!==editing.menuName)){
+        const updated=await updateModelMenuLabelPrice(editing.modelId,newName,nextPrice)
         setMenuItems(current=>current.map(model=>String(model.id)===String(editing.modelId)
-          ? {...model,sellingPrice:Number(updated.sellingPrice)}:model))
+          ? {...model,modelName:updated.modelName,sellingPrice:Number(updated.sellingPrice)}:model))
       }
       setPriceEditing(null)
     }catch(error){
@@ -416,7 +426,7 @@ export default function QuickCounterDesk({ rows, actions, onNew, onCreated, shif
               <Stack direction="row" gap={0.75} alignItems="center" flexWrap="wrap">
                 <Typography variant="body2" color="text.secondary">Đơn giá: {money(item.unitPrice)} × {quantity}</Typography>
                 <Button size="small" variant="outlined" disabled={draftSaving||quickEditLoading}
-                  onClick={()=>startPriceEdit(item)} sx={{textTransform:'none',minWidth:0,py:0}}>Sửa giá</Button>
+                  onClick={()=>startPriceEdit(item)} sx={{textTransform:'none',minWidth:0,py:0}}>Sửa tên / giá</Button>
               </Stack>
               {toppings&&<Typography variant="body2"><strong>Tùy chọn / topping:</strong> {toppings}</Typography>}
               {(item.sideItems||[]).length>0&&<Box sx={{mt:0.25}}>
@@ -479,21 +489,28 @@ export default function QuickCounterDesk({ rows, actions, onNew, onCreated, shif
       </Stack>
     </Paper>})}</Box>)}</Box>
     {priceEditing&&<Dialog open onClose={()=>{if(!draftSaving)setPriceEditing(null)}} fullWidth maxWidth="xs">
-      <DialogTitle>Đổi giá bán · {priceEditing.modelName}</DialogTitle>
+      <DialogTitle>Chỉnh sửa món trong đơn tạm</DialogTitle>
       <DialogContent sx={{pt:'12px !important'}}>
         <Stack gap={1.5}>
           <Typography variant="body2" color="text.secondary">
-            Giá menu hiện tại: {priceEditing.menuPrice == null ? 'Chưa có' : money(priceEditing.menuPrice)}.
-            Giá mới chỉ áp dụng cho dòng món trong đơn tạm này, trừ khi bạn chọn cập nhật menu.
+            Mã sản phẩm: {priceEditing.productCode||'Không có'} · Giá menu: {priceEditing.menuPrice == null ? 'Chưa có' : money(priceEditing.menuPrice)}.
+            Tên, quy cách và giá mới chỉ áp dụng cho dòng món này, trừ khi quản trị viên chọn cập nhật menu.
           </Typography>
-          <TextField autoFocus fullWidth label="Giá bán cho dòng món (₫)" size="small"
+          <TextField autoFocus fullWidth size="small" label="Tên món / Tên hàng" required
+            value={priceEditing.modelName} inputProps={{maxLength:255}}
+            onChange={event=>setPriceEditing(old=>({...old,modelName:event.target.value}))}/>
+          <TextField fullWidth size="small" label="Quy cách / Ghi chú riêng cho đơn" multiline minRows={2}
+            value={priceEditing.notes} inputProps={{maxLength:1000}}
+            onChange={event=>setPriceEditing(old=>({...old,notes:event.target.value}))}
+            helperText="Ghi chú cho dòng hàng, không thay đổi mã sản phẩm hoặc quy cách trong danh mục."/>
+          <TextField fullWidth label="Giá bán cho dòng món (₫)" size="small"
             value={priceText(priceEditing.priceDigits)} inputProps={{inputMode:'numeric',pattern:'[0-9.]*'}}
             onChange={event=>setPriceEditing(old=>({...old,priceDigits:priceDigits(event.target.value)}))}
             helperText="Có thể nhập 0đ (quản trị viên). Không thay đổi giá các đơn đã phát hành."/>
           {isAdmin&&<FormControlLabel
             control={<Checkbox checked={priceEditing.updateMenu}
               onChange={event=>setPriceEditing(old=>({...old,updateMenu:event.target.checked}))}/>}
-            label="Cập nhật giá bán trong menu cho các đơn tiếp theo"/>}
+            label="Cập nhật tên và giá bán trong menu cho các đơn tiếp theo (không lưu ghi chú)"/>}
           {!isAdmin&&priceEditing.menuPrice!=null&&Number(priceEditing.priceDigits)<priceEditing.menuPrice&&
             <Alert severity="warning">Giá thấp hơn menu yêu cầu quyền quản trị viên.</Alert>}
           {priceError&&<Alert severity="error">{priceError}</Alert>}
@@ -502,7 +519,7 @@ export default function QuickCounterDesk({ rows, actions, onNew, onCreated, shif
       <DialogActions>
         <Button disabled={draftSaving} onClick={()=>{setPriceEditing(null);setPriceError('')}}>Hủy</Button>
         <Button variant="contained" disabled={draftSaving||priceEditing.priceDigits===''}
-          onClick={()=>void saveDraftLinePrice()}>{draftSaving?'Đang lưu...':'Lưu giá'}</Button>
+          onClick={()=>void saveDraftLinePrice()}>{draftSaving?'Đang lưu...':'Lưu thay đổi'}</Button>
       </DialogActions>
     </Dialog>}
     {quickEditing&&<ItemOptionsDialog open model={quickEditing.model} options={quickEditingOptions} allowedSideOptions={decorateAllowedSideOptions(menuItems,quickEditing.model.allowedSideIds)} initialCart={{qty:quickEditing.item.quantity,selectedOptions:quickEditing.item.selectedOptions,itemNotes:quickEditing.item.itemNotes,sideItems:(quickEditing.item.sideItems||[]).map(side=>({modelId:side.modelId,qty:side.quantity}))}} onConfirm={saveQuickItemEdit} onClose={()=>{if(!draftSaving){setQuickEditing(null);setQuickEditingOptions([])}}}/>}
