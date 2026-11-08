@@ -308,6 +308,8 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
   const [pdfSerial, setPdfSerial] = useState('')
   const [pdfSupplierTaxId, setPdfSupplierTaxId] = useState('')
   const [pdfCurrency, setPdfCurrency] = useState('VND')
+  // Edited separately from the individual line VAT rates. Never mutate rows on typing.
+  const [bulkVatInput, setBulkVatInput] = useState('')
 
   const currency = pdfDocument ? pdfCurrency : (defaultCurrency === 'USD' ? 'USD' : 'VND')
   const materialOptions = useMemo(() => materials.filter(m => m.materialCode || m.materialName), [materials])
@@ -331,6 +333,10 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
   const invoiceGrandTotal=invoiceTotal+computedVat
   const commonVatRate=lines.length&&lines.every(line=>line.vatRate===lines[0].vatRate)
     ? lines[0].vatRate : ''
+  const bulkVatValue=parseVnNumber(bulkVatInput)
+  const canApplyBulkVat=lines.length>0 && Number.isFinite(bulkVatValue)
+    && bulkVatValue>=0 && bulkVatValue<=100
+    && (bulkVatInput.split(',')[1]?.length||0)<=3
   const pdfDifference = Boolean(pdfDocument) && (
     (Number.isFinite(pdfSubtotal) && Math.abs(invoiceTotal-pdfSubtotal)>1) ||
     (Number.isFinite(pdfVat) && Math.abs(computedVat-pdfVat)>1) ||
@@ -357,6 +363,7 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
     setPdfSerial('')
     setPdfSupplierTaxId('')
     setPdfCurrency('VND')
+    setBulkVatInput('')
     setPdfDocuments([])
     setForm({ invoiceNumber: invoiceNumberSeed(), partyName: '', invoiceDate: todayLocalDate(), notes: '' })
     try { remembered.current = JSON.parse(sessionStorage.getItem(sessionKey) || '{}') } catch { remembered.current = {} }
@@ -494,6 +501,7 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
     })
     const cached=pdfReviewCache.current[doc.id]
     setPdfDocument(doc)
+    setBulkVatInput('')
     setPdfSerial(cached?.serial??doc.serial??'')
     setPdfSupplierTaxId(cached?.supplierTaxId??doc.sellerTaxId??'')
     setPdfCurrency(cached?.currency??doc.currency??'VND')
@@ -504,6 +512,22 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
     })
     setLines(cached?.lines||nextRows)
     setError('')
+  }
+  const applyVatToAll = () => {
+    if (saving || pdfBusy || savedInvoice || !lines.length) return
+    if (!canApplyBulkVat) {
+      setError('Nhập VAT chung từ 0 đến 100%, tối đa 3 chữ số thập phân (ví dụ: 8 hoặc 8,5).')
+      return
+    }
+    const rate=formatVnNumber(bulkVatValue,3)
+    if (!window.confirm(
+      `Áp dụng VAT ${rate}% cho tất cả ${lines.length} dòng của hóa đơn hiện tại?\n\n` +
+      'Thao tác này sẽ ghi đè VAT đang nhập riêng của từng dòng. Bạn có chắc chắn?'
+    )) return
+    setLines(prev=>prev.map(row=>({...row,vatRate:rate})))
+    setPdfMismatchAcknowledged(false)
+    setError('')
+    setBulkVatInput('')
   }
   const savePdfReview = () => {
     if(!pdfDocument)return
@@ -840,7 +864,7 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
                 {pdfQueue.length>0&&<Chip size="small" color="info"
                   label={`Đã chọn ${pdfQueue.length} PDF · Chờ nhập ${pdfQueue.filter(d=>!pdfPostedIds.includes(d.id)).length}`}/>}
                 {pdfDocument&&<Button size="small" variant="outlined" disabled={saving||Boolean(savedInvoice)}
-                  onClick={()=>{setPdfDocument(null);setPdfMismatchAcknowledged(false);setLines([newLine()]);setForm({invoiceNumber:invoiceNumberSeed(),partyName:'',invoiceDate:todayLocalDate(),notes:''})}}>
+                  onClick={()=>{setPdfDocument(null);setBulkVatInput('');setPdfMismatchAcknowledged(false);setLines([newLine()]);setForm({invoiceNumber:invoiceNumberSeed(),partyName:'',invoiceDate:todayLocalDate(),notes:''})}}>
                   Nhập tay thay vì PDF
                 </Button>}
               </Stack>
@@ -993,9 +1017,15 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
 
             <Button variant="outlined" startIcon={<AddIcon />} onClick={()=>addLine()} disabled={saving || Boolean(pdfDocument)} sx={{ alignSelf: 'flex-start', fontWeight: 800 }}>Thêm dòng · Enter</Button>
             <Box sx={{display:'flex',justifyContent:'flex-end',alignItems:'center',flexWrap:'wrap',gap:1}}>
-              <TextField size="small" label="VAT chung (%)" value={commonVatRate}
-                sx={{width:115}} inputProps={{inputMode:'decimal'}}
-                onChange={e=>setLines(prev=>prev.map(row=>({...row,vatRate:e.target.value})))}/>
+              <TextField size="small" label="VAT chung (%)" value={bulkVatInput}
+                placeholder={commonVatRate!==''?`Hiện tại: ${commonVatRate}%`:'Ví dụ: 8 hoặc 8,5'}
+                helperText="Chỉ áp dụng sau khi xác nhận"
+                sx={{width:175}} inputProps={{inputMode:'decimal'}}
+                disabled={saving||pdfBusy||Boolean(savedInvoice)}
+                error={bulkVatInput!==''&&!canApplyBulkVat}
+                onChange={e=>setBulkVatInput(e.target.value)}/>
+              <Button variant="outlined" size="small" disabled={!canApplyBulkVat||saving||pdfBusy||Boolean(savedInvoice)}
+                onClick={applyVatToAll}>Áp dụng tất cả</Button>
               <Chip label={`Tiền hàng ${formatVnNumber(invoiceTotal,2)} ${currency}`} color="primary"/>
               <Chip label={`VAT ${formatVnNumber(computedVat,2)} ${currency}`}/>
               <Chip label={`Tổng sau VAT ${formatVnNumber(invoiceGrandTotal,2)} ${currency}`}

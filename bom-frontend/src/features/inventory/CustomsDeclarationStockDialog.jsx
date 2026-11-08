@@ -47,6 +47,8 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
   const [error,setError]=useState('')
   const [success,setSuccess]=useState('')
   const [confirmed,setConfirmed]=useState(false)
+  // Separate draft: typing a VAT rate never modifies declaration line VAT.
+  const [bulkVatInput,setBulkVatInput]=useState('')
   const [queuedDocs,setQueuedDocs]=useState([])
   const [postedIds,setPostedIds]=useState([])
   const [notice,setNotice]=useState('')
@@ -66,12 +68,13 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
     if(!open)return
     setDirection(initialDirection)
     setDoc(null);setRows([]);setNumber('');setDate('');setCurrency('VND')
-    setError('');setSuccess('');setConfirmed(false)
+    setError('');setSuccess('');setConfirmed(false);setBulkVatInput('')
     setQueuedDocs([]);setPostedIds([]);setNotice('');reviewCache.current={}
     void load().catch(e=>setError(e.message||'Không tải được dữ liệu kho.'))
   },[open,initialDirection,load])
 
   const applyDoc=payload=>{
+    setBulkVatInput('')
     const saved=reviewCache.current[payload.id]
     setDoc(payload)
     setNumber(saved?.number??payload.declarationNumber??'')
@@ -156,6 +159,25 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
   },[doc,rows])
   const commonVatRate=rows.length&&rows.every(row=>row.vatRate===rows[0].vatRate)
     ?rows[0].vatRate:''
+  const bulkVatValue=parseVnNumber(bulkVatInput)
+  const canApplyBulkVat=rows.length>0 && Number.isFinite(bulkVatValue)
+    && bulkVatValue>=0 && bulkVatValue<=100
+    && (bulkVatInput.split(',')[1]?.length||0)<=3
+  const applyVatToAll=()=>{
+    if(busy||confirmed||doc?.status==='POSTED'||!rows.length)return
+    if(!canApplyBulkVat){
+      setError('Nhập VAT chung từ 0 đến 100%, tối đa 3 chữ số thập phân (ví dụ: 8 hoặc 8,5).')
+      return
+    }
+    const rate=formatVnNumber(bulkVatValue,3)
+    if(!window.confirm(
+      `Áp dụng VAT ${rate}% cho tất cả ${rows.length} dòng của tờ khai hiện tại?\n\n` +
+      'Thao tác này sẽ ghi đè VAT riêng từng dòng. Bạn có chắc chắn?'
+    ))return
+    setRows(prev=>prev.map(row=>({...row,vatRate:rate})))
+    setBulkVatInput('')
+    setError('')
+  }
 
   const ready=Boolean(doc)&&doc.status!=='POSTED'&&rows.length===doc.items?.length
     &&rows.length>0&&number.trim()&&validDate(date)
@@ -362,9 +384,14 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
           </Table>
         </TableContainer>
         <Stack direction="row" gap={1} flexWrap="wrap" alignItems="center" justifyContent="flex-end">
-          <TextField size="small" label="VAT chung (%)" value={commonVatRate}
-            disabled={confirmed} sx={{width:125}} inputProps={{inputMode:'decimal'}}
-            onChange={e=>setRows(prev=>prev.map(row=>({...row,vatRate:e.target.value})))}/>
+          <TextField size="small" label="VAT chung (%)" value={bulkVatInput}
+            placeholder={commonVatRate!==''?`Hiện tại: ${commonVatRate}%`:'Ví dụ: 8 hoặc 8,5'}
+            helperText="Chỉ áp dụng sau khi xác nhận"
+            disabled={confirmed||busy} sx={{width:175}} inputProps={{inputMode:'decimal'}}
+            error={bulkVatInput!==''&&!canApplyBulkVat}
+            onChange={e=>setBulkVatInput(e.target.value)}/>
+          <Button variant="outlined" size="small" disabled={!canApplyBulkVat||confirmed||busy}
+            onClick={applyVatToAll}>Áp dụng tất cả</Button>
           <Chip label={`Trị giá khai báo: ${formatVnNumber(taxSummary.subtotal,2)} ${currency}`}/>
           <Chip label={`VAT: ${formatVnNumber(taxSummary.vat,2)} ${currency}`}/>
           <Chip color="success" label={`Tổng sau VAT: ${formatVnNumber(taxSummary.total,2)} ${currency}`}/>
