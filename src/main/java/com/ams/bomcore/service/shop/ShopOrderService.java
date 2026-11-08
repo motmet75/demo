@@ -2867,6 +2867,9 @@ public class ShopOrderService {
         private BigDecimal quantity;
         private String selectedOptions;
         private String itemNotes;
+        // Redis drafts written by older clients used "displayName". Accept
+        // both names, but always persist the canonical displayNameOverride.
+        @com.fasterxml.jackson.annotation.JsonAlias("displayName")
         private String displayNameOverride;
         private BigDecimal unitPriceOverride;
         private List<ItemRequest> sideItems;

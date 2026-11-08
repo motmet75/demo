@@ -66,6 +66,52 @@ class ShopCounterDraftNamePersistenceTest {
     }
 
     @Test
+    void legacyDisplayNameInRedisDraftIsAcceptedAndPreserved() {
+        var item = orderLine(COFFEE_ID);
+        item.setDisplayNameOverride("Cà phê sữa - Size L");
+        item.setItemNotes("Ít đá");
+        var draft = new ShopOrderDraftCache.DraftView(
+                "legacy-draft", UUID.randomUUID(), draftRequest(item),
+                List.of(Map.of(
+                        "modelId", COFFEE_ID.toString(),
+                        "modelName", "Cà phê sữa - Size L",
+                        "itemNotes", "Ít đá")),
+                "staff", Instant.now());
+        String canonical = ShopOrderDraftCache.encode(draft);
+        String legacy = canonical.replace("\"displayNameOverride\":", "\"displayName\":");
+        org.junit.jupiter.api.Assertions.assertNotEquals(canonical, legacy,
+                "Test must use the legacy Redis field name");
+
+        var decoded = ShopOrderDraftCache.decode(legacy).orElseThrow();
+        assertEquals("Cà phê sữa - Size L", decoded.order().items().get(0).displayNameOverride());
+        assertEquals("Ít đá", decoded.order().items().get(0).itemNotes());
+
+        var confirmed = ShopOrderService.withCounterDraftLabels(
+                decoded.order(), decoded.displayItems());
+        assertEquals(COFFEE_ID, confirmed.items().get(0).modelId());
+        assertEquals("Cà phê sữa - Size L",
+                confirmed.items().get(0).displayNameOverride());
+
+        String upgraded = ShopOrderDraftCache.encode(decoded);
+        org.junit.jupiter.api.Assertions.assertTrue(upgraded.contains("\"displayNameOverride\":"));
+        org.junit.jupiter.api.Assertions.assertFalse(upgraded.contains("\"displayName\":"));
+    }
+
+    @Test
+    void legacyNameAliasAlsoWorksInSideItems() throws Exception {
+        String json = """
+                {"modelId":"00000000-0000-0000-0000-000000000011",
+                 "quantity":1, "displayName":"Customized main item",
+                 "sideItems":[{"modelId":"00000000-0000-0000-0000-000000000012",
+                               "quantity":1, "displayName":"Customized topping"}]}
+                """;
+        var line = new com.fasterxml.jackson.databind.ObjectMapper().readValue(
+                json, ShopOrderService.ItemRequest.class);
+        assertEquals("Customized main item", line.displayNameOverride());
+        assertEquals("Customized topping", line.sideItems().get(0).displayNameOverride());
+    }
+
+    @Test
     void confirmationWillNotApplyWrongMenuItemName() {
         ShopOrderService.ItemRequest item = orderLine(COFFEE_ID);
         ShopOrderService.withCounterDraftLabels(draftRequest(item), List.of(Map.of(
