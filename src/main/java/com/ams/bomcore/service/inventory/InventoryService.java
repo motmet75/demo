@@ -357,7 +357,10 @@ public class InventoryService {
         applyReceiptFields(inv, unitPrice, currency, warehouseImportUnit, warehouseImportQuantity,
                 bomUnitPerWarehouseUnit, warehouseImportUnitPrice);
 
-        InventoryEntity savedById = inventoryRepository.save(inv);
+        // Receipt-line audit records are written through JdbcTemplate immediately after
+        // this call; flush the inventory INSERT/UPDATE before they reference its id.
+        // saveAndFlush participates in the caller's transaction (it does not commit).
+        InventoryEntity savedById = inventoryRepository.saveAndFlush(inv);
 
         // Record IN movement log only; on-hand was already applied above.
         movementService.recordInMovementLogOnly(
