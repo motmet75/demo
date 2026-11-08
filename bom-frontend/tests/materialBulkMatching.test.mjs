@@ -47,3 +47,9 @@ test('multiple batches with the same material name are ambiguous for stock out',
   ]
   assert.equal(matchMaterialByDescription('Mo to',available,'cái').status,'ambiguous')
 })
+
+test('non-Latin material descriptions are preserved in exact matching',()=>{
+  const catalog=[{id:'zh',materialName:'螺丝 M8',unit:'pcs'}]
+  assert.equal(matchMaterialByDescription('螺丝 M8',catalog).material.id,'zh')
+  assert.equal(matchMaterialByDescription('螺母 M8',catalog).status,'missing')
+})
