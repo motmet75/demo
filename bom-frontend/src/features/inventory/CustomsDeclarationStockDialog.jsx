@@ -32,7 +32,9 @@ const newRow=(item,warehouses)=>({
   batchNo:'',newMaterial:false,newMaterialAutoCode:true,
   newMaterialCode:'',newMaterialName:item.description||'',
   newMaterialUnit:item.unit||'cái',
-  conversionRatio:'1',vatRate:item.vatRate==null?'0':String(item.vatRate),
+  // Customs import VAT is based on VND customs taxable value + import duty.
+  // Do not silently apply its percentage to foreign-currency purchase cost.
+  conversionRatio:'1',vatRate:'0',
 })
 
 export default function CustomsDeclarationStockDialog({open,onClose,onComplete,initialDirection='IN'}){
