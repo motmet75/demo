@@ -668,6 +668,11 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
       </>}
     </DialogContent>
     <DialogActions sx={{flexWrap:'wrap'}}>
+      {doc&&!confirmed&&error&&
+        <Alert severity="error" sx={{width:'100%',textAlign:'left',whiteSpace:'pre-wrap'}}>
+          <Typography variant="subtitle2" fontWeight={700}>Không xác nhận được tờ khai</Typography>
+          {error}
+        </Alert>}
       {doc&&!confirmed&&showValidation&&validationErrors.length>0&&
         <Alert severity="warning" sx={{width:'100%',textAlign:'left'}}>
           <Typography variant="subtitle2" fontWeight={700}>
