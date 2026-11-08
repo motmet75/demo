@@ -9,6 +9,7 @@ import {fetchMaterials} from '../../api/materialApi'
 import {fetchWarehouses} from '../../api/warehouseApi'
 import {fetchInventoryView} from '../../api/inventoryApi'
 import {formatVnNumber,parseVnNumber} from '../../utils/vietnameseNumbers'
+import {generateMaterialCode} from '../../utils/materialCode'
 
 const norm=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
   .replace(/[đĐ]/g,'d').toLowerCase().trim()
@@ -26,7 +27,7 @@ const today=()=>{const d=new Date();return [
 const newRow=(item,warehouses)=>({
   lineIndex:item.lineIndex,materialId:'',inventoryId:'',
   warehouseId:warehouses.length===1?String(warehouses[0].id):'',
-  batchNo:'',newMaterial:false,
+  batchNo:'',newMaterial:false,newMaterialAutoCode:true,
   newMaterialCode:'',newMaterialName:item.description||'',
   newMaterialUnit:item.unit||'cái',
   conversionRatio:'1',vatRate:'0',
@@ -135,6 +136,21 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
   }
   const edit=(index,patch)=>setRows(prev=>prev.map(row=>
     row.lineIndex===index?{...row,...patch}:row))
+  const suggestCode=(index)=>generateMaterialCode([
+    ...materials.map(item=>item.materialCode),
+    ...rows.filter(row=>row.lineIndex!==index).map(row=>row.newMaterialCode)
+  ])
+  const createNewAtLine=(index,item)=>{
+    const current=rows.find(row=>row.lineIndex===index)
+    edit(index,{
+      newMaterial:true,materialId:'',
+      newMaterialAutoCode:current?.newMaterialAutoCode!==false,
+      newMaterialCode:current?.newMaterialCode?.trim()||
+        (current?.newMaterialAutoCode!==false?suggestCode(index):''),
+      // Default to the exact customs item description; keep it editable.
+      newMaterialName:current?.newMaterialName?.trim()||item.description||''
+    })
+  }
   const mapStock=useMemo(()=>new Map(stock.map(item=>[
     String(item.inventoryId||item.id),item
   ])),[stock])
@@ -319,12 +335,25 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
                         <Button size="small" variant={!line.newMaterial?'contained':'outlined'} onClick={()=>
                           edit(i,{newMaterial:false})} disabled={confirmed}>Chọn mã có sẵn</Button>
                         <Button size="small" variant={line.newMaterial?'contained':'outlined'} onClick={()=>
-                          edit(i,{newMaterial:true,materialId:''})} disabled={confirmed}>Tạo mới tại đây</Button>
+                          createNewAtLine(i,item)} disabled={confirmed}>Tạo mới tại đây</Button>
                       </Stack>
                       {line.newMaterial?<Stack spacing={0.5}>
-                        <TextField size="small" label="Mã vật tư mới" value={line.newMaterialCode}
-                          disabled={confirmed} onChange={e=>edit(i,{newMaterialCode:e.target.value})}/>
+                        <Stack direction="row" spacing={0.5} alignItems="center">
+                          <FormControlLabel sx={{m:0,flexShrink:0}}
+                            label={<Typography variant="caption">Tự sinh mã</Typography>}
+                            control={<Switch size="small" checked={line.newMaterialAutoCode!==false}
+                              disabled={confirmed} onChange={e=>edit(i,{
+                                newMaterialAutoCode:e.target.checked,
+                                newMaterialCode:e.target.checked?suggestCode(i):''
+                              })}/>} />
+                          <TextField size="small" label="Mã vật tư" fullWidth value={line.newMaterialCode}
+                            disabled={confirmed}
+                            inputProps={{readOnly:line.newMaterialAutoCode!==false}}
+                            helperText="Mã được kiểm tra trùng khi ghi kho"
+                            onChange={e=>edit(i,{newMaterialCode:e.target.value})}/>
+                        </Stack>
                         <TextField size="small" label="Tên nguyên vật liệu gốc" value={line.newMaterialName}
+                          helperText="Mặc định từ tên hàng trên tờ khai; có thể sửa"
                           disabled={confirmed} onChange={e=>edit(i,{newMaterialName:e.target.value})}/>
                         <TextField size="small" label="Đơn vị kho" value={line.newMaterialUnit}
                           disabled={confirmed} onChange={e=>edit(i,{newMaterialUnit:e.target.value})}/>

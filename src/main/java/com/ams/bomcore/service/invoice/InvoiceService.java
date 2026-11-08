@@ -89,7 +89,12 @@ public class InvoiceService {
         inv.setNotes(str(body, "notes"));
         inv.setCreatedBy(com.ams.bomcore.audit.AuditActor.username());
         inv.setStatus(InvoiceEntity.STATUS_DRAFT);
-        return invoiceRepository.save(inv);
+        // A receiving workflow creates an invoice with JPA and immediately
+        // inserts a referencing receipt with JdbcTemplate in the SAME transaction.
+        // save() defers the INSERT until Hibernate flushes, which makes the
+        // receipt FK fail ("purchase_invoice_id is not present in invoice").
+        // Flush only the new invoice here, before JDBC writes its FK.
+        return invoiceRepository.saveAndFlush(inv);
     }
 
     @Transactional(rollbackFor = Exception.class)

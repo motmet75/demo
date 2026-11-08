@@ -186,6 +186,10 @@ public class CustomsDeclarationStockService {
         Map<Integer,Material> existingMaterials=new TreeMap<>();
         Map<Integer,InventoryEntity> inventories=new TreeMap<>();
         Map<String,Material> createdMaterials=new HashMap<>();
+        Map<Integer,String> resolvedNewCodes=new HashMap<>();
+        Map<String,Line> newDefinitions=new HashMap<>();
+        Map<String,String> canonicalCodes=new HashMap<>();
+        Set<String> reservedCodes=new HashSet<>();
         Map<Integer,WarehouseEntity> selectedWarehouses=new TreeMap<>();
         Map<UUID,BigDecimal> outQuantities=new TreeMap<>();
         Map<Integer,BigDecimal> taxAmountByLine=new HashMap<>();
@@ -250,17 +254,29 @@ public class CustomsDeclarationStockService {
                     ||!scope.tenantId().equals(m.getTenant().getId()))throw fail("Mã vật tư khác công ty.");
                 existingMaterials.put(line.lineIndex(),m);
             } else {
-                String code=required(line.newMaterialCode(),"Mã vật tư mới",50);
-                required(line.newMaterialName(),"Tên vật tư mới",500);
-                required(line.newMaterialUnit(),"Đơn vị vật tư mới",20);
-                if(materialRepo.findByMaterialCodeAndTenantIdAndCompanyId(
-                       code,scope.tenantId(),scope.companyId()).isPresent())
-                    throw fail("Mã vật tư "+code+" đã tồn tại; chọn mã có sẵn.");
-                for(Line prev:selected.values())if(prev!=line&&prev.materialId()==null
-                    && Objects.equals(code,prev.newMaterialCode())
-                    && (!Objects.equals(line.newMaterialName(),prev.newMaterialName())
-                        ||!Objects.equals(line.newMaterialUnit(),prev.newMaterialUnit())))
-                    throw fail("Định nghĩa mã vật tư "+code+" không thống nhất.");
+                String name=required(line.newMaterialName(),"Tên vật tư mới",500);
+                String unit=required(line.newMaterialUnit(),"Đơn vị vật tư mới",20);
+                String submitted=Objects.toString(line.newMaterialCode(),"").trim();
+                String code=submitted.isEmpty()
+                    ? materialService.generateAvailableMaterialCode(
+                        scope.tenantId(),scope.companyId(),reservedCodes)
+                    : required(submitted,"Mã vật tư mới",50);
+                String normalized=code.toUpperCase(Locale.ROOT);
+                Line first=newDefinitions.get(normalized);
+                if(first!=null) {
+                    if(!name.equals(first.newMaterialName().trim())
+                        ||!unit.equals(first.newMaterialUnit().trim()))
+                        throw fail("Mã vật tư "+code+" đang dùng cho hai vật tư khác nhau.");
+                    code=canonicalCodes.get(normalized);
+                } else {
+                    if(materialRepo.existsByMaterialCodeIgnoreCaseAndTenantIdAndCompanyId(
+                           code,scope.tenantId(),scope.companyId()))
+                        throw fail("Mã vật tư "+code+" đã tồn tại; chọn mã có sẵn.");
+                    newDefinitions.put(normalized,line);
+                    canonicalCodes.put(normalized,code);
+                    reservedCodes.add(code);
+                }
+                resolvedNewCodes.put(line.lineIndex(),code);
             }
         }
         for(int i=0;i<parsed.items().size();i++)if(!selected.containsKey(i))
@@ -312,7 +328,7 @@ public class CustomsDeclarationStockService {
             Line line=selected.get(item.lineIndex());
             Material material=existingMaterials.get(item.lineIndex());
             if(material==null){
-                String code=line.newMaterialCode().trim();
+                String code=resolvedNewCodes.get(item.lineIndex());
                 material=createdMaterials.get(code);
                 if(material==null){
                     material=new Material();

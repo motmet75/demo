@@ -1,6 +1,8 @@
 package com.ams.bomcore.service.material;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -22,11 +24,44 @@ public class MaterialService {
         this.materialRepository = materialRepository;
     }
 
+    /**
+     * Generate a candidate code that does not collide (even ignoring case) with
+     * existing material codes in this tenant/company or other draft lines.
+     * Unique(tenant_id, company_id, material_code) at the DB remains the final
+     * guard against concurrent requests.
+     */
+    public String generateAvailableMaterialCode(UUID tenantId, UUID companyId,
+                                                Collection<String> reservedCodes) {
+        for (int attempt = 0; attempt < 30; attempt++) {
+            String code = "MAT-" + UUID.randomUUID().toString()
+                    .replace("-", "").substring(0, 20).toUpperCase(Locale.ROOT);
+            boolean reserved = reservedCodes != null && reservedCodes.stream()
+                    .anyMatch(value -> value != null && code.equalsIgnoreCase(value.trim()));
+            if (!reserved && !materialRepository.existsByMaterialCodeIgnoreCaseAndTenantIdAndCompanyId(
+                    code, tenantId, companyId)) {
+                return code;
+            }
+        }
+        throw new IllegalStateException("Không thể tạo mã vật tư mới không trùng.");
+    }
+
     public Material createForCompany(Material material, Company company, Tenant tenant) {
-        // assign company and persist
+        if (material == null || company == null || tenant == null) {
+            throw new IllegalArgumentException("Missing material, tenant or company");
+        }
         material.setCompany(company);
         material.setTenant(tenant);
-        return materialRepository.save(material);
+        String code = material.getMaterialCode() == null ? "" : material.getMaterialCode().trim();
+        if (code.isEmpty()) {
+            code = generateAvailableMaterialCode(tenant.getId(), company.getId(), List.of());
+        } else if (materialRepository.existsByMaterialCodeIgnoreCaseAndTenantIdAndCompanyId(
+                code, tenant.getId(), company.getId())) {
+            throw new IllegalArgumentException("Mã vật tư " + code + " đã tồn tại trong công ty.");
+        }
+        material.setMaterialCode(code);
+        // Force unique-constraint failures to occur before the caller writes
+        // inventory movements that reference this new material.
+        return materialRepository.saveAndFlush(material);
     }
 
     /**

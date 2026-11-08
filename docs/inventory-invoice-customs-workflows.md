@@ -57,3 +57,15 @@ Deploy frontend to /var/www/html/bom-inventory using ./bin/bom-frontend-live.sh 
   customs line lacks a declared price the consolidated totals are NULL.
 - Additional additive SQL migration:
   src/main/resources/db/migration/V20261108_4__customs_declaration_vat_audit.sql
+
+## Automatic material-code generation and invoice FK correction
+- In Hóa đơn mới · Nhập kho and Nhập kho · Tờ khai HQ, Tạo mới defaults the editable material name to the invoice/declaration original item name.
+- Tự sinh mã is enabled by default. UI generates MAT- plus 20 uppercase hex characters, avoiding codes loaded from the tenant/company and codes of other draft rows. Toggle it off to enter a manual code.
+- Backend validates all codes case-insensitively per tenant/company and generates unique ones when blank. The database unique index protects simultaneous requests.
+- Additive migration: src/main/resources/db/migration/V20261108_5__material_code_unique_ci.sql. Before running it check for existing duplicate codes by tenant/company ignoring case:
+  SELECT tenant_id, company_id, upper(btrim(material_code)) code, count(*) FROM public.material GROUP BY 1,2,3 HAVING count(*)>1;
+  If this query returns rows, resolve those duplicate legacy codes first; do not delete stock data.
+- InvoiceService.create() uses JPA saveAndFlush(), making public.invoice visible before the JDBC INSERT of inventory_invoice_pdf_receipt referencing its id.
+- InvoicePdfReceivingService also verifies the invoice row is visible to scoped JDBC, aborting the transaction with a clear error if JPA/JDBC schemas or datasource routing differ.
+- Before deployment run ./mvnw -Dtest=MaterialServiceGenerationTest,InvoiceServiceFlushTest test and node --test bom-frontend/tests/materialCode.test.mjs, then npm run build in bom-frontend.
+- Frontend-only deployment does not resolve the invoice foreign-key issue: build and deploy the updated Demo JAR as well.

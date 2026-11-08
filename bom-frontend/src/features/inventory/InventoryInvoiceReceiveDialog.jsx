@@ -34,6 +34,7 @@ import { receivingDefaults, lineCalc, hasLineInput } from './invoiceEntry'
 import { fetchMaterials, createMaterial } from '../../api/materialApi'
 import { listReceivingDocuments, getReceivingDocument, uploadReceivingPdf, confirmPdfReceiving } from '../../api/invoicePdfReceiveApi'
 import { formatVnNumber, parseVnNumber, parseMachineNumber } from '../../utils/vietnameseNumbers'
+import { generateMaterialCode } from '../../utils/materialCode'
 import { fetchWarehouses } from '../../api/warehouseApi'
 import { useAppContext } from '../../context/AppContext'
 import { fmtNum } from '../../utils/format'
@@ -75,6 +76,7 @@ const newLine = () => ({
   pdfUnit: '',
   newMaterial: false,
   newMaterialCode: '',
+  newMaterialAutoCode: true,
   newMaterialName: '',
   newMaterialUnit: '',
   newMaterialType: 'MATERIAL',
@@ -467,10 +469,19 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
   const useNewMaterial = line => {
     clearValidation()
     const unit=line.pdfUnit||line.warehouseImportUnit||'cái'
+    const existingCodes=[
+      ...materialOptions.map(material=>material.materialCode),
+      ...lines.filter(row=>row.id!==line.id).map(row=>row.newMaterialCode)
+    ]
+    const automatic=line.newMaterialAutoCode!==false
+    const suggestedCode=line.newMaterialCode?.trim()||(automatic?generateMaterialCode(existingCodes):'')
     updateLine(line.id,{
       newMaterial:true,material:null,materialInput:'',
-      newMaterialCode:line.newMaterialCode||'',
-      newMaterialName:line.newMaterialName||line.invoiceItemName||'',
+      newMaterialCode:suggestedCode,
+      newMaterialAutoCode:automatic,
+      // By default keep exactly the supplier's OCR description as the
+      // material's editable name. Do not rewrite the source invoice line.
+      newMaterialName:line.newMaterialName?.trim()||line.invoiceItemName?.trim()||'',
       newMaterialUnit:line.newMaterialUnit||unit,
       newMaterialType:line.newMaterialType||'MATERIAL',
       warehouseImportUnit:line.warehouseImportUnit||unit,
@@ -623,7 +634,12 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
     const prefix = `Dòng ${index + 1}`
     const issue = (field, message) => ({ lineId: line.id, field, message: `${prefix}: ${message}` })
     if (line.newMaterial && pdfDocument) {
-      if (!line.newMaterialCode.trim() || line.newMaterialCode.length>50) return issue('material', 'nhập mã vật tư mới (≤ 50 ký tự).')
+      if (line.newMaterialAutoCode===false && !line.newMaterialCode.trim())
+        return issue('material', 'Cần nhập mã vật tư hoặc bật Tự sinh mã.')
+      if (line.newMaterialCode.trim().length>50) return issue('material', 'Mã vật tư tối đa 50 ký tự.')
+      if (line.newMaterialCode.trim() && materialOptions.some(m=>
+        String(m.materialCode||'').trim().toLowerCase()===line.newMaterialCode.trim().toLowerCase()))
+        return issue('material','Mã vật tư đã tồn tại. Hãy chọn vật tư có sẵn.')
       if (!line.newMaterialName.trim()) return issue('material', 'nhập tên nguyên vật liệu gốc.')
       if (!line.newMaterialUnit.trim()) return issue('unit', 'nhập đơn vị vật tư mới.')
     } else if (!line.material) return issue('material',
@@ -689,11 +705,18 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
 
   const createMaterialInline = async line => {
     if(pdfDocument)return // PDF materials are created atomically on confirmation.
-    const code=line.newMaterialCode.trim()
+    const code=line.newMaterialCode.trim() || generateMaterialCode([
+      ...materialOptions.map(m=>m.materialCode),
+      ...lines.filter(row=>row.id!==line.id).map(row=>row.newMaterialCode)
+    ])
     const name=line.newMaterialName.trim()
     const unit=line.newMaterialUnit.trim()
-    if(!code||!name||!unit){setError('Cần nhập mã, tên và đơn vị cho nguyên vật liệu mới.');return}
-    if(materialOptions.some(m=>m.materialCode===code)){
+    if(!name||!unit){setError('Cần nhập tên và đơn vị cho nguyên vật liệu mới.');return}
+    if(line.newMaterialAutoCode===false&&!line.newMaterialCode.trim()){
+      setError('Cần nhập mã vật tư hoặc bật Tự sinh mã.');return
+    }
+    if(code.length>50){setError('Mã vật tư tối đa 50 ký tự.');return}
+    if(materialOptions.some(m=>String(m.materialCode).trim().toUpperCase()===code.toUpperCase())){
       setError('Mã vật tư đã có. Hãy chọn mã có sẵn.');return
     }
     setMaterialCreateId(line.id);setError('')
@@ -934,8 +957,31 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
                       <TableCell sx={{minWidth:320}}>
                         {line.newMaterial?<Box sx={{display:'flex',flexDirection:'column',gap:0.7}}>
                           <Chip color="primary" size="small" label="Tạo nguyên vật liệu mới tại đây" sx={{alignSelf:'flex-start'}}/>
-                          <TextField size="small" label="Mã vật tư mới" value={line.newMaterialCode} onChange={e=>updateLine(line.id,{newMaterialCode:e.target.value})}/>
-                          <TextField size="small" label="Tên nguyên vật liệu gốc" value={line.newMaterialName} onChange={e=>updateLine(line.id,{newMaterialName:e.target.value})}/>
+                          <Stack direction="row" alignItems="center" spacing={0.5}>
+                            <FormControlLabel sx={{m:0,flexShrink:0}} label={<Typography variant="caption">Tự sinh mã</Typography>}
+                              control={<Switch size="small" checked={line.newMaterialAutoCode!==false}
+                                onChange={e=>{
+                                  const automatic=e.target.checked
+                                  const codes=[
+                                    ...materialOptions.map(material=>material.materialCode),
+                                    ...lines.filter(row=>row.id!==line.id).map(row=>row.newMaterialCode)
+                                  ]
+                                  updateLine(line.id,{
+                                    newMaterialAutoCode:automatic,
+                                    newMaterialCode:automatic?generateMaterialCode(codes):''
+                                  })
+                                }}/>} />
+                            <TextField size="small" label="Mã vật tư" value={line.newMaterialCode} fullWidth
+                              inputProps={{readOnly:line.newMaterialAutoCode!==false}}
+                              helperText={line.newMaterialAutoCode!==false?
+                                'Mã gợi ý duy nhất trong danh sách đang có; sẽ kiểm tra lại khi lưu.':
+                                'Nhập mã thủ công; sẽ báo lỗi nếu trùng.'}
+                              onChange={e=>updateLine(line.id,{newMaterialCode:e.target.value})}/>
+                          </Stack>
+                          <TextField size="small" label="Tên nguyên vật liệu gốc" value={line.newMaterialName}
+                            helperText={line.invoiceItemName?
+                              'Mặc định từ tên hàng trên PDF; có thể chỉnh sửa.':'Nhập tên vật tư mới.'}
+                            onChange={e=>updateLine(line.id,{newMaterialName:e.target.value})}/>
                           <Stack direction="row" spacing={0.5}>
                             <TextField size="small" label="Đơn vị vật tư" value={line.newMaterialUnit} sx={{flex:1}}
                               onChange={e=>updateLine(line.id,{newMaterialUnit:e.target.value})}/>

@@ -113,7 +113,7 @@ public class InvoicePdfReceivingService {
             throw invalid("Ngày hóa đơn không hợp lệ.");
         String serial=required(req.invoiceSerial(),"Ký hiệu hóa đơn",80);
         String number=required(req.invoiceNumber(),"Số hóa đơn",80);
-        String supplier=required(req.supplierName(),"Nhà cung cấp",500);
+        String supplier=required(req.supplierName(),"Nhà cung cấp",200);
         String currency=required(req.currency(),"Tiền tệ",3).toUpperCase(Locale.ROOT);
         if(!Set.of("VND","USD","EUR","JPY","CNY").contains(currency))
             throw invalid("Tiền tệ phải là VND, USD, EUR, JPY hoặc CNY.");
@@ -128,6 +128,10 @@ public class InvoicePdfReceivingService {
         Tenant tenant=tenants.findById(scope.tenantId()).orElseThrow(()->invalid("Tenant không tồn tại."));
         Map<Integer,Line> lineMap=new TreeMap<>();
         Map<String,Material> newlyCreated=new HashMap<>();
+        Map<Integer,String> resolvedNewCodes=new HashMap<>();
+        Map<String,Line> codeDefinitions=new HashMap<>();
+        Map<String,String> canonicalCodes=new HashMap<>();
+        Set<String> reservedCodes=new HashSet<>();
         Map<Integer,Material> materialMap=new LinkedHashMap<>();
         Map<Integer,WarehouseEntity> warehouseMap=new LinkedHashMap<>();
         BigDecimal subtotal=BigDecimal.ZERO;
@@ -158,19 +162,34 @@ public class InvoicePdfReceivingService {
             if(ocrQty==null||ocrQty.compareTo(qty)!=0)
                 throw invalid("Số lượng dòng "+(l.invoiceLineIndex()+1)+" không trùng PDF. Sửa trong Invoice Desk trước.");
             if(l.materialId()==null) {
-                String code=required(l.newMaterialCode(),"Mã vật tư mới",50);
-                required(l.newMaterialName(),"Tên vật tư gốc",500);
-                required(l.newMaterialUnit(),"Đơn vị vật tư",20);
-                required(l.newMaterialType(),"Loại vật tư",30);
-                if(materials.findByMaterialCodeAndTenantIdAndCompanyId(code,scope.tenantId(),scope.companyId()).isPresent())
-                    throw new ResponseStatusException(HttpStatus.CONFLICT,
-                            "Mã "+code+" đã tồn tại. Hãy chọn vật tư có sẵn.");
-                // Repeated new codes in this invoice must define the same material.
-                for(Line earlier:lineMap.values())if(earlier!=l && earlier.materialId()==null
-                    && code.equals(earlier.newMaterialCode())
-                    && (!Objects.equals(l.newMaterialName(),earlier.newMaterialName())
-                     ||!Objects.equals(l.newMaterialUnit(),earlier.newMaterialUnit())))
-                    throw invalid("Mã vật tư mới "+code+" có tên hoặc đơn vị không thống nhất.");
+                String name=required(l.newMaterialName(),"Tên vật tư gốc",500);
+                String newUnit=required(l.newMaterialUnit(),"Đơn vị vật tư",20);
+                String newType=required(l.newMaterialType(),"Loại vật tư",30);
+                String requested=Objects.toString(l.newMaterialCode(),"").trim();
+                String code=requested.isBlank()
+                    ? materialService.generateAvailableMaterialCode(
+                        scope.tenantId(),scope.companyId(),reservedCodes)
+                    : required(requested,"Mã vật tư mới",50);
+                String normalized=code.toUpperCase(Locale.ROOT);
+                Line earlier=codeDefinitions.get(normalized);
+                if(earlier!=null) {
+                    if(!name.equals(earlier.newMaterialName().trim())
+                        ||!newUnit.equals(earlier.newMaterialUnit().trim())
+                        ||!newType.equals(earlier.newMaterialType().trim())) {
+                        throw invalid("Mã vật tư " + code + " được dùng cho hai vật tư khác nhau.");
+                    }
+                    code=canonicalCodes.get(normalized);
+                } else {
+                    if(materials.existsByMaterialCodeIgnoreCaseAndTenantIdAndCompanyId(
+                        code,scope.tenantId(),scope.companyId())) {
+                        throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "Mã " + code + " đã tồn tại. Hãy chọn vật tư có sẵn.");
+                    }
+                    codeDefinitions.put(normalized,l);
+                    canonicalCodes.put(normalized,code);
+                    reservedCodes.add(code);
+                }
+                resolvedNewCodes.put(l.invoiceLineIndex(),code);
             } else {
                 Material material=materials.findById(l.materialId())
                     .orElseThrow(()->invalid("Vật tư không tồn tại: "+l.materialId()));
@@ -233,6 +252,18 @@ public class InvoicePdfReceivingService {
         invoiceBody.put("notes","PDF Invoice Desk "+req.documentId()+"; MST NCC: "+taxId
                 +"; ngày nhập kho thực tế: "+LocalDate.now());
         InvoiceEntity purchase=invoiceService.create(invoiceBody,scope.tenantId(),scope.companyId());
+        // The following receipt FK references public.invoice, not another
+        // schema or database. saveAndFlush() in InvoiceService guarantees the
+        // INSERT executes before this JDBC query; verify that JDBC sees it.
+        Boolean visible=jdbc.queryForObject("""
+            SELECT EXISTS(SELECT 1 FROM public.invoice
+                WHERE id=? AND tenant_id=? AND company_id=?)
+            """,Boolean.class,purchase.getId(),scope.tenantId(),scope.companyId());
+        if(!Boolean.TRUE.equals(visible)) {
+            throw new IllegalStateException(
+                "Hóa đơn mua hàng vừa tạo chưa thấy trong public.invoice. "
+                +"Kiểm tra cấu hình JPA/JDBC DataSource và transaction; đã hủy nhập kho.");
+        }
         jdbc.update("""
             INSERT INTO public.inventory_invoice_pdf_receipt
                 (id,tenant_id,company_id,document_id,purchase_invoice_id,
@@ -248,7 +279,7 @@ public class InvoicePdfReceivingService {
             Material material=materialMap.get(i);
             boolean created=false;
             if(material==null) {
-                String code=line.newMaterialCode().trim();
+                String code=resolvedNewCodes.get(i);
                 material=newlyCreated.get(code);
                 if(material==null){
                     material=new Material();
