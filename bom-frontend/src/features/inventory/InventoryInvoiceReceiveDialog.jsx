@@ -35,6 +35,7 @@ import { fetchMaterials, createMaterial } from '../../api/materialApi'
 import { listReceivingDocuments, getReceivingDocument, uploadReceivingPdf, confirmPdfReceiving } from '../../api/invoicePdfReceiveApi'
 import { formatVnNumber, parseVnNumber, parseMachineNumber } from '../../utils/vietnameseNumbers'
 import { generateMaterialCode } from '../../utils/materialCode'
+import { matchMaterialByDescription, normalizeMaterialDescription } from '../../utils/materialBulkMatching'
 import { fetchWarehouses } from '../../api/warehouseApi'
 import { useAppContext } from '../../context/AppContext'
 import { fmtNum } from '../../utils/format'
@@ -429,6 +430,99 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
     rememberDefaults({ batchNo })
     setSharedLocation(prev => ({ ...prev, batchNo }))
     setLines(prev => prev.map(line => ({ ...line, batchNo })))
+  }
+
+  const pdfBulkAllowed=Boolean(pdfDocument)&&!saving&&!pdfBusy&&!savedInvoice
+
+  const bulkCreatePdfMaterials=()=>{
+    if(!pdfBulkAllowed)return
+    if(!window.confirm('Tạo mã vật tư MỚI cho tất cả dòng PDF?\\nMã đã chọn sẽ được thay thế. Vật tư chỉ lưu khi xác nhận nhập kho PDF thành công.'))return
+    const occupied=materialOptions.map(material=>material.materialCode)
+    const byDescription=new Map()
+    let count=0,unreadable=0
+    const prepared=lines.map(line=>{
+      const name=String(line.invoiceItemName||'').trim()
+      const unit=String(line.pdfUnit||line.warehouseImportUnit||'cái').trim()
+      if(!name||!unit){unreadable++;return line}
+      // Reuse the same code for identical source description and unit.
+      const key=JSON.stringify([name,unit])
+      let code=byDescription.get(key)
+      if(!code){
+        code=generateMaterialCode(occupied)
+        occupied.push(code)
+        byDescription.set(key,code)
+        count++
+      }
+      return {...line,material:null,materialInput:'',newMaterial:true,
+        newMaterialAutoCode:true,newMaterialCode:code,
+        newMaterialName:name,newMaterialUnit:unit,newMaterialType:'MATERIAL',
+        warehouseImportUnit:line.warehouseImportUnit||unit,
+        bomUnitPerWarehouseUnit:'1'}
+    })
+    setLines(prepared)
+    clearValidation()
+    setPdfNotice('Đã chuẩn bị '+count+' mã vật tư mới cho '+prepared.filter(line=>line.newMaterial).length+
+      ' dòng; '+unreadable+' dòng chưa có mô tả/đơn vị. Chỉ tạo trong Materials sau khi ghi kho thành công.')
+  }
+
+  const bulkMatchPdfMaterials=()=>{
+    if(!pdfBulkAllowed)return
+    let matched=0,ambiguous=0,missing=0,skipped=0,needsConversion=0
+    const prepared=lines.map(line=>{
+      if(line.material||line.newMaterial){skipped++;return line}
+      const result=matchMaterialByDescription(
+        line.invoiceItemName,materialOptions,line.pdfUnit||line.warehouseImportUnit)
+      if(result.status!=='matched'){
+        if(result.status==='ambiguous')ambiguous++
+        else missing++
+        return line
+      }
+      const material=result.material
+      const warehouse=line.warehouse||sharedLocation.warehouse||
+        (warehouses.length===1?warehouses[0]:null)
+      const defaults=receivingDefaults(material,warehouse,inventory,boms,currency)
+      const originalUnit=line.pdfUnit||line.warehouseImportUnit
+      const matchedUnit=defaults.options.find(option=>
+        normalizeMaterialDescription(option.unit)===normalizeMaterialDescription(originalUnit))
+      const sameUnit=normalizeMaterialDescription(originalUnit)===
+        normalizeMaterialDescription(material.unit)
+      const conversion=matchedUnit?.ratio ?? (sameUnit?1:'')
+      if(!conversion)needsConversion++
+      matched++
+      return {...line,material,warehouse,newMaterial:false,
+        materialInput:material.materialCode+' - '+material.materialName,
+        warehouseImportUnit:originalUnit||defaults.warehouseImportUnit||'',
+        bomUnitPerWarehouseUnit:conversion}
+    })
+    setLines(prepared)
+    clearValidation()
+    setPdfNotice('Đã tự chọn '+matched+' mã vật tư theo tên PDF trùng chính xác. '+
+      'Bỏ qua '+ambiguous+' tên trùng nhiều mã, '+missing+' không tìm thấy, '+
+      skipped+' đã chọn trước. '+needsConversion+' dòng cần kiểm tra hệ số quy đổi.')
+  }
+
+  const bulkClearPdfMaterials=()=>{
+    if(!pdfBulkAllowed)return
+    if(!window.confirm('Bỏ chọn toàn bộ mã vật tư của PDF hiện tại?\\nGiữ nguyên số lượng, đơn giá, VAT, kho và số lô.'))return
+    setLines(prev=>prev.map(line=>({...line,material:null,materialInput:'',
+      newMaterial:false,newMaterialAutoCode:true,newMaterialCode:'',
+      newMaterialName:line.invoiceItemName||'',
+      newMaterialUnit:line.pdfUnit||'cái',newMaterialType:'MATERIAL',
+      warehouseImportUnit:line.pdfUnit||line.warehouseImportUnit,
+      bomUnitPerWarehouseUnit:'1'})))
+    clearValidation()
+    setPdfNotice('Đã bỏ chọn mã vật tư trên tất cả dòng PDF. Vật tư đã lưu trong hệ thống không bị xóa.')
+  }
+
+  const autofillPdfBatch=()=>{
+    if(!pdfBulkAllowed)return
+    const batch=String(form.invoiceNumber||'').trim()
+    if(!batch||batch.length>50){
+      setError('Số hóa đơn phải có từ 1 đến 50 ký tự để tự điền số lô. Bạn có thể nhập số lô chung thủ công.')
+      return
+    }
+    applyBatchToAll(batch)
+    setPdfNotice('Đã điền số lô '+batch+' cho tất cả '+lines.length+' dòng PDF.')
   }
   const addLine = (afterId = lines.at(-1)?.id) => {
     if (pdfDocument) return // All PDF lines must be matched exactly once.
@@ -964,6 +1058,22 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
                   Cần kiểm tra OCR: {pdfDocument.warnings.slice(0,4).join(' · ')}
                 </Typography>}
               </Alert>}
+              {pdfDocument&&<Stack direction="row" gap={1} flexWrap="wrap" sx={{mt:1}}>
+                <Button size="small" variant="outlined" disabled={!pdfBulkAllowed} onClick={bulkCreatePdfMaterials}>
+                  Tạo mới vật tư tất cả dòng
+                </Button>
+                <Button size="small" variant="outlined" disabled={!pdfBulkAllowed} onClick={bulkMatchPdfMaterials}>
+                  Tự chọn vật tư theo tên PDF
+                </Button>
+                <Button size="small" color="warning" variant="outlined" disabled={!pdfBulkAllowed}
+                  onClick={bulkClearPdfMaterials}>Bỏ chọn vật tư tất cả</Button>
+                <Button size="small" variant="outlined" disabled={!pdfBulkAllowed}
+                  onClick={autofillPdfBatch}>Điền số lô tất cả từ số hóa đơn</Button>
+              </Stack>}
+              {pdfDocument&&<Typography variant="caption" color="text.secondary" sx={{mt:1,display:'block'}}>
+                Tự chọn chỉ khớp tên hàng chính xác sau chuẩn hóa; nếu nhiều mã trùng tên sẽ bỏ qua.
+                Mã mới chỉ được lưu vào Materials khi nhập kho PDF thành công. Hãy kiểm tra quy đổi đơn vị trước khi lưu.
+              </Typography>}
             </Box>
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 130px' }, gap: 1.5 }}>
               <TextField label="Số hóa đơn" size="small" value={form.invoiceNumber} onChange={setFormField('invoiceNumber')} required error={validationIssue?.field==='invoiceNumber'} helperText={validationIssue?.field==='invoiceNumber'?'Bắt buộc nhập số hóa đơn.':''} />
