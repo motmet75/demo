@@ -103,8 +103,14 @@ public class CustomsDeclarationStockService {
             SELECT id FROM public.inventory_customs_declaration
             WHERE tenant_id=? AND company_id=? AND sha256=?
             """,scope.tenantId(),scope.companyId(),sha);
-        if(!matches.isEmpty())
-            return document(scope,(UUID)matches.get(0).get("id"));
+        if(!matches.isEmpty()) {
+            UUID existingId=(UUID)matches.get(0).get("id");
+            // This exact file may have been uploaded before the XLS reader
+            // learned to parse the original customs duty/VAT columns.
+            // Refresh only an unposted draft; never rewrite posted evidence.
+            refreshUnpostedSource(scope,existingId,sha,parsed);
+            return document(scope,existingId);
+        }
         UUID id=UUID.randomUUID();
         try{
             jdbc.update("""
@@ -120,8 +126,18 @@ public class CustomsDeclarationStockService {
                 """,scope.tenantId(),scope.companyId(),sha);
             if(existing.isEmpty())throw duplicate;
             id=(UUID)existing.get(0).get("id");
+            refreshUnpostedSource(scope,id,sha,parsed);
         }
         return document(scope,id);
+    }
+
+    private void refreshUnpostedSource(Scope scope,UUID id,String sha,
+            CustomsDeclarationExcelParser.Parsed parsed) {
+        jdbc.update("""
+            UPDATE public.inventory_customs_declaration SET source_json=?::jsonb
+            WHERE id=? AND tenant_id=? AND company_id=? AND sha256=?
+              AND status <> 'POSTED'
+            """,encode(parsed),id,scope.tenantId(),scope.companyId(),sha);
     }
     public Map<String,Object> document(Scope scope,UUID id) {
         var result=jdbc.queryForList("""
