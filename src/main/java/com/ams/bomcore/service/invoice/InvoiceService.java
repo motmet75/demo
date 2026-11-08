@@ -76,12 +76,9 @@ public class InvoiceService {
         if (body.get("partyId") != null) {
 			inv.setPartyId(UUID.fromString(str(body, "partyId")));
 		}
-        if (body.get("invoiceDate") != null) {
-			inv.setInvoiceDate(LocalDate.parse(str(body, "invoiceDate")));
-		}
-        if (body.get("dueDate") != null) {
-			inv.setDueDate(LocalDate.parse(str(body, "dueDate")));
-		}
+        // Optional dates may come from HTML date inputs as empty strings.
+        inv.setInvoiceDate(optionalDate(body, "invoiceDate"));
+        inv.setDueDate(optionalDate(body, "dueDate"));
         inv.setCurrency(body.get("currency") != null ? str(body, "currency") : "USD");
         inv.setSubtotal(decimal(body, "subtotal"));
         inv.setTaxAmount(decimal(body, "taxAmount"));
@@ -106,12 +103,14 @@ public class InvoiceService {
         if (body.containsKey("partyId") && body.get("partyId") != null) {
 			inv.setPartyId(UUID.fromString(str(body, "partyId")));
 		}
-        if (body.containsKey("invoiceDate") && body.get("invoiceDate") != null) {
-			inv.setInvoiceDate(LocalDate.parse(str(body, "invoiceDate")));
-		}
-        if (body.containsKey("dueDate") && body.get("dueDate") != null) {
-			inv.setDueDate(LocalDate.parse(str(body, "dueDate")));
-		}
+        // Omitted fields remain unchanged; explicit null/blank clears optional dates.
+        // A status-only update must not fail because the form sends date: "".
+        if (body.containsKey("invoiceDate")) {
+            inv.setInvoiceDate(optionalDate(body, "invoiceDate"));
+        }
+        if (body.containsKey("dueDate")) {
+            inv.setDueDate(optionalDate(body, "dueDate"));
+        }
         if (body.containsKey("currency")) {
 			inv.setCurrency(str(body, "currency"));
 		}
@@ -195,5 +194,18 @@ public class InvoiceService {
 
     private BigDecimal decimal(Map<String, Object> m, String k) {
         return m.get(k) == null ? BigDecimal.ZERO : new BigDecimal(String.valueOf(m.get(k)));
+    }
+
+    private LocalDate optionalDate(Map<String, Object> body, String field) {
+        String value = str(body, field);
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(value.trim());
+        } catch (java.time.format.DateTimeParseException e) {
+            throw new IllegalArgumentException(
+                    field + " không đúng định dạng ngày YYYY-MM-DD (ví dụ 2026-11-08).", e);
+        }
     }
 }
