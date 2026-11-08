@@ -784,7 +784,7 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
                 onChange={e=>setPdfCurrency(e.target.value)}>
                 {['VND','USD','EUR','JPY','CNY'].map(c=><MenuItem value={c} key={c}>{c}</MenuItem>)}
               </TextField>
-            </Box>
+            </Box>}
 
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'minmax(260px, 1fr) minmax(220px, 1fr)' }, gap: 1.5, p: 1.5, border: '1px solid #bfdbfe', borderRadius: 1, bgcolor: '#eff6ff' }}>
               <TextField size="small" select SelectProps={{ native: true }} label="Kho chung · áp dụng tất cả dòng" value={sharedLocation.warehouse?.id || ''} onChange={e => applyWarehouseToAll(warehouses.find(w => w.id === e.target.value) || null)}>
