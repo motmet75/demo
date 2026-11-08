@@ -150,8 +150,10 @@ NOT overwrite the rounded amount printed by Customs.
 - The existing inventory invoice VAT field remains an independent estimate,
   defaults to 0, and should not automatically mirror import VAT.
 - The original parser output is stored in each document's `source_json`.
-  For documents uploaded **before** this parser update, re-upload the
-  original Excel to populate the new read-only source fields.
+  If an identical XLS (same SHA-256) was uploaded **before** this change,
+  uploading it again refreshes original tax fields ONLY for documents whose
+  status is not `POSTED`. A previously `POSTED` document remains immutable
+  for audit purposes and must not be re-written from a later parser version.
 
 Regression:
 ```bash
