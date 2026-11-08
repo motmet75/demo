@@ -48,6 +48,7 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
   const [error,setError]=useState('')
   const [success,setSuccess]=useState('')
   const [confirmed,setConfirmed]=useState(false)
+  const [showValidation,setShowValidation]=useState(false)
   // Separate draft: typing a VAT rate never modifies declaration line VAT.
   const [bulkVatInput,setBulkVatInput]=useState('')
   const [queuedDocs,setQueuedDocs]=useState([])
@@ -69,12 +70,13 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
     if(!open)return
     setDirection(initialDirection)
     setDoc(null);setRows([]);setNumber('');setDate('');setCurrency('VND')
-    setError('');setSuccess('');setConfirmed(false);setBulkVatInput('')
+    setError('');setSuccess('');setConfirmed(false);setShowValidation(false);setBulkVatInput('')
     setQueuedDocs([]);setPostedIds([]);setNotice('');reviewCache.current={}
     void load().catch(e=>setError(e.message||'Không tải được dữ liệu kho.'))
   },[open,initialDirection,load])
 
   const applyDoc=payload=>{
+    setShowValidation(false)
     setBulkVatInput('')
     const saved=reviewCache.current[payload.id]
     setDoc(payload)
@@ -195,22 +197,109 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
     setError('')
   }
 
-  const ready=Boolean(doc)&&doc.status!=='POSTED'&&rows.length===doc.items?.length
-    &&rows.length>0&&number.trim()&&validDate(date)
-    &&rows.every((row,i)=>{
-      const original=doc.items[i]
+
+  // Actionable explanations for every field that prevents posting.
+  // Keep the confirmation button clickable so the user can see these messages.
+  const validationErrors=useMemo(()=>{
+    if(!doc||confirmed||doc.status==='POSTED')return []
+    const issues=[]
+    if(!doc.items?.length)return ['Tờ khai không có dòng hàng để nhập/xuất kho.']
+    if(rows.length!==doc.items.length)
+      issues.push('Số dòng đối chiếu chưa khớp tờ khai. Hãy tải lại tờ khai.')
+    if(!number.trim())issues.push('Chưa nhập số tờ khai hải quan.')
+    else if(number.trim().length>80)issues.push('Số tờ khai vượt quá 80 ký tự.')
+    const parsedDate=new Date(date+'T00:00:00')
+    const normalizedDate=Number.isNaN(parsedDate.getTime())?'':[
+      parsedDate.getFullYear(),String(parsedDate.getMonth()+1).padStart(2,'0'),
+      String(parsedDate.getDate()).padStart(2,'0')
+    ].join('-')
+    if(!validDate(date)||date!==normalizedDate||date>today())
+      issues.push('Ngày tờ khai không hợp lệ hoặc nằm trong tương lai.')
+    if(!['VND','USD','EUR','JPY','CNY'].includes(currency.trim().toUpperCase()))
+      issues.push('Tiền tệ phải là VND, USD, EUR, JPY hoặc CNY.')
+
+    const existingCodes=new Set(materials.map(m=>String(m.materialCode||'').trim().toUpperCase()))
+    const newCodes=new Map()
+    const requestedStock=new Map()
+    rows.forEach((row,index)=>{
+      const source=doc.items[index]
+      const label='Dòng '+(index+1)
+      if(!source){issues.push(label+': Không có dữ liệu trong tờ khai.');return}
+      const quantity=Number(source.quantity)
       const ratio=parseNumber(row.conversionRatio)
-      const rate=parseNumber(row.vatRate)
-      if(!Number.isFinite(rate)||rate<0||rate>100)return false
-      if(!Number.isFinite(ratio)||ratio<=0||!Number.isFinite(safeNum(original.quantity)*ratio))return false
-      if(direction==='IN')return Boolean(row.warehouseId&&row.batchNo.trim()&&
-        (row.newMaterial?(row.newMaterialCode.trim()&&row.newMaterialName.trim()&&row.newMaterialUnit.trim()):row.materialId))
-      return Boolean(row.inventoryId&&row.warehouseId)
+      const vat=parseNumber(row.vatRate)
+      if(!Number.isFinite(quantity)||quantity<=0||quantity>1000000000)
+        issues.push(label+': Số lượng tờ khai phải lớn hơn 0 và hợp lệ.')
+      if(!Number.isFinite(ratio)||ratio<=0||ratio>1000000000||
+         !Number.isFinite(quantity*ratio)||quantity*ratio>1000000000)
+        issues.push(label+': Hệ số quy đổi và số lượng kho phải lớn hơn 0, trong giới hạn cho phép.')
+      if(!Number.isFinite(vat)||vat<0||vat>100||
+         (String(row.vatRate||'').split(/[.,]/)[1]?.length||0)>3)
+        issues.push(label+': VAT phải từ 0 đến 100%, tối đa 3 chữ số thập phân.')
+
+      if(direction==='IN'){
+        if(!row.warehouseId)issues.push(label+': Chưa chọn kho nhận.')
+        else if(!warehouses.some(w=>String(w.id)===String(row.warehouseId)))
+          issues.push(label+': Kho nhận đã chọn không tồn tại. Hãy chọn lại.')
+        if(!String(row.batchNo||'').trim())issues.push(label+': Chưa nhập số lô.')
+        else if(String(row.batchNo).trim().length>50)
+          issues.push(label+': Số lô không được vượt quá 50 ký tự.')
+        if(row.newMaterial){
+          const code=String(row.newMaterialCode||'').trim()
+          const name=String(row.newMaterialName||'').trim()
+          const unit=String(row.newMaterialUnit||'').trim()
+          if(!code)issues.push(label+': Chưa có mã vật tư; bật "Tự sinh mã" hoặc nhập mã thủ công.')
+          else if(code.length>50)issues.push(label+': Mã vật tư tối đa 50 ký tự.')
+          else if(existingCodes.has(code.toUpperCase()))
+            issues.push(label+': Mã vật tư '+code+' đã tồn tại. Hãy chọn vật tư có sẵn hoặc tạo mã khác.')
+          if(!name)issues.push(label+': Chưa nhập tên vật tư mới.')
+          else if(name.length>500)issues.push(label+': Tên vật tư tối đa 500 ký tự.')
+          if(!unit)issues.push(label+': Chưa nhập đơn vị kho của vật tư mới.')
+          else if(unit.length>20)issues.push(label+': Đơn vị kho tối đa 20 ký tự.')
+          if(code){
+            const key=code.toUpperCase()
+            const first=newCodes.get(key)
+            if(first&&(first.name!==name||first.unit!==unit))
+              issues.push(label+': Mã '+code+' trùng dòng '+first.index+' nhưng tên/đơn vị khác nhau.')
+            if(!first)newCodes.set(key,{name,unit,index:index+1})
+          }
+        } else if(!row.materialId)
+          issues.push(label+': Chưa chọn mã vật tư. Chọn mã có sẵn hoặc nhấn "Tạo mới tại đây".')
+        else if(!materials.some(m=>String(m.id)===String(row.materialId)))
+          issues.push(label+': Mã vật tư đã chọn không tồn tại. Hãy chọn lại.')
+      } else {
+        if(!row.inventoryId)issues.push(label+': Chưa chọn lô tồn kho để xuất.')
+        else {
+          const batch=mapStock.get(String(row.inventoryId))
+          if(!batch)issues.push(label+': Lô tồn kho đã chọn không còn tồn tại. Hãy chọn lại.')
+          else {
+            if(batch.locked)issues.push(label+': Lô tồn kho đang bị khóa.')
+            if(!row.warehouseId||String(row.warehouseId)!==String(batch.warehouseId))
+              issues.push(label+': Kho xuất không khớp với lô tồn kho.')
+            if(Number.isFinite(quantity*ratio)&&quantity*ratio>0)
+              requestedStock.set(String(row.inventoryId),
+                (requestedStock.get(String(row.inventoryId))||0)+quantity*ratio)
+          }
+        }
+      }
     })
+    if(direction==='OUT')requestedStock.forEach((requested,id)=>{
+      const batch=mapStock.get(id)
+      if(!batch)return
+      const free=Number(batch.quantityOnHand||0)-Number(batch.quantityReserved||0)-
+        Number(batch.quantityLocked||0)
+      if(requested>free)
+        issues.push('Lô '+(batch.batchNo||id)+': Số lượng xuất '+formatVnNumber(requested,6)+
+          ' vượt tồn khả dụng '+formatVnNumber(free,6)+'.')
+    })
+    return issues
+  },[doc,confirmed,rows,number,date,currency,direction,materials,warehouses,mapStock])
+  const ready=Boolean(doc)&&!confirmed&&doc.status!=='POSTED'&&validationErrors.length===0
 
   const confirm=async()=>{
     setError('');setSuccess('')
-    if(!ready)return
+    setShowValidation(true)
+    if(!ready){return}
     const type=direction==='IN'?'NHẬP':'XUẤT'
     if(!window.confirm('Xác nhận '+type+' kho theo tờ khai HQ '+number+
       '? Giao dịch sẽ cập nhật tồn kho thật và không thể xác nhận lần hai.'))return
@@ -435,9 +524,19 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
         </Typography>
       </>}
     </DialogContent>
-    <DialogActions>
+    <DialogActions sx={{flexWrap:'wrap'}}>
+      {doc&&!confirmed&&showValidation&&validationErrors.length>0&&
+        <Alert severity="warning" sx={{width:'100%',textAlign:'left'}}>
+          <Typography variant="subtitle2" fontWeight={700}>
+            Chưa thể xác nhận {direction==='IN'?'nhập':'xuất'} kho: cần sửa {validationErrors.length} lỗi sau
+          </Typography>
+          <Box component="ol" sx={{pl:3,my:0.5,maxHeight:170,overflowY:'auto'}}>
+            {validationErrors.map((message,index)=><li key={index}>{message}</li>)}
+          </Box>
+          <Typography variant="caption">Sửa thông tin ở đúng dòng rồi nhấn xác nhận lại.</Typography>
+        </Alert>}
       <Button onClick={onClose} disabled={busy}>Đóng</Button>
-      <Button color="primary" variant="contained" disabled={!ready||busy||confirmed}
+      <Button color="primary" variant="contained" disabled={!doc||busy||confirmed}
         onClick={()=>void confirm()}>{busy?'Đang ghi kho...':
           direction==='IN'?'Xác nhận nhập kho theo tờ khai':'Xác nhận xuất kho theo tờ khai'}</Button>
     </DialogActions>
