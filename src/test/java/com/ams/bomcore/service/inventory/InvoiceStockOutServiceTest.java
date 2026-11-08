@@ -56,6 +56,24 @@ class InvoiceStockOutServiceTest {
         assertEquals("8%",result.get("vatRate"));
     }
 
+    @Test void supplierLookupUsesActualReceivingInvoiceHistoryAndCompanyScope() {
+        var receipt=Map.<String,Object>of(
+                "inventoryId",UUID.randomUUID(),
+                "supplierName","Nhà cung cấp động cơ A",
+                "purchaseInvoiceNumber","PN-2026-01");
+        when(jdbc.queryForList(
+                org.mockito.ArgumentMatchers.contains("SELECT DISTINCT m.inventory_id"),
+                eq(scope.tenantId()),eq(scope.companyId())))
+                .thenReturn(List.of(receipt));
+        var result=service.inventorySuppliers(scope);
+        assertEquals("Nhà cung cấp động cơ A",result.get(0).get("supplierName"));
+        assertEquals("PN-2026-01",result.get(0).get("purchaseInvoiceNumber"));
+        verify(jdbc).queryForList(
+                org.mockito.ArgumentMatchers.contains("m.reference_type='INVOICE'"),
+                eq(scope.tenantId()),eq(scope.companyId()));
+        verifyNoInteractions(movements,repo);
+    }
+
     @Test void noRecognizedItemsCannotDeductInventory() {
         UUID docId=UUID.randomUUID();
         Invoice invoice=new Invoice();invoice.type="INVOICE";invoice.put("number","9");

@@ -58,6 +58,14 @@ public class InvoiceStockOutController {
         var document=service.upload(scope,file);
         return service.document(scope,document.id());
     }
+    @GetMapping("/inventory-suppliers")
+    public List<Map<String,Object>> inventorySuppliers(
+            @RequestHeader("X-Tenant-Id") UUID tenant,
+            @RequestHeader("X-Company-Id") UUID company,
+            Authentication auth) {
+        return service.inventorySuppliers(authorized(tenant,company,auth));
+    }
+
     @GetMapping("/posted")
     public List<Map<String,Object>> posted(
             @RequestHeader("X-Tenant-Id") UUID tenant,

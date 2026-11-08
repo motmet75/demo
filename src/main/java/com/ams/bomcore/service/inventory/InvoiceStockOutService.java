@@ -135,6 +135,35 @@ public class InvoiceStockOutService {
         try { return Parser.money(val); } catch (RuntimeException e) { return null; }
     }
 
+    /**
+     * Supplier provenance from receiving invoices, scoped to the same tenant
+     * and company. Inventory rows can receive stock from multiple suppliers;
+     * do not pretend that the batch has only one supplier.
+     *
+     * The receipt screen stores the supplier's name in invoice.party_name
+     * and links each stock IN movement using reference_type=INVOICE.
+     * Purchase prices deliberately are not returned by this lookup.
+     */
+    public List<Map<String,Object>> inventorySuppliers(Scope scope) {
+        return jdbc.queryForList("""
+            SELECT DISTINCT m.inventory_id AS "inventoryId",
+                   COALESCE(NULLIF(BTRIM(p.party_name), ''), 'Chưa xác định') AS "supplierName",
+                   p.id AS "purchaseInvoiceId",
+                   p.invoice_number AS "purchaseInvoiceNumber",
+                   p.invoice_date AS "purchaseInvoiceDate"
+            FROM public.inventory_movement m
+            JOIN public.invoice p ON p.id=m.reference_id
+                 AND p.tenant_id=m.tenant_id AND p.company_id=m.company_id
+                 AND p.invoice_type='PURCHASE'
+            JOIN public.inventory inv ON inv.id=m.inventory_id
+                 AND inv.tenant_id=m.tenant_id AND inv.company_id=m.company_id
+            WHERE m.tenant_id=? AND m.company_id=?
+              AND m.inventory_id IS NOT NULL AND m.movement_type='IN'
+              AND m.reference_type='INVOICE'
+            ORDER BY "supplierName", "inventoryId"
+            """,scope.tenantId(),scope.companyId());
+    }
+
     public List<Map<String,Object>> posted(Scope scope) {
         return jdbc.queryForList("""
              SELECT id,invoice_desk_document_id,invoice_date,invoice_serial,invoice_number,

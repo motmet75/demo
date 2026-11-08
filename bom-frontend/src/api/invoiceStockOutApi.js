@@ -9,6 +9,7 @@ async function jsonRequest(path, options={}) {
 }
 export function fetchInvoiceStockOutDocuments() { return jsonRequest('/documents') }
 export function fetchInvoiceStockOutPosted() { return jsonRequest('/posted') }
+export function fetchInvoiceStockOutInventorySuppliers() { return jsonRequest('/inventory-suppliers') }
 export function fetchInvoiceStockOutDocument(id) { return jsonRequest('/documents/' + encodeURIComponent(id)) }
 export function confirmInvoiceStockOut(payload) {
   return jsonRequest('/confirm', {

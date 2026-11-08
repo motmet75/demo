@@ -6,31 +6,26 @@ import {
 } from '@mui/material'
 import {fetchInventoryView} from '../../api/inventoryApi'
 import {
-  fetchInvoiceStockOutDocuments, fetchInvoiceStockOutPosted,
+  fetchInvoiceStockOutDocuments, fetchInvoiceStockOutPosted, fetchInvoiceStockOutInventorySuppliers,
   fetchInvoiceStockOutDocument, uploadInvoiceStockOutDocument,
   confirmInvoiceStockOut, openInvoiceStockOutPdf
 } from '../../api/invoiceStockOutApi'
 import {useAuth} from '../../context/useAuth'
+import InvoiceInventoryPickerDialog, {inventorySupplierLabels, stockAvailable} from './InvoiceInventoryPickerDialog'
+import {formatVnNumber, parseVnNumber, parseMachineNumber} from '../../utils/vietnameseNumbers'
 
-const amount = value => Number(value || 0).toLocaleString('vi-VN', {maximumFractionDigits:2})
-const clean = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-  .replace(/[đĐ]/g, 'd').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()
-const number = value => {
-  const s=String(value??'').trim().replace(/\s/g,'')
-  if(!s) return 0
-  if(s.includes(',')) return Number(s.replace(/\./g,'').replace(',','.')) || 0
-  if(/^\d{1,3}(?:\.\d{3})+$/.test(s)) return Number(s.replace(/\./g,'')) || 0
-  return Number(s) || 0
-}
+const amount = value => formatVnNumber(Number(value||0),2)
+const number = value => parseVnNumber(value)
 const vatOf = value => {
   const m=String(value||'').match(/(\d+(?:[.,]\d+)?)\s*%?/)
   return m ? Number(m[1].replace(',','.')) : 0
 }
 const today=()=>{ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
 function newLine(item,index,vatRate){
-  return {invoiceLineIndex:index,description:item.description||'',invoiceQuantity:number(item.quantity),
-    inventoryId:'',quantity:String(number(item.quantity)),unitPrice:String(number(item.unitPrice)),
-    vatRate:String(vatRate),originalUnit:item.unit||''}
+  return {invoiceLineIndex:index,description:item.description||'',invoiceQuantity:parseMachineNumber(item.quantity),
+    inventoryId:'',quantity:formatVnNumber(parseMachineNumber(item.quantity),6),
+    unitPrice:formatVnNumber(parseMachineNumber(item.unitPrice),4),
+    vatRate:formatVnNumber(vatRate,3),originalUnit:item.unit||''}
 }
 
 export default function InvoiceStockOutPage(){
@@ -38,6 +33,9 @@ export default function InvoiceStockOutPage(){
   const [docs,setDocs]=useState([])
   const [posted,setPosted]=useState([])
   const [stock,setStock]=useState([])
+  const [supplierReceipts,setSupplierReceipts]=useState([])
+  const [supplierWarning,setSupplierWarning]=useState('')
+  const [pickingLine,setPickingLine]=useState(null)
   const [selectedDoc,setSelectedDoc]=useState(null)
   const [busy,setBusy]=useState(false)
   const [error,setError]=useState('')
@@ -51,12 +49,18 @@ export default function InvoiceStockOutPage(){
 
   const load=useCallback(async()=>{
     setError('')
+    setSupplierWarning('')
     try{
-      const [documents,inventory,history]=await Promise.all([
-        fetchInvoiceStockOutDocuments(),fetchInventoryView(),fetchInvoiceStockOutPosted()])
+      const [documents,inventory,history,sources]=await Promise.all([
+        fetchInvoiceStockOutDocuments(),fetchInventoryView(),fetchInvoiceStockOutPosted(),
+        fetchInvoiceStockOutInventorySuppliers().catch(error=>{
+          setSupplierWarning('Không tải được nhà cung cấp từ hóa đơn nhập: '+error.message)
+          return []
+        })])
       setDocs(Array.isArray(documents)?documents:[])
       setStock(Array.isArray(inventory)?inventory:[])
       setPosted(Array.isArray(history)?history:[])
+      setSupplierReceipts(Array.isArray(sources)?sources:[])
     }catch(e){setError(e.message||'Không tải được dữ liệu')}
   },[])
   useEffect(()=>{void load()},[load])
@@ -72,7 +76,7 @@ export default function InvoiceStockOutPage(){
       setBuyer({buyerType:fresh.buyerType||'PERSONAL',buyerName:fresh.buyer||'',
         buyerTaxId:fresh.buyerTaxId||'',buyerAddress:fresh.buyerAddress||''})
       setHeader({invoiceDate:fresh.date||today(),invoiceSerial:fresh.serial||'',
-        invoiceNumber:fresh.number||'',exportType:'SALE',vatRate:String(vat)})
+        invoiceNumber:fresh.number||'',exportType:'SALE',vatRate:formatVnNumber(vat,3)})
       setRows((fresh.items||[]).map((item,i)=>newLine(item,i,vat)))
       setAcknowledgeMismatch(false);setAcknowledgeHistoricalDate(false)
     }catch(e){setError(e.message||'Không đọc được dữ liệu hóa đơn')}
@@ -92,14 +96,23 @@ export default function InvoiceStockOutPage(){
       setBuyer({buyerType:doc.buyerType||'PERSONAL',buyerName:doc.buyer||'',
         buyerTaxId:doc.buyerTaxId||'',buyerAddress:doc.buyerAddress||''})
       setHeader({invoiceDate:doc.date||today(),invoiceSerial:doc.serial||'',
-        invoiceNumber:doc.number||'',exportType:'SALE',vatRate:String(vat)})
+        invoiceNumber:doc.number||'',exportType:'SALE',vatRate:formatVnNumber(vat,3)})
       setRows((doc.items||[]).map((item,i)=>newLine(item,i,vat)))
       setAcknowledgeMismatch(false);setAcknowledgeHistoricalDate(false)
     }catch(err){setError(err.message||'Lỗi OCR');}
     finally{setBusy(false)}
   }
   const patchLine=(idx,patch)=>setRows(old=>old.map((row,i)=>i===idx?{...row,...patch}:row))
-  const available=useMemo(()=>stock.filter(x=>Number(x.quantityOnHand||0)>0 && !x.locked),[stock])
+  const available=useMemo(()=>stock.filter(x=>stockAvailable(x)>0 && !x.locked),[stock])
+  const inventorySourceMap=useMemo(()=>{
+    const result=new Map()
+    supplierReceipts.forEach(source=>{
+      const id=String(source.inventoryId||'')
+      if(!result.has(id))result.set(id,[])
+      result.get(id).push(source)
+    })
+    return result
+  },[supplierReceipts])
   const suggestStock=description=>{
     const query=clean(description)
     if(!query)return []
@@ -110,14 +123,16 @@ export default function InvoiceStockOutPage(){
     const base=number(r.quantity)*number(r.unitPrice)
     return {subtotal:acc.subtotal+base,vat:acc.vat+base*number(r.vatRate)/100}
   },{subtotal:0,vat:0}),[rows])
-  const expectedSubtotal=number(selectedDoc?.subtotal)
-  const expectedVat=number(selectedDoc?.vat)
-  const expectedTotal=number(selectedDoc?.total)
+  const expectedSubtotal=parseMachineNumber(selectedDoc?.subtotal)||0
+  const expectedVat=parseMachineNumber(selectedDoc?.vat)||0
+  const expectedTotal=parseMachineNumber(selectedDoc?.total)||0
   const mismatch=(Boolean(selectedDoc?.subtotal) && Math.abs(totals.subtotal-expectedSubtotal)>1)
     || (Boolean(selectedDoc?.vat) && Math.abs(totals.vat-expectedVat)>1)
     || (Boolean(selectedDoc?.total) && Math.abs(totals.subtotal+totals.vat-expectedTotal)>1)
   const historical=header.invoiceDate!==today()
-  const missing=rows.some(r=>!r.inventoryId || number(r.quantity)<=0 || number(r.unitPrice)<0)
+  const missing=rows.some(r=>!r.inventoryId || !Number.isFinite(number(r.quantity)) ||
+    number(r.quantity)<=0 || !Number.isFinite(number(r.unitPrice)) || number(r.unitPrice)<0 ||
+    !Number.isFinite(number(r.vatRate)) || number(r.vatRate)<0 || number(r.vatRate)>100)
   const onConfirm=async()=>{
     setError('');setSuccess('')
     if(!window.confirm('Xác nhận xuất kho theo hóa đơn? Hành động này trừ tồn kho thực tế và tạo các phiếu OUT.'))return
@@ -161,6 +176,7 @@ export default function InvoiceStockOutPage(){
     </Stack>
     {error&&<Alert severity="error" sx={{mb:1.5}} onClose={()=>setError('')}>{error}</Alert>}
     {success&&<Alert severity="success" sx={{mb:1.5}} onClose={()=>setSuccess('')}>{success}</Alert>}
+    {supplierWarning&&<Alert severity="warning" sx={{mb:1.5}}>{supplierWarning}</Alert>}
     <Paper variant="outlined" sx={{p:2,mb:2}}>
       <Stack spacing={2}>
         <Autocomplete size="small" options={docs}
@@ -227,30 +243,44 @@ export default function InvoiceStockOutPage(){
                   <Alert severity="error">OCR chưa nhận dạng được dòng hàng. Mở Invoice Desk để sửa danh sách trước khi xuất kho.</Alert>
                 </TableCell></TableRow>}
                 {rows.map((line,i)=>{
-                  const selected=available.find(x=>String(x.inventoryId)===String(line.inventoryId))||null
-                  const hint=suggestStock(line.description)
+                  const selected=stock.find(x=>String(x.inventoryId)===String(line.inventoryId))||null
+                  const sources=selected?inventorySupplierLabels(selected,inventorySourceMap):[]
+                  const inputCell=(field,digits)=>({
+                    size:'small',value:line[field],inputProps:{inputMode:'decimal'},
+                    onChange:e=>patchLine(i,{[field]:e.target.value}),
+                    onBlur:()=>{const parsed=number(line[field]);if(Number.isFinite(parsed))
+                      patchLine(i,{[field]:formatVnNumber(parsed,digits)})}
+                  })
                   return <TableRow key={i}>
                     <TableCell sx={{minWidth:200}}>
                       <Typography fontWeight={700} variant="body2">{i+1}. {line.description||'(Không có tên)'}</Typography>
-                      <Typography variant="caption" color="text.secondary">SL PDF: {line.invoiceQuantity} {line.originalUnit}</Typography>
-                      {hint.length>0&&!selected&&<Typography variant="caption" display="block" color="primary">
-                        Gợi ý tìm: {hint.map(x=>x.materialName).slice(0,2).join(', ')}
-                      </Typography>}
+                      <Typography variant="caption" color="text.secondary">SL PDF: {formatVnNumber(line.invoiceQuantity,6)} {line.originalUnit}</Typography>
                     </TableCell>
-                    <TableCell>
-                      <Autocomplete size="small" options={available} value={selected} autoHighlight
-                        isOptionEqualToValue={(a,b)=>String(a.inventoryId)===String(b.inventoryId)}
-                        getOptionLabel={x=>[x.materialName,x.materialCode,x.warehouseName,x.batchNo, 'Có '+amount(x.quantityOnHand)].filter(Boolean).join(' · ')}
-                        onChange={(_,x)=>patchLine(i,{inventoryId:x?.inventoryId||''})}
-                        renderInput={params=><TextField {...params} size="small" label="Chọn tồn kho" error={!line.inventoryId} placeholder="Gõ tên / mã / kho / lô"/>}/>
+                    <TableCell sx={{minWidth:290}}>
+                      <Button variant={selected?'outlined':'contained'} size="small"
+                        onClick={()=>setPickingLine(i)}>
+                        {selected?'Đổi hàng / Kho / Lô':'Chọn hàng / Kho / Lô'}
+                      </Button>
+                      {selected&&<Box sx={{mt:0.75}}>
+                        <Typography variant="body2" fontWeight={700}>
+                          {selected.materialName} · {selected.materialCode}
+                        </Typography>
+                        <Typography variant="caption" display="block" color="text.secondary">
+                          Kho: {selected.warehouseName||selected.warehouseCode} · Lô: {selected.batchNo}
+                        </Typography>
+                        <Typography variant="caption" display="block">
+                          NCC: {sources.join(' / ')} · Khả dụng: {formatVnNumber(stockAvailable(selected),6)}
+                        </Typography>
+                      </Box>}
                     </TableCell>
-                    <TableCell><TextField size="small" value={line.quantity} inputProps={{inputMode:'decimal'}}
-                      onChange={e=>patchLine(i,{quantity:e.target.value})}/></TableCell>
-                    <TableCell><TextField size="small" value={line.unitPrice} inputProps={{inputMode:'decimal'}}
-                      onChange={e=>patchLine(i,{unitPrice:e.target.value})}/></TableCell>
-                    <TableCell><TextField size="small" value={line.vatRate} inputProps={{inputMode:'decimal'}}
-                      onChange={e=>patchLine(i,{vatRate:e.target.value})}/></TableCell>
-                    <TableCell align="right">{amount(number(line.quantity)*number(line.unitPrice))}</TableCell>
+                    <TableCell><TextField {...inputCell('quantity',6)}
+                      error={!Number.isFinite(number(line.quantity))||number(line.quantity)<=0}/></TableCell>
+                    <TableCell><TextField {...inputCell('unitPrice',4)}
+                      error={!Number.isFinite(number(line.unitPrice))||number(line.unitPrice)<0}/></TableCell>
+                    <TableCell><TextField {...inputCell('vatRate',3)}
+                      error={!Number.isFinite(number(line.vatRate))||number(line.vatRate)<0||number(line.vatRate)>100}/></TableCell>
+                    <TableCell align="right">{Number.isFinite(number(line.quantity)*number(line.unitPrice))
+                      ?amount(number(line.quantity)*number(line.unitPrice)):'—'}</TableCell>
                   </TableRow>
                 })}
               </TableBody>
@@ -273,7 +303,7 @@ export default function InvoiceStockOutPage(){
           {historical&&<FormControlLabel control={<Checkbox checked={acknowledgeHistoricalDate}
             onChange={e=>setAcknowledgeHistoricalDate(e.target.checked)}/>}
             label="Tôi xác nhận xuất kho theo ngày hóa đơn (hạch toán hồi tố)"/>}
-          <Alert severity="info">Hóa đơn OCR chỉ để tham khảo. Phải chọn đúng <b>inventory ID, kho, batch</b> cho từng dòng. Không tự trừ kho khi tải PDF.</Alert>
+          <Alert severity="info">Giá, số lượng dùng định dạng Việt Nam (1.000.000,50). Chọn đúng <b>inventory ID, kho, lô, nhà cung cấp</b>. Chỉ trừ kho sau khi xác nhận.</Alert>
           <Button variant="contained" color="error" size="large" disabled={busy||rows.length===0||missing||!buyer.buyerName.trim()
             ||!header.invoiceSerial.trim()||!header.invoiceNumber.trim()||(mismatch&&!acknowledgeMismatch)
             ||(historical&&!acknowledgeHistoricalDate)}
@@ -283,6 +313,19 @@ export default function InvoiceStockOutPage(){
         </>}
       </Stack>
     </Paper>
+    <InvoiceInventoryPickerDialog
+      open={pickingLine!==null}
+      onClose={()=>setPickingLine(null)}
+      invoiceLine={pickingLine===null?null:rows[pickingLine]||null}
+      currentInventoryId={pickingLine===null?'':rows[pickingLine]?.inventoryId||''}
+      allocatedLines={rows}
+      supplierReceipts={supplierReceipts}
+      inventory={available}
+      onSelect={picked=>{
+        if(pickingLine!==null)patchLine(pickingLine,{inventoryId:picked.inventoryId})
+        setPickingLine(null)
+      }}
+    />
     <Paper variant="outlined" sx={{p:2}}>
       <Typography fontWeight={800} sx={{mb:1}}>Lịch sử xuất kho bằng hóa đơn</Typography>
       <TableContainer><Table size="small"><TableHead><TableRow>
