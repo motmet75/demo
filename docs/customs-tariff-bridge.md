@@ -106,3 +106,57 @@ After validation, deploy the built frontend using the project's existing
 
 If an invoice is denominated in USD or another currency but has no
 recorded customs exchange rate, amounts are left unavailable rather than guessed.
+
+## Parsing original Vietnamese customs Excel exports
+
+Verified against the supplied legacy BIFF8 (.xls) declaration 103847745300,
+registered on 19 February 2021. The workbook contains 52 printed pages:
+2 header/summary pages followed by 50 numbered goods pages. Each page
+starts with `<IMP>`, and goods pages include `<01>` through `<50>`.
+
+For each goods line, `CustomsDeclarationExcelParser` now preserves:
+
+| Customs Excel field | API JSON key | Unit |
+| --- | --- | --- |
+| Số lượng (1) | `quantity` | Original declaration unit |
+| Đơn giá hóa đơn | `unitPrice` | Original invoice currency |
+| Trị giá hóa đơn | `invoiceValue` | Original invoice currency |
+| Thuế nhập khẩu → Trị giá tính thuế(S) | `importTaxableValueVnd` | VND |
+| Thuế nhập khẩu → Đơn giá tính thuế | `importTaxUnitPriceVnd` | VND/unit |
+| Thuế nhập khẩu → Thuế suất | `importTaxRate` | Percent |
+| Thuế nhập khẩu → Số tiền thuế | `importTaxAmountVnd` | VND |
+| Thuế nhập khẩu → Mã biểu thuế | `importTariffCode` | Original tax scheme code (e.g., A) |
+| Thuế GTGT → Trị giá tính thuế | `vatTaxableValueVnd` | VND |
+| Thuế GTGT → Thuế suất | `vatRate` | Percent |
+| Thuế GTGT → Số tiền thuế | `vatAmountVnd` | VND |
+| Thuế GTGT → Mã áp dụng thuế suất | `vatTariffCode` | Original code (e.g., VB901) |
+
+For goods line 1 of this sample: quantity 400 PCE, invoice unit price
+0.7575 USD, invoice value 303 USD, import duty base 6,941,730 VND,
+original duty 22% = 1,527,180.6 VND, and original import VAT base
+8,468,910.6 VND at 10%, with 846,891 VND **as declared**.
+The calculated unrounded VAT is 846,891.06 VND; this should
+NOT overwrite the rounded amount printed by Customs.
+
+- Rates and declared tax amounts are **original evidence** and remain
+  read-only in the comparison dialog. They must not be overwritten by
+  a newer FTA tariff retrieved from Portal.
+- Import duty and VAT on a historical declaration are **not**
+  calculated by multiplying the foreign-currency invoice amount by the
+  VAT percentage. The original Customs taxable bases in VND take priority.
+- The tariff class code `A` is not evidence of a particular C/O;
+  FTA preference requires an independently verified origin document or
+  accepted alternative proof and eligibility under the applicable agreement.
+- The existing inventory invoice VAT field remains an independent estimate,
+  defaults to 0, and should not automatically mirror import VAT.
+- The original parser output is stored in each document's `source_json`.
+  For documents uploaded **before** this parser update, re-upload the
+  original Excel to populate the new read-only source fields.
+
+Regression:
+```bash
+cd /opt/tuonghoa/demo
+./mvnw -Dtest=CustomsDeclarationExcelParserTest test
+cd bom-frontend
+node --test tests/customsTariffCalc.test.mjs
+```
