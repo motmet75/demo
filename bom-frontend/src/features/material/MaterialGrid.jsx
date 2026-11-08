@@ -3,6 +3,7 @@ import { GridActionsCellItem, DataGrid, useGridApiRef } from '@mui/x-data-grid'
 import EditIcon from '@mui/icons-material/Edit'
 import DeleteIcon from '@mui/icons-material/Delete'
 import { fetchMaterials, updateMaterial, deleteMaterial } from '../../api/materialApi'
+import { useAppContext } from '../../context/AppContext'
 import { apiFetch } from '../../api/client'
 import MaterialEditModal from './MaterialEditModal'
 import * as XLSX from 'xlsx'
@@ -15,6 +16,7 @@ const normalizeSearch = value => String(value ?? '')
   .toLowerCase()
 
 export default function MaterialGrid({ refreshKey }) {
+  const { tenantId, companyId } = useAppContext()
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(false)
   const apiRef = useGridApiRef()
@@ -117,6 +119,10 @@ export default function MaterialGrid({ refreshKey }) {
   }
 
   const load = useCallback(async () => {
+    if (!tenantId || !companyId) {
+      setRows([])
+      return
+    }
     setLoading(true)
     try {
       const data = await fetchMaterials()
@@ -170,7 +176,7 @@ export default function MaterialGrid({ refreshKey }) {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [tenantId, companyId])
 
   useEffect(() => {
     load()
