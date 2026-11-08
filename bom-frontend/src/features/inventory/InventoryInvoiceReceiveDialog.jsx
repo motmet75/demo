@@ -436,7 +436,7 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
 
   const bulkCreatePdfMaterials=()=>{
     if(!pdfBulkAllowed)return
-    if(!window.confirm('Tạo mã vật tư MỚI cho tất cả dòng PDF?\\nMã đã chọn sẽ được thay thế. Vật tư chỉ lưu khi xác nhận nhập kho PDF thành công.'))return
+    if(!window.confirm('Tạo mã vật tư MỚI cho tất cả dòng PDF?\nMã đã chọn sẽ được thay thế. Vật tư chỉ lưu khi xác nhận nhập kho PDF thành công.'))return
     const occupied=materialOptions.map(material=>material.materialCode)
     const byDescription=new Map()
     let count=0,unreadable=0
@@ -505,7 +505,7 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
 
   const bulkClearPdfMaterials=()=>{
     if(!pdfBulkAllowed)return
-    if(!window.confirm('Bỏ chọn toàn bộ mã vật tư của PDF hiện tại?\\nGiữ nguyên số lượng, đơn giá, VAT, kho và số lô.'))return
+    if(!window.confirm('Bỏ chọn toàn bộ mã vật tư của PDF hiện tại?\nGiữ nguyên số lượng, đơn giá, VAT, kho và số lô.'))return
     setLines(prev=>prev.map(line=>({...line,material:null,materialInput:'',
       newMaterial:false,newMaterialAutoCode:true,newMaterialCode:'',
       newMaterialName:line.invoiceItemName||'',
