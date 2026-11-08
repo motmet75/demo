@@ -633,7 +633,7 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
     const { warehouseQty, warehouseUnitPrice, ratio, bomQty } = computeLine(line)
     const prefix = `Dòng ${index + 1}`
     const issue = (field, message) => ({ lineId: line.id, field, message: `${prefix}: ${message}` })
-    if (line.newMaterial && pdfDocument) {
+    if (line.newMaterial) {
       if (line.newMaterialAutoCode===false && !line.newMaterialCode.trim())
         return issue('material', 'Cần nhập mã vật tư hoặc bật Tự sinh mã.')
       if (line.newMaterialCode.trim().length>50) return issue('material', 'Mã vật tư tối đa 50 ký tự.')
@@ -641,10 +641,17 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
         String(m.materialCode||'').trim().toLowerCase()===line.newMaterialCode.trim().toLowerCase()))
         return issue('material','Mã vật tư đã tồn tại. Hãy chọn vật tư có sẵn.')
       if (!line.newMaterialName.trim()) return issue('material', 'nhập tên nguyên vật liệu gốc.')
+      if (line.newMaterialName.trim().length > 500) return issue('material', 'Tên vật tư tối đa 500 ký tự.')
       if (!line.newMaterialUnit.trim()) return issue('unit', 'nhập đơn vị vật tư mới.')
+      if (line.newMaterialUnit.trim().length > 20) return issue('unit', 'Đơn vị vật tư tối đa 20 ký tự.')
+      if (enteredLines.some(other=>other.id!==line.id && other.newMaterial &&
+          other.newMaterialCode.trim().toUpperCase()===line.newMaterialCode.trim().toUpperCase() &&
+          (other.newMaterialName.trim()!==line.newMaterialName.trim() ||
+           other.newMaterialUnit.trim()!==line.newMaterialUnit.trim()))) {
+        return issue('material', 'Mã vật tư đang dùng cho hai tên hoặc đơn vị khác nhau.')
+      }
     } else if (!line.material) return issue('material',
-      line.newMaterial ? 'Bấm Tạo vật tư tại dòng này trước khi lưu hóa đơn nhập tay.' :
-        'bắt buộc chọn vật tư gốc hoặc Tạo mới tại dòng.')
+      'bắt buộc chọn vật tư gốc hoặc Tạo mới tại dòng.')
     if (line.material && !line.material.unit) return issue('material', 'vật tư chưa có đơn vị BOM.')
     if (!line.warehouse) return issue('warehouse', 'bắt buộc chọn kho.')
     if (!line.batchNo.trim()) return issue('batch', 'bắt buộc nhập số lô.')
@@ -742,7 +749,50 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
     let createdInvoice = savedInvoice
     let inventoryCreatedCount = 0
     let pdfCommitted = false
+    let newlyCreatedMaterialCount = 0
     try {
+      // PDF and customs receipts create materials atomically in the backend.
+      // Manual invoices previously required a separate "Tạo vật tư" click.
+      // Resolve newly entered materials into persisted catalog rows BEFORE
+      // creating the invoice or stock. A code preview alone is never a material.
+      let linesToPost = enteredLines
+      if (!createdInvoice && !pdfDocument) {
+        const createdByCode = new Map()
+        linesToPost = []
+        for (const line of enteredLines) {
+          if (!line.newMaterial) {
+            linesToPost.push(line)
+            continue
+          }
+          const code = line.newMaterialCode.trim()
+          const key = code.toUpperCase()
+          let material = createdByCode.get(key)
+          if (!material) {
+            material = normalizeMaterial(await createMaterial({
+              materialCode: code,
+              materialName: line.newMaterialName.trim(),
+              unit: line.newMaterialUnit.trim(),
+              materialType: line.newMaterialType || 'MATERIAL',
+              isActive: true
+            }))
+            if (!material.id || !material.materialCode) {
+              throw new Error('Máy chủ không trả về mã và ID nguyên vật liệu mới. Đã hủy ghi hóa đơn.')
+            }
+            createdByCode.set(key, material)
+            newlyCreatedMaterialCount += 1
+            setMaterials(prev => prev.some(item => item.id === material.id)
+              ? prev : [...prev, material])
+          }
+          const resolved = {
+            ...line, material, newMaterial: false,
+            materialInput: material.materialCode + ' - ' + material.materialName
+          }
+          linesToPost.push(resolved)
+          // Keep successful material creation visible on the same form,
+          // so a later failure can be retried without creating duplicates.
+          setLines(prev => prev.map(item => item.id === line.id ? resolved : item))
+        }
+      }
       if (!createdInvoice && pdfDocument) {
         const receipt=await confirmPdfReceiving({
           documentId:pdfDocument.id,invoiceDate:form.invoiceDate,
@@ -783,7 +833,7 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
           notes: form.notes || `Inventory receiving bill with ${enteredLines.length} item(s)`,
         }, { tenantId, companyId })
 
-        for (const [index, line] of enteredLines.entries()) {
+        for (const [index, line] of linesToPost.entries()) {
           const { warehouseQty, warehouseUnitPrice, ratio, bomQty, bomUnitPrice } = computeLine(line)
           await addStock({
             materialId: line.material.id || undefined,
@@ -846,7 +896,9 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
       if (receiptReady) setSavedInvoice(createdInvoice)
       setError(receiptReady
           ? `Hóa đơn và hàng nhập đã được lưu. Thanh toán chưa ghi được: ${e?.message || 'thử lại hoặc chọn Chưa thanh toán.'}`
-          : e?.message || 'Không lưu được hóa đơn và các dòng nhập kho.')
+          : (newlyCreatedMaterialCount > 0
+              ? `Đã tạo ${newlyCreatedMaterialCount} vật tư trong Materials, nhưng hóa đơn/nhập kho chưa hoàn tất. Vật tư đã tạo vẫn được giữ lại để thử lưu lại. ${e?.message || ''}`
+              : e?.message || 'Không lưu được hóa đơn và các dòng nhập kho.'))
     } finally {
       savingRef.current = false
       setSaving(false)
@@ -991,8 +1043,11 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
                             </TextField>
                           </Stack>
                           {pdfDocument?<Typography variant="caption">Vật tư mới tạo cùng phiếu nhập kho khi xác nhận.</Typography>:
-                            <Button size="small" variant="contained" disabled={materialCreateId===line.id}
-                              onClick={()=>void createMaterialInline(line)}>{materialCreateId===line.id?'Đang tạo...':'Tạo vật tư'}</Button>}
+                            <>
+                              <Typography variant="caption">Vật tư mới sẽ tự lưu vào Materials khi xác nhận nhập kho. Bạn cũng có thể tạo trước.</Typography>
+                              <Button size="small" variant="outlined" disabled={materialCreateId===line.id}
+                                onClick={()=>void createMaterialInline(line)}>{materialCreateId===line.id?'Đang tạo...':'Tạo vật tư ngay'}</Button>
+                            </>}
                           <Button size="small" onClick={()=>updateLine(line.id,{newMaterial:false})}>Chọn mã có sẵn</Button>
                         </Box>:<>
 
@@ -1023,7 +1078,7 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
                       </TableCell>
                       <TableCell sx={{minWidth:110}}><TextField {...cellProps(line,'quantity','SL nhập')} type="text" value={pdfDocument?line.warehouseImportQuantity:formatQuantityInput(line.warehouseImportQuantity)} error={validationIssue?.lineId===line.id&&validationIssue?.field==='quantity'} helperText={validationIssue?.lineId===line.id&&validationIssue?.field==='quantity'?'Bắt buộc':''} onChange={e=>updateLine(line.id,{warehouseImportQuantity:pdfDocument?e.target.value:parseQuantityInput(e.target.value)})} inputProps={{...cellProps(line,'quantity','SL nhập').inputProps,inputMode:'decimal',min:0,step:'any'}}/></TableCell>
                       <TableCell sx={{minWidth:170}}>
-                        {pdfDocument?<Box sx={{display:'flex',flexDirection:'column',gap:0.5}}>
+                        {(pdfDocument||line.newMaterial)?<Box sx={{display:'flex',flexDirection:'column',gap:0.5}}>
                           <TextField size="small" label="Đơn vị theo HĐ" value={line.warehouseImportUnit}
                             onChange={e=>updateLine(line.id,{warehouseImportUnit:e.target.value})}/>
                           <TextField size="small" label="Đơn vị gốc / 1 ĐV HĐ" value={line.bomUnitPerWarehouseUnit}
