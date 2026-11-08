@@ -10,6 +10,7 @@ import {fetchWarehouses} from '../../api/warehouseApi'
 import {fetchInventoryView} from '../../api/inventoryApi'
 import {formatVnNumber,parseVnNumber} from '../../utils/vietnameseNumbers'
 import {generateMaterialCode} from '../../utils/materialCode'
+import {matchMaterialByDescription} from '../../utils/materialBulkMatching'
 
 const norm=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
   .replace(/[đĐ]/g,'d').toLowerCase().trim()
@@ -51,6 +52,7 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
   const [showValidation,setShowValidation]=useState(false)
   // Separate draft: typing a VAT rate never modifies declaration line VAT.
   const [bulkVatInput,setBulkVatInput]=useState('')
+  const [bulkBatchNo,setBulkBatchNo]=useState('')
   const [queuedDocs,setQueuedDocs]=useState([])
   const [postedIds,setPostedIds]=useState([])
   const [notice,setNotice]=useState('')
@@ -78,6 +80,7 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
   const applyDoc=payload=>{
     setShowValidation(false)
     setBulkVatInput('')
+    setBulkBatchNo(reviewCache.current[payload.id]?.bulkBatchNo??payload.declarationNumber??'')
     const saved=reviewCache.current[payload.id]
     setDoc(payload)
     setNumber(saved?.number??payload.declarationNumber??'')
@@ -89,7 +92,7 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
     setSuccess('')
   }
   const saveReview=()=>{
-    if(doc)reviewCache.current[doc.id]={number,date,currency,rows}
+    if(doc)reviewCache.current[doc.id]={number,date,currency,rows,bulkBatchNo}
   }
   const selectDoc=payload=>{
     if(!payload)return
@@ -160,6 +163,111 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
     !item.locked && Number(item.quantityOnHand||0)-
       Number(item.quantityReserved||0)-Number(item.quantityLocked||0)>0
   ),[stock])
+
+  const bulkAllowed=Boolean(doc)&&!busy&&!confirmed&&doc.status!=='POSTED'
+
+  const bulkCreateMaterials=()=>{
+    if(!bulkAllowed||direction!=='IN')return
+    if(!window.confirm('Chuẩn bị TẠO MỚI vật tư cho tất cả các dòng tờ khai?\\nCác mã đã chọn sẽ bị thay bằng mã mới. Chưa ghi kho cho đến khi xác nhận.'))return
+    const usedCodes=materials.map(m=>m.materialCode)
+    const byDefinition=new Map()
+    let created=0
+    const prepared=rows.map((row,i)=>{
+      const source=doc.items[i]||{}
+      const name=String(source.description||row.newMaterialName||'').trim()
+      const unit=String(source.unit||row.newMaterialUnit||'cái').trim()
+      if(!name||!unit)return row
+      // Two exactly identical customs lines should create one catalog material.
+      const key=JSON.stringify([name,unit])
+      let code=byDefinition.get(key)
+      if(!code){
+        code=generateMaterialCode(usedCodes)
+        usedCodes.push(code)
+        byDefinition.set(key,code)
+        created++
+      }
+      return {...row,newMaterial:true,materialId:'',inventoryId:'',
+        newMaterialAutoCode:true,newMaterialCode:code,
+        newMaterialName:name,newMaterialUnit:unit}
+    })
+    setRows(prepared)
+    setShowValidation(false)
+    setNotice('Đã chuẩn bị '+created+' mã vật tư mới cho '+prepared.filter(r=>r.newMaterial).length+
+      ' dòng. Vật tư chỉ được tạo trong Materials khi xác nhận nhập kho thành công.')
+    setError('')
+  }
+
+  const bulkMatchMaterials=()=>{
+    if(!bulkAllowed)return
+    let matched=0,ambiguous=0,missing=0,skipped=0,insufficient=0
+    const allocated=new Map()
+    if(direction==='OUT'){
+      rows.forEach((r,i)=>{
+        if(!r.inventoryId)return
+        const qty=safeNum(doc.items[i]?.quantity)*parseNumber(r.conversionRatio)
+        if(Number.isFinite(qty)&&qty>0)
+          allocated.set(String(r.inventoryId),(allocated.get(String(r.inventoryId))||0)+qty)
+      })
+    }
+    const prepared=rows.map((row,i)=>{
+      if(row.materialId||row.newMaterial||row.inventoryId){skipped++;return row}
+      const source=doc.items[i]||{}
+      const result=matchMaterialByDescription(source.description,
+        direction==='IN'?materials:available,source.unit)
+      if(result.status!=='matched'){
+        if(result.status==='ambiguous')ambiguous++
+        else missing++
+        return row
+      }
+      if(direction==='IN'){matched++;return {...row,newMaterial:false,materialId:String(result.material.id)}}
+      // OUT requires a unique eligible warehouse/batch, not merely a material.
+      const lot=result.material
+      const id=String(lot.inventoryId||lot.id)
+      const free=Number(lot.quantityOnHand||0)-Number(lot.quantityReserved||0)-
+        Number(lot.quantityLocked||0)
+      const qty=safeNum(source.quantity)*parseNumber(row.conversionRatio)
+      if(!Number.isFinite(qty)||qty<=0||qty+(allocated.get(id)||0)>free){
+        insufficient++;return row
+      }
+      allocated.set(id,(allocated.get(id)||0)+qty)
+      matched++
+      return {...row,materialId:String(lot.materialId||''),inventoryId:id,
+        warehouseId:String(lot.warehouseId||'')}
+    })
+    setRows(prepared)
+    setShowValidation(false)
+    setNotice('Đã tự chọn '+matched+' dòng theo TÊN TRÙNG CHÍNH XÁC (không dấu/không phân biệt hoa thường). '+
+      'Bỏ qua: '+ambiguous+' tên trùng nhiều mã/lô, '+missing+' không tìm thấy, '+
+      insufficient+' không đủ tồn, '+skipped+' đã chọn trước. Hãy kiểm tra từng dòng.')
+    setError('')
+  }
+
+  const bulkClearMaterials=()=>{
+    if(!bulkAllowed)return
+    if(!window.confirm('Bỏ tất cả mã vật tư/lô đã chọn của tờ khai hiện tại? Số lượng, VAT và số lô nhập giữ nguyên.'))return
+    setRows(prev=>prev.map((row,i)=>({
+      ...row,materialId:'',inventoryId:'',newMaterial:false,newMaterialAutoCode:true,
+      newMaterialCode:'',newMaterialName:doc.items[i]?.description||'',
+      newMaterialUnit:doc.items[i]?.unit||'cái',
+      warehouseId:direction==='OUT'?'':row.warehouseId
+    })))
+    setShowValidation(false)
+    setNotice('Đã bỏ chọn mã vật tư trên tất cả dòng. Không xóa vật tư trong hệ thống.')
+    setError('')
+  }
+
+  const applyBatchToAll=()=>{
+    if(!bulkAllowed||direction!=='IN')return
+    const batch=String(bulkBatchNo||number||'').trim()
+    if(!batch||batch.length>50){
+      setError('Nhập số lô chung từ 1 đến 50 ký tự (có thể dùng số tờ khai).')
+      return
+    }
+    setRows(prev=>prev.map(row=>({...row,batchNo:batch})))
+    setBulkBatchNo(batch)
+    setNotice('Đã áp dụng số lô '+batch+' cho tất cả '+rows.length+' dòng tờ khai.')
+    setError('')
+  }
   const taxSummary=useMemo(()=>{
     if(!doc)return {subtotal:0,vat:0,total:0,missing:0}
     let subtotal=0,vat=0,missing=0
@@ -392,6 +500,30 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
             disabled={confirmed} onChange={e=>setCurrency(e.target.value)} sx={{width:115}}/>
         </Stack>
         <Typography variant="body2" fontWeight={700}>Nguồn: {doc.fileName} · {doc.items?.length||0} dòng khai báo</Typography>
+        <Stack direction="row" flexWrap="wrap" gap={1} alignItems="center" sx={{p:1,bgcolor:'action.hover',borderRadius:1}}>
+          <Button size="small" variant="outlined" disabled={!bulkAllowed||direction!=='IN'} onClick={bulkCreateMaterials}>
+            Tạo mới vật tư tất cả dòng
+          </Button>
+          <Button size="small" variant="outlined" disabled={!bulkAllowed} onClick={bulkMatchMaterials}>
+            Tự chọn vật tư theo tên mô tả
+          </Button>
+          <Button size="small" color="warning" variant="outlined" disabled={!bulkAllowed} onClick={bulkClearMaterials}>
+            Bỏ chọn vật tư tất cả
+          </Button>
+          {direction==='IN'&&<>
+            <TextField size="small" label="Số lô chung" value={bulkBatchNo}
+              placeholder={number||'Nhập số lô'}
+              disabled={!bulkAllowed} onChange={e=>setBulkBatchNo(e.target.value)}
+              sx={{minWidth:180,flex:'1 1 180px'}}/>
+            <Button size="small" variant="outlined" disabled={!bulkAllowed} onClick={applyBatchToAll}>
+              Điền số lô tất cả
+            </Button>
+          </>}
+        </Stack>
+        <Typography variant="caption" color="text.secondary">
+          Tự chọn chỉ ghép tên trùng chính xác sau chuẩn hóa; tên trùng nhiều mã hoặc nhiều lô sẽ bỏ qua.
+          Xuất kho chỉ tự chọn khi xác định duy nhất lô còn đủ hàng. Tất cả thao tác chỉ chuẩn bị dữ liệu, chưa ghi kho.
+        </Typography>
         <TableContainer sx={{flex:1,minHeight:150,border:'1px solid',borderColor:'divider',borderRadius:1}}>
           <Table size="small" stickyHeader sx={{minWidth:1370}}>
             <TableHead><TableRow>
