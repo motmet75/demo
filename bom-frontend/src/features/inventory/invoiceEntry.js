@@ -43,4 +43,4 @@ export function lineCalc(line) {
   return { warehouseQty, warehouseUnitPrice, ratio, bomQty, bomUnitPrice, total }
 }
 
-export const hasLineInput = line => Boolean(line.material || line.materialInput.trim() || line.warehouseImportQuantity !== '' || line.notes.trim())
+export const hasLineInput = line => Boolean(line.newMaterial || line.newMaterialCode?.trim() || line.newMaterialName?.trim() || line.material || line.materialInput?.trim() || line.warehouseImportQuantity !== '' || line.notes?.trim())
