@@ -854,8 +854,12 @@ public class ShopOrderController {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", "Đơn tạm vừa được cập nhật; tải lại trước khi xác nhận"));
         }
         try {
+            // Redis drafts store the edited name/notes in displayItems as well
+            // as in order.items. Reconcile by model ID before materialization.
+            ShopOrderService.CreateOrderRequest confirmed = ShopOrderService.withCounterDraftLabels(
+                    draft.order(), draft.displayItems());
             ShopOrderResponseDto created = shopOrderService.createAndConfirmCounterOrder(
-                    draft.order(), tId, cId, RequestTimeZone.resolve(timeZone));
+                    confirmed, tId, cId, RequestTimeZone.resolve(timeZone));
             return ResponseEntity.status(HttpStatus.CREATED).body(created);
         } catch (RuntimeException error) {
             shopOrderDraftCache.restoreIfAbsent(tId, cId, tableId, draft);

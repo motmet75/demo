@@ -112,7 +112,12 @@ public class ShopOrderResponseDto {
             dto.id = item.getId();
             dto.modelId = item.getModel() != null ? item.getModel().getId() : null;
             dto.modelName = item.getModelName();
-            dto.modelNameTranslations = item.getModel() != null ? item.getModel().getModelNameTranslations() : null;
+            // A counter order can override the display name without renaming
+            // the menu model. Model translations belong to the ORIGINAL menu
+            // name and must not replace a custom name after confirmation.
+            dto.modelNameTranslations = item.getModel() != null
+                    && java.util.Objects.equals(item.getModelName(), item.getModel().getModelName())
+                    ? item.getModel().getModelNameTranslations() : null;
             dto.imageUrl = item.getModel() != null ? item.getModel().getImageUrl() : null;
             dto.quantity = item.getQuantity();
             dto.unitPrice = item.getUnitPrice();

@@ -508,6 +508,44 @@ public class ShopOrderService {
         return createOrder(sessionRequest, tenantId, companyId, orderZone);
     }
 
+    /**
+     * Resolve the final item labels from the Redis draft display rows just
+     * before confirmation. Older/stale draft writers can have a correct
+     * displayItems[].modelName but an absent ItemRequest.displayNameOverride.
+     * Verify row order and model UUID; never map a label onto another model.
+     *
+     * @return the original request with its matching item snapshots updated.
+     */
+    public static CreateOrderRequest withCounterDraftLabels(
+            CreateOrderRequest req, List<Map<String, Object>> displayItems) {
+        if (req == null || req.items() == null || displayItems == null
+                || req.items().size() != displayItems.size()) return req;
+        // All-or-nothing alignment avoids replacing the wrong line's name
+        // when another client edits/reorders the same draft.
+        for (int i = 0; i < displayItems.size(); i++) {
+            ItemRequest item = req.items().get(i);
+            Map<String, Object> display = displayItems.get(i);
+            if (item == null || item.modelId() == null || display == null
+                    || !item.modelId().toString().equals(String.valueOf(display.get("modelId")))) {
+                return req;
+            }
+        }
+        for (int i = 0; i < displayItems.size(); i++) {
+            ItemRequest item = req.items().get(i);
+            Map<String, Object> display = displayItems.get(i);
+            Object nameValue = display.get("modelName");
+            if (nameValue instanceof String name && !name.isBlank()) {
+                item.setDisplayNameOverride(name);
+            }
+            // The draft UI also carries the edited specifications as notes.
+            if (display.containsKey("itemNotes")) {
+                Object noteValue = display.get("itemNotes");
+                item.setItemNotes(noteValue == null ? null : noteValue.toString());
+            }
+        }
+        return req;
+    }
+
     @Transactional
     public ShopOrderResponseDto createAndConfirmCounterOrder(CreateOrderRequest req, UUID tenantId, UUID companyId,
                                                               ZoneId orderZone) {
