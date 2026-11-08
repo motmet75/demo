@@ -10,6 +10,7 @@ import {fetchWarehouses} from '../../api/warehouseApi'
 import {fetchInventoryView} from '../../api/inventoryApi'
 import {formatVnNumber,parseVnNumber} from '../../utils/vietnameseNumbers'
 import {generateMaterialCode} from '../../utils/materialCode'
+import CustomsTariffComparison from './CustomsTariffComparison'
 import {matchMaterialByDescription,normalizeMaterialDescription} from '../../utils/materialBulkMatching'
 
 const norm=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
@@ -665,6 +666,8 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
           VAT là tỷ lệ do người dùng đối chiếu, không tự suy ra từ thuế nhập khẩu.
           Giá tính bằng tiền tệ đã chọn; nếu các dòng khác tiền tệ cần quy đổi trước khi dùng tổng.
         </Typography>
+        <CustomsTariffComparison key={doc.id} doc={doc} direction={direction}
+          currency={currency} date={date}/>
       </>}
     </DialogContent>
     <DialogActions sx={{flexWrap:'wrap'}}>
