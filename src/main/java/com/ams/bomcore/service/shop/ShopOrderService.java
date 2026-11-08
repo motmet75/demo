@@ -334,7 +334,7 @@ public class ShopOrderService {
         return new CreateOrderRequest(req.fulfillmentType(), req.tableId(), req.customerName(), req.customerPhone(),
                 req.deliveryProvider(), req.deliveryAddress(), req.deliveryFee(), req.paymentMethod(), req.notes(),
                 items, req.manualOrderNumber(), req.token(), req.customerTableTag(), req.requestedFulfillmentAt(),
-                req.buyerTaxCode(), req.buyerOrganizationName(), req.buyerAddress(), req.buyerEmail(), req.buyerPhone());
+                req.buyerTaxCode(), req.buyerOrganizationName(), req.buyerAddress(), req.buyerEmail(), req.buyerPhone(), req.buyerIdentityNumber());
     }
 
     private CreateOrderRequest pendingRequestWithSeat(CreateOrderRequest req, UUID tableId,
@@ -344,14 +344,14 @@ public class ShopOrderService {
                 req.customerName(), req.customerPhone(), req.deliveryProvider(), req.deliveryAddress(),
                 req.deliveryFee(), req.paymentMethod(), req.notes(), req.items(), req.manualOrderNumber(),
                 req.token(), customerTableTag, req.requestedFulfillmentAt(), req.buyerTaxCode(),
-                req.buyerOrganizationName(), req.buyerAddress(), req.buyerEmail(), req.buyerPhone());
+                req.buyerOrganizationName(), req.buyerAddress(), req.buyerEmail(), req.buyerPhone(), req.buyerIdentityNumber());
     }
 
     private CreateOrderRequest pendingRequestWithPayment(CreateOrderRequest req, String paymentMethod) {
         return new CreateOrderRequest(req.fulfillmentType(), req.tableId(), req.customerName(), req.customerPhone(),
                 req.deliveryProvider(), req.deliveryAddress(), req.deliveryFee(), paymentMethod, req.notes(),
                 req.items(), req.manualOrderNumber(), req.token(), req.customerTableTag(), req.requestedFulfillmentAt(),
-                req.buyerTaxCode(), req.buyerOrganizationName(), req.buyerAddress(), req.buyerEmail(), req.buyerPhone());
+                req.buyerTaxCode(), req.buyerOrganizationName(), req.buyerAddress(), req.buyerEmail(), req.buyerPhone(), req.buyerIdentityNumber());
     }
 
     private static void setInvoiceBuyerDetails(ShopOrder order, CreateOrderRequest req) {
@@ -504,7 +504,7 @@ public class ShopOrderService {
                 req.deliveryProvider(), req.deliveryAddress(), req.deliveryFee(), req.paymentMethod(),
                 req.notes(), req.items(), req.manualOrderNumber(), token.getToken(),
                 req.customerTableTag(), req.requestedFulfillmentAt(), req.buyerTaxCode(),
-                req.buyerOrganizationName(), req.buyerAddress(), req.buyerEmail(), req.buyerPhone());
+                req.buyerOrganizationName(), req.buyerAddress(), req.buyerEmail(), req.buyerPhone(), req.buyerIdentityNumber());
         return createOrder(sessionRequest, tenantId, companyId, orderZone);
     }
 
@@ -2862,6 +2862,7 @@ public class ShopOrderService {
 
     // ── Request DTOs ──────────────────────────────────────────────────
 
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
     public static class ItemRequest {
         private UUID modelId;
         private BigDecimal quantity;
@@ -2915,6 +2916,7 @@ public class ShopOrderService {
         menuOptionRepository.delete(opt);
     }
 
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
     public record CreateOrderRequest(
             String fulfillmentType,
             UUID tableId,
@@ -2934,8 +2936,26 @@ public class ShopOrderService {
             String buyerOrganizationName,
             String buyerAddress,
             String buyerEmail,
-            String buyerPhone
-    ) {}
+            String buyerPhone,
+            // Optional identity reference in older Redis draft writers.
+            // This is retained while editing the draft; it is not automatically
+            // persisted to the confirmed order's database table.
+            String buyerIdentityNumber
+    ) {
+        // Keep all pre-existing 19-argument callers source/binary compatible.
+        public CreateOrderRequest(
+                String fulfillmentType, UUID tableId, String customerName, String customerPhone,
+                String deliveryProvider, String deliveryAddress, BigDecimal deliveryFee,
+                String paymentMethod, String notes, List<ItemRequest> items,
+                Integer manualOrderNumber, String token, String customerTableTag,
+                Instant requestedFulfillmentAt, String buyerTaxCode, String buyerOrganizationName,
+                String buyerAddress, String buyerEmail, String buyerPhone) {
+            this(fulfillmentType, tableId, customerName, customerPhone, deliveryProvider,
+                    deliveryAddress, deliveryFee, paymentMethod, notes, items, manualOrderNumber,
+                    token, customerTableTag, requestedFulfillmentAt, buyerTaxCode,
+                    buyerOrganizationName, buyerAddress, buyerEmail, buyerPhone, null);
+        }
+    }
 
     public record BulkImportOrder(
             String externalOrderId,

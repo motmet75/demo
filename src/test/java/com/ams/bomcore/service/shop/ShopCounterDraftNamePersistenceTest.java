@@ -112,6 +112,45 @@ class ShopCounterDraftNamePersistenceTest {
     }
 
     @Test
+    void redisDraftAcceptsBuyerIdentityNumberAndKeepsItAfterRoundTrip() {
+        var line = orderLine(COFFEE_ID);
+        var request = new ShopOrderService.CreateOrderRequest(
+                "DINE_IN", null, "Test customer", null, null, null, null,
+                "CASH", null, List.of(line), null, null, null, null,
+                null, null, null, null, null, "TEST-ID-NOT-A-REAL-NUMBER");
+        var draft = new ShopOrderDraftCache.DraftView("id-draft", UUID.randomUUID(), request,
+                List.of(Map.of("modelId", COFFEE_ID.toString(), "modelName", "Custom label")),
+                "test", Instant.now());
+
+        var restored = ShopOrderDraftCache.decode(ShopOrderDraftCache.encode(draft)).orElseThrow();
+        assertEquals("TEST-ID-NOT-A-REAL-NUMBER", restored.order().buyerIdentityNumber());
+        assertEquals(COFFEE_ID, restored.order().items().get(0).modelId());
+
+        String futureClientJson = ShopOrderDraftCache.encode(draft)
+                .replace("\"buyerIdentityNumber\":\"TEST-ID-NOT-A-REAL-NUMBER\"",
+                        "\"buyerIdentityNumber\":\"TEST-ID-NOT-A-REAL-NUMBER\","
+                        + "\"optionalClientField\":\"should not break reading\"");
+        var forwardsCompatible = ShopOrderDraftCache.decode(futureClientJson).orElseThrow();
+        assertEquals("TEST-ID-NOT-A-REAL-NUMBER",
+                forwardsCompatible.order().buyerIdentityNumber());
+    }
+
+    @Test
+    void redisDraftWithoutBuyerIdentityNumberRemainsReadable() {
+        var line = orderLine(COFFEE_ID);
+        var draft = new ShopOrderDraftCache.DraftView(
+                "old-draft", UUID.randomUUID(), draftRequest(line),
+                List.of(Map.of("modelId", COFFEE_ID.toString(), "modelName", "Original")),
+                "test", Instant.now());
+        String json = ShopOrderDraftCache.encode(draft)
+                .replace("\"buyerIdentityNumber\":null,", "")
+                .replace(",\"buyerIdentityNumber\":null", "");
+        var restored = ShopOrderDraftCache.decode(json).orElseThrow();
+        assertNull(restored.order().buyerIdentityNumber());
+        assertEquals(COFFEE_ID, restored.order().items().get(0).modelId());
+    }
+
+    @Test
     void confirmationWillNotApplyWrongMenuItemName() {
         ShopOrderService.ItemRequest item = orderLine(COFFEE_ID);
         ShopOrderService.withCounterDraftLabels(draftRequest(item), List.of(Map.of(
