@@ -37,7 +37,7 @@ public class CustomsDeclarationStockService {
     public record Line(int lineIndex, UUID materialId, String newMaterialCode,
                        String newMaterialName, String newMaterialUnit,
                        UUID warehouseId, UUID inventoryId, String batchNo,
-                       BigDecimal conversionRatio) {}
+                       BigDecimal conversionRatio, BigDecimal vatRate) {}
     public record Confirm(UUID documentId, String direction, String declarationNumber,
                           LocalDate declarationDate, String currency, List<Line> lines) {}
 
@@ -146,7 +146,9 @@ public class CustomsDeclarationStockService {
         return jdbc.queryForList("""
             SELECT id,declaration_number AS "declarationNumber",direction,
                    declaration_date AS "declarationDate",file_name AS "fileName",
-                   status,confirmed_by AS "confirmedBy",confirmed_at AS "confirmedAt"
+                   status,confirmed_by AS "confirmedBy",confirmed_at AS "confirmedAt",
+                   declared_subtotal AS "subtotal",vat_amount AS "vatAmount",
+                   declared_total_after_vat AS "totalAfterVat"
             FROM public.inventory_customs_declaration WHERE tenant_id=? AND company_id=?
             ORDER BY uploaded_at DESC LIMIT 100
             """,scope.tenantId(),scope.companyId());
@@ -186,16 +188,40 @@ public class CustomsDeclarationStockService {
         Map<String,Material> createdMaterials=new HashMap<>();
         Map<Integer,WarehouseEntity> selectedWarehouses=new TreeMap<>();
         Map<UUID,BigDecimal> outQuantities=new TreeMap<>();
+        Map<Integer,BigDecimal> taxAmountByLine=new HashMap<>();
+        BigDecimal declaredSubtotal=BigDecimal.ZERO;
+        BigDecimal declaredVat=BigDecimal.ZERO;
+        boolean allLinesPriced=true;
 
         for(Line line:req.lines()) {
             if(line==null||line.lineIndex()<0||line.lineIndex()>=parsed.items().size()
                 ||selected.putIfAbsent(line.lineIndex(),line)!=null)
                 throw fail("Dòng tờ khai bị thiếu hoặc trùng.");
             var item=parsed.items().get(line.lineIndex());
+            String lineCurrency=Objects.toString(item.currency(),"").trim().toUpperCase(Locale.ROOT);
+            if(!lineCurrency.isBlank()&&!lineCurrency.equals(currency))
+                throw fail("Tiền tệ dòng "+(line.lineIndex()+1)+" ("+lineCurrency+
+                    ") không khớp "+currency+". Chọn đúng tiền tệ trước khi xác nhận.");
             BigDecimal qty=decimal(item.quantity(),"Số lượng tờ khai",6);
             BigDecimal ratio=decimal(line.conversionRatio(),"Hệ số quy đổi",8);
             BigDecimal bomQty=qty.multiply(ratio);
             decimal(bomQty,"Số lượng kho",6);
+            // VAT is reviewed by the operator, never inferred from customs duty.
+            BigDecimal taxRate=line.vatRate()==null?BigDecimal.ZERO:line.vatRate();
+            if(taxRate.signum()<0||taxRate.compareTo(new BigDecimal("100"))>0
+                ||taxRate.stripTrailingZeros().scale()>3)
+                throw fail("VAT phải từ 0 đến 100%, tối đa 3 chữ số thập phân.");
+            if(item.unitPrice()!=null){
+                BigDecimal base=item.unitPrice().multiply(qty).setScale(4,RoundingMode.HALF_UP);
+                BigDecimal lineTax=base.multiply(taxRate)
+                    .divide(new BigDecimal("100"),4,RoundingMode.HALF_UP);
+                declaredSubtotal=declaredSubtotal.add(base);
+                declaredVat=declaredVat.add(lineTax);
+                taxAmountByLine.put(line.lineIndex(),lineTax);
+            } else {
+                // Do not save an apparently complete total without line prices.
+                allLinesPriced=false;
+            }
             if(line.warehouseId()==null)throw fail("Chưa chọn kho dòng "+(line.lineIndex()+1));
             WarehouseEntity warehouse=warehouses.findById(line.warehouseId())
                 .orElseThrow(()->fail("Không tìm thấy kho."));
@@ -271,9 +297,14 @@ public class CustomsDeclarationStockService {
         if(clashes>0)throw new ResponseStatusException(HttpStatus.CONFLICT,"Số tờ khai này đã nhập/xuất kho.");
         int updated=jdbc.update("""
             UPDATE public.inventory_customs_declaration SET status='POSTED',direction=?,
-               declaration_number=?,declaration_date=?,confirmed_by=?,confirmed_at=now()
+               declaration_number=?,declaration_date=?,confirmed_by=?,confirmed_at=now(),
+               declared_subtotal=?,vat_amount=?,declared_total_after_vat=?
             WHERE id=? AND tenant_id=? AND company_id=? AND status='DRAFT'
-            """,direction,number,date,scope.username(),req.documentId(),scope.tenantId(),scope.companyId());
+            """,direction,number,date,scope.username(),
+            allLinesPriced?declaredSubtotal:null,
+            allLinesPriced?declaredVat:null,
+            allLinesPriced?declaredSubtotal.add(declaredVat):null,
+            req.documentId(),scope.tenantId(),scope.companyId());
         if(updated!=1)throw new ResponseStatusException(HttpStatus.CONFLICT,"Tờ khai đã thay đổi.");
 
         List<Map<String,Object>> results=new ArrayList<>();
@@ -324,12 +355,14 @@ public class CustomsDeclarationStockService {
                   (id,declaration_id,line_index,hs_code,declared_description,material_id,
                    original_material_name,warehouse_id,inventory_id,batch_no,direction,
                    quantity_declared,quantity_stock,conversion_ratio,unit_declared,unit_stock,
-                   unit_price,currency,country_of_origin)
-                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                   unit_price,currency,country_of_origin,vat_rate,vat_amount)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,UUID.randomUUID(),req.documentId(),item.lineIndex(),item.hsCode(),
                 item.description(),material.getId(),material.getMaterialName(),line.warehouseId(),
                 inventoryId,batch,direction,item.quantity(),qty,line.conversionRatio(),
-                item.unit(),material.getUnit(),item.unitPrice(),currency,item.originCountry());
+                item.unit(),material.getUnit(),item.unitPrice(),currency,item.originCountry(),
+                line.vatRate()==null?BigDecimal.ZERO:line.vatRate(),
+                taxAmountByLine.get(item.lineIndex()));
             results.add(Map.of("lineIndex",item.lineIndex(),"inventoryId",inventoryId,
                     "materialId",material.getId(),"nameOnDeclaration",item.description()));
         }

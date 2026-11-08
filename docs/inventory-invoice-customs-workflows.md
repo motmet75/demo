@@ -35,3 +35,25 @@ Deploy frontend to /var/www/html/bom-inventory using ./bin/bom-frontend-live.sh 
 - It reads the first worksheet with <IMP> markers. Other customs templates require a separate parser profile.
 - Users must confirm direction, declaration date, stock conversion and receipt/issue independently of the Excel data.
 - Historical documents change current on-hand balances at confirmation; historical opening balances are not rebuilt.
+
+## Multi-document review and VAT (November 2026)
+- Existing **Hóa đơn mới · Nhập kho** modal: choose up to 30 supplier PDFs/images at once.
+  Upload adds documents to a local review queue; each document is selected,
+  mapped to internal materials, confirmed and posted separately, not merged
+  into one invoice. Existing stored Invoice Desk documents can also be queued.
+- Material selector uses a compact **+** button beside the material input.
+  Hover displays "Tạo nguyên vật liệu mới tại dòng này". New material fields
+  remain inline in the same row.
+- VAT can be edited per item or across the entire invoice using VAT chung (%).
+  Manual invoice subtotal, taxAmount and totalAmount are saved, and payment
+  is based on the gross total after VAT. PDF reconciliation still requires
+  explicit acceptance if calculated totals differ from the source PDF.
+- Customs declaration modal accepts up to 30 Excel files per upload, queues
+  them for independent verification and inventory posting. Each declaration
+  keeps its own direction, date, warehouse/batch and material mapping.
+- Customs VAT is **not** inferred from "Thuế suất" (which may refer to
+  import duties). Its editable percentage is recorded separately for audit.
+  The customs line value, VAT and after-VAT gross are informative; when a
+  customs line lacks a declared price the consolidated totals are NULL.
+- Additional additive SQL migration:
+  src/main/resources/db/migration/V20261108_4__customs_declaration_vat_audit.sql

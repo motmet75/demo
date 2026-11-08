@@ -1,4 +1,4 @@
-import React, {useCallback,useEffect,useMemo,useState} from 'react'
+import React, {useCallback,useEffect,useMemo,useRef,useState} from 'react'
 import {
   Alert,Autocomplete,Box,Button,Chip,CircularProgress,Dialog,DialogActions,
   DialogContent,DialogTitle,FormControlLabel,MenuItem,Stack,Switch,
@@ -29,7 +29,7 @@ const newRow=(item,warehouses)=>({
   batchNo:'',newMaterial:false,
   newMaterialCode:'',newMaterialName:item.description||'',
   newMaterialUnit:item.unit||'cái',
-  conversionRatio:'1',
+  conversionRatio:'1',vatRate:'0',
 })
 
 export default function CustomsDeclarationStockDialog({open,onClose,onComplete,initialDirection='IN'}){
@@ -47,6 +47,10 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
   const [error,setError]=useState('')
   const [success,setSuccess]=useState('')
   const [confirmed,setConfirmed]=useState(false)
+  const [queuedDocs,setQueuedDocs]=useState([])
+  const [postedIds,setPostedIds]=useState([])
+  const [notice,setNotice]=useState('')
+  const reviewCache=useRef({})
 
   const load=useCallback(async()=>{
     const [ma,wh,inv,h]=await Promise.all([
@@ -63,32 +67,67 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
     setDirection(initialDirection)
     setDoc(null);setRows([]);setNumber('');setDate('');setCurrency('VND')
     setError('');setSuccess('');setConfirmed(false)
+    setQueuedDocs([]);setPostedIds([]);setNotice('');reviewCache.current={}
     void load().catch(e=>setError(e.message||'Không tải được dữ liệu kho.'))
   },[open,initialDirection,load])
 
   const applyDoc=payload=>{
+    const saved=reviewCache.current[payload.id]
     setDoc(payload)
-    setNumber(payload.declarationNumber||'')
-    setDate(validDate(payload.declarationDate)?payload.declarationDate:
-      validDate(payload.dateHint)?payload.dateHint:today())
-    setCurrency(payload.items?.find(i=>i.currency)?.currency||'VND')
-    setRows((payload.items||[]).map(item=>newRow(item,warehouses)))
-    setConfirmed(payload.status==='POSTED')
+    setNumber(saved?.number??payload.declarationNumber??'')
+    setDate(saved?.date??(validDate(payload.declarationDate)?payload.declarationDate:
+      validDate(payload.dateHint)?payload.dateHint:today()))
+    setCurrency(saved?.currency??payload.items?.find(i=>i.currency)?.currency??'VND')
+    setRows(saved?.rows||(payload.items||[]).map(item=>newRow(item,warehouses)))
+    setConfirmed(payload.status==='POSTED'||postedIds.includes(payload.id))
     setSuccess('')
   }
+  const saveReview=()=>{
+    if(doc)reviewCache.current[doc.id]={number,date,currency,rows}
+  }
+  const selectDoc=payload=>{
+    if(!payload)return
+    if(doc?.id===payload.id)return
+    saveReview()
+    applyDoc(payload)
+    setNotice('')
+  }
+  const addToQueue=(documents,{activate=false}={})=>{
+    if(!documents.length)return
+    setQueuedDocs(prev=>{
+      const result=[...prev]
+      documents.forEach(item=>{
+        const i=result.findIndex(v=>v.id===item.id)
+        if(i>=0)result[i]=item
+        else result.push(item)
+      })
+      return result
+    })
+    if(activate||!doc)selectDoc(documents[0])
+  }
   const upload=async event=>{
-    const file=event.target.files?.[0]
+    const files=Array.from(event.target.files||[])
     event.target.value=''
-    if(!file)return
-    setBusy(true);setError('')
-    try{applyDoc(await customsUpload(file))}
-    catch(e){setError(e.message||'Không đọc được Excel HQ.')}
-    finally{setBusy(false)}
+    if(!files.length)return
+    if(files.length>30){setError('Tối đa 30 tờ khai mỗi lượt.');return}
+    setBusy(true);setError('');setNotice('')
+    const succeeded=[],failed=[]
+    for(const file of files){
+      try{succeeded.push(await customsUpload(file))}
+      catch(e){failed.push(file.name+': '+(e.message||'Không đọc được Excel HQ.'))}
+    }
+    if(succeeded.length)addToQueue(succeeded)
+    setNotice('Đã thêm '+succeeded.length+' tờ khai. Đối chiếu và xác nhận từng tờ khai.')
+    if(failed.length)setError('Tờ khai lỗi: '+failed.join(' | '))
+    setBusy(false)
   }
   const loadDocument=async id=>{
+    if(!id)return
     setBusy(true);setError('')
-    try{applyDoc(await customsDocument(id))}
-    catch(e){setError(e.message||'Không tải được tờ khai.')}
+    try{
+      const item=queuedDocs.find(x=>String(x.id)===String(id))||await customsDocument(id)
+      addToQueue([item],{activate:true})
+    }catch(e){setError(e.message||'Không tải được tờ khai.')}
     finally{setBusy(false)}
   }
   const edit=(index,patch)=>setRows(prev=>prev.map(row=>
@@ -100,12 +139,31 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
     !item.locked && Number(item.quantityOnHand||0)-
       Number(item.quantityReserved||0)-Number(item.quantityLocked||0)>0
   ),[stock])
+  const taxSummary=useMemo(()=>{
+    if(!doc)return {subtotal:0,vat:0,total:0,missing:0}
+    let subtotal=0,vat=0,missing=0
+    doc.items.forEach((item,i)=>{
+      if(item.unitPrice==null||!Number.isFinite(Number(item.unitPrice))){
+        missing++;return
+      }
+      const base=Number(item.unitPrice)*Number(item.quantity||0)
+      const rate=parseVnNumber(rows[i]?.vatRate||'0')
+      if(!Number.isFinite(base)||!Number.isFinite(rate)){missing++;return}
+      subtotal+=base
+      vat+=Math.round(base*rate/100*10000)/10000
+    })
+    return {subtotal,vat,total:subtotal+vat,missing}
+  },[doc,rows])
+  const commonVatRate=rows.length&&rows.every(row=>row.vatRate===rows[0].vatRate)
+    ?rows[0].vatRate:''
 
   const ready=Boolean(doc)&&doc.status!=='POSTED'&&rows.length===doc.items?.length
     &&rows.length>0&&number.trim()&&validDate(date)
     &&rows.every((row,i)=>{
       const original=doc.items[i]
       const ratio=parseNumber(row.conversionRatio)
+      const rate=parseNumber(row.vatRate)
+      if(!Number.isFinite(rate)||rate<0||rate>100)return false
       if(!Number.isFinite(ratio)||ratio<=0||!Number.isFinite(safeNum(original.quantity)*ratio))return false
       if(direction==='IN')return Boolean(row.warehouseId&&row.batchNo.trim()&&
         (row.newMaterial?(row.newMaterialCode.trim()&&row.newMaterialName.trim()&&row.newMaterialUnit.trim()):row.materialId))
@@ -131,14 +189,23 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
           warehouseId:row.warehouseId,
           inventoryId:direction==='OUT'?row.inventoryId:null,
           batchNo:direction==='IN'?row.batchNo:mapStock.get(String(row.inventoryId))?.batchNo||'',
-          conversionRatio:parseNumber(row.conversionRatio)
+          conversionRatio:parseNumber(row.conversionRatio),
+          vatRate:parseNumber(row.vatRate)
         }))
       })
       setSuccess('Đã '+(direction==='IN'?'nhập':'xuất')+' kho '+result.postedLines.length+
         ' dòng theo tờ khai '+number)
       setConfirmed(true)
+      setPostedIds(prev=>prev.includes(doc.id)?prev:[...prev,doc.id])
+      delete reviewCache.current[doc.id]
       await load()
-      onComplete?.()
+      const next=queuedDocs.find(x=>x.id!==doc.id&&!postedIds.includes(x.id)&&x.status!=='POSTED')
+      if(next){
+        setNotice('Đã ghi kho tờ khai '+number+'. Tiếp tục đối chiếu tờ khai kế tiếp.')
+        applyDoc(next)
+      } else {
+        onComplete?.()
+      }
     }catch(e){setError(e.message||'Lỗi ghi kho; giao dịch không được xác nhận.')}
     finally{setBusy(false)}
   }
@@ -159,8 +226,8 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
           <MenuItem value="OUT">Xuất kho · Tờ khai xuất</MenuItem>
         </TextField>
         <Button variant="contained" size="small" component="label" disabled={busy}>
-          {busy?'Đang xử lý...':'Tải Excel tờ khai HQ (.xls/.xlsx)'}
-          <input hidden type="file" accept=".xls,.xlsx" onChange={e=>void upload(e)}/>
+          {busy?'Đang xử lý...':'Chọn một hoặc nhiều tờ khai Excel'}
+          <input hidden type="file" multiple accept=".xls,.xlsx" onChange={e=>void upload(e)}/>
         </Button>
         <TextField select size="small" label="Hoặc chọn tờ khai đã tải" value="" sx={{minWidth:255,flex:1}}
           disabled={busy} onChange={e=>void loadDocument(e.target.value)}>
@@ -170,6 +237,17 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
           </MenuItem>)}
         </TextField>
         {busy&&<CircularProgress size={20}/>}
+        {queuedDocs.length>0&&<Chip label={`Đã chọn ${queuedDocs.length} tờ khai`} color="info" size="small"/>}
+      </Stack>
+      {notice&&<Alert severity="success">{notice}</Alert>}
+      {queuedDocs.length>0&&<Stack direction="row" gap={0.5} flexWrap="wrap">
+        {queuedDocs.map((item,i)=><Button key={item.id} size="small"
+          variant={item.id===doc?.id?'contained':'outlined'}
+          disabled={busy||postedIds.includes(item.id)||item.status==='POSTED'}
+          onClick={()=>selectDoc(item)}>
+          {i+1}. {item.declarationNumber||item.fileName||'Tờ khai'}
+          {postedIds.includes(item.id)||item.status==='POSTED'?' ✓':''}
+        </Button>)}
       </Stack>
       <Alert severity="info">Đọc Excel theo cách xuất dữ liệu của Portal (dòng <code>&lt;IMP&gt;</code>).
         Bản Excel phải có mã HS/mô tả/số lượng. **Không tự động nhập/xuất** khi tải tờ khai.
@@ -197,6 +275,8 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
               <TableCell>Hệ số sang ĐV kho</TableCell>
               <TableCell align="right">SL kho</TableCell>
               <TableCell align="right">Giá khai báo</TableCell>
+              <TableCell>VAT (%)</TableCell>
+              <TableCell align="right">Sau VAT</TableCell>
             </TableRow></TableHead><TableBody>
               {(doc.items||[]).map((item,i)=>{
                 const line=rows[i]
@@ -265,11 +345,38 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
                   </TableCell>
                   <TableCell align="right">{Number.isFinite(qty)?formatVnNumber(qty,6):'—'}</TableCell>
                   <TableCell align="right">{item.unitPrice==null?'—':formatVnNumber(item.unitPrice,4)} {item.currency||currency}</TableCell>
+                  <TableCell sx={{minWidth:100}}>
+                    <TextField size="small" value={line.vatRate} disabled={confirmed}
+                      onChange={e=>edit(i,{vatRate:e.target.value})}
+                      inputProps={{inputMode:'decimal'}}
+                      error={!Number.isFinite(parseNumber(line.vatRate))||parseNumber(line.vatRate)<0||parseNumber(line.vatRate)>100}/>
+                  </TableCell>
+                  <TableCell align="right" sx={{whiteSpace:'nowrap'}}>
+                    {item.unitPrice==null?'—':
+                      formatVnNumber(Number(item.quantity)*Number(item.unitPrice)*
+                        (1+(parseNumber(line.vatRate)||0)/100),2)} {currency}
+                  </TableCell>
                 </TableRow>
               })}
             </TableBody>
           </Table>
         </TableContainer>
+        <Stack direction="row" gap={1} flexWrap="wrap" alignItems="center" justifyContent="flex-end">
+          <TextField size="small" label="VAT chung (%)" value={commonVatRate}
+            disabled={confirmed} sx={{width:125}} inputProps={{inputMode:'decimal'}}
+            onChange={e=>setRows(prev=>prev.map(row=>({...row,vatRate:e.target.value})))}/>
+          <Chip label={`Trị giá khai báo: ${formatVnNumber(taxSummary.subtotal,2)} ${currency}`}/>
+          <Chip label={`VAT: ${formatVnNumber(taxSummary.vat,2)} ${currency}`}/>
+          <Chip color="success" label={`Tổng sau VAT: ${formatVnNumber(taxSummary.total,2)} ${currency}`}/>
+        </Stack>
+        {taxSummary.missing>0&&<Alert severity="warning">
+          Có {taxSummary.missing} dòng chưa đủ đơn giá/SL từ tờ khai.
+          Tổng tiền chỉ tính các dòng có giá, không phải tổng đầy đủ.
+        </Alert>}
+        <Typography variant="caption" color="text.secondary">
+          VAT là tỷ lệ do người dùng đối chiếu, không tự suy ra từ thuế nhập khẩu.
+          Giá tính bằng tiền tệ đã chọn; nếu các dòng khác tiền tệ cần quy đổi trước khi dùng tổng.
+        </Typography>
       </>}
     </DialogContent>
     <DialogActions>

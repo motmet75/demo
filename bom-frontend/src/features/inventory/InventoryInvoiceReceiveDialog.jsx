@@ -15,6 +15,7 @@ import Switch from '@mui/material/Switch'
 import TextField from '@mui/material/TextField'
 import MenuItem from '@mui/material/MenuItem'
 import Stack from '@mui/material/Stack'
+import Tooltip from '@mui/material/Tooltip'
 import ToggleButton from '@mui/material/ToggleButton'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import Typography from '@mui/material/Typography'
@@ -297,6 +298,10 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
   const [sharedLocation, setSharedLocation] = useState({ warehouse: null, batchNo: '' })
   const [pdfDocuments, setPdfDocuments] = useState([])
   const [pdfDocument, setPdfDocument] = useState(null)
+  const [pdfQueue, setPdfQueue] = useState([])
+  const [pdfPostedIds, setPdfPostedIds] = useState([])
+  const [pdfNotice, setPdfNotice] = useState('')
+  const pdfReviewCache = useRef({})
   const [pdfBusy, setPdfBusy] = useState(false)
   const [materialCreateId, setMaterialCreateId] = useState(null)
   const [pdfMismatchAcknowledged, setPdfMismatchAcknowledged] = useState(false)
@@ -317,8 +322,15 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
   const pdfSubtotal = pdfDocument ? parseMachineNumber(pdfDocument.subtotal) : NaN
   const pdfVat = pdfDocument ? parseMachineNumber(pdfDocument.vat) : NaN
   const pdfTotal = pdfDocument ? parseMachineNumber(pdfDocument.total) : NaN
-  const computedVat = enteredLines.reduce((sum,line)=>
-      sum+computeLine(line).total*(Number(line.vatRate)||0)/100,0)
+  const computedVat = enteredLines.reduce((sum,line)=>{
+    const rate=parseVnNumber(line.vatRate)
+    const base=computeLine(line).total
+    return sum+(Number.isFinite(rate)&&Number.isFinite(base)?
+      Math.round(base*rate/100*10000)/10000:0)
+  },0)
+  const invoiceGrandTotal=invoiceTotal+computedVat
+  const commonVatRate=lines.length&&lines.every(line=>line.vatRate===lines[0].vatRate)
+    ? lines[0].vatRate : ''
   const pdfDifference = Boolean(pdfDocument) && (
     (Number.isFinite(pdfSubtotal) && Math.abs(invoiceTotal-pdfSubtotal)>1) ||
     (Number.isFinite(pdfVat) && Math.abs(computedVat-pdfVat)>1) ||
@@ -335,6 +347,10 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
     setPayment({ method: 'CASH', createPaymentNote: true, notes: '' })
     setSavedInvoice(null)
     setPdfDocument(null)
+    setPdfQueue([])
+    setPdfPostedIds([])
+    setPdfNotice('')
+    pdfReviewCache.current={}
     setPdfBusy(false)
     setMaterialCreateId(null)
     setPdfMismatchAcknowledged(false)
@@ -476,36 +492,77 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
         vatRate:(String(doc.vatRate||'').match(/\d+(?:[.,]\d+)?/)||[])[0]?.replace(',','.')||'0'
       }
     })
+    const cached=pdfReviewCache.current[doc.id]
     setPdfDocument(doc)
-    setPdfSerial(doc.serial||'')
-    setPdfSupplierTaxId(doc.sellerTaxId||'')
-    setPdfCurrency(doc.currency||'VND')
-    setPdfMismatchAcknowledged(false)
-    setForm(prev=>({
-      ...prev,invoiceNumber:doc.number||'',partyName:doc.seller||'',
-      invoiceDate:doc.date||'',notes:prev.notes
-    }))
-    setLines(nextRows)
+    setPdfSerial(cached?.serial??doc.serial??'')
+    setPdfSupplierTaxId(cached?.supplierTaxId??doc.sellerTaxId??'')
+    setPdfCurrency(cached?.currency??doc.currency??'VND')
+    setPdfMismatchAcknowledged(cached?.acknowledged??false)
+    setForm(cached?.form||{
+      invoiceNumber:doc.number||'',partyName:doc.seller||'',
+      invoiceDate:doc.date||'',notes:''
+    })
+    setLines(cached?.lines||nextRows)
     setError('')
+  }
+  const savePdfReview = () => {
+    if(!pdfDocument)return
+    pdfReviewCache.current[pdfDocument.id]={
+      serial:pdfSerial,supplierTaxId:pdfSupplierTaxId,currency:pdfCurrency,
+      acknowledged:pdfMismatchAcknowledged,form,lines
+    }
+  }
+  const activatePdf = doc => {
+    if(!doc || saving || pdfPostedIds.includes(doc.id))return
+    if(savedInvoice){
+      setError('Hóa đơn đã nhập kho. Hoàn tất thanh toán trước khi đổi chứng từ.')
+      return
+    }
+    savePdfReview()
+    applyPdfDocument(doc)
+    setPdfNotice('')
+  }
+  const addPdfToQueue = (docs,{activate=false}={}) => {
+    if(!docs.length)return
+    setPdfQueue(prev=>{
+      const merged=[...prev]
+      docs.forEach(doc=>{
+        const idx=merged.findIndex(old=>old.id===doc.id)
+        if(idx>=0)merged[idx]=doc
+        else merged.push(doc)
+      })
+      return merged
+    })
+    setPdfDocuments(prev=>{
+      const seen=new Set()
+      return [...docs,...prev].filter(doc=>doc?.id&&!seen.has(doc.id)&&seen.add(doc.id))
+    })
+    if(activate||!pdfDocument)activatePdf(docs[0])
   }
   const loadPdfDocument = async id => {
     if(!id)return
     setPdfBusy(true);setError('')
-    try {applyPdfDocument(await getReceivingDocument(id))}
-    catch(error){setError(error.message||'Không thể tải hóa đơn OCR.')}
+    try{
+      const doc=pdfQueue.find(x=>String(x.id)===String(id))||await getReceivingDocument(id)
+      addPdfToQueue([doc],{activate:true})
+    }catch(error){setError(error.message||'Không thể tải hóa đơn OCR.')}
     finally{setPdfBusy(false)}
   }
   const handlePdfUpload = async event => {
-    const file=event.target.files?.[0]
+    const files=Array.from(event.target.files||[])
     event.target.value=''
-    if(!file)return
-    setPdfBusy(true);setError('')
-    try{
-      const document=await uploadReceivingPdf(file)
-      setPdfDocuments(prev=>[document,...prev.filter(x=>x.id!==document.id)])
-      applyPdfDocument(document)
-    }catch(error){setError(error.message||'Không đọc được PDF.')}
-    finally{setPdfBusy(false)}
+    if(!files.length)return
+    if(files.length>30){setError('Tối đa 30 PDF mỗi lượt.');return}
+    setPdfBusy(true);setError('');setPdfNotice('')
+    const imported=[],failed=[]
+    for(const file of files){
+      try{imported.push(await uploadReceivingPdf(file))}
+      catch(error){failed.push(file.name+': '+(error.message||'Không đọc được PDF'))}
+    }
+    if(imported.length)addPdfToQueue(imported)
+    setPdfNotice('Đã thêm '+imported.length+' PDF. Đối chiếu và xác nhận từng hóa đơn.')
+    if(failed.length)setError('PDF lỗi: '+failed.join(' | '))
+    setPdfBusy(false)
   }
   const rowKeyDown = (event, line) => {
     if (event.key !== 'Enter' || event.nativeEvent.isComposing || event.target.tagName !== 'INPUT' || event.target.getAttribute('aria-expanded') === 'true') return
@@ -555,12 +612,13 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
     if (warehouseQty === null || warehouseQty <= 0 || !Number.isFinite(warehouseQty)) return issue('quantity', 'số lượng nhập không hợp lệ.')
     if (warehouseUnitPrice === null || warehouseUnitPrice < 0 || !Number.isFinite(warehouseUnitPrice)) return issue('price', 'đơn giá không hợp lệ.')
     if (ratio === null || ratio <= 0 || !Number.isFinite(ratio) || !Number.isFinite(bomQty)) return issue('unit', 'hệ số quy đổi không hợp lệ.')
+    const vatPercent=parseVnNumber(line.vatRate)
+    if (!Number.isFinite(vatPercent) || vatPercent<0 || vatPercent>100)
+      return issue('price','VAT phải nằm trong khoảng 0–100%.')
     if (pdfDocument) {
       const quantityFromPdf=parseMachineNumber(pdfDocument.items[line.pdfLineIndex]?.quantity)
       if (!Number.isFinite(quantityFromPdf) || Math.abs(quantityFromPdf-warehouseQty)>0.000001)
         return issue('quantity', 'SL phải trùng PDF; hãy sửa số lượng trong Invoice Desk nếu OCR sai.')
-      if (!Number.isFinite(Number(line.vatRate)) || Number(line.vatRate)<0 || Number(line.vatRate)>100)
-        return issue('price', 'VAT phải nằm trong khoảng 0–100%.')
     }
     return null
   }
@@ -657,7 +715,7 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
               quantity:calculation.warehouseQty,invoiceUnit:line.warehouseImportUnit,
               bomUnitPerInvoiceUnit:calculation.ratio,
               unitPrice:calculation.warehouseUnitPrice,
-              vatRate:Number(line.vatRate),
+              vatRate:parseVnNumber(line.vatRate),
             }
           })
         })
@@ -673,8 +731,8 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
           invoiceDate: form.invoiceDate || todayLocalDate(),
           currency,
           subtotal: invoiceTotal,
-          taxAmount: 0,
-          totalAmount: invoiceTotal,
+          taxAmount: computedVat,
+          totalAmount: invoiceGrandTotal,
           notes: form.notes || `Inventory receiving bill with ${enteredLines.length} item(s)`,
         }, { tenantId, companyId })
 
@@ -710,6 +768,26 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
         }, { tenantId, companyId })
       }
 
+      if(pdfDocument) {
+        setPdfPostedIds(prev=>prev.includes(pdfDocument.id)?prev:[...prev,pdfDocument.id])
+        delete pdfReviewCache.current[pdfDocument.id]
+        const next=pdfQueue.find(item=>item.id!==pdfDocument.id&&!pdfPostedIds.includes(item.id))
+        if(next){
+          setPaymentDialogOpen(false)
+          setSavedInvoice(null)
+          setPayment({method:'CASH',createPaymentNote:true,notes:''})
+          setPdfNotice('Đã nhập kho hóa đơn '+form.invoiceNumber+'. Tiếp tục PDF kế tiếp.')
+          try{
+            const [updatedMaterials,updatedStock]=await Promise.all([
+              fetchMaterials(),fetchInventoryView()
+            ])
+            setMaterials(Array.isArray(updatedMaterials)?updatedMaterials.map(normalizeMaterial):[])
+            setInventory(Array.isArray(updatedStock)?updatedStock:[])
+          }catch{/* vẫn sử dụng danh sách vật tư và kho đã tải */}
+          applyPdfDocument(next)
+          return
+        }
+      }
       onComplete?.(createdInvoice)
       setPaymentDialogOpen(false)
       onClose?.()
@@ -745,8 +823,8 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
                 <Typography fontWeight={800}>Nhập kho từ hóa đơn PDF (OCR)</Typography>
                 <Button variant="contained" size="small" component="label"
                   disabled={saving||pdfBusy||Boolean(savedInvoice)}>
-                  {pdfBusy?'Đang đọc PDF...':'Tải PDF vào hóa đơn này'}
-                  <input hidden type="file" accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp"
+                  {pdfBusy?'Đang đọc PDF...':'Chọn một hoặc nhiều PDF'}
+                  <input hidden multiple type="file" accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp"
                     onChange={e=>void handlePdfUpload(e)} />
                 </Button>
                 <TextField size="small" select label="Hoặc chọn PDF đã đọc bằng Invoice Desk"
@@ -759,11 +837,27 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
                   </MenuItem>)}
                 </TextField>
                 {pdfBusy&&<CircularProgress size={20}/>}
+                {pdfQueue.length>0&&<Chip size="small" color="info"
+                  label={`Đã chọn ${pdfQueue.length} PDF · Chờ nhập ${pdfQueue.filter(d=>!pdfPostedIds.includes(d.id)).length}`}/>
                 {pdfDocument&&<Button size="small" variant="outlined" disabled={saving||Boolean(savedInvoice)}
                   onClick={()=>{setPdfDocument(null);setPdfMismatchAcknowledged(false);setLines([newLine()]);setForm({invoiceNumber:invoiceNumberSeed(),partyName:'',invoiceDate:todayLocalDate(),notes:''})}}>
                   Nhập tay thay vì PDF
                 </Button>}
               </Stack>
+              {pdfNotice&&<Alert severity="success" sx={{mt:1}}>{pdfNotice}</Alert>}
+              {pdfQueue.length>0&&<Stack direction="row" gap={0.6} flexWrap="wrap" sx={{mt:1}}>
+                {pdfQueue.map((item,i)=><Tooltip key={item.id}
+                    title={pdfPostedIds.includes(item.id)?'Đã ghi kho':`Xem và đối chiếu PDF: ${item.source||item.number||item.id}`} arrow>
+                  <span><Button size="small" sx={{maxWidth:210,overflow:'hidden'}}
+                    disabled={saving||pdfBusy||pdfPostedIds.includes(item.id)||Boolean(savedInvoice)}
+                    variant={pdfDocument?.id===item.id?'contained':'outlined'}
+                    color={pdfPostedIds.includes(item.id)?'success':'primary'}
+                    onClick={()=>activatePdf(item)}>
+                    {i+1}. {item.number||item.source||item.id?.slice(0,8)}
+                    {pdfPostedIds.includes(item.id)?' ✓':''}
+                  </Button></span>
+                </Tooltip>)}
+              </Stack>}
               {pdfDocument&&<Alert severity="info" sx={{mt:1}}>
                 Giữ tên hàng theo PDF, chọn <strong>vật tư gốc</strong> đã có hoặc <strong>Tạo mới ngay tại dòng</strong>.
                 Chỉ xác nhận mới cộng tồn kho.
@@ -799,7 +893,7 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
             <Box component="fieldset" disabled={saving || loadingRefs || pdfBusy || Boolean(savedInvoice)} sx={{border:0,p:0,m:0,minWidth:0}}>
               <TableContainer sx={{maxHeight:'55vh',border:'1px solid #cbd5e1',borderRadius:1}}>
                 <Table stickyHeader size="small" sx={{minWidth:pdfDocument?2050:1600,'& th':{fontWeight:800,bgcolor:'#eff6ff',whiteSpace:'nowrap'},'& td':{p:0.5,verticalAlign:'top'},'& .MuiOutlinedInput-root':{borderRadius:0.5}}}>
-                  <TableHead><TableRow>{['#','QR / Xóa',...(pdfDocument?['Tên hàng theo PDF']:[]),'Mã / Tên vật tư gốc','SL nhập','Đơn vị kho','Hệ số → BOM','Đơn vị BOM','SL quy đổi','Đơn giá nhập','Thành tiền','Kho','Số lô','Ghi chú'].map((label,index)=><TableCell key={index}>{label}</TableCell>)}</TableRow></TableHead>
+                  <TableHead><TableRow>{['#','QR / Xóa',...(pdfDocument?['Tên hàng theo PDF']:[]),'Mã / Tên vật tư gốc','SL nhập','Đơn vị kho','Hệ số → BOM','Đơn vị BOM','SL quy đổi','Đơn giá nhập','Thành tiền','VAT (%)','Sau VAT','Kho','Số lô','Ghi chú'].map((label,index)=><TableCell key={index}>{label}</TableCell>)}</TableRow></TableHead>
                   <TableBody>{lines.map((line,index)=>{
                     const calc=computeLine(line)
                     const defaults=receivingDefaults(line.material,line.warehouse,inventory,boms,currency)
@@ -832,7 +926,8 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
                           <Button size="small" onClick={()=>updateLine(line.id,{newMaterial:false})}>Chọn mã có sẵn</Button>
                         </Box>:<>
 
-                        <Autocomplete autoHighlight options={materialOptions} loading={loadingRefs} value={line.material} inputValue={line.materialInput}
+                        <Stack direction="row" spacing={0.5} alignItems="flex-start" sx={{width:'100%'}}>
+                        <Autocomplete autoHighlight options={materialOptions} sx={{flex:1,minWidth:0}} loading={loadingRefs} value={line.material} inputValue={line.materialInput}
                                       onInputChange={(_,value,reason)=>{if(reason==='input') updateLine(line.id,{
   materialInput:value,material:null,
   ...(pdfDocument?{}:{warehouseImportUnit:'',bomUnitPerWarehouseUnit:'',warehouseImportUnitPrice:''})
@@ -847,7 +942,12 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
                                                                       inputProps={{...params.inputProps,'aria-label':`Vật tư dòng ${index+1}`}}
                                                                       onKeyDown={event=>{if(event.key==='Tab' && !event.shiftKey && !line.material && matches[0]) {event.preventDefault();event.defaultMuiPrevented=true;selectMaterial(line,matches[0]);cells.current[`${line.id}:quantity`]?.focus()}}}/>}/>
                       
-                        <Button size="small" variant="outlined" onClick={()=>useNewMaterial(line)}>+ Tạo mới tại dòng</Button>
+                        <Tooltip title="Tạo nguyên vật liệu mới tại dòng này" arrow>
+                          <Button size="small" variant="outlined" aria-label="Tạo nguyên vật liệu mới tại dòng này"
+                            onClick={()=>useNewMaterial(line)}
+                            sx={{minWidth:32,width:32,height:36,p:0,fontSize:22,fontWeight:700,flexShrink:0}}>+</Button>
+                        </Tooltip>
+                        </Stack>
                         {line.material&&<Typography variant="caption" display="block">Tên gốc: {line.material.materialName} · Mã: {line.material.materialCode}</Typography>}
                         </>}
                       </TableCell>
@@ -872,6 +972,16 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
                       <TableCell><Typography sx={{pt:1}}>{calc.bomQty==null?'—':formatVnNumber(calc.bomQty,6)}</Typography></TableCell>
                       <TableCell sx={{minWidth:130}}><TextField {...cellProps(line,'price','Đơn giá nhập')} type="text" value={pdfDocument?line.warehouseImportUnitPrice:formatQuantityInput(line.warehouseImportUnitPrice, 2)} error={validationIssue?.lineId===line.id&&validationIssue?.field==='price'} helperText={validationIssue?.lineId===line.id&&validationIssue?.field==='price'?'Không hợp lệ':''} onChange={e=>updateLine(line.id,{warehouseImportUnitPrice:pdfDocument?e.target.value:parseQuantityInput(e.target.value,{maximumFractionDigits:2})})} inputProps={{...cellProps(line,'price','Đơn giá nhập').inputProps,inputMode:'decimal',min:0,step:'any'}}/></TableCell>
                       <TableCell><Typography sx={{pt:1,whiteSpace:'nowrap'}}>{pdfDocument?formatVnNumber(calc.total,2):fmtNum(calc.total,2)}</Typography></TableCell>
+                      <TableCell sx={{minWidth:106}}>
+                        <TextField fullWidth size="small" value={line.vatRate}
+                          onChange={e=>updateLine(line.id,{vatRate:e.target.value})}
+                          inputProps={{inputMode:'decimal','aria-label':`VAT dòng ${index+1}`}}
+                          error={!Number.isFinite(parseVnNumber(line.vatRate))||
+                            parseVnNumber(line.vatRate)<0||parseVnNumber(line.vatRate)>100}/>
+                      </TableCell>
+                      <TableCell sx={{whiteSpace:'nowrap'}}>
+                        {formatVnNumber(calc.total*(1+(parseVnNumber(line.vatRate)||0)/100),2)}
+                      </TableCell>
                       <TableCell sx={{minWidth:190}}><TextField {...cellProps(line,'warehouse','Kho')} select SelectProps={{native:true}} value={line.warehouse?.id || ''} error={validationIssue?.lineId===line.id&&validationIssue?.field==='warehouse'} helperText={validationIssue?.lineId===line.id&&validationIssue?.field==='warehouse'?'Bắt buộc':''} onChange={e=>applyWarehouseToAll(warehouses.find(w=>w.id===e.target.value)||null)}><option value="">Chọn kho</option>{warehouses.map(w=><option key={w.id} value={w.id}>{w.code} · {w.name}</option>)}</TextField></TableCell>
                       <TableCell sx={{minWidth:170}}><TextField {...cellProps(line,'batch','Số lô')} required value={line.batchNo} error={validationIssue?.lineId===line.id&&validationIssue?.field==='batch'} helperText={validationIssue?.lineId===line.id&&validationIssue?.field==='batch'?'Bắt buộc nhập số lô':''} onChange={e=>applyBatchToAll(e.target.value)}/></TableCell>
                       <TableCell sx={{minWidth:170}}><TextField {...cellProps(line,'notes','Ghi chú')} value={line.notes} onChange={e=>updateLine(line.id,{notes:e.target.value})}/></TableCell>
@@ -882,13 +992,15 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
             </Box>
 
             <Button variant="outlined" startIcon={<AddIcon />} onClick={()=>addLine()} disabled={saving || Boolean(pdfDocument)} sx={{ alignSelf: 'flex-start', fontWeight: 800 }}>Thêm dòng · Enter</Button>
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end', flexWrap:'wrap',gap:1 }}>
-              <Chip label={`Tiền hàng ${formatVnNumber(invoiceTotal,2)} ${currency}`} color="primary" sx={{fontWeight:800}}/>
-              {pdfDocument&&<>
-                <Chip label={`VAT ${formatVnNumber(computedVat,2)} ${currency}`}/>
-                <Chip label={`Tổng ${formatVnNumber(invoiceTotal+computedVat,2)} ${currency}`} color="success"/>
-                <Chip label={`PDF: ${formatVnNumber(pdfTotal,2)} ${currency}`} variant="outlined"/>
-              </>}
+            <Box sx={{display:'flex',justifyContent:'flex-end',alignItems:'center',flexWrap:'wrap',gap:1}}>
+              <TextField size="small" label="VAT chung (%)" value={commonVatRate}
+                sx={{width:115}} inputProps={{inputMode:'decimal'}}
+                onChange={e=>setLines(prev=>prev.map(row=>({...row,vatRate:e.target.value})))}/>
+              <Chip label={`Tiền hàng ${formatVnNumber(invoiceTotal,2)} ${currency}`} color="primary"/>
+              <Chip label={`VAT ${formatVnNumber(computedVat,2)} ${currency}`}/>
+              <Chip label={`Tổng sau VAT ${formatVnNumber(invoiceGrandTotal,2)} ${currency}`}
+                color="success" sx={{fontWeight:900}}/>
+              {pdfDocument&&<Chip label={`Trên PDF: ${formatVnNumber(pdfTotal,2)} ${currency}`} variant="outlined"/>}
             </Box>
             {pdfDifference&&<Alert severity="warning">
               Tổng tiền hoặc VAT tính lại khác PDF. Kiểm tra đơn giá, VAT, đơn vị quy đổi và số lượng.
@@ -918,7 +1030,7 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
             {payment.method !== 'NONE' && <>
               <FormControlLabel control={<Switch checked={payment.createPaymentNote} onChange={e => setPayment(prev => ({ ...prev, createPaymentNote: e.target.checked }))} />} label="Tạo phiếu chi" />
               <TextField autoFocus label="Ghi chú thanh toán / lý do chi" size="small" value={payment.notes} onChange={e => setPayment(prev => ({ ...prev, notes: e.target.value }))} multiline minRows={2} />
-              <Chip color={payment.method === 'CASH' ? 'success' : 'primary'} label={`${payment.method === 'CASH' ? 'Tiền mặt' : 'QR'} · ${fmtNum(invoiceTotal, 2)} ${currency}`} sx={{ alignSelf: 'flex-start', fontWeight: 800 }} />
+              <Chip color={payment.method === 'CASH' ? 'success' : 'primary'} label={`${payment.method === 'CASH' ? 'Tiền mặt' : 'QR'} · ${formatVnNumber(invoiceGrandTotal, 2)} ${currency}`} sx={{ alignSelf: 'flex-start', fontWeight: 800 }} />
             </>}
           </DialogContent>
           <DialogActions>
