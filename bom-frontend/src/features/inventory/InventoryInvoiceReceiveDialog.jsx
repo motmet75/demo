@@ -838,7 +838,7 @@ export default function InventoryInvoiceReceiveDialog({ open, defaultCurrency = 
                 </TextField>
                 {pdfBusy&&<CircularProgress size={20}/>}
                 {pdfQueue.length>0&&<Chip size="small" color="info"
-                  label={`Đã chọn ${pdfQueue.length} PDF · Chờ nhập ${pdfQueue.filter(d=>!pdfPostedIds.includes(d.id)).length}`}/>
+                  label={`Đã chọn ${pdfQueue.length} PDF · Chờ nhập ${pdfQueue.filter(d=>!pdfPostedIds.includes(d.id)).length}`}/>}
                 {pdfDocument&&<Button size="small" variant="outlined" disabled={saving||Boolean(savedInvoice)}
                   onClick={()=>{setPdfDocument(null);setPdfMismatchAcknowledged(false);setLines([newLine()]);setForm({invoiceNumber:invoiceNumberSeed(),partyName:'',invoiceDate:todayLocalDate(),notes:''})}}>
                   Nhập tay thay vì PDF

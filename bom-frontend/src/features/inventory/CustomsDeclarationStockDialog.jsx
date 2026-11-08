@@ -248,7 +248,7 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
           {i+1}. {item.declarationNumber||item.fileName||'Tờ khai'}
           {postedIds.includes(item.id)||item.status==='POSTED'?' ✓':''}
         </Button>)}
-      </Stack>
+      </Stack>}
       <Alert severity="info">Đọc Excel theo cách xuất dữ liệu của Portal (dòng <code>&lt;IMP&gt;</code>).
         Bản Excel phải có mã HS/mô tả/số lượng. **Không tự động nhập/xuất** khi tải tờ khai.
         Kiểm tra số tờ khai, ngày, hệ số quy đổi và mã vật tư trước khi xác nhận. Giá khai báo hải quan chỉ lưu để đối chiếu, không thay đổi giá vốn/giá mua đang lưu trong kho.
