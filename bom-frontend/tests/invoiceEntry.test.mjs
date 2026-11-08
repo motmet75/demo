@@ -26,3 +26,12 @@ test('remembered warehouse and batch do not turn a blank trailing row into a sav
  assert.equal(hasLineInput(blank),false)
  assert.equal(hasLineInput({...blank,materialInput:'milk'}),true)
 })
+
+test('a new material with an auto-generated code is a receiving line before catalog save',()=>{
+ const blank={material:null,materialInput:'',warehouseImportQuantity:'',notes:'',
+   newMaterial:false,newMaterialCode:'',newMaterialName:'',newMaterialUnit:''}
+ assert.equal(hasLineInput(blank),false)
+ assert.equal(hasLineInput({...blank,newMaterial:true}),true)
+ assert.equal(hasLineInput({...blank,newMaterialCode:'MAT-123456781234456789AB'}),true)
+ assert.equal(hasLineInput({...blank,newMaterialName:'Tên hàng mới'}),true)
+})
