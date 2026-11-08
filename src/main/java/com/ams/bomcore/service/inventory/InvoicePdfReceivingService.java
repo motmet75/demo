@@ -307,6 +307,21 @@ public class InvoicePdfReceivingService {
                 "Nhập từ hóa đơn PDF "+invoiceKey,scope.username(),note,purchase.getId(),
                 costPerBom,currency,line.invoiceUnit(),line.quantity(),
                 line.bomUnitPerInvoiceUnit(),line.unitPrice());
+            // InventoryService uses JPA while the audit receipt line below uses JDBC.
+            // Verify JDBC can see the flushed inventory row before enforcing its FK.
+            // An invisible row indicates a datasource/transaction-routing mismatch.
+            Boolean stockVisible = jdbc.queryForObject("""
+                SELECT EXISTS (
+                    SELECT 1 FROM public.inventory
+                    WHERE id=? AND tenant_id=? AND company_id=?
+                )
+                """, Boolean.class, added.getId(), scope.tenantId(), scope.companyId());
+            if (!Boolean.TRUE.equals(stockVisible)) {
+                throw new IllegalStateException(
+                    "Tồn kho vừa ghi (ID " + added.getId()
+                    + ") chưa hiển thị với JDBC. Đã hủy giao dịch nhập kho; "
+                    + "kiểm tra JPA flush, DataSource và transaction routing.");
+            }
             jdbc.update("""
                 INSERT INTO public.inventory_invoice_pdf_receipt_line
                  (id,receipt_id,invoice_line_index,invoice_item_name,material_id,
