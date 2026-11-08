@@ -6,7 +6,10 @@ export async function fetchMaterials() {
     throw new Error('Please select a tenant and company before loading materials.')
   }
   const { res, data } = await apiFetchJson('/bom/materials')
-  if (!res.ok) return []
+  if (!res.ok) throw new Error(
+    typeof data === 'string' ? data :
+      data?.message || `Không tải được Materials (HTTP ${res.status}). Vui lòng kiểm tra công ty và quyền truy cập.`
+  )
 
   if (Array.isArray(data)) return data
   if (data && typeof data === 'object') {
