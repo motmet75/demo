@@ -192,6 +192,7 @@ public class InvoiceStockOutService {
         Map<UUID,BigDecimal> qtyByInventory = new TreeMap<>();
         Set<String> uniqueAssignments=new HashSet<>();
         BigDecimal subtotal=BigDecimal.ZERO;
+        BigDecimal calculatedVat=BigDecimal.ZERO;
         for (Line line : request.lines()) {
             if (line==null || line.inventoryId()==null || line.invoiceLineIndex()<0
                     || line.invoiceLineIndex()>=doc.items.size()
@@ -203,8 +204,10 @@ public class InvoiceStockOutService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Số lượng xuất không hợp lệ.");
             qtyByInvoiceLine.merge(line.invoiceLineIndex(),line.quantity(),BigDecimal::add);
             qtyByInventory.merge(line.inventoryId(),line.quantity(),BigDecimal::add);
-            subtotal=subtotal.add(validNonNegative(line.unitPrice(),"Đơn giá bán").multiply(line.quantity()));
-            vat(line.vatRate());
+            BigDecimal lineBase=validNonNegative(line.unitPrice(),"Đơn giá bán").multiply(line.quantity());
+            subtotal=subtotal.add(lineBase);
+            calculatedVat=calculatedVat.add(lineBase.multiply(vat(line.vatRate()))
+                    .divide(new BigDecimal("100"),4,RoundingMode.HALF_UP));
         }
         // Every recognized invoice line must be paired with physical stock. A
         // line may be split across batches, but quantities must add up.
@@ -222,12 +225,16 @@ public class InvoiceStockOutService {
         }
 
         BigDecimal ocrSubtotal=optionalMoney(doc.get("subtotal"));
-        // OCR values are independently reviewed, and mismatch requires an
-        // explicit override rather than silently replacing invoice prices.
-        if (ocrSubtotal!=null && subtotal.subtract(ocrSubtotal).abs().compareTo(new BigDecimal("1"))>0
-                && !request.acknowledgeMismatch())
+        BigDecimal ocrVat=optionalMoney(doc.get("vat"));
+        BigDecimal ocrTotal=optionalMoney(doc.get("total"));
+        // Compare sales amount AND VAT AND gross total, allowing a one-dong
+        // tolerance for rounding in electronic invoice representations.
+        boolean mismatch=(ocrSubtotal!=null && subtotal.subtract(ocrSubtotal).abs().compareTo(BigDecimal.ONE)>0)
+                || (ocrVat!=null && calculatedVat.subtract(ocrVat).abs().compareTo(BigDecimal.ONE)>0)
+                || (ocrTotal!=null && subtotal.add(calculatedVat).subtract(ocrTotal).abs().compareTo(BigDecimal.ONE)>0);
+        if (mismatch && !request.acknowledgeMismatch())
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Tổng tiền hàng khác PDF. Phải xác nhận chênh lệch trước khi xuất kho.");
+                    "Giá bán, thuế VAT hoặc tổng tiền khác PDF. Phải xác nhận chênh lệch trước khi xuất kho.");
 
         // Acquire row locks in deterministic order to prevent duplicate requests
         // from overdrawing the same batch. Locking before movement creation also

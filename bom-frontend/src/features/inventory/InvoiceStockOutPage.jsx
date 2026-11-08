@@ -111,7 +111,11 @@ export default function InvoiceStockOutPage(){
     return {subtotal:acc.subtotal+base,vat:acc.vat+base*number(r.vatRate)/100}
   },{subtotal:0,vat:0}),[rows])
   const expectedSubtotal=number(selectedDoc?.subtotal)
-  const mismatch=selectedDoc?.subtotal && Math.abs(totals.subtotal-expectedSubtotal)>1
+  const expectedVat=number(selectedDoc?.vat)
+  const expectedTotal=number(selectedDoc?.total)
+  const mismatch=(Boolean(selectedDoc?.subtotal) && Math.abs(totals.subtotal-expectedSubtotal)>1)
+    || (Boolean(selectedDoc?.vat) && Math.abs(totals.vat-expectedVat)>1)
+    || (Boolean(selectedDoc?.total) && Math.abs(totals.subtotal+totals.vat-expectedTotal)>1)
   const historical=header.invoiceDate!==today()
   const missing=rows.some(r=>!r.inventoryId || number(r.quantity)<=0 || number(r.unitPrice)<0)
   const onConfirm=async()=>{
@@ -257,9 +261,11 @@ export default function InvoiceStockOutPage(){
             <Chip label={'VAT ước tính: '+amount(totals.vat)+'đ'}/>
             <Chip label={'Tổng: '+amount(totals.subtotal+totals.vat)+'đ'} color="success"/>
             <Chip label={'PDF tiền hàng: '+amount(expectedSubtotal)+'đ'}/>
+            <Chip label={'PDF VAT: '+amount(expectedVat)+'đ'}/>
+            <Chip label={'PDF tổng: '+amount(expectedTotal)+'đ'}/>
           </Stack>
           {mismatch&&<Alert severity="warning">
-            Tiền hàng đối chiếu khác PDF {amount(Math.abs(totals.subtotal-expectedSubtotal))}đ. Kiểm tra số lượng/đơn giá, chỉ xác nhận nếu thực sự cần xuất khác số tiền OCR.
+            Tiền hàng / VAT / tổng cộng có chênh lệch với PDF. Kiểm tra số lượng, giá xuất, thuế suất và hóa đơn gốc trước khi xác nhận.
           </Alert>}
           {mismatch&&<FormControlLabel control={<Checkbox checked={acknowledgeMismatch}
             onChange={e=>setAcknowledgeMismatch(e.target.checked)}/>}

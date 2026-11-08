@@ -25,7 +25,7 @@ export default function InventoryPage() {
         </Tabs>
       </Box>
       <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-        {tab === 0 && <InventoryGrid />}
+        {tab === 0 && <InventoryGrid onInvoiceStockOut={() => setTab(3)} />}
         {tab === 1 && <InventoryShiftReport />}
         {tab === 2 && <InventoryAlertReport />}
         {tab === 3 && <InvoiceStockOutPage />}
