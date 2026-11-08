@@ -168,7 +168,7 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
 
   const bulkCreateMaterials=()=>{
     if(!bulkAllowed||direction!=='IN')return
-    if(!window.confirm('Chuẩn bị TẠO MỚI vật tư cho tất cả các dòng tờ khai?\\nCác mã đã chọn sẽ bị thay bằng mã mới. Chưa ghi kho cho đến khi xác nhận.'))return
+    if(!window.confirm('Chuẩn bị TẠO MỚI vật tư cho tất cả các dòng tờ khai?\nCác mã đã chọn sẽ bị thay bằng mã mới. Chưa ghi kho cho đến khi xác nhận.'))return
     const usedCodes=materials.map(m=>m.materialCode)
     const byDefinition=new Map()
     let created=0
