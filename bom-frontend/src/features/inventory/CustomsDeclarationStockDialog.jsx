@@ -32,7 +32,7 @@ const newRow=(item,warehouses)=>({
   batchNo:'',newMaterial:false,newMaterialAutoCode:true,
   newMaterialCode:'',newMaterialName:item.description||'',
   newMaterialUnit:item.unit||'cái',
-  conversionRatio:'1',vatRate:'0',
+  conversionRatio:'1',vatRate:item.vatRate==null?'0':String(item.vatRate),
 })
 
 export default function CustomsDeclarationStockDialog({open,onClose,onComplete,initialDirection='IN'}){
@@ -537,7 +537,7 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
           Xuất kho chỉ tự chọn khi xác định duy nhất lô còn đủ hàng. Tất cả thao tác chỉ chuẩn bị dữ liệu, chưa ghi kho.
         </Typography>
         <TableContainer sx={{flex:1,minHeight:150,border:'1px solid',borderColor:'divider',borderRadius:1}}>
-          <Table size="small" stickyHeader sx={{minWidth:1370}}>
+          <Table size="small" stickyHeader sx={{minWidth:2050}}>
             <TableHead><TableRow>
               <TableCell>STT / HS / Tên theo tờ khai</TableCell>
               <TableCell sx={{minWidth:300}}>Mã và tên nguyên vật liệu gốc</TableCell>
@@ -545,8 +545,11 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
               <TableCell align="right">SL khai báo</TableCell>
               <TableCell>Hệ số sang ĐV kho</TableCell>
               <TableCell align="right">SL kho</TableCell>
-              <TableCell align="right">Giá khai báo</TableCell>
-              <TableCell>VAT (%)</TableCell>
+              <TableCell align="right">Đơn giá hóa đơn gốc</TableCell>
+              <TableCell align="right">Trị giá hóa đơn gốc</TableCell>
+              <TableCell align="right">Thuế NK gốc</TableCell>
+              <TableCell align="right">VAT HQ gốc</TableCell>
+              <TableCell>VAT nhập kho (%)</TableCell>
               <TableCell align="right">Sau VAT</TableCell>
             </TableRow></TableHead><TableBody>
               {(doc.items||[]).map((item,i)=>{
@@ -628,7 +631,45 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
                       inputProps={{inputMode:'decimal'}} helperText="1 đơn vị khai báo = ? đơn vị kho"/>
                   </TableCell>
                   <TableCell align="right">{Number.isFinite(qty)?formatVnNumber(qty,6):'—'}</TableCell>
-                  <TableCell align="right">{item.unitPrice==null?'—':formatVnNumber(item.unitPrice,4)} {item.currency||currency}</TableCell>
+                  <TableCell align="right">
+                    {item.unitPrice==null?'—':formatVnNumber(item.unitPrice,4)} {item.currency||currency}
+                  </TableCell>
+                  <TableCell align="right" sx={{whiteSpace:'nowrap'}}>
+                    {item.invoiceValue!=null?formatVnNumber(Number(item.invoiceValue),2):
+                      item.unitPrice!=null?formatVnNumber(Number(item.quantity)*Number(item.unitPrice),2):'—'}
+                    {' '}{item.currency||currency}
+                    <Typography variant="caption" display="block">
+                      SL {formatVnNumber(item.quantity,4)} {item.unit}
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{whiteSpace:'nowrap'}}>
+                    <Typography variant="caption" display="block">
+                      Giá tính NK: {item.importTaxableValueVnd==null?'—':
+                        formatVnNumber(Number(item.importTaxableValueVnd),2)} VND
+                    </Typography>
+                    <Typography variant="caption" display="block">
+                      {item.importTaxRate==null?'—':item.importTaxRate+'%'}
+                      {item.importTariffCode?' · mã '+item.importTariffCode:''}
+                    </Typography>
+                    <Typography fontWeight={700}>
+                      {item.importTaxAmountVnd==null?'—':
+                        formatVnNumber(Number(item.importTaxAmountVnd),2)} VND
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{whiteSpace:'nowrap'}}>
+                    <Typography variant="caption" display="block">
+                      Giá tính VAT: {item.vatTaxableValueVnd==null?'—':
+                        formatVnNumber(Number(item.vatTaxableValueVnd),2)} VND
+                    </Typography>
+                    <Typography variant="caption" display="block">
+                      {item.vatRate==null?'—':item.vatRate+'%'}
+                      {item.vatTariffCode?' · mã '+item.vatTariffCode:''}
+                    </Typography>
+                    <Typography fontWeight={700}>
+                      {item.vatAmountVnd==null?'—':
+                        formatVnNumber(Number(item.vatAmountVnd),2)} VND
+                    </Typography>
+                  </TableCell>
                   <TableCell sx={{minWidth:100}}>
                     <TextField size="small" value={line.vatRate} disabled={confirmed}
                       onChange={e=>edit(i,{vatRate:e.target.value})}
@@ -654,17 +695,19 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
             onChange={e=>setBulkVatInput(e.target.value)}/>
           <Button variant="outlined" size="small" disabled={!canApplyBulkVat||confirmed||busy}
             onClick={applyVatToAll}>Áp dụng tất cả</Button>
-          <Chip label={`Trị giá khai báo: ${formatVnNumber(taxSummary.subtotal,2)} ${currency}`}/>
-          <Chip label={`VAT: ${formatVnNumber(taxSummary.vat,2)} ${currency}`}/>
-          <Chip color="success" label={`Tổng sau VAT: ${formatVnNumber(taxSummary.total,2)} ${currency}`}/>
+          <Chip label={`SL × đơn giá HĐ: ${formatVnNumber(taxSummary.subtotal,2)} ${currency}`}/>
+          <Chip label={`VAT nhập kho tạm tính: ${formatVnNumber(taxSummary.vat,2)} ${currency}`}/>
+          <Chip color="success" label={`Tổng nhập kho tạm tính: ${formatVnNumber(taxSummary.total,2)} ${currency}`}/>
         </Stack>
         {taxSummary.missing>0&&<Alert severity="warning">
           Có {taxSummary.missing} dòng chưa đủ đơn giá/SL từ tờ khai.
           Tổng tiền chỉ tính các dòng có giá, không phải tổng đầy đủ.
         </Alert>}
         <Typography variant="caption" color="text.secondary">
-          VAT là tỷ lệ do người dùng đối chiếu, không tự suy ra từ thuế nhập khẩu.
-          Giá tính bằng tiền tệ đã chọn; nếu các dòng khác tiền tệ cần quy đổi trước khi dùng tổng.
+          Trị giá hóa đơn gốc, thuế NK gốc và VAT Hải quan gốc được đọc riêng từ file Excel;
+          không bị ghi đè khi bạn thay đổi VAT nhập kho hoặc tra cứu FTA. Các chip tổng phía trên
+          chỉ mô phỏng giá trị hóa đơn và VAT nhập kho theo đơn vị tiền đang chọn,
+          KHÔNG phải tổng thuế phải nộp Hải quan. Nếu khác tiền tệ, cần quy đổi trước khi cộng tổng.
         </Typography>
         <CustomsTariffComparison key={doc.id} doc={doc} direction={direction}
           currency={currency} date={date}/>
