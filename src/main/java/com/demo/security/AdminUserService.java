@@ -168,6 +168,16 @@ public class AdminUserService {
         return replaceAuthoritiesInternal(username, authoritiesForSave(authorities, true));
     }
 
+    /** Admin form availability check. Re-check at save and keep DB unique index. */
+    @Transactional(readOnly = true)
+    public boolean isEmailAvailable(String email, Integer editingUserId) {
+        if (!StringUtils.hasText(email)) return false;
+        String normalized = email.trim().toLowerCase(Locale.ROOT);
+        return userRepository.findByEmailIgnoreCase(normalized)
+                .map(existing -> Objects.equals(existing.getId(), editingUserId))
+                .orElse(true);
+    }
+
     private String normalizedRequiredEmail(String value) {
         if (!StringUtils.hasText(value)) {
             throw new IllegalArgumentException("Vui lòng nhập email hợp lệ cho tài khoản.");
