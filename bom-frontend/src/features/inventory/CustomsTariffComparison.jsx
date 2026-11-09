@@ -12,6 +12,7 @@ import {estimateCustomsTax,ratePercent} from '../../utils/customsTariffCalc'
 
 const normalizeHs=hs=>String(hs??'').replace(/\D/g,'')
 const fmt=value=>value==null?'—':formatVnNumber(value,2)
+const fmtUnit=value=>value==null?'—':formatVnNumber(value,4)
 const statusLabel={
   NOT_CONFIGURED:'Chưa cấu hình kết nối biểu thuế',NOT_FOUND:'Mã HS không có trong biểu thuế đã kiểm tra',
   PORTAL_API_NOT_FOUND:'Không tìm thấy API biểu thuế Portal (lỗi đường dẫn hoặc chưa deploy)',
@@ -30,6 +31,12 @@ export default function CustomsTariffComparison({doc,direction,currency,date,row
   const [vatCreditable,setVatCreditable]=useState(false)
   const [lines,setLines]=useState({})
   const change=(index,patch)=>setLines(prev=>({...prev,[index]:{...prev[index],...patch}}))
+
+  // A document can have another currency; never carry "1" from a VND
+  // document into an imported USD/EUR invoice as its historical FX rate.
+  useEffect(()=>{
+    setFx(currency==='VND'?'1':'')
+  },[currency,doc?.id])
 
   useEffect(()=>{
     let active=true
@@ -94,9 +101,12 @@ export default function CustomsTariffComparison({doc,direction,currency,date,row
       (edit.vatOverride===undefined||edit.vatOverride==='') &&
       (edit.extraTaxes===undefined||localMoney(edit.extraTaxes)===0) &&
       originalDuty!==null && originalVat!==null
+    const invoiceValueOriginal=item.invoiceValue==null?data.invoiceValue:
+      Number(item.invoiceValue)
     const goodsVnd=goodsValueBasis==='CUSTOMS'?data.customsValue:
-      sourceCurrency.toUpperCase()==='VND'?data.invoiceValue:
-      localMoney(fx)>0&&data.invoiceValue!=null?data.invoiceValue*localMoney(fx):null
+      sourceCurrency.toUpperCase()==='VND'?invoiceValueOriginal:
+      localMoney(fx)>0&&invoiceValueOriginal!=null?
+        invoiceValueOriginal*localMoney(fx):null
     const landedParams={
       declaredQuantity:item.quantity,
       stockConversionRatio:rows[index]?.conversionRatio??'1',
@@ -287,18 +297,18 @@ export default function CustomsTariffComparison({doc,direction,currency,date,row
                   helperText="Phân bổ riêng từng dòng"/></TableCell>
                 <TableCell>
                   <Typography variant="body2" fontWeight={700}>
-                    {fmt(r.appliedLanded?.declaredUnitIncludingVatVnd)} VND/{r.item.unit||'đv'}
+                    {fmtUnit(r.appliedLanded?.declaredUnitIncludingVatVnd)} VND/{r.item.unit||'đv'}
                   </Typography>
                   <Typography variant="caption" display="block">
                     Cả dòng: {fmt(r.appliedLanded?.totalIncludingVatVnd)} VND
                   </Typography>
                   <Typography variant="caption" display="block">
-                    Trước VAT: {fmt(r.appliedLanded?.declaredUnitBeforeVatVnd)} VND/đv
+                    Trước VAT: {fmtUnit(r.appliedLanded?.declaredUnitBeforeVatVnd)} VND/đv
                   </Typography>
                 </TableCell>
                 <TableCell>
                   <Typography variant="body2" fontWeight={700}>
-                    {fmt(r.appliedLanded?.stockUnitInventoryCostVnd)} VND/đv kho
+                    {fmtUnit(r.appliedLanded?.stockUnitInventoryCostVnd)} VND/đv kho
                   </Typography>
                   <Typography variant="caption" display="block">
                     {vatCreditable?'Đã loại VAT đủ điều kiện khấu trừ':'Đang gồm cả VAT nhập khẩu'}
