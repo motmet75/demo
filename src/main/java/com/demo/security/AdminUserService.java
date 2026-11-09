@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -13,6 +14,8 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.util.StringUtils;
 
 import com.ams.bomcore.domain.user.Authority;
@@ -62,8 +65,11 @@ public class AdminUserService {
         User actor = currentActor();
         boolean superAdmin = currentUserIsSuperAdmin();
         if (userRepository.existsByUsernameIgnoreCase(request.username())) {
-            throw new IllegalArgumentException("Username already exists");
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Tên đăng nhập '" + request.username().trim() + "' đã tồn tại.");
         }
+        String newEmail = normalizedRequiredEmail(request.email());
+        assertEmailAvailable(newEmail, null);
         if (!StringUtils.hasText(request.password())) {
             throw new IllegalArgumentException("Password is required for new user");
         }
@@ -74,7 +80,7 @@ public class AdminUserService {
         user.setPassword(passwordEncoder.encode(request.password()));
         user.setFirstName(request.firstName().trim());
         user.setLastName(request.lastName().trim());
-        user.setEmail(request.email() == null ? "" : request.email().trim());
+        user.setEmail(newEmail);
         user.setEnabled(request.enabled() == null ? true : request.enabled());
         user.setAccountNonExpired(true);
         user.setAccountNonLocked(true);
@@ -82,7 +88,9 @@ public class AdminUserService {
         user.setAssignedTenantId(scopedTenantId(actor, request.assignedTenantId(), superAdmin));
         user.setAssignedCompanyId(scopedCompanyId(actor, request.assignedCompanyId(), superAdmin));
 
-        User saved = userRepository.save(user);
+        // Flush user first so database uniqueness errors are not deferred
+        // until subsequent authority updates.
+        User saved = userRepository.saveAndFlush(user);
         replaceAuthoritiesInternal(saved.getUsername(), authoritiesForSave(request.authorities(), superAdmin));
         newUserNotificationService.notifyNewUser(saved, "admin");
         return toView(saved);
@@ -100,14 +108,17 @@ public class AdminUserService {
 
         String requestedUsername = request.username().trim();
         if (!user.getUsername().equalsIgnoreCase(requestedUsername) && userRepository.existsByUsernameIgnoreCase(requestedUsername)) {
-            throw new IllegalArgumentException("Username already exists");
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Tên đăng nhập '" + requestedUsername + "' đã tồn tại.");
         }
+        String updatedEmail = normalizedRequiredEmail(request.email());
+        assertEmailAvailable(updatedEmail, user.getId());
 
         String previousUsername = user.getUsername();
         user.setUsername(requestedUsername);
         user.setFirstName(request.firstName().trim());
         user.setLastName(request.lastName().trim());
-        user.setEmail(request.email() == null ? "" : request.email().trim());
+        user.setEmail(updatedEmail);
         user.setEnabled(request.enabled() == null ? user.isEnabled() : request.enabled());
         if (StringUtils.hasText(request.password())) {
             user.setPassword(passwordEncoder.encode(request.password()));
@@ -115,7 +126,7 @@ public class AdminUserService {
         user.setAssignedTenantId(scopedTenantId(actor, request.assignedTenantId(), superAdmin));
         user.setAssignedCompanyId(scopedCompanyId(actor, request.assignedCompanyId(), superAdmin));
 
-        User saved = userRepository.save(user);
+        User saved = userRepository.saveAndFlush(user);
         if (!previousUsername.equals(saved.getUsername())) {
             List<Authority> existingAuthorities = authorityRepository.findByUsername(previousUsername);
             authorityRepository.deleteByUsername(previousUsername);
@@ -155,6 +166,23 @@ public class AdminUserService {
         }
         assertAllowedAuthorities(authorities, true);
         return replaceAuthoritiesInternal(username, authoritiesForSave(authorities, true));
+    }
+
+    private String normalizedRequiredEmail(String value) {
+        if (!StringUtils.hasText(value)) {
+            throw new IllegalArgumentException("Vui lòng nhập email hợp lệ cho tài khoản.");
+        }
+        return value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private void assertEmailAvailable(String email, Integer updatingId) {
+        userRepository.findByEmailIgnoreCase(email).ifPresent(existing -> {
+            if (!Objects.equals(existing.getId(), updatingId)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Email '" + email + "' đã được sử dụng bởi tài khoản khác. "
+                    + "Vui lòng nhập email chưa đăng ký hoặc sửa tài khoản hiện có.");
+            }
+        });
     }
 
     private List<String> replaceAuthoritiesInternal(String username, List<String> authorities) {
