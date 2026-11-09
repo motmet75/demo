@@ -68,12 +68,7 @@ public class CustomsTariffBridgeService {
                         "Portal không trả được biểu thuế (HTTP " + response.statusCode() + ").");
             Map<String,Object> payload = mapper.readValue(response.body(),
                     new TypeReference<Map<String,Object>>() {});
-            if (!hsCode.equals(Objects.toString(payload.get("hsCode"), "")))
-                return error(hsCode, "MISMATCH",
-                        "Dữ liệu HS trả về không khớp mã yêu cầu; không áp dụng thuế suất.");
-            Map<String,Object> result = new LinkedHashMap<>(payload);
-            result.put("status", "OK");
-            return result;
+            return interpretPortalResult(hsCode, payload);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return error(hsCode, "INTERRUPTED", "Kết nối biểu thuế bị ngắt.");
@@ -81,6 +76,37 @@ public class CustomsTariffBridgeService {
             return error(hsCode, "UNAVAILABLE",
                     "Không kết nối được biểu thuế Portal. Kiểm tra API, URL, TLS và token.");
         }
+    }
+
+    /**
+     * Valid lookup may return HTTP 200 with status NOT_FOUND to prevent
+     * an upstream reverse proxy from replacing the response's JSON body.
+     * No rate may be calculated from a missing tariff result.
+     */
+    Map<String,Object> interpretPortalResult(String hsCode, Map<String,Object> payload) {
+        if (payload == null ||
+                !hsCode.equals(Objects.toString(payload.get("hsCode"), ""))) {
+            return error(hsCode, "MISMATCH",
+                    "Mã HS từ Portal không khớp yêu cầu; không áp dụng thuế suất.");
+        }
+        if ("HS_NOT_FOUND".equals(payload.get("code"))
+                && "NOT_FOUND".equals(payload.get("status"))) {
+            return error(hsCode, "NOT_FOUND",
+                    Objects.toString(payload.get("message"),
+                            "HS " + hsCode + " chưa có trong biểu thuế Portal."));
+        }
+        // Treat unknown statuses/missing expected tariff fields as errors, not
+        // a tax of zero. All valid Portal hits include their FTA map.
+        if (payload.containsKey("code")
+                || !(payload.get("fta") instanceof Map)
+                || !payload.containsKey("mfn")
+                || !payload.containsKey("vat")) {
+            return error(hsCode, "UPSTREAM_ERROR",
+                    "Portal trả dữ liệu biểu thuế không đúng định dạng, không áp dụng thuế.");
+        }
+        Map<String,Object> result = new LinkedHashMap<>(payload);
+        result.put("status", "OK");
+        return result;
     }
 
     // A reverse-proxy 404 (route not deployed) is NOT the same as the
