@@ -126,4 +126,55 @@ class CustomsDeclarationExcelParserTest {
         row.createCell(column).setCellValue(value);
     }
 
+
+    @Test void readsExportDeclarationExpRowsFromLegacyXls() throws Exception {
+        var book = new HSSFWorkbook();
+        var sheet = book.createSheet("XuatKhau");
+        cell(sheet,0,2,"<EXP>");
+        cell(sheet,1,2,"Số tờ khai");cell(sheet,1,5,"308998544060");
+        cell(sheet,4,2,"<EXP>");
+        cell(sheet,5,2,"<01>");
+        cell(sheet,6,2,"Mã số hàng hóa");cell(sheet,6,5,"54011010");
+        cell(sheet,7,2,"Mô tả hàng hóa");cell(sheet,7,6,"Sợi chỉ tổng hợp");
+        cell(sheet,8,18,"Số lượng (1)");cell(sheet,8,21,"200");cell(sheet,8,25,"KGM");
+        cell(sheet,9,18,"Đơn giá hóa đơn");cell(sheet,9,21,"1,25");cell(sheet,9,24,"USD");
+        cell(sheet,10,2,"Thuế xuất khẩu");
+        cell(sheet,11,3,"Trị giá tính thuế(S)");cell(sheet,11,8,"5.000.000");
+        cell(sheet,12,3,"Thuế suất");cell(sheet,12,8,"5%");
+        cell(sheet,13,3,"Số tiền thuế");cell(sheet,13,8,"250.000");
+        cell(sheet,16,2,"<EXP>");
+        cell(sheet,17,2,"<02>");
+        cell(sheet,18,2,"Mã số hàng hóa");cell(sheet,18,5,"54011010");
+        cell(sheet,19,2,"Mô tả hàng hóa");cell(sheet,19,5,"Sợi chỉ loại B");
+        cell(sheet,20,18,"Số lượng (1)");cell(sheet,20,21,"100");cell(sheet,20,25,"KGM");
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try(book){book.write(bytes);}
+        var parsed=parser.parse(bytes.toByteArray(),"ToKhaiHQ7X_QDTQ_308998544060.xls");
+        assertEquals("OUT",parsed.direction());
+        assertEquals("308998544060",parsed.declarationNumber());
+        assertEquals(2,parsed.items().size());
+        assertEquals("54011010",parsed.items().get(0).hsCode());
+        assertEquals(new BigDecimal("200"),parsed.items().get(0).quantity());
+        assertEquals(new BigDecimal("1.25"),parsed.items().get(0).unitPrice());
+        assertEquals("USD",parsed.items().get(0).currency());
+        assertEquals(new BigDecimal("5000000"),parsed.items().get(0).exportTaxableValueVnd());
+        assertEquals(new BigDecimal("5"),parsed.items().get(0).exportTaxRate());
+        assertEquals(new BigDecimal("250000"),parsed.items().get(0).exportTaxAmountVnd());
+        assertNull(parsed.items().get(1).exportTaxRate());
+    }
+
+    @Test void importDirectionAndMixedMarkerAreHandledSafely() throws Exception {
+        var incoming=parser.parse(workbook(new XSSFWorkbook()),"import.xlsx");
+        assertEquals("IN",incoming.direction());
+        var book=new HSSFWorkbook();
+        var sheet=book.createSheet("HQ");
+        cell(sheet,0,2,"<IMP>");
+        cell(sheet,1,2,"<EXP>");
+        ByteArrayOutputStream bytes=new ByteArrayOutputStream();
+        try(book){book.write(bytes);}
+        var err=assertThrows(IllegalArgumentException.class,
+                ()->parser.parse(bytes.toByteArray(),"mixed.xls"));
+        assertTrue(err.getMessage().contains("cả <IMP> và <EXP>"));
+    }
+
 }
