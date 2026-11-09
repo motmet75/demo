@@ -86,6 +86,9 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
     setBulkBatchNo(reviewCache.current[payload.id]?.bulkBatchNo??payload.declarationNumber??'')
     const saved=reviewCache.current[payload.id]
     setDoc(payload)
+    // The source <EXP>/<IMP> marker determines the stock direction.
+    if(payload.direction==='IN'||payload.direction==='OUT')
+      setDirection(payload.direction)
     setNumber(saved?.number??payload.declarationNumber??'')
     setDate(saved?.date??(validDate(payload.declarationDate)?payload.declarationDate:
       validDate(payload.dateHint)?payload.dateHint:today()))
@@ -467,7 +470,7 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
       {success&&<Alert severity="success">{success}</Alert>}
       <Stack direction={{xs:'column',sm:'row'}} gap={1} flexWrap="wrap">
         <TextField select size="small" label="Loại giao dịch" value={direction}
-          disabled={busy||confirmed} onChange={e=>{
+          disabled={busy||confirmed||Boolean(doc?.direction)} onChange={e=>{
             setDirection(e.target.value)
             setRows(old=>old.map(row=>({...row,materialId:'',inventoryId:'',newMaterial:false})))
           }} sx={{minWidth:195}}>
@@ -498,8 +501,9 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
           {postedIds.includes(item.id)||item.status==='POSTED'?' ✓':''}
         </Button>)}
       </Stack>}
-      <Alert severity="info">Đọc Excel theo cách xuất dữ liệu của Portal (dòng <code>&lt;IMP&gt;</code>).
-        Bản Excel phải có mã HS/mô tả/số lượng. **Không tự động nhập/xuất** khi tải tờ khai.
+      <Alert severity="info">Đọc Excel tờ khai nhập <code>&lt;IMP&gt;</code> và tờ khai xuất <code>&lt;EXP&gt;</code>.
+        Hệ thống chọn đúng chiều nhập/xuất theo file; chỉ ghi kho khi bấm xác nhận.
+        File phải có mã HS, mô tả và số lượng.
         Kiểm tra số tờ khai, ngày, hệ số quy đổi và mã vật tư trước khi xác nhận. Giá khai báo hải quan chỉ lưu để đối chiếu, không thay đổi giá vốn/giá mua đang lưu trong kho.
       </Alert>
       {doc&&<>
@@ -513,7 +517,10 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
           <TextField size="small" label="Tiền tệ" value={currency}
             disabled={confirmed} onChange={e=>setCurrency(e.target.value)} sx={{width:115}}/>
         </Stack>
-        <Typography variant="body2" fontWeight={700}>Nguồn: {doc.fileName} · {doc.items?.length||0} dòng khai báo</Typography>
+        <Typography variant="body2" fontWeight={700}>
+          Nguồn: {doc.fileName} · {doc.items?.length||0} dòng khai báo ·
+          {direction==='OUT'?' Tờ khai xuất khẩu <EXP>':' Tờ khai nhập khẩu <IMP>'}
+        </Typography>
         <Stack direction="row" flexWrap="wrap" gap={1} alignItems="center" sx={{p:1,bgcolor:'action.hover',borderRadius:1}}>
           <Button size="small" variant="outlined" disabled={!bulkAllowed||direction!=='IN'} onClick={bulkCreateMaterials}>
             Tạo mới vật tư tất cả dòng
@@ -549,7 +556,7 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
               <TableCell align="right">SL kho</TableCell>
               <TableCell align="right">Đơn giá hóa đơn gốc</TableCell>
               <TableCell align="right">Trị giá hóa đơn gốc</TableCell>
-              <TableCell align="right">Thuế NK gốc</TableCell>
+              <TableCell align="right">{direction==='OUT'?'Thuế xuất khẩu gốc':'Thuế NK gốc'}</TableCell>
               <TableCell align="right">VAT HQ gốc</TableCell>
               <TableCell>VAT nhập kho (%)</TableCell>
               <TableCell align="right">Sau VAT</TableCell>
@@ -646,20 +653,23 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
                   </TableCell>
                   <TableCell align="right" sx={{whiteSpace:'nowrap'}}>
                     <Typography variant="caption" display="block">
-                      Giá tính NK: {item.importTaxableValueVnd==null?'—':
-                        formatVnNumber(Number(item.importTaxableValueVnd),2)} VND
+                      Giá tính {direction==='OUT'?'XK':'NK'}: {
+                        (direction==='OUT'?item.exportTaxableValueVnd:item.importTaxableValueVnd)==null?'—':
+                        formatVnNumber(Number(direction==='OUT'?item.exportTaxableValueVnd:item.importTaxableValueVnd),2)
+                      } VND
                     </Typography>
                     {item.importTaxUnitPriceVnd!=null&&
                       <Typography variant="caption" display="block">
                         Đơn giá tính NK: {formatVnNumber(Number(item.importTaxUnitPriceVnd),3)} VND/{item.unit}
                       </Typography>}
                     <Typography variant="caption" display="block">
-                      {item.importTaxRate==null?'—':item.importTaxRate+'%'}
-                      {item.importTariffCode?' · mã '+item.importTariffCode:''}
+                      {(direction==='OUT'?item.exportTaxRate:item.importTaxRate)==null?'—':
+                        (direction==='OUT'?item.exportTaxRate:item.importTaxRate)+'%'}
+                      {direction==='IN'&&item.importTariffCode?' · mã '+item.importTariffCode:''}
                     </Typography>
                     <Typography fontWeight={700}>
-                      {item.importTaxAmountVnd==null?'—':
-                        formatVnNumber(Number(item.importTaxAmountVnd),2)} VND
+                      {(direction==='OUT'?item.exportTaxAmountVnd:item.importTaxAmountVnd)==null?'—':
+                        formatVnNumber(Number(direction==='OUT'?item.exportTaxAmountVnd:item.importTaxAmountVnd),2)} VND
                     </Typography>
                   </TableCell>
                   <TableCell align="right" sx={{whiteSpace:'nowrap'}}>
