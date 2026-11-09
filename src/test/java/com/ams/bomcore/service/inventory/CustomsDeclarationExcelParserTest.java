@@ -101,6 +101,7 @@ class CustomsDeclarationExcelParserTest {
         try (book) {book.write(bytes);}
         var parsed = parser.parse(bytes.toByteArray(), "ToKhaiHQ7N.xls");
         assertEquals("103847745300", parsed.declarationNumber());
+        assertEquals("2021-02-19",parsed.declarationDate());
         assertEquals(1, parsed.items().size());
         var item = parsed.items().get(0);
         assertEquals("39249090", item.hsCode());
@@ -132,6 +133,7 @@ class CustomsDeclarationExcelParserTest {
         var sheet = book.createSheet("XuatKhau");
         cell(sheet,0,2,"<EXP>");
         cell(sheet,1,2,"Số tờ khai");cell(sheet,1,5,"308998544060");
+        cell(sheet,2,2,"Ngày đăng ký");cell(sheet,2,5,"08/11/2026 09:15:00");
         cell(sheet,4,2,"<EXP>");
         cell(sheet,5,2,"<01>");
         cell(sheet,6,2,"Mã số hàng hóa");cell(sheet,6,5,"54011010");
@@ -152,6 +154,7 @@ class CustomsDeclarationExcelParserTest {
         var parsed=parser.parse(bytes.toByteArray(),"ToKhaiHQ7X_QDTQ_308998544060.xls");
         assertEquals("OUT",parsed.direction());
         assertEquals("308998544060",parsed.declarationNumber());
+        assertEquals("2026-11-08",parsed.declarationDate());
         assertEquals(2,parsed.items().size());
         assertEquals("54011010",parsed.items().get(0).hsCode());
         assertEquals(new BigDecimal("200"),parsed.items().get(0).quantity());
