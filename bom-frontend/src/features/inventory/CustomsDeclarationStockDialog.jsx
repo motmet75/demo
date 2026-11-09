@@ -728,7 +728,7 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
           KHÔNG phải tổng thuế phải nộp Hải quan. Nếu khác tiền tệ, cần quy đổi trước khi cộng tổng.
         </Typography>
         <CustomsTariffComparison key={doc.id} doc={doc} direction={direction}
-          currency={currency} date={date}/>
+          currency={currency} date={date} rows={rows}/>
       </>}
     </DialogContent>
     <DialogActions sx={{flexWrap:'wrap'}}>
