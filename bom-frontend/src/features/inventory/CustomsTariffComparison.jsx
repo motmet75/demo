@@ -11,7 +11,8 @@ import {estimateCustomsTax,ratePercent} from '../../utils/customsTariffCalc'
 const normalizeHs=hs=>String(hs??'').replace(/\D/g,'')
 const fmt=value=>value==null?'—':formatVnNumber(value,2)
 const statusLabel={
-  NOT_CONFIGURED:'Chưa cấu hình kết nối biểu thuế',NOT_FOUND:'Không có HS trong Portal',
+  NOT_CONFIGURED:'Chưa cấu hình kết nối biểu thuế',NOT_FOUND:'Mã HS không có trong biểu thuế đã kiểm tra',
+  PORTAL_API_NOT_FOUND:'Không tìm thấy API biểu thuế Portal (lỗi đường dẫn hoặc chưa deploy)',
   FORBIDDEN:'Token hoặc quyền không hợp lệ',UNAVAILABLE:'Không kết nối Portal',
   UPSTREAM_ERROR:'Portal trả lỗi',INVALID_HS:'HS không đủ 8 số',
   BAD_URL:'URL Portal không hợp lệ',MISMATCH:'Mã HS không khớp'
@@ -145,7 +146,11 @@ export default function CustomsTariffComparison({doc,direction,currency,date}) {
                   <Typography variant="caption" display="block">HS: {r.item.hsCode||'—'} · Xuất xứ: {r.item.originCountry||'—'}</Typography>
                   <Typography variant="caption" display="block" color={r.tariff.status==='OK'?'success.main':'error.main'}>
                     {r.tariff.status==='OK'? `Portal /tariff · bản ${r.tariff.tariffVersion||'chưa rõ'}` :
-                      statusLabel[r.tariff.status]||r.tariff.message||'Đang tra HS…'}
+                      r.tariff.message||statusLabel[r.tariff.status]||'Đang tra HS…'}
+                    {r.tariff.status==='OK'&&r.tariff.matchMethod==='NORMALIZED_EIGHT_DIGITS'&&
+                      <Typography variant="caption" display="block" color="info.main">
+                        HS trong Portal: {r.tariff.storedHsCode} (đã chuẩn hóa thành {r.tariff.hsCode})
+                      </Typography>}
                   </Typography>
                 </TableCell>
                 <TableCell>
