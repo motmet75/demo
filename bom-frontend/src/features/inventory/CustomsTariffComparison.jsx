@@ -6,6 +6,8 @@ import {
 } from '@mui/material'
 import {apiFetchJson} from '../../api/client'
 import {formatVnNumber} from '../../utils/vietnameseNumbers'
+import {localMoney} from '../../utils/customsTariffCalc'
+import {estimateCustomsLandedCost} from '../../utils/customsLandedCost'
 import {estimateCustomsTax,ratePercent} from '../../utils/customsTariffCalc'
 
 const normalizeHs=hs=>String(hs??'').replace(/\D/g,'')
@@ -19,11 +21,13 @@ const statusLabel={
 }
 
 /** Read-only scenario estimator; it NEVER modifies stock or posted VAT. */
-export default function CustomsTariffComparison({doc,direction,currency,date}) {
+export default function CustomsTariffComparison({doc,direction,currency,date,rows=[]}) {
   const [lookup,setLookup]=useState({})
   const [loading,setLoading]=useState(false)
   const [fx,setFx]=useState(currency==='VND'?'1':'')
   const [withoutCo,setWithoutCo]=useState('DECLARED')
+  const [goodsValueBasis,setGoodsValueBasis]=useState('CUSTOMS')
+  const [vatCreditable,setVatCreditable]=useState(false)
   const [lines,setLines]=useState({})
   const change=(index,patch)=>setLines(prev=>({...prev,[index]:{...prev[index],...patch}}))
 
@@ -80,22 +84,62 @@ export default function CustomsTariffComparison({doc,direction,currency,date}) {
       extraTaxesVnd:edit.extraTaxes??'0'
     })
     const actual=edit.verifiedCo&&selectedFta&&data.withCo?data.withCo:data.noCo
-    return {item,index,edit,tariff,sourceCurrency,baseline,selectedFta,vatRate,...data,actual}
-  }),[doc,lookup,lines,fx,withoutCo,currency])
+
+    // For unmodified historical declarations prefer tax AMOUNTS on the
+    // original Excel (not a recalculation that may differ due to rounding).
+    const originalDuty=localMoney(item.importTaxAmountVnd)
+    const originalVat=localMoney(item.vatAmountVnd)
+    const originalAmounts=withoutCo==='DECLARED' &&
+      edit.customsValue===undefined &&
+      (edit.vatOverride===undefined||edit.vatOverride==='') &&
+      (edit.extraTaxes===undefined||localMoney(edit.extraTaxes)===0) &&
+      originalDuty!==null && originalVat!==null
+    const goodsVnd=goodsValueBasis==='CUSTOMS'?data.customsValue:
+      sourceCurrency.toUpperCase()==='VND'?data.invoiceValue:
+      localMoney(fx)>0&&data.invoiceValue!=null?data.invoiceValue*localMoney(fx):null
+    const landedParams={
+      declaredQuantity:item.quantity,
+      stockConversionRatio:rows[index]?.conversionRatio??'1',
+      goodsValueVnd:goodsVnd,
+      otherImportTaxesVnd:edit.extraTaxes??'0',
+      extraLocalCostsVnd:edit.localCosts??'0',
+      importVatCreditable:vatCreditable
+    }
+    const withoutCoLanded=estimateCustomsLandedCost({
+      ...landedParams,
+      importDutyVnd:originalAmounts?originalDuty:data.noCo?.duty,
+      importVatVnd:originalAmounts?originalVat:data.noCo?.vatAmount
+    })
+    const withCoLanded=estimateCustomsLandedCost({
+      ...landedParams,importDutyVnd:data.withCo?.duty,
+      importVatVnd:data.withCo?.vatAmount
+    })
+    const appliedLanded=edit.verifiedCo&&selectedFta&&withCoLanded?
+      withCoLanded:withoutCoLanded
+    return {item,index,edit,tariff,sourceCurrency,baseline,selectedFta,
+      vatRate,...data,actual,withoutCoLanded,withCoLanded,appliedLanded,
+      originalAmounts,goodsVnd}
+  }),[doc,lookup,lines,fx,withoutCo,currency,goodsValueBasis,vatCreditable,rows])
 
   const totals=useMemo(()=>results.reduce((a,row)=>{
     if(row.noCo){a.noCo+=row.noCo.totalTax;a.validNoCo++}
     if(row.withCo){a.withCo+=row.withCo.totalTax;a.validFta++}
     if(row.actual){a.actual+=row.actual.totalTax;a.validActual++}
     if(row.valuationSource!=='CUSTOMS_ENTERED')a.estimatedValuations++
+    if(row.appliedLanded){
+      a.landedCash+=row.appliedLanded.totalIncludingVatVnd
+      a.landedCost+=row.appliedLanded.indicativeInventoryCostVnd
+      a.validLanded++
+    }
     return a
-  },{noCo:0,withCo:0,actual:0,validNoCo:0,validFta:0,validActual:0,estimatedValuations:0}),[results])
+  },{noCo:0,withCo:0,actual:0,validNoCo:0,validFta:0,validActual:0,
+    landedCash:0,landedCost:0,validLanded:0,estimatedValuations:0}),[results])
 
   if(!doc||direction!=='IN')return null
-  return <Accordion disableGutters sx={{border:'1px solid',borderColor:'divider'}} key={doc.id}>
+  return <Accordion defaultExpanded disableGutters sx={{border:'1px solid',borderColor:'divider'}} key={doc.id}>
     <AccordionSummary sx={{bgcolor:'action.hover'}}>
       <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap">
-        <Typography fontWeight={800}>Tra cứu FTA/HS · Tính lại thuế nhập khẩu và VAT từng dòng</Typography>
+        <Typography fontWeight={800}>Giá nhập kho VND sau thuế · FTA / HS · Tính theo ngày tờ khai</Typography>
         <Chip size="small" color="info" label="Chỉ tạm tính · Không ghi kho / không khai thuế"/>
         {loading&&<Chip size="small" label="Đang tra biểu thuế Portal"/>}
       </Stack>
@@ -121,8 +165,29 @@ export default function CustomsTariffComparison({doc,direction,currency,date}) {
           </TextField>
           <Chip color="default" label={`Tổng thuế dự kiến: ${fmt(totals.actual)} VND (${totals.validActual}/${results.length} dòng)`}/>
         </Stack>
+        <Stack direction={{xs:'column',sm:'row'}} gap={1} alignItems="center" flexWrap="wrap">
+          <TextField select size="small" label="Giá trị hàng hóa để tính giá vốn VND"
+            value={goodsValueBasis} onChange={e=>setGoodsValueBasis(e.target.value)}
+            sx={{minWidth:365}}>
+            <MenuItem value="CUSTOMS">Tạm lấy trị giá tính thuế trên tờ khai làm giá hàng</MenuItem>
+            <MenuItem value="INVOICE">Trị giá hóa đơn × tỷ giá của ngày tờ khai</MenuItem>
+          </TextField>
+          <FormControlLabel control={<Checkbox size="small" checked={vatCreditable}
+            onChange={e=>setVatCreditable(e.target.checked)}/>}
+            label="VAT nhập khẩu được khấu trừ (không tính vào giá vốn)"/>
+          <Chip color="primary" label={`Giá hàng đã gồm thuế: ${fmt(totals.landedCash)} VND (${totals.validLanded}/${results.length} dòng)`}/>
+          <Chip label={`Giá vốn dự kiến: ${fmt(totals.landedCost)} VND (${totals.validLanded}/${results.length})`}/>
+        </Stack>
+        <Alert severity="info">
+          Đơn giá VND tính từ số lượng gốc và hệ số quy đổi sang đơn vị kho, dùng thuế đã khai
+          hoặc kịch bản FTA bạn chủ động xác nhận. Khi chọn hóa đơn ngoại tệ, phải nhập
+          tỷ giá áp dụng ở thời điểm đăng ký tờ khai {date||''}.
+          Trị giá tính thuế HQ có thể khác giá mua/giá vốn thực tế do điều chỉnh CIF;
+          nếu dùng làm cơ sở giá hàng, kết quả chỉ là tạm tính. Phí vận chuyển/thông quan
+          chưa có trong tờ khai phải nhập riêng cho từng dòng.
+        </Alert>
         <TableContainer sx={{maxHeight:430,border:'1px solid',borderColor:'divider'}}>
-          <Table stickyHeader size="small" sx={{minWidth:1620}}>
+          <Table stickyHeader size="small" sx={{minWidth:2250}}>
             <TableHead><TableRow>
               <TableCell sx={{minWidth:245}}>Dòng / HS / Tên hàng</TableCell>
               <TableCell sx={{minWidth:160}}>SL × đơn giá hóa đơn · Trị giá gốc</TableCell>
@@ -132,6 +197,9 @@ export default function CustomsTariffComparison({doc,direction,currency,date}) {
               <TableCell sx={{minWidth:180}}>FTA có C/O (giả định)</TableCell>
               <TableCell sx={{minWidth:120}}>VAT (%)</TableCell>
               <TableCell sx={{minWidth:155}}>TTĐB + BVMT (VND)</TableCell>
+              <TableCell sx={{minWidth:155}}>Vận chuyển, thông quan, phí khác (VND)</TableCell>
+              <TableCell sx={{minWidth:165}}>Đơn giá VND gồm thuế / đv khai</TableCell>
+              <TableCell sx={{minWidth:185}}>Giá vốn VND / đơn vị kho</TableCell>
               <TableCell sx={{minWidth:130}}>Không C/O · NK + VAT</TableCell>
               <TableCell sx={{minWidth:130}}>Có C/O · NK + VAT</TableCell>
               <TableCell sx={{minWidth:160}}>Phương án áp dụng</TableCell>
@@ -214,6 +282,34 @@ export default function CustomsTariffComparison({doc,direction,currency,date}) {
                 <TableCell><TextField size="small" value={r.edit.extraTaxes??'0'} fullWidth
                   onChange={e=>change(r.index,{extraTaxes:e.target.value})}
                   helperText="Chỉ nhập khi có phát sinh"/></TableCell>
+                <TableCell><TextField size="small" value={r.edit.localCosts??'0'} fullWidth
+                  onChange={e=>change(r.index,{localCosts:e.target.value})}
+                  helperText="Phân bổ riêng từng dòng"/></TableCell>
+                <TableCell>
+                  <Typography variant="body2" fontWeight={700}>
+                    {fmt(r.appliedLanded?.declaredUnitIncludingVatVnd)} VND/{r.item.unit||'đv'}
+                  </Typography>
+                  <Typography variant="caption" display="block">
+                    Cả dòng: {fmt(r.appliedLanded?.totalIncludingVatVnd)} VND
+                  </Typography>
+                  <Typography variant="caption" display="block">
+                    Trước VAT: {fmt(r.appliedLanded?.declaredUnitBeforeVatVnd)} VND/đv
+                  </Typography>
+                </TableCell>
+                <TableCell>
+                  <Typography variant="body2" fontWeight={700}>
+                    {fmt(r.appliedLanded?.stockUnitInventoryCostVnd)} VND/đv kho
+                  </Typography>
+                  <Typography variant="caption" display="block">
+                    {vatCreditable?'Đã loại VAT đủ điều kiện khấu trừ':'Đang gồm cả VAT nhập khẩu'}
+                  </Typography>
+                  <Typography variant="caption" display="block">
+                    SL kho: {fmt(r.appliedLanded?.stockQuantity)}
+                  </Typography>
+                  {r.originalAmounts&&<Typography variant="caption" color="info.main" display="block">
+                    Thuế tính từ số tiền gốc trên tờ khai
+                  </Typography>}
+                </TableCell>
                 <TableCell>
                   {r.noCo?<>
                     <Typography variant="body2">NK: {fmt(r.noCo.duty)}</Typography>
@@ -243,10 +339,17 @@ export default function CustomsTariffComparison({doc,direction,currency,date}) {
           </Table>
         </TableContainer>
         <Stack direction="row" gap={1} flexWrap="wrap">
+          <Chip color="primary" label={`Giá gồm tất cả thuế: ${fmt(totals.landedCash)} VND (${totals.validLanded}/${results.length})`}/>
+          <Chip label={`Giá vốn dự kiến: ${fmt(totals.landedCost)} VND (${totals.validLanded}/${results.length})`}/>
           <Chip label={`Theo mức cơ sở: ${fmt(totals.noCo)} VND (${totals.validNoCo}/${results.length})`}/>
           <Chip label={`Có C/O giả định: ${fmt(totals.withCo)} VND (${totals.validFta}/${results.length})`}/>
           <Chip color="success" label={`Đã chọn áp dụng: ${fmt(totals.actual)} VND (${totals.validActual}/${results.length})`}/>
         </Stack>
+        {totals.validLanded<results.length&&<Alert severity="warning">
+          Chỉ tính được giá nhập kho VND cho {totals.validLanded}/{results.length} dòng.
+          Kiểm tra giá gốc, số lượng, hệ số quy đổi, thuế suất/tiền thuế và tỷ giá
+          lịch sử nếu dùng giá hóa đơn; không được coi số tổng chưa đủ dòng là tổng thực tế.
+        </Alert>}
         {totals.estimatedValuations>0&&<Alert severity="info">
           Có {totals.estimatedValuations} dòng chưa có trị giá tính thuế gốc từ file hoặc do người dùng nhập.
           Giá trị được ước tính từ đơn giá hóa đơn và tỷ giá (nếu có), có thể thiếu CIF,
@@ -259,6 +362,9 @@ export default function CustomsTariffComparison({doc,direction,currency,date}) {
           chứng từ đã khai. Tỷ giá phải lấy theo quy định hải quan tại thời điểm đăng ký; FTA tính theo năm,
           C/O và điều kiện cụ thể; biểu thuế không chứng minh xuất xứ. Bảng này chỉ
           dùng đối chiếu và không thay đổi dữ liệu VAT đang lưu trong phiếu nhập kho.
+          Giá nhập kho VND là phép tính trước khi xác nhận, chưa được ghi tự động
+          thành đơn giá tồn kho hoặc giá trị kế toán. Chỉ loại VAT khỏi giá vốn khi
+          doanh nghiệp đủ điều kiện khấu trừ thuế đầu vào.
         </Typography>
       </Stack>
     </AccordionDetails>
