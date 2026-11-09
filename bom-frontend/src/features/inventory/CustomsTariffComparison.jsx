@@ -169,9 +169,9 @@ export default function CustomsTariffComparison({doc,direction,currency,date,row
           không tự động giảm từ 10%.
         </Alert>
         <Stack direction={{xs:'column',sm:'row'}} gap={1} alignItems="center" flexWrap="wrap">
-          <TextField size="small" label="Tỷ giá tính thuế HQ (VND / 1 đơn vị tiền)" value={fx}
+          <TextField size="small" label="Tỷ giá ngày tờ khai (VND / 1 ngoại tệ)" value={fx}
             onChange={e=>setFx(e.target.value)} placeholder="Ví dụ: 25.800"
-            helperText="Nhập tỷ giá HQ áp dụng vào ngày đăng ký tờ khai" sx={{width:310}}/>
+            helperText="Nhập tỷ giá lịch sử phù hợp; không dùng tỷ giá hôm nay cho tờ khai cũ" sx={{width:335}}/>
           <TextField select size="small" label="Mức thuế cơ sở để đối chiếu" value={withoutCo}
             onChange={e=>setWithoutCo(e.target.value)} sx={{minWidth:250}}>
             <MenuItem value="DECLARED">Thuế suất gốc trên tờ khai (không suy luận C/O)</MenuItem>
