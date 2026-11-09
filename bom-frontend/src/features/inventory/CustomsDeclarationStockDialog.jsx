@@ -90,8 +90,10 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
     if(payload.direction==='IN'||payload.direction==='OUT')
       setDirection(payload.direction)
     setNumber(saved?.number??payload.declarationNumber??'')
+    // Never substitute today's date for a historical customs declaration.
+    // Unknown dates must be entered explicitly before posting stock.
     setDate(saved?.date??(validDate(payload.declarationDate)?payload.declarationDate:
-      validDate(payload.dateHint)?payload.dateHint:today()))
+      validDate(payload.dateHint)?payload.dateHint:''))
     setCurrency(saved?.currency??payload.items?.find(i=>i.currency)?.currency??'VND')
     setRows(saved?.rows||(payload.items||[]).map(item=>newRow(item,warehouses)))
     setConfirmed(payload.status==='POSTED'||postedIds.includes(payload.id))
