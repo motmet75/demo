@@ -233,6 +233,6 @@ public class CustomsDeclarationExcelParser {
                 Objects.toString(item.getOrDefault("vatTariffCode",""),"").trim(),
                 number(item.get("exportTaxableValueVnd")),
                 number(item.get("exportTaxRate")),
-                number(item.get("exportTaxAmountVnd")));
+                number(item.get("exportTaxAmountVnd"))));
     }
 }
