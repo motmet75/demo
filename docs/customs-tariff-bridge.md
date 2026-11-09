@@ -245,16 +245,16 @@ To confirm the underlying tariff data, query the **actual Portal
 database** (usually `tuonghoa`, depending on deployment):
 
 ```sql
-SELECT id, hscode, "preferentialImTax", "Vat"
-FROM "bieuthueTB"
-WHERE regexp_replace(coalesce(hscode::text,''),'[^0-9]','','g')
+SELECT id, hsCode, preferentialImTax, vat
+FROM bieuthueTB
+WHERE regexp_replace(coalesce(hsCode::text,''),'[^0-9]','','g')
       IN ('76169990','39269099')
-ORDER BY hscode, id DESC;
+ORDER BY hsCode, id DESC;
 
-SELECT id, hscode, "viDescription"
-FROM "bieuthueTB"
-WHERE regexp_replace(coalesce(hscode::text,''),'[^0-9]','','g') LIKE '39269%'
-ORDER BY hscode, id DESC LIMIT 40;
+SELECT id, hsCode, viDescription
+FROM bieuthueTB
+WHERE regexp_replace(coalesce(hsCode::text,''),'[^0-9]','','g') LIKE '39269%'
+ORDER BY hsCode, id DESC LIMIT 40;
 ```
 
 The second query is for **diagnosis only**. Similar codes are not
