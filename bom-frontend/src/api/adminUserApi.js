@@ -15,6 +15,22 @@ export async function fetchAdminUsers() {
   return Array.isArray(data) ? data : []
 }
 
+// Called by the create/edit form while the admin enters an email.
+// Server checks the global unique email index, including users outside
+// the current table view, and excludes the user being edited.
+export async function checkAdminEmailAvailability(email, excludeUserId = null) {
+  const params = new URLSearchParams({ email: String(email).trim() })
+  if (excludeUserId != null) params.set('excludeUserId', String(excludeUserId))
+  const { res, data } = await fetchJson(`/admin/users/email-availability?${params.toString()}`, {
+    credentials: 'include'
+  })
+  if (!res.ok) throw new Error(data?.message || 'Không thể kiểm tra email. Vui lòng thử lại.')
+  if (typeof data?.available !== 'boolean') {
+    throw new Error('Máy chủ không trả về kết quả kiểm tra email hợp lệ.')
+  }
+  return data.available
+}
+
 export async function createAdminUser(payload) {
   const { res, data } = await fetchJson('/admin/users', {
     method: 'POST',
