@@ -85,13 +85,12 @@ export default function CustomsTariffComparison({doc,direction,currency,date,row
     const data=estimateCustomsTax({
       quantity:item.quantity,unitPrice:item.unitPrice,currency:sourceCurrency,
       exchangeRate:fx,
-      taxableValueVnd:edit.customsValue??(item.importTaxableValueVnd==null
-        ?'':String(item.importTaxableValueVnd)),
+      // Keep JSON numeric amount numeric: converting it to a US-decimal
+      // string can be misread as a Vietnamese thousands-grouped input.
+      taxableValueVnd:edit.customsValue??item.importTaxableValueVnd??'',
       noCoRate:baseline,ftaRate:selectedFtaRate,vatRate,
       extraTaxesVnd:edit.extraTaxes??'0'
     })
-    const actual=edit.verifiedCo&&selectedFta&&data.withCo?data.withCo:data.noCo
-
     // For unmodified historical declarations prefer tax AMOUNTS on the
     // original Excel (not a recalculation that may differ due to rounding).
     const originalDuty=localMoney(item.importTaxAmountVnd)
@@ -101,6 +100,12 @@ export default function CustomsTariffComparison({doc,direction,currency,date,row
       (edit.vatOverride===undefined||edit.vatOverride==='') &&
       (edit.extraTaxes===undefined||localMoney(edit.extraTaxes)===0) &&
       originalDuty!==null && originalVat!==null
+    const originalTax=originalAmounts?{
+      duty:originalDuty,vatAmount:originalVat,
+      totalTax:Math.round((originalDuty+originalVat)*100)/100
+    }:null
+    const baselineTax=originalTax||data.noCo
+    const actual=edit.verifiedCo&&selectedFta&&data.withCo?data.withCo:baselineTax
     const invoiceValueOriginal=item.invoiceValue==null?data.invoiceValue:
       Number(item.invoiceValue)
     const goodsVnd=goodsValueBasis==='CUSTOMS'?data.customsValue:
@@ -127,12 +132,12 @@ export default function CustomsTariffComparison({doc,direction,currency,date,row
     const appliedLanded=edit.verifiedCo&&selectedFta&&withCoLanded?
       withCoLanded:withoutCoLanded
     return {item,index,edit,tariff,sourceCurrency,baseline,selectedFta,
-      vatRate,...data,actual,withoutCoLanded,withCoLanded,appliedLanded,
+      vatRate,...data,actual,baselineTax,withoutCoLanded,withCoLanded,appliedLanded,
       originalAmounts,goodsVnd}
   }),[doc,lookup,lines,fx,withoutCo,currency,goodsValueBasis,vatCreditable,rows])
 
   const totals=useMemo(()=>results.reduce((a,row)=>{
-    if(row.noCo){a.noCo+=row.noCo.totalTax;a.validNoCo++}
+    if(row.baselineTax){a.noCo+=row.baselineTax.totalTax;a.validNoCo++}
     if(row.withCo){a.withCo+=row.withCo.totalTax;a.validFta++}
     if(row.actual){a.actual+=row.actual.totalTax;a.validActual++}
     if(row.valuationSource!=='CUSTOMS_ENTERED')a.estimatedValuations++
@@ -321,10 +326,10 @@ export default function CustomsTariffComparison({doc,direction,currency,date,row
                   </Typography>}
                 </TableCell>
                 <TableCell>
-                  {r.noCo?<>
-                    <Typography variant="body2">NK: {fmt(r.noCo.duty)}</Typography>
-                    <Typography variant="body2">VAT: {fmt(r.noCo.vatAmount)}</Typography>
-                    <Typography fontWeight={700}>{fmt(r.noCo.totalTax)}</Typography>
+                  {r.baselineTax?<>
+                    <Typography variant="body2">NK: {fmt(r.baselineTax.duty)}</Typography>
+                    <Typography variant="body2">VAT: {fmt(r.baselineTax.vatAmount)}</Typography>
+                    <Typography fontWeight={700}>{fmt(r.baselineTax.totalTax)}</Typography>
                   </>:'—'}
                 </TableCell>
                 <TableCell>
