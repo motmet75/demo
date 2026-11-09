@@ -81,6 +81,7 @@ export default function AdminUserEditModal({ open, user, onClose, onSave, saving
   }, [form.assignedTenantId])
 
   const handleChange = (field) => (event) => {
+    setError('')
     const value = field === 'enabled' ? event.target.checked : event.target.value
     setForm((prev) => {
       const next = { ...prev, [field]: value }
@@ -136,7 +137,11 @@ export default function AdminUserEditModal({ open, user, onClose, onSave, saving
           />
           <TextField label={t('admin.users.firstName')} value={form.firstName} onChange={handleChange('firstName')} required disabled={saving} />
           <TextField label={t('admin.users.lastName')} value={form.lastName} onChange={handleChange('lastName')} required disabled={saving} />
-          <TextField label={t('admin.users.email')} type="email" value={form.email} onChange={handleChange('email')} disabled={saving} />
+          <TextField label={t('admin.users.email')} type="email" value={form.email}
+            onChange={handleChange('email')} required disabled={saving}
+            error={Boolean(error)&&/email/i.test(error)}
+            helperText={Boolean(error)&&/email/i.test(error)?
+              'Email này đã được đăng ký hoặc không hợp lệ. Vui lòng nhập email khác.':undefined}/>
           <FormControlLabel control={<Switch checked={!!form.enabled} onChange={handleChange('enabled')} disabled={saving} />} label={t('admin.users.enabled')} />
           {isSuperAdmin ? (
             <>
