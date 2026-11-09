@@ -1,4 +1,4 @@
-import {parseMachineNumber} from './vietnameseNumbers.js'
+import {parseMachineNumber, parseVnNumber} from './vietnameseNumbers.js'
 import {localMoney} from './customsTariffCalc.js'
 
 const round = (value, digits) => {
@@ -22,7 +22,9 @@ export function estimateCustomsLandedCost({
   importVatCreditable = false
 }) {
   const qty = parseMachineNumber(declaredQuantity)
-  const ratio = parseMachineNumber(stockConversionRatio)
+  const ratio = typeof stockConversionRatio === 'number'
+    ? parseMachineNumber(stockConversionRatio)
+    : parseVnNumber(stockConversionRatio)
   const goods = localMoney(goodsValueVnd)
   const duty = localMoney(importDutyVnd)
   const vat = localMoney(importVatVnd)
