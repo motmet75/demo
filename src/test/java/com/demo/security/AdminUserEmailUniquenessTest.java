@@ -91,6 +91,36 @@ class AdminUserEmailUniquenessTest {
         verify(users).saveAndFlush(same(target));
     }
 
+    @Test void availabilityCheckRejectsEmailOwnedBySomeoneElse() {
+        User other = new User();
+        other.setId(7);
+        when(users.findByEmailIgnoreCase("vttcc@anhmedia.vn"))
+                .thenReturn(Optional.of(other));
+
+        assertFalse(service.isEmailAvailable(" VTTCC@anhmedia.vn ", null));
+        assertFalse(service.isEmailAvailable("vttcc@anhmedia.vn", 8));
+        assertTrue(service.isEmailAvailable("vttcc@anhmedia.vn", 7));
+    }
+
+    @Test void availabilityCheckPermitsNewEmailButNotBlank() {
+        when(users.findByEmailIgnoreCase("new@anhmedia.vn"))
+                .thenReturn(Optional.empty());
+        assertTrue(service.isEmailAvailable("NEW@anhmedia.vn", null));
+        assertFalse(service.isEmailAvailable("  ", null));
+    }
+
+    @Test void availabilityEndpointReturnsSimpleAvailableBoolean() {
+        var controller = new AdminUserController(service);
+        User existing = new User();
+        existing.setId(1);
+        when(users.findByEmailIgnoreCase("existing@anhmedia.vn"))
+                .thenReturn(Optional.of(existing));
+        assertEquals(Boolean.FALSE, controller.emailAvailability("existing@anhmedia.vn", null)
+                .get("available"));
+        assertEquals(Boolean.TRUE, controller.emailAvailability("existing@anhmedia.vn", 1)
+                .get("available"));
+    }
+
     @Test void databaseRaceConflictReturnsFriendlyEmailErrorInsteadOfSqlException() {
         var controller=new AdminUserController(service);
         var response=controller.adminUserDatabaseConflict(new DataIntegrityViolationException(
