@@ -9,8 +9,8 @@ import org.apache.poi.ss.usermodel.*;
 import org.springframework.stereotype.Component;
 
 /**
- * Imports Vietnamese Customs declaration spreadsheets using the same <IMP>
- * line markers and labels as Portal Utilities.CDSExcelImporter (master).
+ * Reads Vietnamese customs XLS/XLSX source sheets with <IMP> (import)
+ * or <EXP> (export) markers, preserving the original declaration direction.
  *
  * Unlike the legacy Portal parser this uses WorkbookFactory + DataFormatter
  * and does not mutate the uploaded workbook's cell types.
@@ -30,9 +30,12 @@ public class CustomsDeclarationExcelParser {
                        BigDecimal vatAmountVnd,
                        BigDecimal importTaxUnitPriceVnd,
                        String importTariffCode,
-                       String vatTariffCode) {}
+                       String vatTariffCode,
+                       BigDecimal exportTaxableValueVnd,
+                       BigDecimal exportTaxRate,
+                       BigDecimal exportTaxAmountVnd) {}
     public record Parsed(String declarationNumber, String declarationDate,
-                         String fileName, List<Item> items) {}
+                         String fileName, List<Item> items, String direction) {}
 
     private static String fold(String value) {
         return java.text.Normalizer.normalize(Objects.toString(value,""),java.text.Normalizer.Form.NFD)
@@ -97,7 +100,7 @@ public class CustomsDeclarationExcelParser {
             DataFormatter formatter=new DataFormatter(new Locale("vi","VN"));
             List<Item> items=new ArrayList<>();
             Map<String,String> current=null;
-            String number="",date="";
+            String number="",date="",direction=null;
             String taxSection="NONE";
             Sheet sheet=book.getSheetAt(0);
             if(sheet.getLastRowNum()>10_000)throw new IllegalArgumentException("Tờ khai có quá nhiều dòng.");
@@ -109,7 +112,12 @@ public class CustomsDeclarationExcelParser {
                     String label=formatter.formatCellValue(cell).trim();
                     if(label.isEmpty())continue;
                     String key=fold(label);
-                    if("<imp>".equalsIgnoreCase(label)){
+                    if("<imp>".equalsIgnoreCase(label)||"<exp>".equalsIgnoreCase(label)){
+                        String markerDirection="<exp>".equalsIgnoreCase(label)?"OUT":"IN";
+                        if(direction!=null&&!direction.equals(markerDirection))
+                            throw new IllegalArgumentException(
+                                "File có cả <IMP> và <EXP>; vui lòng tách tờ khai nhập/xuất riêng.");
+                        direction=markerDirection;
                         if(current!=null)append(items,current);
                         current=new LinkedHashMap<>();
                         taxSection="NONE";
@@ -134,24 +142,32 @@ public class CustomsDeclarationExcelParser {
                     else if(key.startsWith("nuoc xuat xu"))current.put("originCountry",value);
                     else if(key.equals("tri gia hoa don"))current.put("invoiceValue",value);
                     else if(key.equals("thue nhap khau"))taxSection="IMPORT";
+                    else if(key.equals("thue xuat khau"))taxSection="EXPORT";
                     else if(key.startsWith("thue va thu khac"))taxSection="OTHER";
                     else if(key.equals("ten")&&taxSection.equals("VAT"))taxSection="OTHER";
                     else if(key.equals("thue gtgt"))taxSection="VAT";
                     else if(key.equals("tri gia tinh thue(s)")&&taxSection.equals("IMPORT"))
                         current.put("importTaxableValueVnd",value);
+                    else if(key.equals("tri gia tinh thue(s)")&&taxSection.equals("EXPORT"))
+                        current.put("exportTaxableValueVnd",value);
                     else if(key.equals("don gia tinh thue")&&taxSection.equals("IMPORT"))
                         current.put("importTaxUnitPriceVnd",value);
+                    else if(key.equals("tri gia tinh thue")&&taxSection.equals("EXPORT"))
+                        current.put("exportTaxableValueVnd",value);
                     else if(key.equals("tri gia tinh thue")&&taxSection.equals("VAT"))
                         current.put("vatTaxableValueVnd",value);
-                    else if(key.equals("thue suat")&&(taxSection.equals("IMPORT")||taxSection.equals("VAT"))) {
+                    else if(key.equals("thue suat")&&(taxSection.equals("IMPORT")
+                            ||taxSection.equals("EXPORT")||taxSection.equals("VAT"))) {
                         BigDecimal rate=percentage(row,c,formatter);
-                        if(rate!=null)current.put(taxSection.equals("IMPORT")?"importTaxRate":"vatRate",
-                                rate.toPlainString());
+                        if(rate!=null)current.put(taxSection.equals("IMPORT")?"importTaxRate":
+                            taxSection.equals("EXPORT")?"exportTaxRate":"vatRate",rate.toPlainString());
                         if(taxSection.equals("IMPORT")&&!value.equals("")&&!value.endsWith("%"))
                             current.put("importTariffCode",value);
                     }
                     else if(key.equals("so tien thue")&&taxSection.equals("IMPORT"))
                         current.put("importTaxAmountVnd",value);
+                    else if(key.equals("so tien thue")&&taxSection.equals("EXPORT"))
+                        current.put("exportTaxAmountVnd",value);
                     else if(key.equals("so tien thue")&&taxSection.equals("VAT"))
                         current.put("vatAmountVnd",value);
                     else if(key.equals("ma ap dung thue suat")&&taxSection.equals("VAT"))
@@ -159,12 +175,14 @@ public class CustomsDeclarationExcelParser {
                 }
             }
             if(current!=null)append(items,current);
-            if(items.isEmpty())throw new IllegalArgumentException("Không tìm thấy dòng <IMP> và mô tả hàng hóa trong tờ khai. Kiểm tra định dạng Excel.");
+            if(items.isEmpty())throw new IllegalArgumentException(
+                "Không tìm thấy dòng hàng <IMP>/<EXP> với mô tả và số lượng. "
+                + "Kiểm tra định dạng hoặc sheet của tờ khai Hải quan.");
             if(items.size()>200)throw new IllegalArgumentException("Tối đa 200 dòng hàng/tờ khai.");
             String declaration=number.trim();
             // Some customs exports repeat declaration number per item; a file
             // without it can be previewed, but number is mandatory on posting.
-            return new Parsed(declaration,date,fileName,List.copyOf(items));
+            return new Parsed(declaration,date,fileName,List.copyOf(items),direction);
         }
     }
     private void append(List<Item> lines,Map<String,String> item) {
@@ -187,6 +205,9 @@ public class CustomsDeclarationExcelParser {
                 number(item.get("vatAmountVnd")),
                 number(item.get("importTaxUnitPriceVnd")),
                 Objects.toString(item.getOrDefault("importTariffCode",""),"").trim(),
-                Objects.toString(item.getOrDefault("vatTariffCode",""),"").trim()));
+                Objects.toString(item.getOrDefault("vatTariffCode",""),"").trim(),
+                number(item.get("exportTaxableValueVnd")),
+                number(item.get("exportTaxRate")),
+                number(item.get("exportTaxAmountVnd")));
     }
 }
