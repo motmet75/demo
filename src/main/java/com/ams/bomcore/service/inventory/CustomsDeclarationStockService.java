@@ -155,7 +155,11 @@ public class CustomsDeclarationStockService {
                 Objects.toString(row.get("declaration_number"),parsed.declarationNumber()));
         response.put("declarationDate",row.get("declaration_date"));
         response.put("dateHint",parsed.declarationDate());
-        response.put("status",row.get("status"));response.put("direction",row.get("direction"));
+        response.put("status",row.get("status"));
+        // DRAFT rows have no posted direction yet; use the XLS <IMP>/<EXP>
+        // marker to preselect the correct stock transaction in the browser.
+        response.put("direction",row.get("direction")!=null?
+                row.get("direction"):parsed.direction());
         response.put("items",parsed.items());
         return response;
     }
@@ -200,6 +204,12 @@ public class CustomsDeclarationStockService {
                 ". Không thể ghi kho hai lần; kiểm tra lịch sử tờ khai.");
         }
         var parsed=decode((String)rows.get(0).get("payload"));
+        if(parsed.direction()!=null&&!parsed.direction().equals(direction))
+            throw fail("Tờ khai Excel có dấu <" +
+                ("OUT".equals(parsed.direction())?"EXP":"IMP") +
+                ">, chỉ được xác nhận " +
+                ("OUT".equals(parsed.direction())?"XUẤT":"NHẬP") +
+                " kho. Không thể đổi chiều giao dịch.");
         if(req.lines()==null||req.lines().size()!=parsed.items().size())
             throw fail("Đối chiếu từng dòng hàng trên tờ khai trước khi xác nhận.");
 
