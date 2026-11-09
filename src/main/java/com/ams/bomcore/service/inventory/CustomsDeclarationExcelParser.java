@@ -4,6 +4,9 @@ import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.time.format.ResolverStyle;
 import java.util.*;
 import org.apache.poi.ss.usermodel.*;
 import org.springframework.stereotype.Component;
@@ -65,6 +68,28 @@ public class CustomsDeclarationExcelParser {
         try{return new BigDecimal(val);}catch(NumberFormatException ex){return null;}
     }
     public static BigDecimal parseVietnameseNumber(String raw) {return number(raw);}
+
+    private static String normalizeDeclarationDate(String raw) {
+        String value=Objects.toString(raw,"").trim();
+        if(value.isEmpty())return "";
+        if(value.matches("\\d{4}-\\d{2}-\\d{2}.*")) {
+            try{return LocalDate.parse(value.substring(0,10)).toString();}
+            catch(DateTimeParseException ignored){return "";}
+        }
+        if(value.matches("\\d{2}/\\d{2}/\\d{4}.*")) {
+            try{return LocalDate.parse(value.substring(0,10),
+                    DateTimeFormatter.ofPattern("dd/MM/uuuu")
+                            .withResolverStyle(ResolverStyle.STRICT)).toString();}
+            catch(DateTimeParseException ignored){return "";}
+        }
+        if(value.matches("\\d{2}-\\d{2}-\\d{4}.*")) {
+            try{return LocalDate.parse(value.substring(0,10),
+                    DateTimeFormatter.ofPattern("dd-MM-uuuu")
+                            .withResolverStyle(ResolverStyle.STRICT)).toString();}
+            catch(DateTimeParseException ignored){return "";}
+        }
+        return "";
+    }
 
     private static String nearbyCurrency(Row row,int position,DataFormatter formatter) {
         for(int column=position+1;column<Math.min(position+21,row.getLastCellNum());column++) {
@@ -182,7 +207,7 @@ public class CustomsDeclarationExcelParser {
             String declaration=number.trim();
             // Some customs exports repeat declaration number per item; a file
             // without it can be previewed, but number is mandatory on posting.
-            return new Parsed(declaration,date,fileName,List.copyOf(items),direction);
+            return new Parsed(declaration,normalizeDeclarationDate(date),fileName,List.copyOf(items),direction);
         }
     }
     private void append(List<Item> lines,Map<String,String> item) {
