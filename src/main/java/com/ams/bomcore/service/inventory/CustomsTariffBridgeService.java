@@ -59,8 +59,7 @@ public class CustomsTariffBridgeService {
                     .GET().build();
             HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 404)
-                return error(hsCode, "NOT_FOUND",
-                        "Không tìm thấy đúng mã HS " + hsCode + " trong biểu thuế Portal.");
+                return classifyPortal404(hsCode, response.body());
             if (response.statusCode() == 403 || response.statusCode() == 401)
                 return error(hsCode, "FORBIDDEN",
                         "Portal từ chối kết nối biểu thuế. Kiểm tra quyền hoặc Tariff Bridge Token.");
@@ -82,6 +81,31 @@ public class CustomsTariffBridgeService {
             return error(hsCode, "UNAVAILABLE",
                     "Không kết nối được biểu thuế Portal. Kiểm tra API, URL, TLS và token.");
         }
+    }
+
+    // A reverse-proxy 404 (route not deployed) is NOT the same as the
+    // tariff endpoint explicitly confirming that the HS code is absent.
+    // Only the Portal's authenticated, structured HS_NOT_FOUND response
+    // can tell the UI that the tariff table has no matching row.
+    Map<String,Object> classifyPortal404(String hsCode, String body) {
+        if (body != null && !body.isBlank()) {
+            try {
+                Map<String,Object> payload = mapper.readValue(body,
+                        new TypeReference<Map<String,Object>>() {});
+                if ("HS_NOT_FOUND".equals(payload.get("code"))
+                        && hsCode.equals(Objects.toString(payload.get("hsCode"), ""))) {
+                    return error(hsCode,"NOT_FOUND",
+                            Objects.toString(payload.get("message"),
+                                    "Không tìm thấy đúng mã HS " + hsCode + " trong biểu thuế Portal."));
+                }
+            } catch (Exception ignored) {
+                // Nginx/Traefik often returns HTML here.
+            }
+        }
+        return error(hsCode,"PORTAL_API_NOT_FOUND",
+                "API tra cứu thuế của Portal trả HTTP 404 nhưng không xác nhận thiếu mã HS "
+                + hsCode + ". Kiểm tra Portal đã pull/rebuild nhánh master và Nginx đã "
+                + "chuyển tiếp /api/internal/tariff/hs/... đến ứng dụng.");
     }
 
     private static Map<String,Object> error(String hsCode,String status,String message) {
