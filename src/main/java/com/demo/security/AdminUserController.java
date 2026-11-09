@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -36,6 +37,13 @@ public class AdminUserController {
     @GetMapping
     public List<AuthUserView> listUsers() {
         return adminUserService.findAllUsers();
+    }
+
+    @GetMapping("/email-availability")
+    public Map<String,Boolean> emailAvailability(
+            @RequestParam String email,
+            @RequestParam(required = false) Integer excludeUserId) {
+        return Map.of("available", adminUserService.isEmailAvailable(email, excludeUserId));
     }
 
     @PostMapping
