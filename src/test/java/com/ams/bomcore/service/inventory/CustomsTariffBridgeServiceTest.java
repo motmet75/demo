@@ -11,6 +11,42 @@ class CustomsTariffBridgeServiceTest {
                     "test_tariff_bridge_token_32_chars_long");
 
     @Test
+    void validMissingHsWithHttp200DoesNotBecomeSuccessfulTaxLookup() {
+        Map<String,Object> payload=Map.of(
+                "hsCode","39269099",
+                "status","NOT_FOUND",
+                "code","HS_NOT_FOUND",
+                "message","Mã HS 39269099 chưa có trong bảng bieuthueTB của Portal");
+        Map<String,Object> result=service.interpretPortalResult("39269099",payload);
+        assertEquals("NOT_FOUND",result.get("status"));
+        assertEquals("39269099",result.get("hsCode"));
+        assertFalse(result.containsKey("fta"));
+        assertFalse(result.containsKey("mfn"));
+    }
+
+    @Test
+    void actualFoundHsStillPreservesRates() {
+        Map<String,Object> payload=Map.of(
+                "hsCode","76169990",
+                "mfn","15", "vat","10",
+                "fta",Map.of("ACFTA","5"),
+                "matchMethod","EXACT");
+        Map<String,Object> result=service.interpretPortalResult("76169990",payload);
+        assertEquals("OK",result.get("status"));
+        assertEquals("15",result.get("mfn"));
+        assertEquals(Map.of("ACFTA","5"),result.get("fta"));
+    }
+
+    @Test
+    void inconsistentOrIncompleteSuccessIsNotTreatedAsZeroPercentTax() {
+        Map<String,Object> result=service.interpretPortalResult("39269099",Map.of(
+                "hsCode","39269099", "status","NOT_FOUND", "code","OTHER_ERROR"));
+        assertEquals("UPSTREAM_ERROR",result.get("status"));
+        assertEquals("MISMATCH",service.interpretPortalResult("39269099",Map.of(
+                "hsCode","76169990","mfn","0","vat","10","fta",Map.of())).get("status"));
+    }
+
+    @Test
     void realNotFoundFromPortalIsRecognizedOnlyWithStructuredCode() {
         String body = """
                 {"code":"HS_NOT_FOUND","hsCode":"39249090",
