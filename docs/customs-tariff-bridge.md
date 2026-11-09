@@ -216,3 +216,46 @@ cd /opt/tuonghoa/demo/bom-frontend
 node --test tests/customsLandedCost.test.mjs
 npm run build
 ```
+
+## Missing HS in Portal without false "missing API" (Nov 2026)
+
+Some installations replace a Portal HTTP 404 body with a generic error
+page, causing Demo to show a route/Nginx error even when the controller
+itself queried `bieuthueTB` and found no matching tariff code.
+
+The Portal internal API now returns a **structured negative lookup**
+with HTTP 200:
+
+```json
+{"status":"NOT_FOUND","code":"HS_NOT_FOUND","hsCode":"39269099",
+ "message":"Mã HS 39269099 chưa có trong bảng bieuthueTB của Portal ..."}
+```
+
+A successful lookup contains `hsCode`, `fta`, `mfn`, `vat` and the
+source metadata. Demo must validate the payload `status` and `code`:
+it must NOT treat every HTTP 200 as a found tariff. Missing codes have
+**no rate**, not a fabricated 0% rate. Ordinary 404s without structured
+`HS_NOT_FOUND` still mean that the route, proxy or deployment requires
+diagnostics.
+
+Deploy **both** Portal `master` and Demo `main`. Do not deploy Portal
+alone with an older Demo client that assumes HTTP 200 always means a hit.
+
+To confirm the underlying tariff data, query the **actual Portal
+database** (usually `tuonghoa`, depending on deployment):
+
+```sql
+SELECT id, hscode, "preferentialImTax", "Vat"
+FROM "bieuthueTB"
+WHERE regexp_replace(coalesce(hscode::text,''),'[^0-9]','','g')
+      IN ('76169990','39269099')
+ORDER BY hscode, id DESC;
+
+SELECT id, hscode, "viDescription"
+FROM "bieuthueTB"
+WHERE regexp_replace(coalesce(hscode::text,''),'[^0-9]','','g') LIKE '39269%'
+ORDER BY hscode, id DESC LIMIT 40;
+```
+
+The second query is for **diagnosis only**. Similar codes are not
+substitutes for the exact code on a customs declaration.
