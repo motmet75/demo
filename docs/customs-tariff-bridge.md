@@ -162,3 +162,57 @@ cd /opt/tuonghoa/demo
 cd bom-frontend
 node --test tests/customsTariffCalc.test.mjs
 ```
+
+## Pre-import landed unit price in VND, at the declaration date
+
+For import declarations (`<IMP>`), open the expanded
+**Giá nhập kho VND sau thuế · FTA / HS** section **before confirming stock**.
+
+- All-in unit price = (goods value VND + original import duty or reviewed
+  FTA duty + original/import VAT or scenario VAT + separately entered
+  special consumption/environmental taxes + separately allocated
+  freight, customs clearance and other direct costs) / declared quantity.
+- Inventory-unit indicative price divides the same amount by the declared
+  quantity times the selected stock conversion ratio.
+- Operators can explicitly choose the goods value VND basis:
+  * original customs taxable value on the declaration (only an **indicative
+    proxy** for purchase value, not necessarily the actual acquisition cost);
+  * original invoice total × the **historical exchange rate entered by
+    the operator**, for the actual customs declaration date.
+- No historical exchange rate is invented or fetched as if it were today's
+  rate. If the invoice is in USD/EUR/etc and this mode is selected without
+  a historical rate, the price is shown as unavailable.
+- For the original `DECLARED` scenario, preserve exact duty/VAT **amounts**
+  printed on the customs declaration when unchanged, rather than recomputing
+  them from the rates and causing rounding differences.
+- A scenario based on an FTA is applied only when the operator confirms that
+  actual C/O and applicable FTA conditions have been reviewed. Historical
+  periods must use the correct rates for that period, not today's rates.
+- Two separate unit prices are shown: **including import VAT** (cash-out
+  view), and **indicative inventory cost** (VAT excluded only if the operator
+  explicitly marks import input VAT as creditable).
+- Other direct acquisition costs and other import taxes are editable VND
+  amounts **per declaration line**; do not enter the same tax/charge twice.
+
+Example, **declaration 103847745300, 19/02/2021, HS 39249090**:
+400 PCE, 303 USD invoice, 6,941,730 VND original customs taxable value,
+1,527,180.6 VND original duty and 846,891 VND original customs VAT.
+With no separately allocated expenses, the all-in price using the
+customs taxable value as a proxy is 9,315,801.6 VND, or
+**23,289.504 VND/PCE**. Before creditable VAT, it is
+**21,172.2765 VND/PCE**. Invoice-price-based costing requires the
+historical FX rate plus freight/valuation adjustments as appropriate.
+
+**This is a read-only review preview.** It does not yet persist a
+purchase unit price to `inventory`, modify valuation/cost ledgers,
+or automatically mark a declaration as posted. The operator must
+confirm the correct cost allocation and VAT creditability separately.
+Missing data is displayed as unavailable, not silently as zero.
+
+Regression test:
+
+```bash
+cd /opt/tuonghoa/demo/bom-frontend
+node --test tests/customsLandedCost.test.mjs
+npm run build
+```
