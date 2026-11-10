@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react'
+import * as XLSX from 'xlsx'
 import { patchInventoryXlsx, downloadPatchTemplate } from '../../api/inventoryApi'
 
 /**
@@ -10,7 +11,7 @@ import { patchInventoryXlsx, downloadPatchTemplate } from '../../api/inventoryAp
  *   2. Fill in order_to_deduction and/or material_quota_percentage
  *   3. Upload the CSV back — only those two columns are patched in the DB
  */
-export default function InventoryPatchCsv({ onPatchComplete }) {
+export default function InventoryPatchCsv({ onPatchComplete, selectedRows = [], priceOnly = false }) {
   const [file, setFile]         = useState(null)
   const [uploading, setUploading] = useState(false)
   const [downloading, setDownloading] = useState(false)
@@ -22,11 +23,35 @@ export default function InventoryPatchCsv({ onPatchComplete }) {
     setDownloading(true)
     setResult(null)
     try {
-      const blob = await downloadPatchTemplate()
+      const blob = !priceOnly ? await downloadPatchTemplate() : (() => {
+        if (!selectedRows.length) throw new Error('Hãy chọn các dòng tồn kho trong bảng trước khi tải mẫu giá.')
+        // Reuse the existing /patch-xlsx column format; use immutable inventory
+        // UUID, never a material name or batch as the update key.
+        const data = selectedRows.map(row => ({
+          id: String(row.inventoryId || row.id),
+          material_code: String(row.materialCode || ''),
+          material_name: String(row.materialName || ''),
+          warehouse_code: String(row.warehouseCode || ''),
+          batch_no: String(row.batchNo || ''),
+          currency: String(row.currency || ''),
+          unit_price: row.unitPrice == null ? '' : Number(row.unitPrice),
+        }))
+        const sheet = XLSX.utils.json_to_sheet(data, {header: [
+          'id','material_code','material_name','warehouse_code','batch_no','currency','unit_price',
+        ]})
+        sheet['!cols'] = [
+          {wch:38},{wch:23},{wch:46},{wch:20},{wch:22},{wch:12},{wch:20},
+        ]
+        const workbook = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(workbook, sheet, 'inventory_patch')
+        return new Blob([XLSX.write(workbook,{bookType:'xlsx',type:'array'})],{
+          type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        })
+      })()
       const url  = URL.createObjectURL(blob)
       const a    = document.createElement('a')
       a.href     = url
-      a.download = 'inventory_patch_template.xlsx'
+      a.download = priceOnly ? `inventory_price_selected_${selectedRows.length}.xlsx` : 'inventory_patch_template.xlsx'
       document.body.appendChild(a)
       a.click()
       a.remove()
@@ -67,40 +92,49 @@ export default function InventoryPatchCsv({ onPatchComplete }) {
   return (
     <div style={{ padding: '12px 0' }}>
       <h3 style={{ margin: '0 0 6px 0', fontSize: 15 }}>
-        Patch Deduction &amp; Quota (XLSX)
+        {priceOnly ? `Cập nhật giá tồn kho bằng Excel (${selectedRows.length} dòng đã chọn)` : 'Patch Deduction & Quota (XLSX)'}
       </h3>
 
       {/* description */}
       <div style={{ fontSize: 12, color: '#555', marginBottom: 10, lineHeight: 1.6 }}>
-        Update <strong>order_to_deduction</strong> and/or{' '}
-        <strong>material_quota_percentage</strong> for existing inventory rows.
-        <br />
-        Only the columns present in the CSV header are changed — absent columns are left untouched.
-        <br />
-        Required CSV column: <code>id</code> (inventory UUID).
-        Optional: <code>order_to_deduction</code>, <code>material_quota_percentage</code>.
+        {priceOnly ? <>
+          Lọc theo tên, kho hoặc lô → chọn dòng tồn kho → tải Excel.
+          Chỉ sửa cột <strong>unit_price</strong> (giá theo đơn vị tồn kho).
+          Các cột id, mã vật tư, kho, batch và currency dùng để nhận dạng/đối chiếu;
+          không sửa id. Hệ thống cập nhật theo UUID, không nhân đôi tồn kho.
+          Cột giá trống không cập nhật. Giá phải là số không âm, không có dấu phân cách hàng nghìn.
+        </> : <>
+          Update <strong>order_to_deduction</strong> and/or{' '}
+          <strong>material_quota_percentage</strong> for existing inventory rows.
+          <br />
+          Only the columns present in the XLSX header are changed — absent columns are left untouched.
+          <br />
+          Required column: <code>id</code> (inventory UUID).
+          Optional: <code>order_to_deduction</code>, <code>material_quota_percentage</code>, <code>unit_price</code>.
+        </>}
       </div>
 
       {/* step 1 — download template */}
       <div style={sectionStyle}>
         <span style={{ fontWeight: 600, fontSize: 13 }}>Step 1 — Download template</span>
         <div style={{ fontSize: 12, color: '#666', marginTop: 3, marginBottom: 8 }}>
-          The template is pre-filled with all current inventory rows (id, material code, batch, warehouse).
-          Just fill in the two columns and save.
+          {priceOnly
+            ? `Mẫu Excel gồm đúng ${selectedRows.length} dòng đang được chọn trong bộ lọc; lưu lại sau khi thay đổi giá.`
+            : 'Tải mẫu Excel hiện có. Nhập những cột cần thay đổi rồi lưu.'}
         </div>
         <button
           type="button"
           onClick={handleDownloadTemplate}
-          disabled={downloading}
+          disabled={downloading || (priceOnly && selectedRows.length === 0)}
           style={btnStyle('#1565c0')}
         >
-          {downloading ? '⏳ Downloading…' : '⬇ Download Template XLSX'}
+          {downloading ? '⏳ Đang tạo mẫu…' : priceOnly ? '⬇ Tải Excel giá cho các dòng đã chọn' : '⬇ Download Template XLSX'}
         </button>
       </div>
 
       {/* step 2 — upload filled csv */}
       <div style={sectionStyle}>
-        <span style={{ fontWeight: 600, fontSize: 13 }}>Step 2 — Upload filled XLSX</span>
+        <span style={{ fontWeight: 600, fontSize: 13 }}>Bước 2 — Tải lại Excel đã chỉnh sửa</span>
         <form onSubmit={handleUpload} style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <input
             ref={fileRef}
@@ -114,7 +148,7 @@ export default function InventoryPatchCsv({ onPatchComplete }) {
             disabled={uploading || !file}
             style={btnStyle(uploading || !file ? '#9e9e9e' : '#2e7d32')}
           >
-            {uploading ? '⏳ Uploading…' : '⬆ Upload & Patch'}
+            {uploading ? '⏳ Đang cập nhật…' : priceOnly ? '⬆ Cập nhật đơn giá theo Excel' : '⬆ Upload & Patch'}
           </button>
           {file && (
             <span style={{ fontSize: 12, color: '#333' }}>
