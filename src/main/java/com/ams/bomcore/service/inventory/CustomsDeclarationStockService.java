@@ -267,7 +267,15 @@ public class CustomsDeclarationStockService {
             if(taxRate.signum()<0||taxRate.compareTo(new BigDecimal("100"))>0
                 ||taxRate.stripTrailingZeros().scale()>3)
                 throw fail("VAT phải từ 0 đến 100%, tối đa 3 chữ số thập phân.");
-            if(item.unitPrice()!=null){
+            if("IN".equals(direction)) {
+                var cost = importCosts.get(line.lineIndex());
+                // Legacy document totals now use VND on imports. This prevents
+                // summing mixed USD/CAD amounts into one misleading total.
+                declaredSubtotal=declaredSubtotal.add(cost.goodsValueVnd())
+                    .add(cost.importDutyVnd()).add(cost.additionalCostsVnd());
+                declaredVat=declaredVat.add(cost.importVatVnd());
+                taxAmountByLine.put(line.lineIndex(),cost.importVatVnd());
+            } else if(item.unitPrice()!=null){
                 BigDecimal base=item.unitPrice().multiply(qty).setScale(4,RoundingMode.HALF_UP);
                 BigDecimal lineTax=base.multiply(taxRate)
                     .divide(new BigDecimal("100"),4,RoundingMode.HALF_UP);
@@ -275,7 +283,6 @@ public class CustomsDeclarationStockService {
                 declaredVat=declaredVat.add(lineTax);
                 taxAmountByLine.put(line.lineIndex(),lineTax);
             } else {
-                // Do not save an apparently complete total without line prices.
                 allLinesPriced=false;
             }
             if(line.warehouseId()==null)throw fail("Chưa chọn kho dòng "+(line.lineIndex()+1));
