@@ -19,6 +19,7 @@ import QrCode2Icon from '@mui/icons-material/QrCode2'
 import ZoomInIcon from '@mui/icons-material/ZoomIn'
 import { useI18n } from '../../i18n/I18nContext'
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode'
+import {qrRecoveryCandidates} from '../../utils/qrImageRecovery'
 
 /**
  * Shared QR reader. Image uploads are decoded in the browser by html5-qrcode:
@@ -51,6 +52,7 @@ export default function VoucherQrScanDialog({
   const [starting, setStarting] = useState(false)
   const [streaming, setStreaming] = useState(false)
   const [decodingFile, setDecodingFile] = useState(false)
+  const [decodeProgress, setDecodeProgress] = useState('')
   const [error, setError] = useState('')
   const [facingMode, setFacingMode] = useState('environment')
   const [zoomRange, setZoomRange] = useState(null)
@@ -181,28 +183,66 @@ export default function VoucherQrScanDialog({
 
   const decodeImageFile = async file => {
     if (!file) return
+    if (!file.type?.startsWith('image/')) {
+      setError('Chỉ hỗ trợ ảnh QR. Hãy chọn ảnh JPG hoặc PNG từ thư viện.')
+      return
+    }
     setError('')
-    setDecodingFile(true)
+    setDecodeProgress('Đang đọc QR từ ảnh gốc…')
     detectedRef.current = false
     await stopCamera()
+    if (!openRef.current) return
     const runId = ++runIdRef.current
+    setDecodingFile(true)
+    const scanner = createScanner()
+    scannerRef.current = scanner
+    let decodedText = ''
+    let tried = 0
     try {
-      const scanner = createScanner()
-      scannerRef.current = scanner
-      // scanFile decodes the local selected photo without uploading it.
-      const decodedText = await scanner.scanFile(file, true)
-      if (runId === runIdRef.current) handleDetected(decodedText)
-    } catch (e) {
-      if (runId === runIdRef.current) {
-        setError(e?.message || 'Không đọc được QR trong ảnh. Hãy chọn ảnh rõ nét hơn.')
+      try {
+        // The first attempt always preserves the original unmodified photo.
+        decodedText = await scanner.scanFile(file, false)
+      } catch {
+        // Not a fatal error. Faint ID-card QRs can need image enhancement.
+      }
+      if (!decodedText && runId === runIdRef.current) {
+        try {
+          for await (const candidate of qrRecoveryCandidates(file)) {
+            if (runId !== runIdRef.current || !openRef.current) break
+            tried++
+            setDecodeProgress(`Đang tăng tương phản và thử đọc QR (${tried}/6)…`)
+            try {
+              decodedText = await scanner.scanFile(candidate.file, false)
+            } catch {
+              // Try the next locally generated image, without showing a
+              // raw ZXing/Html5Qrcode error to an invoice operator.
+            }
+            if (decodedText) break
+          }
+        } catch {
+          // Image-processing unsupported/failed. Keep a useful Vietnamese
+          // instruction rather than exposing a browser exception.
+        }
+      }
+      if (decodedText && runId === runIdRef.current) {
+        handleDetected(decodedText)
+      } else if (runId === runIdRef.current) {
+        setError(
+          'Chưa đọc được QR trên CCCD, kể cả sau khi tăng tương phản. ' +
+          'Ảnh có thể bị mờ, lóa hoặc mất nét. Hãy chụp lại với camera sau, ' +
+          'đủ sáng, giữ điện thoại đứng yên và để toàn bộ mã QR trong ảnh. ' +
+          'Bạn cũng có thể dùng nút Tải 1–2 ảnh CCCD để nhận dạng tên/địa chỉ.'
+        )
       }
     } finally {
       if (runId === runIdRef.current) {
-        const scanner = scannerRef.current
         scannerRef.current = null
-        try { await scanner?.clear() } catch {}
+        try { await scanner.clear() } catch {
+          // Closing the dialog can detach its DOM element.
+        }
+        setDecodingFile(false)
+        setDecodeProgress('')
       }
-      setDecodingFile(false)
     }
   }
 
@@ -250,7 +290,7 @@ export default function VoucherQrScanDialog({
             <Box sx={{ textAlign: 'center', color: '#e2e8f0', zIndex: 1 }}>
               <CircularProgress size={28} sx={{ color: '#fff' }} />
               <Typography variant="body2" sx={{ mt: 1 }}>
-                {decodingFile ? 'Đang đọc ảnh QR…' : t('shopOrder.scanner.starting')}
+                {decodingFile ? (decodeProgress || 'Đang đọc ảnh QR…') : t('shopOrder.scanner.starting')}
               </Typography>
             </Box>
           )}
@@ -315,6 +355,8 @@ export default function VoucherQrScanDialog({
         </Stack>
         <Typography variant="caption" color="text.secondary">
           Ảnh QR được đọc ngay trong trình duyệt, không tải ảnh lên server.
+          Nếu mã in nhạt trên nền xanh của CCCD, ứng dụng sẽ tự thử xử lý
+          tương phản trước khi báo không đọc được.
         </Typography>
 
         <TextField label={shownManualLabel} size="small" fullWidth
