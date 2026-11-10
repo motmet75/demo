@@ -32,7 +32,7 @@ export default function PaymentMethodConfirmDialog({ open, order, action = 'paid
     : availableTables
   const selectedTable = tableOptions.find(table => String(table.id) === String(selectedTableId)) || null
 
-  const title = printing ? 'Chọn thanh toán trước khi in hóa đơn' : clearing ? 'Thanh toán & dọn bàn' : finishing ? 'Hoàn tất & trả món' : 'Xác nhận đã thanh toán'
+  const title = printing ? 'Chọn thanh toán trước khi in hóa đơn' : clearing ? 'Thanh toán & dọn bàn' : finishing ? 'Hoàn tất & trả đơn' : 'Xác nhận đã thanh toán'
   const submit = () => onConfirm(alreadyPaid
     ? { paymentMethod: null, splitCashAmount: null, tableId: selectedTableId || null }
     : { paymentMethod, splitCashAmount: paymentMethod === 'SPLIT' ? cashAmount : null, splitQrAmount: paymentMethod === 'SPLIT' ? qrAmount : null, tableId: selectedTableId || null })
@@ -42,7 +42,7 @@ export default function PaymentMethodConfirmDialog({ open, order, action = 'paid
     <DialogContent sx={{ pt: '10px !important', display: 'flex', flexDirection: 'column', gap: 2 }}>
       <Alert severity={alreadyPaid ? 'success' : payLater ? 'warning' : 'info'}>
         {alreadyPaid
-          ? 'Đơn đã thanh toán. Xác nhận hoàn tất và trả món cho khách.'
+          ? 'Đơn đã thanh toán. Xác nhận hoàn tất và trả đơn cho khách.'
           : printing
           ? 'Chọn cách khách dự kiến thanh toán để in đúng hóa đơn. Bạn vẫn có thể đổi trước khi xác nhận đã thanh toán.'
           : payLater
@@ -122,7 +122,7 @@ export default function PaymentMethodConfirmDialog({ open, order, action = 'paid
     <DialogActions>
       <Button disabled={busy} onClick={onCancel}>Hủy</Button>
       <Button disabled={busy || (!alreadyPaid && (!paymentMethod || splitInvalid))} variant="contained" color="success" onClick={submit}>
-        {busy ? 'Đang xử lý…' : printing ? 'Lưu & in hóa đơn' : clearing ? 'Xác nhận thu tiền & dọn bàn' : alreadyPaid ? 'Hoàn tất & trả món' : payLater ? 'Đã phục vụ · thanh toán sau' : finishing ? 'Xác nhận thu tiền & trả món' : 'Xác nhận đã thu tiền'}
+        {busy ? 'Đang xử lý…' : printing ? 'Lưu & in hóa đơn' : clearing ? 'Xác nhận thu tiền & dọn bàn' : alreadyPaid ? 'Hoàn tất & trả đơn' : payLater ? 'Đã phục vụ · thanh toán sau' : finishing ? 'Xác nhận thu tiền & trả đơn' : 'Xác nhận đã thu tiền'}
       </Button>
     </DialogActions>
   </Dialog>
