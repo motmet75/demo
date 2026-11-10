@@ -555,7 +555,7 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
       <Button variant="contained" color="success" onClick={issue} disabled={busy || !readyToSend || existingConflict || !preview || !lineIdsAvailable || invalidItemName}>{busy ? <CircularProgress size={20} /> : 'Gửi sang VIN-HOADON (chưa ký)'}</Button>
     </DialogActions>}
     {(invoice || (showConfig && (!isAdmin || configOnly))) && <DialogActions><Button onClick={onClose} disabled={busy}>Đóng</Button></DialogActions>}
-    <VoucherQrScanDialog open={cccdQrOpen}
+    <VoucherQrScanDialog open={cccdQrOpen} enableZoom
       title="Quét QR trên CCCD / Căn cước"
       scannerLabel="Hướng camera vào mã QR trên thẻ; cũng có thể chọn ảnh từ thư viện"
       manualLabel="Dán nội dung QR CCCD nếu camera không quét được"
