@@ -2467,7 +2467,7 @@ export default function ShopOrderGrid() {
   const cardActions = {
     receive: row => askConfirm({
       title: 'Xác nhận đơn',
-      message: `Xác nhận đơn #${row.orderNumber ?? row.orderCode}. Tích “Đã trả tiền” nếu đã nhận tiền; tích “Hoàn tất đơn” nếu đã thu tiền và trả đủ món.`,
+      message: `Xác nhận đơn #${row.orderNumber ?? row.orderCode}. Tích “Đã trả tiền” nếu đã nhận tiền; tích “Hoàn tất đơn” nếu đã thu tiền và bàn giao đủ hàng.`,
       confirmLabel: 'Xác nhận',
       confirmColor: 'primary',
       quickConfirm: true,
