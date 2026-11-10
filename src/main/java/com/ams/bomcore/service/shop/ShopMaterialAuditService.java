@@ -332,29 +332,67 @@ public class ShopMaterialAuditService {
     }
 
     @Transactional
-    public MenuAvailabilityRow updateAvailabilityOverride(UUID modelId, BigDecimal units, UUID tenantId, UUID companyId, LocalDate businessDate) {
+    public MenuAvailabilityRow updateAvailabilityOverride(UUID modelId, BigDecimal units,
+            UUID tenantId, UUID companyId, LocalDate businessDate) {
+        return updateAvailabilityOverride(modelId, units, tenantId, companyId, businessDate, null);
+    }
+
+    @Transactional
+    public MenuAvailabilityRow updateAvailabilityOverride(UUID modelId, BigDecimal units,
+            UUID tenantId, UUID companyId, LocalDate businessDate, String requestedMode) {
         Model model = modelRepository.findById(modelId)
                 .orElseThrow(() -> new IllegalArgumentException("Model not found: " + modelId));
         if (!tenantId.equals(model.getTenantId()) || !companyId.equals(model.getCompanyId())) {
             throw new IllegalArgumentException("Model does not belong to this company");
         }
-        LocalDate effectiveDate = businessDate != null ? businessDate : LocalDate.now();
-        BigDecimal storedDailyCap = null;
-        if (units != null) {
-            /*
-             * Counter/iPad screens collect "left units" for the rest of today.
-             * The order validator works from a daily cap and subtracts already-sold
-             * quantity, so persist sold-so-far + requested remaining. This keeps
-             * the UI intuitive while preserving automatic countdown after orders.
-             */
-            storedDailyCap = orZero(soldToday(modelId, tenantId, companyId, effectiveDate)).add(units);
+        String mode = requestedMode == null || requestedMode.isBlank()
+                ? model.getShopAvailabilityMode() : requestedMode.trim().toUpperCase(java.util.Locale.ROOT);
+        if (!"DAILY".equals(mode) && !"WAREHOUSE_TOTAL".equals(mode))
+            throw new IllegalArgumentException("Chế độ phải là DAILY hoặc WAREHOUSE_TOTAL.");
+        if ("WAREHOUSE_TOTAL".equals(mode)) {
+            if (buildModelRequirements(model, tenantId, companyId).isEmpty())
+                throw new IllegalArgumentException(
+                        "Chế độ Tổng tồn kho yêu cầu menu liên kết BOM/vật tư trước khi kích hoạt.");
+            model.setShopAvailabilityMode("WAREHOUSE_TOTAL");
+            model.setShopAvailableUnitsOverride(null);
+            model.setShopAvailableUnitsOverrideDate(null);
+        } else {
+            model.setShopAvailabilityMode("DAILY");
+            if (units != null && (units.signum() < 0 || units.scale() > 4))
+                throw new IllegalArgumentException("Số lượng còn bán hôm nay phải không âm, tối đa 4 số thập phân.");
+            LocalDate effectiveDate = businessDate != null ? businessDate : LocalDate.now();
+            BigDecimal dailyCap = units == null ? null :
+                    orZero(soldToday(modelId, tenantId, companyId, effectiveDate)).add(units);
+            model.setShopAvailableUnitsOverride(dailyCap);
+            model.setShopAvailableUnitsOverrideDate(units != null ? effectiveDate : null);
         }
-        model.setShopAvailableUnitsOverride(storedDailyCap);
-        model.setShopAvailableUnitsOverrideDate(units != null ? effectiveDate : null);
         modelRepository.save(model);
         Map<UUID, BigDecimal> available = availableByMaterial(tenantId, companyId);
         subtractOpenDemand(available, tenantId, companyId, null);
-        return availabilityForModel(model, tenantId, companyId, available, effectiveDate);
+        return availabilityForModel(model, tenantId, companyId, available,
+                businessDate != null ? businessDate : LocalDate.now());
+    }
+
+    /**
+     * Stock available to THIS request, excluding its existing reservations
+     * when an order is being edited. Returns null when no valid stock BOM
+     * exists; never treat that as unlimited for WAREHOUSE_TOTAL.
+     */
+    @Transactional(readOnly = true)
+    public BigDecimal warehouseUnitsAvailableForModel(Model model,
+            UUID tenantId, UUID companyId, UUID excludeOrderId) {
+        Map<UUID, BigDecimal> available=availableByMaterial(tenantId,companyId);
+        subtractOpenDemand(available,tenantId,companyId,excludeOrderId);
+        Map<UUID,MaterialRequirement> requirements=buildModelRequirements(model,tenantId,companyId);
+        if(requirements.isEmpty())return null;
+        BigDecimal possible=null;
+        for(MaterialRequirement req:requirements.values()) {
+            if(req.requiredQty.compareTo(EPSILON)<=0)continue;
+            BigDecimal stock=positive(available.getOrDefault(req.materialId,BigDecimal.ZERO));
+            BigDecimal units=stock.divide(req.requiredQty,0,RoundingMode.DOWN);
+            possible=possible==null?units:possible.min(units);
+        }
+        return possible;
     }
 
     private MenuAvailabilityRow availabilityForModel(Model model, UUID tenantId, UUID companyId,
@@ -365,16 +403,19 @@ public class ShopMaterialAuditService {
     private MenuAvailabilityRow availabilityForModel(Model model, UUID tenantId, UUID companyId,
                                                      Map<UUID, BigDecimal> availableByMaterial,
                                                      LocalDate businessDate) {
-        BigDecimal dailyLimit = todayOverride(model, businessDate);
+        boolean warehouseMode = "WAREHOUSE_TOTAL".equals(model.getShopAvailabilityMode());
+        BigDecimal dailyLimit = warehouseMode ? null : todayOverride(model, businessDate);
         BigDecimal soldToday = dailyLimit != null ? soldToday(model.getId(), tenantId, companyId, businessDate) : null;
         BigDecimal remainingToday = dailyLimit != null ? dailyLimit.subtract(orZero(soldToday)).max(BigDecimal.ZERO) : null;
         BigDecimal manualRemainingUnits = dailyLimit != null ? remainingToday : null;
         Map<UUID, MaterialRequirement> perUnit = buildModelRequirements(model, tenantId, companyId);
         if (perUnit.isEmpty()) {
-            BigDecimal effective = dailyLimit != null ? remainingToday : null;
+            BigDecimal effective = warehouseMode ? BigDecimal.ZERO :
+                    dailyLimit != null ? remainingToday : null;
             return new MenuAvailabilityRow(model.getId(), model.getModelCode(), model.getModelName(),
                     null, manualRemainingUnits, effective,
-                    false, List.of(), dailyLimit, soldToday, remainingToday);
+                    false, List.of(), dailyLimit, soldToday, remainingToday,
+                    model.getShopAvailabilityMode());
         }
 
         BigDecimal calculated = null;
@@ -391,9 +432,12 @@ public class ShopMaterialAuditService {
                     requiredPerUnit, scale(available), possible));
         }
 
-        BigDecimal effective = dailyLimit != null ? remainingToday : calculated;
+        BigDecimal effective = warehouseMode ? calculated :
+                dailyLimit != null ? (calculated == null ? remainingToday :
+                    remainingToday.min(calculated)) : calculated;
         return new MenuAvailabilityRow(model.getId(), model.getModelCode(), model.getModelName(),
-                calculated, manualRemainingUnits, effective, true, limits, dailyLimit, soldToday, remainingToday);
+                calculated, manualRemainingUnits, effective, true, limits, dailyLimit, soldToday,
+                remainingToday, model.getShopAvailabilityMode());
     }
 
     private BigDecimal todayOverride(Model model, LocalDate businessDate) {
@@ -622,7 +666,8 @@ public class ShopMaterialAuditService {
                                       List<MaterialLimitRow> materialLimits,
                                       BigDecimal dailyLimitUnits,
                                       BigDecimal dailySoldUnits,
-                                      BigDecimal dailyRemainingUnits) {}
+                                      BigDecimal dailyRemainingUnits,
+                                      String availabilityMode) {}
 
     public record MaterialLimitRow(UUID materialId, String materialCode, String materialName,
                                    String materialUnit,
