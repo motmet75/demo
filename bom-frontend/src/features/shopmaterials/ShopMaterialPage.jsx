@@ -159,6 +159,7 @@ export default function ShopMaterialPage() {
   const [openRows, setOpenRows] = useState([])
   const [reportRows, setReportRows] = useState([])
   const [overrideInputs, setOverrideInputs] = useState({})
+  const [availabilityModeInputs,setAvailabilityModeInputs] = useState({})
   const [from, setFrom] = useState(todayInput())
   const [to, setTo] = useState(todayInput())
   const [loading, setLoading] = useState(false)
@@ -235,6 +236,9 @@ export default function ShopMaterialPage() {
       row.modelId,
       row.manualAvailableUnits != null ? String(row.manualAvailableUnits) : '',
     ])))
+    setAvailabilityModeInputs(Object.fromEntries(list.map(row => [
+      row.modelId,row.availabilityMode || 'DAILY'
+    ])))
   }, [])
 
   const loadOpenAudit = useCallback(async () => {
@@ -305,14 +309,20 @@ export default function ShopMaterialPage() {
     setError('')
     setSuccess('')
     try {
+      const mode = availabilityModeInputs[row.modelId] || 'DAILY'
       const raw = overrideInputs[row.modelId]
-      const units = raw == null || String(raw).trim() === '' ? null : Number(raw)
-      if (units != null && (Number.isNaN(units) || units < 0)) {
-        throw new Error('Left units must be a positive number or blank')
+      const units = mode==='WAREHOUSE_TOTAL' ? null :
+        raw == null || String(raw).trim() === '' ? null : Number(raw)
+      if (units != null && (!Number.isFinite(units) || units < 0)) {
+        throw new Error('Giới hạn còn bán hôm nay phải không âm hoặc để trống.')
       }
-      await apiData(updateMenuAvailabilityOverride(row.modelId, units), 'Failed to save available units')
+      if(mode==='WAREHOUSE_TOTAL'&&!row.hasBom) {
+        throw new Error('Tổng tồn kho yêu cầu menu được liên kết vật tư/BOM trước khi lưu.')
+      }
+      await apiData(updateMenuAvailabilityOverride(row.modelId, units, mode),
+        'Không lưu được chế độ số lượng bán')
       await loadAvailability()
-      setSuccess(`Availability saved for ${row.modelName}`)
+      setSuccess(`Đã lưu chế độ ${mode==='WAREHOUSE_TOTAL'?'Tổng tồn kho':'Theo ngày'} cho ${row.modelName}.`)
     } catch (e) {
       setError(e.message || 'Failed to save available units')
     } finally {
@@ -393,8 +403,11 @@ export default function ShopMaterialPage() {
         <Paper elevation={0} sx={{ border: '1px solid #e2e8f0', mb: 1.5 }}>
           <Box sx={{ px: 1.5, py: 1.25, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
             <Box>
-              <Typography fontWeight={900}>Processing Unit Availability</Typography>
-              <Typography variant="caption" color="text.secondary">Calculated from real inventory minus open shop demand; manual left units mean remaining units from now and count down as new orders are placed.</Typography>
+              <Typography fontWeight={900}>Số lượng có thể bán · Hàng hóa / Thực phẩm</Typography>
+              <Typography variant="caption" color="text.secondary">
+                Theo ngày: giới hạn bán mỗi ngày; Tổng tồn kho: theo tồn vật tư thực tế, phù hợp hàng bán nhiều ngày.
+                Tồn kho đã trừ phần đơn đang giữ/chờ; chế độ tổng kho cần liên kết BOM.
+              </Typography>
             </Box>
             <Tooltip title="Refresh availability">
               <IconButton onClick={async () => { try { await loadAvailability() } catch (e) { setError(e.message || 'Failed to refresh availability') } }}>
@@ -445,8 +458,9 @@ export default function ShopMaterialPage() {
               <TableHead>
                 <TableRow>
                   <TableCell sx={{ fontWeight: 900 }}>Menu item</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 900 }}>Calculated</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 900 }}>Left today</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 900 }}>Tồn theo BOM</TableCell>
+                  <TableCell sx={{ fontWeight: 900, minWidth: 170 }}>Chế độ bán</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 900 }}>Còn bán hôm nay</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 900 }}>Effective</TableCell>
                   <TableCell sx={{ fontWeight: 900 }}>Limiting material</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 900 }}>Action</TableCell>
@@ -454,13 +468,13 @@ export default function ShopMaterialPage() {
               </TableHead>
               <TableBody>
                 {loading && availability.length === 0 && (
-                  <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4 }}><CircularProgress /></TableCell></TableRow>
+                  <TableRow><TableCell colSpan={7} align="center" sx={{ py: 4 }}><CircularProgress /></TableCell></TableRow>
                 )}
                 {!loading && availability.length === 0 && (
-                  <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4, color: 'text.secondary' }}>No active menu items found</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={7} align="center" sx={{ py: 4, color: 'text.secondary' }}>No active menu items found</TableCell></TableRow>
                 )}
                 {!loading && availability.length > 0 && filteredAvailability.length === 0 && (
-                  <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4, color: 'text.secondary' }}>No menu items match the current filter</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={7} align="center" sx={{ py: 4, color: 'text.secondary' }}>No menu items match the current filter</TableCell></TableRow>
                 )}
                 {filteredAvailability.map(row => {
                   const limits = Array.isArray(row.materialLimits) ? row.materialLimits : []
@@ -472,10 +486,22 @@ export default function ShopMaterialPage() {
                         <Typography fontWeight={800}>{row.modelName}</Typography>
                         <Typography variant="caption" color="text.secondary">{row.modelCode || row.modelId}</Typography>
                       </TableCell>
-                      <TableCell align="right">{row.hasBom ? fmtQty(row.calculatedAvailableUnits) : <Chip label="No BOM" size="small" />}</TableCell>
+                      <TableCell align="right">{row.hasBom ? fmtQty(row.calculatedAvailableUnits) : <Chip label="Chưa có BOM" size="small" />}</TableCell>
+                      <TableCell sx={{minWidth:175}}>
+                        <TextField select size="small" fullWidth
+                          value={availabilityModeInputs[row.modelId] || row.availabilityMode || 'DAILY'}
+                          disabled={savingModelId===row.modelId}
+                          onChange={e=>setAvailabilityModeInputs(prev=>({...prev,[row.modelId]:e.target.value}))}>
+                          <MenuItem value="DAILY">Theo ngày (thực phẩm)</MenuItem>
+                          <MenuItem value="WAREHOUSE_TOTAL" disabled={!row.hasBom}>Tổng tồn kho (hàng hóa)</MenuItem>
+                        </TextField>
+                        {availabilityModeInputs[row.modelId]==='WAREHOUSE_TOTAL' &&
+                          <Typography variant="caption" color="text.secondary">Không đặt lại mỗi ngày</Typography>}
+                      </TableCell>
                       <TableCell align="right" sx={{ width: 150 }}>
                         <FormattedNumberField
                           size="small"
+                          disabled={(availabilityModeInputs[row.modelId]||row.availabilityMode)==='WAREHOUSE_TOTAL'}
                           value={overrideInputs[row.modelId] ?? ''}
                           onChange={e => setOverrideInputs(prev => ({ ...prev, [row.modelId]: e.target.value }))}
                           inputProps={{ min: 0, step: '0.001' }}
