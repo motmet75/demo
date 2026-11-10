@@ -146,3 +146,77 @@ export async function* qrRecoveryCandidates(file){
     yield {file:candidate,description:region.name+'/'+mode}
   }
 }
+
+
+/**
+ * The actual low-contrast CCCD JPG supplied for testing was successfully
+ * decoded using: native-resolution 432x432 crop around (52%, 60%),
+ * GREEN RGB channel -> 3x3 median -> ZBar. More aggressive black/white
+ * thresholding, scaling or adding white padding FAILED on that sample.
+ *
+ * No private QR image or decoded identity data is checked into the repo.
+ * This pure function is unit-testable without DOM dependencies.
+ */
+export function medianGreen3x3(imageData) {
+  const {width,height,data}=imageData
+  if(!width||!height||!data) return imageData
+  const green=new Uint8Array(width*height)
+  for(let i=0;i<green.length;i++)green[i]=data[i*4+1]
+  const values=new Array(9)
+  const at=(x,y)=>green[Math.max(0,Math.min(height-1,y))*width+
+    Math.max(0,Math.min(width-1,x))]
+  for(let y=0;y<height;y++){
+    for(let x=0;x<width;x++){
+      let k=0
+      for(let dy=-1;dy<=1;dy++){
+        for(let dx=-1;dx<=1;dx++) values[k++]=at(x+dx,y+dy)
+      }
+      values.sort((a,b)=>a-b)
+      const shade=values[4],p=(y*width+x)*4
+      data[p]=shade
+      data[p+1]=shade
+      data[p+2]=shade
+      data[p+3]=255
+    }
+  }
+  return imageData
+}
+
+function cropAt(width,height,cx,cy,fraction){
+  const size=Math.max(1,Math.round(Math.min(width,height)*fraction))
+  return {x:bound(Math.round(width*cx-size/2),0,Math.max(0,width-size)),
+    y:bound(Math.round(height*cy-size/2),0,Math.max(0,height-size)),
+    size}
+}
+
+/**
+ * Yield a few compact ImageData frames directly to the ZBar WebAssembly
+ * decoder. CRITICAL: do not resize, binarize or add a border for the
+ * original difficult CCCD sample; its signal is fragile.
+ */
+export async function* qrGreenMedianCandidates(file){
+  if(!file?.type?.startsWith('image/'))return
+  const image=await loadLocalImage(file)
+  const width=image.naturalWidth,height=image.naturalHeight
+  if(!width||!height)return
+  const crops=[
+    cropAt(width,height,.52,.60,.45),  // validated portrait CCCD sample
+    cropAt(width,height,.50,.50,.45),
+    cropAt(width,height,.50,.35,.45),
+    cropAt(width,height,.52,.60,.55),
+    cropAt(width,height,.50,.50,.70)
+  ]
+  for(const crop of crops){
+    const canvas=document.createElement('canvas')
+    canvas.width=crop.size
+    canvas.height=crop.size
+    const ctx=canvas.getContext('2d',{willReadFrequently:true})
+    if(!ctx) return
+    // Exactly 1 image pixel per output pixel: avoids interpolation artifacts.
+    ctx.drawImage(image,crop.x,crop.y,crop.size,crop.size,
+      0,0,crop.size,crop.size)
+    const pixels=ctx.getImageData(0,0,crop.size,crop.size)
+    canvas.width=0;canvas.height=0
+    yield medianGreen3x3(pixels)
+  }
+}
