@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
+import {draftInventoryCurrencyPatch} from '../../utils/inventoryCurrencyPatch'
 import { patchInventoryXlsx, downloadPatchTemplate } from '../../api/inventoryApi'
 
 /**
@@ -17,6 +18,10 @@ export default function InventoryPatchCsv({ onPatchComplete, selectedRows = [], 
   const [downloading, setDownloading] = useState(false)
   const [result, setResult]     = useState(null)
   const fileRef = useRef(null)
+  const [targetCurrency,setTargetCurrency] = useState('')
+  const [currencyMode,setCurrencyMode] = useState('KEEP')
+  const [usdToVnd,setUsdToVnd] = useState('')
+  const [relabelConfirmed,setRelabelConfirmed] = useState(false)
 
   // ── download template ────────────────────────────────────────────
   async function handleDownloadTemplate() {
@@ -24,34 +29,34 @@ export default function InventoryPatchCsv({ onPatchComplete, selectedRows = [], 
     setResult(null)
     try {
       const blob = !priceOnly ? await downloadPatchTemplate() : (() => {
-        if (!selectedRows.length) throw new Error('Hãy chọn các dòng tồn kho trong bảng trước khi tải mẫu giá.')
-        // Reuse the existing /patch-xlsx column format; use immutable inventory
-        // UUID, never a material name or batch as the update key.
-        const data = selectedRows.map(row => ({
-          id: String(row.inventoryId || row.id),
-          material_code: String(row.materialCode || ''),
-          material_name: String(row.materialName || ''),
-          warehouse_code: String(row.warehouseCode || ''),
-          batch_no: String(row.batchNo || ''),
-          currency: String(row.currency || ''),
-          unit_price: row.unitPrice == null ? '' : Number(row.unitPrice),
-        }))
-        const sheet = XLSX.utils.json_to_sheet(data, {header: [
-          'id','material_code','material_name','warehouse_code','batch_no','currency','unit_price',
+        if (!selectedRows.length) throw new Error('Chọn các dòng tồn kho trước khi tải Excel.')
+        if (targetCurrency && currencyMode === 'KEEP')
+          throw new Error('Chọn Quy đổi hoặc Chỉ sửa nhãn tiền tệ.')
+        if (currencyMode === 'RELABEL' && targetCurrency && !relabelConfirmed)
+          throw new Error('Cần xác nhận việc đổi nhãn mà không quy đổi số tiền.')
+        const {updates,problems} = draftInventoryCurrencyPatch(selectedRows,{
+          targetCurrency,mode:currencyMode,usdToVnd
+        })
+        if (problems.length) throw new Error(problems.slice(0,6).join(' | '))
+        const sheet = XLSX.utils.json_to_sheet(updates,{header:[
+          'id','material_code','material_name','warehouse_code','batch_no',
+          'original_currency','original_unit_price','currency','unit_price',
+          'confirm_currency_change'
         ]})
         sheet['!cols'] = [
-          {wch:38},{wch:23},{wch:46},{wch:20},{wch:22},{wch:12},{wch:20},
+          {wch:38},{wch:23},{wch:46},{wch:20},{wch:22},{wch:18},
+          {wch:22},{wch:14},{wch:20},{wch:25}
         ]
         const workbook = XLSX.utils.book_new()
-        XLSX.utils.book_append_sheet(workbook, sheet, 'inventory_patch')
+        XLSX.utils.book_append_sheet(workbook,sheet,'inventory_patch')
         return new Blob([XLSX.write(workbook,{bookType:'xlsx',type:'array'})],{
-          type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         })
       })()
       const url  = URL.createObjectURL(blob)
       const a    = document.createElement('a')
       a.href     = url
-      a.download = priceOnly ? `inventory_price_selected_${selectedRows.length}.xlsx` : 'inventory_patch_template.xlsx'
+      a.download = priceOnly ? `inventory_currency_price_${selectedRows.length}.xlsx` : 'inventory_patch_template.xlsx'
       document.body.appendChild(a)
       a.click()
       a.remove()
@@ -98,11 +103,13 @@ export default function InventoryPatchCsv({ onPatchComplete, selectedRows = [], 
       {/* description */}
       <div style={{ fontSize: 12, color: '#555', marginBottom: 10, lineHeight: 1.6 }}>
         {priceOnly ? <>
-          Lọc theo tên, kho hoặc lô → chọn dòng tồn kho → tải Excel.
-          Chỉ sửa cột <strong>unit_price</strong> (giá theo đơn vị tồn kho).
-          Các cột id, mã vật tư, kho, batch và currency dùng để nhận dạng/đối chiếu;
-          không sửa id. Hệ thống cập nhật theo UUID, không nhân đôi tồn kho.
-          Cột giá trống không cập nhật. Giá phải là số không âm, không có dấu phân cách hàng nghìn.
+          Lọc kho / lô → chọn dòng → chọn USD/VND → tải Excel cập nhật đơn giá.
+          Các cột <strong>currency</strong> và <strong>unit_price</strong> là tiền tệ
+          và đơn giá thực tế theo đơn vị kho; không tự coi USD là VND.
+          Giữ nguyên <strong>id, original_currency, original_unit_price</strong>.
+          Nếu sửa tiền tệ trong Excel, nhập đơn giá mới và đặt
+          <strong> confirm_currency_change=YES</strong>.
+          Hệ thống kiểm tra tất cả dòng trước khi ghi database.
         </> : <>
           Update <strong>order_to_deduction</strong> and/or{' '}
           <strong>material_quota_percentage</strong> for existing inventory rows.
@@ -113,6 +120,47 @@ export default function InventoryPatchCsv({ onPatchComplete, selectedRows = [], 
           Optional: <code>order_to_deduction</code>, <code>material_quota_percentage</code>, <code>unit_price</code>.
         </>}
       </div>
+
+      {priceOnly && <div style={{...sectionStyle,background:'#eff6ff'}}>
+        <strong>Cập nhật USD / VND cho các dòng đã chọn</strong>
+        <div style={{display:'flex',gap:12,flexWrap:'wrap',alignItems:'end',marginTop:10}}>
+          <label style={{fontSize:12}}>Tiền tệ đích
+            <select value={targetCurrency} onChange={e=>{
+              setTargetCurrency(e.target.value);setRelabelConfirmed(false)
+            }} style={{display:'block',padding:7}}>
+              <option value="">Giữ nguyên từng dòng</option>
+              <option value="VND">VND</option>
+              <option value="USD">USD</option>
+            </select>
+          </label>
+          <label style={{fontSize:12}}>Chế độ
+            <select value={currencyMode} disabled={!targetCurrency}
+              onChange={e=>{setCurrencyMode(e.target.value);setRelabelConfirmed(false)}}
+              style={{display:'block',padding:7}}>
+              <option value="KEEP">Giữ nguyên</option>
+              <option value="CONVERT">Quy đổi đơn giá qua tỷ giá đã nhập</option>
+              <option value="RELABEL">Chỉ sửa nhãn tiền tệ (không quy đổi)</option>
+            </select>
+          </label>
+          {targetCurrency && currencyMode==='CONVERT' && <label style={{fontSize:12}}>
+            Tỷ giá VND / 1 USD
+            <input type="number" min="0.000001" step="any"
+              value={usdToVnd} onChange={e=>setUsdToVnd(e.target.value)}
+              placeholder="Tỷ giá được kiểm tra"
+              style={{display:'block',padding:7,width:200}}/>
+          </label>}
+        </div>
+        {currencyMode==='RELABEL' && targetCurrency && <label
+          style={{display:'flex',alignItems:'flex-start',gap:8,marginTop:10,fontSize:12,color:'#9a3412'}}>
+          <input type="checkbox" checked={relabelConfirmed}
+            onChange={e=>setRelabelConfirmed(e.target.checked)}/>
+          Tôi xác nhận đơn giá đã đúng theo tiền tệ mới; chỉ sửa nhãn, không quy đổi số tiền.
+        </label>}
+        {currencyMode==='CONVERT' && targetCurrency && <p style={{fontSize:12,marginBottom:0}}>
+          USD → VND: nhân tỷ giá; VND → USD: chia tỷ giá. Mã khác USD/VND cần xử lý
+          riêng, không tự chuyển đổi. Chỉ sử dụng tỷ giá phù hợp chứng từ.
+        </p>}
+      </div>}
 
       {/* step 1 — download template */}
       <div style={sectionStyle}>
@@ -128,7 +176,7 @@ export default function InventoryPatchCsv({ onPatchComplete, selectedRows = [], 
           disabled={downloading || (priceOnly && selectedRows.length === 0)}
           style={btnStyle('#1565c0')}
         >
-          {downloading ? '⏳ Đang tạo mẫu…' : priceOnly ? '⬇ Tải Excel giá cho các dòng đã chọn' : '⬇ Download Template XLSX'}
+          {downloading ? '⏳ Đang tạo mẫu…' : priceOnly ? '⬇ Tải Excel giá & tiền tệ' : '⬇ Download Template XLSX'}
         </button>
       </div>
 
@@ -148,7 +196,7 @@ export default function InventoryPatchCsv({ onPatchComplete, selectedRows = [], 
             disabled={uploading || !file}
             style={btnStyle(uploading || !file ? '#9e9e9e' : '#2e7d32')}
           >
-            {uploading ? '⏳ Đang cập nhật…' : priceOnly ? '⬆ Cập nhật đơn giá theo Excel' : '⬆ Upload & Patch'}
+            {uploading ? '⏳ Đang cập nhật…' : priceOnly ? '⬆ Cập nhật giá & tiền tệ' : '⬆ Upload & Patch'}
           </button>
           {file && (
             <span style={{ fontSize: 12, color: '#333' }}>
