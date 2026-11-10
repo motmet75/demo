@@ -19,6 +19,9 @@ import DownloadIcon from '@mui/icons-material/Download'
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong'
 import SettingsIcon from '@mui/icons-material/Settings'
 import BadgeOutlinedIcon from '@mui/icons-material/BadgeOutlined'
+import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner'
+import VoucherQrScanDialog from './VoucherQrScanDialog'
+import {parseCccdBuyerQr} from '../../utils/cccdQr'
 import { useAppContext } from '../../context/AppContext'
 import { lookupBusinessTaxCode } from '../../api/businessTaxApi'
 import {
@@ -170,6 +173,7 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
   const [taxLookupBusy, setTaxLookupBusy] = useState(false)
   const [taxLookupError, setTaxLookupError] = useState('')
   const [cccdBusy, setCccdBusy] = useState(false)
+  const [cccdQrOpen,setCccdQrOpen] = useState(false)
   const [cccdError, setCccdError] = useState('')
   const [cccdSuccess, setCccdSuccess] = useState('')
   const [addressSuggestions, setAddressSuggestions] = useState([])
@@ -268,6 +272,23 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
     }, 450)
     return () => { cancelled = true; clearTimeout(timeout) }
   }, [open, buyer.buyerAddress, tenantId, companyId])
+  const onCccdQrScan = raw => {
+    setCccdQrOpen(false)
+    const decoded = parseCccdBuyerQr(raw)
+    if (!decoded) {
+      setCccdSuccess('')
+      setCccdError('Mã QR không đúng cấu trúc CCCD/Căn cước Việt Nam. Không tự điền thông tin. Vui lòng chụp ảnh CCCD hoặc nhập thủ công.')
+      return
+    }
+    setBuyer(old => ({
+      ...old, buyerName: decoded.fullName,
+      buyerAddress: decoded.buyerAddress,
+    }))
+    setPreview(null)
+    setCccdError('')
+    setCccdSuccess('Đã điền tên và địa chỉ từ QR CCCD. Hãy kiểm tra trước khi gửi hóa đơn.')
+  }
+
   const scanCccd = async event => {
     const images = Array.from(event.target.files || [])
     event.target.value = ''
@@ -396,14 +417,24 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
               <TextField label="Mã số thuế người mua" fullWidth value={buyer.buyerTaxCode} onChange={field('buyerTaxCode')} inputProps={{ maxLength: 14 }} />
               <Button variant="outlined" onClick={() => lookupTax(true)} disabled={taxLookupBusy || !buyer.buyerTaxCode.trim()} sx={{ whiteSpace: 'nowrap', mt: 1 }}>{taxLookupBusy ? 'Đang tra...' : 'Tra cứu MST'}</Button>
             </Box>
-            <TextField label="Tên đơn vị / tổ chức" value={buyer.buyerOrganizationName} onChange={field('buyerOrganizationName')} />
-            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, minWidth: 0 }}>
-              <TextField label="Người mua hàng" fullWidth value={buyer.buyerName} onChange={field('buyerName')} />
-              <Button component="label" variant="outlined" startIcon={cccdBusy ? <CircularProgress size={16} /> : <BadgeOutlinedIcon />}
-                disabled={busy || cccdBusy} sx={{ whiteSpace: 'nowrap', minHeight: 55, flexShrink: 0 }}>
-                {cccdBusy ? 'Đang đọc...' : 'Tải 1–2 ảnh CCCD'}
-                <input type="file" accept="image/jpeg,image/png,image/webp" multiple hidden onChange={scanCccd} />
-              </Button>
+            <TextField label="Tên đơn vị / tổ chức" fullWidth multiline minRows={2} maxRows={4}
+              value={buyer.buyerOrganizationName} onChange={field('buyerOrganizationName')} />
+            <Box sx={{gridColumn:'1 / -1',minWidth:0}}>
+              <TextField label="Người mua hàng" fullWidth multiline minRows={2} maxRows={5}
+                value={buyer.buyerName} onChange={field('buyerName')}
+                inputProps={{maxLength:255}}
+                helperText="Tên dài sẽ xuống dòng, có thể sửa trực tiếp." />
+              <Stack direction={{xs:'column',sm:'row'}} gap={1} sx={{mt:1}}>
+                <Button variant="outlined" fullWidth startIcon={<QrCodeScannerIcon/>}
+                  onClick={()=>setCccdQrOpen(true)} disabled={busy||cccdBusy}
+                  sx={{minHeight:46,textTransform:'none'}}>Quét QR CCCD bằng camera</Button>
+                <Button component="label" fullWidth variant="outlined"
+                  startIcon={cccdBusy?<CircularProgress size={16}/>:<BadgeOutlinedIcon/>}
+                  disabled={busy||cccdBusy} sx={{minHeight:46,textTransform:'none'}}>
+                  {cccdBusy?'Đang đọc...':'Tải 1–2 ảnh CCCD'}
+                  <input type="file" accept="image/jpeg,image/png,image/webp" multiple hidden onChange={scanCccd}/>
+                </Button>
+              </Stack>
             </Box>
             <TextField label="Địa chỉ xuất hóa đơn" value={buyer.buyerAddress} onChange={field('buyerAddress')} multiline minRows={2} />
             {addressSuggestions.length > 0 && <Box sx={{ gridColumn: '1 / -1' }}>
@@ -462,5 +493,10 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
       <Button variant="contained" color="success" onClick={issue} disabled={busy || !readyToSend || existingConflict || !preview || !lineIdsAvailable || invalidItemName}>{busy ? <CircularProgress size={20} /> : 'Gửi sang VIN-HOADON (chưa ký)'}</Button>
     </DialogActions>}
     {(invoice || (showConfig && (!isAdmin || configOnly))) && <DialogActions><Button onClick={onClose} disabled={busy}>Đóng</Button></DialogActions>}
+    <VoucherQrScanDialog open={cccdQrOpen}
+      title="Quét QR trên CCCD / Căn cước"
+      scannerLabel="Hướng camera vào mã QR trên thẻ, không cần chụp lưu ảnh"
+      onClose={()=>setCccdQrOpen(false)}
+      onScan={onCccdQrScan}/>
   </Dialog>
 }
