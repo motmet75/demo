@@ -194,7 +194,7 @@ export default function QuickTableOrderDialog({ open, table, draftId = '', favor
       const { data } = await fetchMenuOptions(model.id)
       setConfiguring({ model, item })
       setConfiguringOptions(Array.isArray(data) ? data : [])
-    } catch (actionError) { setError(actionError.message || 'Không tải được tùy chọn món') }
+    } catch (actionError) { setError(actionError.message || 'Không tải được tùy chọn sản phẩm') }
     finally { setConfiguringLoading(false) }
   }
 
