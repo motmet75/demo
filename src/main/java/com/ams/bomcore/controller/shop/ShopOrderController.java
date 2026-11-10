@@ -1953,7 +1953,15 @@ public class ShopOrderController {
                 ? new BigDecimal(String.valueOf(body.get("units")))
                 : null;
         java.time.LocalDate businessDate = java.time.LocalDate.now(RequestTimeZone.resolve(timeZone));
-        return ResponseEntity.ok(shopMaterialAuditService.updateAvailabilityOverride(modelId, units, tId, cId, businessDate));
+        String mode = body == null || body.get("mode") == null ? null :
+                String.valueOf(body.get("mode"));
+        try {
+            return ResponseEntity.ok(shopMaterialAuditService.updateAvailabilityOverride(
+                    modelId, units, tId, cId, businessDate, mode));
+        } catch (IllegalArgumentException error) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message",error.getMessage()==null?"Chế độ tồn khả dụng không hợp lệ.":error.getMessage()));
+        }
     }
 
     @GetMapping("/shop/staff/orders/{orderId}/material-audit")
