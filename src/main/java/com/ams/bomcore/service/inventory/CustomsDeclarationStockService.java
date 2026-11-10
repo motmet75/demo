@@ -38,7 +38,9 @@ public class CustomsDeclarationStockService {
     public record Line(int lineIndex, UUID materialId, String newMaterialCode,
                        String newMaterialName, String newMaterialUnit,
                        UUID warehouseId, UUID inventoryId, String batchNo,
-                       BigDecimal conversionRatio, BigDecimal vatRate) {}
+                       BigDecimal conversionRatio, BigDecimal vatRate,
+                       BigDecimal goodsValueVnd, BigDecimal historicalFxRate,
+                       BigDecimal additionalCostsVnd, Boolean importVatCreditable) {}
     public record Confirm(UUID documentId, String direction, String declarationNumber,
                           LocalDate declarationDate, String currency, List<Line> lines) {}
 
@@ -185,8 +187,8 @@ public class CustomsDeclarationStockService {
         if(date==null||date.isAfter(LocalDate.now()))throw fail("Ngày tờ khai không hợp lệ.");
         String currency=Objects.toString(req.currency(),"VND").trim().toUpperCase(Locale.ROOT);
         if(currency.isBlank())currency="VND";
-        if(!Set.of("VND","USD","EUR","JPY","CNY").contains(currency))
-            throw fail("Chọn loại tiền hợp lệ.");
+        if(!currency.matches("[A-Z]{3}"))
+            throw fail("Mã tiền tệ phải gồm 3 chữ cái, ví dụ VND, USD, CAD, EUR.");
         List<Map<String,Object>> rows=jdbc.queryForList("""
             SELECT source_json::text AS payload,status,
                    declaration_number, direction, confirmed_by, confirmed_at
@@ -229,6 +231,7 @@ public class CustomsDeclarationStockService {
         Map<UUID,BigDecimal> outQuantities=new TreeMap<>();
         Map<UUID,List<Integer>> outLineNumbers=new HashMap<>();
         Map<Integer,BigDecimal> taxAmountByLine=new HashMap<>();
+        Map<Integer,CustomsLandedCostCalculator.Cost> importCosts = new HashMap<>();
         BigDecimal declaredSubtotal=BigDecimal.ZERO;
         BigDecimal declaredVat=BigDecimal.ZERO;
         boolean allLinesPriced=true;
@@ -240,14 +243,26 @@ public class CustomsDeclarationStockService {
                     " bị thiếu, trùng hoặc nằm ngoài phạm vi tờ khai. Hãy tải lại và đối chiếu các dòng.");
             var item=parsed.items().get(line.lineIndex());
             String lineCurrency=Objects.toString(item.currency(),"").trim().toUpperCase(Locale.ROOT);
-            if(!lineCurrency.isBlank()&&!lineCurrency.equals(currency))
-                throw fail("Tiền tệ dòng "+(line.lineIndex()+1)+" ("+lineCurrency+
-                    ") không khớp "+currency+". Chọn đúng tiền tệ trước khi xác nhận.");
+            // Each customs item may have its own foreign invoice currency.
+            // Preserve it per line rather than forcing the entire declaration
+            // to USD/VND or converting foreign invoice values by assumption.
+            if(!lineCurrency.isBlank()&&!lineCurrency.matches("[A-Z]{3}"))
+                throw fail("Mã tiền tệ dòng "+(line.lineIndex()+1)+" không hợp lệ.");
             BigDecimal qty=decimal(item.quantity(),"Số lượng tờ khai",6);
             BigDecimal ratio=decimal(line.conversionRatio(),"Hệ số quy đổi",8);
             BigDecimal bomQty=qty.multiply(ratio);
             decimal(bomQty,"Số lượng kho",6);
-            // VAT is reviewed by the operator, never inferred from customs duty.
+            if("IN".equals(direction)) {
+                try {
+                    importCosts.put(line.lineIndex(), CustomsLandedCostCalculator.calculate(
+                        item, bomQty, line.goodsValueVnd(), line.historicalFxRate(),
+                        line.additionalCostsVnd(), Boolean.TRUE.equals(line.importVatCreditable()),
+                        line.vatRate()));
+                } catch (IllegalArgumentException ex) {
+                    throw fail("Dòng "+(line.lineIndex()+1)+": "+ex.getMessage());
+                }
+            }
+            // Legacy invoice-VAT summary is independent of imported customs VAT.
             BigDecimal taxRate=line.vatRate()==null?BigDecimal.ZERO:line.vatRate();
             if(taxRate.signum()<0||taxRate.compareTo(new BigDecimal("100"))>0
                 ||taxRate.stripTrailingZeros().scale()>3)
@@ -419,16 +434,41 @@ public class CustomsDeclarationStockService {
                     required(line.batchNo(),"Số lô nhập kho",50);
             UUID inventoryId;
             if("IN".equals(direction)) {
-                // Customs-declared valuation is NOT the actual procurement
-                // cost. Audit it in customs_declaration_line, but never
-                // overwrite a material's existing inventory purchase price.
+                // An existing batch may have been purchased at a different
+                // cost. Never silently clobber its unit_price/currency/FTA/VAT
+                // or append quantities to a batch with different valuation.
+                var already = inventoryRepo.findByMaterialAndWarehouseCodeAndBatchNoAndTenantIdAndCompanyId(
+                    material,selectedWarehouses.get(item.lineIndex()).getCode(),batch,
+                    scope.tenantId(),scope.companyId());
+                if(already.isPresent())
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Dòng "+(item.lineIndex()+1)+": lô "+batch+
+                        " đã tồn tại trong kho. Chọn lô mới để không ghi đè giá vốn.");
+                var cost=importCosts.get(item.lineIndex());
                 var entry=inventoryService.addStockByIds(
                     material.getId(),line.warehouseId(),qty,batch,
                     null,null,null,null,null,null,scope.tenantId(),scope.companyId(),
                     "Nhập kho tờ khai HQ "+number,scope.username(),
                     "Tên tờ khai: "+item.description()+" | HS: "+item.hsCode(),
-                    null,null,null,item.unit(),item.quantity(),line.conversionRatio(),null,
+                    null,cost.stockUnitVnd(),"VND",item.unit(),item.quantity(),
+                    line.conversionRatio(),cost.declaredUnitVnd(),
                     "CUSTOMS_DECLARATION",req.documentId());
+                entry.setHsCode(item.hsCode());
+                entry.setCdsNo(number);
+                entry.setOriginCountry(item.originCountry());
+                entry.setOriginType("IMPORTED");
+                entry.setCustomsForeignUnitPrice(item.unitPrice());
+                entry.setCustomsForeignCurrency(Objects.toString(item.currency(),"").isBlank()?
+                    currency:item.currency().trim().toUpperCase(Locale.ROOT));
+                entry.setCustomsGoodsValueVnd(cost.goodsValueVnd());
+                entry.setCustomsImportDutyVnd(cost.importDutyVnd());
+                entry.setCustomsImportVatVnd(cost.importVatVnd());
+                entry.setCustomsImportVatRate(cost.importVatRate());
+                entry.setCustomsAdditionalCostsVnd(cost.additionalCostsVnd());
+                entry.setCustomsVatCreditable(cost.vatCreditable());
+                entry.setCustomsHistoricalFxRate(cost.historicalFxRate());
+                entry.setCustomsLandedTotalVnd(cost.totalVnd());
+                inventoryRepo.saveAndFlush(entry);
                 inventoryId=entry.getId();
             }else{
                 InventoryEntity inv=inventories.get(item.lineIndex());
@@ -445,14 +485,31 @@ public class CustomsDeclarationStockService {
                   (id,declaration_id,line_index,hs_code,declared_description,material_id,
                    original_material_name,warehouse_id,inventory_id,batch_no,direction,
                    quantity_declared,quantity_stock,conversion_ratio,unit_declared,unit_stock,
-                   unit_price,currency,country_of_origin,vat_rate,vat_amount)
-                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                   unit_price,currency,country_of_origin,vat_rate,vat_amount,
+                   foreign_invoice_value,goods_value_vnd,goods_value_source,
+                   import_duty_vnd,import_vat_vnd,import_vat_rate,additional_costs_vnd,
+                   import_vat_creditable,historical_fx_rate,landed_total_vnd,landed_unit_vnd)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,UUID.randomUUID(),req.documentId(),item.lineIndex(),item.hsCode(),
                 item.description(),material.getId(),material.getMaterialName(),line.warehouseId(),
                 inventoryId,batch,direction,item.quantity(),qty,line.conversionRatio(),
-                item.unit(),material.getUnit(),item.unitPrice(),currency,item.originCountry(),
+                item.unit(),material.getUnit(),item.unitPrice(),
+                Objects.toString(item.currency(),"").isBlank()?currency:
+                    item.currency().trim().toUpperCase(Locale.ROOT),item.originCountry(),
                 line.vatRate()==null?BigDecimal.ZERO:line.vatRate(),
-                taxAmountByLine.get(item.lineIndex()));
+                taxAmountByLine.get(item.lineIndex()),
+                "IN".equals(direction)?importCosts.get(item.lineIndex()).foreignInvoiceValue():
+                    item.invoiceValue(),
+                "IN".equals(direction)?importCosts.get(item.lineIndex()).goodsValueVnd():null,
+                "IN".equals(direction)?importCosts.get(item.lineIndex()).goodsValueSource():null,
+                "IN".equals(direction)?importCosts.get(item.lineIndex()).importDutyVnd():null,
+                "IN".equals(direction)?importCosts.get(item.lineIndex()).importVatVnd():null,
+                "IN".equals(direction)?importCosts.get(item.lineIndex()).importVatRate():null,
+                "IN".equals(direction)?importCosts.get(item.lineIndex()).additionalCostsVnd():null,
+                "IN".equals(direction)?importCosts.get(item.lineIndex()).vatCreditable():null,
+                "IN".equals(direction)?importCosts.get(item.lineIndex()).historicalFxRate():null,
+                "IN".equals(direction)?importCosts.get(item.lineIndex()).totalVnd():null,
+                "IN".equals(direction)?importCosts.get(item.lineIndex()).stockUnitVnd():null);
             results.add(Map.of("lineIndex",item.lineIndex(),"inventoryId",inventoryId,
                     "materialId",material.getId(),"nameOnDeclaration",item.description()));
         }
