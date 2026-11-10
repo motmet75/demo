@@ -878,7 +878,7 @@ function StatusBoard({ status, orders, modelImageMap = {}, onAction, onDetail, o
                     {(order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT') && <Button size="small" variant="contained" color="info" fullWidth onClick={() => onAction('pickup', order.id, order.orderNumber)} sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12 }}>{t('shopOrder.grid.pickedUpCheck')}</Button>}
                   </Stack>
                 )}
-                {!['COMPLETED', 'PICKED_UP', 'CANCELLED'].includes(status) && <Button size="small" variant="contained" color="success" fullWidth onClick={() => onAction('complete', order.id, order.orderNumber)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: 12 }}>Hoàn tất & trả món</Button>}
+                {!['COMPLETED', 'PICKED_UP', 'CANCELLED'].includes(status) && <Button size="small" variant="contained" color="success" fullWidth onClick={() => onAction('complete', order.id, order.orderNumber)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: 12 }}>Hoàn tất & trả đơn</Button>}
                 {status === 'PICKED_UP' && (
                   <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11, textAlign: 'center', display: 'block' }}>
                     {t('shopOrder.grid.pickedUpAt', { time: order.completedAt ? dateFmt(order.completedAt) : '' })}
@@ -1249,7 +1249,7 @@ function OrderCard({ order, tables, actions, modelImageMap = {}, selected, onSel
           )}
         </Box>
 
-        {isActive && <Button size="small" variant="contained" color="success" fullWidth onClick={() => actions.complete(order)} sx={{ textTransform: 'none', fontWeight: 900, fontSize: 12 }}>Hoàn tất & trả món</Button>}
+        {isActive && <Button size="small" variant="contained" color="success" fullWidth onClick={() => actions.complete(order)} sx={{ textTransform: 'none', fontWeight: 900, fontSize: 12 }}>Hoàn tất & trả đơn</Button>}
 
         {/* Mark paid + Cancel */}
         <Box sx={{ display: 'flex', gap: 0.5 }}>
@@ -1332,7 +1332,7 @@ function OrderRowsGrid({ rows, tables, actions, selectedIds, onToggleSelect, dis
     if (order.status === 'CONFIRMED') stageButton = <Button size="small" variant="outlined" color="warning" onClick={() => actions.prepare(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 13 : 11 }}>{t('shopOrder.grid.prepare')}</Button>
     if (order.status === 'PREPARING') stageButton = <Button size="small" variant="outlined" color="success" onClick={() => actions.ready(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 13 : 11 }}>{t('shopOrder.grid.ready')}</Button>
     if (order.status === 'READY' && (order.paymentMethod === 'BANK_QR' || order.paymentMethod === 'SPLIT')) stageButton = <Button size="small" variant="outlined" color="info" onClick={() => actions.pickup(order)} sx={{ textTransform: 'none', fontWeight: 800, fontSize: large ? 13 : 11 }}>{t('shopOrder.grid.pickedUp')}</Button>
-    if (!['COMPLETED', 'PICKED_UP', 'CANCELLED'].includes(order.status)) return <Stack gap={0.5}>{stageButton}<Button size="small" variant="contained" color="success" onClick={() => actions.complete(order)} sx={{ textTransform: 'none', fontWeight: 900, fontSize: large ? 13 : 11 }}>Hoàn tất & trả món</Button></Stack>
+    if (!['COMPLETED', 'PICKED_UP', 'CANCELLED'].includes(order.status)) return <Stack gap={0.5}>{stageButton}<Button size="small" variant="contained" color="success" onClick={() => actions.complete(order)} sx={{ textTransform: 'none', fontWeight: 900, fontSize: large ? 13 : 11 }}>Hoàn tất & trả đơn</Button></Stack>
     return <Typography sx={{ fontSize: large ? 13 : 11, color: '#64748b', fontWeight: 700 }}>{localizedStatusLabel(order.status, t)}</Typography>
   }
 
@@ -2503,7 +2503,7 @@ export default function ShopOrderGrid() {
     markPaid:   (row) => openPaymentAction(row, 'paid'),
     clearTable: (row) => askConfirm({
       title: `Dọn đơn ${row.orderNumber != null ? `#${row.orderNumber}` : row.orderCode || ''} khỏi bàn`,
-      message: `Xác nhận khách đã rời ${row.tableName || 'bàn'}? Đơn đã trả món và thanh toán sẽ được dọn khỏi danh sách bàn.`,
+      message: `Xác nhận khách đã rời ${row.tableName || 'bàn'}? Đơn đã trả đơn và thanh toán sẽ được dọn khỏi danh sách bàn.`,
       confirmLabel: 'Dọn đơn khỏi bàn',
       confirmColor: 'warning',
     }, () => act(clearOrderTable, row.id)),
