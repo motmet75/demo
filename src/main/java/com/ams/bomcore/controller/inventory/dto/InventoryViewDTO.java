@@ -33,6 +33,16 @@ public class InventoryViewDTO {
     private BigDecimal bomUnitPerWarehouseUnit;
     private BigDecimal warehouseImportUnitPrice;
     private String currency;
+    private BigDecimal customsForeignUnitPrice;
+    private String customsForeignCurrency;
+    private BigDecimal customsGoodsValueVnd;
+    private BigDecimal customsImportDutyVnd;
+    private BigDecimal customsImportVatVnd;
+    private BigDecimal customsImportVatRate;
+    private BigDecimal customsAdditionalCostsVnd;
+    private Boolean customsVatCreditable;
+    private BigDecimal customsHistoricalFxRate;
+    private BigDecimal customsLandedTotalVnd;
     private Instant expirationDateTime;
     private Instant productionDateTime;
     private Instant createdAt;
@@ -48,6 +58,10 @@ public class InventoryViewDTO {
                             BigDecimal quantityOnHand, BigDecimal quantityTotal, BigDecimal quantityReserved, BigDecimal quantityLocked, String batchNo,
                             String contractCode, String orderToDeduction, String unit, BigDecimal unitPrice, String currency,
                             String warehouseImportUnit, BigDecimal warehouseImportQuantity, BigDecimal bomUnitPerWarehouseUnit, BigDecimal warehouseImportUnitPrice,
+                            BigDecimal customsForeignUnitPrice, String customsForeignCurrency, BigDecimal customsGoodsValueVnd,
+                            BigDecimal customsImportDutyVnd, BigDecimal customsImportVatVnd, BigDecimal customsImportVatRate,
+                            BigDecimal customsAdditionalCostsVnd, Boolean customsVatCreditable, BigDecimal customsHistoricalFxRate,
+                            BigDecimal customsLandedTotalVnd,
                             Instant expirationDateTime, Instant productionDateTime, Instant createdAt, Instant updatedAt,
                             Boolean visible, Boolean approved, Boolean locked,
                             BigDecimal materialQuotaPercentage, String userName) {
@@ -74,6 +88,16 @@ public class InventoryViewDTO {
         this.warehouseImportQuantity = warehouseImportQuantity;
         this.bomUnitPerWarehouseUnit = bomUnitPerWarehouseUnit;
         this.warehouseImportUnitPrice = warehouseImportUnitPrice;
+        this.customsForeignUnitPrice = customsForeignUnitPrice;
+        this.customsForeignCurrency = customsForeignCurrency;
+        this.customsGoodsValueVnd = customsGoodsValueVnd;
+        this.customsImportDutyVnd = customsImportDutyVnd;
+        this.customsImportVatVnd = customsImportVatVnd;
+        this.customsImportVatRate = customsImportVatRate;
+        this.customsAdditionalCostsVnd = customsAdditionalCostsVnd;
+        this.customsVatCreditable = customsVatCreditable;
+        this.customsHistoricalFxRate = customsHistoricalFxRate;
+        this.customsLandedTotalVnd = customsLandedTotalVnd;
         this.expirationDateTime = expirationDateTime;
         this.productionDateTime = productionDateTime;
         this.createdAt = createdAt;
@@ -109,6 +133,16 @@ public class InventoryViewDTO {
     public BigDecimal getBomUnitPerWarehouseUnit() { return bomUnitPerWarehouseUnit; }
     public BigDecimal getWarehouseImportUnitPrice() { return warehouseImportUnitPrice; }
     public String getCurrency() { return currency; }
+    public BigDecimal getCustomsForeignUnitPrice() { return customsForeignUnitPrice; }
+    public String getCustomsForeignCurrency() { return customsForeignCurrency; }
+    public BigDecimal getCustomsGoodsValueVnd() { return customsGoodsValueVnd; }
+    public BigDecimal getCustomsImportDutyVnd() { return customsImportDutyVnd; }
+    public BigDecimal getCustomsImportVatVnd() { return customsImportVatVnd; }
+    public BigDecimal getCustomsImportVatRate() { return customsImportVatRate; }
+    public BigDecimal getCustomsAdditionalCostsVnd() { return customsAdditionalCostsVnd; }
+    public Boolean getCustomsVatCreditable() { return customsVatCreditable; }
+    public BigDecimal getCustomsHistoricalFxRate() { return customsHistoricalFxRate; }
+    public BigDecimal getCustomsLandedTotalVnd() { return customsLandedTotalVnd; }
     public Instant getExpirationDateTime() { return expirationDateTime; }
     public Instant getProductionDateTime() { return productionDateTime; }
     public Instant getCreatedAt() { return createdAt; }
