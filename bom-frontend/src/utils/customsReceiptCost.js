@@ -35,10 +35,14 @@ export function previewCustomsReceiptCost(item, row) {
   const extras = num(row.additionalCostsVnd)
   if (!(qty>0) || !(stockQty>0) || !(goodsVnd>0) || duty==null ||
       vat==null || extras==null || extras<0 || rate==null || rate<0 || rate>100) return null
-  const total = goodsVnd + duty + extras + (row.importVatCreditable ? 0 : vat)
+  const totalIncludingVatVnd = goodsVnd + duty + extras + vat
+  const total = totalIncludingVatVnd - (row.importVatCreditable ? vat : 0)
+  if (![totalIncludingVatVnd,total].every(Number.isFinite)) return null
   return {
     goodsVnd, goodsSource:source, foreignInvoiceValue:invoice,
     importDutyVnd:duty, importVatVnd:vat, importVatRate:rate, additionalCostsVnd:extras,
+    totalIncludingVatVnd,
+    unitIncludingVatVnd:totalIncludingVatVnd/stockQty,
     totalVnd:total,stockQuantity:stockQty,stockUnitVnd:total/stockQty,
     declaredUnitVnd:total/qty
   }
