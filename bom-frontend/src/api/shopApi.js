@@ -1009,11 +1009,11 @@ export function fetchMenuAvailability(params = {}) {
   })
 }
 
-export function updateMenuAvailabilityOverride(modelId, units) {
+export function updateMenuAvailabilityOverride(modelId, units, mode = 'DAILY') {
   return apiFetchJson(`/shop/staff/materials/menu-availability/${modelId}/override`, {
     method: 'PUT',
     headers: timeZoneHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ units })
+    body: JSON.stringify({ units: mode==='WAREHOUSE_TOTAL' ? null : units, mode })
   })
 }
 
