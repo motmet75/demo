@@ -11,6 +11,7 @@ import {fetchInventoryView} from '../../api/inventoryApi'
 import {formatVnNumber,parseVnNumber} from '../../utils/vietnameseNumbers'
 import {generateMaterialCode} from '../../utils/materialCode'
 import CustomsTariffComparison from './CustomsTariffComparison'
+import {previewCustomsReceiptCost} from '../../utils/customsReceiptCost'
 import {matchMaterialByDescription,normalizeMaterialDescription} from '../../utils/materialBulkMatching'
 
 const norm=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
@@ -32,9 +33,10 @@ const newRow=(item,warehouses)=>({
   batchNo:'',newMaterial:false,newMaterialAutoCode:true,
   newMaterialCode:'',newMaterialName:item.description||'',
   newMaterialUnit:item.unit||'cái',
-  // Customs import VAT is based on VND customs taxable value + import duty.
-  // Do not silently apply its percentage to foreign-currency purchase cost.
-  conversionRatio:'1',vatRate:'0',
+  // Customs VAT rate comes from the XLS and is NOT a VAT applied to USD/CAD invoice.
+  conversionRatio:'1',vatRate:item.vatRate == null ? '' : String(item.vatRate),
+  goodsValueVnd:'',historicalFxRate:'',additionalCostsVnd:'0',
+  importVatCreditable:false,
 })
 
 export default function CustomsDeclarationStockDialog({open,onClose,onComplete,initialDirection='IN'}){
@@ -342,8 +344,8 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
     ].join('-')
     if(!validDate(date)||date!==normalizedDate||date>today())
       issues.push('Ngày tờ khai không hợp lệ hoặc nằm trong tương lai.')
-    if(!['VND','USD','EUR','JPY','CNY'].includes(currency.trim().toUpperCase()))
-      issues.push('Tiền tệ phải là VND, USD, EUR, JPY hoặc CNY.')
+    if(!/^[A-Z]{3}$/.test(currency.trim().toUpperCase()))
+      issues.push('Tiền tệ phải là mã ISO 3 chữ cái (USD, CAD, VND...).')
 
     const existingCodes=new Set(materials.map(m=>String(m.materialCode||'').trim().toUpperCase()))
     const newCodes=new Map()
@@ -362,7 +364,16 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
         issues.push(label+': Hệ số quy đổi và số lượng kho phải lớn hơn 0, trong giới hạn cho phép.')
       if(!Number.isFinite(vat)||vat<0||vat>100||
          (String(row.vatRate||'').split(/[.,]/)[1]?.length||0)>3)
-        issues.push(label+': VAT phải từ 0 đến 100%, tối đa 3 chữ số thập phân.')
+        issues.push(label+': VAT nhập khẩu phải từ 0 đến 100%, tối đa 3 chữ số thập phân.')
+      if(direction==='IN'){
+        const cost=previewCustomsReceiptCost(source,row)
+        if(!cost) issues.push(label+
+          ': Không tính được đơn giá VND. Kiểm tra trị giá tính thuế, thuế NK, VAT NK và giá nhập kho.')
+        if(row.goodsValueVnd!==''&&!(parseNumber(row.goodsValueVnd)>0))
+          issues.push(label+': Trị giá hàng VND nhập tay phải lớn hơn 0.')
+        if(row.historicalFxRate!==''&&!(parseNumber(row.historicalFxRate)>0))
+          issues.push(label+': Tỷ giá lịch sử phải lớn hơn 0.')
+      }
 
       if(direction==='IN'){
         if(!row.warehouseId)issues.push(label+': Chưa chọn kho nhận.')
@@ -444,7 +455,13 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
           inventoryId:direction==='OUT'?row.inventoryId:null,
           batchNo:direction==='IN'?row.batchNo:mapStock.get(String(row.inventoryId))?.batchNo||'',
           conversionRatio:parseNumber(row.conversionRatio),
-          vatRate:parseNumber(row.vatRate)
+          vatRate:parseNumber(row.vatRate),
+          goodsValueVnd:direction==='IN'&&row.goodsValueVnd!==''?
+            parseNumber(row.goodsValueVnd):null,
+          historicalFxRate:direction==='IN'&&row.historicalFxRate!==''?
+            parseNumber(row.historicalFxRate):null,
+          additionalCostsVnd:direction==='IN'?parseNumber(row.additionalCostsVnd):null,
+          importVatCreditable:direction==='IN'?Boolean(row.importVatCreditable):null
         }))
       })
       setSuccess('Đã '+(direction==='IN'?'nhập':'xuất')+' kho '+result.postedLines.length+
@@ -516,7 +533,7 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
           <TextField size="small" type="date" label="Ngày tờ khai"
             InputLabelProps={{shrink:true}} value={date}
             disabled={confirmed} onChange={e=>setDate(e.target.value)} sx={{flex:1}}/>
-          <TextField size="small" label="Tiền tệ" value={currency}
+          <TextField size="small" label="Tiền tệ mặc định" value={currency}
             disabled={confirmed} onChange={e=>setCurrency(e.target.value)} sx={{width:115}}/>
         </Stack>
         <Typography variant="body2" fontWeight={700}>
@@ -548,7 +565,7 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
           Xuất kho chỉ tự chọn khi xác định duy nhất lô còn đủ hàng. Tất cả thao tác chỉ chuẩn bị dữ liệu, chưa ghi kho.
         </Typography>
         <TableContainer sx={{flex:1,minHeight:150,border:'1px solid',borderColor:'divider',borderRadius:1}}>
-          <Table size="small" stickyHeader sx={{minWidth:2050}}>
+          <Table size="small" stickyHeader sx={{minWidth:2650}}>
             <TableHead><TableRow>
               <TableCell>STT / HS / Tên theo tờ khai</TableCell>
               <TableCell sx={{minWidth:300}}>Mã và tên nguyên vật liệu gốc</TableCell>
@@ -560,8 +577,15 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
               <TableCell align="right">Trị giá hóa đơn gốc</TableCell>
               <TableCell align="right">{direction==='OUT'?'Thuế xuất khẩu gốc':'Thuế NK gốc'}</TableCell>
               <TableCell align="right">VAT HQ gốc</TableCell>
-              <TableCell>VAT nhập kho (%)</TableCell>
-              <TableCell align="right">Sau VAT</TableCell>
+              <TableCell>VAT nhập khẩu (%)</TableCell>
+              {direction==='IN'&&<>
+                <TableCell>Giá trị hàng quy đổi VND</TableCell>
+                <TableCell>Tỷ giá lịch sử (nếu cần)</TableCell>
+                <TableCell>Phí khác VND</TableCell>
+                <TableCell>VAT khấu trừ?</TableCell>
+                <TableCell align="right">Giá nhập kho VND/đv</TableCell>
+              </>}
+              <TableCell align="right">Trị giá hóa đơn gốc</TableCell>
             </TableRow></TableHead><TableBody>
               {(doc.items||[]).map((item,i)=>{
                 const line=rows[i]
@@ -571,6 +595,7 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
                 const chosenMaterial=materials.find(m=>String(m.id)===line.materialId)||null
                 const ratio=parseNumber(line.conversionRatio)
                 const qty=safeNum(item.quantity)*ratio
+                const cost=direction==='IN'?previewCustomsReceiptCost(item,line):null
                 return <TableRow key={item.lineIndex}>
                   <TableCell sx={{minWidth:265}}>
                     <Typography variant="body2" fontWeight={800}>{i+1}. {item.description}</Typography>
@@ -694,10 +719,51 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
                       inputProps={{inputMode:'decimal'}}
                       error={!Number.isFinite(parseNumber(line.vatRate))||parseNumber(line.vatRate)<0||parseNumber(line.vatRate)>100}/>
                   </TableCell>
+                  {direction==='IN'&&<>
+                    <TableCell sx={{minWidth:195}}>
+                      <TextField size="small" fullWidth label="Giá hàng VND"
+                        value={line.goodsValueVnd} disabled={confirmed}
+                        onChange={e=>edit(i,{goodsValueVnd:e.target.value})}
+                        helperText={item.importTaxableValueVnd!=null?
+                          'Để trống: lấy trị giá tính thuế HQ '+formatVnNumber(item.importTaxableValueVnd,2)+' VND (tạm tính)':
+                          'Nhập giá hàng VND hoặc tỷ giá lịch sử'}/>
+                    </TableCell>
+                    <TableCell sx={{minWidth:145}}>
+                      <TextField size="small" fullWidth label="Tỷ giá VND/ngoại tệ"
+                        value={line.historicalFxRate} disabled={confirmed}
+                        onChange={e=>edit(i,{historicalFxRate:e.target.value})}
+                        helperText="Tỷ giá ở ngày tờ khai, không dùng tỷ giá hiện tại"/>
+                    </TableCell>
+                    <TableCell sx={{minWidth:145}}>
+                      <TextField size="small" fullWidth label="Chi phí VND"
+                        value={line.additionalCostsVnd} disabled={confirmed}
+                        onChange={e=>edit(i,{additionalCostsVnd:e.target.value})}
+                        helperText="Cước vận chuyển / thông quan phân bổ dòng"/>
+                    </TableCell>
+                    <TableCell sx={{minWidth:145}}>
+                      <Switch size="small" disabled={confirmed}
+                        checked={Boolean(line.importVatCreditable)}
+                        onChange={e=>edit(i,{importVatCreditable:e.target.checked})}/>
+                      <Typography variant="caption" display="block">
+                        {line.importVatCreditable?'VAT đã loại khỏi giá vốn':'VAT đang cộng vào giá vốn'}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="right" sx={{minWidth:190}}>
+                      <Typography fontWeight={800} color={cost?'primary':'error'}>
+                        {cost?formatVnNumber(cost.stockUnitVnd,4)+' VND/'+(chosenMaterial?.unit||line.newMaterialUnit||item.unit):'Chưa đủ dữ liệu'}
+                      </Typography>
+                      {cost&&<Typography variant="caption" display="block">
+                        Cả dòng: {formatVnNumber(cost.totalVnd,2)} VND
+                      </Typography>}
+                      {cost&&<Typography variant="caption" display="block">
+                        NK: {formatVnNumber(cost.importDutyVnd,2)} · VAT: {formatVnNumber(cost.importVatVnd,2)}
+                      </Typography>}
+                    </TableCell>
+                  </>}
                   <TableCell align="right" sx={{whiteSpace:'nowrap'}}>
-                    {item.unitPrice==null?'—':
-                      formatVnNumber(Number(item.quantity)*Number(item.unitPrice)*
-                        (1+(parseNumber(line.vatRate)||0)/100),2)} {currency}
+                    {item.invoiceValue!=null?formatVnNumber(Number(item.invoiceValue),2):
+                      item.unitPrice!=null?formatVnNumber(Number(item.quantity)*Number(item.unitPrice),2):'—'}
+                    {' '}{item.currency||currency}
                   </TableCell>
                 </TableRow>
               })}
@@ -714,14 +780,17 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
           <Button variant="outlined" size="small" disabled={!canApplyBulkVat||confirmed||busy}
             onClick={applyVatToAll}>Áp dụng tất cả</Button>
           <Chip label={`SL × đơn giá HĐ: ${formatVnNumber(taxSummary.subtotal,2)} ${currency}`}/>
-          <Chip label={`VAT nhập kho tạm tính: ${formatVnNumber(taxSummary.vat,2)} ${currency}`}/>
-          <Chip color="success" label={`Tổng nhập kho tạm tính: ${formatVnNumber(taxSummary.total,2)} ${currency}`}/>
+          <Chip label={`VAT hóa đơn mô phỏng (khác VAT NK): ${formatVnNumber(taxSummary.vat,2)} ${currency}`}/>
+          <Chip label={`Tổng hóa đơn mô phỏng: ${formatVnNumber(taxSummary.total,2)} ${currency}`}/>
         </Stack>
         {taxSummary.missing>0&&<Alert severity="warning">
           Có {taxSummary.missing} dòng chưa đủ đơn giá/SL từ tờ khai.
           Tổng tiền chỉ tính các dòng có giá, không phải tổng đầy đủ.
         </Alert>}
         <Typography variant="caption" color="text.secondary">
+          Đơn giá VND ở bảng trên sẽ ghi vào tồn kho lúc xác nhận: trị giá hàng VND
+          + thuế nhập khẩu + chi phí phân bổ + VAT nhập khẩu (nếu không khấu trừ),
+          chia số lượng kho. Ngoại tệ gốc, thuế NK và VAT NK vẫn được lưu riêng.
           Trị giá hóa đơn gốc, thuế NK gốc và VAT Hải quan gốc được đọc riêng từ file Excel;
           không bị ghi đè khi bạn thay đổi VAT nhập kho hoặc tra cứu FTA. Các chip tổng phía trên
           chỉ mô phỏng giá trị hóa đơn và VAT nhập kho theo đơn vị tiền đang chọn,
