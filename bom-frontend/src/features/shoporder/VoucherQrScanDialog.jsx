@@ -20,6 +20,7 @@ import ZoomInIcon from '@mui/icons-material/ZoomIn'
 import { useI18n } from '../../i18n/I18nContext'
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode'
 import {qrRecoveryCandidates} from '../../utils/qrImageRecovery'
+import {decodeFaintQrWithZbar} from '../../utils/cccdQrZbar'
 
 /**
  * Shared QR reader. Image uploads are decoded in the browser by html5-qrcode:
@@ -207,6 +208,20 @@ export default function VoucherQrScanDialog({
       } catch {
         // Not a fatal error. Faint ID-card QRs can need image enhancement.
       }
+      if (!decodedText && enableZoom && runId === runIdRef.current) {
+        // The CCCD QR may be heavily overprinted with security guilloche.
+        // A supplied real-world sample decoded with native ZBar only after
+        // a GREEN-channel median3 crop, while ZXing and thresholding failed.
+        try {
+          decodedText = await decodeFaintQrWithZbar(file, {
+            isCancelled: () => runId !== runIdRef.current || !openRef.current,
+            onProgress: setDecodeProgress
+          }) || ''
+        } catch {
+          // ZBar unavailable on this device? Continue with existing ZXing
+          // enhancement attempts. Never print sensitive QR payloads.
+        }
+      }
       if (!decodedText && runId === runIdRef.current) {
         try {
           for await (const candidate of qrRecoveryCandidates(file)) {
@@ -230,7 +245,7 @@ export default function VoucherQrScanDialog({
         handleDetected(decodedText)
       } else if (runId === runIdRef.current) {
         setError(
-          'Chưa đọc được QR trên CCCD, kể cả sau khi tăng tương phản. ' +
+          'Chưa đọc được mã QR, kể cả sau khi thử ZBar và xử lý nhiễu. ' +
           'Ảnh có thể bị mờ, lóa hoặc mất nét. Hãy chụp lại với camera sau, ' +
           'đủ sáng, giữ điện thoại đứng yên và để toàn bộ mã QR trong ảnh. ' +
           'Bạn cũng có thể dùng nút Tải 1–2 ảnh CCCD để nhận dạng tên/địa chỉ.'
