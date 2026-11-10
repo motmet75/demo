@@ -41,7 +41,9 @@ export default function VoucherQrScanDialog({
   const detectedRef = useRef(false)
   const readerIdRef = useRef(`voucher-qr-reader-${Math.random().toString(36).slice(2)}`)
   const onScanRef = useRef(onScan)
+  const openRef = useRef(open)
   onScanRef.current = onScan
+  openRef.current = open
   const runIdRef = useRef(0)
   const facingModeRef = useRef('environment')
 
@@ -101,6 +103,7 @@ export default function VoucherQrScanDialog({
     setError('')
     detectedRef.current = false
     await stopCamera()
+    if (!openRef.current) return
     const runId = ++runIdRef.current
     setStarting(true)
 
