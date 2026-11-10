@@ -25,7 +25,7 @@ const ORDER_TIME_FIELDS = [
   {key:'createdAt',label:'Đặt'},
   {key:'confirmedAt',label:'Xác nhận'},
   {key:'paidAt',label:'Thanh toán'},
-  {key:'readyAt',label:'Món sẵn sàng'},
+  {key:'readyAt',label:'Đơn sẵn sàng'},
   {key:'completedAt',label:'Trả đơn / hoàn tất'},
   {key:'tableClearedAt',label:'Dọn bàn'},
 ]
@@ -104,7 +104,7 @@ export default function QuickCounterDesk({ rows, actions, onNew, onCreated, shif
   const needsTableClear=order=>isFinishedPaid(order) && Boolean(order.tableId) && !order.tableClearedAt
   const groups=[
     {title:'1 · Nhận đơn',matches:order=>order.status==='PENDING',color:'#eff6ff'},
-    {title:'2 · Chuẩn bị món',matches:order=>['CONFIRMED','PREPARING'].includes(order.status),color:'#fffbeb',autoHide:true},
+    {title:'2 · Chuẩn bị đơn',matches:order=>['CONFIRMED','PREPARING'].includes(order.status),color:'#fffbeb',autoHide:true},
     {title:'3 · Cần thanh toán & trả đơn',matches:order=>order.status==='READY',color:'#f0fdf4',autoHide:true},
     {title:'4 · Đã trả đơn · chưa thanh toán',matches:isServedUnpaid,color:'#fff1f2'},
     {title:'5 · Đã thanh toán · chờ dọn bàn',matches:needsTableClear,color:'#f0fdfa'},
@@ -193,9 +193,9 @@ export default function QuickCounterDesk({ rows, actions, onNew, onCreated, shif
         displayItems:nextItems,
       }
       const {res,data}=await saveTableOrderDraft(selectedTableId,payload)
-      if(!res.ok)throw new Error(data?.message||data?.error||'Không thêm được món')
+      if(!res.ok)throw new Error(data?.message||data?.error||'Không thêm được sản phẩm')
       upsertDraft(data);setQuickItem(null)
-    } catch(error) { setDraftError(error.message||'Không thêm được món') }
+    } catch(error) { setDraftError(error.message||'Không thêm được sản phẩm') }
     finally { setDraftSaving(false) }
   }
   const removeOneQuickItem=async lineId=>{
@@ -209,7 +209,7 @@ export default function QuickCounterDesk({ rows, actions, onNew, onCreated, shif
       const nextItems=currentItems.map(item=>item.lineId===lineId?{...item,quantity:Number(item.quantity||1)-1}:item).filter(item=>Number(item.quantity||0)>0)
       if(!nextItems.length){
         const {res,data}=await clearTableOrderDraft(selectedTableId,latestDraft?.draftId)
-        if(!res.ok)throw new Error(data?.message||data?.error||'Không xóa được món')
+        if(!res.ok)throw new Error(data?.message||data?.error||'Không xóa được sản phẩm')
         removeDraftFromView(latestDraft?.draftId);return
       }
       const payload={
@@ -218,9 +218,9 @@ export default function QuickCounterDesk({ rows, actions, onNew, onCreated, shif
         displayItems:nextItems,
       }
       const {res,data}=await saveTableOrderDraft(selectedTableId,payload)
-      if(!res.ok)throw new Error(data?.message||data?.error||'Không xóa được món')
+      if(!res.ok)throw new Error(data?.message||data?.error||'Không xóa được sản phẩm')
       upsertDraft(data)
-    } catch(error){setDraftError(error.message||'Không xóa được món')}
+    } catch(error){setDraftError(error.message||'Không xóa được sản phẩm')}
     finally{setDraftSaving(false)}
   }
   const startQuickItemEdit=async item=>{
@@ -231,7 +231,7 @@ export default function QuickCounterDesk({ rows, actions, onNew, onCreated, shif
     try{
       const {data}=await fetchMenuOptions(model.id)
       setQuickEditing({model,item});setQuickEditingOptions(Array.isArray(data)?data:[])
-    }catch(error){setDraftError(error.message||'Không tải được tùy chọn món')}
+    }catch(error){setDraftError(error.message||'Không tải được tùy chọn sản phẩm')}
     finally{setQuickEditLoading(false)}
   }
   const saveQuickItemEdit=async configured=>{
@@ -242,7 +242,7 @@ export default function QuickCounterDesk({ rows, actions, onNew, onCreated, shif
       if(!latest.res.ok&&latest.res.status!==204)throw new Error(latest.data?.message||latest.data?.error||'Không tải được đơn tạm')
       const latestDraft=latest.res.status===204?null:latest.data
       const currentItems=Array.isArray(latestDraft?.displayItems)?latestDraft.displayItems:[]
-      if(!currentItems.some(item=>item.lineId===quickEditing.item.lineId))throw new Error('Món này không còn trong đơn tạm')
+      if(!currentItems.some(item=>item.lineId===quickEditing.item.lineId))throw new Error('Sản phẩm này không còn trong đơn tạm')
       const model=quickEditing.model
       const nextItem={
         lineId:quickEditing.item.lineId,modelId:model.id,modelName:quickEditing.item.modelName||model.modelName,
@@ -258,9 +258,9 @@ export default function QuickCounterDesk({ rows, actions, onNew, onCreated, shif
         displayItems:nextItems,
       }
       const {res,data}=await saveTableOrderDraft(selectedTableId,payload)
-      if(!res.ok)throw new Error(data?.message||data?.error||'Không lưu được món')
+      if(!res.ok)throw new Error(data?.message||data?.error||'Không lưu được sản phẩm')
       upsertDraft(data);setQuickEditing(null);setQuickEditingOptions([])
-    }catch(error){setDraftError(error.message||'Không lưu được món')}
+    }catch(error){setDraftError(error.message||'Không lưu được sản phẩm')}
     finally{setDraftSaving(false)}
   }
   const startPriceEdit=item=>{
@@ -307,7 +307,7 @@ export default function QuickCounterDesk({ rows, actions, onNew, onCreated, shif
       if(!latest.res.ok)throw new Error(latest.data?.message||latest.data?.error||'Không tải được đơn tạm')
       const latestDraft=latest.data
       const currentItems=Array.isArray(latestDraft?.displayItems)?latestDraft.displayItems:[]
-      if(!currentItems.some(item=>item.lineId===editing.lineId))throw new Error('Món này không còn trong đơn tạm, vui lòng tải lại.')
+      if(!currentItems.some(item=>item.lineId===editing.lineId))throw new Error('Sản phẩm này không còn trong đơn tạm, vui lòng tải lại.')
       const nextItems=currentItems.map(item=>item.lineId===editing.lineId?{...item,unitPrice:nextPrice,modelName:newName,itemNotes:newNotes||null}:item)
       const payload={
         draftId:latestDraft.draftId,
@@ -392,11 +392,11 @@ export default function QuickCounterDesk({ rows, actions, onNew, onCreated, shif
           filterOptions={(options,state)=>{const query=normalizeSearch(state.inputValue);return query?options.filter(item=>normalizeSearch(`${item.modelCode||''} ${item.modelName||''}`).includes(query)):options}}
           autoHighlight
           openOnFocus={isMobile}
-          groupBy={isMobile?item=>quickFavoriteIds.includes(String(item.id))?'Yêu thích':'Món trong danh mục':undefined}
+          groupBy={isMobile?item=>quickFavoriteIds.includes(String(item.id))?'Yêu thích':'Sản phẩm trong danh mục':undefined}
           disabled={!selectedTableId||!selectedDraftId||draftSaving}
           sx={{flex:'1 1 0',minWidth:0,width:{xs:'100%',sm:'auto'},'& .MuiInputBase-root':{minHeight:40}}}
           renderOption={(props,item)=>{const {key,...optionProps}=props;const image=item.imageUrl||item.thumbnailUrl;const favorite=quickFavoriteIds.includes(String(item.id));return <Box component="li" key={key||item.id} {...optionProps} sx={{display:'flex!important',gap:1.25,alignItems:'center'}}>{image?<Box component="img" src={image} alt="" sx={{width:46,height:46,objectFit:'cover',borderRadius:1,border:'1px solid #e2e8f0'}}/>:<Box sx={{width:46,height:46,borderRadius:1,bgcolor:'#e2e8f0'}}/>}<Box sx={{minWidth:0,flex:1}}><Typography fontWeight={800} noWrap>{item.modelName}</Typography><Typography variant="caption" color="text.secondary">{item.modelCode||''}{item.modelCode?' · ':''}{money(item.sellingPrice)}</Typography></Box><IconButton size="small" color={favorite?'warning':'default'} onMouseDown={event=>{event.preventDefault();event.stopPropagation()}} onClick={event=>{event.preventDefault();event.stopPropagation();toggleQuickFavorite(item.id)}}>{favorite?<StarIcon fontSize="small"/>:<StarBorderIcon fontSize="small"/>}</IconButton><AddIcon color="primary"/></Box>}}
-          renderInput={params=>{const image=quickItem?.imageUrl||quickItem?.thumbnailUrl;return <TextField {...params} size="small" label="Thêm món nhanh · chọn là thêm" placeholder={selectedTableId?'Gõ tên món không dấu':'Chọn bàn mặc định trước'} InputProps={{...params.InputProps,startAdornment:<>{image&&<Box component="img" src={image} alt="" sx={{width:32,height:32,objectFit:'cover',borderRadius:0.75,mr:0.75}}/>}{params.InputProps.startAdornment}</>}}/>}}
+          renderInput={params=>{const image=quickItem?.imageUrl||quickItem?.thumbnailUrl;return <TextField {...params} size="small" label="Thêm món nhanh · chọn là thêm" placeholder={selectedTableId?'Gõ tên sản phẩm không dấu':'Chọn bàn mặc định trước'} InputProps={{...params.InputProps,startAdornment:<>{image&&<Box component="img" src={image} alt="" sx={{width:32,height:32,objectFit:'cover',borderRadius:0.75,mr:0.75}}/>}{params.InputProps.startAdornment}</>}}/>}}
         />
         {draftSaving&&<Box sx={{width:40,height:40,display:'grid',placeItems:'center',flexShrink:0}}><CircularProgress size={20}/></Box>}
       </Stack>
