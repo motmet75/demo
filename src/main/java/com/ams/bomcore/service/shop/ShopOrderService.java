@@ -173,6 +173,7 @@ public class ShopOrderService {
     }
 
     private BigDecimal activeDailyLimit(Model model, LocalDate businessDate) {
+        if ("WAREHOUSE_TOTAL".equals(model.getShopAvailabilityMode())) return null;
         if (model.getShopAvailableUnitsOverride() == null || model.getShopAvailableUnitsOverrideDate() == null) {
             return null;
         }
@@ -215,7 +216,14 @@ public class ShopOrderService {
         public DailyMenuLimitExceededException(UUID modelId, String modelName, BigDecimal limitUnits,
                                                BigDecimal soldUnits, BigDecimal remainingUnits,
                                                BigDecimal requestedUnits) {
-            super(modelName + " only has " + remainingUnits.stripTrailingZeros().toPlainString() + " left today");
+            this(modelId,modelName,limitUnits,soldUnits,remainingUnits,requestedUnits,false);
+        }
+
+        public DailyMenuLimitExceededException(UUID modelId, String modelName, BigDecimal limitUnits,
+                                               BigDecimal soldUnits, BigDecimal remainingUnits,
+                                               BigDecimal requestedUnits, boolean warehouseStock) {
+            super(modelName + " còn " + remainingUnits.stripTrailingZeros().toPlainString()
+                    + (warehouseStock ? " đơn vị khả dụng trong kho." : " đơn vị có thể bán hôm nay."));
             this.modelId = modelId;
             this.modelName = modelName;
             this.limitUnits = limitUnits;
@@ -252,6 +260,16 @@ public class ShopOrderService {
                     .orElseThrow(() -> new IllegalArgumentException("Model not found: " + modelId));
             if (!tenantId.equals(model.getTenantId()) || !companyId.equals(model.getCompanyId())) {
                 throw new IllegalArgumentException("Model not found: " + modelId);
+            }
+            if ("WAREHOUSE_TOTAL".equals(model.getShopAvailabilityMode())) {
+                BigDecimal available=shopMaterialAuditService.warehouseUnitsAvailableForModel(
+                        model,tenantId,companyId,excludeOrderId);
+                if(available==null)available=BigDecimal.ZERO;
+                if(requested.compareTo(available)>0)
+                    throw new DailyMenuLimitExceededException(modelId,
+                            model.getModelName(),available,BigDecimal.ZERO,
+                            available,requested,true);
+                continue;
             }
             BigDecimal limit = activeDailyLimit(model, businessDate);
             if (limit == null) continue;
