@@ -1,0 +1,22 @@
+Third-party QR decoder notice
+=============================
+
+This app optionally uses @undecaf/zbar-wasm, version 0.11.0, as a local
+WebAssembly QR scanner for low-contrast identity-card photos.
+
+ZBar WebAssembly wrapper:
+  https://github.com/undecaf/zbar-wasm
+  Copyright the contributors as stated in the upstream project.
+  License: GNU Lesser General Public License (LGPL), version 2.1 or later.
+  Upstream license: https://github.com/undecaf/zbar-wasm/blob/master/LICENSE
+
+Underlying ZBar barcode reader:
+  https://github.com/mchehab/zbar
+  License: LGPL-2.1-or-later (refer to upstream license terms).
+
+The application imports the library via NPM and bundles its WebAssembly
+locally. The barcode decoder executes in the browser; uploaded QR photos
+are not transmitted to third-party scanner services.
+
+ZXing / html5-qrcode remains the initial QR reader. The ZBar component
+is activated only as a fallback for difficult image uploads.
