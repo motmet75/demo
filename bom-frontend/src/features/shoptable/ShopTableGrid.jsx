@@ -56,8 +56,8 @@ const STATUS_CHIP = {
   CONFIRMED: { label: 'Đã xác nhận', color: 'success' },
   PREPARING: { label: 'Đang làm', color: 'warning' },
   READY:     { label: 'Sẵn sàng', color: 'info' },
-  PICKED_UP: { label: 'Đã giao món', color: 'success' },
-  COMPLETED: { label: 'Đã trả món', color: 'success' },
+  PICKED_UP: { label: 'Đã giao hàng', color: 'success' },
+  COMPLETED: { label: 'Đã trả đơn', color: 'success' },
   CANCELLED: { label: 'Đã hủy', color: 'error' },
 }
 
@@ -118,7 +118,7 @@ function tableOrderBadge(order) {
   const mainItems = (order?.items || []).filter(item => !item.parentItemId)
   const item = mainItems.length === 1 ? mainItems[0] : null
   const itemLabel = item ? ` · ${Number(item.quantity || 1).toLocaleString('vi-VN')}× ${item.modelName || item.itemName || 'Món'}` : ''
-  return `${orderLabel(order)}${itemLabel} · ${isServedUnpaid(order) ? 'Đã trả món · CHƯA THANH TOÁN' : isServedOrder(order) ? 'Đã trả món' : order.paymentStatus === 'PAID' ? 'Đã thanh toán' : 'Chưa thanh toán'}`
+  return `${orderLabel(order)}${itemLabel} · ${isServedUnpaid(order) ? 'Đã trả đơn · CHƯA THANH TOÁN' : isServedOrder(order) ? 'Đã trả đơn' : order.paymentStatus === 'PAID' ? 'Đã thanh toán' : 'Chưa thanh toán'}`
 }
 
 export default function ShopTableGrid() {
@@ -527,7 +527,7 @@ export default function ShopTableGrid() {
     <Stack direction="row" gap={0.5} alignItems="center" flexWrap="wrap">
       {order.status === 'PENDING' && <Button size="small" variant="contained" disabled={!!orderActionId} onClick={() => runOrderAction(order, confirmShopOrder, 'xác nhận')}>Xác nhận</Button>}
       {order.paymentStatus !== 'PAID' && <Button size="small" variant="outlined" color="success" disabled={!!orderActionId} onClick={() => setPaymentAction({ order, action: 'paid' })}>Đã thanh toán</Button>}
-      {order.status === 'READY' && <Button size="small" variant="contained" color="success" disabled={!!orderActionId} onClick={() => setPaymentAction({ order, action: 'complete' })}>Hoàn tất & trả món</Button>}
+      {order.status === 'READY' && <Button size="small" variant="contained" color="success" disabled={!!orderActionId} onClick={() => setPaymentAction({ order, action: 'complete' })}>Hoàn tất & trả đơn</Button>}
       <Button size="small" variant="outlined" startIcon={<PrintIcon />} disabled={!!orderActionId} onClick={() => isServedOrder(order) ? printOrderReceiptTracked(order) : setPaymentAction({ order, action: 'print' })}>In hóa đơn</Button>
       {!['COMPLETED', 'PICKED_UP', 'CANCELLED'].includes(order.status) && <Button size="small" variant="outlined" startIcon={<TableBarIcon />} disabled={!!orderActionId} onClick={() => { setMoveOrder(order); setMoveTable(null) }}>Chuyển bàn</Button>}
       {['COMPLETED', 'PICKED_UP'].includes(order.status) && !order.tableClearedAt && <Button size="small" variant="outlined" color="warning" disabled={!!orderActionId} onClick={() => order.paymentStatus === 'PAID' ? runOrderAction(order, clearOrderTable, 'dọn bàn') : setPaymentAction({ order, action: 'clear' })}>Khách đã rời · Dọn bàn</Button>}
@@ -567,7 +567,7 @@ export default function ShopTableGrid() {
         return (
           <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', overflow: 'hidden' }}>
             {row.draft && <Chip label={`Tạm: ${(row.draft.displayItems || []).map(item => `${item.quantity}× ${item.modelName}`).join(' · ')}`} size="small" color="warning" sx={{ maxWidth: 300, fontWeight: 800 }} />}
-            {hideServedOrders && servedCount > 0 && <Chip label={`${servedCount} đã trả món`} size="small" color="success" sx={{ fontWeight: 800 }} />}
+            {hideServedOrders && servedCount > 0 && <Chip label={`${servedCount} đã trả đơn`} size="small" color="success" sx={{ fontWeight: 800 }} />}
             {list.slice(0, 3).map(order => (
               <Tooltip key={order.id} title={tableOrderBadge(order)}>
                 <Chip label={tableOrderBadge(order)} size="small" color={isServedUnpaid(order) ? 'error' : order.paymentStatus === 'PAID' ? 'success' : 'warning'} variant={isServedUnpaid(order) ? 'filled' : 'outlined'} sx={{ maxWidth: 320, fontWeight: 900 }} />
@@ -694,9 +694,9 @@ export default function ShopTableGrid() {
         {mobileTable && <Box sx={{ mt: 1.5 }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center"><Typography variant="h6" fontWeight={900}>{mobileTable.tableName}</Typography><Chip color={mobileTable.draft?'warning':mobileTable.activeOrderCount?'primary':'success'} label={mobileTable.draft?'Có đơn tạm':mobileTable.activeOrderCount?`${mobileTable.activeOrderCount} đơn chưa dọn`:'Bàn trống'} /></Stack>
           {mobileTable.draft && <Alert severity="warning" sx={{ mt: 1 }}><strong>Đơn tạm:</strong> {(mobileTable.draft.displayItems || []).map(item => `${item.quantity} × ${item.modelName}`).join(' · ')} · cập nhật bởi {mobileTable.draft.updatedBy}</Alert>}
-          {hideServedOrders && clearableOrders(mobileTable).length > 0 && <Alert severity="success" sx={{ mt: 1, py: 0 }}>{clearableOrders(mobileTable).length} đơn đã trả món đang chờ dọn bàn.</Alert>}
+          {hideServedOrders && clearableOrders(mobileTable).length > 0 && <Alert severity="success" sx={{ mt: 1, py: 0 }}>{clearableOrders(mobileTable).length} đơn đã trả đơn đang chờ dọn bàn.</Alert>}
           {visibleOrders(mobileTable).map(order => <Paper key={order.id} variant="outlined" sx={{ p: 1, my: 1, bgcolor: isServedUnpaid(order) ? '#fff1f2' : 'background.paper', borderColor: isServedUnpaid(order) ? 'error.main' : undefined, borderWidth: isServedUnpaid(order) ? 2 : 1 }} onClick={()=>setDetailOrder(order)}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" gap={1}><Typography fontWeight={800}>#{order.orderNumber ?? order.dailySeq} · {order.staffName || 'Khách tự gọi'}</Typography><Chip size="small" label={isServedUnpaid(order) ? 'ĐÃ TRẢ MÓN · CHƯA THANH TOÁN' : order.paymentStatus === 'PAID' ? 'Đã trả' : 'Chưa trả'} color={isServedUnpaid(order) ? 'error' : order.paymentStatus === 'PAID' ? 'success' : 'warning'} /></Stack>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" gap={1}><Typography fontWeight={800}>#{order.orderNumber ?? order.dailySeq} · {order.staffName || 'Khách tự gọi'}</Typography><Chip size="small" label={isServedUnpaid(order) ? 'ĐÃ TRẢ ĐƠN · CHƯA THANH TOÁN' : order.paymentStatus === 'PAID' ? 'Đã trả' : 'Chưa trả'} color={isServedUnpaid(order) ? 'error' : order.paymentStatus === 'PAID' ? 'success' : 'warning'} /></Stack>
             <Typography variant="body2">{(order.items || []).filter(item=>!item.parentItemId).map(item=>`${item.quantity} × ${item.modelName}${item.itemNotes?` (${item.itemNotes})`:''}`).join(' · ')}</Typography>
             <Box sx={{ mt: 1 }} onClick={event => event.stopPropagation()}>{renderOrderActions(order)}</Box>
           </Paper>)}
@@ -713,7 +713,7 @@ export default function ShopTableGrid() {
             autoFocus
             sx={{ width: '100%', maxWidth: 520 }}
           />
-          <FormControlLabel control={<Checkbox checked={hideServedOrders} onChange={event => setHideServedOrders(event.target.checked)} />} label="Ẩn chi tiết đơn đã trả món" />
+          <FormControlLabel control={<Checkbox checked={hideServedOrders} onChange={event => setHideServedOrders(event.target.checked)} />} label="Ẩn chi tiết đơn đã trả đơn" />
           <Button variant="contained" color="warning" disabled={!selectedTableIds.length || clearingTables} onClick={requestClearSelectedTables}>
             {clearingTables ? 'Đang dọn…' : `Khách đã rời · Dọn bàn (${selectedTableIds.length})`}
           </Button>
@@ -729,13 +729,13 @@ export default function ShopTableGrid() {
               <Stack direction="row" gap={0.5} flexWrap="wrap" justifyContent="flex-end">
                 <Chip size="small" color={table.activeOrderCount ? 'primary' : 'success'} label={table.activeOrderCount ? `${table.activeOrderCount} đơn chưa dọn` : 'Bàn trống'} />
                 {table.draft && <Chip size="small" color="warning" label={`Đơn tạm · ${(table.draft.displayItems || []).length} dòng`} />}
-                {table.activeOrderCount > 0 && <Chip size="small" color={hasServedUnpaid ? 'error' : (table.activeOrders || []).some(order => order.paymentStatus !== 'PAID') ? 'warning' : 'success'} variant={hasServedUnpaid ? 'filled' : 'outlined'} label={hasServedUnpaid ? `${(table.activeOrders || []).filter(isServedUnpaid).length} ĐÃ TRẢ MÓN · CHƯA THANH TOÁN` : `${(table.activeOrders || []).filter(order => order.paymentStatus === 'PAID').length} đã trả · ${(table.activeOrders || []).filter(order => order.paymentStatus !== 'PAID').length} chưa trả`} />}
+                {table.activeOrderCount > 0 && <Chip size="small" color={hasServedUnpaid ? 'error' : (table.activeOrders || []).some(order => order.paymentStatus !== 'PAID') ? 'warning' : 'success'} variant={hasServedUnpaid ? 'filled' : 'outlined'} label={hasServedUnpaid ? `${(table.activeOrders || []).filter(isServedUnpaid).length} ĐÃ TRẢ ĐƠN · CHƯA THANH TOÁN` : `${(table.activeOrders || []).filter(order => order.paymentStatus === 'PAID').length} đã trả · ${(table.activeOrders || []).filter(order => order.paymentStatus !== 'PAID').length} chưa trả`} />}
               </Stack>
             </Stack>
             {table.draft && <Typography variant="body2" fontWeight={800} color="warning.dark" sx={{ mt: 0.5 }}>Tạm: {(table.draft.displayItems || []).map(item => `${item.quantity} × ${item.modelName}`).join(' · ')} · {table.draft.updatedBy}</Typography>}
-            {hideServedOrders && clearableOrders(table).length > 0 && <Alert severity="success" sx={{ mt: 1, py: 0 }}>Đã trả món: {clearableOrders(table).length} đơn · chọn bàn để dọn khi khách rời.</Alert>}
+            {hideServedOrders && clearableOrders(table).length > 0 && <Alert severity="success" sx={{ mt: 1, py: 0 }}>Đã trả đơn: {clearableOrders(table).length} đơn · chọn bàn để dọn khi khách rời.</Alert>}
             {visibleOrders(table).map(order => <Paper key={order.id} variant="outlined" sx={{ p: 1, mt: 1, bgcolor: isServedUnpaid(order) ? '#fff7f7' : 'background.paper', borderColor: isServedUnpaid(order) ? 'error.main' : undefined, borderWidth: isServedUnpaid(order) ? 2 : 1 }}>
-              <Stack direction="row" alignItems="center" gap={0.5} flexWrap="wrap"><Typography fontWeight={900}>{orderLabel(order)}</Typography>{statusChip(order.status)}<Chip size="small" label={isServedUnpaid(order) ? 'ĐÃ TRẢ MÓN · CHƯA THANH TOÁN' : order.paymentStatus === 'PAID' ? 'Đã trả' : 'Chưa trả'} color={isServedUnpaid(order) ? 'error' : order.paymentStatus === 'PAID' ? 'success' : 'warning'} /></Stack>
+              <Stack direction="row" alignItems="center" gap={0.5} flexWrap="wrap"><Typography fontWeight={900}>{orderLabel(order)}</Typography>{statusChip(order.status)}<Chip size="small" label={isServedUnpaid(order) ? 'ĐÃ TRẢ ĐƠN · CHƯA THANH TOÁN' : order.paymentStatus === 'PAID' ? 'Đã trả' : 'Chưa trả'} color={isServedUnpaid(order) ? 'error' : order.paymentStatus === 'PAID' ? 'success' : 'warning'} /></Stack>
               <Typography variant="body2">{(order.items || []).filter(item => !item.parentItemId).map(item => `${item.quantity} × ${item.modelName}`).join(' · ')}</Typography>
               <Typography variant="body2" fontWeight={800}>{fmtMoney(order.totalAmount)}</Typography>
               <Box sx={{ mt: 1 }}>{renderOrderActions(order)}</Box>
@@ -847,7 +847,7 @@ export default function ShopTableGrid() {
           <Typography component="span" fontWeight={900}>{ordersDialog?.table?.tableName}</Typography>
           <Chip label={`${ordersDialog?.orders?.length || 0} đơn`} size="small" />
           <Chip label={`${(ordersDialog?.orders || []).filter(isActiveOrder).length} đang làm`} size="small" color="primary" variant="outlined" />
-          <Chip label={`${(ordersDialog?.orders || []).filter(isServedOrder).length} đã trả món`} size="small" color="success" variant="outlined" />
+          <Chip label={`${(ordersDialog?.orders || []).filter(isServedOrder).length} đã trả đơn`} size="small" color="success" variant="outlined" />
         </DialogTitle>
         <DialogContent sx={{ height: 520 }}>
           <DataGrid
@@ -862,7 +862,7 @@ export default function ShopTableGrid() {
             density="compact"
             initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
           />
-          <FormControlLabel control={<Checkbox checked={hideServedOrders} onChange={event => setHideServedOrders(event.target.checked)} />} label="Ẩn đơn đã trả món và đã thanh toán" />
+          <FormControlLabel control={<Checkbox checked={hideServedOrders} onChange={event => setHideServedOrders(event.target.checked)} />} label="Ẩn đơn đã trả đơn và đã thanh toán" />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOrdersDialog(null)}>Close</Button>
@@ -890,14 +890,14 @@ export default function ShopTableGrid() {
         <DialogTitle>{clearPlan?.scope === 'tables' ? `Dọn ${clearPlan?.tableCount || 0} bàn đã chọn` : 'Dọn các đơn đã chọn khỏi bàn'}</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.25, pt: '10px !important' }}>
           <Alert severity="info">
-            Đã chọn <strong>{clearPlan?.orders?.length || 0}</strong> đơn. Chỉ đơn đã trả món và đã thanh toán mới được dọn.
+            Đã chọn <strong>{clearPlan?.orders?.length || 0}</strong> đơn. Chỉ đơn đã trả đơn và đã thanh toán mới được dọn.
           </Alert>
           {Boolean(clearPlan?.unpaid?.length) && <Alert severity="error"><strong>{clearPlan.unpaid.length} đơn chưa thanh toán.</strong> Các đơn này sẽ được giữ lại tại bàn để thu tiền.</Alert>}
-          {Boolean(clearPlan?.unserved?.length) && <Alert severity="warning"><strong>{clearPlan.unserved.length} đơn chưa trả món.</strong> Hãy hoàn tất/trả món trước khi dọn.</Alert>}
+          {Boolean(clearPlan?.unserved?.length) && <Alert severity="warning"><strong>{clearPlan.unserved.length} đơn chưa trả đơn.</strong> Hãy hoàn tất/trả đơn trước khi dọn.</Alert>}
           <Stack direction="row" gap={1} flexWrap="wrap">
             <Chip color="success" label={`${clearPlan?.eligible?.length || 0} đơn đủ điều kiện dọn`} />
             <Chip color="error" variant="outlined" label={`${clearPlan?.unpaid?.length || 0} chưa thanh toán`} />
-            <Chip color="warning" variant="outlined" label={`${clearPlan?.unserved?.length || 0} chưa trả món`} />
+            <Chip color="warning" variant="outlined" label={`${clearPlan?.unserved?.length || 0} chưa trả đơn`} />
           </Stack>
           {!clearPlan?.eligible?.length && <Typography color="error" fontWeight={800}>Không có đơn nào đủ điều kiện để dọn.</Typography>}
         </DialogContent>
