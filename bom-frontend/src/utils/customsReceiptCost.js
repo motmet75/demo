@@ -18,9 +18,9 @@ export function previewCustomsReceiptCost(item, row) {
   const invoice = num(item.invoiceValue) ??
     (num(item.unitPrice) == null ? null : qty * num(item.unitPrice))
   const source = customVnd != null ? 'REVIEWED_VND' :
-    taxableVnd != null ? 'CUSTOMS_TAXABLE_PROXY' : 'INVOICE_HISTORICAL_FX'
-  const goodsVnd = customVnd ?? taxableVnd ??
-    (fx > 0 && invoice != null ? invoice * fx : null)
+    fx > 0 && invoice != null ? 'INVOICE_HISTORICAL_FX' : 'CUSTOMS_TAXABLE_PROXY'
+  const goodsVnd = customVnd ??
+    (fx > 0 && invoice != null ? invoice * fx : taxableVnd)
   const dutyAmount = num(item.importTaxAmountVnd)
   const dutyRate = num(item.importTaxRate)
   const duty = dutyAmount ?? (taxableVnd != null && dutyRate != null ?
