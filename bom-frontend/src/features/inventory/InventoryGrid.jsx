@@ -68,6 +68,7 @@ export default function InventoryGrid({ onInvoiceStockOut }) {
 
   const [importOpen, setImportOpen] = useState(false)
   const [patchOpen, setPatchOpen]   = useState(false)
+  const [pricePatchOpen, setPricePatchOpen] = useState(false)
   const [invoiceReceiveOpen, setInvoiceReceiveOpen] = useState(false)
   const [customsOpen,setCustomsOpen] = useState(false)
   const [customsDirection,setCustomsDirection] = useState('IN')
@@ -630,12 +631,12 @@ export default function InventoryGrid({ onInvoiceStockOut }) {
             </Button>
           </>}
           {hasInventoryPriceAccess && (
-            <button onClick={() => { setImportOpen(o => !o); setPatchOpen(false) }} disabled={saving}>
+            <button onClick={() => { setImportOpen(o => !o); setPatchOpen(false); setPricePatchOpen(false) }} disabled={saving}>
               {importOpen ? '✕ Close Import' : 'Import Inventory'}
             </button>
           )}
           {hasInventoryPriceAccess && (
-            <button onClick={() => { setPatchOpen(o => !o); setImportOpen(false) }} disabled={saving}
+            <button onClick={() => { setPatchOpen(o => !o); setPricePatchOpen(false); setImportOpen(false) }} disabled={saving}
               style={{ background: patchOpen ? '#e65100' : '#1565c0', color: '#fff', border: 'none', borderRadius: 4, padding: '4px 12px', cursor: 'pointer' }}>
               {patchOpen ? '✕ Close Patch' : '✏ Patch Deduction / Quota'}
             </button>
@@ -667,6 +668,17 @@ export default function InventoryGrid({ onInvoiceStockOut }) {
             <InventoryImport onImportComplete={() => { load(); setImportOpen(false) }} />
             <button onClick={() => setImportOpen(false)} style={{ marginLeft: 8 }}>Close</button>
           </div>
+        </div>
+      )}
+
+      {hasInventoryPriceAccess && pricePatchOpen && (
+        <div style={{padding:'8px 12px',background:'#e9f5ff',borderBottom:'2px solid #2196f3'}}>
+          <InventoryPatchCsv
+            priceOnly
+            selectedRows={filteredRows.filter(row => selectedIds.includes(row.id))}
+            onPatchComplete={() => {load();setPricePatchOpen(false);setSelectionModel({type:'include',ids:new Set()})}}
+          />
+          <button type="button" onClick={()=>setPricePatchOpen(false)}>Đóng cập nhật giá</button>
         </div>
       )}
 
@@ -765,6 +777,12 @@ export default function InventoryGrid({ onInvoiceStockOut }) {
           <button type="button" onClick={() => exportRows(filteredRows.map(r => r.id), 'xlsx', exportGrouping)}>Export Filtered XLSX</button>
           <button type="button" onClick={() => exportRows(filteredRows.map(r => r.id), 'csv', exportGrouping)}>Export Filtered CSV</button>
           <button type="button" onClick={() => exportRows(selectedIds, 'xlsx', exportGrouping)} disabled={selectedIds.length === 0}>Export Selected XLSX</button>
+          {hasInventoryPriceAccess && <button type="button" disabled={selectedIds.length===0 || saving}
+            onClick={()=>{setPricePatchOpen(true);setPatchOpen(false);setImportOpen(false)}}
+            style={{border:'1px solid #1565c0',background:pricePatchOpen?'#1565c0':'#e3f2fd',
+              color:pricePatchOpen?'white':'#0d47a1',fontWeight:700,padding:'6px 10px',borderRadius:4}}>
+            Excel giá · {selectedIds.length} dòng đã chọn
+          </button>}
           <button type="button" onClick={() => exportRows(selectedIds, 'csv', exportGrouping)} disabled={selectedIds.length === 0}>Export Selected CSV</button>
           <button type="button" onClick={openDisposeSelected} disabled={selectedIds.length !== 1 || saving}>Dispose Selected</button>
           <button
