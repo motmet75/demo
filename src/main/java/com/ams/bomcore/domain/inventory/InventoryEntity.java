@@ -91,6 +91,36 @@ public class InventoryEntity {
     @Column(name = "currency", length = 3)
     private String currency = "USD";
 
+    @Column(name = "customs_foreign_unit_price")
+    private BigDecimal customsForeignUnitPrice;
+
+    @Column(name = "customs_foreign_currency", length = 3)
+    private String customsForeignCurrency;
+
+    @Column(name = "customs_goods_value_vnd")
+    private BigDecimal customsGoodsValueVnd;
+
+    @Column(name = "customs_import_duty_vnd")
+    private BigDecimal customsImportDutyVnd;
+
+    @Column(name = "customs_import_vat_vnd")
+    private BigDecimal customsImportVatVnd;
+
+    @Column(name = "customs_import_vat_rate")
+    private BigDecimal customsImportVatRate;
+
+    @Column(name = "customs_additional_costs_vnd")
+    private BigDecimal customsAdditionalCostsVnd;
+
+    @Column(name = "customs_vat_creditable")
+    private Boolean customsVatCreditable;
+
+    @Column(name = "customs_historical_fx_rate")
+    private BigDecimal customsHistoricalFxRate;
+
+    @Column(name = "customs_landed_total_vnd")
+    private BigDecimal customsLandedTotalVnd;
+
     @Column(name = "hs_code", length = 20)
     private String hsCode;
 
@@ -339,6 +369,36 @@ public class InventoryEntity {
     public void setCurrency(String currency) {
         this.currency = currency;
     }
+
+    public BigDecimal getCustomsForeignUnitPrice() { return customsForeignUnitPrice; }
+    public void setCustomsForeignUnitPrice(BigDecimal value) { this.customsForeignUnitPrice = value; }
+
+    public String getCustomsForeignCurrency() { return customsForeignCurrency; }
+    public void setCustomsForeignCurrency(String value) { this.customsForeignCurrency = value; }
+
+    public BigDecimal getCustomsGoodsValueVnd() { return customsGoodsValueVnd; }
+    public void setCustomsGoodsValueVnd(BigDecimal value) { this.customsGoodsValueVnd = value; }
+
+    public BigDecimal getCustomsImportDutyVnd() { return customsImportDutyVnd; }
+    public void setCustomsImportDutyVnd(BigDecimal value) { this.customsImportDutyVnd = value; }
+
+    public BigDecimal getCustomsImportVatVnd() { return customsImportVatVnd; }
+    public void setCustomsImportVatVnd(BigDecimal value) { this.customsImportVatVnd = value; }
+
+    public BigDecimal getCustomsImportVatRate() { return customsImportVatRate; }
+    public void setCustomsImportVatRate(BigDecimal value) { this.customsImportVatRate = value; }
+
+    public BigDecimal getCustomsAdditionalCostsVnd() { return customsAdditionalCostsVnd; }
+    public void setCustomsAdditionalCostsVnd(BigDecimal value) { this.customsAdditionalCostsVnd = value; }
+
+    public Boolean getCustomsVatCreditable() { return customsVatCreditable; }
+    public void setCustomsVatCreditable(Boolean value) { this.customsVatCreditable = value; }
+
+    public BigDecimal getCustomsHistoricalFxRate() { return customsHistoricalFxRate; }
+    public void setCustomsHistoricalFxRate(BigDecimal value) { this.customsHistoricalFxRate = value; }
+
+    public BigDecimal getCustomsLandedTotalVnd() { return customsLandedTotalVnd; }
+    public void setCustomsLandedTotalVnd(BigDecimal value) { this.customsLandedTotalVnd = value; }
 
     public String getHsCode() {
         return hsCode;
