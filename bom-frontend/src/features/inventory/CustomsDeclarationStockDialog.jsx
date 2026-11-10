@@ -12,6 +12,8 @@ import {formatVnNumber,parseVnNumber} from '../../utils/vietnameseNumbers'
 import {generateMaterialCode} from '../../utils/materialCode'
 import CustomsTariffComparison from './CustomsTariffComparison'
 import {previewCustomsReceiptCost} from '../../utils/customsReceiptCost'
+import {prepareCustomsPriceExport} from '../../utils/customsPriceExport'
+import * as XLSX from 'xlsx'
 import {matchMaterialByDescription,normalizeMaterialDescription} from '../../utils/materialBulkMatching'
 
 const norm=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
@@ -481,6 +483,40 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
     finally{setBusy(false)}
   }
 
+  const downloadCustomsVndPrices=()=>{
+    if(!doc?.items?.length || direction!=='IN') return
+    try {
+      const result=prepareCustomsPriceExport({
+        declaration:doc,rows,materials,warehouses,
+        declarationNumber:number,declarationDate:date,defaultCurrency:currency
+      })
+      const workbook=XLSX.utils.book_new()
+      const sheet=XLSX.utils.json_to_sheet(result.records)
+      sheet['!cols'] = Object.keys(result.records[0]||{}).map(key=>({
+        wch: Math.min(65,Math.max(16,key.includes('Tên hàng')?62:key.includes('Tình trạng')?48:24))
+      }))
+      XLSX.utils.book_append_sheet(workbook,sheet,'Bang_gia_CDS_VND')
+      const note=XLSX.utils.aoa_to_sheet([
+        ['BẢNG ĐƠN GIÁ VND TỪ TỜ KHAI HẢI QUAN - CHƯA PHẢI PHIẾU NHẬP KHO'],
+        ['Số tờ khai',number||doc.declarationNumber||''],
+        ['Ngày tờ khai',date||doc.declarationDate||''],
+        ['Tổng số dòng',result.records.length],
+        ['Đã tính được',result.calculatedCount],
+        ['Chưa đủ dữ liệu',result.missingCount],
+        ['Tổng giá vốn VND của các dòng đã tính',result.calculatedTotalVnd],
+        ['Lưu ý','Trị giá tính thuế Hải quan không nhất thiết bằng giá mua. Dòng dùng làm cơ sở sẽ có nhãn TẠM TÍNH.'],
+        ['VAT nhập khẩu','VAT gốc vẫn có trong Excel; loại khỏi giá vốn chỉ khi doanh nghiệp được khấu trừ.'],
+        ['Hạch toán','File chỉ để kiểm tra và tải xuống; tải XLS không tự ghi tồn kho.'],
+        ['Tiền tệ','Giữ giá và đồng tiền hóa đơn gốc USD, CAD, EUR, ... trên từng dòng.']
+      ])
+      note['!cols']=[{wch:32},{wch:115}]
+      XLSX.utils.book_append_sheet(workbook,note,'Huong_dan')
+      const file=(number||doc.declarationNumber||'customs').replace(/[^0-9a-zA-Z_-]/g,'_')
+      XLSX.writeFile(workbook,`CDS_${file}_don_gia_VND.xlsx`)
+      setNotice(`Đã tạo Excel ${result.records.length} dòng; tính được ${result.calculatedCount}; thiếu dữ liệu ${result.missingCount}. File không tự ghi kho.`)
+    }catch(err){setError(err?.message||'Không xuất được bảng đơn giá VND.')}
+  }
+
   return <Dialog open={open} onClose={busy?undefined:onClose} maxWidth="xl" fullWidth
     PaperProps={{sx:{height:'92vh',maxHeight:'95vh'}}}>
     <DialogTitle sx={{fontWeight:800}}>Nhập / Xuất kho bằng tờ khai Hải quan</DialogTitle>
@@ -507,6 +543,12 @@ export default function CustomsDeclarationStockDialog({open,onClose,onComplete,i
             {h.declarationNumber||h.fileName} · {h.status==='POSTED'?'Đã ghi kho':'Chưa ghi'}
           </MenuItem>)}
         </TextField>
+        {doc?.items?.length>0&&direction==='IN'&&
+          <Button variant="outlined" color="success" size="small"
+            disabled={busy} onClick={downloadCustomsVndPrices}
+            sx={{fontWeight:800,textTransform:'none'}}>
+            Tải Excel hàng hóa + đơn giá VND ({doc.items.length} dòng)
+          </Button>}
         {busy&&<CircularProgress size={20}/>}
         {queuedDocs.length>0&&<Chip label={`Đã chọn ${queuedDocs.length} tờ khai`} color="info" size="small"/>}
       </Stack>
