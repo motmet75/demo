@@ -7,7 +7,7 @@ import {
 import {fetchInventoryView} from '../../api/inventoryApi'
 import {createModel,createModelBom} from '../../api/modelApi'
 import {
-  calculateBulkMenuPrice, inventoryMenuCode, inventoryVndUnitPrice
+  calculateBulkMenuPrice, inventoryMenuCode, resolveMenuInventoryVndBase
 } from '../../utils/bulkMenuPricing'
 
 const text = val => String(val ?? '')
@@ -30,6 +30,7 @@ export default function BulkMenuFromInventoryDialog({open,onClose,onCreated,exis
   const [selected,setSelected]=useState([])
   const [edits,setEdits]=useState({})
   const [markup,setMarkup]=useState('30')
+  const [fxRates,setFxRates]=useState({})
   const [roundTo,setRoundTo]=useState('1000')
   const [roundMode,setRoundMode]=useState('up')
   const [category,setCategory]=useState('Hàng hóa')
@@ -68,6 +69,9 @@ export default function BulkMenuFromInventoryDialog({open,onClose,onCreated,exis
       row.warehouseName].join(' ')).includes(norm(search))
   }),[inventory,search,warehouse,batch])
 
+  const foreignCurrencies=useMemo(()=>[...new Set(inventory.map(row=>
+    String(row.currency||'').trim().toUpperCase()).filter(c=>c&&c!=='VND'))].sort(),[inventory])
+
   const currentCodes=useMemo(()=>new Set([
     ...existingModels.map(model=>text(model.modelCode).toUpperCase()),
     ...newCodes
@@ -80,13 +84,15 @@ export default function BulkMenuFromInventoryDialog({open,onClose,onCreated,exis
     const name=edit.name===undefined?
       (text(row.materialName||row.materialCode) +
         (appendBatch&&row.batchNo?' · Lô '+text(row.batchNo):'')):edit.name
-    const base=edit.base===undefined?inventoryVndUnitPrice(row):edit.base
+    const cost=resolveMenuInventoryVndBase(row,fxRates)
+    const base=edit.base===undefined?(cost.value??''):edit.base
     const percent=percentFor(edit,markup)
     const automatic=calculateBulkMenuPrice(base,percent,roundTo,roundMode)
     const finalPrice=edit.priceOverride===undefined||edit.priceOverride===''?
       automatic:(realNumber(edit.priceOverride)?Number(edit.priceOverride):null)
     const code=inventoryMenuCode(row.inventoryId||row.id)
     return {name,base,percent,automatic,finalPrice,code,
+      priceSource:cost.status,fxRate:cost.fxRate,
       alreadyCreated:currentCodes.has(code)}
   }
   const patch=(id,values)=>setEdits(prev=>({
@@ -110,7 +116,7 @@ export default function BulkMenuFromInventoryDialog({open,onClose,onCreated,exis
     if(invalid.length){
       setErrors(invalid.slice(0,12).map(row=>
         (row.name||row.row.materialCode||row.row.materialName||'Dòng tồn kho')+
-        ': chưa có giá gốc VND hợp lệ, giá bán dương hoặc mã vật tư để liên kết BOM.'))
+        ': chưa có giá bán VND hợp lệ hoặc thiếu tỷ giá, đơn giá và liên kết BOM.'))
       return
     }
     setSaving(true)
@@ -169,8 +175,10 @@ export default function BulkMenuFromInventoryDialog({open,onClose,onCreated,exis
       <Stack spacing={2}>
         <Alert severity="info">
           Tìm vật tư theo tên, kho và số lô rồi chọn nhiều dòng để tạo menu.
-          Giá bán độc lập với giá nhập kho. Với tiền tệ khác VND phải nhập
-          giá gốc quy đổi VND thủ công — không tự coi USD là VND.
+          Hệ thống đọc <strong>currency</strong> và <strong>unitPrice</strong> từ từng lô
+          trong Inventory. Hàng đã định giá VND dùng trực tiếp; USD/CAD/EUR phải nhập
+          tỷ giá VND/ngoại tệ để tự tính giá gốc VND trước khi tăng % và làm tròn.
+          Tỷ giá chỉ dùng tạo giá bán menu, KHÔNG đổi giá vốn hoặc đơn vị tiền trong kho.
         </Alert>
         {fetchError&&<Alert severity="error">{fetchError}</Alert>}
         <Stack direction={{xs:'column',sm:'row'}} spacing={1.5}>
@@ -184,6 +192,23 @@ export default function BulkMenuFromInventoryDialog({open,onClose,onCreated,exis
           <TextField size="small" fullWidth label="Lô / batch" value={batch}
             onChange={e=>setBatch(e.target.value)}/>
         </Stack>
+        {foreignCurrencies.length>0&&<Stack spacing={1}>
+          <Typography fontWeight={700}>Tỷ giá định giá menu · VND cho 1 đơn vị ngoại tệ</Typography>
+          <Stack direction={{xs:'column',sm:'row'}} spacing={1.5} flexWrap="wrap">
+            {foreignCurrencies.map(c=><TextField key={c} size="small" type="number"
+              label={`1 ${c} = ? VND`}
+              placeholder="Nhập tỷ giá để tính giá menu"
+              value={fxRates[c]??''}
+              disabled={saving}
+              onChange={e=>setFxRates(prev=>({...prev,[c]:e.target.value}))}
+              inputProps={{min:'0.000001',step:'any'}}
+              sx={{minWidth:225}}/>)}
+          </Stack>
+          <Typography variant="caption" color="text.secondary">
+            Chưa có tỷ giá thì không tự tính giá bán cho các dòng ngoại tệ.
+            Bạn vẫn có thể nhập giá gốc VND riêng cho từng dòng để định giá thủ công.
+          </Typography>
+        </Stack>}
         <Stack direction={{xs:'column',sm:'row'}} spacing={1.5} alignItems={{sm:'center'}}>
           <TextField size="small" label="Tăng giá so với giá gốc (%)" type="number"
             value={markup} onChange={e=>setMarkup(e.target.value)}
@@ -262,7 +287,11 @@ export default function BulkMenuFromInventoryDialog({open,onClose,onCreated,exis
                     value={edit.base} disabled={saving} placeholder="Giá gốc VND"
                     inputProps={{min:0,step:'0.01'}}
                     error={chosen.has(id)&&!realNumber(edit.base)}
-                    helperText={row.currency!=='VND'?'Cần quy đổi VND':'Giá/đv tồn'}
+                    helperText={edit.priceSource==='CONVERTED'
+                      ?`Tự đổi ${row.currency} × ${edit.fxRate} → VND`
+                      : edit.priceSource==='VND'?'Giá kho VND theo đơn vị tồn'
+                      : row.currency&&row.currency!=='VND'?'Nhập tỷ giá phía trên hoặc giá VND tại dòng'
+                      :'Chưa có đơn giá/tiền tệ hợp lệ'}
                     onChange={e=>patch(id,{base:e.target.value})} fullWidth/></TableCell>
                   <TableCell sx={{minWidth:100}}><TextField size="small" type="number" fullWidth
                     disabled={saving} value={edit.percent}
