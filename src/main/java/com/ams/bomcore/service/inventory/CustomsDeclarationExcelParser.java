@@ -96,7 +96,8 @@ public class CustomsDeclarationExcelParser {
             Cell cell=row.getCell(column);
             if(cell==null)continue;
             String candidate=formatter.formatCellValue(cell).trim().toUpperCase(Locale.ROOT);
-            if(Set.of("VND","USD","EUR","JPY","CNY","HKD","KRW","SGD","AUD","GBP","THB")
+            if(Set.of("VND","USD","CAD","EUR","JPY","CNY","HKD","KRW","SGD","AUD","GBP","THB",
+                    "CHF","NZD","SEK","NOK","DKK","TWD","MYR","IDR","PHP","INR")
                 .contains(candidate))return candidate;
         }
         return "";
@@ -125,7 +126,7 @@ public class CustomsDeclarationExcelParser {
             DataFormatter formatter=new DataFormatter(new Locale("vi","VN"));
             List<Item> items=new ArrayList<>();
             Map<String,String> current=null;
-            String number="",date="",direction=null;
+            String number="",date="",direction=null,declarationCurrency="";
             String taxSection="NONE";
             Sheet sheet=book.getSheetAt(0);
             if(sheet.getLastRowNum()>10_000)throw new IllegalArgumentException("Tờ khai có quá nhiều dòng.");
@@ -145,12 +146,20 @@ public class CustomsDeclarationExcelParser {
                         direction=markerDirection;
                         if(current!=null)append(items,current);
                         current=new LinkedHashMap<>();
+                        if(!declarationCurrency.isBlank()) current.put("currency",declarationCurrency);
                         taxSection="NONE";
                         continue;
                     }
                     String value=nearby(row,c,formatter,1);
                     if(key.equals("so to khai")&&!value.isBlank())number=value;
                     if(key.equals("ngay dang ky")&&!value.isBlank())date=value;
+                    if(key.startsWith("dong tien")||key.equals("currency")) {
+                        String candidate=value.trim().toUpperCase(Locale.ROOT);
+                        if(candidate.matches("[A-Z]{3}")) {
+                            declarationCurrency=candidate;
+                            if(current!=null)current.put("currency",candidate);
+                        }
+                    }
                     if(current==null)continue;
                     if(key.startsWith("ma so hang hoa"))current.put("hsCode",value);
                     else if(key.startsWith("mo ta hang hoa"))current.put("description",value);
@@ -163,7 +172,10 @@ public class CustomsDeclarationExcelParser {
                         String unitCurrency=nearbyCurrency(row,c,formatter);
                         if(!unitCurrency.isBlank())current.put("currency",unitCurrency);
                     }
-                    else if(key.equals("currency")||key.startsWith("dong tien"))current.put("currency",value);
+                    else if(key.equals("currency")||key.startsWith("dong tien")) {
+                        if(value.trim().matches("(?i)[A-Z]{3}"))
+                            current.put("currency",value.trim().toUpperCase(Locale.ROOT));
+                    }
                     else if(key.startsWith("nuoc xuat xu"))current.put("originCountry",value);
                     else if(key.equals("tri gia hoa don"))current.put("invoiceValue",value);
                     else if(key.equals("thue nhap khau"))taxSection="IMPORT";
