@@ -26,6 +26,10 @@ export default defineConfig(({ mode }) => {
   }
   return {
   plugins: [react()],
+  // Keep fallback QR decoder self-hosted: bundle its WASM as inlined ESM.
+  resolve: {
+    conditions: ['zbar-inlined', 'module', 'browser', 'development|production']
+  },
   base: '/bom-inventory/',
   build: {
     rollupOptions: {
