@@ -1,4 +1,5 @@
 import {previewCustomsReceiptCost} from './customsReceiptCost.js'
+import {parseVnNumber,parseMachineNumber} from './vietnameseNumbers.js'
 
 /**
  * Build a read-only Excel-ready list from the uploaded customs declaration and
@@ -27,10 +28,11 @@ export function prepareCustomsPriceExport({
     }
     const material = row ? byMaterial.get(String(row.materialId)) : null
     const warehouse = row ? byWarehouse.get(String(row.warehouseId)) : null
-    const quantity = item.quantity == null ? '' : Number(item.quantity)
+    const quantity = item.quantity == null ? '' :
+      (typeof item.quantity === 'number' ? item.quantity : parseMachineNumber(item.quantity))
     const stockQuantity = cost?.stockQuantity ?? (
-      quantity !== '' && row && Number.isFinite(Number(row.conversionRatio)) ?
-        quantity * Number(row.conversionRatio) : ''
+      quantity !== '' && row && Number.isFinite(parseVnNumber(row.conversionRatio)) ?
+        quantity * parseVnNumber(row.conversionRatio) : ''
     )
     const sourceName = cost?.goodsSource === 'INVOICE_HISTORICAL_FX' ?
       'Hóa đơn x tỷ giá lịch sử' :
@@ -52,7 +54,8 @@ export function prepareCustomsPriceExport({
       'Lô / Batch': String(row?.batchNo || ''),
       'Số lượng khai báo': quantity,
       'ĐVT khai báo': String(item.unit || ''),
-      'Hệ số đổi sang ĐVT kho': row ? Number(row.conversionRatio) : '',
+      'Hệ số đổi sang ĐVT kho': row && Number.isFinite(parseVnNumber(row.conversionRatio)) ?
+        parseVnNumber(row.conversionRatio) : '',
       'Số lượng kho': stockQuantity,
       'ĐVT kho': String(row?.newMaterial ? row.newMaterialUnit || '' : material?.unit || item.unit || ''),
       'Đơn giá hóa đơn gốc': item.unitPrice == null ? '' : Number(item.unitPrice),
@@ -60,8 +63,9 @@ export function prepareCustomsPriceExport({
         Number(item.invoiceValue) : (item.unitPrice != null && quantity !== '' ?
           Number(item.unitPrice) * quantity : ''),
       'Tiền tệ gốc': sourceCurrency,
-      'Tỷ giá lịch sử VND/ngoại tệ': row?.historicalFxRate ?
-        Number(String(row.historicalFxRate).replace(/\\./g, '').replace(',', '.')) : '',
+      'Tỷ giá lịch sử VND/ngoại tệ': row?.historicalFxRate &&
+        Number.isFinite(parseVnNumber(row.historicalFxRate)) ?
+          parseVnNumber(row.historicalFxRate) : '',
       'Cơ sở giá VND': sourceName,
       'Trị giá tính thuế HQ VND': item.importTaxableValueVnd == null ?
         '' : Number(item.importTaxableValueVnd),
@@ -72,6 +76,8 @@ export function prepareCustomsPriceExport({
       'VAT nhập khẩu VND': cost?.importVatVnd ?? '',
       'VAT NK được khấu trừ': row?.importVatCreditable ? 'Có' : 'Không',
       'Chi phí phân bổ VND': cost?.additionalCostsVnd ?? '',
+      'Tổng chi phí đã gồm VAT VND': cost?.totalIncludingVatVnd ?? '',
+      'Đơn giá VND/đơn vị kho (gồm VAT)': cost?.unitIncludingVatVnd ?? '',
       'Tổng giá vốn nhập VND': cost?.totalVnd ?? '',
       'Đơn giá VND/đơn vị khai báo': cost?.declaredUnitVnd ?? '',
       'Đơn giá VND/đơn vị kho': cost?.stockUnitVnd ?? '',
