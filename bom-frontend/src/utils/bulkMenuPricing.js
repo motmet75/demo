@@ -37,3 +37,35 @@ export function inventoryVndUnitPrice(item) {
   const value = item?.unitPrice
   return value == null || Number(value) < 0 || !Number.isFinite(Number(value)) ? '' : String(value)
 }
+
+/**
+ * Read the actual inventory denomination: a VND-priced batch needs no FX;
+ * a USD/CAD/etc batch needs a user-reviewed VND per one unit of that
+ * currency. This affects MENU pricing only; warehouse historical cost
+ * and original customs invoice currency are never overwritten.
+ */
+export function resolveMenuInventoryVndBase(item, fxRates = {}) {
+  const currency = String(item?.currency || '').trim().toUpperCase()
+  const originalPrice = item?.unitPrice
+  if (!currency || originalPrice == null ||
+      String(originalPrice).trim() === '' ||
+      !Number.isFinite(Number(originalPrice)) || Number(originalPrice) < 0) {
+    return {value: null, currency, status: 'MISSING_PRICE_OR_CURRENCY', fxRate: null}
+  }
+  if (currency === 'VND') {
+    return {value: Number(originalPrice),currency,fxRate:1,status:'VND'}
+  }
+  const raw = fxRates[currency]
+  if (raw == null || String(raw).trim() === '' ||
+      !Number.isFinite(Number(raw)) || Number(raw) <= 0) {
+    return {value:null,currency,fxRate:null,status:'MISSING_FX'}
+  }
+  const result = Number(originalPrice)*Number(raw)
+  if (!Number.isFinite(result) || result > Number.MAX_SAFE_INTEGER) {
+    return {value:null,currency,fxRate:null,status:'INVALID_FX'}
+  }
+  return {
+    value: Math.round((result+Number.EPSILON)*1e6)/1e6,
+    currency,fxRate:Number(raw),status:'CONVERTED'
+  }
+}
