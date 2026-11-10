@@ -178,7 +178,7 @@ export default function InventoryGrid({ onInvoiceStockOut }) {
       warehouseImportQuantity: item.warehouseImportQuantity ?? item.warehouse_import_quantity ?? '',
       bomUnitPerWarehouseUnit: item.bomUnitPerWarehouseUnit ?? item.bom_unit_per_warehouse_unit ?? '',
       warehouseImportUnitPrice: item.warehouseImportUnitPrice ?? item.warehouse_import_unit_price ?? '',
-      currency: item.currency || 'USD',
+      currency: item.currency || '',
       hsCode: item.hsCode || '',
       originType: item.originType || '',
       originCountry: item.originCountry || '',
@@ -541,7 +541,7 @@ export default function InventoryGrid({ onInvoiceStockOut }) {
     { field: 'orderToDeduction',       headerName: 'Order To Deduction', width: 150 },
     { field: 'userName',               headerName: 'User Name',    width: 120 },
     { field: 'unit',                   headerName: 'Unit',         width: 100 },
-    { field: 'unitPrice',              headerName: 'Đơn giá kho VND / đơn vị', width: 175, type: 'number', valueFormatter: numFmt },
+    { field: 'unitPrice',              headerName: 'Đơn giá kho / đơn vị tiền', width: 175, type: 'number', valueFormatter: numFmt },
     { field: 'customsForeignUnitPrice',headerName:'Đơn giá HĐ ngoại tệ',width:175,type:'number',valueFormatter:numFmt },
     { field: 'customsForeignCurrency',headerName:'Ngoại tệ gốc (CDS)',width:135 },
     { field: 'customsGoodsValueVnd',  headerName:'Trị giá hàng VND',width:165,type:'number',valueFormatter:numFmt },
@@ -806,7 +806,7 @@ export default function InventoryGrid({ onInvoiceStockOut }) {
             onClick={()=>{setPricePatchOpen(true);setPatchOpen(false);setImportOpen(false)}}
             style={{border:'1px solid #1565c0',background:pricePatchOpen?'#1565c0':'#e3f2fd',
               color:pricePatchOpen?'white':'#0d47a1',fontWeight:700,padding:'6px 10px',borderRadius:4}}>
-            Excel giá · {selectedIds.length} dòng đã chọn
+            Excel giá + USD/VND · {selectedIds.length} dòng đã chọn
           </button>}
           <button type="button" onClick={() => exportRows(selectedIds, 'csv', exportGrouping)} disabled={selectedIds.length === 0}>Export Selected CSV</button>
           <button type="button" onClick={openDisposeSelected} disabled={selectedIds.length !== 1 || saving}>Dispose Selected</button>
