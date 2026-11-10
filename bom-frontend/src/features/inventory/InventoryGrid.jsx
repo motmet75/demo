@@ -38,6 +38,7 @@ export default function InventoryGrid({ onInvoiceStockOut }) {
   const [filterWarehouse, setFilterWarehouse] = useState('')
   const [filterInventoryUuid, setFilterInventoryUuid] = useState('')
   const [filterBatch, setFilterBatch] = useState('')
+  const [filterCurrency, setFilterCurrency] = useState('ALL')
   const [filterCreatedFrom, setFilterCreatedFrom] = useState('')
   const [filterCreatedTo, setFilterCreatedTo] = useState('')
   const [createdRangePreset, setCreatedRangePreset] = useState('')
@@ -586,6 +587,9 @@ export default function InventoryGrid({ onInvoiceStockOut }) {
     if (filterWarehouse && !normalizeSearch(`${r.warehouseCode || ''} ${r.warehouseName || ''}`).includes(normalizeSearch(filterWarehouse.trim()))) return false
     if (filterInventoryUuid && !normalizeSearch(r.inventoryId).includes(normalizeSearch(filterInventoryUuid.trim()))) return false
     if (filterBatch && !normalizeSearch(r.batchNo).includes(normalizeSearch(filterBatch.trim()))) return false
+    if (filterCurrency === 'EMPTY' && String(r.currency||'').trim()) return false
+    if (filterCurrency !== 'ALL' && filterCurrency !== 'EMPTY' &&
+        String(r.currency||'').trim().toUpperCase() !== filterCurrency) return false
     if (filterCreatedFrom || filterCreatedTo) {
       const d = r.createdAt ? new Date(r.createdAt) : null
       if (!d || isNaN(d)) return false
@@ -734,6 +738,16 @@ export default function InventoryGrid({ onInvoiceStockOut }) {
           <label style={{ fontSize: 12 }}>Filter Batch:</label><br />
           <input value={filterBatch} onChange={e => setFilterBatch(e.target.value)} />
         </div>
+        <div>
+          <label style={{fontSize:12}}>Lọc tiền tệ:</label><br/>
+          <select value={filterCurrency} onChange={e=>setFilterCurrency(e.target.value)}
+            style={{padding:'3px 8px'}}>
+            <option value="ALL">Tất cả tiền tệ</option>
+            <option value="VND">VND</option>
+            <option value="USD">USD</option>
+            <option value="EMPTY">Chưa có tiền tệ</option>
+          </select>
+        </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <label style={{ fontSize: 12 }}>Quick Range</label>
           <select value={createdRangePreset} onChange={e => applyCreatedRangePreset(e.target.value)} style={{ fontSize: 12, padding: '3px 6px', height: 24 }}>
@@ -756,7 +770,7 @@ export default function InventoryGrid({ onInvoiceStockOut }) {
           <label style={{ fontSize: 12 }}>Created To</label>
           <input type="datetime-local" value={filterCreatedTo} onChange={e => { setCreatedRangePreset(''); setFilterCreatedTo(e.target.value) }} style={{ fontSize: 12, padding: '3px 6px' }} />
         </div>
-        <button type="button" onClick={() => { setFilterInventoryUuid(''); setFilterMaterial(''); setFilterWarehouse(''); setFilterBatch(''); setFilterCreatedFrom(''); setFilterCreatedTo(''); setCreatedRangePreset('') }} style={{ alignSelf: 'flex-end', fontSize: 12, padding: '4px 10px' }}>Clear</button>
+        <button type="button" onClick={() => { setFilterInventoryUuid(''); setFilterMaterial(''); setFilterWarehouse(''); setFilterBatch(''); setFilterCurrency('ALL'); setFilterCreatedFrom(''); setFilterCreatedTo(''); setCreatedRangePreset('') }} style={{ alignSelf: 'flex-end', fontSize: 12, padding: '4px 10px' }}>Clear</button>
         <div style={{ alignSelf: 'flex-end', color: '#666', fontSize: 12 }}>{filteredRows.length} / {rows.length}</div>
       </div>
 
