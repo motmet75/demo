@@ -46,7 +46,7 @@ function OrderReadBack({ order, busy, printed, onPrint, onPrintAlert, onPaid, on
       <CheckCircleIcon color={servedUnpaid ? 'error' : 'success'} />
       <Typography fontWeight={900}>Đơn #{order.orderNumber ?? order.dailySeq} · {order.tableName}</Typography>
       <Chip size="small" label={order.status || '-'} color={order.status === 'READY' ? 'info' : 'default'} />
-      <Chip size="small" label={servedUnpaid ? 'ĐÃ TRẢ MÓN · CHƯA THANH TOÁN' : order.paymentStatus === 'PAID' ? 'Đã thanh toán' : 'Chưa thanh toán'} color={servedUnpaid ? 'error' : order.paymentStatus === 'PAID' ? 'success' : 'warning'} variant={servedUnpaid ? 'filled' : 'outlined'} />
+      <Chip size="small" label={servedUnpaid ? 'ĐÃ TRẢ ĐƠN · CHƯA THANH TOÁN' : order.paymentStatus === 'PAID' ? 'Đã thanh toán' : 'Chưa thanh toán'} color={servedUnpaid ? 'error' : order.paymentStatus === 'PAID' ? 'success' : 'warning'} variant={servedUnpaid ? 'filled' : 'outlined'} />
     </Stack>
     <Typography variant="body2" fontWeight={800}>Đọc lại với khách:</Typography>
     {items.map(item => {
