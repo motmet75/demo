@@ -673,7 +673,7 @@ export default function InventoryGrid({ onInvoiceStockOut }) {
           <button onClick={() => load()} disabled={loading} title="Refresh">🔄 Refresh</button>
           {hasInventoryPriceAccess && (
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px', border: '1px solid #cfd8dc', borderRadius: 4, background: '#f8fafc', fontSize: 12 }}>
-              <span style={{ fontWeight: 700 }}>Add default currency</span>
+              <span style={{ fontWeight: 700 }}>Tiền tệ khi thêm mới (không sửa hàng cũ)</span>
               <select
                 value={defaultCurrency}
                 onChange={e => setDefaultCurrency(e.target.value === 'USD' ? 'USD' : 'VND')}
