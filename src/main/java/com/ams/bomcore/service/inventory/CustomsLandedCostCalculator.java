@@ -45,13 +45,13 @@ public final class CustomsLandedCostCalculator {
         if (reviewedGoodsValueVnd != null) {
             goods = nonnegative(reviewedGoodsValueVnd, "Trị giá hàng quy đổi VND");
             source = "REVIEWED_VND";
-        } else if (item.importTaxableValueVnd() != null) {
-            goods = nonnegative(item.importTaxableValueVnd(), "Trị giá tính thuế Hải quan");
-            source = "CUSTOMS_TAXABLE_PROXY";
         } else if (invoiceValue != null && historicalFxRate != null &&
                 historicalFxRate.signum() > 0) {
             goods = invoiceValue.multiply(historicalFxRate);
             source = "INVOICE_HISTORICAL_FX";
+        } else if (item.importTaxableValueVnd() != null) {
+            goods = nonnegative(item.importTaxableValueVnd(), "Trị giá tính thuế Hải quan");
+            source = "CUSTOMS_TAXABLE_PROXY";
         } else {
             throw new IllegalArgumentException(
                 "Thiếu giá trị hàng VND: nhập trị giá mua quy đổi hoặc tỷ giá ngày tờ khai.");
