@@ -472,11 +472,73 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
               <Typography variant="body2">Địa chỉ: {buyer.buyerAddress || '—'}</Typography>
               <Typography variant="body2">Điện thoại: {buyer.buyerPhone || '—'} · Email: {buyer.buyerEmail || '—'}</Typography>
             </Box>
-            <Box sx={{ overflowX: 'auto' }}>
-              <Box sx={{ minWidth: 930, display: 'grid', gridTemplateColumns: 'minmax(250px, 2fr) 70px 120px 90px 120px 130px', gap: 1, p: 1, bgcolor: 'grey.100', fontWeight: 800 }}><span>Hàng hóa</span><span>SL</span><span>Đơn giá trước thuế</span><span>VAT</span><span>Tiền thuế</span><span>Thành tiền</span></Box>
-              {preview.lines.map(line => <Box key={line.lineId} sx={{ minWidth: 930, display: 'grid', gridTemplateColumns: 'minmax(250px, 2fr) 70px 120px 90px 120px 130px', gap: 1, p: 1, alignItems: 'center', borderTop: '1px solid', borderColor: 'divider' }}>
-                <TextField size="small" fullWidth disabled={!line.lineId} label="Tên hàng trên hóa đơn" value={itemNames[line.lineId] ?? line.name} onChange={event => setItemNames(old => ({ ...old, [line.lineId]: event.target.value }))} error={itemNames[line.lineId] != null && !itemNames[line.lineId].trim()} inputProps={{ maxLength: 255 }} />
-                <span>{line.quantity}</span><span>{money(line.unitPriceBeforeTax)}</span><span>{line.vatRate < 0 ? VAT_OPTIONS.find(option => option.value === line.vatRate)?.label : `${line.vatRate}%`}</span><span>{money(line.taxAmount)}</span><b>{money(line.total)}</b>
+            {/* On narrow screens, avoid a 930px-wide table: the product name
+                must wrap and remain fully editable without horizontal clipping. */}
+            <Stack spacing={1} sx={{ p: 1, display: { xs: 'flex', md: 'none' } }}>
+              {preview.lines.map((line, index) => <Box key={line.lineId || index}
+                sx={{ minWidth: 0, p: 1.5, border: '1px solid', borderColor: 'divider',
+                  borderRadius: 1.5, bgcolor: 'background.paper' }}>
+                <TextField size="small" fullWidth multiline minRows={3} maxRows={10}
+                  label="Tên hàng trên hóa đơn"
+                  disabled={!line.lineId}
+                  value={itemNames[line.lineId] ?? line.name}
+                  onChange={event => setItemNames(old => ({
+                    ...old, [line.lineId]: event.target.value
+                  }))}
+                  error={itemNames[line.lineId] != null && !itemNames[line.lineId].trim()}
+                  inputProps={{ maxLength: 255 }}
+                  helperText="Tên dài tự xuống dòng. Bạn có thể sửa trước khi gửi hóa đơn."
+                  sx={{ minWidth: 0, '& textarea': {
+                    overflowWrap: 'anywhere', wordBreak: 'break-word', whiteSpace: 'pre-wrap',
+                  } }} />
+                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                  columnGap: 2, rowGap: 1, mt: 1.5, minWidth: 0 }}>
+                  <Box><Typography variant="caption" color="text.secondary">Số lượng</Typography>
+                    <Typography fontWeight={700}>{line.quantity}</Typography></Box>
+                  <Box><Typography variant="caption" color="text.secondary">Đơn giá trước thuế</Typography>
+                    <Typography fontWeight={700} sx={{ overflowWrap: 'anywhere' }}>{money(line.unitPriceBeforeTax)}</Typography></Box>
+                  <Box><Typography variant="caption" color="text.secondary">VAT</Typography>
+                    <Typography>{line.vatRate < 0
+                      ? VAT_OPTIONS.find(option => option.value === line.vatRate)?.label
+                      : `${line.vatRate}%`}</Typography></Box>
+                  <Box><Typography variant="caption" color="text.secondary">Tiền thuế</Typography>
+                    <Typography sx={{ overflowWrap: 'anywhere' }}>{money(line.taxAmount)}</Typography></Box>
+                  <Box sx={{ gridColumn: '1 / -1' }}>
+                    <Typography variant="caption" color="text.secondary">Thành tiền</Typography>
+                    <Typography fontWeight={800}>{money(line.total)}</Typography>
+                  </Box>
+                </Box>
+              </Box>)}
+            </Stack>
+            {/* Keep the existing wide invoice grid on desktop, with a multiline
+                product editor for names up to the 255-character invoice limit. */}
+            <Box sx={{ overflowX: 'auto', display: { xs: 'none', md: 'block' } }}>
+              <Box sx={{ minWidth: 930, display: 'grid',
+                gridTemplateColumns: 'minmax(250px, 2fr) 70px 120px 90px 120px 130px',
+                gap: 1, p: 1, bgcolor: 'grey.100', fontWeight: 800 }}>
+                <span>Hàng hóa</span><span>SL</span><span>Đơn giá trước thuế</span>
+                <span>VAT</span><span>Tiền thuế</span><span>Thành tiền</span>
+              </Box>
+              {preview.lines.map((line, index) => <Box key={line.lineId || index}
+                sx={{ minWidth: 930, display: 'grid',
+                  gridTemplateColumns: 'minmax(250px, 2fr) 70px 120px 90px 120px 130px',
+                  gap: 1, p: 1, alignItems: 'start', borderTop: '1px solid',
+                  borderColor: 'divider' }}>
+                <TextField size="small" fullWidth multiline minRows={2} maxRows={7}
+                  disabled={!line.lineId} label="Tên hàng trên hóa đơn"
+                  value={itemNames[line.lineId] ?? line.name}
+                  onChange={event => setItemNames(old => ({
+                    ...old, [line.lineId]: event.target.value
+                  }))}
+                  error={itemNames[line.lineId] != null && !itemNames[line.lineId].trim()}
+                  inputProps={{ maxLength: 255 }}
+                  sx={{ minWidth: 0, '& textarea': { overflowWrap: 'anywhere',
+                    wordBreak: 'break-word' } }} />
+                <span>{line.quantity}</span><span>{money(line.unitPriceBeforeTax)}</span>
+                <span>{line.vatRate < 0
+                  ? VAT_OPTIONS.find(option => option.value === line.vatRate)?.label
+                  : `${line.vatRate}%`}</span>
+                <span>{money(line.taxAmount)}</span><b>{money(line.total)}</b>
               </Box>)}
             </Box>
             <Stack sx={{ p: 1.5, borderTop: '2px solid', borderColor: 'divider', alignItems: 'flex-end' }}>
@@ -495,7 +557,8 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
     {(invoice || (showConfig && (!isAdmin || configOnly))) && <DialogActions><Button onClick={onClose} disabled={busy}>Đóng</Button></DialogActions>}
     <VoucherQrScanDialog open={cccdQrOpen}
       title="Quét QR trên CCCD / Căn cước"
-      scannerLabel="Hướng camera vào mã QR trên thẻ, không cần chụp lưu ảnh"
+      scannerLabel="Hướng camera vào mã QR trên thẻ; cũng có thể chọn ảnh từ thư viện"
+      manualLabel="Dán nội dung QR CCCD nếu camera không quét được"
       onClose={()=>setCccdQrOpen(false)}
       onScan={onCccdQrScan}/>
   </Dialog>
