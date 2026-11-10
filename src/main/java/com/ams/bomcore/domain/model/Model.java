@@ -82,6 +82,9 @@ public class Model {
     @Column(name = "shop_available_units_override_date")
     private LocalDate shopAvailableUnitsOverrideDate;
 
+    @Column(name = "shop_availability_mode", nullable = false, length = 24)
+    private String shopAvailabilityMode = "DAILY";
+
     @Transient
     private BigDecimal shopDailyLimitUnits;
 
@@ -190,6 +193,14 @@ public class Model {
     public void setShopAvailableUnitsOverride(BigDecimal shopAvailableUnitsOverride) { this.shopAvailableUnitsOverride = shopAvailableUnitsOverride; }
     public LocalDate getShopAvailableUnitsOverrideDate() { return shopAvailableUnitsOverrideDate; }
     public void setShopAvailableUnitsOverrideDate(LocalDate shopAvailableUnitsOverrideDate) { this.shopAvailableUnitsOverrideDate = shopAvailableUnitsOverrideDate; }
+    public String getShopAvailabilityMode() {
+        return "WAREHOUSE_TOTAL".equals(shopAvailabilityMode) ? "WAREHOUSE_TOTAL" : "DAILY";
+    }
+    public void setShopAvailabilityMode(String mode) {
+        if (!"DAILY".equals(mode) && !"WAREHOUSE_TOTAL".equals(mode))
+            throw new IllegalArgumentException("Chế độ khả dụng phải là DAILY hoặc WAREHOUSE_TOTAL.");
+        this.shopAvailabilityMode = mode;
+    }
     public BigDecimal getShopDailyLimitUnits() { return shopDailyLimitUnits; }
     public void setShopDailyLimitUnits(BigDecimal shopDailyLimitUnits) { this.shopDailyLimitUnits = shopDailyLimitUnits; }
     public BigDecimal getShopDailySoldUnits() { return shopDailySoldUnits; }
