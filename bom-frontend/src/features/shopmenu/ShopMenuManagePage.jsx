@@ -38,6 +38,7 @@ import { MENU_TRANSLATION_LANGUAGES, compactTranslations, parseJsonObject, strin
 import { getLanguageMeta } from '../../i18n/translations'
 import { parseAllowedSideConfig, serializeAllowedSideConfig } from '../../utils/sideItemConfig'
 import FormattedNumberField from '../../components/FormattedNumberField'
+import BulkMenuFromInventoryDialog from './BulkMenuFromInventoryDialog'
 
 const fmt = (n) => n != null ? Number(n).toLocaleString('vi-VN') + ' d' : ''
 const fmtQty = (n) => n != null && n !== '' ? Number(n).toLocaleString('vi-VN', { maximumFractionDigits: 3 }) : '—'
@@ -1060,6 +1061,7 @@ export default function ShopMenuManagePage() {
   const [cloneSource, setCloneSource] = useState(null)
   const [selectedIds, setSelectedIds] = useState([])
   const [bulkTranslateOpen, setBulkTranslateOpen] = useState(false)
+  const [bulkInventoryOpen,setBulkInventoryOpen] = useState(false)
   const [bulkTranslating, setBulkTranslating] = useState(false)
   const [bulkProgress, setBulkProgress] = useState('')
   const [bulkError, setBulkError] = useState('')
@@ -1287,6 +1289,10 @@ export default function ShopMenuManagePage() {
   const handleCloneCreated = (created) => {
     setModels(prev => [...prev, created])
   }
+  const handleBulkInventoryCreated = (created) => {
+    setModels(prev => [...prev, ...created])
+    void loadAvailability().catch(()=>{})
+  }
 
   const onCount = models.filter(m => Boolean(m.sellingPrice) && m.isActive !== false).length
   const offCount = models.length - onCount
@@ -1364,6 +1370,12 @@ export default function ShopMenuManagePage() {
             </Button>
           </span>
         </Tooltip>
+        <Button size="small" variant="contained" color="success"
+          startIcon={<AddIcon/>} disabled={loading}
+          onClick={()=>setBulkInventoryOpen(true)}
+          sx={{textTransform:'none',fontWeight:800}}>
+          Tạo nhiều menu từ tồn kho · Giá + %
+        </Button>
         <Button
           size="small"
           variant="contained"
@@ -1443,6 +1455,12 @@ export default function ShopMenuManagePage() {
         onCreated={handleCloneCreated}
       />
 
+      <BulkMenuFromInventoryDialog
+        open={bulkInventoryOpen}
+        onClose={()=>setBulkInventoryOpen(false)}
+        onCreated={handleBulkInventoryCreated}
+        existingModels={models}
+      />
       <BulkTranslateDialog
         open={bulkTranslateOpen}
         selectedCount={selectedModels.length}
