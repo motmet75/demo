@@ -497,8 +497,10 @@ export default function QuickCounterDesk({ rows, actions, onNew, onCreated, shif
             Tên, quy cách và giá mới chỉ áp dụng cho dòng món này, trừ khi quản trị viên chọn cập nhật menu.
           </Typography>
           <TextField autoFocus fullWidth size="small" label="Tên món / Tên hàng" required
+            multiline minRows={3} maxRows={8}
             value={priceEditing.modelName} inputProps={{maxLength:255}}
-            onChange={event=>setPriceEditing(old=>({...old,modelName:event.target.value}))}/>
+            onChange={event=>setPriceEditing(old=>({...old,modelName:event.target.value}))}
+            helperText="Tên dài tự xuống dòng, xem và chỉnh sửa toàn bộ trước khi lưu."/>
           <TextField fullWidth size="small" label="Quy cách / Ghi chú riêng cho đơn" multiline minRows={2}
             value={priceEditing.notes} inputProps={{maxLength:1000}}
             onChange={event=>setPriceEditing(old=>({...old,notes:event.target.value}))}
