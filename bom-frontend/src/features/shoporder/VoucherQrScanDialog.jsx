@@ -73,6 +73,7 @@ export default function VoucherQrScanDialog({
       }
     }
     setStreaming(false)
+    setStarting(false)
     setZoomRange(null)
   }, [])
 
@@ -97,11 +98,11 @@ export default function VoucherQrScanDialog({
       setError('Trình duyệt không cấp quyền camera. Có thể chọn ảnh QR từ thư viện.')
       return
     }
-    setStarting(true)
     setError('')
     detectedRef.current = false
     await stopCamera()
     const runId = ++runIdRef.current
+    setStarting(true)
 
     try {
       const scanner = createScanner()
@@ -147,6 +148,7 @@ export default function VoucherQrScanDialog({
     } catch (e) {
       if (runId === runIdRef.current) {
         setError(e?.message || 'Không mở được camera. Hãy thử chọn ảnh QR.')
+        setStarting(false)
         await stopCamera()
       }
     } finally {
