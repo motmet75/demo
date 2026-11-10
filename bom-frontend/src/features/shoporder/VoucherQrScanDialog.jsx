@@ -78,6 +78,8 @@ export default function VoucherQrScanDialog({
     }
     setStreaming(false)
     setStarting(false)
+    setDecodingFile(false)
+    setDecodeProgress('')
     setZoomRange(null)
   }, [])
 
