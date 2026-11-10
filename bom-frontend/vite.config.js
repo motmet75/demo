@@ -35,6 +35,11 @@ export default defineConfig(({ mode }) => {
     rollupOptions: {
       output: {
         manualChunks(id) {
+          // ZBar is loaded only after a QR image fails the first ZXing pass.
+          // Do not force its inlined WASM into the main vendor chunk.
+          if (id.includes('node_modules/@undecaf/zbar-wasm')) {
+            return 'zbar-qr'
+          }
           if (id.includes('node_modules')) {
             return 'vendor'
           }
