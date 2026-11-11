@@ -79,12 +79,12 @@ function ConfigForm({ config, scope, onSaved, onCancel }) {
     <Typography fontWeight={800}>Hóa đơn khởi tạo từ máy tính tiền (POS)</Typography>
     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
       <TextField label="Mẫu số POS" value={form.posInvoiceTemplateCode} onChange={change('posInvoiceTemplateCode')} inputProps={{ maxLength: 11 }} helperText="Mẫu số tại VIN-HOADON (ví dụ 1)" />
-      <TextField label="Ký hiệu POS" value={form.posInvoiceSeries} onChange={change('posInvoiceSeries')} inputProps={{ maxLength: 8 }} placeholder="C26MMC" helperText="Chữ M = máy tính tiền" />
+      <TextField label="Ký hiệu POS" value={form.posInvoiceSeries} onChange={change('posInvoiceSeries')} inputProps={{ maxLength: 8 }} placeholder="C26TBB" helperText="Nhập đúng ký hiệu đã đăng ký tại VIN-HOADON" />
     </Box>
     <Typography fontWeight={800}>Hóa đơn điện tử thông thường</Typography>
     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
       <TextField label="Mẫu số thông thường" value={form.normalInvoiceTemplateCode} onChange={change('normalInvoiceTemplateCode')} inputProps={{ maxLength: 11 }} helperText="Có thể khác mẫu số POS" />
-      <TextField label="Ký hiệu thông thường" value={form.normalInvoiceSeries} onChange={change('normalInvoiceSeries')} inputProps={{ maxLength: 8 }} placeholder="C26TMC" helperText="Chữ T = hóa đơn thông thường" />
+      <TextField label="Ký hiệu thông thường" value={form.normalInvoiceSeries} onChange={change('normalInvoiceSeries')} inputProps={{ maxLength: 8 }} placeholder="C26TMC" helperText="Nhập đúng ký hiệu đã đăng ký tại VIN-HOADON" />
       <TextField select label="Thuế suất mặc định" value={form.defaultVatRate} onChange={e => setForm(old => ({ ...old, defaultVatRate: Number(e.target.value) }))}>
         {VAT_OPTIONS.map(option => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
       </TextField>

@@ -15,13 +15,14 @@ class VinHoadonInvoiceSeriesTest {
     void savesIndependentPosAndNormalSeries() {
         assertDoesNotThrow(() -> VinHoadonInvoiceService.validateTypedPair("POS", "1", "C26MMC"));
         assertDoesNotThrow(() -> VinHoadonInvoiceService.validateTypedPair("NORMAL", "1", "C26TMC"));
+        assertDoesNotThrow(() -> VinHoadonInvoiceService.validateTypedPair("POS", "1", "C26TBB"));
+        assertDoesNotThrow(() -> VinHoadonInvoiceService.validateTypedPair("POS", "1", "C26TMC"));
+        assertDoesNotThrow(() -> VinHoadonInvoiceService.validateTypedPair("NORMAL", "1", "C26MMC"));
         assertDoesNotThrow(() -> VinHoadonInvoiceService.validateTypedPair("POS", null, null));
         assertThrows(IllegalArgumentException.class,
-                () -> VinHoadonInvoiceService.validateTypedPair("POS", "1", "C26TMC"));
-        assertThrows(IllegalArgumentException.class,
-                () -> VinHoadonInvoiceService.validateTypedPair("NORMAL", "1", "C26MMC"));
-        assertThrows(IllegalArgumentException.class,
                 () -> VinHoadonInvoiceService.validateTypedPair("POS", null, "C26MMC"));
+        assertThrows(IllegalArgumentException.class,
+                () -> VinHoadonInvoiceService.validateTypedPair("POS", "1", "invalid"));
     }
 
     @Test

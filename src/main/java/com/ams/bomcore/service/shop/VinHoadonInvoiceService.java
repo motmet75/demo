@@ -172,8 +172,10 @@ public class VinHoadonInvoiceService {
             throw new IllegalArgumentException("Mẫu số và Ký hiệu của " + type + " phải đi cùng nhau.");
         if (template.length() > 11 || template.equalsIgnoreCase(series))
             throw new IllegalArgumentException("Mã mẫu số không hợp lệ cho " + type);
-        // C26MMC (POS) and C26TMC (normal); the two-digit year is part of the series.
-        if (series.length() > 8 || !series.matches("^[A-Z][0-9]{2}" + ("POS".equals(type) ? "M" : "T") + "[A-Z0-9]{2}$"))
+        // VIN-HOADON may register a series such as C26TBB for POS. Do not infer
+        // the invoice type from the fourth character; the selected config field
+        // (POS or NORMAL) is the source of truth.
+        if (series.length() > 8 || !series.matches("^[A-Z][0-9]{2}[A-Z0-9]{3}$"))
             throw new IllegalArgumentException("Ký hiệu " + type + " không hợp lệ: " + series);
     }
 
