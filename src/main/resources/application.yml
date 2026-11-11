@@ -61,3 +61,7 @@ vin-hoadon:
     extension-id: "${VIN_HOADON_RELAY_EXTENSION_ID:}"
     secret: "${VIN_HOADON_RELAY_SECRET:}"
     timeout-seconds: "${VIN_HOADON_RELAY_TIMEOUT_SECONDS:120}"
+portal-content:
+  # Comma-separated server-side datasource directories. The second default
+  # lets a local demo checkout reuse the sibling Portal project's tenant files.
+  tenant-config-dirs: "${PORTAL_TENANT_CONFIG_DIRS:./tenants/atRuntime,../portal/tenants/atRuntime}"

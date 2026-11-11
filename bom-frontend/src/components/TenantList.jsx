@@ -33,7 +33,10 @@ export default function TenantList() {
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    const timer = window.setTimeout(load, 0)
+    return () => window.clearTimeout(timer)
+  }, [])
 
   const onCreate = async (payload) => {
     await createTenant(payload)
@@ -62,6 +65,7 @@ export default function TenantList() {
           <tr>
             <th style={{ textAlign: 'left', padding: '4px 8px' }}>Code</th>
             <th style={{ textAlign: 'left', padding: '4px 8px' }}>Name</th>
+            <th style={{ textAlign: 'left', padding: '4px 8px' }}>Portal Website</th>
             <th style={{ textAlign: 'center', padding: '4px 8px' }}>Active</th>
             <th style={{ textAlign: 'center', padding: '4px 8px' }}>Companies</th>
             <th style={{ textAlign: 'left', padding: '4px 8px' }}>Created</th>
@@ -77,6 +81,7 @@ export default function TenantList() {
               <tr key={t.id} style={{ borderTop: '1px solid #eee' }}>
                 <td style={{ padding: '4px 8px' }}>{t.tenantCode || t.code || ''}</td>
                 <td style={{ padding: '4px 8px' }}>{t.tenantName || t.name || ''}</td>
+                <td style={{ padding: '4px 8px' }}>{t.portalContentTenant || '—'}</td>
                 <td style={{ padding: '4px 8px', textAlign: 'center' }}>{t.isActive ? 'Yes' : 'No'}</td>
                 <td style={{ padding: '4px 8px', textAlign: 'center' }}>
                   <span style={{ color: atLimit ? '#c62828' : '#2e7d32', fontWeight: 'bold' }}>{count}</span>
@@ -97,7 +102,7 @@ export default function TenantList() {
       {editing && (
         <div style={{ marginTop: 12 }}>
           <h3>Edit Tenant</h3>
-          <TenantForm mode="edit" tenant={editing} onUpdate={onUpdate} onCancel={() => setEditing(null)} />
+          <TenantForm key={editing.id} mode="edit" tenant={editing} onUpdate={onUpdate} onCancel={() => setEditing(null)} />
         </div>
       )}
     </div>

@@ -1,22 +1,14 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import { getTenants } from '../api/tenantApi'
 
 export default function TenantForm({ mode = 'create', tenant = null, onCreate, onUpdate, onCancel }) {
-  const [tenantCode, setTenantCode] = useState('')
-  const [tenantName, setTenantName] = useState('')
-  const [isActive, setIsActive] = useState(true)
-  const [maxCompanies, setMaxCompanies] = useState(1)
+  const [tenantCode, setTenantCode] = useState(tenant?.tenantCode || tenant?.code || '')
+  const [tenantName, setTenantName] = useState(tenant?.tenantName || tenant?.name || '')
+  const [isActive, setIsActive] = useState(tenant?.isActive ?? true)
+  const [maxCompanies, setMaxCompanies] = useState(tenant?.maxCompanies ?? 1)
+  const [portalContentTenant, setPortalContentTenant] = useState(tenant?.portalContentTenant || '')
   const [errors, setErrors] = useState({})
   const [checking, setChecking] = useState(false)
-
-  useEffect(() => {
-    if (mode === 'edit' && tenant) {
-      setTenantCode(tenant.tenantCode || tenant.code || '')
-      setTenantName(tenant.tenantName || tenant.name || '')
-      setIsActive(tenant.isActive ?? true)
-      setMaxCompanies(tenant.maxCompanies ?? 1)
-    }
-  }, [mode, tenant])
 
   const validate = async () => {
     const e = {}
@@ -46,12 +38,13 @@ export default function TenantForm({ mode = 'create', tenant = null, onCreate, o
     e.preventDefault()
     const ok = await validate()
     if (!ok) return
-    const payload = { tenantCode, tenantName, isActive, maxCompanies: Number(maxCompanies) || 1 }
+    const payload = { tenantCode, tenantName, isActive, maxCompanies: Number(maxCompanies) || 1, portalContentTenant: portalContentTenant.trim() || null }
     if (mode === 'create') {
       await onCreate(payload)
       setTenantCode('')
       setTenantName('')
       setIsActive(true)
+      setPortalContentTenant('')
     } else {
       await onUpdate(tenant.id, payload)
     }
@@ -73,6 +66,11 @@ export default function TenantForm({ mode = 'create', tenant = null, onCreate, o
         <label>
           <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} /> Active
         </label>
+      </div>
+      <div style={{ marginTop: 8 }}>
+        <label>Portal Website Tenant</label><br />
+        <input value={portalContentTenant} onChange={(e) => setPortalContentTenant(e.target.value)} placeholder="migiatruyen.vn" style={{ width: 280 }} />
+        <span style={{ marginLeft: 8, color: '#666', fontSize: 12 }}>Assigned ADMIN users can edit this website database</span>
       </div>
       <div style={{ marginTop: 8 }}>
         <label>Max Companies</label><br />

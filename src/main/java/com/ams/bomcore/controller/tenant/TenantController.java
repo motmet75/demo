@@ -68,6 +68,7 @@ public class TenantController {
         t.setTenantName(dto.tenantName);
         t.setIsActive(dto.isActive == null ? Boolean.TRUE : dto.isActive);
         t.setMaxCompanies(dto.maxCompanies == null || dto.maxCompanies < 1 ? 1 : dto.maxCompanies);
+        t.setPortalContentTenant(normalizeDomain(dto.portalContentTenant));
         tenantRepository.save(t);
 
         Company company = new Company();
@@ -103,6 +104,8 @@ public class TenantController {
         if (dto.maxCompanies != null && dto.maxCompanies >= 1) {
 			t.setMaxCompanies(dto.maxCompanies);
 		}
+        // SUPER_ADMIN can also clear the assignment to revoke Portal database access.
+        t.setPortalContentTenant(normalizeDomain(dto.portalContentTenant));
         tenantRepository.save(t);
         return ResponseEntity.ok(toDto(t, null));
     }
@@ -122,7 +125,15 @@ public class TenantController {
 
     private TenantDto toDto(Tenant tenant, UUID companyId) {
         return new TenantDto(tenant.getId(), companyId, tenant.getTenantCode(), tenant.getTenantName(),
-                tenant.getIsActive(), tenant.getMaxCompanies(), tenant.getCreatedAt());
+                tenant.getIsActive(), tenant.getMaxCompanies(), tenant.getPortalContentTenant(), tenant.getCreatedAt());
+    }
+
+    private String normalizeDomain(String value) {
+        if (value == null || value.isBlank()) return null;
+        String domain = value.trim().toLowerCase(java.util.Locale.ROOT);
+        if (!domain.matches("^[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?$"))
+            throw new IllegalArgumentException("Invalid Portal content tenant domain");
+        return domain;
     }
 
     private boolean hasText(String value) {
@@ -136,10 +147,11 @@ public class TenantController {
         public final String tenantName;
         public final Boolean isActive;
         public final Integer maxCompanies;
+        public final String portalContentTenant;
         public final java.time.Instant createdAt;
-        public TenantDto(UUID id, UUID companyId, String tenantCode, String tenantName, Boolean isActive, Integer maxCompanies, java.time.Instant createdAt) {
+        public TenantDto(UUID id, UUID companyId, String tenantCode, String tenantName, Boolean isActive, Integer maxCompanies, String portalContentTenant, java.time.Instant createdAt) {
             this.id = id; this.companyId = companyId; this.tenantCode = tenantCode; this.tenantName = tenantName;
-            this.isActive = isActive; this.maxCompanies = maxCompanies; this.createdAt = createdAt;
+            this.isActive = isActive; this.maxCompanies = maxCompanies; this.portalContentTenant = portalContentTenant; this.createdAt = createdAt;
         }
     }
 
@@ -148,6 +160,7 @@ public class TenantController {
         public String tenantName;
         public Boolean isActive;
         public Integer maxCompanies;
+        public String portalContentTenant;
         public String companyCode;
         public String companyName;
     }

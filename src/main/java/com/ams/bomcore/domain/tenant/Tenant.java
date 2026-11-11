@@ -36,6 +36,10 @@ public class Tenant {
     @Column(name = "max_companies", nullable = false)
     private Integer maxCompanies = 1;
 
+    /** Portal website datasource id, for example migiatruyen.vn. */
+    @Column(name = "portal_content_tenant", length = 255)
+    private String portalContentTenant;
+
     @Column(name = "created_at")
     private Instant createdAt;
 
@@ -58,6 +62,8 @@ public class Tenant {
 
     public Integer getMaxCompanies() { return maxCompanies; }
     public void setMaxCompanies(Integer maxCompanies) { this.maxCompanies = maxCompanies; }
+    public String getPortalContentTenant() { return portalContentTenant; }
+    public void setPortalContentTenant(String portalContentTenant) { this.portalContentTenant = portalContentTenant; }
 
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }

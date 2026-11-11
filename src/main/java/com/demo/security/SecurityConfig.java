@@ -100,6 +100,7 @@ public class SecurityConfig {
                 .requestMatchers("/auth/admin/**").hasRole("SUPER_ADMIN")
                 .requestMatchers("/auth/login", "/auth/login-otp/**", "/auth/login-totp/**", "/auth/logout", "/auth/me", "/auth/change-password", "/auth/last-context", "/auth/profile", "/error").permitAll()
                 .requestMatchers("/admin/users/**").hasAnyRole("SUPER_ADMIN", "ADMIN")
+                .requestMatchers("/admin/portal-content/**").hasAnyRole("SUPER_ADMIN", "ADMIN")
                 .requestMatchers("/admin/**").hasRole("SUPER_ADMIN")
                 .requestMatchers("/bom/audit", "/bom/audit/**").hasAnyRole("SUPER_ADMIN", "ADMIN")
                 .requestMatchers("/bom/etl/**").hasRole("SUPER_ADMIN")

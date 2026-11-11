@@ -41,6 +41,7 @@ import RequireAuth from './components/RequireAuth'
 import AuditHistoryPage from './features/audit/AuditHistoryPage'
 import AdminPage from './features/admin/AdminPage'
 import GdtQuotaPage from './features/admin/GdtQuotaPage'
+import PortalContentPage from './features/admin/PortalContentPage'
 import TenantsPage from './features/tenant/TenantsPage'
 import ETLPage from './features/etl/ETLPage'
 import ShopMenuPage from './features/shopfront/ShopMenuPage'
@@ -148,6 +149,7 @@ const PATH_TITLES = {
   '/admin':              'Admin',
   '/admin/users':        'Admin Users',
   '/admin/gdt-quotas':   'GDT OCR & Download Quotas',
+  '/admin/portal-content': 'Website Content',
   '/tenants':            'Tenants',
   '/etl':                'ETL',
   '/login':              'Login',
@@ -262,6 +264,7 @@ const ADMIN_ITEMS = [
   { label: 'Nhật ký thay đổi', path: '/audit-history', icon: '📋', roles: ADMIN_MANAGEMENT_ROLES },
   { label: 'Admin',   path: '/admin',   icon: '🔧', roles: ADMIN_MANAGEMENT_ROLES },
   { label: 'GDT Quotas', path: '/admin/gdt-quotas', icon: '🎛️', roles: SUPER_ADMIN_ROLES },
+  { label: 'Website Content', path: '/admin/portal-content', icon: '📰', roles: ADMIN_MANAGEMENT_ROLES },
   { label: 'Tenants', path: '/tenants', icon: '🏗️', roles: SUPER_ADMIN_ROLES },
   { label: 'ETL',     path: '/etl',     icon: '🔬', roles: SUPER_ADMIN_ROLES },
 ]
@@ -576,6 +579,7 @@ function MainShell({ user, logout, isAdmin, isSuperAdmin, hasFullBusinessAccess,
             <Route path="/admin" element={<RequireAuth roles={ADMIN_MANAGEMENT_ROLES}><AdminPage /></RequireAuth>} />
             <Route path="/admin/users" element={<RequireAuth roles={ADMIN_MANAGEMENT_ROLES}><AdminPage /></RequireAuth>} />
             <Route path="/admin/gdt-quotas" element={<RequireAuth roles={SUPER_ADMIN_ROLES}><GdtQuotaPage /></RequireAuth>} />
+            <Route path="/admin/portal-content" element={<RequireAuth roles={ADMIN_MANAGEMENT_ROLES}><PortalContentPage /></RequireAuth>} />
             <Route path="/tenants" element={<RequireAuth roles={SUPER_ADMIN_ROLES}><TenantsPage /></RequireAuth>} />
             <Route path="/etl"     element={<RequireAuth roles={SUPER_ADMIN_ROLES}><ETLPage /></RequireAuth>} />
           </Routes>
