@@ -27,6 +27,7 @@ import { lookupBusinessTaxCode } from '../../api/businessTaxApi'
 import {
   downloadVinHoadonInvoice, fetchVinHoadonConfig, fetchVinHoadonInvoiceStatuses, fetchVinHoadonTemplates, issueVinHoadonInvoice,
   previewVinHoadonInvoice, retryVinHoadonInvoice, saveVinHoadonConfig, syncVinHoadonInvoice,
+  releaseRemovedDemoVinHoadonInvoice,
   createVinHoadonRelayPairCode,
   readVinHoadonCccdName, suggestVnInvoiceAddress,
   getVnAddressDirectoryStatus, syncVnAddressDirectory,
@@ -296,6 +297,15 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
       setInvoice(data); onIssued?.(data)
     } catch (err) { setError(err.message) } finally { setBusy(false) }
   }
+  const releaseRemovedDemo = async () => {
+    if (!window.confirm('Chỉ tiếp tục nếu hóa đơn đã bị xóa khỏi VIN-HOADON DEMO. Đơn hàng sẽ được giải phóng để tạo hóa đơn mới.')) return
+    setBusy(true); setError('')
+    try {
+      const { res, data } = await releaseRemovedDemoVinHoadonInvoice(invoice.id, scope)
+      if (!res.ok) throw new Error(messageOf(res, data, 'Không thể xác nhận hóa đơn đã bị xóa trên VIN-HOADON DEMO'))
+      setInvoice(null); setPreview(null); setExistingConflict(false)
+    } catch (err) { setError(err.message) } finally { setBusy(false) }
+  }
   const field = key => event => { setBuyer(old => ({ ...old, [key]: event.target.value })); setPreview(null) }
   // Debounced local PostgreSQL lookup; does not send customer address to
   // third-party providers. Suggestions are only applied after a user click.
@@ -428,6 +438,7 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
               <b>{invoice.invoiceSeries || ''} {invoice.invoiceNumber || invoice.externalInvoiceId}</b>
             </Box>
             <Typography variant="body2">Mẫu số đã gửi: <b>{invoice.invoiceTemplateCode || '—'}</b> · Ký hiệu: <b>{invoice.invoiceSeries || '—'}</b></Typography>
+            <Typography variant="body2">Tài khoản VIN đã gửi: <b>{invoice.sellerTaxCode || config?.taxCode || '—'}</b> · {invoice.apiUsername || config?.apiUsername || '—'}</Typography>
             <Typography>Tổng thanh toán: <b>{money(invoice.totalAmount)}</b></Typography>
             {invoice.taxAuthorityStatus != null && <Typography>Trạng thái cơ quan thuế: {({ 0: 'Chờ xác nhận', 1: 'Đã xác nhận', 2: 'Từ chối' })[invoice.taxAuthorityStatus] || invoice.taxAuthorityStatus}</Typography>}
             {invoice.status === 'ISSUED' ? <Stack direction="row" spacing={1}>
@@ -438,6 +449,10 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
               <Button variant="outlined" onClick={sync} disabled={busy}>Tra cứu hóa đơn</Button>
               {!['PENDING', 'DRAFT'].includes(invoice.status) && <Button variant="contained" color="warning" onClick={retry} disabled={busy}>Thử lại cùng mã hóa đơn</Button>}
             </Stack>}
+            {isAdmin && invoice.apiEnvironment === 'DEMO' && ['ISSUED', 'DRAFT', 'PENDING'].includes(invoice.status) &&
+              <Button variant="outlined" color="error" onClick={releaseRemovedDemo} disabled={busy} sx={{ alignSelf: 'flex-start' }}>
+                VIN Demo đã xóa · Hủy bản ghi và tạo lại
+              </Button>}
           </Stack>
         ) : <Stack spacing={2}>
           {config?.apiEnvironment === 'DEMO' && <Alert severity="warning">Đang dùng VIN-HOADON DEMO cho công ty này. Hóa đơn sẽ không được gửi sang hệ thống thật.</Alert>}

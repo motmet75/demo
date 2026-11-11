@@ -87,8 +87,10 @@ public class VinHoadonInvoiceService {
                               String invoiceSeries, String invoiceNumber, BigDecimal subtotal,
                               BigDecimal taxAmount, BigDecimal totalAmount, Instant createdAt,
                               Instant issuedAt, String taxAuthorityStatus, Instant lastSyncedAt,
-                              int attemptCount, List<UUID> orderIds, String apiEnvironment) {}
+                              int attemptCount, List<UUID> orderIds, String apiEnvironment,
+                              String sellerTaxCode, String apiUsername) {}
     public record DownloadFile(String fileName, String contentType, String base64) {}
+    public record ReleaseResult(List<UUID> releasedOrderIds, InvoiceView invoice) {}
 
     public ConfigView getConfig(UUID tenantId, UUID companyId) {
         return configRepository.findByTenantIdAndCompanyId(tenantId, companyId)
@@ -242,6 +244,8 @@ public class VinHoadonInvoiceService {
         invoice.setInvoiceTemplateCode(template.templateCode());
         invoice.setInvoiceSeries(template.series());
         invoice.setApiEnvironment(VinHoadonEnvironment.from(config.getApiEnvironment()).name());
+        invoice.setSellerTaxCode(config.getTaxCode());
+        invoice.setApiUsername(config.getApiUsername());
         invoiceRepository.saveAndFlush(invoice);
         for (ShopOrder order : orders) {
             VinHoadonShopInvoiceOrder link = new VinHoadonShopInvoiceOrder();
@@ -271,9 +275,15 @@ public class VinHoadonInvoiceService {
             VinHoadonCompanyConfig config = requireUsableConfig(tenantId, companyId);
             VinHoadonEnvironment configuredEnvironment = VinHoadonEnvironment.from(config.getApiEnvironment());
             boolean environmentChanged = invoiceEnvironment(invoice) != configuredEnvironment;
-            if (environmentChanged && !canSwitchEnvironmentOnRetry(current))
-                throw new IllegalStateException("Only a definitively FAILED invoice can switch VIN-HOADON environment; reconcile this invoice in its original environment");
-            if (environmentChanged) invoice.setApiEnvironment(configuredEnvironment.name());
+            boolean accountChanged = !Objects.equals(trim(invoice.getSellerTaxCode()), trim(config.getTaxCode()))
+                    || !Objects.equals(trim(invoice.getApiUsername()), trim(config.getApiUsername()));
+            if ((environmentChanged || accountChanged) && !canSwitchEnvironmentOnRetry(current))
+                throw new IllegalStateException("Only a definitively FAILED invoice can switch VIN-HOADON environment or account; reconcile this invoice with its original configuration");
+            if (environmentChanged || accountChanged) {
+                invoice.setApiEnvironment(configuredEnvironment.name());
+                invoice.setSellerTaxCode(config.getTaxCode());
+                invoice.setApiUsername(config.getApiUsername());
+            }
             String invoiceType = request == null ? null : trim(request.invoiceType());
             if (invoiceType != null) {
                 TemplateOption template = selectedTemplate(invoiceType, null, config);
@@ -289,9 +299,9 @@ public class VinHoadonInvoiceService {
                 // as a new submission. Never do this for uncertain/reconcile states.
                 String externalInvoiceId = newExternalInvoiceId();
                 invoice.setExternalInvoiceId(externalInvoiceId);
-                if (refreshedPayload == null)
-                    refreshedPayload = new LinkedHashMap<>(Optional.ofNullable(invoice.getRequestPayload()).orElse(Map.of()));
-                refreshedPayload.put("ma_hoadon", externalInvoiceId);
+                refreshedPayload = refreshFailedPayload(
+                        refreshedPayload == null ? invoice.getRequestPayload() : refreshedPayload,
+                        externalInvoiceId, config.getTaxCode());
             }
             if (refreshedPayload != null) invoice.setRequestPayload(refreshedPayload);
             invoice.setStatus("ISSUING");
@@ -311,6 +321,18 @@ public class VinHoadonInvoiceService {
         return "FAILED".equals(status);
     }
 
+    static boolean isConfirmedAbsentResult(String resultCode) {
+        return "11".equals(resultCode) || "37".equals(resultCode);
+    }
+
+    static Map<String, Object> refreshFailedPayload(Map<String, Object> payload,
+                                                     String externalInvoiceId, String sellerTaxCode) {
+        Map<String, Object> refreshed = new LinkedHashMap<>(Optional.ofNullable(payload).orElse(Map.of()));
+        refreshed.put("ma_hoadon", externalInvoiceId);
+        refreshed.put("doanhnghiep_mst", sellerTaxCode);
+        return refreshed;
+    }
+
     public InvoiceView sync(UUID tenantId, UUID companyId, UUID invoiceId) {
         VinHoadonShopInvoice invoice = requireInvoice(tenantId, companyId, invoiceId);
         VinHoadonCompanyConfig config = requireUsableConfig(tenantId, companyId);
@@ -323,6 +345,45 @@ public class VinHoadonInvoiceService {
             else if (!"ISSUED".equals(current.getStatus())) current.setStatus("RECONCILE");
             current.setLastSyncedAt(Instant.now());
             return toView(current);
+        });
+    }
+
+    public ReleaseResult releaseRemovedDemoInvoice(UUID tenantId, UUID companyId, UUID invoiceId) {
+        VinHoadonShopInvoice invoice = requireInvoice(tenantId, companyId, invoiceId);
+        if (invoiceEnvironment(invoice) != VinHoadonEnvironment.DEMO)
+            throw new IllegalStateException("Only DEMO invoices can be released after removal; production invoices require the legal cancellation/replacement workflow");
+        if (!Set.of("ISSUED", "DRAFT", "PENDING").contains(invoice.getStatus()))
+            throw new IllegalStateException("Only a successfully submitted DEMO invoice can be checked and released");
+        VinHoadonCompanyConfig config = requireUsableConfig(tenantId, companyId);
+        if ((trim(invoice.getSellerTaxCode()) != null && !Objects.equals(trim(invoice.getSellerTaxCode()), trim(config.getTaxCode())))
+                || (trim(invoice.getApiUsername()) != null && !Objects.equals(trim(invoice.getApiUsername()), trim(config.getApiUsername()))))
+            throw new IllegalStateException("Restore the VIN account originally used by this invoice before confirming its removal");
+
+        JsonNode lookup = client.lookupInvoice(new VinHoadonClient.InvoiceReference(
+                invoice.getVendorTransactionId(), invoice.getExternalInvoiceId()),
+                credentials(config, invoiceEnvironment(invoice)));
+        if (lookupMatches(invoice, lookup))
+            throw new IllegalStateException("Invoice still exists in VIN-HOADON and cannot be released");
+        String resultCode = text(lookup, "maketqua");
+        if (!isConfirmedAbsentResult(resultCode))
+            throw new IllegalStateException("VIN-HOADON did not confirm that the invoice was removed; result "
+                    + Optional.ofNullable(resultCode).orElse("unknown"));
+
+        return transactions.execute(status -> {
+            VinHoadonShopInvoice current = invoiceRepository.findWithLockByIdAndTenantIdAndCompanyId(invoiceId, tenantId, companyId)
+                    .orElseThrow(() -> new NoSuchElementException("VIN-HOADON invoice not found"));
+            if (!Set.of("ISSUED", "DRAFT", "PENDING").contains(current.getStatus()))
+                throw new IllegalStateException("Invoice status changed; reload before releasing it");
+            List<VinHoadonShopInvoiceOrder> links = linkRepository.findAllByInvoice_Id(invoiceId);
+            List<UUID> releasedOrderIds = links.stream().map(link -> link.getOrder().getId()).toList();
+            linkRepository.deleteAll(links);
+            linkRepository.flush();
+            current.setStatus("CANCELLED");
+            current.setVendorResultCode(resultCode);
+            current.setVendorResultMessage("Confirmed absent from VIN-HOADON DEMO; orders released for reissue");
+            current.setResponsePayload(mapper.convertValue(lookup, Map.class));
+            current.setLastSyncedAt(Instant.now());
+            return new ReleaseResult(releasedOrderIds, toView(current));
         });
     }
 
@@ -688,7 +749,7 @@ public class VinHoadonInvoiceService {
                 invoice.getInvoiceSeries(), invoice.getInvoiceNumber(), invoice.getSubtotal(), invoice.getTaxAmount(),
                 invoice.getTotalAmount(), invoice.getCreatedAt(), invoice.getIssuedAt(),
                 invoice.getTaxAuthorityStatus(), invoice.getLastSyncedAt(), invoice.getAttemptCount(), ids,
-                invoiceEnvironment(invoice).name());
+                invoiceEnvironment(invoice).name(), invoice.getSellerTaxCode(), invoice.getApiUsername());
     }
     private VinHoadonShopInvoice requireInvoice(UUID tenantId, UUID companyId, UUID id) {
         return invoiceRepository.findByIdAndTenantIdAndCompanyId(id, tenantId, companyId)

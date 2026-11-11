@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.math.BigDecimal;
 import java.time.Year;
 import java.time.ZoneId;
+import java.util.Map;
 import java.util.Locale;
 import org.junit.jupiter.api.Test;
 
@@ -71,5 +72,16 @@ class VinHoadonInvoiceSeriesTest {
         assertTrue(VinHoadonInvoiceService.canSwitchEnvironmentOnRetry("FAILED"));
         assertFalse(VinHoadonInvoiceService.canSwitchEnvironmentOnRetry("RECONCILE"));
         assertFalse(VinHoadonInvoiceService.canSwitchEnvironmentOnRetry("ISSUING"));
+        assertTrue(VinHoadonInvoiceService.isConfirmedAbsentResult("11"));
+        assertTrue(VinHoadonInvoiceService.isConfirmedAbsentResult("37"));
+        assertFalse(VinHoadonInvoiceService.isConfirmedAbsentResult("01"));
+        assertFalse(VinHoadonInvoiceService.isConfirmedAbsentResult(null));
+
+        Map<String, Object> refreshed = VinHoadonInvoiceService.refreshFailedPayload(
+                Map.of("ma_hoadon", first, "doanhnghiep_mst", "0401486901", "kyhieu", "C26MAM"),
+                second, "0123456789");
+        assertEquals(second, refreshed.get("ma_hoadon"));
+        assertEquals("0123456789", refreshed.get("doanhnghiep_mst"));
+        assertEquals("C26MAM", refreshed.get("kyhieu"));
     }
 }

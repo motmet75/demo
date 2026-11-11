@@ -34,6 +34,8 @@ public class VinHoadonShopInvoice {
     @Column(name = "invoice_series", length = 8) private String invoiceSeries;
     @Column(name = "invoice_number") private String invoiceNumber;
     @Column(name = "api_environment", nullable = false, length = 10) private String apiEnvironment = "PRODUCTION";
+    @Column(name = "seller_tax_code", length = 14) private String sellerTaxCode;
+    @Column(name = "api_username") private String apiUsername;
     @JdbcTypeCode(SqlTypes.JSON) @Column(name = "request_payload", columnDefinition = "jsonb") private Map<String, Object> requestPayload;
     @JdbcTypeCode(SqlTypes.JSON) @Column(name = "response_payload", columnDefinition = "jsonb") private Map<String, Object> responsePayload;
     @Column(name = "created_by") private String createdBy;
@@ -68,6 +70,8 @@ public class VinHoadonShopInvoice {
     public String getInvoiceSeries() { return invoiceSeries; } public void setInvoiceSeries(String v) { invoiceSeries = v; }
     public String getInvoiceNumber() { return invoiceNumber; } public void setInvoiceNumber(String v) { invoiceNumber = v; }
     public String getApiEnvironment() { return apiEnvironment; } public void setApiEnvironment(String v) { apiEnvironment = v; }
+    public String getSellerTaxCode() { return sellerTaxCode; } public void setSellerTaxCode(String v) { sellerTaxCode = v; }
+    public String getApiUsername() { return apiUsername; } public void setApiUsername(String v) { apiUsername = v; }
     public Map<String, Object> getRequestPayload() { return requestPayload; } public void setRequestPayload(Map<String, Object> v) { requestPayload = v; }
     public Map<String, Object> getResponsePayload() { return responsePayload; } public void setResponsePayload(Map<String, Object> v) { responsePayload = v; }
     public String getCreatedBy() { return createdBy; } public void setCreatedBy(String v) { createdBy = v; }

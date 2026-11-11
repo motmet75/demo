@@ -453,6 +453,10 @@ export function syncVinHoadonInvoice(invoiceId, scope) {
   return vinFetchJson(`/shop/staff/e-invoices/${invoiceId}/sync`, { method: 'POST' }, scope)
 }
 
+export function releaseRemovedDemoVinHoadonInvoice(invoiceId, scope) {
+  return vinFetchJson(`/shop/staff/e-invoices/${invoiceId}/release-removed-demo`, { method: 'POST' }, scope)
+}
+
 export async function downloadVinHoadonInvoice(invoiceId, format = 'pdf', scope) {
   const requestUrl = `/shop/staff/e-invoices/${invoiceId}/download/${format}`
   const options = vinScopedOptions({}, scope)

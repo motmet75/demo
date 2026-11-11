@@ -9,6 +9,7 @@ import com.ams.bomcore.util.RequestTimeZone;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.*;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -116,6 +117,16 @@ public class VinHoadonInvoiceController {
                                                     @PathVariable UUID invoiceId) {
         validateScope(tenantId, companyId);
         return service.sync(tenantId, companyId, invoiceId);
+    }
+
+    @PostMapping("/{invoiceId}/release-removed-demo")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN')")
+    public VinHoadonInvoiceService.ReleaseResult releaseRemovedDemo(
+            @RequestHeader("X-Tenant-Id") UUID tenantId,
+            @RequestHeader("X-Company-Id") UUID companyId,
+            @PathVariable UUID invoiceId) {
+        validateScope(tenantId, companyId);
+        return service.releaseRemovedDemoInvoice(tenantId, companyId, invoiceId);
     }
 
     @GetMapping("/{invoiceId}/download/{format}")
