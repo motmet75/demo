@@ -43,6 +43,10 @@ const PAYMENT_OPTIONS = [
 ]
 const money = value => Number(value || 0).toLocaleString('vi-VN', { maximumFractionDigits: 2 }) + ' ₫'
 const messageOf = (res, data, fallback) => data?.message || data?.error || (typeof data === 'string' ? data : '') || `${fallback} (${res?.status || '?'})`
+const hasCurrentInvoiceYear = series => {
+  const match = String(series || '').match(/^\d?[A-Z](\d{2})/i)
+  return !match || match[1] === String(new Date().getFullYear()).slice(-2)
+}
 
 function ConfigForm({ config, scope, onSaved, onCancel }) {
   const [form, setForm] = useState({
@@ -79,7 +83,7 @@ function ConfigForm({ config, scope, onSaved, onCancel }) {
     <Typography fontWeight={800}>Hóa đơn khởi tạo từ máy tính tiền (POS)</Typography>
     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
       <TextField label="Mẫu số POS" value={form.posInvoiceTemplateCode} onChange={change('posInvoiceTemplateCode')} inputProps={{ maxLength: 11 }} helperText="Mẫu số tại VIN-HOADON (ví dụ 1)" />
-      <TextField label="Ký hiệu POS" value={form.posInvoiceSeries} onChange={change('posInvoiceSeries')} inputProps={{ maxLength: 8 }} placeholder="C26TBB" helperText="Nhập đúng ký hiệu đã đăng ký tại VIN-HOADON" />
+      <TextField label="Ký hiệu POS" value={form.posInvoiceSeries} onChange={change('posInvoiceSeries')} inputProps={{ maxLength: 8 }} placeholder="2C26MAM" helperText="Nhập nguyên ký hiệu VIN-HOADON cung cấp; hệ thống không giới hạn mẫu ký tự" />
     </Box>
     <Typography fontWeight={800}>Hóa đơn điện tử thông thường</Typography>
     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
@@ -346,7 +350,7 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
     } catch (err) { setTaxLookupError(err.message) } finally { setTaxLookupBusy(false) }
   }
   const usable = config?.configured && config?.enabled && config?.gatewayEnabled && config?.encryptionConfigured
-  const validYear = Boolean(invoiceSeries && invoiceSeries.slice(1, 3) === String(new Date().getFullYear()).slice(-2))
+  const validYear = Boolean(invoiceSeries && hasCurrentInvoiceYear(invoiceSeries))
   const selectedConfigured = Boolean(invoiceSeries && (
     (invoiceType === 'POS' && invoiceSeries === config?.posInvoiceSeries && config?.posInvoiceTemplateCode) ||
     (invoiceType === 'NORMAL' && invoiceSeries === config?.normalInvoiceSeries && config?.normalInvoiceTemplateCode)
@@ -358,7 +362,7 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
   return <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="md">
     <DialogTitle sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
       {showConfig ? <SettingsIcon color="primary" /> : <ReceiptLongIcon color="primary" />}
-      {showConfig ? 'Cấu hình VIN-HOADON' : `Xuất hóa đơn điện tử · ${orders.length} đơn`}
+      {showConfig ? 'Cấu hình VIN-HOADON' : `NGƯỜI MUA HÀNG · ${orders.length} đơn`}
     </DialogTitle>
     <DialogContent dividers>
       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>Cấu hình riêng cho công ty: {companyName || companyId || 'chưa chọn'}</Typography>

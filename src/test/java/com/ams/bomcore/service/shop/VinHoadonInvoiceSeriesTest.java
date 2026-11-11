@@ -16,13 +16,16 @@ class VinHoadonInvoiceSeriesTest {
         assertDoesNotThrow(() -> VinHoadonInvoiceService.validateTypedPair("POS", "1", "C26MMC"));
         assertDoesNotThrow(() -> VinHoadonInvoiceService.validateTypedPair("NORMAL", "1", "C26TMC"));
         assertDoesNotThrow(() -> VinHoadonInvoiceService.validateTypedPair("POS", "1", "C26TBB"));
+        assertDoesNotThrow(() -> VinHoadonInvoiceService.validateTypedPair("POS", "2", "2C26MAM"));
         assertDoesNotThrow(() -> VinHoadonInvoiceService.validateTypedPair("POS", "1", "C26TMC"));
         assertDoesNotThrow(() -> VinHoadonInvoiceService.validateTypedPair("NORMAL", "1", "C26MMC"));
+        assertDoesNotThrow(() -> VinHoadonInvoiceService.validateTypedPair("NORMAL", "1", "CUSTOM"));
         assertDoesNotThrow(() -> VinHoadonInvoiceService.validateTypedPair("POS", null, null));
         assertThrows(IllegalArgumentException.class,
                 () -> VinHoadonInvoiceService.validateTypedPair("POS", null, "C26MMC"));
+        assertDoesNotThrow(() -> VinHoadonInvoiceService.validateTypedPair("POS", "1", "invalid"));
         assertThrows(IllegalArgumentException.class,
-                () -> VinHoadonInvoiceService.validateTypedPair("POS", "1", "invalid"));
+                () -> VinHoadonInvoiceService.validateTypedPair("POS", "1", "TOO-LONG-1"));
     }
 
     @Test
@@ -47,7 +50,11 @@ class VinHoadonInvoiceSeriesTest {
         String thisYear = String.format(Locale.ROOT, "%02d", Year.now(ZoneId.of("Asia/Ho_Chi_Minh")).getValue() % 100);
         String previousYear = String.format(Locale.ROOT, "%02d", (Year.now(ZoneId.of("Asia/Ho_Chi_Minh")).getValue() - 1) % 100);
         assertDoesNotThrow(() -> VinHoadonInvoiceService.requireCurrentYear("C" + thisYear + "MMC"));
+        assertDoesNotThrow(() -> VinHoadonInvoiceService.requireCurrentYear("2C" + thisYear + "MAM"));
+        assertDoesNotThrow(() -> VinHoadonInvoiceService.requireCurrentYear("CUSTOM"));
         assertThrows(IllegalStateException.class,
                 () -> VinHoadonInvoiceService.requireCurrentYear("C" + previousYear + "MMC"));
+        assertThrows(IllegalStateException.class,
+                () -> VinHoadonInvoiceService.requireCurrentYear("2C" + previousYear + "MAM"));
     }
 }

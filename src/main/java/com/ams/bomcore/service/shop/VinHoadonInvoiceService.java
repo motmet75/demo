@@ -24,6 +24,7 @@ public class VinHoadonInvoiceService {
     private static final Set<Integer> VAT_RATES = Set.of(-2, -1, 0, 5, 8, 10);
     private static final DateTimeFormatter VIN_DATE = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final Pattern TAX_CODE = Pattern.compile("^[0-9]{10}(?:-[0-9]{3})?$");
+    private static final Pattern STANDARD_SERIES_YEAR = Pattern.compile("^[0-9]?[A-Z](\\d{2})");
 
     private final VinHoadonCompanyConfigRepository configRepository;
     private final VinHoadonShopInvoiceRepository invoiceRepository;
@@ -172,16 +173,20 @@ public class VinHoadonInvoiceService {
             throw new IllegalArgumentException("Mẫu số và Ký hiệu của " + type + " phải đi cùng nhau.");
         if (template.length() > 11 || template.equalsIgnoreCase(series))
             throw new IllegalArgumentException("Mã mẫu số không hợp lệ cho " + type);
-        // VIN-HOADON may register a series such as C26TBB for POS. Do not infer
-        // the invoice type from the fourth character; the selected config field
-        // (POS or NORMAL) is the source of truth.
-        if (series.length() > 8 || !series.matches("^[A-Z][0-9]{2}[A-Z0-9]{3}$"))
+        // VIN-HOADON is the source of truth for a registered series. In
+        // particular, some accounts return the leading invoice-form digit as
+        // part of the series (for example 2C26MAM), while others return C26MAM.
+        // Do not infer the invoice type or restrict the vendor's character format.
+        if (series.length() > 8)
             throw new IllegalArgumentException("Ký hiệu " + type + " không hợp lệ: " + series);
     }
 
     static void requireCurrentYear(String series) {
         String year = String.format(Locale.ROOT, "%02d", Year.now(ZoneId.of("Asia/Ho_Chi_Minh")).getValue() % 100);
-        if (!series.substring(1, 3).equals(year)) {
+        var match = STANDARD_SERIES_YEAR.matcher(series);
+        // Only enforce the year when the value follows a recognized standard
+        // shape. Custom VIN-HOADON series are passed through unchanged.
+        if (match.find() && !match.group(1).equals(year)) {
             throw new IllegalStateException("Ký hiệu " + series
                     + " không thuộc năm hiện tại (20" + year + "). Hãy cập nhật ký hiệu đã đăng ký trên VIN-HOADON.");
         }
