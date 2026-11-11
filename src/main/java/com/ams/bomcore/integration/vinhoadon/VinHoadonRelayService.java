@@ -18,7 +18,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -48,7 +47,7 @@ public class VinHoadonRelayService {
     // Keep a private Jackson mapper to convert JsonNode to plain Java Maps for relay serialization.
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final boolean enabled;
-    private final String vinBaseUrl;
+    private final String defaultVinBaseUrl;
     private final byte[] secret;
     private final int timeoutSeconds;
     private final LinkedBlockingQueue<Pending> queue = new LinkedBlockingQueue<>();
@@ -79,26 +78,14 @@ public class VinHoadonRelayService {
             @Value("${vin-hoadon.relay.timeout-seconds:120}") int timeoutSeconds,
             VinHoadonProperties vinProperties) {
         this.enabled = enabled;
-        String scheme = vinProperties.getBaseUrl().getScheme();
-        String host = vinProperties.getBaseUrl().getHost();
-        this.vinBaseUrl = scheme.toLowerCase(java.util.Locale.ROOT) + "://"
-                + host.toLowerCase(java.util.Locale.ROOT);
+        this.defaultVinBaseUrl = enabled
+                ? allowedBaseUrl(vinProperties.getBaseUrl().toString())
+                : vinProperties.getBaseUrl().toString();
         this.secret = (signingSecret == null ? "" : signingSecret).getBytes(StandardCharsets.UTF_8);
         this.timeoutSeconds = timeoutSeconds;
         if (enabled) {
             if (secret.length < 32) throw new IllegalStateException("VIN_HOADON_RELAY_SECRET must contain at least 32 bytes");
             if (timeoutSeconds < 30 || timeoutSeconds > 300) throw new IllegalStateException("VIN_HOADON_RELAY_TIMEOUT_SECONDS must be 30-300");
-            boolean allowedHost = host != null && Set.of("ws.vin-hoadon.com", "demows.vin-hoadon.com")
-                    .contains(host.toLowerCase(java.util.Locale.ROOT));
-            String path = vinProperties.getBaseUrl().getPath();
-            boolean originOnly = vinProperties.getBaseUrl().getPort() == -1
-                    && vinProperties.getBaseUrl().getUserInfo() == null
-                    && vinProperties.getBaseUrl().getQuery() == null
-                    && vinProperties.getBaseUrl().getFragment() == null
-                    && (path == null || path.isBlank() || "/".equals(path));
-            if (!"https".equalsIgnoreCase(scheme) || !allowedHost || !originOnly) {
-                throw new IllegalStateException("VIN-HOADON relay only supports the official production and demo HTTPS origins");
-            }
         }
     }
 
@@ -175,7 +162,12 @@ public class VinHoadonRelayService {
     }
 
     public Reply forward(String path, JsonNode payload, String bearerToken) {
+        return forward(defaultVinBaseUrl, path, payload, bearerToken);
+    }
+
+    public Reply forward(String baseUrl, String path, JsonNode payload, String bearerToken) {
         requireEnabled();
+        String targetBaseUrl = allowedBaseUrl(baseUrl);
         if (path == null || !path.matches("^/api/services/hddtws/[A-Za-z0-9_/-]+$")) {
             throw new IllegalArgumentException("Unsupported VIN-HOADON relay path");
         }
@@ -193,7 +185,7 @@ public class VinHoadonRelayService {
         Map<String, Object> requestPayload = objectMapper.convertValue(
                 payload, new TypeReference<Map<String, Object>>() {});
         String id = UUID.randomUUID().toString();
-        Pending p = new Pending(new Job(id, vinBaseUrl, path, requestPayload, bearerToken));
+        Pending p = new Pending(new Job(id, targetBaseUrl, path, requestPayload, bearerToken));
         pending.put(id, p);
         queue.add(p);
         try {
@@ -256,6 +248,15 @@ public class VinHoadonRelayService {
     private static void validateAgentId(String agentId) {
         try { UUID.fromString(agentId); }
         catch (Exception exception) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid agent ID"); }
+    }
+
+    private static String allowedBaseUrl(String value) {
+        for (VinHoadonEnvironment environment : VinHoadonEnvironment.values()) {
+            if (environment.baseUrl().toString().equalsIgnoreCase(value)) {
+                return environment.baseUrl().toString();
+            }
+        }
+        throw new IllegalStateException("VIN-HOADON relay only supports the official production and demo HTTPS origins");
     }
 
     private void requireEnabled() {

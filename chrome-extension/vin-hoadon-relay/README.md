@@ -20,17 +20,13 @@ VIN_HOADON_RELAY_SECRET=replace-with-long-random-secret
 VIN_HOADON_RELAY_TIMEOUT_SECONDS=120
 ```
 
-Select exactly one VIN-HOADON environment in the same secret file, then restart Demo:
+The fallback endpoint can remain production in the secret file:
 
 ```properties
-# Demo API (temporary testing)
-VIN_HOADON_BASE_URL=https://demows.vin-hoadon.com
-
-# Production API (restore after testing)
-# VIN_HOADON_BASE_URL=https://ws.vin-hoadon.com
+VIN_HOADON_BASE_URL=https://ws.vin-hoadon.com
 ```
 
-This setting is process-wide, so every tenant uses the selected environment. Do not submit production invoices while the demo endpoint is active. `demohddt.vin-hoadon.com` is the demo website; the API origin required here is `demows.vin-hoadon.com`.
+Select **Production** or **Demo** independently in each company's VIN-HOADON configuration in the Admin GUI. Both environments can run concurrently through the same server and relay. Each invoice records its environment so later lookup, retry, and download remain on the original endpoint. `demohddt.vin-hoadon.com` is the demo website; the demo API origin is `demows.vin-hoadon.com`.
 
 After upgrading from relay 1.0.0, download/install relay 1.0.1 (or reload its unpacked folder) and accept the added demo-host permission. The old extension cannot call `demows.vin-hoadon.com`.
 

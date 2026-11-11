@@ -59,11 +59,12 @@ public class VinHoadonInvoiceService {
         this.transactions = new TransactionTemplate(transactionManager);
     }
 
-    public record ConfigRequest(boolean enabled, String taxCode, String apiUsername, String apiPassword,
+    public record ConfigRequest(boolean enabled, String apiEnvironment, String taxCode, String apiUsername, String apiPassword,
                                 String invoiceTemplateCode, String invoiceSeries, Integer defaultVatRate,
                                 Boolean pricesIncludeVat, String posInvoiceTemplateCode, String posInvoiceSeries,
                                 String normalInvoiceTemplateCode, String normalInvoiceSeries) {}
-    public record ConfigView(boolean configured, boolean enabled, boolean gatewayEnabled, boolean encryptionConfigured,
+    public record ConfigView(boolean configured, boolean enabled, String apiEnvironment,
+                             boolean gatewayEnabled, boolean encryptionConfigured,
                              String taxCode, String apiUsername, boolean passwordConfigured,
                              String invoiceTemplateCode, String invoiceSeries, int defaultVatRate,
                              boolean pricesIncludeVat, String posInvoiceTemplateCode, String posInvoiceSeries,
@@ -86,13 +87,14 @@ public class VinHoadonInvoiceService {
                               String invoiceSeries, String invoiceNumber, BigDecimal subtotal,
                               BigDecimal taxAmount, BigDecimal totalAmount, Instant createdAt,
                               Instant issuedAt, String taxAuthorityStatus, Instant lastSyncedAt,
-                              int attemptCount, List<UUID> orderIds) {}
+                              int attemptCount, List<UUID> orderIds, String apiEnvironment) {}
     public record DownloadFile(String fileName, String contentType, String base64) {}
 
     public ConfigView getConfig(UUID tenantId, UUID companyId) {
         return configRepository.findByTenantIdAndCompanyId(tenantId, companyId)
                 .map(config -> view(config, true))
-                .orElse(new ConfigView(false, false, properties.isEnabled(), cipher.isConfigured(),
+                .orElse(new ConfigView(false, false, VinHoadonEnvironment.PRODUCTION.name(),
+                        properties.isEnabled(), cipher.isConfigured(),
                         "", "", false, "", "", 8, true, "", "", "", ""));
     }
 
@@ -110,6 +112,9 @@ public class VinHoadonInvoiceService {
             config.setTenantId(tenantId);
             config.setCompanyId(companyId);
         }
+        String apiEnvironment = request.apiEnvironment() == null
+                ? VinHoadonEnvironment.from(config.getApiEnvironment()).name()
+                : VinHoadonEnvironment.from(request.apiEnvironment()).name();
 
         // New clients send both typed series, old clients can still update the legacy default.
         // A blank typed field explicitly clears it; an omitted typed field preserves its value.
@@ -153,6 +158,7 @@ public class VinHoadonInvoiceService {
             throw new IllegalArgumentException("VIN-HOADON API password is required for initial setup");
         }
         config.setEnabled(request.enabled());
+        config.setApiEnvironment(apiEnvironment);
         config.setTaxCode(taxCode);
         config.setApiUsername(username);
         config.setInvoiceTemplateCode(legacyTemplate);
@@ -235,6 +241,7 @@ public class VinHoadonInvoiceService {
         invoice.setCreatedBy(trim(actor));
         invoice.setInvoiceTemplateCode(template.templateCode());
         invoice.setInvoiceSeries(template.series());
+        invoice.setApiEnvironment(VinHoadonEnvironment.from(config.getApiEnvironment()).name());
         invoiceRepository.saveAndFlush(invoice);
         for (ShopOrder order : orders) {
             VinHoadonShopInvoiceOrder link = new VinHoadonShopInvoiceOrder();
@@ -264,6 +271,8 @@ public class VinHoadonInvoiceService {
             String invoiceType = request == null ? null : trim(request.invoiceType());
             if (invoiceType != null) {
                 VinHoadonCompanyConfig config = requireUsableConfig(tenantId, companyId);
+                if (!invoiceEnvironment(invoice).name().equals(VinHoadonEnvironment.from(config.getApiEnvironment()).name()))
+                    throw new IllegalStateException("Cannot change invoice type after switching the VIN-HOADON environment");
                 TemplateOption template = selectedTemplate(invoiceType, null, config);
                 invoice.setInvoiceTemplateCode(template.templateCode());
                 invoice.setInvoiceSeries(template.series());
@@ -299,7 +308,7 @@ public class VinHoadonInvoiceService {
         VinHoadonShopInvoice invoice = requireInvoice(tenantId, companyId, invoiceId);
         VinHoadonCompanyConfig config = requireUsableConfig(tenantId, companyId);
         JsonNode response = client.lookupInvoice(new VinHoadonClient.InvoiceReference(
-                invoice.getVendorTransactionId(), invoice.getExternalInvoiceId()), credentials(config));
+                invoice.getVendorTransactionId(), invoice.getExternalInvoiceId()), credentials(config, invoiceEnvironment(invoice)));
         return transactions.execute(status -> {
             VinHoadonShopInvoice current = invoiceRepository.findWithLockByIdAndTenantIdAndCompanyId(invoiceId, tenantId, companyId)
                     .orElseThrow(() -> new NoSuchElementException("VIN-HOADON invoice not found"));
@@ -313,7 +322,7 @@ public class VinHoadonInvoiceService {
     private InvoiceView submit(UUID tenantId, UUID companyId, UUID invoiceId) {
         VinHoadonShopInvoice invoice = requireInvoice(tenantId, companyId, invoiceId);
         VinHoadonCompanyConfig config = requireUsableConfig(tenantId, companyId);
-        VinHoadonCredentials credentials = credentials(config);
+        VinHoadonCredentials credentials = credentials(config, invoiceEnvironment(invoice));
         if (invoice.getAttemptCount() > 1) {
             try {
                 JsonNode lookup = client.lookupInvoice(new VinHoadonClient.InvoiceReference(
@@ -379,8 +388,9 @@ public class VinHoadonInvoiceService {
         VinHoadonCompanyConfig config = requireUsableConfig(tenantId, companyId);
         var reference = new VinHoadonClient.InvoiceReference(invoice.getVendorTransactionId(), invoice.getExternalInvoiceId());
         boolean xml = "xml".equalsIgnoreCase(format);
-        JsonNode response = xml ? client.downloadSignedXml(reference, credentials(config))
-                : client.downloadSignedPdf(reference, credentials(config));
+        VinHoadonCredentials invoiceCredentials = credentials(config, invoiceEnvironment(invoice));
+        JsonNode response = xml ? client.downloadSignedXml(reference, invoiceCredentials)
+                : client.downloadSignedPdf(reference, invoiceCredentials);
         String field = xml ? "base64xml" : "base64pdf";
         String base64 = text(response, field);
         if (base64 == null) throw new IllegalStateException("VIN-HOADON did not return " + field);
@@ -393,7 +403,8 @@ public class VinHoadonInvoiceService {
         boolean legacyOnly = c.getPosInvoiceSeries() == null && c.getNormalInvoiceSeries() == null;
         boolean legacyPos = legacyOnly && legacySeries != null && legacySeries.matches("^[A-Z][0-9]{2}M[A-Z0-9]{2}$");
         boolean legacyNormal = legacyOnly && legacySeries != null && legacySeries.matches("^[A-Z][0-9]{2}T[A-Z0-9]{2}$");
-        return new ConfigView(configured, c.isEnabled(), properties.isEnabled(), cipher.isConfigured(), c.getTaxCode(),
+        return new ConfigView(configured, c.isEnabled(), VinHoadonEnvironment.from(c.getApiEnvironment()).name(),
+                properties.isEnabled(), cipher.isConfigured(), c.getTaxCode(),
                 c.getApiUsername(), c.getEncryptedApiPassword() != null && !c.getEncryptedApiPassword().isBlank(),
                 c.getInvoiceTemplateCode(), c.getInvoiceSeries(), c.getDefaultVatRate(), c.isPricesIncludeVat(),
                 Optional.ofNullable(c.getPosInvoiceTemplateCode()).orElse(legacyPos ? c.getInvoiceTemplateCode() : ""),
@@ -669,15 +680,22 @@ public class VinHoadonInvoiceService {
                 invoice.getVendorResultMessage(), invoice.getVendorTransactionId(), invoice.getInvoiceTemplateCode(),
                 invoice.getInvoiceSeries(), invoice.getInvoiceNumber(), invoice.getSubtotal(), invoice.getTaxAmount(),
                 invoice.getTotalAmount(), invoice.getCreatedAt(), invoice.getIssuedAt(),
-                invoice.getTaxAuthorityStatus(), invoice.getLastSyncedAt(), invoice.getAttemptCount(), ids);
+                invoice.getTaxAuthorityStatus(), invoice.getLastSyncedAt(), invoice.getAttemptCount(), ids,
+                invoiceEnvironment(invoice).name());
     }
     private VinHoadonShopInvoice requireInvoice(UUID tenantId, UUID companyId, UUID id) {
         return invoiceRepository.findByIdAndTenantIdAndCompanyId(id, tenantId, companyId)
                 .orElseThrow(() -> new NoSuchElementException("VIN-HOADON invoice not found"));
     }
     private VinHoadonCredentials credentials(VinHoadonCompanyConfig config) {
+        return credentials(config, VinHoadonEnvironment.from(config.getApiEnvironment()));
+    }
+    private VinHoadonCredentials credentials(VinHoadonCompanyConfig config, VinHoadonEnvironment environment) {
         return new VinHoadonCredentials(config.getTaxCode(), config.getApiUsername(),
-                cipher.decrypt(config.getEncryptedApiPassword(), config.getTenantId(), config.getCompanyId()));
+                cipher.decrypt(config.getEncryptedApiPassword(), config.getTenantId(), config.getCompanyId()), environment);
+    }
+    private VinHoadonEnvironment invoiceEnvironment(VinHoadonShopInvoice invoice) {
+        return VinHoadonEnvironment.from(invoice.getApiEnvironment());
     }
     // Per-invoice choice independent of the company's historical default.
     // Legacy clients that omit it use VAT-inclusive prices, the shop-POS default.

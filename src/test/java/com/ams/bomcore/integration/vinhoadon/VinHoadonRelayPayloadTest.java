@@ -39,7 +39,7 @@ class VinHoadonRelayPayloadTest {
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
             Future<VinHoadonRelayService.Reply> reply = executor.submit(
-                    () -> service.forward(VinHoadonClient.TOKEN_PATH, login, null));
+                    () -> service.forward("https://demows.vin-hoadon.com", VinHoadonClient.TOKEN_PATH, login, null));
             VinHoadonRelayService.Job job = null;
             for (int i = 0; i < 100 && job == null; i++) {
                 job = service.take(bearer);
@@ -47,7 +47,7 @@ class VinHoadonRelayPayloadTest {
             }
 
             assertNotNull(job, "Chrome should receive the queued VIN request");
-            assertEquals("https://ws.vin-hoadon.com", job.baseUrl());
+            assertEquals("https://demows.vin-hoadon.com", job.baseUrl());
             assertEquals(Set.of("doanhnghiep_mst", "username", "password"),
                     job.payload().keySet());
             assertEquals("0123456789", job.payload().get("doanhnghiep_mst"));

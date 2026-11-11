@@ -52,7 +52,7 @@ app:
     from: "${MAIL_FROM:services@anhmedia.vn}"
 vin-hoadon:
   enabled: "${VIN_HOADON_ENABLED:false}"
-  base-url: "${VIN_HOADON_BASE_URL:https://demows.vin-hoadon.com}"
+  base-url: "${VIN_HOADON_BASE_URL:https://ws.vin-hoadon.com}"
   connect-timeout-seconds: "${VIN_HOADON_CONNECT_TIMEOUT_SECONDS:10}"
   request-timeout-seconds: "${VIN_HOADON_REQUEST_TIMEOUT_SECONDS:30}"
   master-key: "${VIN_HOADON_MASTER_KEY:}"

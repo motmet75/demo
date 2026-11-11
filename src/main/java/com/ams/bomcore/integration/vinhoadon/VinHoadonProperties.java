@@ -23,7 +23,7 @@ public class VinHoadonProperties {
 
     public VinHoadonProperties(
             @Value("${vin-hoadon.enabled:false}") boolean enabled,
-            @Value("${vin-hoadon.base-url:https://demows.vin-hoadon.com}") String baseUrl,
+            @Value("${vin-hoadon.base-url:https://ws.vin-hoadon.com}") String baseUrl,
             @Value("${vin-hoadon.connect-timeout-seconds:10}") long connectTimeoutSeconds,
             @Value("${vin-hoadon.request-timeout-seconds:30}") long requestTimeoutSeconds) {
         this.enabled = enabled;

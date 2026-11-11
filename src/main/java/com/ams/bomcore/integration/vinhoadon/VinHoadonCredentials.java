@@ -1,7 +1,13 @@
 package com.ams.bomcore.integration.vinhoadon;
 
-/** Credentials issued by VIN-HOADON for one seller tax identity. */
-public record VinHoadonCredentials(String taxCode, String username, String password) {
+/** Credentials issued by VIN-HOADON for one seller tax identity and environment. */
+public record VinHoadonCredentials(String taxCode, String username, String password,
+                                   VinHoadonEnvironment environment) {
+
+    /** Compatibility constructor for low-level callers that use the configured fallback endpoint. */
+    public VinHoadonCredentials(String taxCode, String username, String password) {
+        this(taxCode, username, password, null);
+    }
 
     public VinHoadonCredentials {
         taxCode = required(taxCode, "taxCode");
@@ -11,7 +17,7 @@ public record VinHoadonCredentials(String taxCode, String username, String passw
 
     /** A non-secret identity suitable for isolating cached tokens. */
     String cacheKey() {
-        return taxCode + "\u0000" + username;
+        return (environment == null ? "DEFAULT" : environment.name()) + "\u0000" + taxCode + "\u0000" + username;
     }
 
     private static String required(String value, String name) {

@@ -51,7 +51,8 @@ const hasCurrentInvoiceYear = series => {
 
 function ConfigForm({ config, scope, onSaved, onCancel }) {
   const [form, setForm] = useState({
-    enabled: config?.enabled || false, taxCode: config?.taxCode || '', apiUsername: config?.apiUsername || '', apiPassword: '',
+    enabled: config?.enabled || false, apiEnvironment: config?.apiEnvironment || 'PRODUCTION',
+    taxCode: config?.taxCode || '', apiUsername: config?.apiUsername || '', apiPassword: '',
     invoiceTemplateCode: config?.invoiceTemplateCode || '', invoiceSeries: config?.invoiceSeries || '',
     posInvoiceTemplateCode: config?.posInvoiceTemplateCode || '',
     posInvoiceSeries: config?.posInvoiceSeries || '',
@@ -88,6 +89,13 @@ function ConfigForm({ config, scope, onSaved, onCancel }) {
     {!config?.gatewayEnabled && <Alert severity="warning">VIN_HOADON_ENABLED đang là false trên máy chủ. Có thể lưu cấu hình trước, nhưng chưa thể phát hành hóa đơn.</Alert>}
     {error && <Alert severity="error">{error}</Alert>}
     <FormControlLabel control={<Switch checked={form.enabled} onChange={e => setForm(old => ({ ...old, enabled: e.target.checked }))} />} label="Bật VIN-HOADON cho công ty này" />
+    <TextField select label="Môi trường VIN-HOADON" value={form.apiEnvironment} onChange={change('apiEnvironment')}>
+      <MenuItem value="PRODUCTION">Thật (ws.vin-hoadon.com)</MenuItem>
+      <MenuItem value="DEMO">Demo (demows.vin-hoadon.com)</MenuItem>
+    </TextField>
+    {form.apiEnvironment === 'DEMO' && <Alert severity="warning">
+      Chế độ DEMO: dữ liệu chỉ gửi đến hệ thống thử nghiệm, không phải hóa đơn thật.
+    </Alert>}
     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
       <TextField label="Mã số thuế người bán" value={form.taxCode} onChange={change('taxCode')} required inputProps={{ maxLength: 14 }} />
       <TextField label="Tên đăng nhập VIN-HOADON" value={form.apiUsername} onChange={change('apiUsername')} required />
@@ -414,7 +422,11 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
             <Alert severity={invoice.status === 'ISSUED' ? 'success' : invoice.status === 'FAILED' ? 'error' : 'warning'}>
               {invoice.status === 'ISSUED' ? 'Hóa đơn đã được ký.' : invoice.status === 'DRAFT' ? 'Đã gửi hóa đơn chưa ký lên VIN-HOADON. Kiểm tra danh sách hóa đơn trên VIN-HOADON và ký tại đó khi sẵn sàng.' : invoice.status === 'PENDING' ? 'VIN-HOADON đã nhận hóa đơn; đang chờ ký hoặc cấp số.' : invoice.status === 'RECONCILE' ? 'Chưa xác nhận được kết quả. Tra cứu trước khi thử gửi lại.' : `Gửi hóa đơn chưa thành công: ${invoice.resultMessage || 'Lỗi VIN-HOADON'}`}
             </Alert>
-            <Box><Chip label={invoice.status} color={invoice.status === 'ISSUED' ? 'success' : invoice.status === 'DRAFT' ? 'info' : 'warning'} /> <b>{invoice.invoiceSeries || ''} {invoice.invoiceNumber || invoice.externalInvoiceId}</b></Box>
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+              <Chip label={invoice.status} color={invoice.status === 'ISSUED' ? 'success' : invoice.status === 'DRAFT' ? 'info' : 'warning'} />
+              <Chip label={invoice.apiEnvironment === 'DEMO' ? 'DEMO' : 'THẬT'} color={invoice.apiEnvironment === 'DEMO' ? 'warning' : 'primary'} variant="outlined" />
+              <b>{invoice.invoiceSeries || ''} {invoice.invoiceNumber || invoice.externalInvoiceId}</b>
+            </Box>
             <Typography variant="body2">Mẫu số đã gửi: <b>{invoice.invoiceTemplateCode || '—'}</b> · Ký hiệu: <b>{invoice.invoiceSeries || '—'}</b></Typography>
             <Typography>Tổng thanh toán: <b>{money(invoice.totalAmount)}</b></Typography>
             {invoice.taxAuthorityStatus != null && <Typography>Trạng thái cơ quan thuế: {({ 0: 'Chờ xác nhận', 1: 'Đã xác nhận', 2: 'Từ chối' })[invoice.taxAuthorityStatus] || invoice.taxAuthorityStatus}</Typography>}
@@ -428,6 +440,7 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
             </Stack>}
           </Stack>
         ) : <Stack spacing={2}>
+          {config?.apiEnvironment === 'DEMO' && <Alert severity="warning">Đang dùng VIN-HOADON DEMO cho công ty này. Hóa đơn sẽ không được gửi sang hệ thống thật.</Alert>}
           {!usable && <Alert severity="warning" action={isAdmin ? <Button color="inherit" onClick={() => setShowConfig(true)}>Cấu hình</Button> : null}>VIN-HOADON chưa sẵn sàng cho công ty này.</Alert>}
           {templateError && <Alert severity="warning">{templateError}. Kiểm tra ký hiệu đã đăng ký trên VIN-HOADON trước khi gửi.</Alert>}
           {!readyToSend && usable && <Alert severity="warning">Chưa cấu hình ký hiệu {invoiceType === 'POS' ? 'máy tính tiền' : 'thông thường'} hợp lệ cho năm hiện tại. Cần cập nhật cấu hình trước khi lập hóa đơn.</Alert>}

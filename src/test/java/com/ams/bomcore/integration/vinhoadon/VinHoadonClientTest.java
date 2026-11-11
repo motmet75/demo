@@ -1,6 +1,7 @@
 package com.ams.bomcore.integration.vinhoadon;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.io.IOException;
@@ -103,6 +104,18 @@ class VinHoadonClientTest {
                 () -> client().issueOriginalHsm(invoice, credentials()));
 
         assertEquals("Invoice seller tax code does not match VIN-HOADON credentials", error.getMessage());
+    }
+
+    @Test
+    void isolatesTokenCacheIdentityByEnvironment() {
+        VinHoadonCredentials production = new VinHoadonCredentials(
+                "0123456789", "api-user", "secret", VinHoadonEnvironment.PRODUCTION);
+        VinHoadonCredentials demo = new VinHoadonCredentials(
+                "0123456789", "api-user", "secret", VinHoadonEnvironment.DEMO);
+
+        assertNotEquals(production.cacheKey(), demo.cacheKey());
+        assertEquals("https://demows.vin-hoadon.com", demo.environment().baseUrl().toString());
+        assertThrows(IllegalArgumentException.class, () -> VinHoadonEnvironment.from("custom"));
     }
 
     private VinHoadonClient client() {

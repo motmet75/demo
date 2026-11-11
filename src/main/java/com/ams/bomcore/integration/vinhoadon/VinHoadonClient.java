@@ -89,7 +89,7 @@ public class VinHoadonClient {
                 .put("password", credentials.password());
         JsonNode response;
         try {
-            response = post(TOKEN_PATH, request, null);
+            response = post(TOKEN_PATH, request, null, credentials);
         } catch (VinHoadonApiException exception) {
             if (exception.getStatusCode() <= 0) throw exception;
             throw new VinHoadonApiException(
@@ -191,14 +191,14 @@ public class VinHoadonClient {
         ensureEnabled();
         String token = tokenFor(credentials);
         try {
-            return unwrapResult(post(path, payload, token));
+            return unwrapResult(post(path, payload, token, credentials));
         } catch (VinHoadonApiException exception) {
             if (exception.getStatusCode() != 401) {
                 throw exception;
             }
             invalidateToken(credentials);
             String refreshedToken = authenticate(credentials).accessToken();
-            return unwrapResult(post(path, payload, refreshedToken));
+            return unwrapResult(post(path, payload, refreshedToken, credentials));
         }
     }
 
@@ -210,9 +210,12 @@ public class VinHoadonClient {
         return authenticate(credentials).accessToken();
     }
 
-    private JsonNode post(String path, JsonNode payload, String bearerToken) {
+    private JsonNode post(String path, JsonNode payload, String bearerToken,
+                          VinHoadonCredentials credentials) {
+        URI baseUrl = credentials.environment() == null
+                ? properties.getBaseUrl() : credentials.environment().baseUrl();
         if (relay != null && relay.isEnabled()) {
-            VinHoadonRelayService.Reply reply = relay.forward(path, payload, bearerToken);
+            VinHoadonRelayService.Reply reply = relay.forward(baseUrl.toString(), path, payload, bearerToken);
             if (reply.status() < 200 || reply.status() >= 300) {
                 throw new VinHoadonApiException("VIN-HOADON returned HTTP " + reply.status(),
                         reply.status(), truncate(reply.body()));
@@ -223,7 +226,7 @@ public class VinHoadonClient {
                 throw new VinHoadonApiException("VIN-HOADON relay returned invalid JSON", exception);
             }
         }
-        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(resolve(path))
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(resolve(baseUrl, path))
                 .timeout(properties.getRequestTimeout())
                 .header("Accept", "application/json")
                 .header("Content-Type", "application/json")
@@ -270,11 +273,11 @@ public class VinHoadonClient {
         }
     }
 
-    private URI resolve(String path) {
+    private URI resolve(URI baseUrl, String path) {
         if (path == null || !path.startsWith("/api/services/hddtws/")) {
             throw new IllegalArgumentException("Unsupported VIN-HOADON API path");
         }
-        return URI.create(properties.getBaseUrl().toString() + path);
+        return URI.create(baseUrl.toString() + path);
     }
 
     private String writeJson(JsonNode payload) {

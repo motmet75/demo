@@ -15,6 +15,7 @@ public class VinHoadonCompanyConfig {
     @Column(name = "tax_code", nullable = false, length = 14) private String taxCode;
     @Column(name = "api_username", nullable = false) private String apiUsername;
     @Column(name = "encrypted_api_password", nullable = false, columnDefinition = "text") private String encryptedApiPassword;
+    @Column(name = "api_environment", nullable = false, length = 10) private String apiEnvironment = "PRODUCTION";
     @Column(name = "invoice_template_code", nullable = false, length = 11) private String invoiceTemplateCode;
     @Column(name = "invoice_series", nullable = false, length = 8) private String invoiceSeries;
     // One company/login, two independently registered invoice template/series pairs.
@@ -44,6 +45,8 @@ public class VinHoadonCompanyConfig {
     public void setApiUsername(String apiUsername) { this.apiUsername = apiUsername; }
     public String getEncryptedApiPassword() { return encryptedApiPassword; }
     public void setEncryptedApiPassword(String value) { this.encryptedApiPassword = value; }
+    public String getApiEnvironment() { return apiEnvironment; }
+    public void setApiEnvironment(String value) { this.apiEnvironment = value; }
     public String getInvoiceTemplateCode() { return invoiceTemplateCode; }
     public void setInvoiceTemplateCode(String value) { this.invoiceTemplateCode = value; }
     public String getInvoiceSeries() { return invoiceSeries; }
