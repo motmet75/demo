@@ -11,6 +11,7 @@ import java.time.Year;
 import java.time.ZoneId;
 import java.util.Map;
 import java.util.Locale;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class VinHoadonInvoiceSeriesTest {
@@ -83,5 +84,23 @@ class VinHoadonInvoiceSeriesTest {
         assertEquals(second, refreshed.get("ma_hoadon"));
         assertEquals("0123456789", refreshed.get("doanhnghiep_mst"));
         assertEquals("C26MAM", refreshed.get("kyhieu"));
+    }
+
+    @Test
+    void submissionRequiresAnExactAnnouncedTemplatePair() {
+        var announced = List.of(
+                new VinHoadonInvoiceService.TemplateOption("2", "C26MTT", "POS"),
+                new VinHoadonInvoiceService.TemplateOption("2", "C26TKT", "Normal"));
+
+        assertTrue(VinHoadonInvoiceService.isAnnouncedTemplate(announced,
+                new VinHoadonInvoiceService.TemplateOption("2", "C26MTT", null)));
+        assertTrue(VinHoadonInvoiceService.isAnnouncedTemplate(announced,
+                new VinHoadonInvoiceService.TemplateOption("2", "C26TKT", null)));
+        assertFalse(VinHoadonInvoiceService.isAnnouncedTemplate(announced,
+                new VinHoadonInvoiceService.TemplateOption("2", "C26MAM", null)));
+        assertFalse(VinHoadonInvoiceService.isAnnouncedTemplate(announced,
+                new VinHoadonInvoiceService.TemplateOption("1", "C26MTT", null)));
+        assertFalse(VinHoadonInvoiceService.isAnnouncedTemplate(List.of(),
+                new VinHoadonInvoiceService.TemplateOption("2", "C26MTT", null)));
     }
 }

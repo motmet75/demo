@@ -213,6 +213,8 @@ public class VinHoadonInvoiceService {
     }
 
     public InvoiceView issue(UUID tenantId, UUID companyId, IssueRequest request, String actor, ZoneId zoneId) {
+        VinHoadonCompanyConfig config = requireUsableConfig(tenantId, companyId);
+        requireAnnouncedTemplate(config, selectedTemplate(request, config));
         UUID invoiceId = transactions.execute(status -> prepareIssue(tenantId, companyId, request, actor, zoneId));
         return submit(tenantId, companyId, invoiceId);
     }
@@ -261,6 +263,15 @@ public class VinHoadonInvoiceService {
     }
 
     public InvoiceView retry(UUID tenantId, UUID companyId, UUID invoiceId, RetryRequest request) {
+        VinHoadonShopInvoice existing = requireInvoice(tenantId, companyId, invoiceId);
+        String requestedType = request == null ? null : trim(request.invoiceType());
+        if (!"PENDING".equals(existing.getStatus())) {
+            VinHoadonCompanyConfig config = requireUsableConfig(tenantId, companyId);
+            TemplateOption retryTemplate = requestedType == null
+                    ? new TemplateOption(existing.getInvoiceTemplateCode(), existing.getInvoiceSeries(), null)
+                    : selectedTemplate(requestedType, null, config);
+            requireAnnouncedTemplate(config, retryTemplate);
+        }
         String previousStatus = transactions.execute(status -> {
             VinHoadonShopInvoice invoice = invoiceRepository.findWithLockByIdAndTenantIdAndCompanyId(invoiceId, tenantId, companyId)
                     .orElseThrow(() -> new NoSuchElementException("VIN-HOADON invoice not found"));
@@ -311,6 +322,21 @@ public class VinHoadonInvoiceService {
         });
         if ("PENDING".equals(previousStatus)) return sync(tenantId, companyId, invoiceId);
         return submit(tenantId, companyId, invoiceId);
+    }
+
+    private void requireAnnouncedTemplate(VinHoadonCompanyConfig config, TemplateOption selected) {
+        if (!isAnnouncedTemplate(announcedTemplates(config), selected)) {
+            throw new IllegalStateException("Mẫu số " + selected.templateCode() + " và Ký hiệu "
+                    + selected.series() + " chưa đăng ký cho tài khoản VIN-HOADON này. "
+                    + "Hãy chọn đúng cặp trong danh sách mẫu VIN-HOADON trước khi gửi.");
+        }
+    }
+
+    static boolean isAnnouncedTemplate(List<TemplateOption> announced, TemplateOption selected) {
+        if (selected == null || selected.templateCode() == null || selected.series() == null) return false;
+        return Optional.ofNullable(announced).orElse(List.of()).stream().anyMatch(option ->
+                selected.templateCode().equals(option.templateCode())
+                        && selected.series().equals(option.series()));
     }
 
     static String newExternalInvoiceId() {
