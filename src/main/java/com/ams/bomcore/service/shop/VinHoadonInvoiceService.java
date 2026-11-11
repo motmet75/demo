@@ -173,6 +173,7 @@ public class VinHoadonInvoiceService {
         }
         config.setDefaultVatRate(vat);
         config.setPricesIncludeVat(!Boolean.FALSE.equals(request.pricesIncludeVat()));
+        if (config.isEnabled()) requireConfiguredTemplatesAreAnnounced(config);
         return view(configRepository.save(config), true);
     }
 
@@ -325,7 +326,28 @@ public class VinHoadonInvoiceService {
     }
 
     private void requireAnnouncedTemplate(VinHoadonCompanyConfig config, TemplateOption selected) {
-        if (!isAnnouncedTemplate(announcedTemplates(config), selected)) {
+        requireAnnouncedTemplate(announcedTemplates(config), selected);
+    }
+
+    private void requireConfiguredTemplatesAreAnnounced(VinHoadonCompanyConfig config) {
+        List<TemplateOption> announced = announcedTemplates(config);
+        boolean typed = trim(config.getPosInvoiceSeries()) != null || trim(config.getNormalInvoiceSeries()) != null;
+        if (trim(config.getPosInvoiceSeries()) != null) {
+            requireAnnouncedTemplate(announced, new TemplateOption(
+                    trim(config.getPosInvoiceTemplateCode()), trim(config.getPosInvoiceSeries()), null));
+        }
+        if (trim(config.getNormalInvoiceSeries()) != null) {
+            requireAnnouncedTemplate(announced, new TemplateOption(
+                    trim(config.getNormalInvoiceTemplateCode()), trim(config.getNormalInvoiceSeries()), null));
+        }
+        if (!typed) {
+            requireAnnouncedTemplate(announced, new TemplateOption(
+                    trim(config.getInvoiceTemplateCode()), trim(config.getInvoiceSeries()), null));
+        }
+    }
+
+    private void requireAnnouncedTemplate(List<TemplateOption> announced, TemplateOption selected) {
+        if (!isAnnouncedTemplate(announced, selected)) {
             throw new IllegalStateException("Mẫu số " + selected.templateCode() + " và Ký hiệu "
                     + selected.series() + " chưa đăng ký cho tài khoản VIN-HOADON này. "
                     + "Hãy chọn đúng cặp trong danh sách mẫu VIN-HOADON trước khi gửi.");
