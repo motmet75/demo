@@ -81,7 +81,7 @@ public class SecurityConfig {
                 // Extension endpoints authenticate with signed relay tokens, not the app session.
                 .requestMatchers(HttpMethod.POST, "/api/vin-hoadon/relay/handshake", "/api/vin-hoadon/relay/renew", "/api/vin-hoadon/relay/result").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/vin-hoadon/relay/next", "/api/vin-hoadon/relay/status").permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/vin-hoadon/relay/pair-code").hasAnyRole("SUPER_ADMIN", "ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/vin-hoadon/relay/pair-code").hasAnyRole(FULL_BUSINESS_ROLES)
                 .requestMatchers("/api/vin-hoadon/relay/**").denyAll()
                 .requestMatchers(HttpMethod.POST, "/api/invoice-desk/desktop/handshake", "/api/invoice-desk/desktop/heartbeat", "/api/invoice-desk/desktop/reports", "/api/invoice-desk/desktop/ocr", "/api/invoice-desk/desktop/events", "/api/invoice-desk/desktop/login-gate", "/api/invoice-desk/desktop/login-result", "/api/invoice-desk/desktop/invoice-reservations", "/api/invoice-desk/desktop/invoice-reservations/*/finish").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/invoice-desk/desktop/usage").permitAll()

@@ -13,7 +13,7 @@ public class VinHoadonRelayController {
     public record PairRequest(String code, String agentId) {}
 
     @PostMapping("/pair-code")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','USER')")
     public VinHoadonRelayService.PairCode pairCode() {
         return service.generatePairCode();
     }

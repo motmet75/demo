@@ -114,7 +114,14 @@ function ConfigForm({ config, scope, onSaved, onCancel }) {
     <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, p: 1.5 }}>
       <Typography fontWeight={700}>VIN-HOADON Vietnam Relay</Typography>
       <Typography variant="body2" color="text.secondary">Bấm tạo mã, sau đó mở extension VIN-HOADON Relay trên Chrome tại Việt Nam và dán 8 chữ số.</Typography>
-      <Button variant="outlined" sx={{ mt: 1 }} onClick={pairRelay} disabled={busy}>Tạo và sao chép mã ghép relay</Button>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mt: 1 }}>
+        <Button variant="outlined" onClick={pairRelay} disabled={busy}>Tạo và sao chép mã ghép relay</Button>
+        <Button component="a" href="/sapi/downloads/vin-hoadon-relay.zip" download
+          startIcon={<DownloadIcon />} variant="outlined">Tải addon Chrome (.zip)</Button>
+      </Stack>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+        Giải nén ZIP, mở chrome://extensions, bật Developer mode rồi chọn Load unpacked và thư mục vừa giải nén.
+      </Typography>
       {relayPair?.code && <Alert severity="success" sx={{ mt: 1 }}>
         Mã ghép: <b style={{ letterSpacing: 2 }}>{relayPair.code}</b> · hết hạn lúc {new Date(relayPair.expiresAt * 1000).toLocaleTimeString('vi-VN')}
       </Alert>}
