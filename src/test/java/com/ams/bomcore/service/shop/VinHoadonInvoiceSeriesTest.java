@@ -2,6 +2,7 @@ package com.ams.bomcore.service.shop;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -67,5 +68,8 @@ class VinHoadonInvoiceSeriesTest {
         assertTrue(first.matches("^SO[0-9a-f]{32}$"));
         assertTrue(second.matches("^SO[0-9a-f]{32}$"));
         assertNotEquals(first, second);
+        assertTrue(VinHoadonInvoiceService.canSwitchEnvironmentOnRetry("FAILED"));
+        assertFalse(VinHoadonInvoiceService.canSwitchEnvironmentOnRetry("RECONCILE"));
+        assertFalse(VinHoadonInvoiceService.canSwitchEnvironmentOnRetry("ISSUING"));
     }
 }

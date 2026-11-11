@@ -268,11 +268,14 @@ public class VinHoadonInvoiceService {
             if (!Set.of("FAILED", "RECONCILE", "ISSUING").contains(current))
                 throw new IllegalStateException("This invoice cannot be retried");
             Map<String, Object> refreshedPayload = null;
+            VinHoadonCompanyConfig config = requireUsableConfig(tenantId, companyId);
+            VinHoadonEnvironment configuredEnvironment = VinHoadonEnvironment.from(config.getApiEnvironment());
+            boolean environmentChanged = invoiceEnvironment(invoice) != configuredEnvironment;
+            if (environmentChanged && !canSwitchEnvironmentOnRetry(current))
+                throw new IllegalStateException("Only a definitively FAILED invoice can switch VIN-HOADON environment; reconcile this invoice in its original environment");
+            if (environmentChanged) invoice.setApiEnvironment(configuredEnvironment.name());
             String invoiceType = request == null ? null : trim(request.invoiceType());
             if (invoiceType != null) {
-                VinHoadonCompanyConfig config = requireUsableConfig(tenantId, companyId);
-                if (!invoiceEnvironment(invoice).name().equals(VinHoadonEnvironment.from(config.getApiEnvironment()).name()))
-                    throw new IllegalStateException("Cannot change invoice type after switching the VIN-HOADON environment");
                 TemplateOption template = selectedTemplate(invoiceType, null, config);
                 invoice.setInvoiceTemplateCode(template.templateCode());
                 invoice.setInvoiceSeries(template.series());
@@ -302,6 +305,10 @@ public class VinHoadonInvoiceService {
 
     static String newExternalInvoiceId() {
         return "SO" + UUID.randomUUID().toString().replace("-", "");
+    }
+
+    static boolean canSwitchEnvironmentOnRetry(String status) {
+        return "FAILED".equals(status);
     }
 
     public InvoiceView sync(UUID tenantId, UUID companyId, UUID invoiceId) {
