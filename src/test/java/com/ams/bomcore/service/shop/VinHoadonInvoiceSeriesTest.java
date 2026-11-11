@@ -2,6 +2,8 @@ package com.ams.bomcore.service.shop;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.math.BigDecimal;
 import java.time.Year;
@@ -56,5 +58,14 @@ class VinHoadonInvoiceSeriesTest {
                 () -> VinHoadonInvoiceService.requireCurrentYear("C" + previousYear + "MMC"));
         assertThrows(IllegalStateException.class,
                 () -> VinHoadonInvoiceService.requireCurrentYear("2C" + previousYear + "MAM"));
+    }
+
+    @Test
+    void retryCanUseAFreshVendorInvoiceIdAfterDefinitiveFailure() {
+        String first = VinHoadonInvoiceService.newExternalInvoiceId();
+        String second = VinHoadonInvoiceService.newExternalInvoiceId();
+        assertTrue(first.matches("^SO[0-9a-f]{32}$"));
+        assertTrue(second.matches("^SO[0-9a-f]{32}$"));
+        assertNotEquals(first, second);
     }
 }

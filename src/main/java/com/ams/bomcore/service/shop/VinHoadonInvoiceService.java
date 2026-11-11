@@ -222,7 +222,7 @@ public class VinHoadonInvoiceService {
         VinHoadonShopInvoice invoice = new VinHoadonShopInvoice();
         invoice.setTenantId(tenantId);
         invoice.setCompanyId(companyId);
-        invoice.setExternalInvoiceId("SO" + UUID.randomUUID().toString().replace("-", ""));
+        invoice.setExternalInvoiceId(newExternalInvoiceId());
         invoice.setStatus("ISSUING");
         invoice.setAttemptCount(1);
         invoice.setLastAttemptAt(Instant.now());
@@ -260,17 +260,28 @@ public class VinHoadonInvoiceService {
                 throw new IllegalStateException("Invoice submission is still in progress");
             if (!Set.of("FAILED", "RECONCILE", "ISSUING").contains(current))
                 throw new IllegalStateException("This invoice cannot be retried");
+            Map<String, Object> refreshedPayload = null;
             String invoiceType = request == null ? null : trim(request.invoiceType());
             if (invoiceType != null) {
                 VinHoadonCompanyConfig config = requireUsableConfig(tenantId, companyId);
                 TemplateOption template = selectedTemplate(invoiceType, null, config);
                 invoice.setInvoiceTemplateCode(template.templateCode());
                 invoice.setInvoiceSeries(template.series());
-                Map<String, Object> payload = new LinkedHashMap<>(Optional.ofNullable(invoice.getRequestPayload()).orElse(Map.of()));
-                payload.put("mauso", template.templateCode());
-                payload.put("kyhieu", template.series());
-                invoice.setRequestPayload(payload);
+                refreshedPayload = new LinkedHashMap<>(Optional.ofNullable(invoice.getRequestPayload()).orElse(Map.of()));
+                refreshedPayload.put("mauso", template.templateCode());
+                refreshedPayload.put("kyhieu", template.series());
             }
+            if ("FAILED".equals(current)) {
+                // A definitive vendor rejection was not accepted as an invoice.
+                // Use a fresh application id so the corrected payload is treated
+                // as a new submission. Never do this for uncertain/reconcile states.
+                String externalInvoiceId = newExternalInvoiceId();
+                invoice.setExternalInvoiceId(externalInvoiceId);
+                if (refreshedPayload == null)
+                    refreshedPayload = new LinkedHashMap<>(Optional.ofNullable(invoice.getRequestPayload()).orElse(Map.of()));
+                refreshedPayload.put("ma_hoadon", externalInvoiceId);
+            }
+            if (refreshedPayload != null) invoice.setRequestPayload(refreshedPayload);
             invoice.setStatus("ISSUING");
             invoice.setLastAttemptAt(Instant.now());
             invoice.setAttemptCount(invoice.getAttemptCount() + 1);
@@ -278,6 +289,10 @@ public class VinHoadonInvoiceService {
         });
         if ("PENDING".equals(previousStatus)) return sync(tenantId, companyId, invoiceId);
         return submit(tenantId, companyId, invoiceId);
+    }
+
+    static String newExternalInvoiceId() {
+        return "SO" + UUID.randomUUID().toString().replace("-", "");
     }
 
     public InvoiceView sync(UUID tenantId, UUID companyId, UUID invoiceId) {
