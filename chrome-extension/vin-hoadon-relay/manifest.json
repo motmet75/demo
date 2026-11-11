@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
   "name": "VIN-HOADON Vietnam Relay",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Pair a trusted Vietnam Chrome browser to forward VIN-HOADON HTTPS requests from Demo.",
   "permissions": ["alarms", "storage"],
   "host_permissions": [
     "https://anhmedia.vn/*",
-    "https://ws.vin-hoadon.com/*"
+    "https://ws.vin-hoadon.com/*",
+    "https://demows.vin-hoadon.com/*"
   ],
   "background": {"service_worker": "background.js"},
   "action": {"default_title": "VIN-HOADON Relay", "default_popup": "popup.html"}

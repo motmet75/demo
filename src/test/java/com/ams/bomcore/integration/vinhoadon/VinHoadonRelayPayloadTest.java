@@ -1,8 +1,10 @@
 package com.ams.bomcore.integration.vinhoadon;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -45,6 +47,7 @@ class VinHoadonRelayPayloadTest {
             }
 
             assertNotNull(job, "Chrome should receive the queued VIN request");
+            assertEquals("https://ws.vin-hoadon.com", job.baseUrl());
             assertEquals(Set.of("doanhnghiep_mst", "username", "password"),
                     job.payload().keySet());
             assertEquals("0123456789", job.payload().get("doanhnghiep_mst"));
@@ -64,5 +67,19 @@ class VinHoadonRelayPayloadTest {
         } finally {
             executor.shutdownNow();
         }
+    }
+
+    @Test
+    void relayAcceptsOnlyOfficialProductionAndDemoOrigins() {
+        String secret = "test-only-relay-signing-secret-at-least-32-bytes";
+        assertDoesNotThrow(() -> new VinHoadonRelayService(
+                true, secret, 30,
+                new VinHoadonProperties(true, "https://demows.vin-hoadon.com", 10, 30)));
+        assertThrows(IllegalStateException.class, () -> new VinHoadonRelayService(
+                true, secret, 30,
+                new VinHoadonProperties(true, "https://demows.vin-hoadon.com/untrusted-path", 10, 30)));
+        assertThrows(IllegalStateException.class, () -> new VinHoadonRelayService(
+                true, secret, 30,
+                new VinHoadonProperties(true, "https://example.com", 10, 30)));
     }
 }

@@ -1,5 +1,8 @@
 const API = "https://anhmedia.vn/sapi/api/vin-hoadon/relay";
-const VIN = "https://ws.vin-hoadon.com";
+const VIN_ORIGINS = new Set([
+  "https://ws.vin-hoadon.com",
+  "https://demows.vin-hoadon.com"
+]);
 const PERIOD_MIN = 0.5;
 let running = false;
 
@@ -34,10 +37,11 @@ async function processJob(job, token) {
   let status=0, body="", error=null;
   try {
     if (!/^\/api\/services\/hddtws\/[A-Za-z0-9_/-]+$/.test(job.path)) throw new Error("Unsupported path");
+    if (!VIN_ORIGINS.has(job.baseUrl)) throw new Error("Unsupported VIN-HOADON origin");
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 60000);
     try {
-      const response = await fetch(VIN + job.path, {
+      const response = await fetch(job.baseUrl + job.path, {
         method: "POST",
         headers: {
           "Accept": "application/json",

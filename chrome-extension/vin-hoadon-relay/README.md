@@ -20,6 +20,20 @@ VIN_HOADON_RELAY_SECRET=replace-with-long-random-secret
 VIN_HOADON_RELAY_TIMEOUT_SECONDS=120
 ```
 
+Select exactly one VIN-HOADON environment in the same secret file, then restart Demo:
+
+```properties
+# Demo API (temporary testing)
+VIN_HOADON_BASE_URL=https://demows.vin-hoadon.com
+
+# Production API (restore after testing)
+# VIN_HOADON_BASE_URL=https://ws.vin-hoadon.com
+```
+
+This setting is process-wide, so every tenant uses the selected environment. Do not submit production invoices while the demo endpoint is active. `demohddt.vin-hoadon.com` is the demo website; the API origin required here is `demows.vin-hoadon.com`.
+
+After upgrading from relay 1.0.0, download/install relay 1.0.1 (or reload its unpacked folder) and accept the added demo-host permission. The old extension cannot call `demows.vin-hoadon.com`.
+
 **Before configuring the server:** On your Vietnam computer open `chrome://extensions`, enable Developer mode, and copy the **ID** shown under `VIN-HOADON Vietnam Relay`. It is 32 lowercase characters. Put exactly this ID in `VIN_HOADON_RELAY_EXTENSION_ID` and restart Demo. Only that extension origin is allowed to call `/sapi/api/vin-hoadon/relay/**`. If you reinstall from a different folder and the ID changes, update the property and restart.
 
 Generate a suitable secret locally with `openssl rand -hex 32`. Do not publish it. Keep `VIN_HOADON_MASTER_KEY` unchanged. Rebuild and restart Demo. If your deployed website is not `https://anhmedia.vn`, adjust both `API` in background.js and the manifest host permission, then reinstall the extension.
