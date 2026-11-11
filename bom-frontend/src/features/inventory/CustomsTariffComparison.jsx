@@ -58,7 +58,7 @@ export default function CustomsTariffComparison({doc,direction,currency,date,row
               '/bom/inventory/customs-declaration/tariff/'+encodeURIComponent(hs))
             result=res.ok&&data&&typeof data==='object'?data:{
               hsCode:hs,status:'UNAVAILABLE',message:data?.detail||data?.message||
-                'Không đọc được biểu thuế từ Demo.'
+                'Không đọc được biểu thuế CDS.'
             }
           }catch{result={hsCode:hs,status:'UNAVAILABLE',message:'Không kết nối được API thuế.'}}
         }
