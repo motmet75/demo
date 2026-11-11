@@ -72,6 +72,7 @@ public class VinHoadonInvoiceService {
                                String buyerName, String buyerAddress, String buyerPhone, String buyerEmail,
                                Integer paymentMethod, Integer vatRate, Map<String, String> itemNames,
                                String invoiceSeries, String invoiceType, Boolean pricesIncludeVat) {}
+    public record RetryRequest(String invoiceType) {}
     public record TemplateOption(String templateCode, String series, String name) {}
     public record PreviewOrder(UUID id, String orderCode, Integer orderNumber, BigDecimal amount) {}
     public record PreviewLine(String lineId, String code, String name, String unit, BigDecimal quantity,
@@ -248,7 +249,7 @@ public class VinHoadonInvoiceService {
         return invoice.getId();
     }
 
-    public InvoiceView retry(UUID tenantId, UUID companyId, UUID invoiceId) {
+    public InvoiceView retry(UUID tenantId, UUID companyId, UUID invoiceId, RetryRequest request) {
         String previousStatus = transactions.execute(status -> {
             VinHoadonShopInvoice invoice = invoiceRepository.findWithLockByIdAndTenantIdAndCompanyId(invoiceId, tenantId, companyId)
                     .orElseThrow(() -> new NoSuchElementException("VIN-HOADON invoice not found"));
@@ -259,6 +260,17 @@ public class VinHoadonInvoiceService {
                 throw new IllegalStateException("Invoice submission is still in progress");
             if (!Set.of("FAILED", "RECONCILE", "ISSUING").contains(current))
                 throw new IllegalStateException("This invoice cannot be retried");
+            String invoiceType = request == null ? null : trim(request.invoiceType());
+            if (invoiceType != null) {
+                VinHoadonCompanyConfig config = requireUsableConfig(tenantId, companyId);
+                TemplateOption template = selectedTemplate(invoiceType, null, config);
+                invoice.setInvoiceTemplateCode(template.templateCode());
+                invoice.setInvoiceSeries(template.series());
+                Map<String, Object> payload = new LinkedHashMap<>(Optional.ofNullable(invoice.getRequestPayload()).orElse(Map.of()));
+                payload.put("mauso", template.templateCode());
+                payload.put("kyhieu", template.series());
+                invoice.setRequestPayload(payload);
+            }
             invoice.setStatus("ISSUING");
             invoice.setLastAttemptAt(Instant.now());
             invoice.setAttemptCount(invoice.getAttemptCount() + 1);
@@ -398,8 +410,11 @@ public class VinHoadonInvoiceService {
     }
 
     private TemplateOption selectedTemplate(IssueRequest request, VinHoadonCompanyConfig config) {
-        String invoiceType = request == null ? null : trim(request.invoiceType());
-        String requestedSeries = request == null ? null : trim(request.invoiceSeries());
+        return selectedTemplate(request == null ? null : trim(request.invoiceType()),
+                request == null ? null : trim(request.invoiceSeries()), config);
+    }
+
+    private TemplateOption selectedTemplate(String invoiceType, String requestedSeries, VinHoadonCompanyConfig config) {
         if (invoiceType != null && !Set.of("POS", "NORMAL").contains(invoiceType))
             throw new IllegalArgumentException("Invoice type must be POS or NORMAL");
 

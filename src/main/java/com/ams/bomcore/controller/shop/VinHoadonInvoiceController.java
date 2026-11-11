@@ -104,9 +104,10 @@ public class VinHoadonInvoiceController {
     @PostMapping("/{invoiceId}/retry")
     public VinHoadonInvoiceService.InvoiceView retry(@RequestHeader("X-Tenant-Id") UUID tenantId,
                                                      @RequestHeader("X-Company-Id") UUID companyId,
-                                                     @PathVariable UUID invoiceId) {
+                                                     @PathVariable UUID invoiceId,
+                                                     @RequestBody(required = false) VinHoadonInvoiceService.RetryRequest request) {
         validateScope(tenantId, companyId);
-        return service.retry(tenantId, companyId, invoiceId);
+        return service.retry(tenantId, companyId, invoiceId, request);
     }
 
     @PostMapping("/{invoiceId}/sync")

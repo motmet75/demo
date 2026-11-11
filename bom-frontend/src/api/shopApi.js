@@ -439,8 +439,10 @@ export function issueVinHoadonInvoice(payload, scope) {
   }, scope)
 }
 
-export function retryVinHoadonInvoice(invoiceId, scope) {
-  return vinFetchJson(`/shop/staff/e-invoices/${invoiceId}/retry`, { method: 'POST' }, scope)
+export function retryVinHoadonInvoice(invoiceId, invoiceType, scope) {
+  return vinFetchJson(`/shop/staff/e-invoices/${invoiceId}/retry`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ invoiceType }),
+  }, scope)
 }
 
 export function syncVinHoadonInvoice(invoiceId, scope) {

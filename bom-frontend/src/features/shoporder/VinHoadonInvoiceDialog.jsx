@@ -244,7 +244,7 @@ export default function VinHoadonInvoiceDialog({ open, onClose, orders = [], con
   const retry = async () => {
     setBusy(true); setError('')
     try {
-      const { res, data } = await retryVinHoadonInvoice(invoice.id, scope)
+      const { res, data } = await retryVinHoadonInvoice(invoice.id, invoiceType, scope)
       if (!res.ok) throw new Error(messageOf(res, data, 'Không thể thử lại'))
       setInvoice(data); onIssued?.(data)
     } catch (err) { setError(err.message) } finally { setBusy(false) }
