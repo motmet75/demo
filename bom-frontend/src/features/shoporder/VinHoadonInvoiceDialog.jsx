@@ -27,6 +27,7 @@ import { lookupBusinessTaxCode } from '../../api/businessTaxApi'
 import {
   downloadVinHoadonInvoice, fetchVinHoadonConfig, fetchVinHoadonInvoiceStatuses, fetchVinHoadonTemplates, issueVinHoadonInvoice,
   previewVinHoadonInvoice, retryVinHoadonInvoice, saveVinHoadonConfig, syncVinHoadonInvoice,
+  createVinHoadonRelayPairCode,
   readVinHoadonCccdName, suggestVnInvoiceAddress,
   getVnAddressDirectoryStatus, syncVnAddressDirectory,
   listViettelPostAddressProvinces, syncViettelPostAddressProvince,
@@ -60,7 +61,20 @@ function ConfigForm({ config, scope, onSaved, onCancel }) {
   })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [relayPair, setRelayPair] = useState(null)
   const change = key => event => setForm(old => ({ ...old, [key]: event.target.value }))
+  const clearPair = type => setForm(old => type === 'POS'
+    ? { ...old, posInvoiceTemplateCode: '', posInvoiceSeries: '' }
+    : { ...old, normalInvoiceTemplateCode: '', normalInvoiceSeries: '' })
+  const pairRelay = async () => {
+    setBusy(true); setError(''); setRelayPair(null)
+    try {
+      const { res, data } = await createVinHoadonRelayPairCode()
+      if (!res.ok) throw new Error(messageOf(res, data, 'Không thể tạo mã ghép VIN-HOADON relay'))
+      setRelayPair(data)
+      try { await navigator.clipboard.writeText(data.code) } catch { /* Copy manually if browser denies clipboard. */ }
+    } catch (err) { setError(err.message) } finally { setBusy(false) }
+  }
   const save = async () => {
     setBusy(true); setError('')
     try {
@@ -85,6 +99,7 @@ function ConfigForm({ config, scope, onSaved, onCancel }) {
       <TextField label="Mẫu số POS" value={form.posInvoiceTemplateCode} onChange={change('posInvoiceTemplateCode')} inputProps={{ maxLength: 11 }} helperText="Mẫu số tại VIN-HOADON (ví dụ 1)" />
       <TextField label="Ký hiệu POS" value={form.posInvoiceSeries} onChange={change('posInvoiceSeries')} inputProps={{ maxLength: 8 }} placeholder="2C26MAM" helperText="Nhập nguyên ký hiệu VIN-HOADON cung cấp; hệ thống không giới hạn mẫu ký tự" />
     </Box>
+    <Button size="small" sx={{ alignSelf: 'flex-start' }} onClick={() => clearPair('POS')}>Không dùng hóa đơn máy tính tiền</Button>
     <Typography fontWeight={800}>Hóa đơn điện tử thông thường</Typography>
     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
       <TextField label="Mẫu số thông thường" value={form.normalInvoiceTemplateCode} onChange={change('normalInvoiceTemplateCode')} inputProps={{ maxLength: 11 }} helperText="Có thể khác mẫu số POS" />
@@ -93,8 +108,17 @@ function ConfigForm({ config, scope, onSaved, onCancel }) {
         {VAT_OPTIONS.map(option => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}
       </TextField>
     </Box>
+    <Button size="small" sx={{ alignSelf: 'flex-start' }} onClick={() => clearPair('NORMAL')}>Không dùng hóa đơn thông thường</Button>
     <Typography variant="caption" color="text.secondary">Cách tính VAT được chọn riêng khi tạo từng hóa đơn, không phụ thuộc cấu hình công ty.</Typography>
     <Typography variant="caption" color="text.secondary">Mật khẩu được mã hóa AES-GCM theo công ty và không bao giờ trả lại trình duyệt.</Typography>
+    <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, p: 1.5 }}>
+      <Typography fontWeight={700}>VIN-HOADON Vietnam Relay</Typography>
+      <Typography variant="body2" color="text.secondary">Bấm tạo mã, sau đó mở extension VIN-HOADON Relay trên Chrome tại Việt Nam và dán 8 chữ số.</Typography>
+      <Button variant="outlined" sx={{ mt: 1 }} onClick={pairRelay} disabled={busy}>Tạo và sao chép mã ghép relay</Button>
+      {relayPair?.code && <Alert severity="success" sx={{ mt: 1 }}>
+        Mã ghép: <b style={{ letterSpacing: 2 }}>{relayPair.code}</b> · hết hạn lúc {new Date(relayPair.expiresAt * 1000).toLocaleTimeString('vi-VN')}
+      </Alert>}
+    </Box>
     <DialogActions sx={{ px: 0 }}>
       {onCancel && <Button onClick={onCancel}>Quay lại</Button>}
       <Button variant="contained" onClick={save} disabled={busy || !config?.encryptionConfigured}>{busy ? <CircularProgress size={20} /> : 'Lưu cấu hình'}</Button>

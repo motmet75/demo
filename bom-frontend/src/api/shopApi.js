@@ -415,6 +415,10 @@ export function fetchVinHoadonTemplates(scope) {
   return vinFetchJson('/shop/staff/e-invoices/templates', {}, scope)
 }
 
+export function createVinHoadonRelayPairCode() {
+  return apiFetchJsonNoContext('/api/vin-hoadon/relay/pair-code', { method: 'POST' })
+}
+
 export function saveVinHoadonConfig(payload, scope) {
   return vinFetchJson('/shop/staff/e-invoices/config', {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
