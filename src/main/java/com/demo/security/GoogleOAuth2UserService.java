@@ -81,7 +81,7 @@ public class GoogleOAuth2UserService implements OAuth2UserService<OAuth2UserRequ
         return user;
     }
 
-    private User createNewGoogleUser(String email, String firstName, String lastName, String picture) {
+    User createNewGoogleUser(String email, String firstName, String lastName, String picture) {
         String shortId = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
         String displayName = (firstName != null && !firstName.isBlank()) ? firstName : email.split("@")[0];
 
@@ -89,13 +89,14 @@ public class GoogleOAuth2UserService implements OAuth2UserService<OAuth2UserRequ
         tenant.setTenantCode("shop-" + shortId);
         tenant.setTenantName(displayName + "'s Shop");
         tenant.setTenantType("SHOP_OWNER");
+        tenant.setMaxCompanies(1);
         tenant = tenantRepository.save(tenant);
 
         Company company = new Company();
         company.setTenant(tenant);
         company.setCompanyCode("co-" + shortId);
         company.setCompanyName(displayName + "'s Company");
-        company.setValidUntil(Instant.now().plus(15, ChronoUnit.DAYS));
+        company.setValidUntil(Instant.now().plus(16, ChronoUnit.DAYS));
         company = companyRepository.save(company);
 
         User user = new User();
@@ -111,6 +112,10 @@ public class GoogleOAuth2UserService implements OAuth2UserService<OAuth2UserRequ
         user.setAssignedTenantId(tenant.getId().toString());
         user.setAssignedCompanyId(company.getId().toString());
         User saved = userRepository.save(user);
+        Authority owner = new Authority();
+        owner.setUsername(saved.getUsername());
+        owner.setAuthority("ROLE_ADMIN");
+        authorityRepository.saveAndFlush(owner);
         newUserNotificationService.notifyNewUser(saved, "google-oauth2");
         return saved;
     }

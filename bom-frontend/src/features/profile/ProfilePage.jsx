@@ -465,8 +465,8 @@ export default function ProfilePage() {
           </Typography>
           <Box component="ol" sx={{ mt: 1, mb: 2, pl: 3, '& li': { mb: 1 } }}>
             <li>Kiểm tra tên và email đăng nhập Google.</li>
-            <li>Tạo tenant và công ty dùng thử bằng nút bên dưới.</li>
-            <li>GDT PDF Invoice Desk được kích hoạt tự động cho ROLE_USER.</li>
+            <li>Tạo cửa hàng và công ty để dùng thử đầy đủ chức năng trong 16 ngày.</li>
+            <li>Bạn có quyền quản trị cửa hàng (ADMIN), bao gồm GDT PDF Invoice Desk.</li>
             <li>Mở Invoice Desk và ghép nối GDT Client để tải hóa đơn.</li>
           </Box>
           <Button variant="contained" size="large" onClick={handleInitializeShop} disabled={initializeLoading}

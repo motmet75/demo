@@ -21,6 +21,12 @@ import org.springframework.web.bind.annotation.RestController;
 import com.ams.bomcore.domain.company.Company;
 import com.ams.bomcore.domain.tenant.Tenant;
 import com.ams.bomcore.domain.user.User;
+import com.ams.bomcore.domain.user.Authority;
+import com.ams.bomcore.repository.AuthorityRepository;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import jakarta.servlet.http.HttpServletRequest;
 import com.ams.bomcore.repository.CompanyRepository;
 import com.ams.bomcore.repository.TenantRepository;
 import com.ams.bomcore.repository.UserRepository;
@@ -38,17 +44,20 @@ public class ProfileController {
     private final UserRepository userRepository;
     private final ShopSetupService shopSetupService;
     private final InvoiceDeskRoleAccessService invoiceDeskRoleAccess;
+    private final AuthorityRepository authorityRepository;
 
     public ProfileController(TenantRepository tenantRepository,
                              CompanyRepository companyRepository,
                              UserRepository userRepository,
                              ShopSetupService shopSetupService,
-                             InvoiceDeskRoleAccessService invoiceDeskRoleAccess) {
+                             InvoiceDeskRoleAccessService invoiceDeskRoleAccess,
+                             AuthorityRepository authorityRepository) {
         this.tenantRepository = tenantRepository;
         this.companyRepository = companyRepository;
         this.userRepository = userRepository;
         this.shopSetupService = shopSetupService;
         this.invoiceDeskRoleAccess = invoiceDeskRoleAccess;
+        this.authorityRepository = authorityRepository;
     }
 
     public record ProfileUser(Integer id, String username, String email, String firstName, String lastName, String avatar) {}
@@ -67,9 +76,9 @@ public class ProfileController {
     private record EmailList(List<String> emails, String invalid) {}
 
     @PostMapping("/shop/initialize")
-    @PreAuthorize("hasRole('USER')")
+    @PreAuthorize("hasAnyRole('USER','ADMIN','SUPER_ADMIN')")
     @Transactional
-    public ResponseEntity<ShopInitializeResponse> initializeShop(Authentication authentication) {
+    public ResponseEntity<ShopInitializeResponse> initializeShop(Authentication authentication, HttpServletRequest request) {
         if (authentication == null || !(authentication.getPrincipal() instanceof User sessionUser)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
@@ -95,14 +104,29 @@ public class ProfileController {
         tenant.setTenantType("SHOP_OWNER");tenant.setMaxCompanies(1);tenant=tenantRepository.saveAndFlush(tenant);
         Company company = new Company();
         company.setTenant(tenant);company.setCompanyCode("co-" + shortId);company.setCompanyName(displayName + "'s Company");
-        company.setValidUntil(Instant.now().plus(15, ChronoUnit.DAYS));company=companyRepository.saveAndFlush(company);
+        company.setValidUntil(Instant.now().plus(16, ChronoUnit.DAYS));company=companyRepository.saveAndFlush(company);
         user.setAssignedTenantId(tenant.getId().toString());user.setAssignedCompanyId(company.getId().toString());
         user.setLastTenantId(tenant.getId().toString());user.setLastCompanyId(company.getId().toString());userRepository.saveAndFlush(user);
         sessionUser.setAssignedTenantId(user.getAssignedTenantId());sessionUser.setAssignedCompanyId(user.getAssignedCompanyId());
         sessionUser.setLastTenantId(user.getLastTenantId());sessionUser.setLastCompanyId(user.getLastCompanyId());
+        var authorities = new java.util.ArrayList<>(authorityRepository.findByUsername(user.getUsername()));
+        if (authorities.stream().noneMatch(a -> "ROLE_ADMIN".equals(a.getAuthority())
+                || "ROLE_SUPER_ADMIN".equals(a.getAuthority()))) {
+            Authority owner = new Authority();
+            owner.setUsername(user.getUsername());
+            owner.setAuthority("ROLE_ADMIN");
+            authorities.add(authorityRepository.saveAndFlush(owner));
+        }
+        sessionUser.setAuthorities(authorities);
+        var refreshed = UsernamePasswordAuthenticationToken.authenticated(sessionUser, null, authorities);
+        refreshed.setDetails(authentication.getDetails());
+        var context = SecurityContextHolder.createEmptyContext();
+        context.setAuthentication(refreshed);
+        SecurityContextHolder.setContext(context);
+        request.getSession().setAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY, context);
         invoiceDeskRoleAccess.sync(user.getUsername());
         return ResponseEntity.ok(new ShopInitializeResponse(true,
-                "Shop created. GDT PDF Invoice Desk is active.", tenant.getId().toString(), company.getId().toString()));
+                "Shop created with admin access and a 16-day trial. Invoice Desk is active.", tenant.getId().toString(), company.getId().toString()));
     }
 
     @GetMapping("/profile")

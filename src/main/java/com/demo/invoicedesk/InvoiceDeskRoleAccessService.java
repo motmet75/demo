@@ -24,7 +24,7 @@ public class InvoiceDeskRoleAccessService {
    JOIN tenant t ON t.id=ids.tenant_id AND t.is_active=true
    JOIN company c ON c.id=ids.company_id AND c.tenant_id=t.id
    WHERE lower(u.username)=lower(?)
-     AND EXISTS (SELECT 1 FROM authorities a WHERE lower(a.username)=lower(u.username) AND upper(a.authority)='ROLE_USER')
+     AND EXISTS (SELECT 1 FROM authorities a WHERE lower(a.username)=lower(u.username) AND upper(a.authority) IN ('ROLE_USER','ROLE_ADMIN'))
    ON CONFLICT DO NOTHING
    """,username);
  }
