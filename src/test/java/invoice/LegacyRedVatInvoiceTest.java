@@ -11,6 +11,7 @@ class LegacyRedVatInvoiceTest {
   String ocr = """
    HÓA ĐƠN GIÁ TRỊ GIA TĂNG
    Liên 2: Giao cho người mua
+   Mẫu số: 01GTKT3/001
    Ngày 16 tháng 01 năm 2017
    Ký hiệu: AB/17T
    Số: 0000007
