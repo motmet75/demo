@@ -238,8 +238,13 @@ public class InvoiceDeskService {
  public List<Map<String,Object>> learning(Scope scope){return db.queryForList("SELECT id,document_id,tax_id,serial,sha256,reviewed_by,created_at,approved_payload FROM invoice_desk_learning WHERE tenant_id=? ORDER BY created_at DESC LIMIT 200",scope.tenantId());}
  public byte[] export(Scope scope,boolean draft)throws Exception{return export(scope,draft,null);}
  public byte[] export(Scope scope,boolean draft,List<UUID> ids)throws Exception{
-  if(draft)throw new IllegalArgumentException("Chỉ xuất hóa đơn đã duyệt.");
+  if(ids!=null&&(ids.isEmpty()||ids.size()>3000))throw new IllegalArgumentException("Chọn từ 1 đến 3000 hóa đơn.");
   List<Document> chosen=ids==null?documents(scope):ids.stream().distinct().map(id->document(scope,id)).toList();
+  if(draft){
+   if(chosen.isEmpty())throw new IllegalArgumentException("Không có hóa đơn để xuất bản nháp.");
+   // Draft exports preserve OCR warnings, without changing approval or reconciliation state.
+   Path file=Files.createTempFile("invoice-review-",".xlsx");try{Excel.write(file,chosen.stream().map(Document::invoice).toList(),false);return Files.readAllBytes(file);}finally{Files.deleteIfExists(file);}
+  }
   if(ids!=null&&chosen.stream().anyMatch(d->!d.invoice().approved))throw new IllegalArgumentException("Danh sách có hóa đơn chưa duyệt.");
   List<Invoice> all=chosen.stream().map(Document::invoice).filter(i->i.approved).toList();
   for(Invoice i:all){Parser.validate(i);if(i.warnings.stream().anyMatch(w->w.startsWith("Missing ")||w.startsWith("Check:")||w.startsWith("OCR ")))throw new IllegalArgumentException("Hóa đơn còn lỗi kiểm tra, vui lòng kiểm tra lại.");}
