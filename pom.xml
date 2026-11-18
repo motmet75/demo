@@ -36,6 +36,12 @@
             <artifactId>web-push</artifactId>
             <version>5.1.2</version>
         </dependency>
+        <!-- web-push 5.1.2 references JoseException directly; pin its API dependency. -->
+        <dependency>
+            <groupId>org.bitbucket.b_c</groupId>
+            <artifactId>jose4j</artifactId>
+            <version>0.9.6</version>
+        </dependency>
         <!-- Apache HttpResponse is referenced directly by push delivery -->
         <dependency>
             <groupId>org.apache.httpcomponents</groupId>
