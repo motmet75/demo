@@ -20,7 +20,7 @@ public class Parser {
  }
  static BigDecimal number(String s,String document){
   boolean english=Pattern.compile("\\d{1,3}(?:,\\d{3}){2,}(?![.,\\d])").matcher(document).find()&&!Pattern.compile("\\d{1,3}(?:\\.\\d{3}){2,}").matcher(document).find();
-  return english?new BigDecimal(s.replace(",","")):money(s);
+  return english&&s.matches("-?\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?")?new BigDecimal(s.replace(",","")):money(s);
  }
  public Invoice parse(String text){
   if(DebitNoteParser.accepts(text))return DebitNoteParser.parse(text);
