@@ -12,21 +12,23 @@ public class Parser {
  public static BigDecimal money(String s){
   s=s.replaceAll("[\\s\\u00a0]","");
   if(!s.matches("-?\\d+(?:[.,]\\d+)*"))throw new IllegalArgumentException("Invalid amount: "+s);
-  if(s.contains(","))s=s.replace(".","").replace(',','.');
+  // Support Vietnamese 15.899.000,00 and English 15,899,000.00 OCR amounts.
+  if(s.contains(",")&&s.contains(".")){if(s.lastIndexOf(',')>s.lastIndexOf('.'))s=s.replace(".","").replace(',','.');else s=s.replace(",","");}
+  else if(s.contains(",")){if(s.matches("-?\\d{1,3}(?:,\\d{3}){2,}"))s=s.replace(",","");else s=s.replace(',','.');}
   else if(s.matches("-?\\d{1,3}(?:\\.\\d{3})+"))s=s.replace(".","");
   return new BigDecimal(s);
  }
  static BigDecimal number(String s,String document){
   boolean english=Pattern.compile("\\d{1,3}(?:,\\d{3}){2,}(?![.,\\d])").matcher(document).find()&&!Pattern.compile("\\d{1,3}(?:\\.\\d{3}){2,}").matcher(document).find();
-  return english?new BigDecimal(s.replace(",","")):money(s);
+  return english&&s.matches("-?\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?")?new BigDecimal(s.replace(",","")):money(s);
  }
  public Invoice parse(String text){
   if(DebitNoteParser.accepts(text))return DebitNoteParser.parse(text);
   Invoice r=new Invoice(); r.text=text; String t=fold(text);
   if(!t.contains("hoa don")&&!t.contains("vat invoice")){r.type=t.contains("phu luc")||t.contains("cptpp")?"APPENDIX":"UNKNOWN";r.warnings.add("Not identified as an invoice; inspect source");return r;}
-  r.put("serial",match(text,"Ký hiệu[^:\\n]*:[ \\t]*([A-Z0-9]+)"));
-  if(r.get("serial").isBlank())r.put("serial",match(text,"Ký hiệu[ \\t]+([A-Z0-9]+)"));
-  r.put("number",match(text,"(?:^|\\s)Số(?:[ \\t]*\\([^\\n)]*\\))?[ \\t]*:[ \\t]*(\\d+)"));
+  r.put("serial",match(text,"Ký hiệu[^:\\n]*:[ \\t]*([A-Z0-9/-]+)"));
+  if(r.get("serial").isBlank())r.put("serial",match(text,"Ký hiệu[ \\t]+([A-Z0-9/-]+)"));
+  r.put("number",match(text,"(?:^|\\s)Số(?:[ \\t]*\\([^\\n)]*\\))?[ \\t]*:[ \\t]*(\\d+)(?![A-Za-z0-9/-])"));
   if(r.get("number").isBlank())r.put("number",match(text,"^Số[ \\t]+(\\d+)"));
   if(r.get("number").isBlank())r.put("number",match(text,"(?is)Số(?:[ \\t]*\\([^\\n)]*\\))?[ \\t]*:[ \\t]*\\R[^\\d\\n]*(\\d+)"));
   var d=Pattern.compile("ngay[^\\d\\n]*(\\d{1,2})[^\\d\\n]+(\\d{1,2})[^\\d\\n]+(\\d{4})").matcher(t);
@@ -50,7 +52,8 @@ public class Parser {
   return r;
  }
  static String amount(String t,String label){
-  var m=Pattern.compile(label+"[ \\t]*(?:\\([^\\n)]*\\))?[ \\t]*:?[ \\t]*([\\d][\\d.,]*)").matcher(t);String found="";
+  // Some scanned invoices put amounts on the line following the footer label.
+  var m=Pattern.compile(label+"[ \\t]*(?:\\([^\\n)]*\\))?[ \\t]*[:：]?[ \\t]*(?:\\R[ \\t]*)?([\\d][\\d.,]*)").matcher(t);String found="";
   while(m.find())try{found=number(m.group(1),t).toPlainString();}catch(Exception ignored){}return found;
  }
  static void readItems(Invoice r){
