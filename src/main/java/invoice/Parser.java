@@ -12,7 +12,9 @@ public class Parser {
  public static BigDecimal money(String s){
   s=s.replaceAll("[\\s\\u00a0]","");
   if(!s.matches("-?\\d+(?:[.,]\\d+)*"))throw new IllegalArgumentException("Invalid amount: "+s);
-  if(s.contains(","))s=s.replace(".","").replace(',','.');
+  // Support Vietnamese 15.899.000,00 and English 15,899,000.00 OCR amounts.
+  if(s.contains(",")&&s.contains(".")){if(s.lastIndexOf(',')>s.lastIndexOf('.'))s=s.replace(".","").replace(',','.');else s=s.replace(",","");}
+  else if(s.contains(",")){if(s.matches("-?\\d{1,3}(?:,\\d{3}){2,}"))s=s.replace(",","");else s=s.replace(',','.');}
   else if(s.matches("-?\\d{1,3}(?:\\.\\d{3})+"))s=s.replace(".","");
   return new BigDecimal(s);
  }
@@ -50,7 +52,8 @@ public class Parser {
   return r;
  }
  static String amount(String t,String label){
-  var m=Pattern.compile(label+"[ \\t]*(?:\\([^\\n)]*\\))?[ \\t]*:?[ \\t]*([\\d][\\d.,]*)").matcher(t);String found="";
+  // Some scanned invoices put amounts on the line following the footer label.
+  var m=Pattern.compile(label+"[ \\t]*(?:\\([^\\n)]*\\))?[ \\t]*[:：]?[ \\t]*(?:\\R[ \\t]*)?([\\d][\\d.,]*)").matcher(t);String found="";
   while(m.find())try{found=number(m.group(1),t).toPlainString();}catch(Exception ignored){}return found;
  }
  static void readItems(Invoice r){
