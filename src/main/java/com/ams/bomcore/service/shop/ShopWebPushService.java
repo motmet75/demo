@@ -16,10 +16,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.math.BigDecimal;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.Security;
+import java.text.NumberFormat;
+import java.util.Locale;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
@@ -86,12 +89,9 @@ public class ShopWebPushService {
                 (id, tenant_id, company_id, username, endpoint_sha256, endpoint,
                  p256dh, auth_key, enabled, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, TRUE, NOW(), NOW())
-            -- A Web Push endpoint is one browser installation, not one shop.
-            -- Re-registering moves that installation to the selected tenant/company.
-            ON CONFLICT (endpoint_sha256)
-            DO UPDATE SET tenant_id = EXCLUDED.tenant_id,
-                          company_id = EXCLUDED.company_id,
-                          username = EXCLUDED.username,
+            -- Keep each subscription assigned to its registered company.
+            ON CONFLICT (tenant_id, company_id, endpoint_sha256)
+            DO UPDATE SET username = EXCLUDED.username,
                           endpoint = EXCLUDED.endpoint,
                           p256dh = EXCLUDED.p256dh,
                           auth_key = EXCLUDED.auth_key,
@@ -114,15 +114,61 @@ public class ShopWebPushService {
                 || order.getTenantId() == null || order.getCompanyId() == null) return;
         UUID tenantId = order.getTenantId();
         UUID companyId = order.getCompanyId();
-        String number = order.getOrderNumber() == null
-                ? (order.getOrderCode() == null ? "QR" : order.getOrderCode())
-                : String.valueOf(order.getOrderNumber());
-        String table = StringUtils.hasText(order.getTableName())
-                ? order.getTableName() : order.getCustomerTableTag();
-        String text = StringUtils.hasText(table) ? "Bàn " + table : "Có đơn hàng mới";
         enqueue(tenantId, companyId, null,
-                "Đơn hàng mới #" + number, text,
+                orderNotificationTitle(order),
+                orderNotificationBody(order),
                 "order-" + order.getId());
+    }
+
+    /**
+     * Keep the order of information stable for iPhone Lock Screen:
+     * sequence → table → item quantity → total money → last five characters of
+     * the order code (when present). Never query or expose five other orders.
+     * PENDING QR orders do not have an assigned numeric sequence yet.
+     */
+    static String orderNotificationTitle(ShopOrderResponseDto order) {
+        Integer sequence = order.getDailySeq() != null
+                ? order.getDailySeq() : order.getOrderNumber();
+        String title = sequence == null ? "Đơn QR mới" : "STT " + sequence;
+        String table = StringUtils.hasText(order.getTableName())
+                ? order.getTableName().trim() : order.getCustomerTableTag();
+        if (StringUtils.hasText(table)) {
+            title += " · Bàn " + table.trim();
+        }
+        return title;
+    }
+
+    static String orderNotificationBody(ShopOrderResponseDto order) {
+        StringBuilder text = new StringBuilder();
+        BigDecimal items = BigDecimal.ZERO;
+        if (order.getItems() != null) {
+            for (ShopOrderResponseDto.ItemDto item : order.getItems()) {
+                // A topping is a child line. Do not double-count it as a main item.
+                if (item == null || item.getParentItemId() != null) continue;
+                if (item.getQuantity() != null) items = items.add(item.getQuantity());
+            }
+        }
+        text.append(formatNumber(items)).append(" món");
+        if (order.getTotalAmount() != null) {
+            text.append(" · ").append(formatNumber(order.getTotalAmount())).append("đ");
+        }
+        String codeSuffix = lastFiveCode(order.getOrderCode());
+        if (codeSuffix != null) text.append(" · Mã ").append(codeSuffix);
+        return text.toString();
+    }
+
+    /** Display only the last five code characters, with an ellipsis for hidden prefix. */
+    static String lastFiveCode(String orderCode) {
+        if (!StringUtils.hasText(orderCode)) return null;
+        String code = orderCode.trim();
+        return code.length() > 5 ? "…" + code.substring(code.length() - 5) : code;
+    }
+
+    private static String formatNumber(BigDecimal value) {
+        NumberFormat format = NumberFormat.getNumberInstance(Locale.forLanguageTag("vi-VN"));
+        format.setGroupingUsed(true);
+        format.setMaximumFractionDigits(2);
+        return format.format(value);
     }
 
     /** Only test the current user's subscriptions, never broadcast test alerts. */
