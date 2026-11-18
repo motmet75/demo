@@ -7,8 +7,8 @@ self.addEventListener('push', (event) => {
     {
       body: typeof data.body === 'string' ? data.body : 'Mở QR Shop để xem đơn.',
       tag: typeof data.tag === 'string' ? data.tag : 'shop-order',
-      icon: '/bom-inventory/anhmedia-icon.svg',
-      badge: '/bom-inventory/anhmedia-icon.svg',
+      icon: '/anhmedia.vn/img/favicon.png',
+      badge: '/anhmedia.vn/img/favicon.png',
       data: { url: '/bom-inventory/shop-orders' },
     }
   ))
