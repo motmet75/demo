@@ -27,6 +27,7 @@ class LegacyRedVatInvoiceTest {
    3.179.800
    Tổng tiền thanh toán:
    34.977.800
+   Số tiền viết bằng chữ: Ba mươi bốn triệu chín trăm bảy mươi bảy nghìn tám trăm đồng chẵn
    """;
   Invoice invoice=new Parser().parse(ocr);
   Parser.validate(invoice);
@@ -34,6 +35,7 @@ class LegacyRedVatInvoiceTest {
   assertEquals("AB/17T",invoice.get("serial"));
   assertEquals("0000007",invoice.get("number"));
   assertEquals("2017-01-16",invoice.get("date"));
+  assertEquals("VND",invoice.get("currency"));
   assertEquals("31798000",invoice.get("subtotal"));
   assertEquals("3179800",invoice.get("vat"));
   assertEquals("34977800",invoice.get("total"));
@@ -48,6 +50,7 @@ class LegacyRedVatInvoiceTest {
   assertEquals("15899000.00",Parser.money("15.899.000,00").toPlainString());
   assertEquals("15899000.00",Parser.money("15,899,000.00").toPlainString());
   assertEquals("31798000",Parser.money("31.798.000").toPlainString());
+  assertEquals("2.00",Parser.number("2,00","15,899,000.00").toPlainString());
  }
  @Test void borderedGridDoesNotTreatPrintedAbcLegendAsProduct(){
   List<TableGrid.Box> words=new ArrayList<>();
