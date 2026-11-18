@@ -86,8 +86,12 @@ public class ShopWebPushService {
                 (id, tenant_id, company_id, username, endpoint_sha256, endpoint,
                  p256dh, auth_key, enabled, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, TRUE, NOW(), NOW())
-            ON CONFLICT (tenant_id, company_id, endpoint_sha256)
-            DO UPDATE SET username = EXCLUDED.username,
+            -- A Web Push endpoint is one browser installation, not one shop.
+            -- Re-registering moves that installation to the selected tenant/company.
+            ON CONFLICT (endpoint_sha256)
+            DO UPDATE SET tenant_id = EXCLUDED.tenant_id,
+                          company_id = EXCLUDED.company_id,
+                          username = EXCLUDED.username,
                           endpoint = EXCLUDED.endpoint,
                           p256dh = EXCLUDED.p256dh,
                           auth_key = EXCLUDED.auth_key,
