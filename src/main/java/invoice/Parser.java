@@ -26,8 +26,8 @@ public class Parser {
   if(DebitNoteParser.accepts(text))return DebitNoteParser.parse(text);
   Invoice r=new Invoice(); r.text=text; String t=fold(text);
   if(!t.contains("hoa don")&&!t.contains("vat invoice")){r.type=t.contains("phu luc")||t.contains("cptpp")?"APPENDIX":"UNKNOWN";r.warnings.add("Not identified as an invoice; inspect source");return r;}
-  r.put("serial",match(text,"Ký hiệu[^:\\n]*:[ \\t]*([A-Z0-9]+)"));
-  if(r.get("serial").isBlank())r.put("serial",match(text,"Ký hiệu[ \\t]+([A-Z0-9]+)"));
+  r.put("serial",match(text,"Ký hiệu[^:\\n]*:[ \\t]*([A-Z0-9/-]+)"));
+  if(r.get("serial").isBlank())r.put("serial",match(text,"Ký hiệu[ \\t]+([A-Z0-9/-]+)"));
   r.put("number",match(text,"(?:^|\\s)Số(?:[ \\t]*\\([^\\n)]*\\))?[ \\t]*:[ \\t]*(\\d+)"));
   if(r.get("number").isBlank())r.put("number",match(text,"^Số[ \\t]+(\\d+)"));
   if(r.get("number").isBlank())r.put("number",match(text,"(?is)Số(?:[ \\t]*\\([^\\n)]*\\))?[ \\t]*:[ \\t]*\\R[^\\d\\n]*(\\d+)"));
