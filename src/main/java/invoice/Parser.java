@@ -28,7 +28,7 @@ public class Parser {
   if(!t.contains("hoa don")&&!t.contains("vat invoice")){r.type=t.contains("phu luc")||t.contains("cptpp")?"APPENDIX":"UNKNOWN";r.warnings.add("Not identified as an invoice; inspect source");return r;}
   r.put("serial",match(text,"Ký hiệu[^:\\n]*:[ \\t]*([A-Z0-9/-]+)"));
   if(r.get("serial").isBlank())r.put("serial",match(text,"Ký hiệu[ \\t]+([A-Z0-9/-]+)"));
-  r.put("number",match(text,"(?:^|\\s)Số(?:[ \\t]*\\([^\\n)]*\\))?[ \\t]*:[ \\t]*(\\d+)"));
+  r.put("number",match(text,"(?:^|\\s)Số(?:[ \\t]*\\([^\\n)]*\\))?[ \\t]*:[ \\t]*(\\d+)(?![A-Za-z0-9/-])"));
   if(r.get("number").isBlank())r.put("number",match(text,"^Số[ \\t]+(\\d+)"));
   if(r.get("number").isBlank())r.put("number",match(text,"(?is)Số(?:[ \\t]*\\([^\\n)]*\\))?[ \\t]*:[ \\t]*\\R[^\\d\\n]*(\\d+)"));
   var d=Pattern.compile("ngay[^\\d\\n]*(\\d{1,2})[^\\d\\n]+(\\d{1,2})[^\\d\\n]+(\\d{4})").matcher(t);
