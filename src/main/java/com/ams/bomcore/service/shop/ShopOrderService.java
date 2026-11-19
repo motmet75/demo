@@ -26,6 +26,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -64,6 +66,7 @@ public class ShopOrderService {
     private final ShopBillItemRepository shopBillItemRepository;
     private final ShopLocalizedLabelService shopLocalizedLabelService;
     private final ShopNewOrderNotificationService newOrderNotificationService;
+    private final ShopWebPushService shopWebPushService;
     private final ShopPendingOrderCache pendingOrderCache;
     private static final Instant DISTANT_PAST   = Instant.EPOCH;
     private static final Instant DISTANT_FUTURE = Instant.parse("9999-12-31T23:59:59Z");
@@ -92,6 +95,7 @@ public class ShopOrderService {
                             ShopBillItemRepository shopBillItemRepository,
                             ShopLocalizedLabelService shopLocalizedLabelService,
                             ShopNewOrderNotificationService newOrderNotificationService,
+                            ShopWebPushService shopWebPushService,
                             ShopPendingOrderCache pendingOrderCache,
                             CounterShiftGuard counterShiftGuard) {
         this.counterShiftGuard=counterShiftGuard;
@@ -113,6 +117,7 @@ public class ShopOrderService {
         this.shopBillItemRepository = shopBillItemRepository;
         this.shopLocalizedLabelService = shopLocalizedLabelService;
         this.newOrderNotificationService = newOrderNotificationService;
+        this.shopWebPushService = shopWebPushService;
         this.pendingOrderCache = pendingOrderCache;
     }
 
@@ -332,7 +337,20 @@ public class ShopOrderService {
                 nextPendingOrderCode(), tenantId, companyId, req, staffName,
                 now, now, null, false, null, false, null, null);
         pendingOrderCache.save(pending);
-        return pendingDto(pending);
+        // Notify staff when the customer places the order, not when staff confirms it.
+        // Only schedule delivery after a successful transaction commit.
+        ShopOrderResponseDto placed = pendingDto(pending);
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    shopWebPushService.enqueueOrderPlaced(placed);
+                }
+            });
+        } else {
+            shopWebPushService.enqueueOrderPlaced(placed);
+        }
+        return placed;
     }
 
     private String nextPendingOrderCode() {

@@ -1,0 +1,24 @@
+{
+  "name": "AnhMedia QR Shop Alerts",
+  "short_name": "AnhMedia",
+  "description": "Thông báo đơn hàng QR Shop cho nhân viên được cấp quyền",
+  "id": "/bom-inventory/shop-orders",
+  "start_url": "/bom-inventory/shop-orders",
+  "scope": "/bom-inventory/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#4338ca",
+  "icons": [
+    {
+      "src": "/bom-inventory/anhmedia-home-icon.png",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/bom-inventory/anhmedia-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
