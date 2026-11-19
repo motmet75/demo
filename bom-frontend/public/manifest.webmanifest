@@ -10,7 +10,7 @@
   "theme_color": "#4338ca",
   "icons": [
     {
-      "src": "/anhmedia.vn/img/favicon.png",
+      "src": "/bom-inventory/anhmedia-home-icon.png",
       "type": "image/png",
       "purpose": "any"
     },
