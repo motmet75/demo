@@ -78,6 +78,8 @@ public class SecurityConfig {
             }))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                // Token + loopback verified by PortalPublicBridgeController (fail closed).
+                .requestMatchers(HttpMethod.GET, "/internal/portal-public/*").permitAll()
                 // Extension endpoints authenticate with signed relay tokens, not the app session.
                 .requestMatchers(HttpMethod.POST, "/api/vin-hoadon/relay/handshake", "/api/vin-hoadon/relay/renew", "/api/vin-hoadon/relay/result").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/vin-hoadon/relay/next", "/api/vin-hoadon/relay/status").permitAll()
