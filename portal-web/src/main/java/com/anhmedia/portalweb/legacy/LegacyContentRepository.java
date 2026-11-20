@@ -6,6 +6,7 @@ import com.anhmedia.portalweb.legacy.entity.TemplateImage;
 import com.anhmedia.portalweb.legacy.entity.WebMenu;
 import org.springframework.dao.IncorrectResultSizeDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -20,6 +21,16 @@ import java.util.Optional;
  * Hibernate mapped the unquoted camelCase columns to lower case.
  */
 public class LegacyContentRepository {
+    // One managed instance per (entity, id) per request, like the legacy Hibernate session.
+    private static final RowMapper<Article> ARTICLE =
+            (rs, n) -> PersistenceContext.managed(Article.class, rs.getInt("id"), () -> Article.fromRow(rs));
+    private static final RowMapper<WebMenu> MENU =
+            (rs, n) -> PersistenceContext.managed(WebMenu.class, rs.getLong("id"), () -> WebMenu.fromRow(rs));
+    private static final RowMapper<Client> CLIENT =
+            (rs, n) -> PersistenceContext.managed(Client.class, rs.getLong("id"), () -> Client.fromRow(rs));
+    private static final RowMapper<TemplateImage> IMAGE =
+            (rs, n) -> PersistenceContext.managed(TemplateImage.class, rs.getLong("id"), () -> TemplateImage.fromRow(rs));
+
     private final JdbcTemplate db;
 
     public LegacyContentRepository(JdbcTemplate db) {
@@ -32,7 +43,7 @@ public class LegacyContentRepository {
     public Article findArticleByUrl(String link) {
         List<Article> rows = db.query(
                 "SELECT * FROM articletb t WHERE LOWER(t.articlelink) = LOWER(?) AND t.isvisible = true",
-                (rs, n) -> Article.fromRow(rs), link);
+                ARTICLE, link);
         if (rows.size() > 1) throw new IncorrectResultSizeDataAccessException(1, rows.size());
         return rows.isEmpty() ? null : rows.get(0);
     }
@@ -41,7 +52,7 @@ public class LegacyContentRepository {
     public List<Article> getAllArticleByType(String typePattern) {
         return db.query("SELECT * FROM articletb t WHERE t.articlecategory LIKE ? AND t.isvisible = true"
                         + " ORDER BY t.modifiedtime DESC",
-                (rs, n) -> Article.fromRow(rs), typePattern);
+                ARTICLE, typePattern);
     }
 
     /** getAllDisplayArticleByTypeAndPage. */
@@ -49,7 +60,7 @@ public class LegacyContentRepository {
         return db.query("SELECT * FROM articletb t WHERE t.articlecategory LIKE ? AND t.isvisible = true"
                         + " AND t.isapproved = true AND t.islocked = false ORDER BY t.articletime DESC"
                         + " LIMIT ? OFFSET ?",
-                (rs, n) -> Article.fromRow(rs), typePattern, size, (long) page * size);
+                ARTICLE, typePattern, size, (long) page * size);
     }
 
     /** getSpotlightArticle. */
@@ -58,7 +69,7 @@ public class LegacyContentRepository {
                         + " AND LOWER(t.articlesubcategory) LIKE LOWER(?) AND t.isvisible = true"
                         + " AND t.isapproved = true AND t.islocked = false ORDER BY t.articletime DESC"
                         + " LIMIT ? OFFSET ?",
-                (rs, n) -> Article.fromRow(rs), typePattern, subcatePattern, size, (long) page * size);
+                ARTICLE, typePattern, subcatePattern, size, (long) page * size);
     }
 
     /** getAllDisplayedArticleWithPageWithMenu. */
@@ -66,7 +77,7 @@ public class LegacyContentRepository {
         return db.query("SELECT * FROM articletb t WHERE t.articlecategory LIKE ? AND t.menustringid LIKE ?"
                         + " AND t.isvisible = true AND t.isapproved = true AND t.islocked = false"
                         + " ORDER BY t.articletime DESC LIMIT ? OFFSET ?",
-                (rs, n) -> Article.fromRow(rs), typePattern, linkPattern, size, (long) page * size);
+                ARTICLE, typePattern, linkPattern, size, (long) page * size);
     }
 
     /** countArticlesByGroupAndMenu. */
@@ -83,14 +94,14 @@ public class LegacyContentRepository {
     /** getAllWebMenu: visible = true order by index ASC. */
     public List<WebMenu> getAllWebMenu() {
         return db.query("SELECT * FROM menutb m WHERE m.isvisible = true ORDER BY m.index ASC",
-                (rs, n) -> WebMenu.fromRow(rs));
+                MENU);
     }
 
     /** getClientByDomainAndLanguageCode (Optional single result). */
     public Optional<Client> getClientByDomainAndLanguageCode(String domain, String langId) {
         List<Client> rows = db.query("SELECT * FROM clienttb e WHERE e.isvisible = true AND e.clientcode = ?"
                         + " AND e.clientlangstringid = ?",
-                (rs, n) -> Client.fromRow(rs), domain, langId);
+                CLIENT, domain, langId);
         if (rows.size() > 1) throw new IncorrectResultSizeDataAccessException(1, rows.size());
         return rows.stream().findFirst();
     }
@@ -100,7 +111,7 @@ public class LegacyContentRepository {
         return db.query("SELECT * FROM templateimagetb t WHERE t.isvisible = true"
                         + " AND LOWER(t.templatelink) = LOWER(?) AND LOWER(t.langcode) = LOWER(?)"
                         + " ORDER BY t.imagesequence ASC, t.stringid ASC",
-                (rs, n) -> TemplateImage.fromRow(rs), templateLink, langCode);
+                IMAGE, templateLink, langCode);
     }
 
     // ---- ArticleAiReviewRepository ----

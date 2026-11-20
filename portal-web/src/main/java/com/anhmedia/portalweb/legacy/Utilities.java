@@ -88,6 +88,54 @@ public final class Utilities {
         return formattedAmount;
     }
 
+    public static String appendResolutionToFilename(String fileName, String resolutionSuffix) {
+        if (fileName.contains("_rslt_")) {
+            fileName = fileName.replaceFirst("_rslt_.*(?=\\.)", "");
+        }
+        int dotIndex = fileName.lastIndexOf('.');
+        if (dotIndex == -1) {
+            return fileName + resolutionSuffix;
+        }
+        String namePart = fileName.substring(0, dotIndex);
+        String extension = fileName.substring(dotIndex);
+        return namePart + resolutionSuffix + extension;
+    }
+
+    /** True when the URL is one of the tenant's own uploads (it has resized "_rslt_" variants). */
+    public static boolean returnTenants(String tenantId, String Url) {
+        if (tenantId == null || tenantId.isBlank() || Url == null || Url.isBlank()) return false;
+        java.nio.file.Path dir = tenantRuntimePath;
+        if (dir == null) return false;
+        java.io.File[] tenantFiles = dir.toFile()
+                .listFiles(file -> file.isFile() && file.getName().endsWith(".properties"));
+        if (tenantFiles == null) return false;
+        for (java.io.File propertyFile : tenantFiles) {
+            java.util.Properties tenantProperties = new java.util.Properties();
+            try (java.io.FileInputStream input = new java.io.FileInputStream(propertyFile)) {
+                tenantProperties.load(input);
+                String loadedTenantId = tenantProperties.getProperty("id");
+                if (tenantId.equals(loadedTenantId) && Url.contains(tenantId)) return true;
+            } catch (java.io.IOException e) {
+                // removed or unreadable between listFiles() and open(): scan the rest
+            }
+        }
+        return false;
+    }
+
+    public static <T> List<T> getPage(List<T> fullList, int pageNumber, int pageSize) {
+        if (pageSize <= 0 || pageNumber <= 0) {
+            throw new IllegalArgumentException("pageSize and pageNumber must be greater than 0");
+        }
+        int fromIndex = (pageNumber - 1) * pageSize;
+        if (fromIndex >= fullList.size()) return List.of();
+        int toIndex = Math.min(fromIndex + pageSize, fullList.size());
+        return fullList.subList(fromIndex, toIndex);
+    }
+
+    private static volatile java.nio.file.Path tenantRuntimePath;
+
+    static void initTenantRuntimePath(java.nio.file.Path path) { tenantRuntimePath = path; }
+
     /** AppConfiguration.getHostbaseurl on Linux (the Windows dev branch is not reproduced). */
     public static String getHostbaseurl(String tenString) {
         if (tenString != null && !tenString.isBlank()) return "https://" + tenString;

@@ -1,6 +1,9 @@
 package com.anhmedia.portalweb;
 
+import com.anhmedia.portalweb.legacy.HomePageRenderer;
 import com.anhmedia.portalweb.legacy.LegacyLanguage;
+import com.anhmedia.portalweb.legacy.MenuPageRenderer;
+import org.springframework.beans.factory.annotation.Autowired;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.http.HttpStatus;
@@ -16,6 +19,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Initial public-theme renderer. Model defaults prevent legacy home templates
@@ -27,11 +31,20 @@ public class PublicWebsiteController {
     private final ThemeRegistry themes;
     private final PublicContentBridge content;
     private final LegacyLanguage languages;
+    private final HomePageRenderer homePages;
 
-    public PublicWebsiteController(ThemeRegistry themes, PublicContentBridge content, LegacyLanguage languages) {
+    @Autowired
+    public PublicWebsiteController(ThemeRegistry themes, PublicContentBridge content, LegacyLanguage languages,
+                                   HomePageRenderer homePages) {
         this.themes = themes;
         this.content = content;
         this.languages = languages;
+        this.homePages = homePages;
+    }
+
+    /** Without direct database access (tests, bridge-only setups) home pages use the Demo bridge snapshot. */
+    PublicWebsiteController(ThemeRegistry themes, PublicContentBridge content, LegacyLanguage languages) {
+        this(themes, content, languages, null);
     }
 
     @GetMapping("/healthz")
@@ -48,24 +61,43 @@ public class PublicWebsiteController {
     /** GreetingController.home / index: Vietnamese visitors get /trang-chu.html. */
     @GetMapping({"/home", "/index.html"})
     public String homeRoute(HttpServletRequest request, HttpSession session, Model model) {
+        Map<String, Object> implicit = implicitLanguageModel(request, session);
         String lang = languages.resolveRequestedOrSessionLanguage(request, session);
         if (LegacyLanguage.DEFAULT_LANGUAGE.equals(lang)) {
             languages.setSessionLanguage(session, LegacyLanguage.DEFAULT_LANGUAGE);
             return "redirect:/trang-chu.html";
         }
-        return home(request, model, lang);
+        return renderHome("home", implicit, request, session, model, lang);
     }
 
     /** GreetingController.homeTrangChu: any other ?lang= goes back to /home. */
     @GetMapping("/trang-chu.html")
     public String trangChu(HttpServletRequest request, HttpSession session, Model model) {
+        Map<String, Object> implicit = implicitLanguageModel(request, session);
         String lang = languages.normalizeFrontendLanguageCode(request.getParameter("lang"));
         if (lang != null && !LegacyLanguage.DEFAULT_LANGUAGE.equals(lang)) {
             languages.setSessionLanguage(session, lang);
             return "redirect:/home?lang=" + lang;
         }
         languages.setSessionLanguage(session, LegacyLanguage.DEFAULT_LANGUAGE);
-        return home(request, model, LegacyLanguage.DEFAULT_LANGUAGE);
+        return renderHome("trang-chu.html", implicit, request, session, model, LegacyLanguage.DEFAULT_LANGUAGE);
+    }
+
+    /** GreetingController's @ModelAttribute language controls run before the handler body. */
+    private Map<String, Object> implicitLanguageModel(HttpServletRequest request, HttpSession session) {
+        return homePages == null ? Map.of() : homePages.globalLanguageControls(request, session);
+    }
+
+    private String renderHome(String pageLink, Map<String, Object> implicit, HttpServletRequest request,
+                              HttpSession session, Model model, String lang) {
+        if (homePages == null) return home(request, model, lang);
+        Optional<MenuPageRenderer.Page> page = homePages.render(pageLink, implicit, request, session);
+        if (page.isEmpty()) {
+            // No tenant database configured for this host: Nginx serves it from Portal 8080.
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Home page not served by Portal Web for this host");
+        }
+        model.addAllAttributes(page.get().model());
+        return page.get().view();
     }
 
     /** GreetingController.setLanguage. */

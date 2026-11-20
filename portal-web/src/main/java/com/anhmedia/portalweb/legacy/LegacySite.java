@@ -28,8 +28,10 @@ public class LegacySite {
 
     public LegacySite(LegacyLanguage languages,
                       @Value("${portal.web.config-path:/opt/tuonghoa/portal/xml/config.xml}") String configXml,
-                      @Value("${portal.web.legacy-resources-root:/opt/tuonghoa/portal/src/main/resources}") String legacyRoot) {
+                      @Value("${portal.web.legacy-resources-root:/opt/tuonghoa/portal/src/main/resources}") String legacyRoot,
+                      @Value("${portal.web.tenant-config-dir:/opt/tuonghoa/portal/tenants/atRuntime}") String tenantConfigDir) {
         this.languages = languages;
+        Utilities.initTenantRuntimePath(Path.of(tenantConfigDir).toAbsolutePath().normalize());
         // Templates packaged in the legacy Portal JAR: localizedViewName() only
         // switches to a "-en"/"-vi" file when it exists there.
         this.packagedTemplates = Path.of(legacyRoot, "templates").toAbsolutePath().normalize();

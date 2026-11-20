@@ -43,6 +43,12 @@
       <artifactId>postgresql</artifactId>
       <scope>runtime</scope>
     </dependency>
+    <!-- Annotations only (no JPA provider): the legacy entity classes are copied
+         unchanged, and LegacyRowMapper reads their @Column names to hydrate fields. -->
+    <dependency>
+      <groupId>jakarta.persistence</groupId>
+      <artifactId>jakarta.persistence-api</artifactId>
+    </dependency>
     <!-- Article.getArticleContentPure() parses article HTML exactly like the legacy entity. -->
     <dependency>
       <groupId>org.jsoup</groupId>
