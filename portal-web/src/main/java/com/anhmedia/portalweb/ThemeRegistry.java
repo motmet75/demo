@@ -2,6 +2,7 @@ package com.anhmedia.portalweb;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.w3c.dom.Document;
@@ -27,11 +28,20 @@ public class ThemeRegistry {
     private static final Logger log = LoggerFactory.getLogger(ThemeRegistry.class);
     private final Path configXml;
     private final Path liveTemplates;
+    private final Path legacyTemplates;
 
+    @Autowired
     public ThemeRegistry(@Value("${portal.web.config-path:/opt/tuonghoa/portal/xml/config.xml}") String xml,
-                         @Value("${portal.live.root:/opt/portal-live}") String liveRoot) {
+                         @Value("${portal.live.root:/opt/portal-live}") String liveRoot,
+                         @Value("${portal.web.legacy-resources-root:/opt/tuonghoa/portal/src/main/resources}") String legacyResourcesRoot) {
         this.configXml = Path.of(xml).toAbsolutePath().normalize();
         this.liveTemplates = Path.of(liveRoot, "templates").toAbsolutePath().normalize();
+        this.legacyTemplates = Path.of(legacyResourcesRoot, "templates").toAbsolutePath().normalize();
+    }
+
+    // Retained for existing unit tests and direct use outside Spring.
+    ThemeRegistry(String xml, String liveRoot) {
+        this(xml, liveRoot, "/opt/tuonghoa/portal/src/main/resources");
     }
 
     public Optional<Theme> findForHost(String host) {
@@ -82,17 +92,28 @@ public class ThemeRegistry {
                         domain, tenant, configXml);
                 return Optional.empty();
             }
-            Path index = liveTemplates.resolve(folder).resolve("index.html").normalize();
-            Path root = liveTemplates.resolve(folder + ".html").normalize();
-            if (index.startsWith(liveTemplates) && Files.isRegularFile(index)) {
+            // A live theme ALWAYS takes priority. The original Portal source
+            // is a read-only fallback for themes/fragments not yet copied to live.
+            Path liveIndex = liveTemplates.resolve(folder).resolve("index.html").normalize();
+            Path liveRoot = liveTemplates.resolve(folder + ".html").normalize();
+            Path originalIndex = legacyTemplates.resolve(folder).resolve("index.html").normalize();
+            Path originalRoot = legacyTemplates.resolve(folder + ".html").normalize();
+            if (liveIndex.startsWith(liveTemplates) && Files.isRegularFile(liveIndex)) {
                 return Optional.of(new Theme(domain, tenant, folder, folder + "/index"));
             }
-            if (root.startsWith(liveTemplates) && Files.isRegularFile(root)) {
+            if (liveRoot.startsWith(liveTemplates) && Files.isRegularFile(liveRoot)) {
                 return Optional.of(new Theme(domain, tenant, folder, folder));
             }
-            log.warn("Portal web tenant template missing: host={}, tenant={}, folder={}, indexExists={}, rootExists={}, templates={}",
-                    domain, tenant, folder, Files.isRegularFile(index),
-                    Files.isRegularFile(root), liveTemplates);
+            if (originalIndex.startsWith(legacyTemplates) && Files.isRegularFile(originalIndex)) {
+                log.info("Using legacy read-only theme for host={}, folder={}", domain, folder);
+                return Optional.of(new Theme(domain, tenant, folder, folder + "/index"));
+            }
+            if (originalRoot.startsWith(legacyTemplates) && Files.isRegularFile(originalRoot)) {
+                log.info("Using legacy read-only root theme for host={}, folder={}", domain, folder);
+                return Optional.of(new Theme(domain, tenant, folder, folder));
+            }
+            log.warn("Portal web tenant template missing: host={}, tenant={}, folder={}, live={}, legacy={}",
+                    domain, tenant, folder, liveTemplates, legacyTemplates);
             return Optional.empty();
         } catch (Exception ex) {
             throw new IllegalStateException("Unable to resolve the Portal theme configuration", ex);
