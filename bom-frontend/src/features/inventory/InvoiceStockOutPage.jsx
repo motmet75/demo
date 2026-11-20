@@ -8,6 +8,7 @@ import {fetchInventoryView} from '../../api/inventoryApi'
 import {
   fetchInvoiceStockOutDocuments, fetchInvoiceStockOutPosted, fetchInvoiceStockOutInventorySuppliers,
   fetchInvoiceStockOutDocument, uploadInvoiceStockOutDocument,
+  fetchVinStockOutInvoices, fetchVinStockOutInvoice,
   confirmInvoiceStockOut, openInvoiceStockOutPdf
 } from '../../api/invoiceStockOutApi'
 import {useAuth} from '../../context/useAuth'
@@ -31,6 +32,8 @@ function newLine(item,index,vatRate){
 export default function InvoiceStockOutPage(){
   const {hasInventoryPriceAccess} = useAuth()
   const [docs,setDocs]=useState([])
+  const [vinInvoices,setVinInvoices]=useState([])
+  const [stockSearch,setStockSearch]=useState('')
   const [posted,setPosted]=useState([])
   const [stock,setStock]=useState([])
   const [supplierReceipts,setSupplierReceipts]=useState([])
@@ -51,13 +54,14 @@ export default function InvoiceStockOutPage(){
     setError('')
     setSupplierWarning('')
     try{
-      const [documents,inventory,history,sources]=await Promise.all([
-        fetchInvoiceStockOutDocuments(),fetchInventoryView(),fetchInvoiceStockOutPosted(),
+      const [documents,vin,inventory,history,sources]=await Promise.all([
+        fetchInvoiceStockOutDocuments(),fetchVinStockOutInvoices(),fetchInventoryView(),fetchInvoiceStockOutPosted(),
         fetchInvoiceStockOutInventorySuppliers().catch(error=>{
           setSupplierWarning('Không tải được nhà cung cấp từ hóa đơn nhập: '+error.message)
           return []
         })])
       setDocs(Array.isArray(documents)?documents:[])
+      setVinInvoices(Array.isArray(vin)?vin:[])
       setStock(Array.isArray(inventory)?inventory:[])
       setPosted(Array.isArray(history)?history:[])
       setSupplierReceipts(Array.isArray(sources)?sources:[])
@@ -82,6 +86,21 @@ export default function InvoiceStockOutPage(){
     }catch(e){setError(e.message||'Không đọc được dữ liệu hóa đơn')}
     finally{setBusy(false)}
   }
+  const selectVinInvoice=async record=>{
+    setBusy(true);setError('');setSuccess('')
+    try{
+      const fresh=await fetchVinStockOutInvoice(record.id)
+      setSelectedDoc(fresh)
+      const vat=vatOf(fresh.vatRate)
+      setBuyer({buyerType:fresh.buyerType||'PERSONAL',buyerName:fresh.buyer||'',
+        buyerTaxId:fresh.buyerTaxId||'',buyerAddress:fresh.buyerAddress||''})
+      setHeader({invoiceDate:fresh.date||today(),invoiceSerial:fresh.serial||'',
+        invoiceNumber:fresh.number||'',exportType:'SALE',vatRate:formatVnNumber(vat,3)})
+      setRows((fresh.items||[]).map((item,i)=>newLine(item,i,vat)))
+      setAcknowledgeMismatch(false);setAcknowledgeHistoricalDate(false)
+    }catch(e){setError(e.message||'Không đọc được hóa đơn VIN-HOADON')}
+    finally{setBusy(false)}
+  }
   const upload=async e=>{
     const file=e.target.files?.[0]
     e.target.value=''
@@ -104,6 +123,13 @@ export default function InvoiceStockOutPage(){
   }
   const patchLine=(idx,patch)=>setRows(old=>old.map((row,i)=>i===idx?{...row,...patch}:row))
   const available=useMemo(()=>stock.filter(x=>stockAvailable(x)>0 && !x.locked),[stock])
+  const visibleStock=useMemo(()=>available.filter(x=>
+    [x.materialName,x.materialCode,x.batchNo,x.warehouseName].join(' ').toLocaleLowerCase('vi')
+      .includes(stockSearch.toLocaleLowerCase('vi'))).slice(0,80),[available,stockSearch])
+  const assignStock=(lineIndex,inventoryId)=>{
+    const item=available.find(x=>String(x.inventoryId)===String(inventoryId))
+    if(item)patchLine(lineIndex,{inventoryId:String(item.inventoryId)})
+  }
   const inventorySourceMap=useMemo(()=>{
     const result=new Map()
     supplierReceipts.forEach(source=>{
@@ -133,13 +159,20 @@ export default function InvoiceStockOutPage(){
   const missing=rows.some(r=>!r.inventoryId || !Number.isFinite(number(r.quantity)) ||
     number(r.quantity)<=0 || !Number.isFinite(number(r.unitPrice)) || number(r.unitPrice)<0 ||
     !Number.isFinite(number(r.vatRate)) || number(r.vatRate)<0 || number(r.vatRate)>100)
+  const selectedVin=['VIN-HOADON','VIN-PORTAL'].includes(selectedDoc?.source)
+    ?vinInvoices.find(v=>v.id===selectedDoc.id):null
+  const vinNotReady=Boolean(selectedVin && (selectedVin.status!=='ISSUED'
+    ||selectedVin.already_posted||selectedVin.order_stock_posted))
   const onConfirm=async()=>{
     setError('');setSuccess('')
     if(!window.confirm('Xác nhận xuất kho theo hóa đơn? Hành động này trừ tồn kho thực tế và tạo các phiếu OUT.'))return
     setBusy(true)
     try{
       const result=await confirmInvoiceStockOut({
-        documentId:selectedDoc.id,invoiceDate:header.invoiceDate,
+        documentId:['VIN-HOADON','VIN-PORTAL'].includes(selectedDoc.source)?null:selectedDoc.id,
+        vinInvoiceId:selectedDoc.source==='VIN-HOADON'?selectedDoc.id:null,
+        vinPortalInvoiceId:selectedDoc.source==='VIN-PORTAL'?selectedDoc.id:null,
+        invoiceDate:header.invoiceDate,
         invoiceSerial:header.invoiceSerial,invoiceNumber:header.invoiceNumber,
         buyerType:buyer.buyerType,buyerName:buyer.buyerName,buyerTaxId:buyer.buyerTaxId,
         buyerAddress:buyer.buyerAddress,exportType:header.exportType,
@@ -158,9 +191,9 @@ export default function InvoiceStockOutPage(){
   return <Box sx={{p:2,overflowY:'auto',height:'100%',bgcolor:'#f8fafc'}}>
     <Stack direction={{xs:'column',sm:'row'}} justifyContent="space-between" gap={1} sx={{mb:2}}>
       <Box>
-        <Typography variant="h6" fontWeight={800}>Xuất kho theo hóa đơn PDF</Typography>
+        <Typography variant="h6" fontWeight={800}>Đối chiếu hóa đơn bán và tồn kho</Typography>
         <Typography variant="caption" color="text.secondary">
-          PDF → Invoice Desk OCR → đối chiếu khách hàng và dòng hàng → chọn lô kho → xác nhận OUT theo ngày hóa đơn.
+          Chọn hóa đơn VIN-HOADON hoặc PDF, kéo lô kho vào từng dòng hàng, rồi xác nhận xuất kho.
         </Typography>
       </Box>
       <Stack direction="row" gap={1}>
@@ -177,6 +210,52 @@ export default function InvoiceStockOutPage(){
     {error&&<Alert severity="error" sx={{mb:1.5}} onClose={()=>setError('')}>{error}</Alert>}
     {success&&<Alert severity="success" sx={{mb:1.5}} onClose={()=>setSuccess('')}>{success}</Alert>}
     {supplierWarning&&<Alert severity="warning" sx={{mb:1.5}}>{supplierWarning}</Alert>}
+    <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',md:'1fr 1fr'},gap:1.5,mb:2}}>
+      <Paper variant="outlined" sx={{p:1.5,maxHeight:320,overflowY:'auto'}}>
+        <Typography fontWeight={800} sx={{mb:1}}>Hóa đơn bán VIN-HOADON ({vinInvoices.length})</Typography>
+        {vinInvoices.some(v=>v.source==='VIN-PORTAL')&&<Typography variant="caption" color="text.secondary" display="block" sx={{mb:1}}>
+          Hóa đơn VIN Portal được kiểm tra theo trạng thái lúc nhập. Xác minh lại trên VIN trước khi xác nhận xuất kho.
+        </Typography>}
+        {vinInvoices.length===0&&<Typography variant="body2" color="text.secondary">Chưa có hóa đơn trong công ty này.</Typography>}
+        {vinInvoices.map(v=><Box key={v.id} onClick={()=>void selectVinInvoice(v)}
+          sx={{p:1,mb:0.5,border:'1px solid',borderColor:selectedDoc?.id===v.id?'primary.main':'divider',
+            borderRadius:1,cursor:'pointer',bgcolor:selectedDoc?.id===v.id?'action.selected':'transparent'}}>
+          <Stack direction="row" justifyContent="space-between" gap={1}>
+            <Typography variant="body2" fontWeight={700}>{v.invoice_series||'—'} / {v.invoice_number||'Chưa có số'} · {v.buyer_organization_name||v.buyer_name||'Người mua'}</Typography>
+            <Chip size="small" label={v.source==='VIN-PORTAL'?'VIN Portal · '+v.status:v.status}/>
+          </Stack>
+          {(v.already_posted||v.order_stock_posted)&&<Typography variant="caption" color="success.main">Đã trừ kho</Typography>}
+          {!v.already_posted&&!v.order_stock_posted&&v.status!=='ISSUED'&&<Typography variant="caption" color="warning.main">Chờ phát hành để trừ kho</Typography>}
+        </Box>)}
+        {selectedDoc&&<Box sx={{mt:1.5,pt:1.5,borderTop:'1px solid',borderColor:'divider'}}>
+          <Typography fontWeight={800} sx={{mb:1}}>Dòng hàng của hóa đơn đã chọn</Typography>
+          {rows.map((line,i)=>{
+            const matched=stock.find(x=>String(x.inventoryId)===String(line.inventoryId))
+            return <Box key={i} onDragOver={e=>e.preventDefault()}
+              onDrop={e=>{e.preventDefault();assignStock(i,e.dataTransfer.getData('text/plain'))}}
+              sx={{p:1,mb:0.75,border:'1px dashed',borderColor:matched?'success.main':'primary.main',borderRadius:1,
+                bgcolor:matched?'success.50':'primary.50'}}>
+              <Typography variant="body2" fontWeight={700}>{i+1}. {line.description}</Typography>
+              <Typography variant="caption" display="block">{formatVnNumber(line.invoiceQuantity,6)} {line.originalUnit}</Typography>
+              <Typography variant="caption" color={matched?'success.main':'primary.main'}>
+                {matched?`${matched.materialName} · ${matched.batchNo}`:'Kéo lô kho từ cột bên phải vào đây'}
+              </Typography>
+            </Box>
+          })}
+        </Box>}
+      </Paper>
+      <Paper variant="outlined" sx={{p:1.5,maxHeight:320,overflowY:'auto'}}>
+        <Typography fontWeight={800} sx={{mb:1}}>Tồn kho khả dụng ({available.length})</Typography>
+        <TextField size="small" fullWidth placeholder="Tìm tên hàng, mã, kho hoặc lô"
+          value={stockSearch} onChange={e=>setStockSearch(e.target.value)} sx={{mb:1}}/>
+        {visibleStock.map(item=><Box key={item.inventoryId} draggable
+          onDragStart={e=>e.dataTransfer.setData('text/plain',String(item.inventoryId))}
+          sx={{p:1,mb:0.5,border:'1px solid',borderColor:'divider',borderRadius:1,cursor:'grab'}}>
+          <Typography variant="body2" fontWeight={700}>{item.materialName} · {item.materialCode}</Typography>
+          <Typography variant="caption" color="text.secondary">{item.warehouseName||item.warehouseCode} / {item.batchNo} · Nhập gốc {formatVnNumber(item.quantityTotal,6)} · Còn {formatVnNumber(stockAvailable(item),6)}</Typography>
+        </Box>)}
+      </Paper>
+    </Box>
     <Paper variant="outlined" sx={{p:2,mb:2}}>
       <Stack spacing={2}>
         <Autocomplete size="small" options={docs}
@@ -187,13 +266,18 @@ export default function InvoiceStockOutPage(){
           renderInput={params=><TextField {...params} label="Chọn hóa đơn đã đọc bằng Invoice Desk" placeholder="Ký hiệu, số hóa đơn, tên người mua..." />}/>
         {busy&&<CircularProgress size={20}/>}
         {selectedDoc&&<>
+          {selectedVin&&vinNotReady&&<Alert severity="warning">
+            {selectedVin.already_posted||selectedVin.order_stock_posted
+              ?'Hóa đơn này đã có giao dịch trừ kho.'
+              :'Hóa đơn VIN-HOADON chưa phát hành. Có thể đối chiếu trước; xuất kho sau khi phát hành.'}
+          </Alert>}
           <Stack direction="row" gap={1} flexWrap="wrap" alignItems="center">
             <Chip size="small" color="primary" label={selectedDoc.source}/>
             <Chip size="small" label={'Số '+(selectedDoc.number||'?')+' · '+(selectedDoc.serial||'?')}/>
             <Chip size="small" label={(selectedDoc.items||[]).length+' dòng OCR'}/>
-            <Button size="small" onClick={()=>void openInvoiceStockOutPdf(selectedDoc.id).catch(e=>setError(e.message))}>Xem PDF gốc</Button>
+            {!['VIN-HOADON','VIN-PORTAL'].includes(selectedDoc.source)&&<Button size="small" onClick={()=>void openInvoiceStockOutPdf(selectedDoc.id).catch(e=>setError(e.message))}>Xem PDF gốc</Button>}
           </Stack>
-          <Typography variant="caption" color="text.secondary">Người bán từ PDF: {selectedDoc.seller||'Chưa xác định'} · MST: {selectedDoc.sellerTaxId||'—'}. Kiểm tra đúng công ty phát hành trước khi trừ kho.</Typography>
+          {!['VIN-HOADON','VIN-PORTAL'].includes(selectedDoc.source)&&<Typography variant="caption" color="text.secondary">Người bán từ PDF: {selectedDoc.seller||'Chưa xác định'} · MST: {selectedDoc.sellerTaxId||'—'}. Kiểm tra đúng công ty phát hành trước khi trừ kho.</Typography>}
           {selectedDoc.warnings?.length>0&&<Alert severity="warning">Invoice Desk cần kiểm tra: {selectedDoc.warnings.slice(0,5).join(' · ')}</Alert>}
           <Typography fontWeight={800}>1. Khách hàng và thông tin xuất hóa đơn</Typography>
           <Box sx={{display:'grid',gridTemplateColumns:{xs:'1fr',md:'repeat(3,minmax(0,1fr))'},gap:1.5}}>
@@ -251,7 +335,8 @@ export default function InvoiceStockOutPage(){
                     onBlur:()=>{const parsed=number(line[field]);if(Number.isFinite(parsed))
                       patchLine(i,{[field]:formatVnNumber(parsed,digits)})}
                   })
-                  return <TableRow key={i}>
+                  return <TableRow key={i} onDragOver={e=>e.preventDefault()}
+                    onDrop={e=>{e.preventDefault();assignStock(i,e.dataTransfer.getData('text/plain'))}}>
                     <TableCell sx={{minWidth:200}}>
                       <Typography fontWeight={700} variant="body2">{i+1}. {line.description||'(Không có tên)'}</Typography>
                       <Typography variant="caption" color="text.secondary">SL PDF: {formatVnNumber(line.invoiceQuantity,6)} {line.originalUnit}</Typography>
@@ -261,6 +346,7 @@ export default function InvoiceStockOutPage(){
                         onClick={()=>setPickingLine(i)}>
                         {selected?'Đổi hàng / Kho / Lô':'Chọn hàng / Kho / Lô'}
                       </Button>
+                      {!selected&&<Typography variant="caption" display="block" color="text.secondary">Kéo một lô từ danh sách tồn kho vào dòng này</Typography>}
                       {selected&&<Box sx={{mt:0.75}}>
                         <Typography variant="body2" fontWeight={700}>
                           {selected.materialName} · {selected.materialCode}
@@ -310,7 +396,7 @@ export default function InvoiceStockOutPage(){
             onChange={e=>setAcknowledgeHistoricalDate(e.target.checked)}/>}
             label="Tôi xác nhận xuất kho theo ngày hóa đơn (hạch toán hồi tố)"/>}
           <Alert severity="info">Giá, số lượng dùng định dạng Việt Nam (1.000.000,50). Chọn đúng <b>inventory ID, kho, lô, nhà cung cấp</b>. Chỉ trừ kho sau khi xác nhận.</Alert>
-          <Button variant="contained" color="error" size="large" disabled={busy||rows.length===0||missing||!buyer.buyerName.trim()
+          <Button variant="contained" color="error" size="large" disabled={busy||vinNotReady||rows.length===0||missing||!buyer.buyerName.trim()
             ||!header.invoiceSerial.trim()||!header.invoiceNumber.trim()||(mismatch&&!acknowledgeMismatch)
             ||(historical&&!acknowledgeHistoricalDate)}
             onClick={()=>void onConfirm()}>

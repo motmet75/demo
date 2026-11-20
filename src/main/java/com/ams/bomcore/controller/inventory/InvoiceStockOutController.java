@@ -48,6 +48,21 @@ public class InvoiceStockOutController {
             Authentication auth) {
         return service.document(authorized(tenant,company,auth),id);
     }
+    @GetMapping("/vin-invoices")
+    public List<Map<String,Object>> vinInvoices(
+            @RequestHeader("X-Tenant-Id") UUID tenant,
+            @RequestHeader("X-Company-Id") UUID company,
+            Authentication auth) {
+        return service.vinDocuments(authorized(tenant,company,auth));
+    }
+    @GetMapping("/vin-invoices/{id}")
+    public Map<String,Object> vinInvoice(
+            @PathVariable UUID id,
+            @RequestHeader("X-Tenant-Id") UUID tenant,
+            @RequestHeader("X-Company-Id") UUID company,
+            Authentication auth) {
+        return service.vinDocument(authorized(tenant,company,auth),id);
+    }
     @PostMapping(path="/upload",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
     public Map<String,Object> upload(
             @RequestParam("file") MultipartFile file,
