@@ -23,7 +23,7 @@ public final class LegacyExplicitRoutes {
             "/check-loading-status", "/login-user", "/login-status-2", "/trang-thai-don-hang",
             "/dang-nhap", "/dang-nhap/**", "/register", "/tariff", "/docs", "/messagebox", "/login",
             "/order", "/profile", "/vietnamse-import-chart", "/forgotpassword", "/3dwarehouse",
-            "/dang-xuat", "/topselling", "/article-search", "/products.html", "/single-product.html",
+            "/dang-xuat", "/topselling", "/article-search", "/single-product.html",
             "/productfilter", "/productpage", "/contact.html", "/videos.html",
             "/marine.html", "/tin-tuc.html", "/one-product", "/san-pham.html", "/privacy-policy.html",
             "/terms-of-service.html", "/shipping-policy.html", "/return-policy.html",

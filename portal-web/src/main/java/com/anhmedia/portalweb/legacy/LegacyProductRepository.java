@@ -230,6 +230,26 @@ public class LegacyProductRepository {
                 LegacyRowMapper.of(ProductColor.class)));
     }
 
+    // ---- product attributes (ProductAttributeValue / CategoryAttribute / ProductAttribute repositories) ----
+
+    public List<com.anhmedia.portalweb.legacy.entity.ProductAttributeValue> findVisibleAttributeValuesByProductIdIn(List<Long> ids) {
+        if (ids.isEmpty()) return new ArrayList<>();
+        return new ArrayList<>(db.query("SELECT * FROM product_attribute_value v WHERE v.product_id IN (" + inList(ids.size())
+                + ") AND v.visible = true", LegacyRowMapper.of(com.anhmedia.portalweb.legacy.entity.ProductAttributeValue.class),
+                ids.toArray()));
+    }
+
+    public List<com.anhmedia.portalweb.legacy.entity.CategoryAttribute> findFilterableByCategoryCode(String categoryCode) {
+        return new ArrayList<>(db.query("SELECT * FROM category_attribute ca WHERE ca.filterable = true AND ca.active = true"
+                        + " AND ca.category_code = ? ORDER BY ca.display_order ASC, ca.attribute_code ASC",
+                LegacyRowMapper.of(com.anhmedia.portalweb.legacy.entity.CategoryAttribute.class), categoryCode));
+    }
+
+    public List<com.anhmedia.portalweb.legacy.entity.ProductAttribute> findAllAttributesOrdered() {
+        return new ArrayList<>(db.query("SELECT * FROM product_attribute a ORDER BY a.attribute_code ASC",
+                LegacyRowMapper.of(com.anhmedia.portalweb.legacy.entity.ProductAttribute.class)));
+    }
+
     /** ProductHtmlRepository.getProductHtmlByGroup ("active" index first). No visible filter in legacy either. */
     public List<ProductHtml> getProductHtmlByGroup(String groupCode, String productCode) {
         return new ArrayList<>(db.query("SELECT * FROM producthtmltb p WHERE p.producthtmlgroup = ? AND p.productcode = ?"

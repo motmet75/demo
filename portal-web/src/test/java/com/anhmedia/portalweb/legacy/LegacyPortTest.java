@@ -40,7 +40,7 @@ class LegacyPortTest {
     void explicitLegacyRoutesAreLeftToPortal8080() {
         for (String owned : List.of("/gio-hang", "/gio-hang/", "/dang-nhap", "/dang-nhap/oauth2/code/google",
                 "/contact.html", "/about.html", "/article/x.html",
-                "/api/anything/deep", "/app/login", "/admin/products", "/products.html", "/VAADIN/build/x.js")) {
+                "/api/anything/deep", "/app/login", "/admin/products", "/VAADIN/build/x.js")) {
             assertTrue(LegacyExplicitRoutes.ownedByLegacy(owned), owned);
         }
         for (String dynamic : List.of("/tin-tuc-su-kien", "/tin-tuc-su-kien/", "/news",

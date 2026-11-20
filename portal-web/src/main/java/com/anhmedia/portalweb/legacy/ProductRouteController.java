@@ -14,9 +14,17 @@ import java.util.Optional;
 @Controller
 public class ProductRouteController {
     private final ProductPageRenderer renderer;
+    private final ProductsListRenderer list;
 
-    public ProductRouteController(ProductPageRenderer renderer) {
+    public ProductRouteController(ProductPageRenderer renderer, ProductsListRenderer list) {
         this.renderer = renderer;
+        this.list = list;
+    }
+
+    /** GreetingController.products(): the product list with its result filters. */
+    @GetMapping("/products.html")
+    public Object products(Model model, HttpServletRequest request, HttpSession session) {
+        return view(list.render(request, session), model);
     }
 
     @GetMapping({"/product/{endpoint}", "/product/{endpoint}/"})
