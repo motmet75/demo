@@ -7,7 +7,7 @@ XML="${PORTAL_CONFIG_XML:-/opt/tuonghoa/portal/xml/config.xml}"
 URL="${PORTAL_WEB_TEST_URL:-http://127.0.0.1:8083/}"
 export ROOT XML URL
 python3 - <<'PY'
-import os, pathlib, urllib.request, urllib.error, xml.etree.ElementTree as ET
+import os, pathlib, re, urllib.request, urllib.error, xml.etree.ElementTree as ET
 from http.client import IncompleteRead
 
 domains = [
@@ -34,9 +34,27 @@ for host in domains:
                    and el.get("tenantId") == tenant and cfg(el)), None)
     print("\n===", host, "tenant =", tenant, "theme =", folder or "<NOT_MAPPED>", "===")
     if folder and ".." not in folder and not folder.startswith("/"):
-        for candidate in [root / folder / "index.html", root / (folder + ".html")]:
+        candidates = [root / folder / "index.html", root / (folder + ".html")]
+        for candidate in candidates:
             print("template:", candidate, "exists =", candidate.is_file(),
                   "readable =", os.access(candidate, os.R_OK) if candidate.exists() else False)
+        active = next((p for p in candidates if p.is_file()), None)
+        if active:
+            # Diagnostic only: identify literal fragments like
+            # th:replace="minhmapshop :: head" that need a shared
+            # templates/minhmapshop.html alongside theme/index.html.
+            content = active.read_text(encoding="utf-8", errors="replace")
+            fragment_names = sorted(set(re.findall(
+                r'th:(?:replace|insert|include)\\s*=\\s*["\\\']([\\w./-]+)\\s*::',
+                content
+            )))
+            for fragment in fragment_names:
+                if ".." in fragment or fragment.startswith("/"):
+                    continue
+                shared = root / (fragment + ".html")
+                print("shared fragment:", shared,
+                      "exists =", shared.is_file(),
+                      "readable =", os.access(shared, os.R_OK) if shared.exists() else False)
     try:
         req=urllib.request.Request(url,headers={"Host":host,"User-Agent":"portal-web-readonly-diagnostic"})
         with urllib.request.urlopen(req,timeout=20) as resp:
