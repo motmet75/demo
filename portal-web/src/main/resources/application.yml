@@ -17,3 +17,5 @@ portal:
     config-path: "${PORTAL_CONFIG_XML:/opt/tuonghoa/portal/xml/config.xml}"
     # Read-only fallback for original public theme fragments and shared assets.
     legacy-resources-root: "${PORTAL_LEGACY_RESOURCES_ROOT:/opt/tuonghoa/portal/src/main/resources}"
+    content-bridge-url: "${PORTAL_WEB_BRIDGE_URL:http://127.0.0.1:8081/sapi/internal/portal-public}"
+    content-bridge-token: "${PORTAL_WEB_BRIDGE_TOKEN:}"
