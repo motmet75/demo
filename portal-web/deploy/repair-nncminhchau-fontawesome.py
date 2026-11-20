@@ -14,7 +14,7 @@ import shutil
 
 ROOT = Path("/opt/portal-live/templates")
 CSS_URL = "/portal.tuonghoa-imex.com/fontawesome/css/all.min.css"
-HREF = re.compile(r'(?P<name>\\b(?:th:)?href)\\s*=\\s*(?P<quote>["\\\'])(?P<value>.*?)(?P=quote)', re.IGNORECASE)
+HREF = re.compile(r'(?P<name>\b(?:th:)?href)\s*=\s*(?P<quote>["\'])(?P<value>.*?)(?P=quote)', re.IGNORECASE)
 # Regex is deliberately restricted to attribute values that reference the
 # Font Awesome target and visibly contain an unrendered domain expression.
 
