@@ -139,7 +139,7 @@ export default function InvoiceInventoryPickerDialog({
       <Alert severity="info">
         Nhà cung cấp được lấy từ <strong>hóa đơn nhập kho đã ghi nhận</strong>.
         Nếu một lô có nhiều hóa đơn nhập, hệ thống hiển thị tất cả nhà cung cấp.
-        Giá nhập hiển thị là giá đang lưu trên <strong>bản ghi tồn kho</strong>, không phải giá riêng của từng nhà cung cấp.
+        Giá nhập của hóa đơn nguồn được hiển thị bên cạnh số lượng gốc; giá của lô kho được hiển thị ở cột riêng.
         Chọn đúng lô hàng; việc chọn không tự trừ tồn kho.
       </Alert>
       <Stack direction={{xs:'column',md:'row'}} spacing={1}>
@@ -168,13 +168,14 @@ export default function InvoiceInventoryPickerDialog({
         </Typography>
       </Stack>
       <TableContainer sx={{flex:1,minHeight:120,border:1,borderColor:'divider',borderRadius:1}}>
-        <Table size="small" stickyHeader sx={{minWidth:1460}}>
+        <Table size="small" stickyHeader sx={{minWidth:1560}}>
           <TableHead><TableRow>
             <TableCell sx={{fontWeight:700}}>Mã hàng / Tên hàng</TableCell>
             <TableCell sx={{fontWeight:700}}>Nhà cung cấp</TableCell>
             <TableCell sx={{fontWeight:700}}>HĐ nhập kho</TableCell>
             <TableCell sx={{fontWeight:700}}>Kho</TableCell>
             <TableCell sx={{fontWeight:700}}>Lô / Batch / Số máy</TableCell>
+            <TableCell sx={{fontWeight:700}} align="right">SL nhập ban đầu</TableCell>
             <TableCell sx={{fontWeight:700}} align="right">Tồn kho</TableCell>
             <TableCell sx={{fontWeight:700}} align="right">Khả dụng</TableCell>
             <TableCell sx={{fontWeight:700}}>Đơn vị</TableCell>
@@ -197,12 +198,16 @@ export default function InvoiceInventoryPickerDialog({
                   {row.suppliers.map(name=><Typography key={name} variant="body2">{name}</Typography>)}
                 </TableCell>
                 <TableCell>
-                  {[...new Set(row.sources.map(src=>src.purchaseInvoiceNumber).filter(Boolean))]
-                    .slice(0,4).map(n=><Typography key={n} variant="caption" display="block">{n}</Typography>)}
+                  {row.sources.filter(src=>src.purchaseInvoiceNumber).slice(0,4).map((src,index)=><Typography key={`${src.purchaseInvoiceNumber}-${index}`} variant="caption" display="block">
+                    {src.purchaseInvoiceNumber}
+                    {src.originalQuantity!=null&&` · SL gốc ${formatVnNumber(src.originalQuantity,6)}`}
+                    {src.purchaseUnitPrice!=null&&` · ${formatPurchasePrice(src.purchaseUnitPrice)} VND/ĐV`}
+                  </Typography>)}
                   {row.sources.length===0&&'—'}
                 </TableCell>
                 <TableCell>{row.warehouseName||row.warehouseCode||'—'}</TableCell>
                 <TableCell sx={{maxWidth:240,overflowWrap:'anywhere'}}>{row.batchNo||'—'}</TableCell>
+                <TableCell align="right">{formatVnNumber(row.quantityTotal,6)}</TableCell>
                 <TableCell align="right">{formatVnNumber(row.quantityOnHand,6)}</TableCell>
                 <TableCell align="right">
                   <Typography color={insufficient?'error.main':'success.main'} fontWeight={800}>
@@ -235,7 +240,7 @@ export default function InvoiceInventoryPickerDialog({
                 </TableCell>
               </TableRow>
             })}
-            {paged.length===0&&<TableRow><TableCell colSpan={11}>
+            {paged.length===0&&<TableRow><TableCell colSpan={12}>
               Không tìm thấy lô khả dụng. Thử chọn nhà cung cấp khác hoặc kiểm tra hàng nhập kho.
             </TableCell></TableRow>}
           </TableBody>

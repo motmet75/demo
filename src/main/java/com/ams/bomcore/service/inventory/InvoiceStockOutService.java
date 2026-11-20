@@ -8,6 +8,7 @@ import com.demo.invoicedesk.InvoiceDeskService.Scope;
 import invoice.Invoice;
 import invoice.Parser;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -42,12 +43,31 @@ public class InvoiceStockOutService {
 
     public record Line(int invoiceLineIndex, UUID inventoryId, BigDecimal quantity,
                        BigDecimal unitPrice, BigDecimal vatRate) {}
-    public record Confirm(UUID documentId, LocalDate invoiceDate,
+    public record Confirm(UUID documentId, UUID vinInvoiceId, UUID vinPortalInvoiceId, LocalDate invoiceDate,
                           String invoiceSerial, String invoiceNumber,
                           String buyerType, String buyerName, String buyerTaxId,
                           String buyerAddress, String exportType,
                           BigDecimal vatRate, boolean acknowledgeHistoricalDate,
-                          boolean acknowledgeMismatch, List<Line> lines) {}
+                          boolean acknowledgeMismatch, List<Line> lines) {
+        public Confirm(UUID documentId, LocalDate invoiceDate, String invoiceSerial,
+                       String invoiceNumber, String buyerType, String buyerName,
+                       String buyerTaxId, String buyerAddress, String exportType,
+                       BigDecimal vatRate, boolean acknowledgeHistoricalDate,
+                       boolean acknowledgeMismatch, List<Line> lines) {
+            this(documentId,null,null,invoiceDate,invoiceSerial,invoiceNumber,buyerType,buyerName,
+                    buyerTaxId,buyerAddress,exportType,vatRate,acknowledgeHistoricalDate,
+                    acknowledgeMismatch,lines);
+        }
+        public Confirm(UUID documentId, UUID vinInvoiceId, LocalDate invoiceDate,
+                       String invoiceSerial, String invoiceNumber, String buyerType,
+                       String buyerName, String buyerTaxId, String buyerAddress,
+                       String exportType, BigDecimal vatRate, boolean acknowledgeHistoricalDate,
+                       boolean acknowledgeMismatch, List<Line> lines) {
+            this(documentId,vinInvoiceId,null,invoiceDate,invoiceSerial,invoiceNumber,
+                    buyerType,buyerName,buyerTaxId,buyerAddress,exportType,vatRate,
+                    acknowledgeHistoricalDate,acknowledgeMismatch,lines);
+        }
+    }
 
     public InvoiceStockOutService(InvoiceDeskService desk, InventoryMovementService movements,
                                   InventoryMovementRepository movementRepo, JdbcTemplate jdbc) {
@@ -71,6 +91,153 @@ public class InvoiceStockOutService {
     }
     public Map<String,Object> document(Scope scope, UUID id) {
         return preview(desk.document(scope,id));
+    }
+    public List<Map<String,Object>> vinDocuments(Scope scope) {
+        List<Map<String,Object>> result=new ArrayList<>(jdbc.queryForList("""
+            SELECT v.id,v.status,v.invoice_series,v.invoice_number,v.created_at,
+                   v.issued_at,v.buyer_name,v.buyer_organization_name,
+                   EXISTS (SELECT 1 FROM public.inventory_invoice_stock_out s
+                           WHERE s.tenant_id=v.tenant_id AND s.company_id=v.company_id
+                             AND s.vin_hoadon_invoice_id=v.id) AS already_posted,
+                   EXISTS (SELECT 1 FROM public.vin_hoadon_shop_invoice_order l
+                           JOIN public.inventory_movement m
+                             ON m.reference_type='SHOP_ORDER' AND m.reference_id=l.order_id
+                            AND m.tenant_id=l.tenant_id AND m.company_id=l.company_id
+                           WHERE l.invoice_id=v.id) AS order_stock_posted
+            FROM public.vin_hoadon_shop_invoice v
+            WHERE v.tenant_id=? AND v.company_id=?
+            ORDER BY v.created_at DESC LIMIT 500
+            """,scope.tenantId(),scope.companyId()));
+        result.addAll(jdbc.queryForList("""
+            SELECT v.id,'ISSUED' AS status,v.invoice_serial AS invoice_series,
+                   v.invoice_number,v.invoice_date AS issued_at,v.buyer_name,
+                   NULL::text AS buyer_organization_name,
+                   (EXISTS (SELECT 1 FROM public.inventory_invoice_stock_out s
+                           WHERE s.tenant_id=v.tenant_id AND s.company_id=v.company_id
+                             AND (s.vin_portal_invoice_id=v.id OR
+                                  (s.invoice_serial=v.invoice_serial AND s.invoice_number=v.invoice_number)))
+                    OR EXISTS (SELECT 1 FROM public.vin_portal_legacy_out_link l
+                               WHERE l.invoice_id=v.id AND l.tenant_id=v.tenant_id
+                                 AND l.company_id=v.company_id))
+                       AS already_posted,
+                   false AS order_stock_posted,'VIN-PORTAL' AS source,
+                   v.checked_at
+            FROM public.vin_portal_selling_invoice v
+            WHERE v.tenant_id=? AND v.company_id=?
+              AND v.invoice_status=3 AND v.tax_status=6
+              AND v.invoice_type IN (1,3) AND v.currency='VND'
+            ORDER BY v.invoice_date DESC,v.invoice_number DESC LIMIT 500
+            """,scope.tenantId(),scope.companyId()));
+        result.sort(Comparator.comparing(row -> !"VIN-PORTAL".equals(row.get("source"))));
+        return result;
+    }
+    public Map<String,Object> vinDocument(Scope scope, UUID id) {
+        Integer portal=jdbc.queryForObject("SELECT count(*) FROM public.vin_portal_selling_invoice WHERE id=? AND tenant_id=? AND company_id=?",
+                Integer.class,id,scope.tenantId(),scope.companyId());
+        return vinSource(scope,id,portal!=null && portal>0).preview();
+    }
+    private record VinSource(Invoice invoice, Map<String,Object> preview) {}
+    private VinSource vinSource(Scope scope, UUID id, boolean portal) {
+        if (portal) return portalSource(scope,id);
+        List<Map<String,Object>> rows=jdbc.queryForList("""
+            SELECT id,status,invoice_series,invoice_number,created_at,issued_at,
+                   buyer_name,buyer_organization_name,buyer_tax_code,buyer_address,
+                   vat_rate,subtotal,tax_amount,total_amount,request_payload::text AS payload
+            FROM public.vin_hoadon_shop_invoice
+            WHERE id=? AND tenant_id=? AND company_id=?
+            """,id,scope.tenantId(),scope.companyId());
+        if (rows.size()!=1) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Không tìm thấy hóa đơn VIN-HOADON.");
+        Map<String,Object> row=rows.get(0);
+        Map<String,Object> payload;
+        try { payload=json.readValue(Objects.toString(row.get("payload"),"{}"),new TypeReference<>(){}); }
+        catch (Exception e) { throw new ResponseStatusException(HttpStatus.CONFLICT,"Không đọc được chi tiết hóa đơn VIN-HOADON."); }
+        Invoice inv=new Invoice();
+        inv.source="VIN-HOADON";
+        try {
+            byte[] digest=java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(Objects.toString(row.get("payload"),"").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            inv.sha256=java.util.HexFormat.of().formatHex(digest);
+        } catch (java.security.NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
+        inv.put("serial",Objects.toString(row.get("invoice_series"),""));
+        inv.put("number",Objects.toString(row.get("invoice_number"),""));
+        String date=Objects.toString(payload.get("ngaylap"),"");
+        inv.put("date",date.length()>=10?date.substring(0,10):"");
+        String organization=Objects.toString(row.get("buyer_organization_name"),"");
+        inv.put("buyer",organization.isBlank()?Objects.toString(row.get("buyer_name"),""):organization);
+        inv.put("buyerTaxId",Objects.toString(row.get("buyer_tax_code"),""));
+        inv.put("subtotal",Objects.toString(row.get("subtotal"),""));
+        inv.put("vat",Objects.toString(row.get("tax_amount"),""));
+        inv.put("total",Objects.toString(row.get("total_amount"),""));
+        inv.put("taxRate",Objects.toString(row.get("vat_rate"),""));
+        Object details=payload.get("dschitiet");
+        if (details instanceof List<?> lines) for (Object entry:lines) {
+            if (!(entry instanceof Map<?,?> line)) continue;
+            Map<String,String> item=new LinkedHashMap<>();
+            item.put("description",Objects.toString(line.get("ten"),""));
+            item.put("quantity",Objects.toString(line.get("soluong"),""));
+            item.put("unit",Objects.toString(line.get("donvitinh"),""));
+            item.put("unitPrice",Objects.toString(line.get("dongia"),""));
+            inv.items.add(item);
+        }
+        Map<String,Object> view=new LinkedHashMap<>();
+        view.put("id",id);view.put("source",inv.source);view.put("status",row.get("status"));
+        view.put("serial",inv.get("serial"));view.put("number",inv.get("number"));
+        view.put("date",inv.get("date"));view.put("buyer",inv.get("buyer"));
+        view.put("buyerTaxId",inv.get("buyerTaxId"));view.put("buyerAddress",row.get("buyer_address"));
+        view.put("buyerType",inv.get("buyerTaxId").isBlank()?"PERSONAL":"COMPANY");
+        view.put("subtotal",inv.get("subtotal"));view.put("vat",inv.get("vat"));
+        view.put("total",inv.get("total"));view.put("vatRate",inv.get("taxRate"));
+        view.put("items",inv.items);view.put("warnings",List.of());
+        view.put("sha256",inv.sha256);
+        return new VinSource(inv,view);
+    }
+    private VinSource portalSource(Scope scope, UUID id) {
+        List<Map<String,Object>> rows=jdbc.queryForList("""
+            SELECT id,invoice_serial,invoice_number,invoice_date,invoice_type,
+                   invoice_status,tax_status,currency,buyer_name,buyer_tax_id,
+                   buyer_address,subtotal,vat,total,source_json::text AS payload
+            FROM public.vin_portal_selling_invoice
+            WHERE id=? AND tenant_id=? AND company_id=?
+            """,id,scope.tenantId(),scope.companyId());
+        if(rows.size()!=1) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Không tìm thấy hóa đơn VIN Portal.");
+        Map<String,Object> row=rows.get(0);
+        Map<String,Object> payload;
+        try { payload=json.readValue((String)row.get("payload"),new TypeReference<>(){}); }
+        catch(Exception e) { throw new ResponseStatusException(HttpStatus.CONFLICT,"Không đọc được dòng hàng VIN Portal."); }
+        Invoice inv=new Invoice();inv.source="VIN-PORTAL";
+        try {
+            byte[] digest=java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(((String)row.get("payload")).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            inv.sha256=java.util.HexFormat.of().formatHex(digest);
+        } catch(java.security.NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
+        inv.put("serial",Objects.toString(row.get("invoice_serial"),""));
+        inv.put("number",Objects.toString(row.get("invoice_number"),""));
+        inv.put("date",Objects.toString(row.get("invoice_date"),""));
+        inv.put("buyer",Objects.toString(row.get("buyer_name"),""));
+        inv.put("buyerTaxId",Objects.toString(row.get("buyer_tax_id"),""));
+        inv.put("subtotal",Objects.toString(row.get("subtotal"),""));
+        inv.put("vat",Objects.toString(row.get("vat"),""));
+        inv.put("total",Objects.toString(row.get("total"),""));
+        inv.put("currency",Objects.toString(row.get("currency"),""));
+        Object rawItems=payload.get("items");
+        if(rawItems instanceof List<?> items) for(Object entry:items) {
+            if(!(entry instanceof Map<?,?> item)) continue;
+            Map<String,String> line=new LinkedHashMap<>();
+            for(String key:List.of("description","quantity","unit","unitPrice","vatRate"))
+                line.put(key,Objects.toString(item.get(key),""));
+            inv.items.add(line);
+        }
+        Map<String,Object> view=new LinkedHashMap<>();
+        view.put("id",id);view.put("source",inv.source);view.put("status","ISSUED");
+        view.put("serial",inv.get("serial"));view.put("number",inv.get("number"));
+        view.put("date",inv.get("date"));view.put("buyer",inv.get("buyer"));
+        view.put("buyerTaxId",inv.get("buyerTaxId"));view.put("buyerAddress",row.get("buyer_address"));
+        view.put("buyerType",inv.get("buyerTaxId").isBlank()?"PERSONAL":"COMPANY");
+        view.put("subtotal",inv.get("subtotal"));view.put("vat",inv.get("vat"));
+        view.put("total",inv.get("total"));view.put("vatRate",inv.items.isEmpty()?"8":inv.items.get(0).get("vatRate"));
+        view.put("currency",inv.get("currency"));view.put("items",inv.items);
+        view.put("warnings",List.of());view.put("sha256",inv.sha256);
+        return new VinSource(inv,view);
     }
     public Document upload(Scope scope, org.springframework.web.multipart.MultipartFile file) throws Exception {
         return com.demo.invoicedesk.InvoiceDeskTasks.run(
@@ -150,7 +317,9 @@ public class InvoiceStockOutService {
                    COALESCE(NULLIF(BTRIM(p.party_name), ''), 'Chưa xác định') AS "supplierName",
                    p.id AS "purchaseInvoiceId",
                    p.invoice_number AS "purchaseInvoiceNumber",
-                   p.invoice_date AS "purchaseInvoiceDate"
+                   p.invoice_date AS "purchaseInvoiceDate",
+                   NULL::numeric AS "purchaseUnitPrice",
+                   NULL::numeric AS "originalQuantity"
             FROM public.inventory_movement m
             JOIN public.invoice p ON p.id=m.reference_id
                  AND p.tenant_id=m.tenant_id AND p.company_id=m.company_id
@@ -160,8 +329,18 @@ public class InvoiceStockOutService {
             WHERE m.tenant_id=? AND m.company_id=?
               AND m.inventory_id IS NOT NULL AND m.movement_type='IN'
               AND m.reference_type='INVOICE'
+            UNION
+            SELECT DISTINCT p.inventory_id AS "inventoryId",
+                   COALESCE(NULLIF(BTRIM(p.supplier_name), ''), 'Chưa xác định') AS "supplierName",
+                   NULL::uuid AS "purchaseInvoiceId",
+                   p.invoice_number AS "purchaseInvoiceNumber",
+                   p.invoice_date AS "purchaseInvoiceDate",
+                   p.unit_price AS "purchaseUnitPrice",
+                   p.quantity AS "originalQuantity"
+            FROM public.nnc_legacy_purchase_line p
+            WHERE p.tenant_id=? AND p.company_id=?
             ORDER BY "supplierName", "inventoryId"
-            """,scope.tenantId(),scope.companyId());
+            """,scope.tenantId(),scope.companyId(),scope.tenantId(),scope.companyId());
     }
 
     public List<Map<String,Object>> posted(Scope scope) {
@@ -177,9 +356,44 @@ public class InvoiceStockOutService {
 
     @Transactional(rollbackFor = Exception.class)
     public Map<String,Object> confirm(Scope scope, Confirm request) throws Exception {
-        if (request==null || request.documentId()==null)
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Chưa chọn PDF hóa đơn.");
-        Invoice doc = desk.document(scope,request.documentId()).invoice();
+        if (request==null || (request.documentId()!=null?1:0)
+                +(request.vinInvoiceId()!=null?1:0)+(request.vinPortalInvoiceId()!=null?1:0)!=1)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Chọn đúng một hóa đơn PDF hoặc VIN-HOADON.");
+        Invoice doc;
+        if (request.vinInvoiceId()!=null || request.vinPortalInvoiceId()!=null) {
+            boolean portal=request.vinPortalInvoiceId()!=null;
+            VinSource source=vinSource(scope,portal?request.vinPortalInvoiceId():request.vinInvoiceId(),portal);
+            doc=source.invoice();
+            if (!"ISSUED".equals(source.preview().get("status")))
+                throw new ResponseStatusException(HttpStatus.CONFLICT,"Hóa đơn VIN-HOADON chưa phát hành; chưa thể trừ kho.");
+            if (portal) {
+                Integer valid=jdbc.queryForObject("""
+                    SELECT count(*) FROM public.vin_portal_selling_invoice
+                    WHERE id=? AND tenant_id=? AND company_id=? AND invoice_status=3
+                      AND tax_status=6 AND invoice_type IN (1,3) AND currency='VND'
+                    """,Integer.class,request.vinPortalInvoiceId(),scope.tenantId(),scope.companyId());
+                if(valid==null || valid!=1)
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,"Hóa đơn VIN Portal không còn đủ điều kiện trừ kho.");
+                Integer legacyPosted=jdbc.queryForObject("""
+                    SELECT count(*) FROM public.vin_portal_legacy_out_link
+                    WHERE invoice_id=? AND tenant_id=? AND company_id=?
+                    """,Integer.class,request.vinPortalInvoiceId(),scope.tenantId(),scope.companyId());
+                if(legacyPosted!=null && legacyPosted>0)
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "Hóa đơn VIN Portal đã có OUT trong lịch sử kho NNC; không trừ lần nữa.");
+            } else {
+                Integer orderPosted=jdbc.queryForObject("""
+                SELECT count(*) FROM public.vin_hoadon_shop_invoice_order l
+                JOIN public.inventory_movement m
+                  ON m.reference_type='SHOP_ORDER' AND m.reference_id=l.order_id
+                 AND m.tenant_id=l.tenant_id AND m.company_id=l.company_id
+                WHERE l.invoice_id=? AND l.tenant_id=? AND l.company_id=?
+                """,Integer.class,request.vinInvoiceId(),scope.tenantId(),scope.companyId());
+                if (orderPosted!=null && orderPosted>0)
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "Đơn bán gắn với hóa đơn này đã trừ kho; không thể trừ lần nữa.");
+            }
+        } else doc=desk.document(scope,request.documentId()).invoice();
         if (!"INVOICE".equals(doc.type) || doc.items.isEmpty())
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Invoice Desk chưa nhận dạng được dòng hàng. Hãy sửa/duyệt trong Invoice Desk trước.");
@@ -191,6 +405,11 @@ public class InvoiceStockOutService {
                     "Xuất kho hồi tố theo ngày hóa đơn cần được xác nhận rõ.");
         String serial=required(request.invoiceSerial(),"Ký hiệu hóa đơn",80);
         String number=required(request.invoiceNumber(),"Số hóa đơn",80);
+        if ((request.vinInvoiceId()!=null || request.vinPortalInvoiceId()!=null) &&
+                (!serial.equals(doc.get("serial")) || !number.equals(doc.get("number"))
+                 || !date.toString().equals(doc.get("date"))))
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Số, ký hiệu hoặc ngày hóa đơn VIN-HOADON đã thay đổi. Tải lại trước khi xuất kho.");
         String buyerType=required(request.buyerType(),"Loại người mua",20).toUpperCase(Locale.ROOT);
         if (!BUYER_TYPES.contains(buyerType))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Loại người mua không hợp lệ.");
@@ -210,8 +429,10 @@ public class InvoiceStockOutService {
         Integer already=jdbc.queryForObject("""
             SELECT count(*) FROM public.inventory_invoice_stock_out
             WHERE tenant_id=? AND company_id=? AND
-                  (invoice_desk_document_id=? OR (invoice_serial=? AND invoice_number=?))
-            """,Integer.class,scope.tenantId(),scope.companyId(),request.documentId(),serial,number);
+                  (invoice_desk_document_id=? OR vin_hoadon_invoice_id=?
+                   OR vin_portal_invoice_id=?
+                   OR (invoice_serial=? AND invoice_number=?))
+            """,Integer.class,scope.tenantId(),scope.companyId(),request.documentId(),request.vinInvoiceId(),request.vinPortalInvoiceId(),serial,number);
         if (already!=null && already>0)
             throw new ResponseStatusException(HttpStatus.CONFLICT,"Hóa đơn này đã được xuất kho; không trừ kho hai lần.");
 
@@ -295,18 +516,23 @@ public class InvoiceStockOutService {
         UUID dispatchId=UUID.randomUUID();
         String summary;
         try {
-            summary=json.writeValueAsString(Map.of("documentId",request.documentId(),
-                    "lines",request.lines(),"ocrItems",doc.items,
-                    "ocrWarnings",doc.warnings));
+            Map<String,Object> snapshot=new LinkedHashMap<>();
+            snapshot.put("documentId",request.documentId());
+            snapshot.put("vinInvoiceId",request.vinInvoiceId());
+            snapshot.put("vinPortalInvoiceId",request.vinPortalInvoiceId());
+            snapshot.put("lines",request.lines());
+            snapshot.put("sourceItems",doc.items);
+            snapshot.put("sourceWarnings",doc.warnings);
+            summary=json.writeValueAsString(snapshot);
         } catch (Exception e) { throw new IllegalArgumentException("Không ghi được dữ liệu đối chiếu",e); }
         jdbc.update("""
             INSERT INTO public.inventory_invoice_stock_out
-             (id,tenant_id,company_id,invoice_desk_document_id,invoice_date,
+             (id,tenant_id,company_id,invoice_desk_document_id,vin_hoadon_invoice_id,vin_portal_invoice_id,invoice_date,
               invoice_serial,invoice_number,buyer_type,buyer_name,buyer_tax_id,
               buyer_address,export_type,vat_rate,invoice_subtotal,invoice_vat,
               invoice_total,source_sha256,reviewed_snapshot,confirmed_by)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?::jsonb,?)
-            """,dispatchId,scope.tenantId(),scope.companyId(),request.documentId(),date,
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?::jsonb,?)
+            """,dispatchId,scope.tenantId(),scope.companyId(),request.documentId(),request.vinInvoiceId(),request.vinPortalInvoiceId(),date,
             serial,number,buyerType,buyer,buyerTax,address,exportType,defaultVat,
             optionalMoney(doc.get("subtotal")),optionalMoney(doc.get("vat")),optionalMoney(doc.get("total")),
             doc.sha256,summary,scope.username());
