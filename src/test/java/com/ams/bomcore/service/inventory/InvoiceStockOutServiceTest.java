@@ -63,6 +63,7 @@ class InvoiceStockOutServiceTest {
                 "purchaseInvoiceNumber","PN-2026-01");
         when(jdbc.queryForList(
                 org.mockito.ArgumentMatchers.contains("SELECT DISTINCT m.inventory_id"),
+                eq(scope.tenantId()),eq(scope.companyId()),
                 eq(scope.tenantId()),eq(scope.companyId())))
                 .thenReturn(List.of(receipt));
         var result=service.inventorySuppliers(scope);
@@ -70,6 +71,11 @@ class InvoiceStockOutServiceTest {
         assertEquals("PN-2026-01",result.get(0).get("purchaseInvoiceNumber"));
         verify(jdbc).queryForList(
                 org.mockito.ArgumentMatchers.contains("m.reference_type='INVOICE'"),
+                eq(scope.tenantId()),eq(scope.companyId()),
+                eq(scope.tenantId()),eq(scope.companyId()));
+        verify(jdbc).queryForList(
+                org.mockito.ArgumentMatchers.contains("FROM public.nnc_legacy_purchase_line"),
+                eq(scope.tenantId()),eq(scope.companyId()),
                 eq(scope.tenantId()),eq(scope.companyId()));
         verifyNoInteractions(movements,repo);
     }

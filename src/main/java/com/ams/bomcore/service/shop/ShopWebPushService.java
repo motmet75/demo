@@ -127,8 +127,9 @@ public class ShopWebPushService {
      * PENDING QR orders do not have an assigned numeric sequence yet.
      */
     static String orderNotificationTitle(ShopOrderResponseDto order) {
-        Integer sequence = order.getDailySeq() != null
-                ? order.getDailySeq() : order.getOrderNumber();
+        // A zero or negative value is not an assigned sequence (no fake "STT 0").
+        Integer sequence = assignedSequence(order.getDailySeq()) != null
+                ? order.getDailySeq() : assignedSequence(order.getOrderNumber());
         String title = sequence == null ? "Đơn QR mới" : "STT " + sequence;
         String table = StringUtils.hasText(order.getTableName())
                 ? order.getTableName().trim() : order.getCustomerTableTag();
@@ -136,6 +137,10 @@ public class ShopWebPushService {
             title += " · Bàn " + table.trim();
         }
         return title;
+    }
+
+    private static Integer assignedSequence(Integer value) {
+        return value != null && value > 0 ? value : null;
     }
 
     static String orderNotificationBody(ShopOrderResponseDto order) {
