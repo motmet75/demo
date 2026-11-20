@@ -35,7 +35,7 @@ public final class LegacyExplicitRoutes {
             "/article.html", "/blog.html", "/gioi-thieu.html", "/about.html",
             "/gio-hang", "/dat-hang", "/don-hang-cua-toi", "/dat-hang-thanh-cong", "/lien-he.html",
             "/document", "/minhmapshop/", "/minhmapshop/product.html", "/business-profile/{endpoint}",
-            "/image/{endpoint}", "/file/{endpoint}", "/files/{endpoint}", "/preview/{endpoint}",
+            "/file/{endpoint}", "/files/{endpoint}", "/preview/{endpoint}",
             "/company/{endpoint}", "/article/{endpoint}", "/bai-viet/{endpoint}", "/blog/{endpoint}",
             "/doc/{endpoint}", "/api/**", "/cart/**",
             // other controllers
