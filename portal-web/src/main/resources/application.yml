@@ -15,3 +15,5 @@ portal:
     root: "${PORTAL_LIVE_ROOT:/opt/portal-live}"
   web:
     config-path: "${PORTAL_CONFIG_XML:/opt/tuonghoa/portal/xml/config.xml}"
+    # Read-only fallback for original public theme fragments and shared assets.
+    legacy-resources-root: "${PORTAL_LEGACY_RESOURCES_ROOT:/opt/tuonghoa/portal/src/main/resources}"
