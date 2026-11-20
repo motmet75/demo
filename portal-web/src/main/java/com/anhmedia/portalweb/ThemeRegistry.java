@@ -1,5 +1,7 @@
 package com.anhmedia.portalweb;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.w3c.dom.Document;
@@ -22,6 +24,7 @@ import java.util.Optional;
  */
 @Component
 public class ThemeRegistry {
+    private static final Logger log = LoggerFactory.getLogger(ThemeRegistry.class);
     private final Path configXml;
     private final Path liveTemplates;
 
@@ -33,7 +36,14 @@ public class ThemeRegistry {
 
     public Optional<Theme> findForHost(String host) {
         String domain = normalizeHost(host);
-        if (!domain.matches("[a-z0-9.-]+") || !Files.isRegularFile(configXml)) return Optional.empty();
+        if (!domain.matches("[a-z0-9.-]+")) {
+            log.warn("Portal web tenant: rejected invalid hostname '{}'", domain);
+            return Optional.empty();
+        }
+        if (!Files.isRegularFile(configXml)) {
+            log.error("Portal web tenant config missing: {}", configXml);
+            return Optional.empty();
+        }
         try (InputStream stream = Files.newInputStream(configXml)) {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
             factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
@@ -67,7 +77,11 @@ public class ThemeRegistry {
             }
             // A tenant not registered in xml/config.xml is never served, even
             // if an unrelated directory with the same name happens to exist.
-            if (folder == null) return Optional.empty();
+            if (folder == null) {
+                log.warn("Portal web tenant has no templateFolder: host={}, tenant={}, config={}",
+                        domain, tenant, configXml);
+                return Optional.empty();
+            }
             Path index = liveTemplates.resolve(folder).resolve("index.html").normalize();
             Path root = liveTemplates.resolve(folder + ".html").normalize();
             if (index.startsWith(liveTemplates) && Files.isRegularFile(index)) {
@@ -76,6 +90,9 @@ public class ThemeRegistry {
             if (root.startsWith(liveTemplates) && Files.isRegularFile(root)) {
                 return Optional.of(new Theme(domain, tenant, folder, folder));
             }
+            log.warn("Portal web tenant template missing: host={}, tenant={}, folder={}, indexExists={}, rootExists={}, templates={}",
+                    domain, tenant, folder, Files.isRegularFile(index),
+                    Files.isRegularFile(root), liveTemplates);
             return Optional.empty();
         } catch (Exception ex) {
             throw new IllegalStateException("Unable to resolve the Portal theme configuration", ex);
