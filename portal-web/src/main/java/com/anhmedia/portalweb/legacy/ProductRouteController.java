@@ -27,6 +27,12 @@ public class ProductRouteController {
         return view(list.render(request, session), model);
     }
 
+    /** GreetingController.sanpham(): products() with the "san-pham.html" page article. */
+    @GetMapping("/san-pham.html")
+    public Object sanPhamList(Model model, HttpServletRequest request, HttpSession session) {
+        return view(list.render(request, session, "san-pham.html"), model);
+    }
+
     @GetMapping({"/product/{endpoint}", "/product/{endpoint}/"})
     public Object product(@PathVariable String endpoint, Model model, HttpServletRequest request, HttpSession session) {
         return view(renderer.productPage(endpoint, request, session), model);

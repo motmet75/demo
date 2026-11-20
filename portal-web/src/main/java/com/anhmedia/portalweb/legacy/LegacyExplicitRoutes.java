@@ -25,7 +25,7 @@ public final class LegacyExplicitRoutes {
             "/order", "/profile", "/vietnamse-import-chart", "/forgotpassword", "/3dwarehouse",
             "/dang-xuat", "/topselling", "/article-search", "/single-product.html",
             "/productfilter", "/productpage", "/contact.html", "/videos.html",
-            "/marine.html", "/tin-tuc.html", "/one-product", "/san-pham.html", "/privacy-policy.html",
+            "/marine.html", "/tin-tuc.html", "/one-product", "/privacy-policy.html",
             "/terms-of-service.html", "/shipping-policy.html", "/return-policy.html",
             "/knowledge-center.html", "/guides/how-to-choose-marine-diesel-engine.html",
             "/guides/mitsubishi-vs-yanmar-marine-engines.html",

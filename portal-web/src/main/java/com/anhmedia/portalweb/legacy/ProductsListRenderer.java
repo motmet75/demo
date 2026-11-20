@@ -60,6 +60,11 @@ public class ProductsListRenderer {
     }
 
     public Optional<MenuPageRenderer.Page> render(HttpServletRequest request, HttpSession session) {
+        return render(request, session, null);
+    }
+
+    /** @param fixedPageLink "san-pham.html" for GreetingController.sanpham(); null = products() reading ?pageLink= */
+    public Optional<MenuPageRenderer.Page> render(HttpServletRequest request, HttpSession session, String fixedPageLink) {
         String domainString = site.domainString(request);
         String tenant = site.resolveTenantId(domainString);
         var db = databases.forTenant(tenant);
@@ -71,7 +76,7 @@ public class ProductsListRenderer {
         // @ModelAttribute addGlobalLanguageControls runs first (Model is a plain model here).
         Map<String, Object> model = new LinkedHashMap<>(home.globalLanguageControls(request, session));
 
-        String pageLink = request.getParameter("pageLink"); // unannotated String handler argument
+        String pageLink = fixedPageLink != null ? fixedPageLink : request.getParameter("pageLink"); // unannotated handler argument
         if (pageLink == null) pageLink = "products.html";
         model.put("activePage", "products");
         model.put("subpath", "");
