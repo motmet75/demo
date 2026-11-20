@@ -45,7 +45,7 @@ for host in domains:
             # templates/minhmapshop.html alongside theme/index.html.
             content = active.read_text(encoding="utf-8", errors="replace")
             fragment_names = sorted(set(re.findall(
-                r'th:(?:replace|insert|include)\\s*=\\s*["\\\']([\\w./-]+)\\s*::',
+                r"th:(?:replace|insert|include)\s*=\s*['\"]([\w./-]+)\s*::",
                 content
             )))
             for fragment in fragment_names:
