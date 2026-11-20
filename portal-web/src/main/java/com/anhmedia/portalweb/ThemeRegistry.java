@@ -120,6 +120,38 @@ public class ThemeRegistry {
         }
     }
 
+    /**
+     * GreetingController selected the homepage filename from articletb's
+     * articleTemplate, not a hard-coded theme/index. Do not allow any path
+     * outside the tenant's configured template folder.
+     */
+    public String viewForPage(Theme theme, String template, String language) {
+        String filename = template == null ? "" : template.trim();
+        if (filename.isEmpty() || "home".equalsIgnoreCase(filename)
+                || "home.html".equalsIgnoreCase(filename)) filename = "index.html";
+        if (filename.startsWith(theme.folder() + "/")) {
+            filename = filename.substring(theme.folder().length() + 1);
+        }
+        if (!filename.matches("[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*\\.html")
+                || filename.contains("..")) return theme.viewName();
+        if ("vi".equalsIgnoreCase(language)) {
+            String localized = filename.replaceFirst("\\.html$", "-vi.html");
+            if (templateExists(theme.folder(), localized)) filename = localized;
+        } else if ("en".equalsIgnoreCase(language)) {
+            String localized = filename.replaceFirst("\\.html$", "-en.html");
+            if (templateExists(theme.folder(), localized)) filename = localized;
+        }
+        if (!templateExists(theme.folder(), filename)) return theme.viewName();
+        return theme.folder() + "/" + filename.substring(0, filename.length() - ".html".length());
+    }
+
+    private boolean templateExists(String folder, String filename) {
+        Path live = liveTemplates.resolve(folder).resolve(filename).normalize();
+        Path old = legacyTemplates.resolve(folder).resolve(filename).normalize();
+        return (live.startsWith(liveTemplates) && Files.isRegularFile(live))
+                || (old.startsWith(legacyTemplates) && Files.isRegularFile(old));
+    }
+
     static String normalizeHost(String raw) {
         String value = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
         if (value.startsWith("www.")) value = value.substring(4);
