@@ -1,11 +1,14 @@
 package com.anhmedia.portalweb;
 
+import com.anhmedia.portalweb.legacy.LegacyLanguage;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
@@ -23,10 +26,12 @@ import java.util.Map;
 public class PublicWebsiteController {
     private final ThemeRegistry themes;
     private final PublicContentBridge content;
+    private final LegacyLanguage languages;
 
-    public PublicWebsiteController(ThemeRegistry themes, PublicContentBridge content) {
+    public PublicWebsiteController(ThemeRegistry themes, PublicContentBridge content, LegacyLanguage languages) {
         this.themes = themes;
         this.content = content;
+        this.languages = languages;
     }
 
     @GetMapping("/healthz")
@@ -34,13 +39,53 @@ public class PublicWebsiteController {
         return ResponseEntity.ok("portal-web:ok");
     }
 
-    @GetMapping({"/", "/home", "/index.html", "/trang-chu.html"})
-    public String home(HttpServletRequest request, Model model) {
+    /** GreetingController.rootPage. */
+    @GetMapping("/")
+    public String root() {
+        return "redirect:home";
+    }
+
+    /** GreetingController.home / index: Vietnamese visitors get /trang-chu.html. */
+    @GetMapping({"/home", "/index.html"})
+    public String homeRoute(HttpServletRequest request, HttpSession session, Model model) {
+        String lang = languages.resolveRequestedOrSessionLanguage(request, session);
+        if (LegacyLanguage.DEFAULT_LANGUAGE.equals(lang)) {
+            languages.setSessionLanguage(session, LegacyLanguage.DEFAULT_LANGUAGE);
+            return "redirect:/trang-chu.html";
+        }
+        return home(request, model, lang);
+    }
+
+    /** GreetingController.homeTrangChu: any other ?lang= goes back to /home. */
+    @GetMapping("/trang-chu.html")
+    public String trangChu(HttpServletRequest request, HttpSession session, Model model) {
+        String lang = languages.normalizeFrontendLanguageCode(request.getParameter("lang"));
+        if (lang != null && !LegacyLanguage.DEFAULT_LANGUAGE.equals(lang)) {
+            languages.setSessionLanguage(session, lang);
+            return "redirect:/home?lang=" + lang;
+        }
+        languages.setSessionLanguage(session, LegacyLanguage.DEFAULT_LANGUAGE);
+        return home(request, model, LegacyLanguage.DEFAULT_LANGUAGE);
+    }
+
+    /** GreetingController.setLanguage. */
+    @GetMapping("/setLanguage")
+    public String setLanguage(@RequestParam("lang") String languageCode,
+                              @RequestParam(value = "redirect", required = false) String redirectPath,
+                              HttpSession session) {
+        return "redirect:" + languages.setLanguageRedirect(languageCode, redirectPath, session);
+    }
+
+    /**
+     * Home content still comes from the Demo bridge snapshot (Phase 2 ports
+     * returnHomePage exactly). The snapshot only knows "vi" and "en".
+     */
+    private String home(HttpServletRequest request, Model model, String resolvedLanguage) {
         ThemeRegistry.Theme theme = themes.findForHost(request.getServerName())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "No live Portal theme mapped for host"));
 
-        String lang = "vi".equalsIgnoreCase(request.getParameter("lang")) ? "vi" : "en";
+        String lang = "vi".equals(resolvedLanguage) ? "vi" : "en";
         String flag = "/img/languageflags/" + lang + ".png";
         model.addAttribute("tenant", theme.tenant());
         model.addAttribute("tenantId", theme.tenant());

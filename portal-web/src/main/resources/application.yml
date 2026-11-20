@@ -4,6 +4,17 @@ server:
   address: "${PORTAL_WEB_BIND:127.0.0.1}"
   port: ${PORTAL_WEB_PORT:8083}
   forward-headers-strategy: framework
+  servlet:
+    session:
+      # Same domain as legacy Portal 8080: a JSESSIONID here would overwrite
+      # the 8080 session (login, cart). Keep a separate cookie name.
+      cookie:
+        name: PORTALWEBSESSION
+        http-only: true
+      timeout: 30m
+      # Cookie only: never rewrite links with ";PORTALWEBSESSION=..." (legacy
+      # Portal's Spring Security disables URL rewriting the same way).
+      tracking-modes: cookie
 spring:
   thymeleaf:
     cache: false
@@ -19,3 +30,12 @@ portal:
     legacy-resources-root: "${PORTAL_LEGACY_RESOURCES_ROOT:/opt/tuonghoa/portal/src/main/resources}"
     content-bridge-url: "${PORTAL_WEB_BRIDGE_URL:http://127.0.0.1:8081/sapi/internal/portal-public}"
     content-bridge-token: "${PORTAL_WEB_BRIDGE_TOKEN:}"
+    # Tenant id -> JDBC URL comes from the legacy tenant files (id/url only;
+    # their passwords are never read). Connections use the read-only role.
+    tenant-config-dir: "${PORTAL_TENANT_CONFIG_DIR:/opt/tuonghoa/portal/tenants/atRuntime}"
+    db:
+      username: "${PORTAL_WEB_DB_USERNAME:}"
+      password: "${PORTAL_WEB_DB_PASSWORD:}"
+    # Legacy frontend language detection may call this geo-IP API once per
+    # new visitor IP (24h cache), exactly like Portal 8080. Set false to skip.
+    geo-ip-lookup: "${PORTAL_WEB_GEO_IP_LOOKUP:true}"
