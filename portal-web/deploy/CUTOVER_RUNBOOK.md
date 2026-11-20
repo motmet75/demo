@@ -7,8 +7,10 @@ not ready for a blind full-domain cutover or shutdown of the Portal JAR.
 
 ## Architecture (Nginx existing public port mapping remains unchanged)
 
-* Public `https://anhmedia.vn/` and other registered tenants → **8083**
-  standalone `portal-web` (Spring Boot + Thymeleaf). DNS/domain and certificate stay as-is.
+* Public `https://anhmedia.vn/` and `www` → **8083** canary for standalone
+  `portal-web` (Spring Boot + Thymeleaf). Other registered tenant hostnames
+  **remain on 8080** until that tenant's dynamic routes are ported and verified.
+  DNS/domain and certificate stay as-is.
 * `/bom-inventory/login`, `/bom-inventory/admin/*` → Nginx static admin React build,
   served at `/var/www/html/bom-inventory/`.
 * `/bom-inventory/shop/*` → separate public customer React SPA build;
@@ -130,8 +132,9 @@ Confirm the real pages, forms, images and CSS **in a browser** and check
 network requests; HTTP 200 alone is not a content parity test.
 
 Do not change all tenant domains before a two-tenant parity check.
-If the site is missing product/article data, revert the public root
-route to 8080 and continue the backend/frontend migration.
+If the site is missing product/article data, revert the **anhmedia.vn** canary
+root route to 8080 and continue the backend/frontend migration. A 200 HTML
+response is not enough. Do not route all other tenants to 8083 yet.
 
 ## 5. Modules to migrate, one by one
 
