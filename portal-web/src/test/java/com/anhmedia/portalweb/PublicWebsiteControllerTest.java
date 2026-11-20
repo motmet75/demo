@@ -29,7 +29,9 @@ class PublicWebsiteControllerTest {
                 """);
 
         ThemeRegistry registry = new ThemeRegistry(xml.toString(), live.toString(), legacy.toString());
-        PublicWebsiteController controller = new PublicWebsiteController(registry);
+        PublicContentBridge bridge = new PublicContentBridge(
+                "http://127.0.0.1:8081/sapi/internal/portal-public", "");
+        PublicWebsiteController controller = new PublicWebsiteController(registry, bridge);
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/");
         request.setServerName("nncminhchau.vn");
         ExtendedModelMap model = new ExtendedModelMap();
