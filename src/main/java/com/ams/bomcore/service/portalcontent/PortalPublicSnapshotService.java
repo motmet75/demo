@@ -188,6 +188,7 @@ public class PortalPublicSnapshotService {
                 "articleCategory", str(row,"articlecategory"),
                 "articleSubCategory", str(row,"articlesubcategory"),
                 "articleDescription", str(row,"articledescription"),
+                "articleContent", str(row,"articlecontent"),
                 "articleThumnailURL", image, "articleThumnailURLWithHost2", thumb,
                 "articleLangCode", str(row,"articlelangcode"),
                 "articleTime", date(row,"articletime"),
