@@ -1,0 +1,17 @@
+# Isolated public website process. No Redis, JPA, Vaadin, or admin sessions.
+# Keep files under /opt/portal-live and the live server config unchanged.
+server:
+  address: "${PORTAL_WEB_BIND:127.0.0.1}"
+  port: ${PORTAL_WEB_PORT:8083}
+  forward-headers-strategy: framework
+spring:
+  thymeleaf:
+    cache: false
+  web:
+    resources:
+      add-mappings: false
+portal:
+  live:
+    root: "${PORTAL_LIVE_ROOT:/opt/portal-live}"
+  web:
+    config-path: "${PORTAL_CONFIG_XML:/opt/tuonghoa/portal/xml/config.xml}"
