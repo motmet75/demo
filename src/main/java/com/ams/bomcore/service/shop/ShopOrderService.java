@@ -2905,6 +2905,7 @@ public class ShopOrderService {
         public void setQuantity(BigDecimal v) { this.quantity = v; }
         public void setSelectedOptions(String v) { this.selectedOptions = v; }
         public void setItemNotes(String v) { this.itemNotes = v; }
+        @com.fasterxml.jackson.annotation.JsonAlias("displayName")
         public void setDisplayNameOverride(String v) { this.displayNameOverride = v; }
         public void setUnitPriceOverride(BigDecimal v) { this.unitPriceOverride = v; }
         public void setSideItems(List<ItemRequest> v) { this.sideItems = v; }
