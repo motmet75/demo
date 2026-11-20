@@ -37,6 +37,50 @@ curl -i -H 'Host: anhmedia.vn' http://127.0.0.1:8083/
 curl -I -H 'Host: anhmedia.vn' http://127.0.0.1:8083/anhmedia.vn/css/anhmedia-live-2026.css
 ```
 
+## Compatibility fixes for existing live customer themes (Nov 2026)
+
+This renderer selects the theme from the existing XML `templateFolder` mapping;
+the folder can be different from the hostname (e.g. `nlsjsc.com` →
+`nlsjsc-yanmar`). Theme lookup and Thymeleaf fragment/asset loading prefer:
+
+1. `/opt/portal-live/templates` and `/opt/portal-live/static`
+2. Original Portal's **read-only** public resource folders:
+   `/opt/tuonghoa/portal/src/main/resources/templates` and `static`
+
+Set `PORTAL_LEGACY_RESOURCES_ROOT` if the original Portal resources are in a
+different location. This fallback can render `tuonghoa-imex.com/index.html`
+without copying the original source into `portal-live`, and can serve
+`/img/languageflags/en.png` from the original public static directory.
+The original resource directory must be readable by the `8083` service user.
+
+The homepage controller now supplies **compatibility-only empty** values for
+existing template attributes (including `client`, `catalogs`,
+`productsWithVideos`, `partners`, `projectMenuEntities`, and
+`languageOptions`). It does **not** load real tenant products, articles,
+banners, prices, client contact details or translations. Full functionality
+still requires a read-only tenant-aware backend. Avoid treating HTTP 200 as
+proof of migration completeness.
+
+Some older live HTML includes malformed font-awesome URLs with the literal
+string `${domain}`. Fix these **only in the live theme that has the issue**:
+
+```bash
+python3 portal-web/deploy/repair-nncminhchau-fontawesome.py
+python3 portal-web/deploy/repair-nncminhchau-fontawesome.py --apply
+```
+
+The script first prints the targeted changes, and `--apply` creates a backup
+for each changed file. It does not replace other customer theme content.
+
+Verification from EC2 (keep port 8080 running during migration):
+
+```bash
+curl -sS -o /tmp/nnc-8083.html -w '%{http_code} %{size_download}\n' -H 'Host: nncminhchau.vn' http://127.0.0.1:8083/
+curl -I -H 'Host: nncminhchau.vn' http://127.0.0.1:8083/img/languageflags/en.png
+curl -I -H 'Host: nncminhchau.vn' http://127.0.0.1:8083/portal.tuonghoa-imex.com/fontawesome/css/all.min.css
+curl -sS -o /tmp/th-8083.html -w '%{http_code} %{size_download}\n' -H 'Host: tuonghoa-imex.com' http://127.0.0.1:8083/
+```
+
 ## IMPORTANT: production blockers before redirecting domain traffic
 
 1. Port `GreetingController` page models and routes (home, article/product list/detail, cart, auth), preserving tenant-specific behavior and SEO.
