@@ -78,6 +78,26 @@ class ThemeRegistryTest {
     }
 
     @Test
+    void selectsDatabaseConfiguredHomeTemplateWithLanguageAndBlocksTraversal() throws Exception {
+        Path root = temp.resolve("portal-live");
+        Files.createDirectories(root.resolve("templates/minhmapshop.com"));
+        Files.writeString(root.resolve("templates/minhmapshop.com/index.html"), "default");
+        Files.writeString(root.resolve("templates/minhmapshop.com/landing.html"), "dynamic");
+        Files.writeString(root.resolve("templates/minhmapshop.com/landing-vi.html"), "translated");
+        Path config = temp.resolve("config.xml");
+        Files.writeString(config, """
+                <configs><config name="templateFolder" tenantId="minhmapshop.com">
+                  <language code="en">minhmapshop.com</language>
+                </config></configs>
+                """);
+        ThemeRegistry registry = new ThemeRegistry(config.toString(), root.toString());
+        var theme = registry.findForHost("minhmapshop.com").orElseThrow();
+        assertEquals("minhmapshop.com/landing-vi", registry.viewForPage(theme, "landing.html", "vi"));
+        assertEquals("minhmapshop.com/landing", registry.viewForPage(theme, "landing.html", "en"));
+        assertEquals("minhmapshop.com/index", registry.viewForPage(theme, "../../secret.html", "en"));
+    }
+
+    @Test
     void rejectsUnsafeThemeFolderAndUnknownHost() throws Exception {
         Path root = temp.resolve("portal-live");
         Files.createDirectories(root.resolve("templates"));
