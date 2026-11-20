@@ -6,6 +6,7 @@ import com.anhmedia.portalweb.legacy.entity.ProductBrand;
 import com.anhmedia.portalweb.legacy.entity.ProductCatalog;
 import com.anhmedia.portalweb.legacy.entity.ProductColor;
 import com.anhmedia.portalweb.legacy.entity.ProductGroup;
+import com.anhmedia.portalweb.legacy.entity.ProductHtml;
 import com.anhmedia.portalweb.legacy.entity.ProductPrice;
 import com.anhmedia.portalweb.legacy.entity.ProductSize;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -227,6 +228,13 @@ public class LegacyProductRepository {
     public List<ProductColor> getAllProductColor() {
         return new ArrayList<>(db.query("SELECT * FROM productcolortb m WHERE m.isvisible = true ORDER BY m.id DESC",
                 LegacyRowMapper.of(ProductColor.class)));
+    }
+
+    /** ProductHtmlRepository.getProductHtmlByGroup ("active" index first). No visible filter in legacy either. */
+    public List<ProductHtml> getProductHtmlByGroup(String groupCode, String productCode) {
+        return new ArrayList<>(db.query("SELECT * FROM producthtmltb p WHERE p.producthtmlgroup = ? AND p.productcode = ?"
+                        + " ORDER BY CASE WHEN LOWER(p.index) = 'active' THEN 0 ELSE 1 END, p.index ASC",
+                LegacyRowMapper.of(ProductHtml.class), groupCode, productCode));
     }
 
     /** "SELECT pp FROM ProductPrice pp JOIN Product p ON pp.productCode = p.productCode WHERE pp.visible = true" (no ORDER BY). */

@@ -38,11 +38,19 @@ public class LegacyProductService {
     private Map<String, List<ProductSize>> sizesByCode;
     private Map<String, List<ProductColor>> colorsByCode;
     private Map<String, List<ProductPrice>> pricesByCode;
+    private final LegacyGlobalState global;
 
     public LegacyProductService(LegacyProductRepository repo, String tenant) {
+        this(repo, tenant, null);
+    }
+
+    public LegacyProductService(LegacyProductRepository repo, String tenant, LegacyGlobalState global) {
         this.repo = repo;
         this.tenant = tenant;
+        this.global = global;
     }
+
+    public LegacyProductRepository repository() { return repo; }
 
     // ---- ProductCatalogService / ProductBrandService / ProductGroupService / PartnerService ----
 
@@ -99,9 +107,13 @@ public class LegacyProductService {
     public void MapColorsAndPrices(List<Product> inputedList) {
         if (inputedList == null || inputedList.isEmpty()) return;
         if (sizesByCode == null) {
-            sizesByCode = repo.getAllProductSize().stream().collect(Collectors.groupingBy(ProductSize::getProductCode));
-            colorsByCode = repo.getAllProductColor().stream().collect(Collectors.groupingBy(ProductColor::getProductCode));
-            pricesByCode = repo.getAllProductPrice().stream()
+            List<ProductSize> allSizes = repo.getAllProductSize();
+            List<ProductColor> allColors = repo.getAllProductColor();
+            List<ProductPrice> allPrices = repo.getAllProductPrice();
+            if (global != null) global.reapply(tenant, allSizes, allColors, allPrices);
+            sizesByCode = allSizes.stream().collect(Collectors.groupingBy(ProductSize::getProductCode));
+            colorsByCode = allColors.stream().collect(Collectors.groupingBy(ProductColor::getProductCode));
+            pricesByCode = allPrices.stream()
                     .peek(price -> price.setTenantId(tenant))
                     .collect(Collectors.groupingBy(ProductPrice::getProductCode));
         }
@@ -249,6 +261,29 @@ public class LegacyProductService {
                 product.setProductImageDesUrl(Utilities.appendResolutionToFilename(product.getProductImageDesUrl(), "_rslt_300x300"));
             }
         }
+    }
+
+    /** getProductByPath: the legacy product cache is never filled, so this is always the DB lookup. */
+    public Product getProductByPath(String path) {
+        List<Product> found = repo.findByPath(path);
+        if (found.isEmpty()) return new Product();
+        List<Product> one = new LinkedList<>();
+        one.add(found.get(0));
+        mapped(one);
+        return one.get(0);
+    }
+
+    /** getRelatedProduct: up to `size` products per "#sub-catalog" of the product, concatenated. */
+    public List<Product> getRelatedProduct(Product product, int page, int size) {
+        List<Product> related = new LinkedList<>();
+        for (String sub : product.getProductSubCatalog().split("#")) {
+            if (sub.length() > 2) {
+                related = java.util.stream.Stream.concat(related.stream(),
+                                repo.getTopRelatedProducts("#" + sub, page, size).stream())
+                        .distinct().collect(Collectors.toList());
+            }
+        }
+        return mapped(related);
     }
 
     public String tenant() { return tenant; }
