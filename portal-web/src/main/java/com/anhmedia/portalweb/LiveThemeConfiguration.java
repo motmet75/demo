@@ -18,9 +18,13 @@ import java.nio.file.Path;
 @Configuration
 public class LiveThemeConfiguration implements WebMvcConfigurer {
     private final String themeRoot;
+    private final String legacyResourcesRoot;
 
-    public LiveThemeConfiguration(@Value("${portal.live.root:/opt/portal-live}") String root) {
+    public LiveThemeConfiguration(
+            @Value("${portal.live.root:/opt/portal-live}") String root,
+            @Value("${portal.web.legacy-resources-root:/opt/tuonghoa/portal/src/main/resources}") String legacyRoot) {
         this.themeRoot = Path.of(root).toAbsolutePath().normalize().toString();
+        this.legacyResourcesRoot = Path.of(legacyRoot).toAbsolutePath().normalize().toString();
     }
 
     @Bean
@@ -37,12 +41,35 @@ public class LiveThemeConfiguration implements WebMvcConfigurer {
         return resolver;
     }
 
+    /**
+     * The old Portal stores shared fragments such as nncminhchau.html and
+     * tuonghoaimex.html in its packaged resource tree. Use them only when
+     * no live template of the same name exists.
+     */
+    @Bean
+    SpringResourceTemplateResolver legacyPortalTemplateResolver(ApplicationContext context) {
+        SpringResourceTemplateResolver resolver = new SpringResourceTemplateResolver();
+        resolver.setApplicationContext(context);
+        resolver.setPrefix("file:" + legacyResourcesRoot + "/templates/");
+        resolver.setSuffix(".html");
+        resolver.setTemplateMode(TemplateMode.HTML);
+        resolver.setCharacterEncoding("UTF-8");
+        resolver.setCacheable(false);
+        resolver.setCheckExistence(true);
+        resolver.setOrder(1);
+        return resolver;
+    }
+
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        // Theme paths are already used in HTML: /anhmedia.vn/css/site.css, etc.
-        // Only content inside /opt/portal-live/static is publicly exposed.
+        // Live assets take priority. Original packaged assets are a read-only
+        // fallback for shared paths such as /img/languageflags/en.png and
+        // /portal.tuonghoa-imex.com/fontawesome/css/all.min.css.
+        // These directories contain public assets, not tenant credentials.
         registry.addResourceHandler("/**")
-                .addResourceLocations("file:" + themeRoot + "/static/")
+                .addResourceLocations(
+                        "file:" + themeRoot + "/static/",
+                        "file:" + legacyResourcesRoot + "/static/")
                 .setCachePeriod(300);
     }
 }
