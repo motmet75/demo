@@ -14,6 +14,7 @@ import {
   savePortalArticle, savePortalProduct
 } from '../../api/portalContentApi'
 import PortalMediaSchedulePanel from './PortalMediaSchedulePanel'
+import { usePhone } from '../../components/usePhone'
 
 const emptyArticle = {
   title: '', articleLink: '', category: 'blog', subCategory: 'none', language: 'vi',
@@ -40,8 +41,9 @@ function Flags({ value, onChange, product = false }) {
 }
 
 function ArticleEditor({ open, value, onChange, onClose, onSave, saving }) {
+  const phone = usePhone()
   const set = key => event => onChange({ ...value, [key]: event.target.value })
-  return <Dialog open={open} onClose={saving ? undefined : onClose} fullWidth maxWidth="lg">
+  return <Dialog open={open} onClose={saving ? undefined : onClose} fullWidth maxWidth="lg" fullScreen={phone}>
     <DialogTitle>{value.id ? `Edit article #${value.id}` : 'New article'}</DialogTitle>
     <DialogContent><Stack spacing={2} sx={{ pt: 1 }}>
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
@@ -65,9 +67,10 @@ function ArticleEditor({ open, value, onChange, onClose, onSave, saving }) {
 }
 
 function ProductEditor({ open, value, onChange, onClose, onSave, saving }) {
+  const phone = usePhone()
   const set = key => event => onChange({ ...value, [key]: event.target.value })
   const number = key => event => onChange({ ...value, [key]: Number(event.target.value) || 0 })
-  return <Dialog open={open} onClose={saving ? undefined : onClose} fullWidth maxWidth="lg">
+  return <Dialog open={open} onClose={saving ? undefined : onClose} fullWidth maxWidth="lg" fullScreen={phone}>
     <DialogTitle>{value.id ? `Edit product #${value.id}` : 'New product'}</DialogTitle>
     <DialogContent><Stack spacing={2} sx={{ pt: 1 }}>
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>

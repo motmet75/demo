@@ -11,6 +11,7 @@ import {
   cancelPortalSchedule, createPortalSchedule, fetchPortalFacebookPages,
   fetchPortalProducts, fetchPortalSchedules
 } from '../../api/portalContentApi'
+import { usePhone } from '../../components/usePhone'
 
 const ACTIONS = [
   { value: 'post_facebook_multi_image', label: 'Facebook · images', video: false, facebook: true },
@@ -45,6 +46,7 @@ function defaultMessage(product, page, tenant) {
 }
 
 function ScheduleDialog({ open, tenant, onClose, onCreated }) {
+  const phone = usePhone()
   const [products, setProducts] = useState([])
   const [pages, setPages] = useState([])
   const [loading, setLoading] = useState(false)
@@ -115,7 +117,7 @@ function ScheduleDialog({ open, tenant, onClose, onCreated }) {
     finally { setSaving(false) }
   }
 
-  return <Dialog open={open} onClose={saving ? undefined : onClose} fullWidth maxWidth="md">
+  return <Dialog open={open} onClose={saving ? undefined : onClose} fullWidth maxWidth="md" fullScreen={phone}>
     <DialogTitle>Schedule media post</DialogTitle>
     <DialogContent>
       {loading ? <Box sx={{ py: 6, textAlign: 'center' }}><CircularProgress /></Box> : <Stack spacing={2} sx={{ pt: 1 }}>
