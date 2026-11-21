@@ -26,6 +26,8 @@ import BomPage from './features/bom/BomPage'
 import { AppProvider } from './context/AppContext'
 import { AuthProvider } from './context/AuthContext'
 import { useAuth } from './context/useAuth'
+import StaffHomeButton from './components/StaffHomeButton'
+import { useRememberLastView } from './components/lastView'
 import { TenantListProvider } from './context/TenantListContext'
 import TenantSelector from './components/TenantSelector'
 import CompanySelector from './components/CompanySelector'
@@ -523,6 +525,7 @@ function HomeRedirect({ user }) {
 
 function MainShell({ user, logout, isAdmin, isSuperAdmin, hasFullBusinessAccess, hasShopOrderingAccess, hasCounterAccess }) {
   const [collapsed, setCollapsed] = useState(false)
+  useRememberLastView()
   return (
     <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       {user && <Sidebar
@@ -602,10 +605,11 @@ function AppShell() {
         <Route path="/shop/booking" element={<ShopBookingPage />} />
         <Route path="/shop/queue" element={<ShopQueuePage />} />
         <Route path="/shop/order/:orderCode" element={<ShopOrderStatusPage />} />
-        <Route path="/shop/board" element={<DisplayBoardPage />} />
-        <Route path="/shop/customer-board" element={<CustomerBoardPage />} />
+        {/* Full-screen staff screens: floating Home button (no header/sidebar here) */}
+        <Route path="/shop/board" element={<><DisplayBoardPage /><StaffHomeButton /></>} />
+        <Route path="/shop/customer-board" element={<><CustomerBoardPage /><StaffHomeButton /></>} />
         <Route path="/shop/pickup/:orderCode" element={<CustomerPickupPage />} />
-        <Route path="/shop/counter" element={<CounterDisplayPage />} />
+        <Route path="/shop/counter" element={<><CounterDisplayPage /><StaffHomeButton /></>} />
         <Route path="/*" element={<MainShell
           user={user}
           logout={logout}

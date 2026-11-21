@@ -62,18 +62,21 @@ function ScheduleDialog({ open, tenant, onClose, onCreated }) {
   useEffect(() => {
     if (!open || !tenant) return
     let cancelled = false
-    setLoading(true); setError(''); setProduct(null); setMessage(''); setImages(''); setVideoId('')
-    setWhen(vietnamNowPlus(5))
-    Promise.all([fetchPortalProducts(tenant, ''), fetchPortalFacebookPages(tenant)])
-      .then(([productRows, pageRows]) => {
-        if (cancelled) return
-        setProducts(Array.isArray(productRows) ? productRows : [])
-        setPages(Array.isArray(pageRows) ? pageRows : [])
-        setPageId(pageRows?.[0]?.pageId || '')
-      })
-      .catch(e => !cancelled && setError(e.message || 'Cannot load products'))
-      .finally(() => !cancelled && setLoading(false))
-    return () => { cancelled = true }
+    // Reset and load after the dialog opens (deferred, like PortalContentPage's tenant load).
+    const timer = window.setTimeout(() => {
+      setLoading(true); setError(''); setProduct(null); setMessage(''); setImages(''); setVideoId('')
+      setWhen(vietnamNowPlus(5))
+      Promise.all([fetchPortalProducts(tenant, ''), fetchPortalFacebookPages(tenant)])
+        .then(([productRows, pageRows]) => {
+          if (cancelled) return
+          setProducts(Array.isArray(productRows) ? productRows : [])
+          setPages(Array.isArray(pageRows) ? pageRows : [])
+          setPageId(pageRows?.[0]?.pageId || '')
+        })
+        .catch(e => !cancelled && setError(e.message || 'Cannot load products'))
+        .finally(() => !cancelled && setLoading(false))
+    }, 0)
+    return () => { cancelled = true; window.clearTimeout(timer) }
   }, [open, tenant])
 
   const page = pages.find(p => p.pageId === pageId)
@@ -187,7 +190,10 @@ export default function PortalMediaSchedulePanel({ tenant, onNotice, onError }) 
     finally { setLoading(false) }
   }, [tenant, onError])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    const timer = window.setTimeout(load, 0)
+    return () => window.clearTimeout(timer)
+  }, [load])
 
   const cancel = async row => {
     if (!window.confirm(`Cancel "${row.name}"?`)) return
