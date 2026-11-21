@@ -15,6 +15,9 @@ import {
 } from '../../api/portalContentApi'
 import PortalMediaSchedulePanel from './PortalMediaSchedulePanel'
 import { usePhone } from '../../components/usePhone'
+import { useSearchParams } from 'react-router-dom'
+
+const TAB_KEYS = ['articles', 'products', 'media']
 
 const emptyArticle = {
   title: '', articleLink: '', category: 'blog', subCategory: 'none', language: 'vi',
@@ -109,7 +112,9 @@ function ProductEditor({ open, value, onChange, onClose, onSave, saving }) {
 export default function PortalContentPage() {
   const [tenants, setTenants] = useState([])
   const [tenant, setTenant] = useState('')
-  const [tab, setTab] = useState(0)
+  // The tab lives in the URL (?tab=articles|products|media) so menu links open it directly.
+  const [params, setParams] = useSearchParams()
+  const tab = Math.max(0, TAB_KEYS.indexOf(params.get('tab')))
   const [search, setSearch] = useState('')
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
@@ -125,7 +130,6 @@ export default function PortalContentPage() {
       setTenants(Array.isArray(result) ? result : [])
       const selected = result?.includes('migiatruyen.vn') ? 'migiatruyen.vn' : result?.[0] || ''
       setTenant(selected)
-      setRows(selected ? await fetchPortalArticles(selected, '') : [])
     } catch (e) { setError(e.message || 'Cannot load Portal tenants') }
     finally { setLoading(false) }
   }, [])
@@ -147,15 +151,20 @@ export default function PortalContentPage() {
     finally { setLoading(false) }
   }, [tenant, tab, search])
 
-  const switchTenant = event => {
-    const value = event.target.value
-    setTenant(value); setSearch(''); setRows([]); setDraft(null)
-    loadRows(value, tab, '')
-  }
-  const switchTab = (_, value) => {
-    setTab(value); setSearch(''); setRows([]); setDraft(null)
-    loadRows(tenant, value, '')
-  }
+  // Load the list whenever the website or the tab (from the URL) changes.
+  useEffect(() => {
+    if (!tenant) return
+    const timer = window.setTimeout(() => {
+      setSearch(''); setRows([]); setDraft(null)
+      loadRows(tenant, tab, '')
+    }, 0)
+    return () => window.clearTimeout(timer)
+    // loadRows is recreated on every search keystroke; only tenant/tab changes reload.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenant, tab])
+
+  const switchTenant = event => setTenant(event.target.value)
+  const switchTab = (_, value) => setParams({ tab: TAB_KEYS[value] })
   const edit = row => setDraft({ ...row })
   // New items copy the classification of the newest existing item, so they land in
   // the same catalog/group/category as this website's other content.

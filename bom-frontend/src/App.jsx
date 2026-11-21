@@ -262,11 +262,18 @@ const BOTTOM_ITEMS = [
   { label: 'Profile', path: '/profile', icon: '👤' },
 ]
 
+// Website (Portal) content for admins: shown first in the menu so it is easy to
+// reach on phones (the admin block at the bottom is below the fold on iPhone).
+const WEBSITE_GROUP = { key: 'website', label: 'Website', icon: '📰', defaultExpanded: true, items: [
+  { label: 'Đăng sản phẩm', path: '/admin/portal-content?tab=products', icon: '🛒' },
+  { label: 'Lịch đăng mạng xã hội', path: '/admin/portal-content?tab=media', icon: '📅' },
+  { label: 'Đăng bài viết', path: '/admin/portal-content?tab=articles', icon: '📰' },
+] }
+
 const ADMIN_ITEMS = [
   { label: 'Nhật ký thay đổi', path: '/audit-history', icon: '📋', roles: ADMIN_MANAGEMENT_ROLES },
   { label: 'Admin',   path: '/admin',   icon: '🔧', roles: ADMIN_MANAGEMENT_ROLES },
   { label: 'GDT Quotas', path: '/admin/gdt-quotas', icon: '🎛️', roles: SUPER_ADMIN_ROLES },
-  { label: 'Website Content', path: '/admin/portal-content', icon: '📰', roles: ADMIN_MANAGEMENT_ROLES },
   { label: 'Tenants', path: '/tenants', icon: '🏗️', roles: SUPER_ADMIN_ROLES },
   { label: 'ETL',     path: '/etl',     icon: '🔬', roles: SUPER_ADMIN_ROLES },
 ]
@@ -321,7 +328,7 @@ function NavGroup({ group, collapsed }) {
   const [expanded, setExpanded] = useState(() => {
     const stored = sessionStorage.getItem(storageKey)
     if (stored !== null) return stored === 'true'
-    return hasActiveChild
+    return hasActiveChild || Boolean(group.defaultExpanded)
   })
 
   const toggle = () => {
@@ -404,7 +411,7 @@ function Sidebar({ collapsed, onToggle, user, isAdmin, isSuperAdmin, hasFullBusi
     next.has(path) ? next.delete(path) : next.add(path)
     return next
   })
-  const visibleGroups = roleGroups
+  const visibleGroups = (isAdmin ? [WEBSITE_GROUP, ...roleGroups] : roleGroups)
     .map(group => ({ ...group, items: group.items.filter(item => !hiddenPaths.has(item.path)) }))
     .filter(group => group.items.length)
   const visibleAdminItems = ADMIN_ITEMS.filter(item => {
@@ -417,7 +424,7 @@ function Sidebar({ collapsed, onToggle, user, isAdmin, isSuperAdmin, hasFullBusi
       flexShrink: 0,
       display: 'flex',
       flexDirection: 'column',
-      height: '100vh',
+      height: '100dvh',
       position: 'sticky',
       top: 0,
       background: '#f8f9fa',
@@ -527,7 +534,7 @@ function MainShell({ user, logout, isAdmin, isSuperAdmin, hasFullBusinessAccess,
   const [collapsed, setCollapsed] = useState(false)
   useRememberLastView()
   return (
-    <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+    <Box sx={{ display: 'flex', height: '100dvh', overflow: 'hidden' }}>
       {user && <Sidebar
         collapsed={collapsed}
         onToggle={() => setCollapsed(c => !c)}
