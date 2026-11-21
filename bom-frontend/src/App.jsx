@@ -263,11 +263,18 @@ const BOTTOM_ITEMS = [
   { label: 'Profile', path: '/profile', icon: '👤' },
 ]
 
+// Website (Portal) content for admins: shown first in the menu so it is easy to
+// reach on phones (the admin block at the bottom is below the fold on iPhone).
+const WEBSITE_GROUP = { key: 'website', label: 'Website', icon: '📰', defaultExpanded: true, items: [
+  { label: 'Đăng sản phẩm', path: '/admin/portal-content?tab=products', icon: '🛒' },
+  { label: 'Lịch đăng mạng xã hội', path: '/admin/portal-content?tab=media', icon: '📅' },
+  { label: 'Đăng bài viết', path: '/admin/portal-content?tab=articles', icon: '📰' },
+] }
+
 const ADMIN_ITEMS = [
   { label: 'Nhật ký thay đổi', path: '/audit-history', icon: '📋', roles: ADMIN_MANAGEMENT_ROLES },
   { label: 'Admin',   path: '/admin',   icon: '🔧', roles: ADMIN_MANAGEMENT_ROLES },
   { label: 'GDT Quotas', path: '/admin/gdt-quotas', icon: '🎛️', roles: SUPER_ADMIN_ROLES },
-  { label: 'Website Content', path: '/admin/portal-content', icon: '📰', roles: ADMIN_MANAGEMENT_ROLES },
   { label: 'Tenants', path: '/tenants', icon: '🏗️', roles: SUPER_ADMIN_ROLES },
   { label: 'ETL',     path: '/etl',     icon: '🔬', roles: SUPER_ADMIN_ROLES },
 ]
@@ -392,6 +399,11 @@ function Sidebar({ collapsed, onToggle, user, isAdmin, isSuperAdmin, hasFullBusi
       : hasAnyRole(user, ['ROLE_INVOICE_DESK'])
         ? [{ key: 'invoice', label: 'Hóa đơn', items: [{ label: 'Xử lý hóa đơn', path: '/invoice-desk', icon: 'PDF' }] }]
         : []
+  // WEBSITE_GROUP (Website Content admin: articles/products/media schedule)
+  // is shown first for admins, but only for the standard workspace -- a
+  // tenant-specific preset (e.g. VTTCC) is a deliberately curated menu and
+  // should not gain an unrelated admin section.
+  const groupsWithWebsite = !tenantPreset && isAdmin ? [WEBSITE_GROUP, ...roleGroups] : roleGroups
   const navPrefKey = `bom.nav.hidden.${user?.username || 'anonymous'}`
   const [hiddenPaths, setHiddenPaths] = useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem(navPrefKey) || '[]')) } catch { return new Set() }
@@ -405,7 +417,7 @@ function Sidebar({ collapsed, onToggle, user, isAdmin, isSuperAdmin, hasFullBusi
     next.has(path) ? next.delete(path) : next.add(path)
     return next
   })
-  const visibleGroups = roleGroups
+  const visibleGroups = groupsWithWebsite
     .map(group => ({ ...group, items: group.items.filter(item => !hiddenPaths.has(item.path)) }))
     .filter(group => group.items.length)
   const visibleAdminItems = ADMIN_ITEMS.filter(item => {
