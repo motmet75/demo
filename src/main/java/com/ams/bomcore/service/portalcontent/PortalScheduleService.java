@@ -64,7 +64,7 @@ public class PortalScheduleService {
                        l.targetusername, l.targetaccountid
                   FROM appscheduletb s
                   LEFT JOIN schedulelogtb l
-                    ON s.actionvalue ~ '^[0-9]+$' AND l.id = CAST(s.actionvalue AS bigint)
+                    ON l.id = CASE WHEN s.actionvalue ~ '^[0-9]{1,18}$' THEN CAST(s.actionvalue AS bigint) END
                  WHERE s.isvisible = true AND s.scheduletype = 'SOCIAL_POST'
                  ORDER BY s.starttime DESC NULLS LAST, s.id DESC
                  LIMIT 300
