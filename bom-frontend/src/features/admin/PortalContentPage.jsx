@@ -9,6 +9,7 @@ import {
 import HtmlEditor from '../../components/HtmlEditor'
 import PortalMediaSchedulePanel from './PortalMediaSchedulePanel'
 import PortalGroupPostPanel from './PortalGroupPostPanel'
+import PortalLazyCreateDialog from './PortalLazyCreateDialog'
 import AddIcon from '@mui/icons-material/Add'
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh'
 import EditIcon from '@mui/icons-material/Edit'
@@ -319,6 +320,7 @@ export default function PortalContentPage() {
   const [brands, setBrands] = useState([])
   const [catalogs, setCatalogs] = useState([])
   const [groups, setGroups] = useState([])
+  const [lazyOpen, setLazyOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -435,6 +437,7 @@ export default function PortalContentPage() {
         {tab < 2 && <TextField label={`Search ${title.toLowerCase()}`} value={search} onChange={event => setSearch(event.target.value)} onKeyDown={event => event.key === 'Enter' && loadRows()} sx={{ flex: 1 }} />}
         {tab < 2 && <Button startIcon={<RefreshIcon />} onClick={() => loadRows()} disabled={!tenant || loading}>Load</Button>}
         {tab < 2 && <Button variant="contained" startIcon={<AddIcon />} onClick={create} disabled={!tenant}>New {tab === 0 ? 'article' : 'product'}</Button>}
+        {tab === 1 && <Button variant="contained" color="secondary" onClick={() => setLazyOpen(true)} disabled={!tenant}>Tạo nhanh + đăng bài</Button>}
       </Stack>
       <Tabs value={tab} onChange={switchTab} sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
         <Tab label="Articles" /><Tab label="Products" /><Tab label="Media schedule" /><Tab label="Group posts" />
@@ -460,6 +463,13 @@ export default function PortalContentPage() {
       </>}
     </CardContent></Card>
     <ArticleEditor open={tab === 0 && Boolean(draft)} value={draft || emptyArticle} onChange={setDraft} onClose={() => setDraft(null)} onSave={save} saving={saving} rows={tab === 0 ? rows : []} />
+    <PortalLazyCreateDialog open={lazyOpen} tenant={tenant} brands={brands} catalogs={catalogs} groups={groups}
+      onClose={() => setLazyOpen(false)}
+      onCreated={result => {
+        setLazyOpen(false)
+        setNotice(`Đã tạo "${result.code}" (${result.host}/san-pham/${result.path}) · ${result.postsQueued} bài đã lên lịch.${result.warning ? ' ⚠ ' + result.warning : ''}`)
+        loadRows(tenant, 1, search)
+      }} />
     <ProductEditor open={tab === 1 && Boolean(draft)} value={draft || emptyProduct} onChange={setDraft} onClose={() => setDraft(null)} onSave={save} saving={saving} rows={tab === 1 ? rows : []} brands={brands} catalogs={catalogs} groups={groups} />
   </Box>
 }

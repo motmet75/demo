@@ -4,6 +4,10 @@ import com.ams.bomcore.service.portalcontent.PortalContentService;
 import com.ams.bomcore.service.portalcontent.PortalContentAccessService;
 import com.ams.bomcore.service.portalcontent.PortalScheduleService;
 import com.ams.bomcore.service.portalcontent.PortalGroupPostService;
+import com.ams.bomcore.service.portalcontent.PortalLazyCreateService;
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -29,10 +33,13 @@ public class PortalContentAdminController {
     private final PortalContentAccessService access;
     private final PortalScheduleService schedules;
     private final PortalGroupPostService groupPosts;
+    private final PortalLazyCreateService lazyCreate;
 
     public PortalContentAdminController(PortalContentService service, PortalContentAccessService access,
-                                        PortalScheduleService schedules, PortalGroupPostService groupPosts) {
+                                        PortalScheduleService schedules, PortalGroupPostService groupPosts,
+                                        PortalLazyCreateService lazyCreate) {
         this.service = service; this.access = access; this.schedules = schedules; this.groupPosts = groupPosts;
+        this.lazyCreate = lazyCreate;
     }
 
     @GetMapping("/tenants")
@@ -171,6 +178,21 @@ public class PortalContentAdminController {
         access.require(authentication, tenantId);
         groupPosts.cancel(tenantId, id);
         return ResponseEntity.noContent().build();
+    }
+
+    // ---- lazy create: new product + its social posts in one submission (legacy schedule-product page) ----
+
+    @PostMapping(value = "/{tenantId}/lazy-create", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<PortalLazyCreateService.Result> lazyCreate(@PathVariable String tenantId,
+            @RequestPart("form") PortalLazyCreateService.Form form,
+            @RequestPart(value = "images", required = false) List<MultipartFile> images,
+            @RequestPart(value = "thumbnail", required = false) MultipartFile thumbnail,
+            @RequestPart(value = "video", required = false) MultipartFile video,
+            Authentication authentication) {
+        access.require(authentication, tenantId);
+        String actor = authentication == null ? "admin" : authentication.getName();
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(lazyCreate.create(tenantId, form, images, thumbnail, video, actor));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

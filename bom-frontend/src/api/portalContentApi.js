@@ -44,3 +44,7 @@ export const savePortalGroupPosts = (tenant, campaign) => request(`/${encodeURIC
 export const cancelPortalGroupPost = (tenant, id) => request(
   `/${encodeURIComponent(tenant)}/group-posts/${encodeURIComponent(id)}/cancel`, { method: 'POST' }
 )
+
+// Lazy create: product + its social posts in one multipart submission (files uploaded by Portal).
+export const createPortalLazyProduct = (tenant, formData) =>
+  request(`/${encodeURIComponent(tenant)}/lazy-create`, { method: 'POST', body: formData })
