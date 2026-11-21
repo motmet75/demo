@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  Alert, Box, Button, Card, CardContent, Checkbox, CircularProgress, Dialog,
+  Alert, Autocomplete, Box, Button, Card, CardContent, Checkbox, CircularProgress, Dialog,
   DialogActions, DialogContent, DialogTitle, FormControlLabel, MenuItem, Paper,
   Stack, Tab, Tabs, Table, TableBody, TableCell, TableContainer, TableHead,
   TableRow, TextField, Typography
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh'
 import EditIcon from '@mui/icons-material/Edit'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import SaveIcon from '@mui/icons-material/Save'
@@ -28,6 +29,32 @@ const emptyProduct = {
 
 const date = value => value ? new Date(value).toLocaleString('vi-VN') : '—'
 
+// Distinct non-empty, non-placeholder values already used in this tenant's
+// rows, so category/catalog/brand become pick-from-existing (freeSolo keeps
+// typing a new one possible) instead of free text prone to typos/duplicates.
+const PLACEHOLDER_VALUES = new Set(['', 'none'])
+function distinctValues(rows, field) {
+  const seen = new Set()
+  for (const row of rows) {
+    const value = String(row?.[field] ?? '').trim()
+    if (!PLACEHOLDER_VALUES.has(value)) seen.add(value)
+  }
+  return Array.from(seen).sort((a, b) => a.localeCompare(b))
+}
+
+function PickField({ label, value, options, onChange, fullWidth = true }) {
+  return <Autocomplete
+    freeSolo fullWidth={fullWidth} options={options} value={value || ''}
+    onChange={(_, next) => onChange(next || '')}
+    onInputChange={(_, next, reason) => { if (reason === 'input') onChange(next) }}
+    renderInput={params => <TextField {...params} label={label} />}
+  />
+}
+
+function joinParts(parts) {
+  return parts.map(p => String(p || '').trim()).filter(p => p && p !== 'none').join(' - ')
+}
+
 function Flags({ value, onChange, product = false }) {
   const set = key => event => onChange({ ...value, [key]: event.target.checked })
   return <Stack direction="row" useFlexGap flexWrap="wrap">
@@ -38,18 +65,26 @@ function Flags({ value, onChange, product = false }) {
   </Stack>
 }
 
-function ArticleEditor({ open, value, onChange, onClose, onSave, saving }) {
+function ArticleEditor({ open, value, onChange, onClose, onSave, saving, rows }) {
   const set = key => event => onChange({ ...value, [key]: event.target.value })
+  const setField = key => next => onChange({ ...value, [key]: next })
+  const categoryOptions = useMemo(() => distinctValues(rows, 'category'), [rows])
+  const subCategoryOptions = useMemo(() => distinctValues(rows, 'subCategory'), [rows])
+  const autoFillTitle = () => onChange({ ...value, title: joinParts([value.category, value.subCategory]) || value.title })
   return <Dialog open={open} onClose={saving ? undefined : onClose} fullWidth maxWidth="lg">
     <DialogTitle>{value.id ? `Edit article #${value.id}` : 'New article'}</DialogTitle>
     <DialogContent><Stack spacing={2} sx={{ pt: 1 }}>
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
         <TextField fullWidth required label="Title" value={value.title || ''} onChange={set('title')} />
+        <Button startIcon={<AutoFixHighIcon />} onClick={autoFillTitle}
+          disabled={!value.category && !value.subCategory} sx={{ whiteSpace: 'nowrap' }}>
+          Auto-fill title
+        </Button>
         <TextField fullWidth required label="Article link" value={value.articleLink || ''} onChange={set('articleLink')} placeholder="/tin-tuc/bai-viet" />
       </Stack>
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-        <TextField fullWidth label="Category" value={value.category || ''} onChange={set('category')} />
-        <TextField fullWidth label="Subcategory" value={value.subCategory || ''} onChange={set('subCategory')} />
+        <PickField label="Category" value={value.category} options={categoryOptions} onChange={setField('category')} />
+        <PickField label="Subcategory" value={value.subCategory} options={subCategoryOptions} onChange={setField('subCategory')} />
         <TextField fullWidth label="Language" value={value.language || ''} onChange={set('language')} />
         <TextField fullWidth label="Template" value={value.template || ''} onChange={set('template')} />
       </Stack>
@@ -63,21 +98,30 @@ function ArticleEditor({ open, value, onChange, onClose, onSave, saving }) {
   </Dialog>
 }
 
-function ProductEditor({ open, value, onChange, onClose, onSave, saving }) {
+function ProductEditor({ open, value, onChange, onClose, onSave, saving, rows }) {
   const set = key => event => onChange({ ...value, [key]: event.target.value })
+  const setField = key => next => onChange({ ...value, [key]: next })
   const number = key => event => onChange({ ...value, [key]: Number(event.target.value) || 0 })
+  const catalogOptions = useMemo(() => distinctValues(rows, 'catalog'), [rows])
+  const subCatalogOptions = useMemo(() => distinctValues(rows, 'subCatalog'), [rows])
+  const brandOptions = useMemo(() => distinctValues(rows, 'brand'), [rows])
+  const autoFillName = () => onChange({ ...value, name: joinParts([value.brand, value.catalog, value.subCatalog]) || value.name })
   return <Dialog open={open} onClose={saving ? undefined : onClose} fullWidth maxWidth="lg">
     <DialogTitle>{value.id ? `Edit product #${value.id}` : 'New product'}</DialogTitle>
     <DialogContent><Stack spacing={2} sx={{ pt: 1 }}>
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
         <TextField fullWidth required label="Product name" value={value.name || ''} onChange={set('name')} />
+        <Button startIcon={<AutoFixHighIcon />} onClick={autoFillName}
+          disabled={!value.brand && !value.catalog && !value.subCatalog} sx={{ whiteSpace: 'nowrap' }}>
+          Auto-fill name
+        </Button>
         <TextField fullWidth required label="Product code" value={value.code || ''} onChange={set('code')} />
         <TextField fullWidth required label="Path" value={value.path || ''} onChange={set('path')} placeholder="/san-pham/mi-gia-truyen" />
       </Stack>
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-        <TextField fullWidth label="Catalog" value={value.catalog || ''} onChange={set('catalog')} />
-        <TextField fullWidth label="Subcatalog" value={value.subCatalog || ''} onChange={set('subCatalog')} />
-        <TextField fullWidth label="Brand" value={value.brand || ''} onChange={set('brand')} />
+        <PickField label="Catalog" value={value.catalog} options={catalogOptions} onChange={setField('catalog')} />
+        <PickField label="Subcatalog" value={value.subCatalog} options={subCatalogOptions} onChange={setField('subCatalog')} />
+        <PickField label="Brand" value={value.brand} options={brandOptions} onChange={setField('brand')} />
         <TextField fullWidth label="Group" value={value.group || ''} onChange={set('group')} />
       </Stack>
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
@@ -202,7 +246,7 @@ export default function PortalContentPage() {
           </TableRow>)}</TableBody>
         </Table></TableContainer>}
     </CardContent></Card>
-    <ArticleEditor open={tab === 0 && Boolean(draft)} value={draft || emptyArticle} onChange={setDraft} onClose={() => setDraft(null)} onSave={save} saving={saving} />
-    <ProductEditor open={tab === 1 && Boolean(draft)} value={draft || emptyProduct} onChange={setDraft} onClose={() => setDraft(null)} onSave={save} saving={saving} />
+    <ArticleEditor open={tab === 0 && Boolean(draft)} value={draft || emptyArticle} onChange={setDraft} onClose={() => setDraft(null)} onSave={save} saving={saving} rows={tab === 0 ? rows : []} />
+    <ProductEditor open={tab === 1 && Boolean(draft)} value={draft || emptyProduct} onChange={setDraft} onClose={() => setDraft(null)} onSave={save} saving={saving} rows={tab === 1 ? rows : []} />
   </Box>
 }
