@@ -12,6 +12,9 @@ import LogoutIcon from '@mui/icons-material/Logout'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff'
+import Drawer from '@mui/material/Drawer'
+import MenuOpenIcon from '@mui/icons-material/MenuOpen'
+import { usePhone } from './components/usePhone'
 
 import MaterialPage from './features/material/MaterialPage'
 import ModelPage from './features/model/ModelPage'
@@ -381,7 +384,7 @@ function NavGroup({ group, collapsed }) {
   )
 }
 
-function Sidebar({ collapsed, onToggle, user, isAdmin, isSuperAdmin, hasFullBusinessAccess, hasShopOrderingAccess, hasCounterAccess }) {
+function Sidebar({ collapsed, onToggle, onHide, inDrawer = false, user, isAdmin, isSuperAdmin, hasFullBusinessAccess, hasShopOrderingAccess, hasCounterAccess }) {
   const { t } = useI18n()
   const tenantPreset = TENANT_NAV_PRESETS[String(user?.assignedTenantId || '')]
   const roleGroups = tenantPreset
@@ -430,8 +433,8 @@ function Sidebar({ collapsed, onToggle, user, isAdmin, isSuperAdmin, hasFullBusi
       flexShrink: 0,
       display: 'flex',
       flexDirection: 'column',
-      height: '100vh',
-      position: 'sticky',
+      height: inDrawer ? '100%' : '100vh',
+      position: inDrawer ? 'static' : 'sticky',
       top: 0,
       background: '#f8f9fa',
       borderRight: '1px solid #e0e0e0',
@@ -456,9 +459,20 @@ function Sidebar({ collapsed, onToggle, user, isAdmin, isSuperAdmin, hasFullBusi
             <VisibilityOffIcon fontSize="small" />
           </IconButton>
         </Tooltip>
-        <IconButton size="small" onClick={onToggle} sx={{ flexShrink: 0 }}>
-          {collapsed ? <MenuIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
-        </IconButton>
+        {!inDrawer && (
+          <Tooltip title={collapsed ? 'Mở rộng menu' : 'Thu nhỏ menu'} placement="right">
+            <IconButton size="small" onClick={onToggle} sx={{ flexShrink: 0 }}>
+              {collapsed ? <MenuIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
+            </IconButton>
+          </Tooltip>
+        )}
+        {!collapsed && onHide && (
+          <Tooltip title={inDrawer ? 'Đóng menu' : 'Ẩn menu (Ctrl+B)'} placement="right">
+            <IconButton size="small" onClick={onHide} sx={{ flexShrink: 0 }}>
+              <MenuOpenIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
       </Box>
 
       {!collapsed && customizingNav && (
@@ -537,21 +551,69 @@ function HomeRedirect({ user }) {
 }
 
 function MainShell({ user, logout, isAdmin, isSuperAdmin, hasFullBusinessAccess, hasShopOrderingAccess, hasCounterAccess }) {
-  const [collapsed, setCollapsed] = useState(false)
+  // Sidebar visibility, following "The Design of Everyday Things" (Norman):
+  // - Hiding the menu never hides the way back: the ☰ button in the header is
+  //   always visible (signifier / discoverability).
+  // - The choice is remembered per user (state lives "in the world", not in
+  //   the user's head), and the width animates so the change is felt (feedback).
+  // - Phone: the menu is an overlay drawer that closes itself after a page is
+  //   chosen (natural mapping: pick a page -> see the page).
+  const isPhone = usePhone()
+  const modeKey = `bom.nav.mode.${user?.username || 'anonymous'}`
+  const readMode = key => { try { return localStorage.getItem(key) || 'full' } catch { return 'full' } }
+  // { key, mode }: re-read the saved mode when a different user logs in.
+  const [navPref, setNavPref] = useState(() => ({ key: modeKey, mode: readMode(modeKey) }))
+  const navMode = navPref.key === modeKey ? navPref.mode : readMode(modeKey) // 'full' | 'mini' | 'hidden'
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const changeMode = mode => {
+    setNavPref({ key: modeKey, mode })
+    try { localStorage.setItem(modeKey, mode) } catch { /* storage unavailable */ }
+  }
+  // Phone drawer closes as soon as a menu link is tapped.
+  const closeDrawerOnLink = e => { if (e.target.closest?.('a')) setDrawerOpen(false) }
+  const sidebarVisible = isPhone ? drawerOpen : navMode !== 'hidden'
+  const toggleSidebar = () => {
+    if (isPhone) setDrawerOpen(open => !open)
+    else changeMode(navMode === 'hidden' ? 'full' : 'hidden')
+  }
+  useEffect(() => {
+    const onKey = e => {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'b') {
+        e.preventDefault(); toggleSidebar()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+  const sidebarProps = {
+    user, isAdmin, isSuperAdmin, hasFullBusinessAccess, hasShopOrderingAccess, hasCounterAccess,
+  }
   return (
     <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      {user && <Sidebar
-        collapsed={collapsed}
-        onToggle={() => setCollapsed(c => !c)}
-        user={user}
-        isAdmin={isAdmin}
-        isSuperAdmin={isSuperAdmin}
-        hasFullBusinessAccess={hasFullBusinessAccess}
-        hasShopOrderingAccess={hasShopOrderingAccess}
-        hasCounterAccess={hasCounterAccess}
-      />}
+      {user && !isPhone && (
+        <Box sx={{ width: navMode === 'hidden' ? 0 : (navMode === 'mini' ? SIDEBAR_MINI : SIDEBAR_FULL), flexShrink: 0, overflow: 'hidden', transition: 'width 0.2s' }}>
+          <Sidebar
+            {...sidebarProps}
+            collapsed={navMode === 'mini'}
+            onToggle={() => changeMode(navMode === 'mini' ? 'full' : 'mini')}
+            onHide={() => changeMode('hidden')}
+          />
+        </Box>
+      )}
+      {user && isPhone && (
+        <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} ModalProps={{ keepMounted: true }} PaperProps={{ onClick: closeDrawerOnLink }}>
+          <Sidebar {...sidebarProps} collapsed={false} inDrawer onHide={() => setDrawerOpen(false)} />
+        </Drawer>
+      )}
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
         <Box sx={{ flexShrink: 0, borderBottom: '1px solid #e0e0e0', px: { xs: 0.75, sm: 2 }, py: { xs: 0.5, sm: 0.75 }, display: 'flex', alignItems: 'center', gap: { xs: 0.5, sm: 1.5 }, background: '#fff', flexWrap: { xs: 'nowrap', sm: 'wrap' }, minHeight: { xs: 42, sm: 'auto' } }}>
+          {user && (isPhone || !sidebarVisible) && (
+            <Tooltip title={sidebarVisible ? 'Ẩn menu (Ctrl+B)' : 'Hiện menu (Ctrl+B)'}>
+              <IconButton size="small" onClick={toggleSidebar} aria-label="menu" sx={{ flexShrink: 0 }}>
+                <MenuIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
           <HeaderBar user={user} logout={logout} />
         </Box>
         <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
