@@ -78,6 +78,56 @@ function joinParts(parts) {
   return parts.map(p => String(p || '').trim()).filter(p => p && p !== 'none').join(' - ')
 }
 
+// ASCII slug, Vietnamese-aware: NFD strips combining accents, but 'đ'/'Đ'
+// don't decompose that way so they're replaced explicitly first.
+function slugify(text) {
+  return String(text || '').trim().toLowerCase()
+    .replace(/đ/g, 'd')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+// Smallest "-2", "-3"... suffix not already present in any of the given sets,
+// so a generated code/link never collides with what's already on this page.
+function uniqueSlug(base, existingSets) {
+  let candidate = base || 'item'
+  let n = 1
+  while (existingSets.some(set => set.has(candidate))) {
+    n += 1
+    candidate = `${base}-${n}`
+  }
+  return candidate
+}
+
+function lastPathSegment(path) {
+  return String(path || '').split('/').filter(Boolean).pop() || ''
+}
+
+// Remember the taxonomy picked last time (per tenant, per tab) so a new
+// article/product starts from what staff usually pick instead of blank --
+// identifying fields (title/name/code/link/content) are never remembered.
+const LAST_DEFAULTS_FIELDS = {
+  article: ['category', 'subCategory', 'language', 'template'],
+  product: ['catalog', 'subCatalog', 'brand', 'group', 'language', 'currency', 'status'],
+}
+function lastDefaultsKey(kind, tenant) {
+  return `bom.portalContent.lastDefaults.${kind}.${tenant || ''}`
+}
+function loadLastDefaults(kind, tenant) {
+  try {
+    const raw = localStorage.getItem(lastDefaultsKey(kind, tenant))
+    return raw ? JSON.parse(raw) : {}
+  } catch { return {} }
+}
+function saveLastDefaults(kind, tenant, draft) {
+  try {
+    const picked = {}
+    LAST_DEFAULTS_FIELDS[kind].forEach(field => { if (draft[field] !== undefined) picked[field] = draft[field] })
+    localStorage.setItem(lastDefaultsKey(kind, tenant), JSON.stringify(picked))
+  } catch { /* storage unavailable */ }
+}
+
 function Flags({ value, onChange, product = false }) {
   const set = key => event => onChange({ ...value, [key]: event.target.checked })
   return <Stack direction="row" useFlexGap flexWrap="wrap">
@@ -93,7 +143,13 @@ function ArticleEditor({ open, value, onChange, onClose, onSave, saving, rows })
   const setField = key => next => onChange({ ...value, [key]: next })
   const categoryOptions = useMemo(() => distinctValues(rows, 'category'), [rows])
   const subCategoryOptions = useMemo(() => distinctValues(rows, 'subCategory'), [rows])
+  const existingLinkSlugs = useMemo(() =>
+    new Set(rows.filter(r => r.id !== value.id).map(r => lastPathSegment(r.articleLink))), [rows, value.id])
   const autoFillTitle = () => onChange({ ...value, title: joinParts([value.category, value.subCategory]) || value.title })
+  const autoFillLink = () => {
+    const slug = uniqueSlug(slugify(value.title) || 'bai-viet', [existingLinkSlugs])
+    onChange({ ...value, articleLink: '/tin-tuc/' + slug })
+  }
   return <Dialog open={open} onClose={saving ? undefined : onClose} fullWidth maxWidth="lg">
     <DialogTitle>{value.id ? `Edit article #${value.id}` : 'New article'}</DialogTitle>
     <DialogContent><Stack spacing={2} sx={{ pt: 1 }}>
@@ -104,6 +160,9 @@ function ArticleEditor({ open, value, onChange, onClose, onSave, saving, rows })
           Auto-fill title
         </Button>
         <TextField fullWidth required label="Article link" value={value.articleLink || ''} onChange={set('articleLink')} placeholder="/tin-tuc/bai-viet" />
+        <Button startIcon={<AutoFixHighIcon />} onClick={autoFillLink} disabled={!value.title} sx={{ whiteSpace: 'nowrap' }}>
+          Auto-fill link
+        </Button>
       </Stack>
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
         <PickField label="Category" value={value.category} options={categoryOptions} onChange={setField('category')} />
@@ -129,7 +188,15 @@ function ProductEditor({ open, value, onChange, onClose, onSave, saving, rows })
   const subCatalogOptions = useMemo(() => distinctValues(rows, 'subCatalog'), [rows])
   const brandOptions = useMemo(() => distinctValues(rows, 'brand'), [rows])
   const groupOptions = useMemo(() => distinctTagValues(rows, 'group'), [rows])
+  const existingCodeSlugs = useMemo(() =>
+    new Set(rows.filter(r => r.id !== value.id).map(r => slugify(r.code))), [rows, value.id])
+  const existingPathSlugs = useMemo(() =>
+    new Set(rows.filter(r => r.id !== value.id).map(r => lastPathSegment(r.path))), [rows, value.id])
   const autoFillName = () => onChange({ ...value, name: joinParts([value.brand, value.catalog, value.subCatalog]) || value.name })
+  const autoFillCodeAndLink = () => {
+    const slug = uniqueSlug(slugify(value.name) || 'san-pham', [existingCodeSlugs, existingPathSlugs])
+    onChange({ ...value, code: slug.toUpperCase(), path: '/san-pham/' + slug })
+  }
   return <Dialog open={open} onClose={saving ? undefined : onClose} fullWidth maxWidth="lg">
     <DialogTitle>{value.id ? `Edit product #${value.id}` : 'New product'}</DialogTitle>
     <DialogContent><Stack spacing={2} sx={{ pt: 1 }}>
@@ -141,6 +208,9 @@ function ProductEditor({ open, value, onChange, onClose, onSave, saving, rows })
         </Button>
         <TextField fullWidth required label="Product code" value={value.code || ''} onChange={set('code')} />
         <TextField fullWidth required label="Path" value={value.path || ''} onChange={set('path')} placeholder="/san-pham/mi-gia-truyen" />
+        <Button startIcon={<AutoFixHighIcon />} onClick={autoFillCodeAndLink} disabled={!value.name} sx={{ whiteSpace: 'nowrap' }}>
+          Auto-fill code &amp; link
+        </Button>
       </Stack>
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
         <PickField label="Catalog" value={value.catalog} options={catalogOptions} onChange={setField('catalog')} />
@@ -222,13 +292,18 @@ export default function PortalContentPage() {
     TAXONOMY_FIELDS.forEach(field => { if (normalized[field] === 'none') normalized[field] = '' })
     setDraft(normalized)
   }
-  const create = () => setDraft({ ...(tab === 0 ? emptyArticle : emptyProduct) })
+  const create = () => {
+    const kind = tab === 0 ? 'article' : 'product'
+    setDraft({ ...(tab === 0 ? emptyArticle : emptyProduct), ...loadLastDefaults(kind, tenant) })
+  }
   const save = async () => {
     if (!tenant || !draft) return
     setSaving(true); setError(''); setNotice('')
     try {
+      const kind = tab === 0 ? 'article' : 'product'
       if (tab === 0) await savePortalArticle(tenant, draft)
       else await savePortalProduct(tenant, draft)
+      saveLastDefaults(kind, tenant, draft)
       setDraft(null); setNotice(`${tab === 0 ? 'Article' : 'Product'} saved in ${tenant}.`)
       await loadRows(tenant, tab, search)
     } catch (e) { setError(e.message || 'Cannot save Portal content') }
