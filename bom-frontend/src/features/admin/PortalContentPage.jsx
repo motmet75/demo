@@ -16,14 +16,14 @@ import {
 } from '../../api/portalContentApi'
 
 const emptyArticle = {
-  title: '', articleLink: '', category: 'blog', subCategory: 'none', language: 'vi',
+  title: '', articleLink: '', category: 'blog', subCategory: '', language: 'vi',
   keywords: '', thumbnailUrl: '', description: '', content: '', template: 'blog-single.html',
   visible: true, approved: false, locked: false,
 }
 const emptyProduct = {
-  name: '', code: '', catalog: 'none', subCatalog: 'none', brand: 'none', status: 'available',
+  name: '', code: '', catalog: '', subCatalog: '', brand: '', status: 'available',
   shortDescription: '', longDescription: '', imageUrl: '', imageDescriptionUrl: '', videoUrl: '',
-  price: 0, discount: 0, currency: 'VND', language: 'vi', path: '', group: 'none',
+  price: 0, discount: 0, currency: 'VND', language: 'vi', path: '', group: '',
   visible: true, approved: false, locked: false, newProduct: false,
 }
 
@@ -47,6 +47,29 @@ function PickField({ label, value, options, onChange, fullWidth = true }) {
     freeSolo fullWidth={fullWidth} options={options} value={value || ''}
     onChange={(_, next) => onChange(next || '')}
     onInputChange={(_, next, reason) => { if (reason === 'input') onChange(next) }}
+    renderInput={params => <TextField {...params} label={label} />}
+  />
+}
+
+// `group` is stored as one comma-separated string column (no real multi-group
+// table, see PortalContentService). Splitting into individual tags here is
+// purely a UI convenience -- the join/split must stay symmetric.
+const splitTags = value => String(value || '').split(',').map(part => part.trim()).filter(Boolean)
+const joinTags = tags => tags.map(tag => String(tag || '').trim()).filter(Boolean).join(', ')
+function distinctTagValues(rows, field) {
+  const seen = new Set()
+  for (const row of rows) {
+    for (const tag of splitTags(row?.[field])) {
+      if (!PLACEHOLDER_VALUES.has(tag)) seen.add(tag)
+    }
+  }
+  return Array.from(seen).sort((a, b) => a.localeCompare(b))
+}
+
+function MultiPickField({ label, value, options, onChange, fullWidth = true }) {
+  return <Autocomplete
+    multiple freeSolo fullWidth={fullWidth} options={options} value={splitTags(value)}
+    onChange={(_, next) => onChange(joinTags(next))}
     renderInput={params => <TextField {...params} label={label} />}
   />
 }
@@ -105,6 +128,7 @@ function ProductEditor({ open, value, onChange, onClose, onSave, saving, rows })
   const catalogOptions = useMemo(() => distinctValues(rows, 'catalog'), [rows])
   const subCatalogOptions = useMemo(() => distinctValues(rows, 'subCatalog'), [rows])
   const brandOptions = useMemo(() => distinctValues(rows, 'brand'), [rows])
+  const groupOptions = useMemo(() => distinctTagValues(rows, 'group'), [rows])
   const autoFillName = () => onChange({ ...value, name: joinParts([value.brand, value.catalog, value.subCatalog]) || value.name })
   return <Dialog open={open} onClose={saving ? undefined : onClose} fullWidth maxWidth="lg">
     <DialogTitle>{value.id ? `Edit product #${value.id}` : 'New product'}</DialogTitle>
@@ -122,7 +146,7 @@ function ProductEditor({ open, value, onChange, onClose, onSave, saving, rows })
         <PickField label="Catalog" value={value.catalog} options={catalogOptions} onChange={setField('catalog')} />
         <PickField label="Subcatalog" value={value.subCatalog} options={subCatalogOptions} onChange={setField('subCatalog')} />
         <PickField label="Brand" value={value.brand} options={brandOptions} onChange={setField('brand')} />
-        <TextField fullWidth label="Group" value={value.group || ''} onChange={set('group')} />
+        <MultiPickField label="Group" value={value.group} options={groupOptions} onChange={setField('group')} />
       </Stack>
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
         <TextField fullWidth type="number" label="Price" value={value.price ?? 0} onChange={number('price')} />
@@ -192,7 +216,12 @@ export default function PortalContentPage() {
     setTab(value); setSearch(''); setRows([]); setDraft(null)
     loadRows(tenant, value, '')
   }
-  const edit = row => setDraft({ ...row })
+  const TAXONOMY_FIELDS = ['category', 'subCategory', 'catalog', 'subCatalog', 'brand', 'group']
+  const edit = row => {
+    const normalized = { ...row }
+    TAXONOMY_FIELDS.forEach(field => { if (normalized[field] === 'none') normalized[field] = '' })
+    setDraft(normalized)
+  }
   const create = () => setDraft({ ...(tab === 0 ? emptyArticle : emptyProduct) })
   const save = async () => {
     if (!tenant || !draft) return
