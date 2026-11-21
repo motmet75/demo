@@ -172,6 +172,12 @@ public class PageRouteController {
         };
     }
 
+    @GetMapping("/instruction-gallery.html")
+    public Object instructionGallery(@RequestParam(required = false) String pageKey, @RequestParam(required = false) Long mediaId,
+                                     @RequestParam(required = false) Integer slide, Model model, HttpServletRequest r, HttpSession s) {
+        return view(pages.instructionGallery(pageKey, mediaId, slide, r, s), model);
+    }
+
     // ---- login page (the login itself is a POST and stays on Portal 8080) ----
 
     @GetMapping("/dang-nhap")

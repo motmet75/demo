@@ -125,6 +125,25 @@ public class LegacyContentRepository {
         return count == null ? 0 : count;
     }
 
+    // ---- InstructionPageRepository / InstructionMediaItemRepository ----
+
+    public List<com.anhmedia.portalweb.legacy.entity.InstructionPage> findVisibleInstructionPagesByLanguage(String languageCode) {
+        return db.query("SELECT * FROM instructionpagetb p WHERE p.visible = true AND (LOWER(COALESCE(p.languagecode, 'vi')) = LOWER(?)"
+                        + " OR (? = 'vi' AND p.languagecode = '')) ORDER BY p.sortorder ASC, p.modifiedtime DESC, p.title ASC",
+                LegacyRowMapper.of(com.anhmedia.portalweb.legacy.entity.InstructionPage.class), languageCode, languageCode);
+    }
+
+    public List<com.anhmedia.portalweb.legacy.entity.InstructionMediaItem> findVisibleInstructionMediaByPageKey(String pageKey) {
+        return db.query("SELECT * FROM instructionmediaitemtb m WHERE m.visible = true AND LOWER(m.pagekey) = LOWER(?)"
+                        + " ORDER BY m.sortorder ASC, m.createdtime DESC",
+                LegacyRowMapper.of(com.anhmedia.portalweb.legacy.entity.InstructionMediaItem.class), pageKey);
+    }
+
+    public Optional<com.anhmedia.portalweb.legacy.entity.InstructionMediaItem> findVisibleInstructionMediaById(long id) {
+        return db.query("SELECT * FROM instructionmediaitemtb m WHERE m.visible = true AND m.id = ?",
+                LegacyRowMapper.of(com.anhmedia.portalweb.legacy.entity.InstructionMediaItem.class), id).stream().findFirst();
+    }
+
     // ---- WebMenuRepository / ClientRepository / TemplateImageRepository ----
 
     /** getAllWebMenu: visible = true order by index ASC. */

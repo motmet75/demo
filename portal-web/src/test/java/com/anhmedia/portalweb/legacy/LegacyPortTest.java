@@ -39,7 +39,7 @@ class LegacyPortTest {
     @Test
     void explicitLegacyRoutesAreLeftToPortal8080() {
         for (String owned : List.of("/gio-hang", "/gio-hang/", "/dang-nhap/oauth2/code/google", "/doc/x.html", "/file/a.pdf",
-                "/instruction-gallery.html",
+                "/one-product",
                 "/api/anything/deep", "/app/login", "/admin/products", "/VAADIN/build/x.js")) {
             assertTrue(LegacyExplicitRoutes.ownedByLegacy(owned), owned);
         }

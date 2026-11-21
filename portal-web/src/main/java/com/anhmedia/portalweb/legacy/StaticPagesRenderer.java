@@ -289,6 +289,112 @@ public class StaticPagesRenderer {
         return page(site.localizedViewName(c.domain(), c.tenant(), pageArticle.getArticleTemplate(), lang), m);
     }
 
+    // ---- instructionGallery() ----
+
+    public Optional<MenuPageRenderer.Page> instructionGallery(String pageKey, Long mediaId, Integer slide,
+                                                              HttpServletRequest request, HttpSession session) {
+        Optional<Ctx> o = ctx(request, session);
+        if (o.isEmpty()) return Optional.empty();
+        Ctx c = o.get();
+        Map<String, Object> m = c.model();
+        LegacyLanguage languages = site.languages();
+        Article pageArticle = c.content().getArticleByLink("instruction-gallery.html");
+        String requested = languages.normalizeFrontendLanguageCode(request.getParameter("lang"));
+        String lang = requested == null
+                ? (pageArticle == null || pageArticle.getId() <= 0 ? LegacyLanguage.DEFAULT_LANGUAGE : pageArticle.getArticleLangCode())
+                : requested;
+        if (requested != null) {
+            languages.setSessionLanguage(session, requested);
+        } else {
+            lang = ensurePublicLanguage(session, lang);
+        }
+        if (pageArticle == null || pageArticle.getId() <= 0) {
+            pageArticle = new Article("AnhMedia Profile Gallery", "instruction-gallery.html", "instruction-gallery.html", "page", lang);
+            pageArticle.setArticleDescription("Instruction gallery and digital profile media for AnhMedia tenant users.");
+            pageArticle.setArticleKeyWord("instruction gallery, profile gallery, employee timeline, AnhMedia");
+            pageArticle.setArticleThumnailURL("none");
+        }
+        populateInstructionGalleryPublicModel(c, m, session, lang, pageArticle);
+
+        var repo = new LegacyContentRepository(databases.forTenant(c.tenant()).orElseThrow());
+        var requestedMedia = mediaId == null || mediaId <= 0 ? null : repo.findVisibleInstructionMediaById(mediaId).orElse(null);
+        if (requestedMedia != null && !requestedMedia.getPageKey().isBlank()) pageKey = requestedMedia.getPageKey();
+        var instructionPages = repo.findVisibleInstructionPagesByLanguage(normalizeInstructionLanguage(lang));
+        com.anhmedia.portalweb.legacy.entity.InstructionPage selected = null;
+        if (pageKey != null && !pageKey.trim().isEmpty()) {
+            String key = pageKey.trim();
+            selected = instructionPages.stream().filter(p -> key.equals(p.getPageKey())).findFirst().orElse(null);
+        }
+        if (selected == null && !instructionPages.isEmpty()) selected = instructionPages.get(0);
+        List<com.anhmedia.portalweb.legacy.entity.InstructionMediaItem> media = selected == null || selected.getPageKey() == null
+                || selected.getPageKey().trim().isEmpty() ? new ArrayList<>()
+                : repo.findVisibleInstructionMediaByPageKey(selected.getPageKey().trim());
+        int selectedIndex = 0;
+        if (requestedMedia != null) {
+            for (int i = 0; i < media.size(); i++) {
+                if (media.get(i).getId().equals(requestedMedia.getId())) {
+                    selectedIndex = i;
+                    break;
+                }
+            }
+        }
+        m.put("instructionPages", instructionPages);
+        m.put("selectedInstructionPage", selected);
+        m.put("instructionMediaItems", media);
+        m.put("galleryPageKey", selected == null ? "" : selected.getPageKey());
+        m.put("instructionGalleryTotalItems", media.size());
+        m.put("selectedInstructionMediaId", requestedMedia == null ? "" : requestedMedia.getId().toString());
+        m.put("selectedInstructionIndex", selectedIndex);
+        m.put("selectedInstructionSlide", slide == null || slide < 0 ? 0 : slide);
+        site.addFrontendTemplateControls(m, c.content(), "instruction-gallery.html", "instruction-gallery.html", lang);
+        return page(site.viewName(c.domain(), c.tenant(), "instruction-gallery.html"), m);
+    }
+
+    /** ensurePublicLanguage: the session's mapped language, else store the fallback. */
+    private String ensurePublicLanguage(HttpSession session, String fallback) {
+        String lang = site.languages().normalizeFrontendLanguageCode(fallback);
+        if (lang == null) lang = LegacyLanguage.DEFAULT_LANGUAGE;
+        String mapped = site.languages().mappedLanguage(session);
+        if (mapped != null) return mapped;
+        site.languages().setSessionLanguage(session, lang);
+        return lang;
+    }
+
+    /** InstructionExperienceService.normalizeLanguageCode. */
+    private static String normalizeInstructionLanguage(String value) {
+        String clean = value == null ? "" : value.trim().toLowerCase(java.util.Locale.ROOT).replace('_', '-');
+        if (clean.isEmpty()) return "vi";
+        int dash = clean.indexOf('-');
+        return dash > 0 ? clean.substring(0, dash) : clean;
+    }
+
+    /** populateInstructionGalleryPublicModel. */
+    private void populateInstructionGalleryPublicModel(Ctx c, Map<String, Object> m, HttpSession session, String lang, Article pageArticle) {
+        m.put("activePage", "instruction-gallery");
+        m.put("subpath", "");
+        m.put("language", lang);
+        site.addTenantTemplateVariables(m, c.domain(), c.tenant());
+        m.put("cart", site.cart(session, c.tenant(), lang));
+        m.put("client", c.content().getClientByDomainAndLanguageCode(c.tenant(), lang).orElseGet(Client::new));
+        var catalogs = c.products().getAllProductCatalog();
+        m.put("catalogs", catalogs);
+        m.put("selectedHomeCatalogs", catalogs);
+        m.put("brands", c.products().getAllProductDisPlayedBrand());
+        m.put("products", new ArrayList<>());
+        m.put("pages", pages(c.content(), c.tenant(), lang));
+        List<WebMenu> projects = c.content().getAllWebMenu();
+        List<WebMenu> menu = new ArrayList<>();
+        if (projects.stream().anyMatch(p -> "root".equals(p.getMenuRootStringId()))) {
+            WebMenu.buildMenuTree(projects, "root");
+            String mapped = site.languages().mappedLanguage(session);
+            String menuLang = mapped == null ? lang : mapped;
+            menu = projects.stream().filter(p -> "root".equals(p.getMenuRootStringId()) && menuLang.equals(p.getLanguage())).toList();
+            if (menu.isEmpty()) menu = projects.stream().filter(p -> "root".equals(p.getMenuRootStringId())).toList();
+        }
+        m.put("projectMenuEntities", menu);
+        m.put("page", pageArticle);
+    }
+
     // ---- LoginPage() ----
 
     public Optional<MenuPageRenderer.Page> login(HttpServletRequest request, HttpSession session) {

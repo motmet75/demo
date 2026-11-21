@@ -28,7 +28,7 @@ public final class LegacyExplicitRoutes {
             "/dang-nhap/**", "/register", "/tariff", "/docs", "/messagebox", "/login",
             "/order", "/profile", "/vietnamse-import-chart", "/forgotpassword", "/3dwarehouse",
             "/dang-xuat", "/topselling", "/article-search", "/single-product.html",
-            "/productfilter", "/productpage", "/one-product", "/instruction-gallery.html",
+            "/productfilter", "/productpage", "/one-product",
             "/gio-hang", "/dat-hang", "/don-hang-cua-toi", "/dat-hang-thanh-cong",
             "/document", "/minhmapshop/", "/minhmapshop/product.html", "/business-profile/{endpoint}",
             "/file/{endpoint}", "/files/{endpoint}", "/preview/{endpoint}",
