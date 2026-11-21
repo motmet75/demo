@@ -60,6 +60,21 @@ public class LiveThemeConfiguration implements WebMvcConfigurer {
         return resolver;
     }
 
+    /** Portal Web's own shared templates (e.g. the fallback login page), packaged in this JAR. */
+    @Bean
+    org.thymeleaf.templateresolver.ClassLoaderTemplateResolver portalWebSharedTemplateResolver() {
+        org.thymeleaf.templateresolver.ClassLoaderTemplateResolver resolver =
+                new org.thymeleaf.templateresolver.ClassLoaderTemplateResolver();
+        resolver.setPrefix("templates/");
+        resolver.setSuffix(".html");
+        resolver.setTemplateMode(TemplateMode.HTML);
+        resolver.setCharacterEncoding("UTF-8");
+        resolver.setResolvablePatterns(java.util.Set.of("portal-web-shared/*"));
+        resolver.setCheckExistence(true);
+        resolver.setOrder(2);
+        return resolver;
+    }
+
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
         // Live assets take priority. Original packaged assets are a read-only

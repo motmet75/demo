@@ -409,9 +409,15 @@ public class StaticPagesRenderer {
         String lang = mapped != null ? mapped : "vi";
         m.put("client", c.content().getClientByDomainAndLanguageCode(c.tenant(), lang).orElseGet(Client::new));
         String view = site.viewName(c.domain(), c.tenant(), "login-page.html");
-        // Legacy answered 500 for tenants without a login-page.html (tuonghoa-imex.com);
-        // send those visitors to the tenant's working Vaadin login instead.
-        if (!site.templateExists(view)) return page("redirect:/app/login", new java.util.HashMap<>());
+        // Legacy answered 500 for tenants without a login-page.html (tuonghoa-imex.com and
+        // seven others). Serve a neutral shared login form instead: same /api/login-act,
+        // quick sign-up and Google OAuth as the tenant pages (/app Vaadin is not used).
+        if (!site.templateExists(view)) {
+            Client client = (Client) m.get("client");
+            String name = client == null ? "" : client.getClientName();
+            m.put("brandName", name == null || name.isBlank() ? c.tenant() : name);
+            return page("portal-web-shared/login-page", m);
+        }
         return page(view, m);
     }
 
