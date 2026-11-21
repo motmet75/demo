@@ -79,6 +79,33 @@ public class LegacyContentService {
         return list;
     }
 
+    /** getAllDisplayedArticlWithPage (sets the host only; no thumbnail recompute). */
+    public List<Article> getAllDisplayedArticlWithPage(String type, int page, int size) {
+        List<Article> list = repo.getAllDisplayArticleByTypeAndPage(type + "%", page, size);
+        for (Article a : list) a.setHostString(tenant);
+        return list;
+    }
+
+    public long countArticlesByGroup(String type) { return repo.countArticlesByGroup(type + "%"); }
+
+    /** findByCatalogOrSubCatalogWithPage: note the catalog is passed WITHOUT a trailing '%'. */
+    public List<Article> findByCatalogOrSubCatalogWithPage(String searchTerm, String catalog, int page, int size) {
+        List<Article> list = repo.findArticlesByCatalogOrSubCatalogPageable(catalog, searchTerm, page, size);
+        if (list.isEmpty()) return Collections.emptyList();
+        for (Article a : list) {
+            a.setTenantString(tenant);
+            a.setHostString(tenant);
+            a.setArticleThumnailURL(a.getArticleThumnailURL());
+        }
+        return list.stream().filter(a -> a.getApproved() && a.getVisible() && !a.getLocked())
+                .sorted(Comparator.comparing(Article::getModifiedTime)).toList();
+    }
+
+    /** countByCatalogOrSubCatalog(type, searchTerm): type + "%". */
+    public long countByCatalogOrSubCatalog(String type, String searchTerm) {
+        return repo.countArticlesByCatalogOrSubCatalog(type + "%", searchTerm);
+    }
+
     public long countArticlesByGroupAndMenu(String type, String pageLink) {
         return repo.countArticlesByGroupAndMenu(type + "%", "%" + pageLink + "%");
     }

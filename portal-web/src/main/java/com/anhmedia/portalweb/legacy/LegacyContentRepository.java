@@ -89,6 +89,42 @@ public class LegacyContentRepository {
         return count == null ? 0 : count;
     }
 
+    /** countArticlesByGroup. */
+    public long countArticlesByGroup(String typePattern) {
+        Long count = db.queryForObject("SELECT COUNT(*) FROM articletb t WHERE t.articlecategory LIKE ? AND t.isvisible = true"
+                + " AND t.isapproved = true AND t.islocked = false", Long.class, typePattern);
+        return count == null ? 0 : count;
+    }
+
+    private static final String ARTICLE_TERM = "((LOWER(unaccent(p.articletitle)) LIKE ?) OR (LOWER(unaccent(p.originauthor)) LIKE ?)"
+            + " OR (LOWER(unaccent(p.articlekeyword)) LIKE ?) OR (LOWER(unaccent(p.articledescription)) LIKE ?)"
+            + " OR (LOWER(unaccent(p.articlecontent)) LIKE ?))";
+
+    private static Object[] articleSearchArgs(String catalogCode, String searchTerm) {
+        String like = "%" + searchTerm + "%";
+        return new Object[] {catalogCode, catalogCode, like, like, like, like, like};
+    }
+
+    /** findByCatalogOrSubCatalogPageable(catalogCode, searchTerm, pageable). */
+    public List<Article> findArticlesByCatalogOrSubCatalogPageable(String catalogCode, String searchTerm, int page, int size) {
+        if (page < 0 || size < 1) throw new IllegalArgumentException("Page index must not be less than zero");
+        Object[] base = articleSearchArgs(catalogCode, searchTerm);
+        Object[] args = java.util.Arrays.copyOf(base, base.length + 2);
+        args[base.length] = size;
+        args[base.length + 1] = (long) page * size;
+        return db.query("SELECT * FROM articletb p WHERE p.isvisible = true AND p.isapproved = true AND p.islocked = false"
+                        + " AND (p.articlecategory LIKE ? OR p.articlesubcategory LIKE ?) AND " + ARTICLE_TERM
+                        + " ORDER BY p.articletime DESC LIMIT ? OFFSET ?", ARTICLE, args);
+    }
+
+    /** countByCatalogOrSubCatalog(catalogCode, searchTerm) for articles. */
+    public long countArticlesByCatalogOrSubCatalog(String catalogCode, String searchTerm) {
+        Long count = db.queryForObject("SELECT COUNT(*) FROM articletb p WHERE p.isvisible = true AND p.isapproved = true"
+                + " AND p.islocked = false AND (p.articlecategory LIKE ? OR p.articlesubcategory LIKE ?) AND " + ARTICLE_TERM,
+                Long.class, articleSearchArgs(catalogCode, searchTerm));
+        return count == null ? 0 : count;
+    }
+
     // ---- WebMenuRepository / ClientRepository / TemplateImageRepository ----
 
     /** getAllWebMenu: visible = true order by index ASC. */

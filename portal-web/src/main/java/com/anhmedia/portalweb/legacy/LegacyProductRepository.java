@@ -101,6 +101,10 @@ public class LegacyProductRepository {
         return products(P + "WHERE " + SHOWN + " AND p.youtubevideourl LIKE 'http%'" + BY_PUBLISHED + page(page, size));
     }
 
+    public long countProductsWithVideos() {
+        return count("SELECT COUNT(*) FROM producttb p WHERE " + SHOWN + " AND p.youtubevideourl LIKE 'http%'");
+    }
+
     public List<Product> getProductsByGroupByPage(String groupCode, int page, int size) {
         return products(P + "WHERE " + SHOWN + " AND p.productgroupstring LIKE CONCAT('%', ?, '%')" + BY_PUBLISHED
                 + page(page, size), groupCode);
