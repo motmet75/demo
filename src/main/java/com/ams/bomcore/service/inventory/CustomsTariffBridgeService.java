@@ -3,9 +3,11 @@ package com.ams.bomcore.service.inventory;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -45,10 +47,7 @@ public class CustomsTariffBridgeService {
         }
         try {
             URI uri = URI.create(baseUrl + "/api/internal/tariff/hs/" + hsCode);
-            if (!("https".equalsIgnoreCase(uri.getScheme()) ||
-                    ("http".equalsIgnoreCase(uri.getScheme()) &&
-                     ("localhost".equalsIgnoreCase(uri.getHost()) ||
-                      "127.0.0.1".equals(uri.getHost()))))) {
+            if (!isAllowedScheme(uri)) {
                 return error(hsCode, "BAD_URL",
                         "Đường dẫn biểu thuế phải dùng HTTPS hoặc HTTP localhost.");
             }
@@ -76,6 +75,72 @@ public class CustomsTariffBridgeService {
             return error(hsCode, "UNAVAILABLE",
                     "Không kết nối được biểu thuế Portal. Kiểm tra API, URL, TLS và token.");
         }
+    }
+
+    /** Multi-result search, for a search box rather than one exact HS code. */
+    public Map<String,Object> search(String query, int limit) {
+        String trimmed = Objects.toString(query, "").trim();
+        if (trimmed.length() < 2) {
+            return searchError(trimmed, "INVALID_QUERY", "Nhập ít nhất 2 ký tự để tìm kiếm.");
+        }
+        if (baseUrl.isBlank() || token.length() < 24) {
+            return searchError(trimmed, "NOT_CONFIGURED",
+                    "Chưa cấu hình kết nối đến biểu thuế Portal. " +
+                    "Thiết lập customs.tariff.bridge-url và customs.tariff.bridge-token trên Demo.");
+        }
+        int cappedLimit = Math.max(1, Math.min(limit, 50));
+        try {
+            URI uri = URI.create(baseUrl + "/api/internal/tariff/search?q="
+                    + URLEncoder.encode(trimmed, StandardCharsets.UTF_8)
+                    + "&limit=" + cappedLimit);
+            if (!isAllowedScheme(uri)) {
+                return searchError(trimmed, "BAD_URL",
+                        "Đường dẫn biểu thuế phải dùng HTTPS hoặc HTTP localhost.");
+            }
+            HttpRequest request = HttpRequest.newBuilder(uri)
+                    .timeout(Duration.ofSeconds(7))
+                    .header("X-Tariff-Bridge-Token", token)
+                    .header("Accept", "application/json")
+                    .GET().build();
+            HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() == 403 || response.statusCode() == 401)
+                return searchError(trimmed, "FORBIDDEN",
+                        "Portal từ chối kết nối biểu thuế. Kiểm tra quyền hoặc Tariff Bridge Token.");
+            if (response.statusCode() != 200)
+                return searchError(trimmed, "UPSTREAM_ERROR",
+                        "Portal không trả được kết quả tìm kiếm (HTTP " + response.statusCode() + ").");
+            Map<String,Object> payload = mapper.readValue(response.body(),
+                    new TypeReference<Map<String,Object>>() {});
+            if (!(payload.get("results") instanceof java.util.List)) {
+                return searchError(trimmed, "UPSTREAM_ERROR",
+                        "Portal trả dữ liệu tìm kiếm không đúng định dạng.");
+            }
+            Map<String,Object> result = new LinkedHashMap<>(payload);
+            result.put("status", "OK");
+            return result;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return searchError(trimmed, "INTERRUPTED", "Kết nối biểu thuế bị ngắt.");
+        } catch (Exception e) {
+            return searchError(trimmed, "UNAVAILABLE",
+                    "Không kết nối được biểu thuế Portal. Kiểm tra API, URL, TLS và token.");
+        }
+    }
+
+    private static boolean isAllowedScheme(URI uri) {
+        return "https".equalsIgnoreCase(uri.getScheme()) ||
+                ("http".equalsIgnoreCase(uri.getScheme()) &&
+                 ("localhost".equalsIgnoreCase(uri.getHost()) ||
+                  "127.0.0.1".equals(uri.getHost())));
+    }
+
+    private static Map<String,Object> searchError(String query, String status, String message) {
+        Map<String,Object> result = new LinkedHashMap<>();
+        result.put("query", Objects.toString(query, ""));
+        result.put("status", status);
+        result.put("message", message);
+        result.put("results", java.util.List.of());
+        return result;
     }
 
     /**

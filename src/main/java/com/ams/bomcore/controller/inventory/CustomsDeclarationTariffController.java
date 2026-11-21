@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -31,6 +32,23 @@ public class CustomsDeclarationTariffController {
             @RequestHeader("X-Tenant-Id") UUID tenant,
             @RequestHeader("X-Company-Id") UUID company,
             Authentication auth) {
+        requireLookupRole(auth);
+        scopeService.scope(auth,tenant,company);
+        return tariff.lookup(hsCode);
+    }
+
+    @GetMapping("/search")
+    public Map<String,Object> search(@RequestParam("q") String q,
+            @RequestParam(value = "limit", defaultValue = "20") int limit,
+            @RequestHeader("X-Tenant-Id") UUID tenant,
+            @RequestHeader("X-Company-Id") UUID company,
+            Authentication auth) {
+        requireLookupRole(auth);
+        scopeService.scope(auth,tenant,company);
+        return tariff.search(q, limit);
+    }
+
+    private static void requireLookupRole(Authentication auth) {
         if (auth == null || !auth.isAuthenticated() ||
                 auth.getAuthorities().stream().noneMatch(a ->
                     List.of("ROLE_ADMIN","ROLE_SUPER_ADMIN","ROLE_USER")
@@ -38,7 +56,5 @@ public class CustomsDeclarationTariffController {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "Không có quyền tra cứu biểu thuế HQ.");
         }
-        scopeService.scope(auth,tenant,company);
-        return tariff.lookup(hsCode);
     }
 }

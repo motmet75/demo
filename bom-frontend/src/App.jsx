@@ -42,6 +42,7 @@ import AuditHistoryPage from './features/audit/AuditHistoryPage'
 import AdminPage from './features/admin/AdminPage'
 import GdtQuotaPage from './features/admin/GdtQuotaPage'
 import PortalContentPage from './features/admin/PortalContentPage'
+import TariffSearchPage from './features/tariff/TariffSearchPage'
 import TenantsPage from './features/tenant/TenantsPage'
 import ETLPage from './features/etl/ETLPage'
 import ShopMenuPage from './features/shopfront/ShopMenuPage'
@@ -150,6 +151,7 @@ const PATH_TITLES = {
   '/admin/users':        'Admin Users',
   '/admin/gdt-quotas':   'GDT OCR & Download Quotas',
   '/admin/portal-content': 'Website Content',
+  '/tariff-search':      'Tra cứu mã HS / Biểu thuế',
   '/tenants':            'Tenants',
   '/etl':                'ETL',
   '/login':              'Login',
@@ -232,6 +234,7 @@ const NAV_GROUPS = [
     icon: '✨',
     items: [
       { label: 'Document Scanner', path: '/document-scanner', icon: '📷' },
+      { label: 'Tra cứu mã HS / Biểu thuế', path: '/tariff-search', icon: '🧮' },
     ],
   },
   {
@@ -544,6 +547,7 @@ function MainShell({ user, logout, isAdmin, isSuperAdmin, hasFullBusinessAccess,
             <Route path="/login" element={<LoginForm />} />
             <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
             <Route path="/document-scanner" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><DocumentScannerPage /></RequireAuth>} />
+            <Route path="/tariff-search" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><TariffSearchPage /></RequireContext></RequireAuth>} />
             <Route path="/" element={<RequireAuth><HomeRedirect user={user} /></RequireAuth>} />
             <Route path="/materials" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><RequireContext><MaterialPage /></RequireContext></RequireAuth>} />
             <Route path="/models" element={<RequireAuth roles={FULL_BUSINESS_ROLES}><ModelPage /></RequireAuth>} />
