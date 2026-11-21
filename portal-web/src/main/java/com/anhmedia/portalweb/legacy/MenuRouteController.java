@@ -106,7 +106,27 @@ public class MenuRouteController {
                 // unreadable: treat as missing, like a failed ClassPathResource lookup
             }
         }
+        // Legacy quirk: a FOLDER of the packaged static tree (e.g. /img, /assets/, /migiatruyen.vn/)
+        // "exists" as a jar entry, so 8080 answers it with an empty 200 octet-stream body.
+        Path folder = packagedStatic.resolve(relativePath).normalize();
+        if (folder.startsWith(packagedStatic) && !folder.equals(packagedStatic) && Files.isDirectory(folder)) {
+            return Optional.of(ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(detectContentType(fileName.toLowerCase())))
+                    .body(new FileSystemResource(EMPTY)));
+        }
         return Optional.empty();
+    }
+
+    private static final Path EMPTY = emptyFile();
+
+    private static Path emptyFile() {
+        try {
+            Path p = Files.createTempFile("portal-web-empty", ".bin");
+            p.toFile().deleteOnExit();
+            return p;
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     static String detectContentType(String fileName) {
