@@ -8,6 +8,7 @@ import {
 } from '@mui/material'
 import HtmlEditor from '../../components/HtmlEditor'
 import PortalMediaSchedulePanel from './PortalMediaSchedulePanel'
+import PortalGroupPostPanel from './PortalGroupPostPanel'
 import AddIcon from '@mui/icons-material/Add'
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh'
 import EditIcon from '@mui/icons-material/Edit'
@@ -299,13 +300,13 @@ function ProductEditor({ open, value, onChange, onClose, onSave, saving, rows, b
   </Dialog>
 }
 
-// Nav items (WEBSITE_GROUP in App.jsx) link to ?tab=products/media/articles.
+// Nav items (WEBSITE_GROUP in App.jsx) link to ?tab=products/media/groupposts/articles.
 // React Router doesn't remount on a query-string-only navigation, so a plain
 // useState initializer would only catch the tab on first load -- clicking a
 // nav link while already on this page needs the effect below too.
 function tabFromQuery(search) {
   const value = new URLSearchParams(search).get('tab')
-  return value === 'products' ? 1 : value === 'media' ? 2 : 0
+  return value === 'products' ? 1 : value === 'media' ? 2 : value === 'groupposts' ? 3 : 0
 }
 
 export default function PortalContentPage() {
@@ -355,7 +356,7 @@ export default function PortalContentPage() {
   }, [loadTenants])
 
   const loadRows = useCallback(async (selectedTenant = tenant, selectedTab = tab, query = search) => {
-    if (!selectedTenant || selectedTab === 2) { setRows([]); return }
+    if (!selectedTenant || selectedTab >= 2) { setRows([]); return }
     setLoading(true); setError(''); setNotice('')
     try {
       const result = selectedTab === 0
@@ -415,7 +416,7 @@ export default function PortalContentPage() {
     finally { setSaving(false) }
   }
 
-  const title = tab === 0 ? 'Articles' : tab === 1 ? 'Products' : 'Media schedule'
+  const title = tab === 0 ? 'Articles' : tab === 1 ? 'Products' : tab === 2 ? 'Media schedule' : 'Group posts'
   const visibleRows = useMemo(() => rows, [rows])
 
   return <Box sx={{ p: { xs: 1, md: 3 } }}>
@@ -431,14 +432,15 @@ export default function PortalContentPage() {
         <TextField select label="Website tenant" value={tenant} onChange={switchTenant} sx={{ minWidth: 280 }} disabled={loading && !tenants.length}>
           {tenants.map(value => <MenuItem key={value} value={value}>{value}</MenuItem>)}
         </TextField>
-        {tab !== 2 && <TextField label={`Search ${title.toLowerCase()}`} value={search} onChange={event => setSearch(event.target.value)} onKeyDown={event => event.key === 'Enter' && loadRows()} sx={{ flex: 1 }} />}
-        {tab !== 2 && <Button startIcon={<RefreshIcon />} onClick={() => loadRows()} disabled={!tenant || loading}>Load</Button>}
-        {tab !== 2 && <Button variant="contained" startIcon={<AddIcon />} onClick={create} disabled={!tenant}>New {tab === 0 ? 'article' : 'product'}</Button>}
+        {tab < 2 && <TextField label={`Search ${title.toLowerCase()}`} value={search} onChange={event => setSearch(event.target.value)} onKeyDown={event => event.key === 'Enter' && loadRows()} sx={{ flex: 1 }} />}
+        {tab < 2 && <Button startIcon={<RefreshIcon />} onClick={() => loadRows()} disabled={!tenant || loading}>Load</Button>}
+        {tab < 2 && <Button variant="contained" startIcon={<AddIcon />} onClick={create} disabled={!tenant}>New {tab === 0 ? 'article' : 'product'}</Button>}
       </Stack>
       <Tabs value={tab} onChange={switchTab} sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
-        <Tab label="Articles" /><Tab label="Products" /><Tab label="Media schedule" />
+        <Tab label="Articles" /><Tab label="Products" /><Tab label="Media schedule" /><Tab label="Group posts" />
       </Tabs>
-      {tab === 2 ? <PortalMediaSchedulePanel tenant={tenant} onNotice={setNotice} onError={setError} /> : <>
+      {tab === 2 ? <PortalMediaSchedulePanel tenant={tenant} onNotice={setNotice} onError={setError} />
+        : tab === 3 ? <PortalGroupPostPanel tenant={tenant} onNotice={setNotice} onError={setError} /> : <>
       {tenant && <Typography variant="body2" sx={{ mb: 1 }}>Database: <strong>{tenant}</strong> · {visibleRows.length} {title.toLowerCase()}</Typography>}
       {loading ? <Box sx={{ py: 6, textAlign: 'center' }}><CircularProgress /></Box> :
         <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: '65vh' }}><Table stickyHeader size="small">

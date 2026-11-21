@@ -271,6 +271,7 @@ const BOTTOM_ITEMS = [
 const WEBSITE_GROUP = { key: 'website', label: 'Website', icon: '📰', defaultExpanded: true, items: [
   { label: 'Đăng sản phẩm', path: '/admin/portal-content?tab=products', icon: '🛒' },
   { label: 'Lịch đăng mạng xã hội', path: '/admin/portal-content?tab=media', icon: '📅' },
+  { label: 'Đăng nhóm Facebook', path: '/admin/portal-content?tab=groupposts', icon: '👥' },
   { label: 'Đăng bài viết', path: '/admin/portal-content?tab=articles', icon: '📰' },
 ] }
 

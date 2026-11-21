@@ -31,3 +31,16 @@ export const savePortalProduct = (tenant, product) => request(
   `/${encodeURIComponent(tenant)}/products${product.id ? `/${product.id}` : ''}`,
   { method: product.id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(product) }
 )
+
+// Facebook group post campaigns (legacy ProductGroupPostForm); queued for the Chrome add-on.
+const json = body => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+export const fetchPortalGroupPostOptions = (tenant) => request(`/${encodeURIComponent(tenant)}/group-post/options`)
+export const fetchPortalGroupPostMembers = (tenant, groupIds = []) => request(
+  `/${encodeURIComponent(tenant)}/group-post/members${groupIds.length ? `?${groupIds.map(g => `groups=${encodeURIComponent(g)}`).join('&')}` : ''}`
+)
+export const previewPortalGroupPosts = (tenant, campaign) => request(`/${encodeURIComponent(tenant)}/group-post/preview`, json(campaign))
+export const fetchPortalGroupPosts = (tenant) => request(`/${encodeURIComponent(tenant)}/group-posts`)
+export const savePortalGroupPosts = (tenant, campaign) => request(`/${encodeURIComponent(tenant)}/group-posts`, json(campaign))
+export const cancelPortalGroupPost = (tenant, id) => request(
+  `/${encodeURIComponent(tenant)}/group-posts/${encodeURIComponent(id)}/cancel`, { method: 'POST' }
+)

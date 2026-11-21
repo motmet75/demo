@@ -3,6 +3,7 @@ package com.ams.bomcore.controller.admin;
 import com.ams.bomcore.service.portalcontent.PortalContentService;
 import com.ams.bomcore.service.portalcontent.PortalContentAccessService;
 import com.ams.bomcore.service.portalcontent.PortalScheduleService;
+import com.ams.bomcore.service.portalcontent.PortalGroupPostService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -27,10 +28,11 @@ public class PortalContentAdminController {
     private final PortalContentService service;
     private final PortalContentAccessService access;
     private final PortalScheduleService schedules;
+    private final PortalGroupPostService groupPosts;
 
     public PortalContentAdminController(PortalContentService service, PortalContentAccessService access,
-                                        PortalScheduleService schedules) {
-        this.service = service; this.access = access; this.schedules = schedules;
+                                        PortalScheduleService schedules, PortalGroupPostService groupPosts) {
+        this.service = service; this.access = access; this.schedules = schedules; this.groupPosts = groupPosts;
     }
 
     @GetMapping("/tenants")
@@ -125,6 +127,49 @@ public class PortalContentAdminController {
     public ResponseEntity<Void> cancelSchedule(@PathVariable String tenantId, @PathVariable long id, Authentication authentication) {
         access.require(authentication, tenantId);
         schedules.cancel(tenantId, id);
+        return ResponseEntity.noContent().build();
+    }
+
+    // ---- Facebook group post campaigns; picked up by the Chrome add-on via legacy /api/ext/queue ----
+
+    @GetMapping("/{tenantId}/group-post/options")
+    public PortalGroupPostService.Options groupPostOptions(@PathVariable String tenantId, Authentication authentication) {
+        access.require(authentication, tenantId);
+        return groupPosts.options(tenantId);
+    }
+
+    @GetMapping("/{tenantId}/group-post/members")
+    public List<PortalGroupPostService.Member> groupPostMembers(@PathVariable String tenantId,
+            @RequestParam(value = "groups", required = false) List<String> groups, Authentication authentication) {
+        access.require(authentication, tenantId);
+        return groupPosts.members(tenantId, groups);
+    }
+
+    @PostMapping("/{tenantId}/group-post/preview")
+    public List<PortalGroupPostService.PreviewRow> groupPostPreview(@PathVariable String tenantId,
+            @RequestBody PortalGroupPostService.PreviewRequest request, Authentication authentication) {
+        access.require(authentication, tenantId);
+        return groupPosts.preview(tenantId, request);
+    }
+
+    @GetMapping("/{tenantId}/group-posts")
+    public List<PortalGroupPostService.GroupPostView> groupPostList(@PathVariable String tenantId, Authentication authentication) {
+        access.require(authentication, tenantId);
+        return groupPosts.recent(tenantId);
+    }
+
+    @PostMapping("/{tenantId}/group-posts")
+    public ResponseEntity<PortalGroupPostService.SaveResult> groupPostSave(@PathVariable String tenantId,
+            @RequestBody PortalGroupPostService.SaveRequest request, Authentication authentication) {
+        access.require(authentication, tenantId);
+        String actor = authentication == null ? "admin" : authentication.getName();
+        return ResponseEntity.status(HttpStatus.CREATED).body(groupPosts.save(tenantId, request, actor));
+    }
+
+    @PostMapping("/{tenantId}/group-posts/{id}/cancel")
+    public ResponseEntity<Void> groupPostCancel(@PathVariable String tenantId, @PathVariable long id, Authentication authentication) {
+        access.require(authentication, tenantId);
+        groupPosts.cancel(tenantId, id);
         return ResponseEntity.noContent().build();
     }
 
