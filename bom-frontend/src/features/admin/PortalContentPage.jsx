@@ -138,11 +138,11 @@ function slugify(text) {
     .replace(/^-+|-+$/g, '')
 }
 
-// Smallest "-2", "-3"... suffix not already present in any of the given sets,
-// so a generated code/link never collides with what's already on this page.
+// Matches legacy Portal's own generateUniqueProductCode: try the bare slug
+// first, then "-1", "-2"... (ProductService.java) -- not "-2" first.
 function uniqueSlug(base, existingSets) {
   let candidate = base || 'item'
-  let n = 1
+  let n = 0
   while (existingSets.some(set => set.has(candidate))) {
     n += 1
     candidate = `${base}-${n}`
@@ -152,6 +152,10 @@ function uniqueSlug(base, existingSets) {
 
 function lastPathSegment(path) {
   return String(path || '').split('/').filter(Boolean).pop() || ''
+}
+
+function stripHtmlSuffix(path) {
+  return String(path || '').replace(/\.html$/i, '')
 }
 
 // Remember the taxonomy picked last time (per tenant, per tab) so a new
@@ -246,14 +250,16 @@ function ProductEditor({ open, value, onChange, onClose, onSave, saving, rows, b
   const existingCodeSlugs = useMemo(() =>
     new Set(rows.filter(r => r.id !== value.id).map(r => slugify(r.code))), [rows, value.id])
   const existingPathSlugs = useMemo(() =>
-    new Set(rows.filter(r => r.id !== value.id).map(r => lastPathSegment(r.path))), [rows, value.id])
+    new Set(rows.filter(r => r.id !== value.id).map(r => stripHtmlSuffix(lastPathSegment(r.path)))), [rows, value.id])
   const autoFillName = () => onChange({
     ...value,
     name: joinParts([nameFor(brands, value.brand), nameFor(catalogs, value.catalog), value.subCatalog]) || value.name,
   })
+  // Matches legacy Portal's own lazy-create flow exactly (AdminLazyCreateProductController):
+  // productCode = slugify(productName); productLink = productCode + ".html".
   const autoFillCodeAndLink = () => {
-    const slug = uniqueSlug(slugify(value.name) || 'san-pham', [existingCodeSlugs, existingPathSlugs])
-    onChange({ ...value, code: slug.toUpperCase(), path: '/san-pham/' + slug })
+    const code = uniqueSlug(slugify(value.name) || 'san-pham', [existingCodeSlugs, existingPathSlugs])
+    onChange({ ...value, code, path: code + '.html' })
   }
   return <Dialog open={open} onClose={saving ? undefined : onClose} fullWidth maxWidth="lg">
     <DialogTitle>{value.id ? `Edit product #${value.id}` : 'New product'}</DialogTitle>
@@ -265,7 +271,7 @@ function ProductEditor({ open, value, onChange, onClose, onSave, saving, rows, b
           Auto-fill name
         </Button>
         <TextField fullWidth required label="Product code" value={value.code || ''} onChange={set('code')} />
-        <TextField fullWidth required label="Path" value={value.path || ''} onChange={set('path')} placeholder="/san-pham/mi-gia-truyen" />
+        <TextField fullWidth required label="Path" value={value.path || ''} onChange={set('path')} placeholder="mi-gia-truyen.html" />
         <Button startIcon={<AutoFixHighIcon />} onClick={autoFillCodeAndLink} disabled={!value.name} sx={{ whiteSpace: 'nowrap' }}>
           Auto-fill code &amp; link
         </Button>
