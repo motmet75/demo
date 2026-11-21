@@ -19,3 +19,12 @@ export const savePortalProduct = (tenant, product) => request(
   `/${encodeURIComponent(tenant)}/products${product.id ? `/${product.id}` : ''}`,
   { method: product.id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(product) }
 )
+export const fetchPortalSchedules = tenant => request(`/${encodeURIComponent(tenant)}/schedules`)
+export const fetchPortalFacebookPages = tenant => request(`/${encodeURIComponent(tenant)}/facebook-pages`)
+export const createPortalSchedule = (tenant, schedule) => request(
+  `/${encodeURIComponent(tenant)}/schedules`,
+  { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(schedule) }
+)
+export const cancelPortalSchedule = (tenant, id) => request(
+  `/${encodeURIComponent(tenant)}/schedules/${id}/cancel`, { method: 'POST' }
+)

@@ -13,6 +13,7 @@ import {
   fetchPortalArticles, fetchPortalProducts, fetchPortalTenants,
   savePortalArticle, savePortalProduct
 } from '../../api/portalContentApi'
+import PortalMediaSchedulePanel from './PortalMediaSchedulePanel'
 
 const emptyArticle = {
   title: '', articleLink: '', category: 'blog', subCategory: 'none', language: 'vi',
@@ -71,8 +72,12 @@ function ProductEditor({ open, value, onChange, onClose, onSave, saving }) {
     <DialogContent><Stack spacing={2} sx={{ pt: 1 }}>
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
         <TextField fullWidth required label="Product name" value={value.name || ''} onChange={set('name')} />
-        <TextField fullWidth required label="Product code" value={value.code || ''} onChange={set('code')} />
-        <TextField fullWidth required label="Path" value={value.path || ''} onChange={set('path')} placeholder="/san-pham/mi-gia-truyen" />
+        <TextField fullWidth required label="Product code" value={value.code || ''} onChange={event => {
+          const code = event.target.value
+          const autoPath = !value.id && (!value.path || value.path === `${value.code || ''}.html`)
+          onChange({ ...value, code, ...(autoPath ? { path: code ? `${code}.html` : '' } : {}) })
+        }} />
+        <TextField fullWidth required label="Path" value={value.path || ''} onChange={set('path')} placeholder="product-code.html" />
       </Stack>
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
         <TextField fullWidth label="Catalog" value={value.catalog || ''} onChange={set('catalog')} />
@@ -87,7 +92,7 @@ function ProductEditor({ open, value, onChange, onClose, onSave, saving }) {
         <TextField fullWidth label="Language" value={value.language || ''} onChange={set('language')} />
         <TextField fullWidth label="Status" value={value.status || ''} onChange={set('status')} />
       </Stack>
-      <TextField fullWidth label="Image URL" value={value.imageUrl || ''} onChange={set('imageUrl')} />
+      <TextField fullWidth multiline minRows={2} label="Image URLs (gallery, one per line)" value={value.imageUrl || ''} onChange={set('imageUrl')} />
       <TextField fullWidth label="Description image URL" value={value.imageDescriptionUrl || ''} onChange={set('imageDescriptionUrl')} />
       <TextField fullWidth label="Video URL" value={value.videoUrl || ''} onChange={set('videoUrl')} />
       <TextField fullWidth multiline minRows={2} label="Short description" value={value.shortDescription || ''} onChange={set('shortDescription')} />
@@ -128,7 +133,7 @@ export default function PortalContentPage() {
   }, [loadTenants])
 
   const loadRows = useCallback(async (selectedTenant = tenant, selectedTab = tab, query = search) => {
-    if (!selectedTenant) { setRows([]); return }
+    if (!selectedTenant || selectedTab === 2) { setRows([]); return }
     setLoading(true); setError(''); setNotice('')
     try {
       const result = selectedTab === 0
@@ -149,7 +154,22 @@ export default function PortalContentPage() {
     loadRows(tenant, value, '')
   }
   const edit = row => setDraft({ ...row })
-  const create = () => setDraft({ ...(tab === 0 ? emptyArticle : emptyProduct) })
+  // New items copy the classification of the newest existing item, so they land in
+  // the same catalog/group/category as this website's other content.
+  const create = () => {
+    if (tab === 0) {
+      const latest = rows.find(row => row.category && row.category !== 'page')
+      setDraft({ ...emptyArticle, ...(latest ? {
+        category: latest.category, subCategory: latest.subCategory, language: latest.language, template: latest.template,
+      } : {}) })
+    } else {
+      const latest = rows[0]
+      setDraft({ ...emptyProduct, ...(latest ? {
+        catalog: latest.catalog, subCatalog: latest.subCatalog, brand: latest.brand, group: latest.group,
+        currency: latest.currency, language: latest.language, status: latest.status,
+      } : {}) })
+    }
+  }
   const save = async () => {
     if (!tenant || !draft) return
     setSaving(true); setError(''); setNotice('')
@@ -178,13 +198,16 @@ export default function PortalContentPage() {
         <TextField select label="Website tenant" value={tenant} onChange={switchTenant} sx={{ minWidth: 280 }} disabled={loading && !tenants.length}>
           {tenants.map(value => <MenuItem key={value} value={value}>{value}</MenuItem>)}
         </TextField>
-        <TextField label={`Search ${title.toLowerCase()}`} value={search} onChange={event => setSearch(event.target.value)} onKeyDown={event => event.key === 'Enter' && loadRows()} sx={{ flex: 1 }} />
-        <Button startIcon={<RefreshIcon />} onClick={() => loadRows()} disabled={!tenant || loading}>Load</Button>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={create} disabled={!tenant}>New {tab === 0 ? 'article' : 'product'}</Button>
+        {tab !== 2 && <>
+          <TextField label={`Search ${title.toLowerCase()}`} value={search} onChange={event => setSearch(event.target.value)} onKeyDown={event => event.key === 'Enter' && loadRows()} sx={{ flex: 1 }} />
+          <Button startIcon={<RefreshIcon />} onClick={() => loadRows()} disabled={!tenant || loading}>Load</Button>
+          <Button variant="contained" startIcon={<AddIcon />} onClick={create} disabled={!tenant}>New {tab === 0 ? 'article' : 'product'}</Button>
+        </>}
       </Stack>
       <Tabs value={tab} onChange={switchTab} sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
-        <Tab label="Articles" /><Tab label="Products" />
+        <Tab label="Articles" /><Tab label="Products" /><Tab label="Media schedule" />
       </Tabs>
+      {tab === 2 ? <PortalMediaSchedulePanel tenant={tenant} onNotice={setNotice} onError={setError} /> : <>
       {tenant && <Typography variant="body2" sx={{ mb: 1 }}>Database: <strong>{tenant}</strong> · {visibleRows.length} {title.toLowerCase()}</Typography>}
       {loading ? <Box sx={{ py: 6, textAlign: 'center' }}><CircularProgress /></Box> :
         <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: '65vh' }}><Table stickyHeader size="small">
@@ -201,6 +224,7 @@ export default function PortalContentPage() {
             <TableCell>{date(row.modifiedTime)}</TableCell><TableCell><Button size="small" startIcon={<EditIcon />} onClick={() => edit(row)}>Edit</Button></TableCell>
           </TableRow>)}</TableBody>
         </Table></TableContainer>}
+      </>}
     </CardContent></Card>
     <ArticleEditor open={tab === 0 && Boolean(draft)} value={draft || emptyArticle} onChange={setDraft} onClose={() => setDraft(null)} onSave={save} saving={saving} />
     <ProductEditor open={tab === 1 && Boolean(draft)} value={draft || emptyProduct} onChange={setDraft} onClose={() => setDraft(null)} onSave={save} saving={saving} />
