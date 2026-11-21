@@ -25,16 +25,19 @@ public class LegacySite {
 
     private final LegacyLanguage languages;
     private final Path packagedTemplates;
+    private final Path liveTemplates;
 
     public LegacySite(LegacyLanguage languages,
                       @Value("${portal.web.config-path:/opt/tuonghoa/portal/xml/config.xml}") String configXml,
                       @Value("${portal.web.legacy-resources-root:/opt/tuonghoa/portal/src/main/resources}") String legacyRoot,
-                      @Value("${portal.web.tenant-config-dir:/opt/tuonghoa/portal/tenants/atRuntime}") String tenantConfigDir) {
+                      @Value("${portal.web.tenant-config-dir:/opt/tuonghoa/portal/tenants/atRuntime}") String tenantConfigDir,
+                      @Value("${portal.live.root:/opt/portal-live}") String liveRoot) {
         this.languages = languages;
         Utilities.initTenantRuntimePath(Path.of(tenantConfigDir).toAbsolutePath().normalize());
         // Templates packaged in the legacy Portal JAR: localizedViewName() only
         // switches to a "-en"/"-vi" file when it exists there.
         this.packagedTemplates = Path.of(legacyRoot, "templates").toAbsolutePath().normalize();
+        this.liveTemplates = Path.of(liveRoot, "templates").toAbsolutePath().normalize();
         Utilities.init(new ConfigXml(Path.of(configXml)));
     }
 
@@ -104,6 +107,12 @@ public class LegacySite {
             if (!englishTemplate.equals(templateName) && packaged(englishView)) return englishView;
         }
         return viewName(domainString, tenantId, templateName);
+    }
+
+    /** True when either Thymeleaf resolver (live theme folder or legacy resources) can find the view. */
+    public boolean templateExists(String view) {
+        Path live = liveTemplates.resolve(view).normalize();
+        return packaged(view) || (live.startsWith(liveTemplates) && Files.isRegularFile(live));
     }
 
     /** new ClassPathResource("templates/" + view).exists() against the legacy resource tree. */

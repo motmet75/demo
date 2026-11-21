@@ -408,7 +408,11 @@ public class StaticPagesRenderer {
         String mapped = site.languages().mappedLanguage(session);
         String lang = mapped != null ? mapped : "vi";
         m.put("client", c.content().getClientByDomainAndLanguageCode(c.tenant(), lang).orElseGet(Client::new));
-        return page(site.viewName(c.domain(), c.tenant(), "login-page.html"), m);
+        String view = site.viewName(c.domain(), c.tenant(), "login-page.html");
+        // Legacy answered 500 for tenants without a login-page.html (tuonghoa-imex.com);
+        // send those visitors to the tenant's working Vaadin login instead.
+        if (!site.templateExists(view)) return page("redirect:/app/login", new java.util.HashMap<>());
+        return page(view, m);
     }
 
     private List<Language> parseLanguages() {

@@ -180,7 +180,7 @@ public class PageRouteController {
 
     // ---- login page (the login itself is a POST and stays on Portal 8080) ----
 
-    @GetMapping("/dang-nhap")
+    @GetMapping({"/dang-nhap", "/dang-nhap/"})
     public Object login(Model model, HttpServletRequest r, HttpSession s) {
         return view(pages.login(r, s), model);
     }
