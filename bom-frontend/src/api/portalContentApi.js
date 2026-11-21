@@ -9,6 +9,16 @@ const request = async (path, options = {}) => {
 export const fetchPortalTenants = () => request('/tenants')
 export const fetchPortalBrands = (tenant) => request(`/${encodeURIComponent(tenant)}/brands`)
 export const fetchPortalCatalogs = (tenant) => request(`/${encodeURIComponent(tenant)}/catalogs`)
+export const fetchPortalGroups = (tenant) => request(`/${encodeURIComponent(tenant)}/groups`)
+export const fetchPortalSchedules = (tenant) => request(`/${encodeURIComponent(tenant)}/schedules`)
+export const fetchPortalFacebookPages = (tenant) => request(`/${encodeURIComponent(tenant)}/facebook-pages`)
+export const createPortalSchedule = (tenant, schedule) => request(
+  `/${encodeURIComponent(tenant)}/schedules`,
+  { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(schedule) }
+)
+export const cancelPortalSchedule = (tenant, id) => request(
+  `/${encodeURIComponent(tenant)}/schedules/${encodeURIComponent(id)}/cancel`, { method: 'POST' }
+)
 export const fetchPortalArticles = (tenant, search = '') =>
   request(`/${encodeURIComponent(tenant)}/articles?search=${encodeURIComponent(search)}`)
 export const savePortalArticle = (tenant, article) => request(

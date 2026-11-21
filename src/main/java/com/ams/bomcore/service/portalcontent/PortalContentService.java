@@ -8,7 +8,10 @@ import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class PortalContentService {
@@ -44,6 +47,52 @@ public class PortalContentService {
     // "none" rather than null/blank (see ProductBrand/ProductCatalog).
     private static String noneToEmpty(String value) {
         return value == null || value.isBlank() || value.equals("none") ? "" : value;
+    }
+
+    public List<CodeName> groups(String tenantId) {
+        String sql = "SELECT productGroupCode, productGroupName FROM ProductGroupTb " +
+                "WHERE isVisible = true ORDER BY productGroupName";
+        return access(tenantId, db -> db.query(sql, (row, i) -> new CodeName(
+                row.getString("productgroupcode"), row.getString("productgroupname"), "")));
+    }
+
+    // producttb.productgroupstring is a separate, disconnected legacy display
+    // column (see Product.java / ProductService.java in the portal repo) --
+    // it is NEVER populated from ProductGroupItemTb, the actual many-to-many
+    // membership table the Vaadin admin's own Group-assignment UI writes to
+    // (ProductGroupGridForm.java). Real membership must come from that table,
+    // keyed by productCode; this map fetches it in one query for all products
+    // rather than one query per row.
+    private Map<String, List<String>> groupCodesByProduct(JdbcTemplate db) {
+        String sql = "SELECT productCode, productGroupItemCode FROM ProductGroupItemTb WHERE isVisible = true";
+        return db.query(sql, rs -> {
+            Map<String, List<String>> result = new java.util.LinkedHashMap<>();
+            while (rs.next()) {
+                result.computeIfAbsent(rs.getString("productcode"), k -> new ArrayList<>())
+                        .add(rs.getString("productgroupitemcode"));
+            }
+            return result;
+        });
+    }
+
+    // Keep producttb.productgroupstring as a human-readable cache (joined
+    // names) for whatever in legacy Portal still just displays that column,
+    // while ProductGroupItemTb stays the source of truth.
+    private void replaceProductGroups(JdbcTemplate db, String productCode, List<String> groupCodes) {
+        db.update("DELETE FROM ProductGroupItemTb WHERE productCode = ?", productCode);
+        if (groupCodes == null) return;
+        for (String code : groupCodes) {
+            if (code == null || code.isBlank()) continue;
+            String name = db.queryForList(
+                    "SELECT productGroupName FROM ProductGroupTb WHERE productGroupCode = ?", String.class, code)
+                    .stream().findFirst().orElse(code);
+            db.update("""
+                    INSERT INTO ProductGroupItemTb
+                        (productGroupItemCode, productGroupItemName, productCode,
+                         createdTime, modifiedTime, isApproved, isLocked, isVisible)
+                    VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, true, false, true)
+                    """, code, name, productCode);
+        }
     }
 
     public List<ArticleView> articles(String tenantId, String search) {
@@ -101,16 +150,20 @@ public class PortalContentService {
                        productshortdes, productlongdes, productstatus, productimageurl1,
                        productimagedesurl, productvideoadd, productpriceamount, productdiscont,
                        productpricecurrency, language, path, createdtime, modifiedtime,
-                       isvisible, isapproved, islocked, isnew, productbrand, productgroupstring
+                       isvisible, isapproved, islocked, isnew, productbrand
                   FROM producttb
                  WHERE (? = '' OR lower(coalesce(productname,'')) LIKE ? OR lower(coalesce(productcode,'')) LIKE ?)
                  ORDER BY modifiedtime DESC NULLS LAST, id DESC LIMIT 500
                 """;
-        return access(tenantId, db -> db.query(sql, this::product, query, like(query), like(query)));
+        return access(tenantId, db -> {
+            Map<String, List<String>> groupsByCode = groupCodesByProduct(db);
+            return db.query(sql, (row, i) -> product(row, groupsByCode), query, like(query), like(query));
+        });
     }
 
     public ProductView createProduct(String tenantId, ProductWrite value) {
         ProductWrite input = validate(value);
+        String groupString = input.groupCodes() == null ? "" : String.join(", ", input.groupCodes());
         String sql = """
                 INSERT INTO producttb
                     (productname, productcode, productcatalog, productsubcatalog, productshortdes,
@@ -121,16 +174,21 @@ public class PortalContentService {
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
                         ?, ?, ?, ?, ?, ?) RETURNING id
                 """;
-        Integer id = access(tenantId, db -> db.queryForObject(sql, Integer.class,
-                input.name(), input.code(), input.catalog(), input.subCatalog(), input.shortDescription(),
-                input.longDescription(), input.status(), input.imageUrl(), input.imageDescriptionUrl(),
-                input.videoUrl(), input.price(), input.discount(), input.currency(), input.language(), input.path(),
-                input.visible(), input.approved(), input.locked(), input.newProduct(), input.brand(), input.group()));
+        Integer id = access(tenantId, db -> {
+            Integer newId = db.queryForObject(sql, Integer.class,
+                    input.name(), input.code(), input.catalog(), input.subCatalog(), input.shortDescription(),
+                    input.longDescription(), input.status(), input.imageUrl(), input.imageDescriptionUrl(),
+                    input.videoUrl(), input.price(), input.discount(), input.currency(), input.language(), input.path(),
+                    input.visible(), input.approved(), input.locked(), input.newProduct(), input.brand(), groupString);
+            replaceProductGroups(db, input.code(), input.groupCodes());
+            return newId;
+        });
         return productById(tenantId, id);
     }
 
     public ProductView updateProduct(String tenantId, int id, ProductWrite value) {
         ProductWrite input = validate(value);
+        String groupString = input.groupCodes() == null ? "" : String.join(", ", input.groupCodes());
         String sql = """
                 UPDATE producttb SET productname=?, productcode=?, productcatalog=?, productsubcatalog=?,
                     productshortdes=?, productlongdes=?, productstatus=?, productimageurl1=?,
@@ -139,11 +197,15 @@ public class PortalContentService {
                     isvisible=?, isapproved=?, islocked=?, isnew=?, productbrand=?, productgroupstring=?
                  WHERE id=?
                 """;
-        int changed = access(tenantId, db -> db.update(sql, input.name(), input.code(), input.catalog(),
-                input.subCatalog(), input.shortDescription(), input.longDescription(), input.status(), input.imageUrl(),
-                input.imageDescriptionUrl(), input.videoUrl(), input.price(), input.discount(), input.currency(),
-                input.language(), input.path(), input.visible(), input.approved(), input.locked(), input.newProduct(),
-                input.brand(), input.group(), id));
+        int changed = access(tenantId, db -> {
+            int rows = db.update(sql, input.name(), input.code(), input.catalog(),
+                    input.subCatalog(), input.shortDescription(), input.longDescription(), input.status(), input.imageUrl(),
+                    input.imageDescriptionUrl(), input.videoUrl(), input.price(), input.discount(), input.currency(),
+                    input.language(), input.path(), input.visible(), input.approved(), input.locked(), input.newProduct(),
+                    input.brand(), groupString, id);
+            if (rows == 1) replaceProductGroups(db, input.code(), input.groupCodes());
+            return rows;
+        });
         if (changed != 1) throw new IllegalArgumentException("Product not found");
         return productById(tenantId, id);
     }
@@ -167,15 +229,16 @@ public class PortalContentService {
                 row.getBoolean("isapproved"), row.getBoolean("islocked"), row.getString("articletemplate"));
     }
 
-    private ProductView product(ResultSet row, int ignored) throws SQLException {
-        return new ProductView(row.getInt("id"), row.getString("productname"), row.getString("productcode"),
+    private ProductView product(ResultSet row, Map<String, List<String>> groupsByCode) throws SQLException {
+        String code = row.getString("productcode");
+        return new ProductView(row.getInt("id"), row.getString("productname"), code,
                 row.getString("productcatalog"), row.getString("productsubcatalog"), row.getString("productshortdes"),
                 row.getString("productlongdes"), row.getString("productstatus"), row.getString("productimageurl1"),
                 row.getString("productimagedesurl"), row.getString("productvideoadd"), row.getBigDecimal("productpriceamount"),
                 row.getBigDecimal("productdiscont"), row.getString("productpricecurrency"), row.getString("language"),
                 row.getString("path"), time(row, "createdtime"), time(row, "modifiedtime"), row.getBoolean("isvisible"),
                 row.getBoolean("isapproved"), row.getBoolean("islocked"), row.getBoolean("isnew"),
-                row.getString("productbrand"), row.getString("productgroupstring"));
+                row.getString("productbrand"), groupsByCode.getOrDefault(code, List.of()));
     }
 
     private static LocalDateTime time(ResultSet row, String field) throws SQLException {
@@ -197,12 +260,14 @@ public class PortalContentService {
         BigDecimal discount = value.discount() == null ? BigDecimal.ZERO : value.discount();
         if (discount.compareTo(BigDecimal.ZERO) < 0 || discount.compareTo(new BigDecimal("99.99")) > 0)
             throw new IllegalArgumentException("Discount must be between 0 and 99.99");
+        List<String> groupCodes = value.groupCodes() == null ? List.of() :
+                value.groupCodes().stream().filter(c -> c != null && !c.isBlank()).collect(Collectors.toList());
         return new ProductWrite(required(value.name(), "Product name", 255), required(value.code(), "Product code", 255),
                 text(value.catalog(), "none"), text(value.subCatalog(), "none"), text(value.brand(), "none"),
                 text(value.status(), "available"), text(value.shortDescription(), ""), text(value.longDescription(), ""),
                 text(value.imageUrl(), ""), text(value.imageDescriptionUrl(), ""), text(value.videoUrl(), ""),
                 value.price() == null ? BigDecimal.ZERO : value.price(), discount, text(value.currency(), "VND"),
-                text(value.language(), "vi"), required(value.path(), "Product path", 2000), text(value.group(), "none"),
+                text(value.language(), "vi"), required(value.path(), "Product path", 2000), groupCodes,
                 value.visible(), value.approved(), value.locked(), value.newProduct());
     }
 
@@ -238,10 +303,11 @@ public class PortalContentService {
                               String imageDescriptionUrl, String videoUrl, BigDecimal price, BigDecimal discount,
                               String currency, String language, String path, LocalDateTime createdTime,
                               LocalDateTime modifiedTime, boolean visible, boolean approved, boolean locked,
-                              boolean newProduct, String brand, String group) {}
+                              boolean newProduct, String brand, List<String> groupCodes) {}
     public record ProductWrite(String name, String code, String catalog, String subCatalog, String brand, String status,
                                String shortDescription, String longDescription, String imageUrl, String imageDescriptionUrl,
                                String videoUrl, BigDecimal price, BigDecimal discount, String currency, String language,
-                               String path, String group, boolean visible, boolean approved, boolean locked, boolean newProduct) {}
+                               String path, List<String> groupCodes, boolean visible, boolean approved, boolean locked,
+                               boolean newProduct) {}
     public record CodeName(String code, String name, String imageUrl) {}
 }

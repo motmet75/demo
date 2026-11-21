@@ -2,6 +2,7 @@ package com.ams.bomcore.controller.admin;
 
 import com.ams.bomcore.service.portalcontent.PortalContentService;
 import com.ams.bomcore.service.portalcontent.PortalContentAccessService;
+import com.ams.bomcore.service.portalcontent.PortalScheduleService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -25,9 +26,11 @@ import java.util.Map;
 public class PortalContentAdminController {
     private final PortalContentService service;
     private final PortalContentAccessService access;
+    private final PortalScheduleService schedules;
 
-    public PortalContentAdminController(PortalContentService service, PortalContentAccessService access) {
-        this.service = service; this.access = access;
+    public PortalContentAdminController(PortalContentService service, PortalContentAccessService access,
+                                        PortalScheduleService schedules) {
+        this.service = service; this.access = access; this.schedules = schedules;
     }
 
     @GetMapping("/tenants")
@@ -68,6 +71,12 @@ public class PortalContentAdminController {
         return service.catalogs(tenantId);
     }
 
+    @GetMapping("/{tenantId}/groups")
+    public List<PortalContentService.CodeName> groups(@PathVariable String tenantId, Authentication authentication) {
+        access.require(authentication, tenantId);
+        return service.groups(tenantId);
+    }
+
     @GetMapping("/{tenantId}/products")
     public List<PortalContentService.ProductView> products(@PathVariable String tenantId,
                                                            @RequestParam(defaultValue = "") String search,
@@ -88,6 +97,35 @@ public class PortalContentAdminController {
             @RequestBody PortalContentService.ProductWrite request, Authentication authentication) {
         access.require(authentication, tenantId);
         return service.updateProduct(tenantId, id, request);
+    }
+
+    // ---- media (social post) schedules; posted by the legacy Portal dispatcher ----
+
+    @GetMapping("/{tenantId}/schedules")
+    public List<PortalScheduleService.ScheduleView> schedules(@PathVariable String tenantId, Authentication authentication) {
+        access.require(authentication, tenantId);
+        return schedules.schedules(tenantId);
+    }
+
+    @GetMapping("/{tenantId}/facebook-pages")
+    public List<PortalScheduleService.FacebookPage> facebookPages(@PathVariable String tenantId, Authentication authentication) {
+        access.require(authentication, tenantId);
+        return schedules.facebookPages(tenantId);
+    }
+
+    @PostMapping("/{tenantId}/schedules")
+    public ResponseEntity<List<PortalScheduleService.ScheduleView>> createSchedule(@PathVariable String tenantId,
+            @RequestBody PortalScheduleService.ScheduleRequest request, Authentication authentication) {
+        access.require(authentication, tenantId);
+        String actor = authentication == null ? "admin" : authentication.getName();
+        return ResponseEntity.status(HttpStatus.CREATED).body(schedules.create(tenantId, request, actor));
+    }
+
+    @PostMapping("/{tenantId}/schedules/{id}/cancel")
+    public ResponseEntity<Void> cancelSchedule(@PathVariable String tenantId, @PathVariable long id, Authentication authentication) {
+        access.require(authentication, tenantId);
+        schedules.cancel(tenantId, id);
+        return ResponseEntity.noContent().build();
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

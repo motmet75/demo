@@ -1,17 +1,20 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import {
   Alert, Autocomplete, Avatar, Box, Button, Card, CardContent, Checkbox, CircularProgress, Dialog,
   DialogActions, DialogContent, DialogTitle, FormControlLabel, MenuItem, Paper,
   Stack, Tab, Tabs, Table, TableBody, TableCell, TableContainer, TableHead,
   TableRow, TextField, Tooltip, Typography
 } from '@mui/material'
+import HtmlEditor from '../../components/HtmlEditor'
+import PortalMediaSchedulePanel from './PortalMediaSchedulePanel'
 import AddIcon from '@mui/icons-material/Add'
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh'
 import EditIcon from '@mui/icons-material/Edit'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import SaveIcon from '@mui/icons-material/Save'
 import {
-  fetchPortalArticles, fetchPortalBrands, fetchPortalCatalogs, fetchPortalProducts, fetchPortalTenants,
+  fetchPortalArticles, fetchPortalBrands, fetchPortalCatalogs, fetchPortalGroups, fetchPortalProducts, fetchPortalTenants,
   savePortalArticle, savePortalProduct
 } from '../../api/portalContentApi'
 
@@ -23,7 +26,7 @@ const emptyArticle = {
 const emptyProduct = {
   name: '', code: '', catalog: '', subCatalog: '', brand: '', status: 'available',
   shortDescription: '', longDescription: '', imageUrl: '', imageDescriptionUrl: '', videoUrl: '',
-  price: 0, discount: 0, currency: 'VND', language: 'vi', path: '', group: '',
+  price: 0, discount: 0, currency: 'VND', language: 'vi', path: '', groupCodes: [],
   visible: true, approved: false, locked: false, newProduct: false,
 }
 
@@ -51,25 +54,18 @@ function PickField({ label, value, options, onChange, fullWidth = true }) {
   />
 }
 
-// `group` is stored as one comma-separated string column (no real multi-group
-// table, see PortalContentService). Splitting into individual tags here is
-// purely a UI convenience -- the join/split must stay symmetric.
-const splitTags = value => String(value || '').split(',').map(part => part.trim()).filter(Boolean)
-const joinTags = tags => tags.map(tag => String(tag || '').trim()).filter(Boolean).join(', ')
-function distinctTagValues(rows, field) {
-  const seen = new Set()
-  for (const row of rows) {
-    for (const tag of splitTags(row?.[field])) {
-      if (!PLACEHOLDER_VALUES.has(tag)) seen.add(tag)
-    }
-  }
-  return Array.from(seen).sort((a, b) => a.localeCompare(b))
-}
-
-function MultiPickField({ label, value, options, onChange, fullWidth = true }) {
+// Group is a real many-to-many membership (ProductGroupItemTb, keyed by
+// productCode -- see PortalContentService.groupCodesByProduct). Unlike
+// catalog/brand (single pick), a product can be in several groups at once.
+function MultiCodeNamePickField({ label, value, options, onChange, fullWidth = true }) {
+  const codes = Array.isArray(value) ? value : []
+  const selected = codes.map(code => options.find(o => o.code === code) || { code, name: `${code} (mã chưa rõ)` })
   return <Autocomplete
-    multiple freeSolo fullWidth={fullWidth} options={options} value={splitTags(value)}
-    onChange={(_, next) => onChange(joinTags(next))}
+    multiple fullWidth={fullWidth} options={options}
+    getOptionLabel={o => o?.name || ''}
+    isOptionEqualToValue={(o, v) => o.code === v.code}
+    value={selected}
+    onChange={(_, next) => onChange(next.map(o => o.code))}
     renderInput={params => <TextField {...params} label={label} />}
   />
 }
@@ -163,7 +159,7 @@ function stripHtmlSuffix(path) {
 // identifying fields (title/name/code/link/content) are never remembered.
 const LAST_DEFAULTS_FIELDS = {
   article: ['category', 'subCategory', 'language', 'template'],
-  product: ['catalog', 'subCatalog', 'brand', 'group', 'language', 'currency', 'status'],
+  product: ['catalog', 'subCatalog', 'brand', 'groupCodes', 'language', 'currency', 'status'],
 }
 function lastDefaultsKey(kind, tenant) {
   return `bom_portalContent_lastDefaults_${kind}_${tenant || ''}`.replace(/[^A-Za-z0-9._-]/g, '_')
@@ -234,19 +230,18 @@ function ArticleEditor({ open, value, onChange, onClose, onSave, saving, rows })
       <TextField fullWidth label="Keywords" value={value.keywords || ''} onChange={set('keywords')} />
       <TextField fullWidth label="Thumbnail URL" value={value.thumbnailUrl || ''} onChange={set('thumbnailUrl')} />
       <TextField fullWidth multiline minRows={2} label="Description" value={value.description || ''} onChange={set('description')} />
-      <TextField fullWidth multiline minRows={10} label="HTML content" value={value.content || ''} onChange={set('content')} />
+      <HtmlEditor label="HTML content" value={value.content} onChange={setField('content')} minHeight={260} />
       <Flags value={value} onChange={onChange} />
     </Stack></DialogContent>
     <DialogActions><Button onClick={onClose} disabled={saving}>Cancel</Button><Button variant="contained" startIcon={<SaveIcon />} onClick={onSave} disabled={saving || !value.title?.trim() || !value.articleLink?.trim()}>{saving ? 'Saving…' : 'Save article'}</Button></DialogActions>
   </Dialog>
 }
 
-function ProductEditor({ open, value, onChange, onClose, onSave, saving, rows, brands, catalogs }) {
+function ProductEditor({ open, value, onChange, onClose, onSave, saving, rows, brands, catalogs, groups }) {
   const set = key => event => onChange({ ...value, [key]: event.target.value })
   const setField = key => next => onChange({ ...value, [key]: next })
   const number = key => event => onChange({ ...value, [key]: Number(event.target.value) || 0 })
   const subCatalogOptions = useMemo(() => distinctValues(rows, 'subCatalog'), [rows])
-  const groupOptions = useMemo(() => distinctTagValues(rows, 'group'), [rows])
   const existingCodeSlugs = useMemo(() =>
     new Set(rows.filter(r => r.id !== value.id).map(r => slugify(r.code))), [rows, value.id])
   const existingPathSlugs = useMemo(() =>
@@ -284,7 +279,7 @@ function ProductEditor({ open, value, onChange, onClose, onSave, saving, rows, b
       </Stack>
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
         <PickField label="Subcatalog" value={value.subCatalog} options={subCatalogOptions} onChange={setField('subCatalog')} />
-        <MultiPickField label="Group" value={value.group} options={groupOptions} onChange={setField('group')} />
+        <MultiCodeNamePickField label="Group" value={value.groupCodes} options={groups} onChange={setField('groupCodes')} />
       </Stack>
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
         <TextField fullWidth type="number" label="Price" value={value.price ?? 0} onChange={number('price')} />
@@ -297,21 +292,32 @@ function ProductEditor({ open, value, onChange, onClose, onSave, saving, rows, b
       <TextField fullWidth label="Description image URL" value={value.imageDescriptionUrl || ''} onChange={set('imageDescriptionUrl')} />
       <TextField fullWidth label="Video URL" value={value.videoUrl || ''} onChange={set('videoUrl')} />
       <TextField fullWidth multiline minRows={2} label="Short description" value={value.shortDescription || ''} onChange={set('shortDescription')} />
-      <TextField fullWidth multiline minRows={8} label="Long description / HTML" value={value.longDescription || ''} onChange={set('longDescription')} />
+      <HtmlEditor label="Long description / HTML" value={value.longDescription} onChange={setField('longDescription')} minHeight={200} />
       <Flags value={value} onChange={onChange} product />
     </Stack></DialogContent>
     <DialogActions><Button onClick={onClose} disabled={saving}>Cancel</Button><Button variant="contained" startIcon={<SaveIcon />} onClick={onSave} disabled={saving || !value.name?.trim() || !value.code?.trim() || !value.path?.trim()}>{saving ? 'Saving…' : 'Save product'}</Button></DialogActions>
   </Dialog>
 }
 
+// Nav items (WEBSITE_GROUP in App.jsx) link to ?tab=products/media/articles.
+// React Router doesn't remount on a query-string-only navigation, so a plain
+// useState initializer would only catch the tab on first load -- clicking a
+// nav link while already on this page needs the effect below too.
+function tabFromQuery(search) {
+  const value = new URLSearchParams(search).get('tab')
+  return value === 'products' ? 1 : value === 'media' ? 2 : 0
+}
+
 export default function PortalContentPage() {
+  const location = useLocation()
   const [tenants, setTenants] = useState([])
   const [tenant, setTenant] = useState('')
-  const [tab, setTab] = useState(0)
+  const [tab, setTab] = useState(() => tabFromQuery(window.location.search))
   const [search, setSearch] = useState('')
   const [rows, setRows] = useState([])
   const [brands, setBrands] = useState([])
   const [catalogs, setCatalogs] = useState([])
+  const [groups, setGroups] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -319,14 +325,15 @@ export default function PortalContentPage() {
   const [draft, setDraft] = useState(null)
 
   const loadBrandsAndCatalogs = useCallback(async (selectedTenant) => {
-    if (!selectedTenant) { setBrands([]); setCatalogs([]); return }
+    if (!selectedTenant) { setBrands([]); setCatalogs([]); setGroups([]); return }
     try {
-      const [brandList, catalogList] = await Promise.all([
-        fetchPortalBrands(selectedTenant), fetchPortalCatalogs(selectedTenant),
+      const [brandList, catalogList, groupList] = await Promise.all([
+        fetchPortalBrands(selectedTenant), fetchPortalCatalogs(selectedTenant), fetchPortalGroups(selectedTenant),
       ])
       setBrands(Array.isArray(brandList) ? brandList : [])
       setCatalogs(Array.isArray(catalogList) ? catalogList : [])
-    } catch { setBrands([]); setCatalogs([]) }
+      setGroups(Array.isArray(groupList) ? groupList : [])
+    } catch { setBrands([]); setCatalogs([]); setGroups([]) }
   }, [])
 
   const loadTenants = useCallback(async () => {
@@ -348,7 +355,7 @@ export default function PortalContentPage() {
   }, [loadTenants])
 
   const loadRows = useCallback(async (selectedTenant = tenant, selectedTab = tab, query = search) => {
-    if (!selectedTenant) { setRows([]); return }
+    if (!selectedTenant || selectedTab === 2) { setRows([]); return }
     setLoading(true); setError(''); setNotice('')
     try {
       const result = selectedTab === 0
@@ -358,6 +365,21 @@ export default function PortalContentPage() {
     } catch (e) { setError(e.message || 'Cannot load Portal content'); setRows([]) }
     finally { setLoading(false) }
   }, [tenant, tab, search])
+
+  // Only reacts to a nav-link click changing the URL while already on this
+  // page (e.g. the sidebar's "Lịch đăng mạng xã hội" -> ?tab=media) --
+  // switchTab/switchTenant below already load data for in-page clicks, and
+  // the very first mount is already handled by loadTenants.
+  const mountedRef = React.useRef(false)
+  useEffect(() => {
+    const next = tabFromQuery(location.search)
+    if (!mountedRef.current) { mountedRef.current = true; return }
+    setTab(current => {
+      if (current === next) return current
+      if (tenant) loadRows(tenant, next, '')
+      return next
+    })
+  }, [location.search])
 
   const switchTenant = event => {
     const value = event.target.value
@@ -369,7 +391,7 @@ export default function PortalContentPage() {
     setTab(value); setSearch(''); setRows([]); setDraft(null)
     loadRows(tenant, value, '')
   }
-  const TAXONOMY_FIELDS = ['category', 'subCategory', 'catalog', 'subCatalog', 'brand', 'group']
+  const TAXONOMY_FIELDS = ['category', 'subCategory', 'catalog', 'subCatalog', 'brand']
   const edit = row => {
     const normalized = { ...row }
     TAXONOMY_FIELDS.forEach(field => { if (normalized[field] === 'none') normalized[field] = '' })
@@ -393,7 +415,7 @@ export default function PortalContentPage() {
     finally { setSaving(false) }
   }
 
-  const title = tab === 0 ? 'Articles' : 'Products'
+  const title = tab === 0 ? 'Articles' : tab === 1 ? 'Products' : 'Media schedule'
   const visibleRows = useMemo(() => rows, [rows])
 
   return <Box sx={{ p: { xs: 1, md: 3 } }}>
@@ -409,13 +431,14 @@ export default function PortalContentPage() {
         <TextField select label="Website tenant" value={tenant} onChange={switchTenant} sx={{ minWidth: 280 }} disabled={loading && !tenants.length}>
           {tenants.map(value => <MenuItem key={value} value={value}>{value}</MenuItem>)}
         </TextField>
-        <TextField label={`Search ${title.toLowerCase()}`} value={search} onChange={event => setSearch(event.target.value)} onKeyDown={event => event.key === 'Enter' && loadRows()} sx={{ flex: 1 }} />
-        <Button startIcon={<RefreshIcon />} onClick={() => loadRows()} disabled={!tenant || loading}>Load</Button>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={create} disabled={!tenant}>New {tab === 0 ? 'article' : 'product'}</Button>
+        {tab !== 2 && <TextField label={`Search ${title.toLowerCase()}`} value={search} onChange={event => setSearch(event.target.value)} onKeyDown={event => event.key === 'Enter' && loadRows()} sx={{ flex: 1 }} />}
+        {tab !== 2 && <Button startIcon={<RefreshIcon />} onClick={() => loadRows()} disabled={!tenant || loading}>Load</Button>}
+        {tab !== 2 && <Button variant="contained" startIcon={<AddIcon />} onClick={create} disabled={!tenant}>New {tab === 0 ? 'article' : 'product'}</Button>}
       </Stack>
       <Tabs value={tab} onChange={switchTab} sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
-        <Tab label="Articles" /><Tab label="Products" />
+        <Tab label="Articles" /><Tab label="Products" /><Tab label="Media schedule" />
       </Tabs>
+      {tab === 2 ? <PortalMediaSchedulePanel tenant={tenant} onNotice={setNotice} onError={setError} /> : <>
       {tenant && <Typography variant="body2" sx={{ mb: 1 }}>Database: <strong>{tenant}</strong> · {visibleRows.length} {title.toLowerCase()}</Typography>}
       {loading ? <Box sx={{ py: 6, textAlign: 'center' }}><CircularProgress /></Box> :
         <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: '65vh' }}><Table stickyHeader size="small">
@@ -432,8 +455,9 @@ export default function PortalContentPage() {
             <TableCell>{date(row.modifiedTime)}</TableCell><TableCell><Button size="small" startIcon={<EditIcon />} onClick={() => edit(row)}>Edit</Button></TableCell>
           </TableRow>)}</TableBody>
         </Table></TableContainer>}
+      </>}
     </CardContent></Card>
     <ArticleEditor open={tab === 0 && Boolean(draft)} value={draft || emptyArticle} onChange={setDraft} onClose={() => setDraft(null)} onSave={save} saving={saving} rows={tab === 0 ? rows : []} />
-    <ProductEditor open={tab === 1 && Boolean(draft)} value={draft || emptyProduct} onChange={setDraft} onClose={() => setDraft(null)} onSave={save} saving={saving} rows={tab === 1 ? rows : []} brands={brands} catalogs={catalogs} />
+    <ProductEditor open={tab === 1 && Boolean(draft)} value={draft || emptyProduct} onChange={setDraft} onClose={() => setDraft(null)} onSave={save} saving={saving} rows={tab === 1 ? rows : []} brands={brands} catalogs={catalogs} groups={groups} />
   </Box>
 }
