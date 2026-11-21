@@ -7,6 +7,8 @@ const request = async (path, options = {}) => {
 }
 
 export const fetchPortalTenants = () => request('/tenants')
+export const fetchPortalBrands = (tenant) => request(`/${encodeURIComponent(tenant)}/brands`)
+export const fetchPortalCatalogs = (tenant) => request(`/${encodeURIComponent(tenant)}/catalogs`)
 export const fetchPortalArticles = (tenant, search = '') =>
   request(`/${encodeURIComponent(tenant)}/articles?search=${encodeURIComponent(search)}`)
 export const savePortalArticle = (tenant, article) => request(

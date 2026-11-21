@@ -20,6 +20,32 @@ public class PortalContentService {
 
     public List<String> tenantIds() { return tenants.tenantIds(); }
 
+    /**
+     * Real reference entities on the Portal side (productBrandTB /
+     * productCatalogTB -- same tenant database, just a different table),
+     * each with a stable code and a display name. producttb.productbrand/
+     * productcatalog store the CODE, not the name.
+     */
+    public List<CodeName> brands(String tenantId) {
+        String sql = "SELECT brandCode, brandName, brandImageUrl1 FROM productBrandTB " +
+                "WHERE isVisible = true ORDER BY brandName";
+        return access(tenantId, db -> db.query(sql, (row, i) -> new CodeName(
+                row.getString("brandcode"), row.getString("brandname"), noneToEmpty(row.getString("brandimageurl1")))));
+    }
+
+    public List<CodeName> catalogs(String tenantId) {
+        String sql = "SELECT catalogCode, catalogName, catalogImageUrl1 FROM productCatalogTB " +
+                "WHERE isVisible = true ORDER BY catalogName";
+        return access(tenantId, db -> db.query(sql, (row, i) -> new CodeName(
+                row.getString("catalogcode"), row.getString("catalogname"), noneToEmpty(row.getString("catalogimageurl1")))));
+    }
+
+    // These legacy entities default image columns to the literal string
+    // "none" rather than null/blank (see ProductBrand/ProductCatalog).
+    private static String noneToEmpty(String value) {
+        return value == null || value.isBlank() || value.equals("none") ? "" : value;
+    }
+
     public List<ArticleView> articles(String tenantId, String search) {
         String query = search(search);
         String sql = """
@@ -217,4 +243,5 @@ public class PortalContentService {
                                String shortDescription, String longDescription, String imageUrl, String imageDescriptionUrl,
                                String videoUrl, BigDecimal price, BigDecimal discount, String currency, String language,
                                String path, String group, boolean visible, boolean approved, boolean locked, boolean newProduct) {}
+    public record CodeName(String code, String name, String imageUrl) {}
 }

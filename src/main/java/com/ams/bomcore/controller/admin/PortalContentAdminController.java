@@ -56,6 +56,18 @@ public class PortalContentAdminController {
         return service.updateArticle(tenantId, id, request);
     }
 
+    @GetMapping("/{tenantId}/brands")
+    public List<PortalContentService.CodeName> brands(@PathVariable String tenantId, Authentication authentication) {
+        access.require(authentication, tenantId);
+        return service.brands(tenantId);
+    }
+
+    @GetMapping("/{tenantId}/catalogs")
+    public List<PortalContentService.CodeName> catalogs(@PathVariable String tenantId, Authentication authentication) {
+        access.require(authentication, tenantId);
+        return service.catalogs(tenantId);
+    }
+
     @GetMapping("/{tenantId}/products")
     public List<PortalContentService.ProductView> products(@PathVariable String tenantId,
                                                            @RequestParam(defaultValue = "") String search,

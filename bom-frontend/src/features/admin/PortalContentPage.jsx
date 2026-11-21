@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  Alert, Autocomplete, Box, Button, Card, CardContent, Checkbox, CircularProgress, Dialog,
+  Alert, Autocomplete, Avatar, Box, Button, Card, CardContent, Checkbox, CircularProgress, Dialog,
   DialogActions, DialogContent, DialogTitle, FormControlLabel, MenuItem, Paper,
   Stack, Tab, Tabs, Table, TableBody, TableCell, TableContainer, TableHead,
-  TableRow, TextField, Typography
+  TableRow, TextField, Tooltip, Typography
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh'
@@ -11,7 +11,7 @@ import EditIcon from '@mui/icons-material/Edit'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import SaveIcon from '@mui/icons-material/Save'
 import {
-  fetchPortalArticles, fetchPortalProducts, fetchPortalTenants,
+  fetchPortalArticles, fetchPortalBrands, fetchPortalCatalogs, fetchPortalProducts, fetchPortalTenants,
   savePortalArticle, savePortalProduct
 } from '../../api/portalContentApi'
 
@@ -74,6 +74,56 @@ function MultiPickField({ label, value, options, onChange, fullWidth = true }) {
   />
 }
 
+// Real reference entities (productBrandTB/productCatalogTB -- see
+// PortalContentService) have a stable code and a display name; the product
+// row stores the code. Strict pick-only (no freeSolo: you can't invent a
+// brand/catalog here, that belongs in the proper admin screens), but a
+// legacy/orphaned code not in the list is still shown rather than blanked.
+function nameFor(list, code) {
+  return list.find(o => o.code === code)?.name || code || ''
+}
+function CodeNamePickField({ label, value, options, onChange, fullWidth = true }) {
+  const known = options.find(o => o.code === value)
+  const allOptions = known || !value ? options : [...options, { code: value, name: `${value} (mã chưa rõ)` }]
+  return <Autocomplete
+    fullWidth={fullWidth} options={allOptions}
+    getOptionLabel={o => o?.name || ''}
+    isOptionEqualToValue={(o, v) => o.code === v.code}
+    value={allOptions.find(o => o.code === value) || null}
+    onChange={(_, next) => onChange(next?.code || '')}
+    renderInput={params => <TextField {...params} label={label} />}
+  />
+}
+
+// Fast visual pick: the 3 most relevant options as thumbnails (brand/catalog
+// image when set, else a letter avatar), the currently selected one
+// highlighted -- including whatever "remember last option" restored.
+function QuickPickThumbnails({ options, value, onChange }) {
+  const selected = options.find(o => o.code === value)
+  const quick = selected && !options.slice(0, 3).some(o => o.code === value)
+    ? [selected, ...options.filter(o => o.code !== value).slice(0, 2)]
+    : options.slice(0, 3)
+  if (!quick.length) return null
+  return <Stack direction="row" spacing={1}>
+    {quick.map(option => {
+      const isSelected = option.code === value
+      return <Tooltip key={option.code} title={option.name}>
+        <Avatar
+          onClick={() => onChange(isSelected ? '' : option.code)}
+          src={option.imageUrl || undefined}
+          sx={{
+            cursor: 'pointer', width: 36, height: 36,
+            border: isSelected ? '3px solid' : '1px solid',
+            borderColor: isSelected ? 'primary.main' : 'divider',
+          }}
+        >
+          {!option.imageUrl && option.name?.charAt(0)?.toUpperCase()}
+        </Avatar>
+      </Tooltip>
+    })}
+  </Stack>
+}
+
 function joinParts(parts) {
   return parts.map(p => String(p || '').trim()).filter(p => p && p !== 'none').join(' - ')
 }
@@ -112,11 +162,18 @@ const LAST_DEFAULTS_FIELDS = {
   product: ['catalog', 'subCatalog', 'brand', 'group', 'language', 'currency', 'status'],
 }
 function lastDefaultsKey(kind, tenant) {
-  return `bom.portalContent.lastDefaults.${kind}.${tenant || ''}`
+  return `bom_portalContent_lastDefaults_${kind}_${tenant || ''}`.replace(/[^A-Za-z0-9._-]/g, '_')
+}
+function readCookie(name) {
+  const match = document.cookie.split('; ').find(part => part.startsWith(name + '='))
+  return match ? decodeURIComponent(match.slice(name.length + 1)) : null
+}
+function writeCookie(name, value) {
+  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${365 * 86400}; SameSite=Lax`
 }
 function loadLastDefaults(kind, tenant) {
   try {
-    const raw = localStorage.getItem(lastDefaultsKey(kind, tenant))
+    const raw = readCookie(lastDefaultsKey(kind, tenant))
     return raw ? JSON.parse(raw) : {}
   } catch { return {} }
 }
@@ -124,8 +181,8 @@ function saveLastDefaults(kind, tenant, draft) {
   try {
     const picked = {}
     LAST_DEFAULTS_FIELDS[kind].forEach(field => { if (draft[field] !== undefined) picked[field] = draft[field] })
-    localStorage.setItem(lastDefaultsKey(kind, tenant), JSON.stringify(picked))
-  } catch { /* storage unavailable */ }
+    writeCookie(lastDefaultsKey(kind, tenant), JSON.stringify(picked))
+  } catch { /* cookies unavailable */ }
 }
 
 function Flags({ value, onChange, product = false }) {
@@ -180,19 +237,20 @@ function ArticleEditor({ open, value, onChange, onClose, onSave, saving, rows })
   </Dialog>
 }
 
-function ProductEditor({ open, value, onChange, onClose, onSave, saving, rows }) {
+function ProductEditor({ open, value, onChange, onClose, onSave, saving, rows, brands, catalogs }) {
   const set = key => event => onChange({ ...value, [key]: event.target.value })
   const setField = key => next => onChange({ ...value, [key]: next })
   const number = key => event => onChange({ ...value, [key]: Number(event.target.value) || 0 })
-  const catalogOptions = useMemo(() => distinctValues(rows, 'catalog'), [rows])
   const subCatalogOptions = useMemo(() => distinctValues(rows, 'subCatalog'), [rows])
-  const brandOptions = useMemo(() => distinctValues(rows, 'brand'), [rows])
   const groupOptions = useMemo(() => distinctTagValues(rows, 'group'), [rows])
   const existingCodeSlugs = useMemo(() =>
     new Set(rows.filter(r => r.id !== value.id).map(r => slugify(r.code))), [rows, value.id])
   const existingPathSlugs = useMemo(() =>
     new Set(rows.filter(r => r.id !== value.id).map(r => lastPathSegment(r.path))), [rows, value.id])
-  const autoFillName = () => onChange({ ...value, name: joinParts([value.brand, value.catalog, value.subCatalog]) || value.name })
+  const autoFillName = () => onChange({
+    ...value,
+    name: joinParts([nameFor(brands, value.brand), nameFor(catalogs, value.catalog), value.subCatalog]) || value.name,
+  })
   const autoFillCodeAndLink = () => {
     const slug = uniqueSlug(slugify(value.name) || 'san-pham', [existingCodeSlugs, existingPathSlugs])
     onChange({ ...value, code: slug.toUpperCase(), path: '/san-pham/' + slug })
@@ -212,10 +270,14 @@ function ProductEditor({ open, value, onChange, onClose, onSave, saving, rows })
           Auto-fill code &amp; link
         </Button>
       </Stack>
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="center">
+        <CodeNamePickField label="Catalog" value={value.catalog} options={catalogs} onChange={setField('catalog')} />
+        <QuickPickThumbnails options={catalogs} value={value.catalog} onChange={setField('catalog')} />
+        <CodeNamePickField label="Brand" value={value.brand} options={brands} onChange={setField('brand')} />
+        <QuickPickThumbnails options={brands} value={value.brand} onChange={setField('brand')} />
+      </Stack>
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-        <PickField label="Catalog" value={value.catalog} options={catalogOptions} onChange={setField('catalog')} />
         <PickField label="Subcatalog" value={value.subCatalog} options={subCatalogOptions} onChange={setField('subCatalog')} />
-        <PickField label="Brand" value={value.brand} options={brandOptions} onChange={setField('brand')} />
         <MultiPickField label="Group" value={value.group} options={groupOptions} onChange={setField('group')} />
       </Stack>
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
@@ -242,11 +304,24 @@ export default function PortalContentPage() {
   const [tab, setTab] = useState(0)
   const [search, setSearch] = useState('')
   const [rows, setRows] = useState([])
+  const [brands, setBrands] = useState([])
+  const [catalogs, setCatalogs] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [draft, setDraft] = useState(null)
+
+  const loadBrandsAndCatalogs = useCallback(async (selectedTenant) => {
+    if (!selectedTenant) { setBrands([]); setCatalogs([]); return }
+    try {
+      const [brandList, catalogList] = await Promise.all([
+        fetchPortalBrands(selectedTenant), fetchPortalCatalogs(selectedTenant),
+      ])
+      setBrands(Array.isArray(brandList) ? brandList : [])
+      setCatalogs(Array.isArray(catalogList) ? catalogList : [])
+    } catch { setBrands([]); setCatalogs([]) }
+  }, [])
 
   const loadTenants = useCallback(async () => {
     setLoading(true); setError('')
@@ -256,9 +331,10 @@ export default function PortalContentPage() {
       const selected = result?.includes('migiatruyen.vn') ? 'migiatruyen.vn' : result?.[0] || ''
       setTenant(selected)
       setRows(selected ? await fetchPortalArticles(selected, '') : [])
+      await loadBrandsAndCatalogs(selected)
     } catch (e) { setError(e.message || 'Cannot load Portal tenants') }
     finally { setLoading(false) }
-  }, [])
+  }, [loadBrandsAndCatalogs])
 
   useEffect(() => {
     const timer = window.setTimeout(loadTenants, 0)
@@ -281,6 +357,7 @@ export default function PortalContentPage() {
     const value = event.target.value
     setTenant(value); setSearch(''); setRows([]); setDraft(null)
     loadRows(value, tab, '')
+    loadBrandsAndCatalogs(value)
   }
   const switchTab = (_, value) => {
     setTab(value); setSearch(''); setRows([]); setDraft(null)
@@ -343,7 +420,7 @@ export default function PortalContentPage() {
           </TableRow></TableHead>
           <TableBody>{visibleRows.map(row => <TableRow key={row.id} hover>
             <TableCell>{row.id}</TableCell><TableCell sx={{ fontWeight: 700 }}>{tab === 0 ? row.title : row.name}</TableCell>
-            <TableCell>{tab === 0 ? row.articleLink : row.code}</TableCell><TableCell>{tab === 0 ? row.category : row.catalog}</TableCell>
+            <TableCell>{tab === 0 ? row.articleLink : row.code}</TableCell><TableCell>{tab === 0 ? row.category : nameFor(catalogs, row.catalog)}</TableCell>
             {tab === 1 && <TableCell align="right">{Number(row.price || 0).toLocaleString('vi-VN')} {row.currency}</TableCell>}
             <TableCell>{row.approved ? 'Approved' : 'Draft'}{row.visible ? '' : ' · Hidden'}{row.locked ? ' · Locked' : ''}</TableCell>
             <TableCell>{date(row.modifiedTime)}</TableCell><TableCell><Button size="small" startIcon={<EditIcon />} onClick={() => edit(row)}>Edit</Button></TableCell>
@@ -351,6 +428,6 @@ export default function PortalContentPage() {
         </Table></TableContainer>}
     </CardContent></Card>
     <ArticleEditor open={tab === 0 && Boolean(draft)} value={draft || emptyArticle} onChange={setDraft} onClose={() => setDraft(null)} onSave={save} saving={saving} rows={tab === 0 ? rows : []} />
-    <ProductEditor open={tab === 1 && Boolean(draft)} value={draft || emptyProduct} onChange={setDraft} onClose={() => setDraft(null)} onSave={save} saving={saving} rows={tab === 1 ? rows : []} />
+    <ProductEditor open={tab === 1 && Boolean(draft)} value={draft || emptyProduct} onChange={setDraft} onClose={() => setDraft(null)} onSave={save} saving={saving} rows={tab === 1 ? rows : []} brands={brands} catalogs={catalogs} />
   </Box>
 }
