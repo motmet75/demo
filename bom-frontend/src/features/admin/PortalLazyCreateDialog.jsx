@@ -6,7 +6,7 @@ import {
 import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternate'
 import VideoFileIcon from '@mui/icons-material/VideoFile'
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch'
-import { createPortalLazyProduct, fetchPortalFacebookPages } from '../../api/portalContentApi'
+import { createPortalLazyProduct, fetchPortalFacebookPages, suggestPortalProductCode } from '../../api/portalContentApi'
 import { usePhone } from '../../components/usePhone'
 
 // Port of legacy Portal "lazy create" (portal-live schedule-product page,
@@ -34,6 +34,7 @@ const vietnamNowPlus = minutes => {
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`
 }
 const mb = bytes => `${(bytes / 1024 / 1024).toFixed(1)} MB`
+const nameFor = (list, code) => list.find(o => o.code === code)?.name || code || ''
 
 function CodePick({ label, options, value, onChange, multiple = false }) {
   const selected = multiple ? options.filter(o => value.includes(o.code)) : options.find(o => o.code === value) || null
@@ -61,6 +62,8 @@ export default function PortalLazyCreateDialog({ open, tenant, brands, catalogs,
   const [images, setImages] = useState([])
   const [thumbnail, setThumbnail] = useState(null)
   const [video, setVideo] = useState(null)
+  // code check result for the current name / typed code: null | { checking } | { ok, path } | { suggestion, reason }
+  const [codeCheck, setCodeCheck] = useState(null)
 
   useEffect(() => {
     if (!open || !tenant) return
@@ -68,7 +71,7 @@ export default function PortalLazyCreateDialog({ open, tenant, brands, catalogs,
     const timer = window.setTimeout(() => {
       setError(''); setImages([]); setThumbnail(null); setVideo(null)
       setF({
-        name: '', price: '', catalog: '', brand: '', groupCodes: [], dailymotionVideoAddress: '',
+        name: '', autoName: '', code: '', codeEdited: false, price: '', catalog: '', brand: '', groupCodes: [], dailymotionVideoAddress: '',
         actions: ['post_facebook_multi_image'], immediate: false, scheduledAt: vietnamNowPlus(30), facebookPageId: '',
         facebookMessage: '', facebookSequence: '51267', tiktokMessage: '', tiktokSequence: '127',
         youtubeDescription: '', youtubeSequence: '5127', tiktokPrivacy: 'PUBLIC_TO_EVERYONE',
@@ -84,6 +87,27 @@ export default function PortalLazyCreateDialog({ open, tenant, brands, catalogs,
     return () => { cancelled = true; window.clearTimeout(timer) }
   }, [open, tenant])
 
+  // Auto code: from the name, or the code typed by hand; always checked against existing codes and links.
+  const codeSource = f ? (f.codeEdited ? f.code : f.name).trim() : ''
+  const codeEdited = !!f?.codeEdited
+  useEffect(() => {
+    if (!open || !tenant) return
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      if (!codeSource) { setCodeCheck(null); if (!codeEdited) setF(cur => cur && ({ ...cur, code: '' })); return }
+      setCodeCheck({ checking: true })
+      suggestPortalProductCode(tenant, codeSource).then(s => {
+        if (cancelled) return
+        if (!codeEdited) { setF(cur => cur && ({ ...cur, code: s.code })); setCodeCheck({ ok: true, path: s.path, changed: s.changed }) }
+        else if (s.code === codeSource) setCodeCheck({ ok: true, path: s.path })
+        else setCodeCheck({ suggestion: s.code, reason: s.base !== codeSource
+          ? 'Mã chỉ gồm chữ thường không dấu, số, - và _'
+          : `Đã có sản phẩm dùng mã hoặc link ${codeSource}.html` })
+      }).catch(e => !cancelled && setCodeCheck({ reason: e.message || 'Không kiểm tra được mã' }))
+    }, 400)
+    return () => { cancelled = true; window.clearTimeout(timer) }
+  }, [open, tenant, codeSource, codeEdited])
+
   const previews = useMemo(() => images.map(file => ({ file, url: URL.createObjectURL(file) })), [images])
   useEffect(() => () => previews.forEach(p => URL.revokeObjectURL(p.url)), [previews])
 
@@ -97,8 +121,20 @@ export default function PortalLazyCreateDialog({ open, tenant, brands, catalogs,
   const wantsTikTok = f.actions.some(a => a.startsWith('post_tiktok'))
   const wantsYouTube = f.actions.includes('post_youtube_video')
 
+  // Catalog and brand first; while the name is still the auto-filled one, it follows them.
+  const pickCatalogBrand = key => value => setF(cur => {
+    const next = { ...cur, [key]: value }
+    const prefix = [nameFor(catalogs, next.catalog), nameFor(brands, next.brand)].filter(Boolean).join(' ')
+    if (!cur.name.trim() || cur.name.trim() === cur.autoName.trim()) { next.name = prefix ? `${prefix} ` : ''; next.autoName = prefix }
+    return next
+  })
+  const readyForName = !!(f.catalog && f.brand)
+
   const problems = []
-  if (!f.name.trim()) problems.push('Nhập tên sản phẩm')
+  if (!f.catalog) problems.push('Chọn danh mục')
+  if (!f.brand) problems.push('Chọn thương hiệu')
+  if (readyForName && !f.name.trim()) problems.push('Nhập tên sản phẩm')
+  if (f.name.trim() && (!f.code || !codeCheck?.ok)) problems.push(codeCheck?.checking ? 'Đang kiểm tra mã…' : 'Mã sản phẩm chưa hợp lệ')
   if (wantsImages && !images.length && !thumbnail) problems.push('Chọn ảnh để đăng ảnh')
   if (wantsVideo && !video && !f.dailymotionVideoAddress.trim()) problems.push('Chọn video hoặc nhập Dailymotion')
   if (wantsFacebook && !f.facebookPageId) problems.push('Chọn Facebook Page')
@@ -111,7 +147,7 @@ export default function PortalLazyCreateDialog({ open, tenant, brands, catalogs,
     setSaving(true); setError('')
     try {
       const form = {
-        ...f, name: f.name.trim(), price: f.price === '' ? null : Number(f.price),
+        ...f, autoName: undefined, codeEdited: undefined, name: f.name.trim(), code: f.code.trim(), price: f.price === '' ? null : Number(f.price),
         scheduledAt: f.immediate ? null : (f.scheduledAt.length === 16 ? `${f.scheduledAt}:00` : f.scheduledAt),
       }
       const body = new FormData()
@@ -135,14 +171,27 @@ export default function PortalLazyCreateDialog({ open, tenant, brands, catalogs,
 
         <Typography variant="subtitle2">1 · Sản phẩm</Typography>
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-          <TextField fullWidth required label="Tên sản phẩm" value={f.name} onChange={e => set('name')(e.target.value)}
-            helperText="Mã và link (mã.html) do Portal tự tạo từ tên, không trùng." />
-          <TextField sx={{ width: { md: 200 } }} type="number" label="Giá (VND)" value={f.price} onChange={e => set('price')(e.target.value)} />
+          <CodePick label="Danh mục *" options={catalogs} value={f.catalog} onChange={pickCatalogBrand('catalog')} />
+          <CodePick label="Thương hiệu *" options={brands} value={f.brand} onChange={pickCatalogBrand('brand')} />
         </Stack>
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-          <CodePick label="Danh mục" options={catalogs} value={f.catalog} onChange={set('catalog')} />
-          <CodePick label="Thương hiệu" options={brands} value={f.brand} onChange={set('brand')} />
+          <TextField fullWidth required label="Tên sản phẩm" value={f.name} onChange={e => set('name')(e.target.value)}
+            disabled={!readyForName} autoFocus={readyForName}
+            helperText={readyForName ? 'Đã điền sẵn danh mục và thương hiệu, gõ tiếp tên sản phẩm.' : 'Chọn danh mục và thương hiệu trước.'} />
+          <TextField sx={{ width: { md: 200 } }} type="number" label="Giá (VND)" value={f.price} onChange={e => set('price')(e.target.value)} />
         </Stack>
+        {f.name.trim() && <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} alignItems={{ md: 'flex-start' }}>
+          <TextField fullWidth label={f.codeEdited ? 'Mã sản phẩm (tự nhập)' : 'Mã sản phẩm (tự tạo từ tên)'} value={f.code}
+            onChange={e => setF(cur => ({ ...cur, code: e.target.value.toLowerCase(), codeEdited: true }))}
+            error={!!codeCheck && !codeCheck.ok && !codeCheck.checking}
+            InputProps={{ endAdornment: codeCheck?.checking ? <CircularProgress size={18} /> : null }}
+            helperText={codeCheck?.ok ? `Link: ${codeCheck.path} · chưa có sản phẩm nào dùng${codeCheck.changed ? ' (đã thêm số vì mã gốc đã có)' : ''}`
+              : codeCheck?.reason ? `${codeCheck.reason}${codeCheck.suggestion ? `. Gợi ý: ${codeCheck.suggestion}` : ''}` : 'Đang kiểm tra mã và link trong Portal…'} />
+          {codeCheck?.suggestion && <Button sx={{ whiteSpace: 'nowrap', mt: { md: 1 } }}
+            onClick={() => setF(cur => ({ ...cur, code: codeCheck.suggestion }))}>Dùng {codeCheck.suggestion}</Button>}
+          {f.codeEdited && <Button sx={{ whiteSpace: 'nowrap', mt: { md: 1 } }}
+            onClick={() => setF(cur => ({ ...cur, codeEdited: false }))}>Tự tạo lại</Button>}
+        </Stack>}
         <CodePick label="Nhóm sản phẩm" multiple options={groups} value={f.groupCodes} onChange={set('groupCodes')} />
 
         <Typography variant="subtitle2">2 · Ảnh và video</Typography>
@@ -215,7 +264,7 @@ export default function PortalLazyCreateDialog({ open, tenant, brands, catalogs,
             sequence={f.youtubeSequence} onSequence={set('youtubeSequence')} />}
           <Typography variant="caption" color="text.secondary">{SEQUENCE_HELP}</Typography>
         </>}
-        {problems.length > 0 && f.name && <Alert severity="info">{problems.join(' · ')}</Alert>}
+        {problems.length > 0 && (f.catalog || f.brand) && <Alert severity="info">{problems.join(' · ')}</Alert>}
         {saving && <Alert severity="info" icon={<CircularProgress size={18} />}>
           Đang tải {mb(totalUpload)} lên Portal và tạo sản phẩm… video lớn có thể mất vài phút, đừng đóng trang.
         </Alert>}

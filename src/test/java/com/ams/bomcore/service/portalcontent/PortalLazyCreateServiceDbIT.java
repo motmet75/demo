@@ -70,7 +70,51 @@ class PortalLazyCreateServiceDbIT {
                                                      String fbMessage, boolean consent) {
         return new PortalLazyCreateService.Form("Ghế sofa", "noi-that", "hoa-phat", List.of("sale"), null, "",
                 actions, immediate, at, "PAGE1", fbMessage, null, "", null, "PUBLIC_TO_EVERYONE", true, false, false,
-                true, consent, "", null);
+                true, consent, "", null, null);
+    }
+
+    private static PortalLazyCreateService.Form withCode(PortalLazyCreateService.Form f, String catalog, String brand, String code) {
+        return new PortalLazyCreateService.Form(f.name(), catalog, brand, f.groupCodes(), f.price(), f.dailymotionVideoAddress(),
+                f.actions(), f.immediate(), f.scheduledAt(), f.facebookPageId(), f.facebookMessage(), f.facebookSequence(),
+                f.tiktokMessage(), f.tiktokSequence(), f.tiktokPrivacy(), f.tiktokAllowComment(), f.tiktokAllowDuet(),
+                f.tiktokAllowStitch(), f.tiktokAutoAddMusic(), f.tiktokMusicConsent(), f.youtubeDescription(),
+                f.youtubeSequence(), code);
+    }
+
+    @Test
+    void autoCodeSkipsCodesAndLinksAlreadyUsed() throws Exception {
+        JdbcTemplate[] dbRef = new JdbcTemplate[1];
+        var service = service(dbRef);
+        JdbcTemplate db = dbRef[0];
+        // "ghe-sofa" is free as a code but its link is used; "ghe-sofa-1" is used as a code.
+        db.update("INSERT INTO producttb (productname, productcode, path, isvisible, isapproved, islocked, isnew) VALUES "
+                + "('Old', 'old-item', 'Ghe-Sofa.html', true, true, false, false), ('Old 2', 'GHE-SOFA-1', 'x.html', true, true, false, false)");
+        var content = new PortalContentService(new PortalTenantDataSourceRegistry(List.of(directory)));
+        assertEquals("ghe-sofa-2", content.suggestProductCode("shop.test", "Ghế  Sofa").code());
+        assertEquals("ghe-sofa-2.html", content.suggestProductCode("shop.test", "ghế sofa").path());
+        assertEquals("noi-that-ghe-sofa", content.suggestProductCode("shop.test", "Nội thất / Ghế sofa").code());
+
+        var r = service.create("shop.test", form(List.of(), true, null, "", true), List.of(), null, null, "t");
+        assertEquals("ghe-sofa-2", r.code());
+        assertEquals("ghe-sofa-2.html", r.path());
+        assertTrue(bodies.get(0).contains("name=\"code\"\r\n\r\nghe-sofa-2"));     // the bridge gets the checked code
+
+        // a typed code that is already used (as a code or a link) is refused before any upload, with a suggestion
+        calls.clear();
+        var taken = assertThrows(IllegalArgumentException.class, () -> service.create("shop.test",
+                withCode(form(List.of(), true, null, "", true), "noi-that", "hoa-phat", "ghe-sofa"), List.of(), null, null, "t"));
+        assertTrue(taken.getMessage().contains("ghe-sofa-3"), taken.getMessage());
+        assertThrows(IllegalArgumentException.class, () -> service.create("shop.test",
+                withCode(form(List.of(), true, null, "", true), "noi-that", "hoa-phat", "Ghe Sofa"), List.of(), null, null, "t"));
+        // catalog and brand come first
+        assertThrows(IllegalArgumentException.class, () -> service.create("shop.test",
+                withCode(form(List.of(), true, null, "", true), "", "hoa-phat", null), List.of(), null, null, "t"));
+        assertThrows(IllegalArgumentException.class, () -> service.create("shop.test",
+                withCode(form(List.of(), true, null, "", true), "noi-that", "", null), List.of(), null, null, "t"));
+        assertEquals(List.of(), calls);
+        var typed = service.create("shop.test", withCode(form(List.of(), true, null, "", true), "noi-that", "hoa-phat", "sofa-hp-01"),
+                List.of(), null, null, "t");
+        assertEquals("sofa-hp-01", typed.code());
     }
 
     @Test

@@ -192,6 +192,14 @@ public class PortalContentAdminController {
 
     // ---- lazy create: new product + its social posts in one submission (legacy schedule-product page) ----
 
+    /** Next free product code for a name or typed code: checked against existing product codes and links. */
+    @GetMapping("/{tenantId}/lazy-create/code")
+    public PortalContentService.CodeSuggestion lazyCreateCode(@PathVariable String tenantId,
+            @RequestParam("text") String text, Authentication authentication) {
+        access.require(authentication, tenantId);
+        return service.suggestProductCode(tenantId, text);
+    }
+
     @PostMapping(value = "/{tenantId}/lazy-create", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<PortalLazyCreateService.Result> lazyCreate(@PathVariable String tenantId,
             @RequestPart("form") PortalLazyCreateService.Form form,

@@ -49,3 +49,6 @@ export const cancelPortalGroupPost = (tenant, id) => request(
 // Lazy create: product + its social posts in one multipart submission (files uploaded by Portal).
 export const createPortalLazyProduct = (tenant, formData) =>
   request(`/${encodeURIComponent(tenant)}/lazy-create`, { method: 'POST', body: formData })
+// First free product code for a name or typed code (checked against existing product codes and links).
+export const suggestPortalProductCode = (tenant, text) =>
+  request(`/${encodeURIComponent(tenant)}/lazy-create/code?text=${encodeURIComponent(text)}`)

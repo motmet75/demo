@@ -7,9 +7,11 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.text.Normalizer;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -161,8 +163,50 @@ public class PortalContentService {
         });
     }
 
+    // ---- product code: legacy normalizeProductCode, unique against existing codes AND links ----
+
+    /** Legacy Portal ProductService.normalizeProductCode: lower-case, no Vietnamese marks, spaces and / to -, only [A-Za-z0-9_-]. */
+    public static String productCode(String value) {
+        if (value == null) return "";
+        String ascii = Normalizer.normalize(value.toLowerCase(Locale.ROOT).trim(), Normalizer.Form.NFD)
+                .replaceAll("\\p{M}+", "").replace('đ', 'd');
+        return ascii.replace(' ', '-').replace('/', '-').replaceAll("[^A-Za-z0-9_-]", "")
+                .replaceAll("-{2,}", "-").replaceAll("^-+|-+$", "");
+    }
+
+    /** True when a product already uses this code, or its link (code.html), ignoring case. */
+    public boolean productCodeTaken(String tenantId, String code) {
+        return access(tenantId, db -> taken(db, code, code + ".html"));
+    }
+
+    private static boolean taken(JdbcTemplate db, String code, String path) {
+        Integer n = db.queryForObject("""
+                SELECT count(*) FROM producttb
+                 WHERE lower(trim(productcode)) = lower(?)
+                    OR lower(trim(path)) IN (lower(?), lower(?), lower(?))
+                """, Integer.class, code, path, code + ".html", "/" + code + ".html");
+        return n != null && n > 0;
+    }
+
+    /** First free code for the text: base, base-1, base-2 … (legacy suffix style), checked against code and path. */
+    public CodeSuggestion suggestProductCode(String tenantId, String text) {
+        String normalized = productCode(text);
+        if (normalized.isEmpty()) throw new IllegalArgumentException("Cannot make a product code from \"" + (text == null ? "" : text) + "\"");
+        String base = normalized.length() > 200 ? normalized.substring(0, 200).replaceAll("-+$", "") : normalized;
+        return access(tenantId, db -> {
+            String candidate = base;
+            for (int i = 1; taken(db, candidate, candidate + ".html"); i++) {
+                if (i > 5000) throw new IllegalStateException("No free product code for " + base);
+                candidate = base + "-" + i;
+            }
+            return new CodeSuggestion(candidate, candidate + ".html", base, !candidate.equals(base));
+        });
+    }
+
     public ProductView createProduct(String tenantId, ProductWrite value) {
         ProductWrite input = validate(value);
+        if (access(tenantId, db -> taken(db, input.code(), input.path())))
+            throw new IllegalArgumentException("Product code or link already exists: " + input.code() + " / " + input.path());
         String groupString = input.groupCodes() == null ? "" : String.join(", ", input.groupCodes());
         String sql = """
                 INSERT INTO producttb
@@ -309,5 +353,6 @@ public class PortalContentService {
                                String videoUrl, BigDecimal price, BigDecimal discount, String currency, String language,
                                String path, List<String> groupCodes, boolean visible, boolean approved, boolean locked,
                                boolean newProduct) {}
+    public record CodeSuggestion(String code, String path, String base, boolean changed) {}
     public record CodeName(String code, String name, String imageUrl) {}
 }

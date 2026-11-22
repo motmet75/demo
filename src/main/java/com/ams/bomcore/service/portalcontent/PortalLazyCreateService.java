@@ -127,8 +127,11 @@ public class PortalLazyCreateService {
         }
         String catalogCode = text(form.catalog(), "");
         String brandCode = text(form.brand(), "");
-        String catalogName = catalogCode.isEmpty() ? "" : nameOf(content.catalogs(tenant), catalogCode, "Danh mục");
-        String brandName = brandCode.isEmpty() ? "" : nameOf(content.brands(tenant), brandCode, "Thương hiệu");
+        if (catalogCode.isEmpty()) throw new IllegalArgumentException("Vui lòng chọn danh mục trước.");
+        if (brandCode.isEmpty()) throw new IllegalArgumentException("Vui lòng chọn thương hiệu trước.");
+        String catalogName = nameOf(content.catalogs(tenant), catalogCode, "Danh mục");
+        String brandName = nameOf(content.brands(tenant), brandCode, "Thương hiệu");
+        String code = productCode(tenant, form.code(), name);
         List<String> groupCodes = form.groupCodes() == null ? List.of() : form.groupCodes();
         if (!groupCodes.isEmpty()) {
             Set<String> known = new java.util.HashSet<>(content.groups(tenant).stream().map(PortalContentService.CodeName::code).toList());
@@ -136,7 +139,13 @@ public class PortalLazyCreateService {
         }
 
         // ---- 1. Portal bridge: unique code + Drive images + queued video + Dailymotion ----
-        Media media = uploadMedia(tenant, name, createdBy, imageFiles, thumbnail, video, dmAddress, wantsVideo);
+        Media media = uploadMedia(tenant, name, code, createdBy, imageFiles, thumbnail, video, dmAddress, wantsVideo);
+        String codeWarning = "";
+        if (content.productCodeTaken(tenant, code)) {          // taken by someone else while the files uploaded
+            String next = content.suggestProductCode(tenant, code).code();
+            codeWarning = "Mã " + code + " vừa được dùng cho sản phẩm khác nên đã đổi thành " + next + ".";
+            code = next;
+        }
         String scheduleVideoRef = !media.queuedVideoRef().isEmpty() ? media.queuedVideoRef() : media.videoUrl();
         if (wantsVideo && scheduleVideoRef.isEmpty())
             throw new IllegalArgumentException("Không tìm thấy video dùng để đăng bài. Vui lòng tải lại tệp.");
@@ -146,13 +155,14 @@ public class PortalLazyCreateService {
         List<String> gallery = media.galleryUrls();
         String subCatalog = brandCode.isEmpty() ? name : "#" + brandCode.toLowerCase().replace(" ", "_");
         PortalContentService.ProductView product = content.createProduct(tenant, new PortalContentService.ProductWrite(
-                name, media.code(), catalogCode, subCatalog, brandCode, "available", name, "<p>" + escapeHtml(name) + "</p>",
+                name, code, catalogCode, subCatalog, brandCode, "available", name, "<p>" + escapeHtml(name) + "</p>",
                 gallery.isEmpty() ? "none" : String.join("\n", gallery), gallery.isEmpty() ? "" : gallery.get(0),
                 media.videoUrl().isEmpty() ? "none" : media.videoUrl(),
-                form.price() == null ? BigDecimal.ZERO : form.price(), BigDecimal.ZERO, "VND", "vi", media.path(),
+                form.price() == null ? BigDecimal.ZERO : form.price(), BigDecimal.ZERO, "VND", "vi", code + ".html",
                 groupCodes, true, approved, false, true));
 
-        if (actions.isEmpty()) return new Result(product.id(), product.code(), product.path(), media.host(), 0, media.warning());
+        String mediaWarning = String.join(" ", List.of(codeWarning, media.warning()).stream().filter(w -> !w.isBlank()).toList());
+        if (actions.isEmpty()) return new Result(product.id(), product.code(), product.path(), media.host(), 0, mediaWarning);
 
         // ---- 3. tracked links + messages + schedules, one transaction ----
         String productUrl = media.host() + "/san-pham/" + product.code() + ".html";
@@ -195,7 +205,7 @@ public class PortalLazyCreateService {
                 }
                 return count;
             });
-            String warning = media.warning();
+            String warning = mediaWarning;
             for (Long logId : youtubeLogs) {
                 try {
                     bridgeJson(tenant, "/youtube-idea", Map.of("scheduleLogId", String.valueOf(logId), "productCode", product.code(),
@@ -341,12 +351,13 @@ public class PortalLazyCreateService {
     record Media(String code, String path, String host, List<String> galleryUrls, String videoUrl,
                  String queuedVideoRef, String warning) {}
 
-    private Media uploadMedia(String tenant, String name, String actor, List<MultipartFile> images, MultipartFile thumbnail,
+    private Media uploadMedia(String tenant, String name, String code, String actor, List<MultipartFile> images, MultipartFile thumbnail,
                               MultipartFile video, String dmAddress, boolean queueVideo) {
         String boundary = "----demo-lazy-" + UUID.randomUUID();
         List<InputStream> parts = new ArrayList<>();
         try {
             field(parts, boundary, "name", name);
+            field(parts, boundary, "code", code);
             field(parts, boundary, "actor", actor);
             field(parts, boundary, "dailymotionVideoAddress", dmAddress);
             field(parts, boundary, "queueVideo", String.valueOf(queueVideo));
@@ -362,9 +373,9 @@ public class PortalLazyCreateService {
                 .build();
         Map<String, Object> body = send(request);
         @SuppressWarnings("unchecked") List<Object> urls = (List<Object>) body.getOrDefault("galleryUrls", List.of());
-        String code = text((String) body.get("code"), "");
-        if (code.isEmpty()) throw new IllegalStateException("Portal did not return a product code");
-        return new Media(code, text((String) body.get("path"), code + ".html"), text((String) body.get("host"), "https://" + tenant),
+        String portalCode = text((String) body.get("code"), "");
+        if (portalCode.isEmpty()) throw new IllegalStateException("Portal did not return a product code");
+        return new Media(portalCode, text((String) body.get("path"), portalCode + ".html"), text((String) body.get("host"), "https://" + tenant),
                 urls.stream().map(String::valueOf).toList(), text((String) body.get("videoUrl"), ""),
                 text((String) body.get("queuedVideoRef"), ""), text((String) body.get("warning"), ""));
     }
@@ -427,6 +438,21 @@ public class PortalLazyCreateService {
             throw new IllegalArgumentException(label + " tối đa " + maxMb + " MB: " + f.getOriginalFilename());
     }
 
+    /**
+     * The code typed (or auto-filled) in the form, which must already be in legacy code form and free;
+     * without one, the first free code made from the name. Checked against existing codes and links.
+     */
+    private String productCode(String tenant, String wanted, String name) {
+        String typed = text(wanted, "");
+        if (typed.isEmpty()) return content.suggestProductCode(tenant, name).code();
+        if (typed.length() > 200 || !typed.equals(PortalContentService.productCode(typed)))
+            throw new IllegalArgumentException("Mã sản phẩm chỉ gồm chữ thường không dấu, số, - và _ (tối đa 200 ký tự).");
+        if (content.productCodeTaken(tenant, typed))
+            throw new IllegalArgumentException("Mã \"" + typed + "\" hoặc link " + typed + ".html đã có sản phẩm khác. Gợi ý: "
+                    + content.suggestProductCode(tenant, typed).code());
+        return typed;
+    }
+
     private static String nameOf(List<PortalContentService.CodeName> list, String code, String label) {
         return list.stream().filter(c -> c.code().equals(code)).map(PortalContentService.CodeName::name).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(label + " không tồn tại: " + code));
@@ -443,6 +469,6 @@ public class PortalLazyCreateService {
                        String facebookPageId, String facebookMessage, String facebookSequence,
                        String tiktokMessage, String tiktokSequence, String tiktokPrivacy, boolean tiktokAllowComment,
                        boolean tiktokAllowDuet, boolean tiktokAllowStitch, boolean tiktokAutoAddMusic,
-                       boolean tiktokMusicConsent, String youtubeDescription, String youtubeSequence) {}
+                       boolean tiktokMusicConsent, String youtubeDescription, String youtubeSequence, String code) {}
     public record Result(int productId, String code, String path, String host, int postsQueued, String warning) {}
 }
