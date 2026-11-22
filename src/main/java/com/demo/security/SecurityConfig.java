@@ -58,6 +58,18 @@ public class SecurityConfig {
         return "/bom-inventory/ipad4/".equals(stored) ? stored.toString() : fallback;
     }
 
+    // Always show Google's account chooser. Without it Google silently reuses the
+    // last account, so an app added to the home screen (its own cookie jar, no
+    // address bar) can never switch to another Google account.
+    static org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestResolver googleAccountChooser(
+            org.springframework.security.oauth2.client.registration.ClientRegistrationRepository registrations) {
+        var resolver = new org.springframework.security.oauth2.client.web.DefaultOAuth2AuthorizationRequestResolver(
+            registrations, org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestRedirectFilter.DEFAULT_AUTHORIZATION_REQUEST_BASE_URI);
+        resolver.setAuthorizationRequestCustomizer(builder ->
+            builder.additionalParameters(params -> params.put("prompt", "select_account")));
+        return resolver;
+    }
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http, @org.springframework.beans.factory.annotation.Value("${app.oauth2.enabled:true}") boolean oauthEnabled, org.springframework.jdbc.core.JdbcTemplate db) throws Exception {
         http
@@ -152,6 +164,10 @@ public class SecurityConfig {
             )
             ;
         if (oauthEnabled) http.oauth2Login(oauth2 -> oauth2
+                .authorizationEndpoint(endpoint -> endpoint
+                    .authorizationRequestResolver(googleAccountChooser(http.getSharedObject(org.springframework.context.ApplicationContext.class)
+                        .getBean(org.springframework.security.oauth2.client.registration.ClientRegistrationRepository.class)))
+                )
                 .redirectionEndpoint(endpoint -> endpoint
                     .baseUri("/dang-nhap/oauth2/code/*")
                 )
