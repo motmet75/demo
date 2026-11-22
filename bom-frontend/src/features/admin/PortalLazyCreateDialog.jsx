@@ -8,6 +8,7 @@ import VideoFileIcon from '@mui/icons-material/VideoFile'
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch'
 import { createPortalLazyProduct, fetchPortalFacebookPages, suggestPortalProductCode } from '../../api/portalContentApi'
 import { usePhone } from '../../components/usePhone'
+import VideoFrameCapture from './VideoFrameCapture'
 
 // Port of legacy Portal "lazy create" (portal-live schedule-product page,
 // AdminLazyCreateProductController): one form creates the product and queues
@@ -110,6 +111,8 @@ export default function PortalLazyCreateDialog({ open, tenant, brands, catalogs,
 
   const previews = useMemo(() => images.map(file => ({ file, url: URL.createObjectURL(file) })), [images])
   useEffect(() => () => previews.forEach(p => URL.revokeObjectURL(p.url)), [previews])
+  const thumbnailUrl = useMemo(() => thumbnail ? URL.createObjectURL(thumbnail) : '', [thumbnail])
+  useEffect(() => () => { if (thumbnailUrl) URL.revokeObjectURL(thumbnailUrl) }, [thumbnailUrl])
 
   if (!f) return null
   const set = key => value => setF(cur => ({ ...cur, [key]: value }))
@@ -211,6 +214,11 @@ export default function PortalLazyCreateDialog({ open, tenant, brands, catalogs,
           </Button>
           {(images.length > 0 || thumbnail || video) && <Button color="inherit" onClick={() => { setImages([]); setThumbnail(null); setVideo(null) }}>Xoá file</Button>}
         </Stack>
+        {thumbnailUrl && <Stack direction="row" spacing={1} alignItems="center">
+          <Box component="img" src={thumbnailUrl} alt="" sx={{ width: 96, height: 72, objectFit: 'cover', borderRadius: 1, border: 2, borderColor: 'primary.main' }} />
+          <Typography variant="caption" color="text.secondary">Ảnh bìa: {thumbnail.name}</Typography>
+          <Button size="small" color="inherit" onClick={() => setThumbnail(null)}>Bỏ</Button>
+        </Stack>}
         {previews.length > 0 && <Stack direction="row" spacing={1} sx={{ overflowX: 'auto', pb: 1 }}>
           {previews.map((p, i) => <Box key={p.url} sx={{ position: 'relative', flex: '0 0 auto' }}>
             <Box component="img" src={p.url} alt="" sx={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 1, border: 1, borderColor: 'divider' }} />
@@ -218,6 +226,8 @@ export default function PortalLazyCreateDialog({ open, tenant, brands, catalogs,
               sx={{ position: 'absolute', top: 0, right: 0, minWidth: 0, p: '0 6px', bgcolor: 'rgba(255,255,255,.85)' }}>✕</Button>
           </Box>)}
         </Stack>}
+        {video && <VideoFrameCapture key={`${video.name}-${video.size}-${video.lastModified}`} file={video} baseName={f.code || 'video'} galleryFull={images.length >= 35}
+          onGallery={shot => setImages(cur => [...cur, shot].slice(0, 35))} onThumbnail={setThumbnail} />}
         {!video && <TextField fullWidth label="Hoặc video Dailymotion (id hoặc link)" value={f.dailymotionVideoAddress}
           onChange={e => set('dailymotionVideoAddress')(e.target.value)} />}
 
