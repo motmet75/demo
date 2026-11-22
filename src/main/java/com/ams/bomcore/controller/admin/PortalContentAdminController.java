@@ -3,6 +3,7 @@ package com.ams.bomcore.controller.admin;
 import com.ams.bomcore.service.portalcontent.PortalContentService;
 import com.ams.bomcore.service.portalcontent.PortalContentAccessService;
 import com.ams.bomcore.service.portalcontent.PortalScheduleService;
+import com.ams.bomcore.service.portalcontent.PortalFacebookGroupService;
 import com.ams.bomcore.service.portalcontent.PortalGroupPostService;
 import com.ams.bomcore.service.portalcontent.PortalLazyCreateService;
 import org.springframework.http.MediaType;
@@ -34,12 +35,13 @@ public class PortalContentAdminController {
     private final PortalScheduleService schedules;
     private final PortalGroupPostService groupPosts;
     private final PortalLazyCreateService lazyCreate;
+    private final PortalFacebookGroupService facebookGroups;
 
     public PortalContentAdminController(PortalContentService service, PortalContentAccessService access,
                                         PortalScheduleService schedules, PortalGroupPostService groupPosts,
-                                        PortalLazyCreateService lazyCreate) {
+                                        PortalLazyCreateService lazyCreate, PortalFacebookGroupService facebookGroups) {
         this.service = service; this.access = access; this.schedules = schedules; this.groupPosts = groupPosts;
-        this.lazyCreate = lazyCreate;
+        this.lazyCreate = lazyCreate; this.facebookGroups = facebookGroups;
     }
 
     @GetMapping("/tenants")
@@ -157,6 +159,14 @@ public class PortalContentAdminController {
             @RequestBody PortalGroupPostService.PreviewRequest request, Authentication authentication) {
         access.require(authentication, tenantId);
         return groupPosts.preview(tenantId, request);
+    }
+
+    /** Store Facebook groups from pasted links (one per line) into a marketing group. */
+    @PostMapping("/{tenantId}/group-post/facebook-groups")
+    public PortalFacebookGroupService.AddResult groupPostAddFacebookGroups(@PathVariable String tenantId,
+            @RequestBody PortalFacebookGroupService.AddRequest request, Authentication authentication) {
+        access.require(authentication, tenantId);
+        return facebookGroups.add(tenantId, request);
     }
 
     @GetMapping("/{tenantId}/group-posts")

@@ -5,10 +5,11 @@ import {
   TableRow, TextField, Tooltip, Typography
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
+import GroupAddIcon from '@mui/icons-material/GroupAdd'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import ScheduleSendIcon from '@mui/icons-material/ScheduleSend'
 import {
-  cancelPortalGroupPost, fetchPortalGroupPostMembers, fetchPortalGroupPostOptions, fetchPortalGroupPosts,
+  addPortalFacebookGroups, cancelPortalGroupPost, fetchPortalGroupPostMembers, fetchPortalGroupPostOptions, fetchPortalGroupPosts,
   fetchPortalProducts, previewPortalGroupPosts, savePortalGroupPosts
 } from '../../api/portalContentApi'
 import { usePhone } from '../../components/usePhone'
@@ -28,6 +29,76 @@ const vietnamNowPlus = minutes => {
 const showTime = value => value ? value.replace('T', ' ').slice(0, 16) : '—'
 const withSeconds = value => value && value.length === 16 ? `${value}:00` : value
 const memberLabel = m => m.name ? `${m.name} · ${m.username}` : m.username
+const LINKS_EXAMPLE = 'Nội thất HCM | https://www.facebook.com/groups/noithathcm\nhttps://www.facebook.com/groups/1234567890'
+const looksLikeGroupLink = line => /facebook\.com\/groups\/|fb\.com\/groups\/|^\s*groups\/|(^|\s)\d{6,}(\s|$)/i.test(line)
+
+// Store Facebook groups by pasting their links. Each group becomes a member of a
+// marketing group, exactly as in legacy Portal, so campaigns can pick it.
+function AddFacebookGroupsDialog({ open, tenant, groups, defaultGroup, onClose, onSaved }) {
+  const phone = usePhone()
+  const [links, setLinks] = useState('')
+  const [group, setGroup] = useState(null)
+  const [working, setWorking] = useState(false)
+  const [error, setError] = useState('')
+  const [result, setResult] = useState(null)
+  const [openedFor, setOpenedFor] = useState(false)
+  if (open !== openedFor) {               // reset when the dialog opens (derived state, no effect)
+    setOpenedFor(open)
+    if (open) { setLinks(''); setError(''); setResult(null); setGroup(defaultGroup || null) }
+  }
+
+  const lines = links.split('\n').map(l => l.trim()).filter(Boolean)
+  const recognised = lines.filter(looksLikeGroupLink).length
+  const groupId = group && typeof group === 'object' ? group.id : ''
+  const newGroupName = typeof group === 'string' ? group.trim() : ''
+
+  const save = async () => {
+    setWorking(true); setError('')
+    try {
+      const r = await addPortalFacebookGroups(tenant, { links, marketingGroupId: groupId, newGroupName })
+      setResult(r)
+      const stored = (r?.created?.length || 0) + (r?.linked?.length || 0)
+      if (stored > 0) onSaved(r)
+      // keep only the lines that need fixing
+      setLinks((r?.invalid || []).map(i => i.line).join('\n'))
+    } catch (e) { setError(e.message || 'Cannot store Facebook groups') }
+    finally { setWorking(false) }
+  }
+
+  return <Dialog open={open} onClose={working ? undefined : onClose} fullWidth maxWidth="sm" fullScreen={phone}>
+    <DialogTitle>Add Facebook groups by link</DialogTitle>
+    <DialogContent>
+      <Stack spacing={2} sx={{ pt: 1 }}>
+        {error && <Alert severity="error">{error}</Alert>}
+        {result && <Alert severity={result.invalid?.length ? 'warning' : 'success'}>
+          {result.created?.length || 0} new · {result.linked?.length || 0} already stored, added to “{result.marketingGroupName}”
+          {result.already?.length ? ` · ${result.already.length} already in this group` : ''}
+          {result.invalid?.length ? <Box component="ul" sx={{ m: 0, pl: 2 }}>
+            {result.invalid.map(i => <li key={i.line}><strong>{i.line}</strong>: {i.reason}</li>)}
+          </Box> : null}
+        </Alert>}
+        <TextField label="Facebook group links" value={links} onChange={e => setLinks(e.target.value)} multiline minRows={5}
+          maxRows={14} autoFocus placeholder={LINKS_EXAMPLE}
+          helperText={lines.length
+            ? `${recognised} of ${lines.length} line${lines.length === 1 ? '' : 's'} look like group links`
+            : 'One group per line. A name before or after the link is optional.'} />
+        <Autocomplete freeSolo options={groups} value={group} onChange={(_, v) => setGroup(v)}
+          onInputChange={(_, v, reason) => { if (reason === 'input') setGroup(v) }}
+          getOptionLabel={g => typeof g === 'string' ? g : `${g.name} (${g.members})`}
+          isOptionEqualToValue={(a, b) => typeof a === 'object' && typeof b === 'object' && a.id === b.id}
+          renderInput={params => <TextField {...params} label="Save into marketing group"
+            helperText={newGroupName ? `A new marketing group “${newGroupName}” will be created` : 'Choose one, or type a name to create it'} />} />
+      </Stack>
+    </DialogContent>
+    <DialogActions>
+      <Button onClick={onClose} disabled={working}>{result ? 'Done' : 'Cancel'}</Button>
+      <Button variant="contained" startIcon={<GroupAddIcon />} onClick={save}
+        disabled={working || !tenant || !lines.length || (!groupId && !newGroupName)}>
+        {working ? 'Saving…' : `Save ${lines.length || ''} group${lines.length === 1 ? '' : 's'}`}
+      </Button>
+    </DialogActions>
+  </Dialog>
+}
 
 function GroupPostDialog({ open, tenant, onClose, onSaved }) {
   const phone = usePhone()
@@ -47,6 +118,18 @@ function GroupPostDialog({ open, tenant, onClose, onSaved }) {
   const [interval, setIntervalMinutes] = useState(10)
   const [rows, setRows] = useState([])
   const [working, setWorking] = useState(false)
+  const [addingGroups, setAddingGroups] = useState(false)
+
+  const groupsSaved = async r => {
+    try {
+      const options = await fetchPortalGroupPostOptions(tenant)
+      const next = options?.groups || []
+      setGroups(next)
+      const saved = next.find(g => g.id === r.marketingGroupId)
+      if (saved) setChosenGroups(current => [...current.filter(g => g.id !== saved.id), saved])
+      setRows([])
+    } catch (e) { setError(e.message || 'Cannot reload marketing groups') }
+  }
 
   useEffect(() => {
     if (!open || !tenant) return
@@ -154,7 +237,12 @@ function GroupPostDialog({ open, tenant, onClose, onSaved }) {
             ? [<Chip key="n" size="small" label={`${value.length} Facebook groups selected`} onDelete={() => setChosenMembers([])} />]
             : value.map((m, i) => <Chip size="small" {...getTagProps({ index: i })} key={m.username} label={m.name || m.username} />)}
           renderInput={params => <TextField {...params} label={`Facebook groups (${chosenMembers.length}/${members.length})`}
-            helperText={<Button size="small" onClick={() => setChosenMembers(members)} disabled={!members.length}>Select all {members.length}</Button>} />} />
+            helperText={<>
+              <Button size="small" onClick={() => setChosenMembers(members)} disabled={!members.length}>Select all {members.length}</Button>
+              <Button size="small" startIcon={<GroupAddIcon />} onClick={() => setAddingGroups(true)}>Add groups by link</Button>
+            </>} />} />
+        <AddFacebookGroupsDialog open={addingGroups} tenant={tenant} groups={groups} defaultGroup={chosenGroups[0]}
+          onClose={() => setAddingGroups(false)} onSaved={groupsSaved} />
 
         <Typography variant="subtitle2">3 · When and how</Typography>
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
@@ -216,6 +304,14 @@ export default function PortalGroupPostPanel({ tenant, onNotice, onError }) {
   const [open, setOpen] = useState(false)
   const [busyId, setBusyId] = useState(null)
   const [filter, setFilter] = useState('')
+  const [adding, setAdding] = useState(false)
+  const [marketingGroups, setMarketingGroups] = useState([])
+
+  const openAdd = async () => {
+    setAdding(true)
+    try { setMarketingGroups((await fetchPortalGroupPostOptions(tenant))?.groups || []) }
+    catch (e) { onError(e.message || 'Cannot load marketing groups') }
+  }
 
   const load = useCallback(async () => {
     if (!tenant) { setRows([]); return }
@@ -247,6 +343,7 @@ export default function PortalGroupPostPanel({ tenant, onNotice, onError }) {
     <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems={{ md: 'center' }} sx={{ mb: 2 }}>
       <TextField label="Filter group posts" value={filter} onChange={e => setFilter(e.target.value)} sx={{ flex: 1 }} />
       <Button startIcon={<RefreshIcon />} onClick={load} disabled={!tenant || loading}>Load</Button>
+      <Button startIcon={<GroupAddIcon />} onClick={openAdd} disabled={!tenant}>Add Facebook groups</Button>
       <Button variant="contained" startIcon={<AddIcon />} onClick={() => setOpen(true)} disabled={!tenant}>New group post campaign</Button>
     </Stack>
     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
@@ -269,6 +366,8 @@ export default function PortalGroupPostPanel({ tenant, onNotice, onError }) {
             <Button size="small" color="error" onClick={() => cancel(row)} disabled={busyId === row.id}>Cancel</Button>}</TableCell>
         </TableRow>)}</TableBody>
       </Table></TableContainer>}
+    <AddFacebookGroupsDialog open={adding} tenant={tenant} groups={marketingGroups} onClose={() => setAdding(false)}
+      onSaved={r => onNotice(`${(r.created?.length || 0) + (r.linked?.length || 0)} Facebook group(s) saved in “${r.marketingGroupName}”.`)} />
     <GroupPostDialog open={open} tenant={tenant} onClose={() => setOpen(false)}
       onSaved={saved => { setOpen(false); onNotice(`${saved} group post(s) queued in ${tenant}.`); load() }} />
   </Box>

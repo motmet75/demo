@@ -39,6 +39,7 @@ export const fetchPortalGroupPostMembers = (tenant, groupIds = []) => request(
   `/${encodeURIComponent(tenant)}/group-post/members${groupIds.length ? `?${groupIds.map(g => `groups=${encodeURIComponent(g)}`).join('&')}` : ''}`
 )
 export const previewPortalGroupPosts = (tenant, campaign) => request(`/${encodeURIComponent(tenant)}/group-post/preview`, json(campaign))
+export const addPortalFacebookGroups = (tenant, body) => request(`/${encodeURIComponent(tenant)}/group-post/facebook-groups`, json(body))
 export const fetchPortalGroupPosts = (tenant) => request(`/${encodeURIComponent(tenant)}/group-posts`)
 export const savePortalGroupPosts = (tenant, campaign) => request(`/${encodeURIComponent(tenant)}/group-posts`, json(campaign))
 export const cancelPortalGroupPost = (tenant, id) => request(
