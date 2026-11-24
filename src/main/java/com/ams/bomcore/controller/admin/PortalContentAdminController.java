@@ -200,6 +200,13 @@ public class PortalContentAdminController {
         return service.suggestProductCode(tenantId, text);
     }
 
+    /** TikTok / YouTube / LinkedIn accounts the website has connected in Portal (names only). */
+    @GetMapping("/{tenantId}/lazy-create/channels")
+    public java.util.Map<String, Object> lazyCreateChannels(@PathVariable String tenantId, Authentication authentication) {
+        access.require(authentication, tenantId);
+        return lazyCreate.channels(tenantId);
+    }
+
     @PostMapping(value = "/{tenantId}/lazy-create", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<PortalLazyCreateService.Result> lazyCreate(@PathVariable String tenantId,
             @RequestPart("form") PortalLazyCreateService.Form form,

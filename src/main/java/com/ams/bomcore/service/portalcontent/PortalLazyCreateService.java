@@ -346,6 +346,20 @@ public class PortalLazyCreateService {
         }, tokenType).stream().findFirst().orElse("");
     }
 
+    /**
+     * Connected TikTok / YouTube / LinkedIn accounts, read by Portal (YouTube
+     * credentials live on Portal's disk, TikTok needs its token refresh).
+     * Never fails the form: an unreachable bridge reports every channel as unknown.
+     */
+    public Map<String, Object> channels(String tenantId) {
+        String tenant = PortalTenantDataSourceRegistry.normalizeTenantId(tenantId);
+        try {
+            return send(bridgeRequest(tenant, "/channels").timeout(Duration.ofSeconds(20)).GET().build());
+        } catch (RuntimeException e) {
+            return Map.of("error", text(e.getMessage(), "Không đọc được kênh từ Portal"));
+        }
+    }
+
     // ---- Portal bridge client ----
 
     record Media(String code, String path, String host, List<String> galleryUrls, String videoUrl,

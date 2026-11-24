@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import {
   Alert, Autocomplete, Box, Button, Checkbox, CircularProgress, Dialog, DialogActions, DialogContent,
-  DialogTitle, FormControlLabel, FormGroup, FormLabel, MenuItem, Stack, Switch, TextField, Typography
+  DialogTitle, FormControlLabel, FormGroup, FormLabel, InputAdornment, MenuItem, Stack, Switch, TextField, Typography
 } from '@mui/material'
 import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternate'
 import VideoFileIcon from '@mui/icons-material/VideoFile'
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch'
-import { createPortalLazyProduct, fetchPortalFacebookPages, suggestPortalProductCode } from '../../api/portalContentApi'
+import { createPortalLazyProduct, fetchPortalFacebookPages, fetchPortalLazyCreateChannels, suggestPortalProductCode } from '../../api/portalContentApi'
 import { usePhone } from '../../components/usePhone'
+import { useAuth } from '../../context/useAuth'
 import VideoFrameCapture from './VideoFrameCapture'
 
 // Port of legacy Portal "lazy create" (portal-live schedule-product page,
@@ -37,6 +38,44 @@ const vietnamNowPlus = minutes => {
 const mb = bytes => `${(bytes / 1024 / 1024).toFixed(1)} MB`
 const nameFor = (list, code) => list.find(o => o.code === code)?.name || code || ''
 
+// Last-used choices, per signed-in user and website (several people share one browser/app),
+// kept in a cookie so that user's next form starts from them.
+const REMEMBER = ['catalog', 'brand', 'groupCodes', 'actions', 'immediate', 'facebookPageId', 'facebookSequence',
+  'tiktokSequence', 'youtubeSequence', 'tiktokPrivacy', 'tiktokAllowComment', 'tiktokAllowDuet', 'tiktokAllowStitch', 'tiktokAutoAddMusic']
+const cookieName = scope => `lazy_create_${String(scope).replace(/[^A-Za-z0-9]/g, '_')}`
+const readChoices = scope => {
+  try {
+    const raw = document.cookie.split('; ').find(c => c.startsWith(`${cookieName(scope)}=`))
+    const parsed = raw ? JSON.parse(decodeURIComponent(raw.slice(raw.indexOf('=') + 1))) : {}
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch { return {} }
+}
+const writeChoices = (scope, form) => {
+  const next = { ...readChoices(scope) }
+  REMEMBER.forEach(k => { if (form[k] !== '' && form[k] !== undefined) next[k] = form[k] })
+  document.cookie = `${cookieName(scope)}=${encodeURIComponent(JSON.stringify(next))}; path=/; max-age=31536000; SameSite=Lax`
+}
+// The form remembers whose choices it holds, so a leftover form never saves into another user's cookie.
+const withScope = (scope, form) => ({ ...form, scope })
+const restoreChoices = (saved, defaults, { catalogs, brands, groups }) => {
+  const out = { ...defaults }
+  REMEMBER.forEach(k => { if (saved[k] !== undefined && typeof saved[k] === typeof defaults[k]) out[k] = saved[k] })
+  if (!catalogs.some(c => c.code === out.catalog)) out.catalog = ''
+  if (!brands.some(b => b.code === out.brand)) out.brand = ''
+  out.groupCodes = Array.isArray(out.groupCodes) ? out.groupCodes.filter(g => groups.some(o => o.code === g)) : []
+  out.actions = Array.isArray(out.actions) ? out.actions.filter(a => PLATFORMS.some(p => p.value === a)) : defaults.actions
+  if (!PRIVACY.some(p => p.value === out.tiktokPrivacy)) out.tiktokPrivacy = defaults.tiktokPrivacy
+  return out
+}
+
+// Channel status line under the platform checkboxes: null = still loading.
+function ChannelStatus({ label, channel, unknown }) {
+  const text = unknown ? 'không kiểm tra được' : !channel ? 'đang kiểm tra…'
+    : channel.connected ? `đã kết nối${channel.name ? `: ${channel.name}` : ''}` : 'chưa kết nối'
+  const color = unknown || !channel ? 'text.secondary' : channel.connected ? 'success.main' : 'warning.main'
+  return <Typography variant="caption" sx={{ color }}>{label} · {text}</Typography>
+}
+
 function CodePick({ label, options, value, onChange, multiple = false }) {
   const selected = multiple ? options.filter(o => value.includes(o.code)) : options.find(o => o.code === value) || null
   return <Autocomplete multiple={multiple} fullWidth options={options} value={selected}
@@ -56,7 +95,11 @@ function MessageField({ label, message, onMessage, sequence, onSequence }) {
 
 export default function PortalLazyCreateDialog({ open, tenant, brands, catalogs, groups, onClose, onCreated }) {
   const phone = usePhone()
+  const { user } = useAuth()
+  const scope = `${user?.id ?? user?.username ?? 'anon'}__${tenant}`
   const [pages, setPages] = useState([])
+  // { tiktok: {connected, name, privacyOptions}, youtube: {connected, name}, linkedin: {connected, authors}, error? } | null
+  const [channels, setChannels] = useState(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [f, setF] = useState(null)
@@ -70,23 +113,36 @@ export default function PortalLazyCreateDialog({ open, tenant, brands, catalogs,
     if (!open || !tenant) return
     let cancelled = false
     const timer = window.setTimeout(() => {
-      setError(''); setImages([]); setThumbnail(null); setVideo(null)
-      setF({
-        name: '', autoName: '', code: '', codeEdited: false, price: '', catalog: '', brand: '', groupCodes: [], dailymotionVideoAddress: '',
+      setError(''); setImages([]); setThumbnail(null); setVideo(null); setChannels(null)
+      const saved = readChoices(scope)
+      setF(withScope(scope, restoreChoices(saved, {
+        name: '', code: '', codeEdited: false, price: '', catalog: '', brand: '', groupCodes: [], dailymotionVideoAddress: '',
         actions: ['post_facebook_multi_image'], immediate: false, scheduledAt: vietnamNowPlus(30), facebookPageId: '',
         facebookMessage: '', facebookSequence: '51267', tiktokMessage: '', tiktokSequence: '127',
         youtubeDescription: '', youtubeSequence: '5127', tiktokPrivacy: 'PUBLIC_TO_EVERYONE',
         tiktokAllowComment: true, tiktokAllowDuet: false, tiktokAllowStitch: false, tiktokAutoAddMusic: true,
         tiktokMusicConsent: true,
-      })
+      }, { catalogs, brands, groups })))
       fetchPortalFacebookPages(tenant).then(list => {
         if (cancelled) return
-        setPages(Array.isArray(list) ? list : [])
-        setF(cur => cur && ({ ...cur, facebookPageId: list?.[0]?.pageId || '' }))
+        const found = Array.isArray(list) ? list : []
+        setPages(found)
+        const remembered = found.find(p => p.pageId === saved.facebookPageId)
+        setF(cur => cur && ({ ...cur, facebookPageId: (remembered || found[0])?.pageId || '' }))
       }).catch(() => !cancelled && setPages([]))
+      fetchPortalLazyCreateChannels(tenant).then(c => !cancelled && setChannels(c || { error: 'empty' }))
+        .catch(e => !cancelled && setChannels({ error: e.message || 'error' }))
     }, 0)
     return () => { cancelled = true; window.clearTimeout(timer) }
-  }, [open, tenant])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- lists are read once when the dialog opens
+  }, [open, tenant, scope])
+
+  // Remember the option controls as they change (not the name, code, price or files).
+  const remembered = f ? JSON.stringify(REMEMBER.map(k => f[k])) : ''
+  useEffect(() => {
+    if (open && tenant && f?.scope === scope) writeChoices(scope, f)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `remembered` is the serialized subset of f
+  }, [open, tenant, scope, remembered])
 
   // Auto code: from the name, or the code typed by hand; always checked against existing codes and links.
   const codeSource = f ? (f.codeEdited ? f.code : f.name).trim() : ''
@@ -124,14 +180,18 @@ export default function PortalLazyCreateDialog({ open, tenant, brands, catalogs,
   const wantsTikTok = f.actions.some(a => a.startsWith('post_tiktok'))
   const wantsYouTube = f.actions.includes('post_youtube_video')
 
-  // Catalog and brand first; while the name is still the auto-filled one, it follows them.
-  const pickCatalogBrand = key => value => setF(cur => {
-    const next = { ...cur, [key]: value }
-    const prefix = [nameFor(catalogs, next.catalog), nameFor(brands, next.brand)].filter(Boolean).join(' ')
-    if (!cur.name.trim() || cur.name.trim() === cur.autoName.trim()) { next.name = prefix ? `${prefix} ` : ''; next.autoName = prefix }
-    return next
-  })
+  // Catalog and brand first; the button puts "<catalog> <brand>" at the start of the name, only when asked.
+  const namePrefix = [nameFor(catalogs, f.catalog), nameFor(brands, f.brand)].filter(Boolean).join(' ')
+  const hasPrefix = !!namePrefix && f.name.trimStart().toLowerCase().startsWith(namePrefix.toLowerCase())
+  const addPrefix = () => setF(cur => ({ ...cur, name: `${namePrefix} ${cur.name.trimStart()}` }))
   const readyForName = !!(f.catalog && f.brand)
+  const tiktokPrivacyChoices = channels?.tiktok?.privacyOptions?.length
+    ? PRIVACY.filter(p => channels.tiktok.privacyOptions.includes(p.value)) : PRIVACY
+  const channelUnknown = !!channels?.error
+  const notConnected = channels && !channelUnknown ? [
+    wantsTikTok && channels.tiktok && !channels.tiktok.connected && 'TikTok',
+    wantsYouTube && channels.youtube && !channels.youtube.connected && 'YouTube',
+  ].filter(Boolean) : []
 
   const problems = []
   if (!f.catalog) problems.push('Chọn danh mục')
@@ -150,7 +210,7 @@ export default function PortalLazyCreateDialog({ open, tenant, brands, catalogs,
     setSaving(true); setError('')
     try {
       const form = {
-        ...f, autoName: undefined, codeEdited: undefined, name: f.name.trim(), code: f.code.trim(), price: f.price === '' ? null : Number(f.price),
+        ...f, codeEdited: undefined, scope: undefined, name: f.name.trim(), code: f.code.trim(), price: f.price === '' ? null : Number(f.price),
         scheduledAt: f.immediate ? null : (f.scheduledAt.length === 16 ? `${f.scheduledAt}:00` : f.scheduledAt),
       }
       const body = new FormData()
@@ -174,13 +234,19 @@ export default function PortalLazyCreateDialog({ open, tenant, brands, catalogs,
 
         <Typography variant="subtitle2">1 · Sản phẩm</Typography>
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-          <CodePick label="Danh mục *" options={catalogs} value={f.catalog} onChange={pickCatalogBrand('catalog')} />
-          <CodePick label="Thương hiệu *" options={brands} value={f.brand} onChange={pickCatalogBrand('brand')} />
+          <CodePick label="Danh mục *" options={catalogs} value={f.catalog} onChange={set('catalog')} />
+          <CodePick label="Thương hiệu *" options={brands} value={f.brand} onChange={set('brand')} />
         </Stack>
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
           <TextField fullWidth required label="Tên sản phẩm" value={f.name} onChange={e => set('name')(e.target.value)}
+            onFocus={() => { if (/^\s/.test(f.name)) set('name')(f.name.trimStart()) }}
             disabled={!readyForName} autoFocus={readyForName}
-            helperText={readyForName ? 'Đã điền sẵn danh mục và thương hiệu, gõ tiếp tên sản phẩm.' : 'Chọn danh mục và thương hiệu trước.'} />
+            InputProps={{ endAdornment: readyForName && !hasPrefix && <InputAdornment position="end">
+              <Button size="small" sx={{ whiteSpace: 'nowrap' }} onClick={addPrefix} title={`Thêm “${namePrefix}” vào đầu tên`}>
+                + {namePrefix}
+              </Button>
+            </InputAdornment> }}
+            helperText={readyForName ? 'Bấm nút để thêm danh mục và thương hiệu vào đầu tên.' : 'Chọn danh mục và thương hiệu trước.'} />
           <TextField sx={{ width: { md: 200 } }} type="number" label="Giá (VND)" value={f.price} onChange={e => set('price')(e.target.value)} />
         </Stack>
         {f.name.trim() && <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} alignItems={{ md: 'flex-start' }}>
@@ -238,7 +304,16 @@ export default function PortalLazyCreateDialog({ open, tenant, brands, catalogs,
             {PLATFORMS.map(p => <FormControlLabel key={p.value} label={p.label}
               control={<Checkbox checked={f.actions.includes(p.value)} onChange={toggle(p.value)} />} />)}
           </FormGroup>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={{ xs: 0, sm: 2 }} flexWrap="wrap" useFlexGap>
+            <ChannelStatus label="TikTok" channel={channels?.tiktok} unknown={channelUnknown} />
+            <ChannelStatus label="YouTube" channel={channels?.youtube} unknown={channelUnknown} />
+            <ChannelStatus label="LinkedIn" unknown={channelUnknown} channel={channels?.linkedin && {
+              connected: channels.linkedin.connected, name: (channels.linkedin.authors || []).join(', ') }} />
+          </Stack>
         </Box>
+        {notConnected.length > 0 && <Alert severity="warning">
+          {notConnected.join(', ')} chưa kết nối trong Portal; bài đăng lên kênh này sẽ không chạy được.
+        </Alert>}
         {chosen.length > 0 && <>
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems={{ md: 'center' }}>
             <FormControlLabel control={<Switch checked={f.immediate} onChange={e => set('immediate')(e.target.checked)} />}
@@ -260,7 +335,7 @@ export default function PortalLazyCreateDialog({ open, tenant, brands, catalogs,
               sequence={f.tiktokSequence} onSequence={set('tiktokSequence')} />
             <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} alignItems={{ md: 'center' }} flexWrap="wrap" useFlexGap>
               <TextField select sx={{ minWidth: 200 }} label="Quyền riêng tư TikTok" value={f.tiktokPrivacy} onChange={e => set('tiktokPrivacy')(e.target.value)}>
-                {PRIVACY.map(p => <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>)}
+                {tiktokPrivacyChoices.map(p => <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>)}
               </TextField>
               <FormControlLabel label="Bình luận" control={<Checkbox checked={f.tiktokAllowComment} onChange={e => set('tiktokAllowComment')(e.target.checked)} />} />
               <FormControlLabel label="Duet" control={<Checkbox checked={f.tiktokAllowDuet} onChange={e => set('tiktokAllowDuet')(e.target.checked)} />} />

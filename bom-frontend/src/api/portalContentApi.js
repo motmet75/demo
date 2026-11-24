@@ -52,3 +52,6 @@ export const createPortalLazyProduct = (tenant, formData) =>
 // First free product code for a name or typed code (checked against existing product codes and links).
 export const suggestPortalProductCode = (tenant, text) =>
   request(`/${encodeURIComponent(tenant)}/lazy-create/code?text=${encodeURIComponent(text)}`)
+// TikTok / YouTube / LinkedIn accounts connected in Portal (names only).
+export const fetchPortalLazyCreateChannels = (tenant) =>
+  request(`/${encodeURIComponent(tenant)}/lazy-create/channels`)
