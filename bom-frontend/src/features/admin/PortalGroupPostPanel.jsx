@@ -10,7 +10,7 @@ import GroupAddIcon from '@mui/icons-material/GroupAdd'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import ScheduleSendIcon from '@mui/icons-material/ScheduleSend'
 import {
-  addPortalFacebookGroups, cancelPortalGroupPost, fetchPortalGroupPostMembers, fetchPortalGroupPostOptions, fetchPortalGroupPosts,
+  addPortalFacebookGroups, cancelPortalGroupPost, fetchPortalGroupPostMembers, fetchPortalLazyCreateChannels, fetchPortalGroupPostOptions, fetchPortalGroupPosts,
   fetchPortalProducts, previewPortalGroupPosts, savePortalGroupPosts
 } from '../../api/portalContentApi'
 import { usePhone } from '../../components/usePhone'
@@ -198,6 +198,9 @@ function GroupPostDialog({ open, tenant, onClose, onSaved }) {
   const [rows, setRows] = useState([])
   const [working, setWorking] = useState(false)
   const [addingGroups, setAddingGroups] = useState(false)
+  // Optional extra post per product on the site's company LinkedIn account (Portal scheduler posts it).
+  const [linkedin, setLinkedin] = useState({ on: false, mediaType: 'multi_image', sequence: '01267' })
+  const [linkedinAccount, setLinkedinAccount] = useState(null) // null = checking, { connected, name } or { error }
 
   const groupsSaved = async r => {
     try {
@@ -216,6 +219,11 @@ function GroupPostDialog({ open, tenant, onClose, onSaved }) {
     const timer = window.setTimeout(() => {
       setLoading(true); setError(''); setRows([]); setChosenProducts([]); setChosenGroups([]); setChosenMembers([])
       setStart(vietnamNowPlus(60))
+      setLinkedinAccount(null)
+      fetchPortalLazyCreateChannels(tenant)
+        .then(c => !cancelled && setLinkedinAccount(c?.error ? { error: true }
+          : { connected: !!c?.linkedin?.connected, name: (c?.linkedin?.authors || []).join(', ') }))
+        .catch(() => !cancelled && setLinkedinAccount({ error: true }))
       Promise.all([fetchPortalProducts(tenant, ''), fetchPortalGroupPostOptions(tenant)])
         .then(([productRows, options]) => {
           if (cancelled) return
@@ -278,8 +286,9 @@ function GroupPostDialog({ open, tenant, onClose, onSaved }) {
       const result = await savePortalGroupPosts(tenant, {
         campaignCode: campaign, timezone: 'Asia/Ho_Chi_Minh',
         rows: rows.map(r => ({ username: r.username, productId: r.productId, scheduledAt: withSeconds(r.scheduledAt), message: r.message })),
+        linkedin: linkedin.on ? { mediaType: linkedin.mediaType, sequence: linkedin.sequence } : null,
       })
-      onSaved(result?.saved || 0)
+      onSaved(result?.saved || 0, result?.linkedin || 0)
     } catch (e) { setError(e.message || 'Cannot save group posts') }
     finally { setWorking(false) }
   }
@@ -323,6 +332,29 @@ function GroupPostDialog({ open, tenant, onClose, onSaved }) {
           <TextField fullWidth label="Message sequence" value={sequence} error={!/^[0-7]*$/.test(sequence)}
             onChange={e => setSequence(e.target.value.replace(/[^0-7]/g, ''))} helperText={SEQUENCE_HELP} />
         </Stack>
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems={{ md: 'center' }}>
+          <FormControlLabel sx={{ minWidth: 260 }} label="Also post each product to LinkedIn"
+            control={<Checkbox checked={linkedin.on} onChange={e => setLinkedin(l => ({ ...l, on: e.target.checked }))} />} />
+          {linkedin.on && <>
+            <TextField select size="small" sx={{ minWidth: 160 }} label="LinkedIn post" value={linkedin.mediaType}
+              onChange={e => setLinkedin(l => ({ ...l, mediaType: e.target.value }))}>
+              <MenuItem value="multi_image">Images</MenuItem>
+              <MenuItem value="video">Video (Dailymotion)</MenuItem>
+            </TextField>
+            <TextField size="small" sx={{ minWidth: 160 }} label="LinkedIn sequence" value={linkedin.sequence}
+              onChange={e => setLinkedin(l => ({ ...l, sequence: e.target.value.replace(/[^0-7]/g, '') }))} />
+          </>}
+          <Typography variant="caption" sx={{ color: !linkedinAccount || linkedinAccount.error ? 'text.secondary'
+            : linkedinAccount.connected ? 'success.main' : 'warning.main' }}>
+            LinkedIn · {!linkedinAccount ? 'checking…' : linkedinAccount.error ? 'could not check'
+              : linkedinAccount.connected ? `connected${linkedinAccount.name ? `: ${linkedinAccount.name}` : ''}` : 'not connected in Portal'}
+          </Typography>
+        </Stack>
+        {linkedin.on && <Typography variant="caption" color="text.secondary">
+          One LinkedIn post per product, at the time of its first group post, with its own tracked link. Same sequence digits as above.
+        </Typography>}
+        {linkedin.on && linkedinAccount && !linkedinAccount.error && !linkedinAccount.connected &&
+          <Alert severity="warning">LinkedIn is not connected in Portal; the LinkedIn posts will fail until it is.</Alert>}
         <Box><Button variant="outlined" onClick={generate} disabled={!canGenerate || working}>
           {rows.length ? 'Regenerate rows' : 'Generate rows'}
         </Button></Box>
@@ -362,7 +394,8 @@ function GroupPostDialog({ open, tenant, onClose, onSaved }) {
       <Button onClick={onClose} disabled={working}>Cancel</Button>
       <Button variant="contained" startIcon={<ScheduleSendIcon />} onClick={save}
         disabled={working || loading || !rows.length || rowProblems > 0}>
-        {working ? 'Saving…' : `Queue ${rows.length || ''} group post${rows.length === 1 ? '' : 's'}`}
+        {working ? 'Saving…' : `Queue ${rows.length || ''} group post${rows.length === 1 ? '' : 's'}${linkedin.on && rows.length
+          ? ` + ${new Set(rows.map(r => r.productId)).size} LinkedIn` : ''}`}
       </Button>
     </DialogActions>
   </Dialog>
@@ -487,6 +520,10 @@ export default function PortalGroupPostPanel({ tenant, onNotice, onError }) {
     <AddFacebookGroupsDialog open={adding} tenant={tenant} groups={marketingGroups} onClose={() => setAdding(false)}
       onSaved={r => onNotice(`${(r.created?.length || 0) + (r.linked?.length || 0)} Facebook group(s) saved in “${r.marketingGroupName}”.`)} />
     <GroupPostDialog open={open} tenant={tenant} onClose={() => setOpen(false)}
-      onSaved={saved => { setOpen(false); onNotice(`${saved} group post(s) queued in ${tenant}.`); load() }} />
+      onSaved={(saved, linkedinPosts) => {
+        setOpen(false)
+        onNotice(`${saved} group post(s) queued in ${tenant}.${linkedinPosts ? ` ${linkedinPosts} LinkedIn post(s) scheduled (see Media schedule).` : ''}`)
+        load()
+      }} />
   </Box>
 }

@@ -51,7 +51,7 @@ class PortalGroupPostServiceDbIT {
         assertEquals("Hoi Noi that", rows.get(0).name());
 
         var save = rows.stream().map(r -> new PortalGroupPostService.SaveRow(r.username(), r.productId(), r.scheduledAt(), r.message())).toList();
-        assertEquals(3, service.save("shop.test", new PortalGroupPostService.SaveRequest("CAMP11", null, save), "tester").saved());
+        assertEquals(3, service.save("shop.test", new PortalGroupPostService.SaveRequest("CAMP11", null, save, null), "tester").saved());
 
         List<Map<String, Object>> logs = db.queryForList("SELECT * FROM schedulelogtb ORDER BY id");
         assertEquals(3, logs.size());
@@ -74,7 +74,7 @@ class PortalGroupPostServiceDbIT {
         assertTrue(msg.endsWith("?t=" + tokens.get(0).get("idbase62") + "\nSP001"), msg);
 
         // saving again reuses the same tokens
-        service.save("shop.test", new PortalGroupPostService.SaveRequest("CAMP11", null, save), "tester");
+        service.save("shop.test", new PortalGroupPostService.SaveRequest("CAMP11", null, save, null), "tester");
         assertEquals(3, db.queryForObject("SELECT count(*) FROM access_tokens", Integer.class));
 
         var recent = service.recent("shop.test");
@@ -87,6 +87,6 @@ class PortalGroupPostServiceDbIT {
         // a username that is not a marketing group member is refused
         var bad = List.of(new PortalGroupPostService.SaveRow("https://facebook.com/groups/444", 1, start, "hi"));
         assertThrows(IllegalArgumentException.class,
-                () -> service.save("shop.test", new PortalGroupPostService.SaveRequest("CAMP11", null, bad), "tester"));
+                () -> service.save("shop.test", new PortalGroupPostService.SaveRequest("CAMP11", null, bad, null), "tester"));
     }
 }

@@ -166,8 +166,10 @@ public class PortalGroupPostService {
             java.util.Set<String> knownGroups = new java.util.HashSet<>(
                     members(tenantId, List.of()).stream().map(Member::username).toList());
 
+            int[] linkedInCount = {0};
             List<Long> ids = tx.execute(status -> {
-                Map<Integer, Product> products = new HashMap<>();
+                Map<Integer, Product> products = new LinkedHashMap<>();
+                Map<Integer, LocalDateTime> firstAt = new HashMap<>();
                 List<Long> created = new ArrayList<>();
                 int index = 0;
                 for (SaveRow row : request.rows()) {
@@ -191,6 +193,7 @@ public class PortalGroupPostService {
                                 campaignName + " - " + product.name());
                         message = message.replace(LINK_PLACEHOLDER, url + "?t=" + token);
                     }
+                    firstAt.merge(product.id(), local, (a, b) -> a.isBefore(b) ? a : b);
                     created.add(db.queryForObject("""
                             INSERT INTO schedulelogtb
                                 (relatedpath, relatedcode, relatedtype, platform, mediatype, targetusername, targetaccountid,
@@ -205,12 +208,77 @@ public class PortalGroupPostService {
                             product.path(), product.code(), username, message, product.image(), product.video(),
                             Timestamp.valueOf(local), Timestamp.valueOf(utc), zone, createdBy, now(), now()));
                 }
+                if (request.linkedin() != null) {
+                    int before = created.size();
+                    for (Product product : products.values())
+                        created.add(linkedInPost(db, normalizedTenant, product, request.linkedin(), firstAt.get(product.id()),
+                                zoneId, campaignCode, campaignName, createdBy));
+                    linkedInCount[0] = created.size() - before;
+                }
                 return created;
             });
-            return new SaveResult(ids == null ? 0 : ids.size());
+            int total = ids == null ? 0 : ids.size();
+            return new SaveResult(total - linkedInCount[0], linkedInCount[0]);
         } catch (DataAccessException exception) {
             throw new IllegalStateException("Portal database operation failed for tenant " + normalizedTenant, exception);
         }
+    }
+
+    /**
+     * One post per product on the site's company LinkedIn account, at the product's first group post time.
+     * Same schedulelogtb + appscheduletb rows as the media schedule; blank targetaccountid makes the
+     * Portal dispatcher use the connected linkedin_author_urn.
+     */
+    private long linkedInPost(JdbcTemplate db, String tenant, Product product, LinkedIn linkedin, LocalDateTime at,
+                              ZoneId zoneId, String campaignCode, String campaignName, String createdBy) {
+        boolean video = "video".equals(linkedin.mediaType());
+        if (!video && !"multi_image".equals(linkedin.mediaType()))
+            throw new IllegalArgumentException("LinkedIn: choose images or video");
+        String sequence = clean(linkedin.sequence());
+        if (!sequence.matches("[0-7]*")) throw new IllegalArgumentException("LinkedIn sequence may only contain digits 0-7");
+        String images = String.join("\n", product.image().lines().map(String::trim)
+                .filter(l -> !l.isEmpty() && !"none".equalsIgnoreCase(l)).toList());
+        if (video && product.video().isEmpty())
+            throw new IllegalArgumentException("LinkedIn video: product " + product.code() + " has no Dailymotion video");
+        if (!video && images.isEmpty())
+            throw new IllegalArgumentException("LinkedIn images: product " + product.code() + " has no images");
+        Map<String, String> tokens = new HashMap<>();
+        tokens.put("1", tokenCampaignText(db, "hashtag_token"));
+        tokens.put("5", tokenCampaignText(db, "facebook_page_access_token"));
+        String message = message(product, sequence, tokens);
+        if (message.contains(LINK_PLACEHOLDER)) {
+            String url = productUrl(tenant, product);
+            if (url.isEmpty()) throw new IllegalArgumentException("LinkedIn: product " + product.code() + " has no link path");
+            String token = ensureTrackingToken(db, "linkedin", url, campaignCode, campaignName + " - LinkedIn - " + product.name());
+            message = message.replace(LINK_PLACEHOLDER, url + "?t=" + token);
+        }
+        if (message.length() > 3000) throw new IllegalArgumentException("LinkedIn post over 3000 characters: " + product.code());
+        LocalDateTime local = at.withNano(0);
+        LocalDateTime utc = local.atZone(zoneId).withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
+        String title = product.name().length() > 255 ? product.name().substring(0, 255) : product.name();
+        Long logId = db.queryForObject("""
+                INSERT INTO schedulelogtb
+                    (relatedpath, relatedcode, relatedtype, platform, mediatype, postmessage, imageurls,
+                     videodmid, scheduledtime, scheduledtimeutc, timezone, status, createdtime, modifiedtime,
+                     visible, targetusername, targetaccountid, tiktokprivacylevel, createdby)
+                VALUES (?, ?, 'product', 'LinkedIn', ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, true, ?, '', 'SELF_ONLY', ?)
+                RETURNING id
+                """, Long.class, product.path(), product.code(), video ? "video" : "multi_image", message,
+                video ? "" : images, video ? product.video() : "", Timestamp.valueOf(local), Timestamp.valueOf(utc),
+                zoneId.getId(), now(), now(), title, createdBy);
+        String action = video ? "post_linkedin_video" : "post_linkedin_multi_image";
+        String name = (video ? "LinkedIn Video: " : "LinkedIn Images: ") + product.name();
+        return db.queryForObject("""
+                INSERT INTO appscheduletb
+                    (schedulename, schedulecode, schedulestringid, scheduletype, relatedcode, actionname,
+                     actionvalue, repeatingrange, recure, recurevalue, starttime, endtime, createdtime,
+                     modifiedtime, isenable, islocked, isvisible, timezone, starttimeutc, endtimeutc)
+                VALUES (?, 'none', ?, 'SOCIAL_POST', ?, ?, ?, 'none', 0, 'none', ?, ?, ?, ?,
+                        true, false, true, ?, ?, ?)
+                RETURNING id
+                """, Long.class, name.length() > 255 ? name.substring(0, 255) : name, tenant, product.code(), action,
+                String.valueOf(logId), Timestamp.valueOf(local), Timestamp.valueOf(local), now(), now(), zoneId.getId(),
+                Timestamp.valueOf(utc), Timestamp.valueOf(utc));
     }
 
     /** Only rows the add-on has not picked up yet (status pending) can be cancelled. */
@@ -364,8 +432,10 @@ public class PortalGroupPostService {
     public record PreviewRow(String username, String name, int productId, String productCode, String productName,
                              LocalDateTime scheduledAt, String message) {}
     public record SaveRow(String username, Integer productId, LocalDateTime scheduledAt, String message) {}
-    public record SaveRequest(String campaignCode, String timezone, List<SaveRow> rows) {}
-    public record SaveResult(int saved) {}
+    /** Optional: also post each product to the company LinkedIn account (mediaType multi_image | video). */
+    public record LinkedIn(String mediaType, String sequence) {}
+    public record SaveRequest(String campaignCode, String timezone, List<SaveRow> rows, LinkedIn linkedin) {}
+    public record SaveResult(int saved, int linkedin) {}
     public record GroupPostView(long id, String productCode, String groupUrl, String message, LocalDateTime scheduledAt,
                                 String timezone, String status, String lastError, String createdBy, int attempts) {}
 }
