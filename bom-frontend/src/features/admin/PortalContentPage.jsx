@@ -2,17 +2,16 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import {
   Alert, Autocomplete, Avatar, Box, Button, Card, CardContent, Checkbox, CircularProgress, Dialog,
-  DialogActions, DialogContent, DialogTitle, FormControlLabel, MenuItem, Paper,
-  Stack, Tab, Tabs, Table, TableBody, TableCell, TableContainer, TableHead,
-  TableRow, TextField, Tooltip, Typography
+  DialogActions, DialogContent, DialogTitle, FormControlLabel, MenuItem,
+  Stack, Tab, Tabs, TextField, Tooltip, Typography
 } from '@mui/material'
 import HtmlEditor from '../../components/HtmlEditor'
 import PortalMediaSchedulePanel from './PortalMediaSchedulePanel'
 import PortalGroupPostPanel from './PortalGroupPostPanel'
 import PortalLazyCreateDialog from './PortalLazyCreateDialog'
+import PortalContentGrid from './PortalContentGrid'
 import AddIcon from '@mui/icons-material/Add'
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh'
-import EditIcon from '@mui/icons-material/Edit'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import SaveIcon from '@mui/icons-material/Save'
 import {
@@ -32,7 +31,6 @@ const emptyProduct = {
   visible: true, approved: false, locked: false, newProduct: false,
 }
 
-const date = value => value ? new Date(value).toLocaleString('vi-VN') : '—'
 
 // Distinct non-empty, non-placeholder values already used in this tenant's
 // rows, so category/catalog/brand become pick-from-existing (freeSolo keeps
@@ -419,7 +417,6 @@ export default function PortalContentPage() {
   }
 
   const title = tab === 0 ? 'Articles' : tab === 1 ? 'Products' : tab === 2 ? 'Media schedule' : 'Group posts'
-  const visibleRows = useMemo(() => rows, [rows])
 
   return <Box sx={{ p: { xs: 1, md: 3 } }}>
     <Typography variant="h4" fontWeight={800}>Website Content</Typography>
@@ -444,22 +441,10 @@ export default function PortalContentPage() {
       </Tabs>
       {tab === 2 ? <PortalMediaSchedulePanel tenant={tenant} onNotice={setNotice} onError={setError} />
         : tab === 3 ? <PortalGroupPostPanel tenant={tenant} onNotice={setNotice} onError={setError} /> : <>
-      {tenant && <Typography variant="body2" sx={{ mb: 1 }}>Database: <strong>{tenant}</strong> · {visibleRows.length} {title.toLowerCase()}</Typography>}
+      {tenant && <Typography variant="body2" sx={{ mb: 1 }}>Database: <strong>{tenant}</strong></Typography>}
       {loading ? <Box sx={{ py: 6, textAlign: 'center' }}><CircularProgress /></Box> :
-        <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: '65vh' }}><Table stickyHeader size="small">
-          <TableHead><TableRow>
-            <TableCell width={70}>ID</TableCell><TableCell>{tab === 0 ? 'Title' : 'Product'}</TableCell>
-            <TableCell>{tab === 0 ? 'Link' : 'Code'}</TableCell><TableCell>{tab === 0 ? 'Category' : 'Catalog'}</TableCell>
-            {tab === 1 && <TableCell align="right">Price</TableCell>}<TableCell>Status</TableCell><TableCell>Modified</TableCell><TableCell width={80} />
-          </TableRow></TableHead>
-          <TableBody>{visibleRows.map(row => <TableRow key={row.id} hover>
-            <TableCell>{row.id}</TableCell><TableCell sx={{ fontWeight: 700 }}>{tab === 0 ? row.title : row.name}</TableCell>
-            <TableCell>{tab === 0 ? row.articleLink : row.code}</TableCell><TableCell>{tab === 0 ? row.category : nameFor(catalogs, row.catalog)}</TableCell>
-            {tab === 1 && <TableCell align="right">{Number(row.price || 0).toLocaleString('vi-VN')} {row.currency}</TableCell>}
-            <TableCell>{row.approved ? 'Approved' : 'Draft'}{row.visible ? '' : ' · Hidden'}{row.locked ? ' · Locked' : ''}</TableCell>
-            <TableCell>{date(row.modifiedTime)}</TableCell><TableCell><Button size="small" startIcon={<EditIcon />} onClick={() => edit(row)}>Edit</Button></TableCell>
-          </TableRow>)}</TableBody>
-        </Table></TableContainer>}
+        <PortalContentGrid key={`${tenant}-${tab}`} kind={tab === 0 ? 'article' : 'product'} rows={rows}
+          catalogs={catalogs} brands={brands} groups={groups} onEdit={edit} />}
       </>}
     </CardContent></Card>
     <ArticleEditor open={tab === 0 && Boolean(draft)} value={draft || emptyArticle} onChange={setDraft} onClose={() => setDraft(null)} onSave={save} saving={saving} rows={tab === 0 ? rows : []} />
