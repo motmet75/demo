@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
+  Alert, Autocomplete, Box, Button, Checkbox, Chip, FormControlLabel, Switch, CircularProgress, Dialog, DialogActions, DialogContent,
   DialogTitle, MenuItem, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead,
   TableRow, TableSortLabel, TextField, Tooltip, Typography
 } from '@mui/material'
@@ -15,7 +15,7 @@ import {
 } from '../../api/portalContentApi'
 import { usePhone } from '../../components/usePhone'
 import GridFilterPick from './GridFilterPick'
-import { WHEN_FILTERS, countedOptions, matchesWords, nextSort, sortRows, vietnamNowPlus } from './gridFilterUtils'
+import { WHEN_FILTERS, countedOptions, fold, matchesWords, nextSort, sortRows, vietnamNowPlus } from './gridFilterUtils'
 
 // Ported from legacy Portal ProductGroupPostForm: post products into many
 // Facebook groups (marketing-group members), one row per group, staggered.
@@ -26,7 +26,6 @@ const STATUS_COLOR = { pending: 'info', running: 'warning', retrying: 'warning',
 const SEQUENCE_HELP = '0 name first · 1 hashtag line · 2 #brand · 3 #catalog · 4 #sub-catalog · 5 page contact line · 6 tracked link · 7 product code'
 const showTime = value => value ? value.replace('T', ' ').slice(0, 16) : '—'
 const withSeconds = value => value && value.length === 16 ? `${value}:00` : value
-const memberLabel = m => m.name ? `${m.name} · ${m.username}` : m.username
 const LINKS_EXAMPLE = 'Nội thất HCM | https://www.facebook.com/groups/noithathcm\nhttps://www.facebook.com/groups/1234567890'
 const looksLikeGroupLink = line => /facebook\.com\/groups\/|fb\.com\/groups\/|^\s*groups\/|(^|\s)\d{6,}(\s|$)/i.test(line)
 
@@ -96,6 +95,88 @@ function AddFacebookGroupsDialog({ open, tenant, groups, defaultGroup, onClose, 
       </Button>
     </DialogActions>
   </Dialog>
+}
+
+const membershipsOf = m => (m.groups || '').split(', ').map(g => g.trim()).filter(Boolean)
+
+// Facebook groups to post into: filter, sort and tick in a table. "Select all" ticks the
+// rows that match the current filter, so you can narrow first and then select.
+function FacebookGroupPicker({ members, chosen, onChange, loading, onAdd }) {
+  const [text, setText] = useState('')
+  const [marketing, setMarketing] = useState('')
+  const [onlyChosen, setOnlyChosen] = useState(false)
+  const [sort, setSort] = useState({ key: 'name', dir: 'asc' })
+  const picked = useMemo(() => new Set(chosen.map(m => m.username)), [chosen])
+
+  const marketingItems = useMemo(() => {
+    const seen = new Map()
+    members.forEach(m => membershipsOf(m).forEach(g => seen.set(g, (seen.get(g) || 0) + 1)))
+    return [...seen.entries()].map(([value, count]) => ({ value, count })).sort((a, b) => a.value.localeCompare(b.value, 'vi'))
+  }, [members])
+  const columns = useMemo(() => [
+    { key: 'name', label: 'Tên nhóm', get: m => fold(m.name || m.username) },
+    { key: 'link', label: 'Link / ID', get: m => fold(m.username) },
+    { key: 'marketing', label: 'Nhóm marketing', get: m => fold(m.groups) },
+  ], [])
+  const visible = useMemo(() => {
+    const filtered = members.filter(m =>
+      (!marketing || membershipsOf(m).includes(marketing)) && (!onlyChosen || picked.has(m.username)) &&
+      matchesWords(text, [m.name, m.username, m.groups].join(' ')))
+    return sortRows(filtered, (columns.find(c => c.key === sort.key) || columns[0]).get, sort.dir)
+  }, [members, marketing, onlyChosen, picked, text, sort, columns])
+
+  const filtering = !!(text || marketing || onlyChosen)
+  const visibleChosen = visible.filter(m => picked.has(m.username)).length
+  const toggle = m => onChange(picked.has(m.username) ? chosen.filter(c => c.username !== m.username) : [...chosen, m])
+  const selectVisible = on => {
+    const names = new Set(visible.map(m => m.username))
+    onChange(on ? [...chosen.filter(c => !names.has(c.username)), ...visible] : chosen.filter(c => !names.has(c.username)))
+  }
+
+  return <Box>
+    <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} sx={{ mb: 1 }} flexWrap="wrap" useFlexGap alignItems={{ md: 'center' }}>
+      <TextField size="small" sx={{ minWidth: 220, flex: 1 }} label="Lọc nhóm Facebook" value={text}
+        onChange={e => setText(e.target.value)} placeholder="Tên nhóm, link, nhóm marketing…" />
+      {marketingItems.length > 1 && <GridFilterPick label="Nhóm marketing" value={marketing} items={marketingItems} onChange={setMarketing} minWidth={200} />}
+      <FormControlLabel control={<Switch size="small" checked={onlyChosen} onChange={e => setOnlyChosen(e.target.checked)} />} label="Chỉ nhóm đã chọn" />
+      {filtering && <Button size="small" color="inherit" startIcon={<FilterAltOffIcon />}
+        onClick={() => { setText(''); setMarketing(''); setOnlyChosen(false) }}>Xoá lọc</Button>}
+    </Stack>
+    <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
+      <Typography variant="body2" color="text.secondary">
+        Đã chọn {chosen.length} / {members.length} nhóm Facebook{filtering ? ` · đang hiện ${visible.length}` : ''}
+      </Typography>
+      <Button size="small" onClick={() => selectVisible(true)} disabled={!visible.length || visibleChosen === visible.length}>
+        Chọn {filtering ? `${visible.length} nhóm đang hiện` : `tất cả ${members.length}`}
+      </Button>
+      <Button size="small" color="inherit" onClick={() => selectVisible(false)} disabled={!visibleChosen}>
+        Bỏ chọn {filtering ? 'nhóm đang hiện' : 'tất cả'}
+      </Button>
+      <Button size="small" startIcon={<GroupAddIcon />} onClick={onAdd}>Add groups by link</Button>
+    </Stack>
+    <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 320 }}><Table stickyHeader size="small">
+      <TableHead><TableRow>
+        <TableCell padding="checkbox"><Checkbox size="small" checked={!!visible.length && visibleChosen === visible.length}
+          indeterminate={visibleChosen > 0 && visibleChosen < visible.length} onChange={e => selectVisible(e.target.checked)} /></TableCell>
+        {columns.map(c => <TableCell key={c.key} sortDirection={sort.key === c.key ? sort.dir : false}>
+          <TableSortLabel active={sort.key === c.key} direction={sort.key === c.key ? sort.dir : 'asc'}
+            onClick={() => setSort(cur => nextSort(cur, c.key, []))}>{c.label}</TableSortLabel>
+        </TableCell>)}
+      </TableRow></TableHead>
+      <TableBody>
+        {visible.map(m => <TableRow key={m.username} hover onClick={() => toggle(m)} selected={picked.has(m.username)} sx={{ cursor: 'pointer' }}>
+          <TableCell padding="checkbox"><Checkbox size="small" checked={picked.has(m.username)}
+            onClick={e => e.stopPropagation()} onChange={() => toggle(m)} /></TableCell>
+          <TableCell sx={{ fontWeight: 600 }}>{m.name || '—'}</TableCell>
+          <TableCell sx={{ wordBreak: 'break-all' }}>{m.username}</TableCell>
+          <TableCell>{m.groups}</TableCell>
+        </TableRow>)}
+        {!visible.length && <TableRow><TableCell colSpan={4} align="center" sx={{ py: 3, color: 'text.secondary' }}>
+          {loading ? <CircularProgress size={20} /> : members.length ? 'Không có nhóm nào khớp bộ lọc.' : 'Chưa có nhóm Facebook. Bấm “Add groups by link”.'}
+        </TableCell></TableRow>}
+      </TableBody>
+    </Table></TableContainer>
+  </Box>
 }
 
 function GroupPostDialog({ open, tenant, onClose, onSaved }) {
@@ -228,17 +309,8 @@ function GroupPostDialog({ open, tenant, onClose, onSaved }) {
             {campaigns.map(c => <MenuItem key={c.code} value={c.code}>{c.name} · {c.code}</MenuItem>)}
           </TextField>
         </Stack>
-        <Autocomplete multiple options={members} value={chosenMembers} loading={membersLoading} disableCloseOnSelect
-          onChange={(_, v) => { setChosenMembers(v); setRows([]) }} getOptionLabel={memberLabel}
-          isOptionEqualToValue={(a, b) => a.username === b.username}
-          renderTags={(value, getTagProps) => value.length > 6
-            ? [<Chip key="n" size="small" label={`${value.length} Facebook groups selected`} onDelete={() => setChosenMembers([])} />]
-            : value.map((m, i) => <Chip size="small" {...getTagProps({ index: i })} key={m.username} label={m.name || m.username} />)}
-          renderInput={params => <TextField {...params} label={`Facebook groups (${chosenMembers.length}/${members.length})`}
-            helperText={<>
-              <Button size="small" onClick={() => setChosenMembers(members)} disabled={!members.length}>Select all {members.length}</Button>
-              <Button size="small" startIcon={<GroupAddIcon />} onClick={() => setAddingGroups(true)}>Add groups by link</Button>
-            </>} />} />
+        <FacebookGroupPicker members={members} chosen={chosenMembers} loading={membersLoading}
+          onChange={v => { setChosenMembers(v); setRows([]) }} onAdd={() => setAddingGroups(true)} />
         <AddFacebookGroupsDialog open={addingGroups} tenant={tenant} groups={groups} defaultGroup={chosenGroups[0]}
           onClose={() => setAddingGroups(false)} onSaved={groupsSaved} />
 
