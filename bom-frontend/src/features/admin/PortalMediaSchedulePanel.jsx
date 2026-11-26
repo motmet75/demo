@@ -73,7 +73,8 @@ function ScheduleDialog({ open, tenant, onClose, onCreated }) {
           if (cancelled) return
           setProducts(Array.isArray(productRows) ? productRows : [])
           setPages(Array.isArray(pageRows) ? pageRows : [])
-          setPageId(pageRows?.[0]?.pageId || '')
+          // Only one Page: use it. Several: never preselect, the user picks the Page for every post.
+          setPageId(Array.isArray(pageRows) && pageRows.length === 1 ? pageRows[0].pageId : '')
         })
         .catch(e => !cancelled && setError(e.message || 'Cannot load products'))
         .finally(() => !cancelled && setLoading(false))
@@ -87,6 +88,12 @@ function ScheduleDialog({ open, tenant, onClose, onCreated }) {
     setImages(lines(value?.imageUrl).join('\n'))
     setVideoId(videoIdOf(value?.videoUrl))
     setMessage(value ? defaultMessage(value, page, tenant) : '')
+  }
+  // Picking the Page after the product: refresh the default message (Page contact line) unless it was edited.
+  const choosePage = value => {
+    if (product && message === defaultMessage(product, page, tenant))
+      setMessage(defaultMessage(product, pages.find(p => p.pageId === value), tenant))
+    setPageId(value)
   }
   const toggle = value => event => setActions(current => event.target.checked
     ? [...current, value] : current.filter(a => a !== value))
@@ -137,8 +144,9 @@ function ScheduleDialog({ open, tenant, onClose, onCreated }) {
 
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
           {needsPage && <TextField select fullWidth required label="Facebook Page" value={pageId}
-            onChange={event => setPageId(event.target.value)}
-            helperText={pages.length ? 'Pages connected in the Portal' : 'No Facebook Page token found for this website'}>
+            onChange={event => choosePage(event.target.value)} error={pages.length > 1 && !pageId}
+            helperText={!pages.length ? 'No Facebook Page token found for this website'
+              : pages.length > 1 && !pageId ? `${pages.length} Pages connected: choose the Page to post to` : 'Pages connected in the Portal'}>
             {pages.map(p => <MenuItem key={p.pageId} value={p.pageId}>{p.name || p.pageId} · {p.pageId}</MenuItem>)}
           </TextField>}
           {chosen.some(a => a.tiktok) && <TextField select fullWidth label="TikTok privacy" value={privacy}

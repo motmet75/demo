@@ -42,7 +42,7 @@ const nameFor = (list, code) => list.find(o => o.code === code)?.name || code ||
 
 // Last-used choices, per signed-in user and website (several people share one browser/app),
 // kept in a cookie so that user's next form starts from them.
-const REMEMBER = ['catalog', 'brand', 'groupCodes', 'actions', 'immediate', 'facebookPageId', 'facebookSequence',
+const REMEMBER = ['catalog', 'brand', 'groupCodes', 'actions', 'immediate', 'facebookSequence',
   'tiktokSequence', 'youtubeSequence', 'linkedinSequence', 'tiktokPrivacy', 'tiktokAllowComment', 'tiktokAllowDuet', 'tiktokAllowStitch', 'tiktokAutoAddMusic']
 const cookieName = scope => `lazy_create_${String(scope).replace(/[^A-Za-z0-9]/g, '_')}`
 const readChoices = scope => {
@@ -129,8 +129,8 @@ export default function PortalLazyCreateDialog({ open, tenant, brands, catalogs,
         if (cancelled) return
         const found = Array.isArray(list) ? list : []
         setPages(found)
-        const remembered = found.find(p => p.pageId === saved.facebookPageId)
-        setF(cur => cur && ({ ...cur, facebookPageId: (remembered || found[0])?.pageId || '' }))
+        // Only one Page: use it. Several: never preselect, the user picks the Page for every post.
+        setF(cur => cur && ({ ...cur, facebookPageId: found.length === 1 ? found[0].pageId : '' }))
       }).catch(() => !cancelled && setPages([]))
       fetchPortalLazyCreateChannels(tenant).then(c => !cancelled && setChannels(c || { error: 'empty' }))
         .catch(e => !cancelled && setChannels({ error: e.message || 'error' }))
@@ -328,7 +328,9 @@ export default function PortalLazyCreateDialog({ open, tenant, brands, catalogs,
           </Stack>
           {wantsFacebook && <>
             <TextField select fullWidth label="Facebook Page" value={f.facebookPageId} onChange={e => set('facebookPageId')(e.target.value)}
-              helperText={pages.length ? '' : 'Website này chưa kết nối Facebook Page'}>
+              error={pages.length > 1 && !f.facebookPageId}
+              helperText={!pages.length ? 'Website này chưa kết nối Facebook Page'
+                : pages.length > 1 && !f.facebookPageId ? `Có ${pages.length} Page, hãy chọn Page để đăng` : ''}>
               {pages.map(p => <MenuItem key={p.pageId} value={p.pageId}>{p.name || p.pageId} · {p.pageId}</MenuItem>)}
             </TextField>
             <MessageField label="Nội dung Facebook" message={f.facebookMessage} onMessage={set('facebookMessage')}
