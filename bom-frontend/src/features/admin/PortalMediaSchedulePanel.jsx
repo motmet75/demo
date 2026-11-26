@@ -2,9 +2,10 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions,
   DialogContent, DialogTitle, FormControlLabel, FormGroup, FormLabel, MenuItem, Paper, Stack,
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Tooltip, Typography
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TableSortLabel, TextField, Tooltip, Typography
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
+import FilterAltOffIcon from '@mui/icons-material/FilterAltOff'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import ScheduleSendIcon from '@mui/icons-material/ScheduleSend'
 import {
@@ -12,6 +13,8 @@ import {
   fetchPortalProducts, fetchPortalSchedules
 } from '../../api/portalContentApi'
 import { usePhone } from '../../components/usePhone'
+import GridFilterPick from './GridFilterPick'
+import { countedOptions, matchesWords, nextSort, sortRows } from './gridFilterUtils'
 
 const ACTIONS = [
   { value: 'post_facebook_multi_image', label: 'Facebook · images', video: false, facebook: true },
@@ -25,6 +28,15 @@ const PRIVACY = [
   { value: 'MUTUAL_FOLLOW_FRIENDS', label: 'Friends' },
   { value: 'FOLLOWER_OF_CREATOR', label: 'Followers' },
   { value: 'SELF_ONLY', label: 'Only me' },
+]
+// Post-time windows; startTime is a Vietnam-time "YYYY-MM-DDTHH:mm…" string, so plain string compare works.
+const WHEN_FILTERS = [
+  { value: '', label: 'Mọi thời gian' },
+  { value: 'upcoming', label: 'Sắp đăng', test: (t, now) => t >= now },
+  { value: 'today', label: 'Hôm nay', test: (t, now) => t.slice(0, 10) === now.slice(0, 10) },
+  { value: 'next7', label: '7 ngày tới', test: (t, now) => t >= now && t <= vietnamNowPlus(7 * 24 * 60) },
+  { value: 'last7', label: '7 ngày qua', test: (t, now) => t < now && t >= vietnamNowPlus(-7 * 24 * 60) },
+  { value: 'past', label: 'Đã qua', test: (t, now) => t < now },
 ]
 const STATUS_COLOR = { pending: 'info', running: 'warning', retrying: 'warning', fired: 'success', done: 'success', failed: 'error', cancelled: 'default' }
 
@@ -183,6 +195,12 @@ export default function PortalMediaSchedulePanel({ tenant, onNotice, onError }) 
   const [open, setOpen] = useState(false)
   const [busyId, setBusyId] = useState(null)
   const [filter, setFilter] = useState('')
+  const [platform, setPlatform] = useState('')
+  const [media, setMedia] = useState('')
+  const [status, setStatus] = useState('')
+  const [createdBy, setCreatedBy] = useState('')
+  const [when, setWhen] = useState('')
+  const [sort, setSort] = useState({ key: 'time', dir: 'desc' })
 
   const load = useCallback(async () => {
     if (!tenant) { setRows([]); return }
@@ -205,38 +223,82 @@ export default function PortalMediaSchedulePanel({ tenant, onNotice, onError }) 
     finally { setBusyId(null) }
   }
 
+  const columns = useMemo(() => [
+    { key: 'id', label: 'ID', width: 70, get: r => r.id },
+    { key: 'time', label: 'Post time', get: r => r.startTime || '' },
+    { key: 'name', label: 'Schedule', get: r => (r.name || '').toLowerCase() },
+    { key: 'product', label: 'Product', get: r => (r.productCode || '').toLowerCase() },
+    { key: 'media', label: 'Media', get: r => `${r.platform || ''} ${r.mediaType || ''}` },
+    { key: 'status', label: 'Status', get: r => r.status || '' },
+    { key: 'by', label: 'By', get: r => (r.createdBy || '').toLowerCase() },
+  ], [])
+  const platformItems = useMemo(() => countedOptions(rows, r => r.platform), [rows])
+  const mediaItems = useMemo(() => countedOptions(rows, r => r.mediaType), [rows])
+  const statusItems = useMemo(() => countedOptions(rows, r => r.status), [rows])
+  const byItems = useMemo(() => countedOptions(rows, r => r.createdBy), [rows])
+
   const visible = useMemo(() => {
-    const q = filter.trim().toLowerCase()
-    return q ? rows.filter(r => `${r.name} ${r.productCode} ${r.status}`.toLowerCase().includes(q)) : rows
-  }, [rows, filter])
+    const now = vietnamNowPlus(0)
+    const whenTest = WHEN_FILTERS.find(w => w.value === when)?.test
+    const filtered = rows.filter(r =>
+      (!platform || r.platform === platform) && (!media || r.mediaType === media) &&
+      (!status || r.status === status) && (!createdBy || r.createdBy === createdBy) &&
+      (!whenTest || (r.startTime && whenTest(r.startTime.slice(0, 16), now))) &&
+      matchesWords(filter, [r.id, r.name, r.productCode, r.status, r.platform, r.mediaType, r.createdBy,
+        r.message, r.lastError, r.facebookPageId, r.videoId].join(' ')))
+    const column = columns.find(c => c.key === sort.key) || columns[1]
+    return sortRows(filtered, column.get, sort.dir)
+  }, [rows, filter, platform, media, status, createdBy, when, sort, columns])
+  const filtering = !!(filter || platform || media || status || createdBy || when)
+  const clear = () => { setFilter(''); setPlatform(''); setMedia(''); setStatus(''); setCreatedBy(''); setWhen('') }
+  const sortBy = key => setSort(cur => nextSort(cur, key, ['id', 'time']))
 
   return <Box>
     <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems={{ md: 'center' }} sx={{ mb: 2 }}>
-      <TextField label="Filter schedules" value={filter} onChange={event => setFilter(event.target.value)} sx={{ flex: 1 }} />
+      <TextField label="Lọc nhanh: tên, mã sản phẩm, nội dung, lỗi…" value={filter} onChange={event => setFilter(event.target.value)} sx={{ flex: 1 }} />
       <Button startIcon={<RefreshIcon />} onClick={load} disabled={!tenant || loading}>Load</Button>
       <Button variant="contained" startIcon={<AddIcon />} onClick={() => setOpen(true)} disabled={!tenant}>New media schedule</Button>
     </Stack>
+    <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} sx={{ mb: 1 }} flexWrap="wrap" useFlexGap alignItems={{ md: 'center' }}>
+      <TextField select size="small" sx={{ minWidth: 170 }} label="Thời gian đăng" value={when} onChange={e => setWhen(e.target.value)}>
+        {WHEN_FILTERS.map(w => <MenuItem key={w.value} value={w.value}>{w.label}</MenuItem>)}
+      </TextField>
+      <GridFilterPick label="Kênh" value={platform} items={platformItems} onChange={setPlatform} minWidth={160} />
+      <GridFilterPick label="Loại" value={media} items={mediaItems} onChange={setMedia} minWidth={150}
+        labelFor={v => v === 'video' ? 'Video' : v === 'multi_image' ? 'Ảnh' : v} />
+      <GridFilterPick label="Trạng thái" value={status} items={statusItems} onChange={setStatus} minWidth={160} />
+      <GridFilterPick label="Người tạo" value={createdBy} items={byItems} onChange={setCreatedBy} minWidth={180} />
+      {filtering && <Button size="small" color="inherit" startIcon={<FilterAltOffIcon />} onClick={clear}>Xoá lọc</Button>}
+    </Stack>
     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+      {filtering ? `${visible.length} / ${rows.length}` : rows.length} lịch đăng{rows.length >= 300 ? ' (300 lịch gần nhất)' : ''} ·
       Posts are published by the Portal scheduler (checks every minute). Times are Vietnam time.
     </Typography>
     {loading ? <Box sx={{ py: 6, textAlign: 'center' }}><CircularProgress /></Box> :
       <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: '65vh' }}><Table stickyHeader size="small">
         <TableHead><TableRow>
-          <TableCell width={70}>ID</TableCell><TableCell>Post time</TableCell><TableCell>Schedule</TableCell>
-          <TableCell>Product</TableCell><TableCell>Media</TableCell><TableCell>Status</TableCell>
-          <TableCell>By</TableCell><TableCell width={90} />
+          {columns.map(c => <TableCell key={c.key} width={c.width} sortDirection={sort.key === c.key ? sort.dir : false}>
+            <TableSortLabel active={sort.key === c.key} direction={sort.key === c.key ? sort.dir : 'asc'} onClick={() => sortBy(c.key)}>
+              {c.label}
+            </TableSortLabel>
+          </TableCell>)}
+          <TableCell width={90} />
         </TableRow></TableHead>
         <TableBody>{visible.map(row => <TableRow key={row.id} hover>
           <TableCell>{row.id}</TableCell>
           <TableCell sx={{ whiteSpace: 'nowrap' }}>{showTime(row.startTime)}</TableCell>
           <TableCell sx={{ fontWeight: 700 }}>{row.name}</TableCell>
           <TableCell>{row.productCode}</TableCell>
-          <TableCell sx={{ whiteSpace: 'nowrap' }}>{row.mediaType === 'video' ? `video ${row.videoId}` : `${row.imageCount} images`}</TableCell>
+          <TableCell sx={{ whiteSpace: 'nowrap' }}>{row.platform ? `${row.platform} · ` : ''}{row.mediaType === 'video' ? `video ${row.videoId}` : `${row.imageCount} images`}</TableCell>
           <TableCell><Tooltip title={row.lastError || ''}><Chip size="small" label={row.status} color={STATUS_COLOR[row.status] || 'default'} /></Tooltip></TableCell>
           <TableCell>{row.createdBy}</TableCell>
           <TableCell>{row.enabled && ['pending', 'retrying'].includes(row.status) &&
             <Button size="small" color="error" onClick={() => cancel(row)} disabled={busyId === row.id}>Cancel</Button>}</TableCell>
-        </TableRow>)}</TableBody>
+        </TableRow>)}
+        {!visible.length && <TableRow><TableCell colSpan={columns.length + 1} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+          {rows.length ? 'Không có lịch nào khớp bộ lọc.' : 'Chưa có lịch đăng.'}
+        </TableCell></TableRow>}
+        </TableBody>
       </Table></TableContainer>}
     <ScheduleDialog open={open} tenant={tenant} onClose={() => setOpen(false)}
       onCreated={created => { setOpen(false); onNotice(`${created?.length || 0} post(s) scheduled in ${tenant}.`); load() }} />
