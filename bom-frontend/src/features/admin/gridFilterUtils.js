@@ -34,3 +34,20 @@ export function sortRows(rows, get, dir) {
 export const nextSort = (cur, key, descFirst) => cur.key === key
   ? { key, dir: cur.dir === 'asc' ? 'desc' : 'asc' }
   : { key, dir: descFirst.includes(key) ? 'desc' : 'asc' }
+
+const pad = n => String(n).padStart(2, '0')
+/** Current time in Asia/Ho_Chi_Minh (UTC+7, no DST) plus minutes, as a datetime-local value. */
+export const vietnamNowPlus = minutes => {
+  const d = new Date(Date.now() + (7 * 60 + minutes) * 60000)
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`
+}
+
+/** Post-time windows; t and now are Vietnam-time "YYYY-MM-DDTHH:mm" strings, so plain string compare works. */
+export const WHEN_FILTERS = [
+  { value: '', label: 'Mọi thời gian' },
+  { value: 'upcoming', label: 'Sắp đăng', test: (t, now) => t >= now },
+  { value: 'today', label: 'Hôm nay', test: (t, now) => t.slice(0, 10) === now.slice(0, 10) },
+  { value: 'next7', label: '7 ngày tới', test: (t, now) => t >= now && t <= vietnamNowPlus(7 * 24 * 60) },
+  { value: 'last7', label: '7 ngày qua', test: (t, now) => t < now && t >= vietnamNowPlus(-7 * 24 * 60) },
+  { value: 'past', label: 'Đã qua', test: (t, now) => t < now },
+]

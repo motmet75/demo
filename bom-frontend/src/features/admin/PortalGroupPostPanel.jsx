@@ -2,8 +2,9 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
   DialogTitle, MenuItem, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead,
-  TableRow, TextField, Tooltip, Typography
+  TableRow, TableSortLabel, TextField, Tooltip, Typography
 } from '@mui/material'
+import FilterAltOffIcon from '@mui/icons-material/FilterAltOff'
 import AddIcon from '@mui/icons-material/Add'
 import GroupAddIcon from '@mui/icons-material/GroupAdd'
 import RefreshIcon from '@mui/icons-material/Refresh'
@@ -13,6 +14,8 @@ import {
   fetchPortalProducts, previewPortalGroupPosts, savePortalGroupPosts
 } from '../../api/portalContentApi'
 import { usePhone } from '../../components/usePhone'
+import GridFilterPick from './GridFilterPick'
+import { WHEN_FILTERS, countedOptions, matchesWords, nextSort, sortRows, vietnamNowPlus } from './gridFilterUtils'
 
 // Ported from legacy Portal ProductGroupPostForm: post products into many
 // Facebook groups (marketing-group members), one row per group, staggered.
@@ -21,11 +24,6 @@ import { usePhone } from '../../components/usePhone'
 const LINK = '{{link}}'
 const STATUS_COLOR = { pending: 'info', running: 'warning', retrying: 'warning', fired: 'success', done: 'success', failed: 'error', cancelled: 'default' }
 const SEQUENCE_HELP = '0 name first · 1 hashtag line · 2 #brand · 3 #catalog · 4 #sub-catalog · 5 page contact line · 6 tracked link · 7 product code'
-const pad = n => String(n).padStart(2, '0')
-const vietnamNowPlus = minutes => {
-  const d = new Date(Date.now() + (7 * 60 + minutes) * 60000)
-  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`
-}
 const showTime = value => value ? value.replace('T', ' ').slice(0, 16) : '—'
 const withSeconds = value => value && value.length === 16 ? `${value}:00` : value
 const memberLabel = m => m.name ? `${m.name} · ${m.username}` : m.username
@@ -334,26 +332,70 @@ export default function PortalGroupPostPanel({ tenant, onNotice, onError }) {
     finally { setBusyId(null) }
   }
 
+  const [product, setProduct] = useState('')
+  const [status, setStatus] = useState('')
+  const [createdBy, setCreatedBy] = useState('')
+  const [when, setWhen] = useState('')
+  const [sort, setSort] = useState({ key: 'time', dir: 'desc' })
+
+  const columns = useMemo(() => [
+    { key: 'id', label: 'ID', width: 70, get: r => r.id },
+    { key: 'time', label: 'Post time', get: r => r.scheduledAt || '' },
+    { key: 'group', label: 'Facebook group', get: r => (r.groupUrl || '').toLowerCase() },
+    { key: 'product', label: 'Product', get: r => (r.productCode || '').toLowerCase() },
+    { key: 'status', label: 'Status', get: r => r.status || '' },
+    { key: 'by', label: 'By', get: r => (r.createdBy || '').toLowerCase() },
+  ], [])
+  const productItems = useMemo(() => countedOptions(rows, r => r.productCode), [rows])
+  const statusItems = useMemo(() => countedOptions(rows, r => r.status), [rows])
+  const byItems = useMemo(() => countedOptions(rows, r => r.createdBy), [rows])
+
   const visible = useMemo(() => {
-    const q = filter.trim().toLowerCase()
-    return q ? rows.filter(r => `${r.groupUrl} ${r.productCode} ${r.status} ${r.createdBy}`.toLowerCase().includes(q)) : rows
-  }, [rows, filter])
+    const now = vietnamNowPlus(0)
+    const whenTest = WHEN_FILTERS.find(w => w.value === when)?.test
+    const filtered = rows.filter(r =>
+      (!product || r.productCode === product) && (!status || r.status === status) &&
+      (!createdBy || r.createdBy === createdBy) &&
+      (!whenTest || (r.scheduledAt && whenTest(r.scheduledAt.slice(0, 16), now))) &&
+      matchesWords(filter, [r.id, r.groupUrl, r.productCode, r.status, r.createdBy, r.message, r.lastError].join(' ')))
+    const column = columns.find(c => c.key === sort.key) || columns[1]
+    return sortRows(filtered, column.get, sort.dir)
+  }, [rows, filter, product, status, createdBy, when, sort, columns])
+  const filtering = !!(filter || product || status || createdBy || when)
+  const clear = () => { setFilter(''); setProduct(''); setStatus(''); setCreatedBy(''); setWhen('') }
+  const sortBy = key => setSort(cur => nextSort(cur, key, ['id', 'time']))
 
   return <Box>
     <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems={{ md: 'center' }} sx={{ mb: 2 }}>
-      <TextField label="Filter group posts" value={filter} onChange={e => setFilter(e.target.value)} sx={{ flex: 1 }} />
+      <Box sx={{ flex: 1 }} />
       <Button startIcon={<RefreshIcon />} onClick={load} disabled={!tenant || loading}>Load</Button>
       <Button startIcon={<GroupAddIcon />} onClick={openAdd} disabled={!tenant}>Add Facebook groups</Button>
       <Button variant="contained" startIcon={<AddIcon />} onClick={() => setOpen(true)} disabled={!tenant}>New group post campaign</Button>
     </Stack>
+    <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} sx={{ mb: 1 }} flexWrap="wrap" useFlexGap alignItems={{ md: 'center' }}>
+      <TextField size="small" sx={{ minWidth: 240, flex: 1 }} label="Lọc nhanh" value={filter} onChange={e => setFilter(e.target.value)}
+        placeholder="Nhóm, mã sản phẩm, nội dung, lỗi…" />
+      <TextField select size="small" sx={{ minWidth: 160 }} label="Thời gian đăng" value={when} onChange={e => setWhen(e.target.value)}>
+        {WHEN_FILTERS.map(w => <MenuItem key={w.value} value={w.value}>{w.label}</MenuItem>)}
+      </TextField>
+      <GridFilterPick label="Sản phẩm" value={product} items={productItems} onChange={setProduct} minWidth={180} />
+      <GridFilterPick label="Trạng thái" value={status} items={statusItems} onChange={setStatus} minWidth={160} />
+      <GridFilterPick label="Người tạo" value={createdBy} items={byItems} onChange={setCreatedBy} minWidth={180} />
+      {filtering && <Button size="small" color="inherit" startIcon={<FilterAltOffIcon />} onClick={clear}>Xoá lọc</Button>}
+    </Stack>
     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+      {filtering ? `${visible.length} / ${rows.length}` : rows.length} bài đăng nhóm{rows.length >= 300 ? ' (300 bài gần nhất)' : ''} ·
       Posted into Facebook groups by the Chrome add-on (it pulls pending posts from the Portal queue). Times are Vietnam time.
     </Typography>
     {loading ? <Box sx={{ py: 6, textAlign: 'center' }}><CircularProgress /></Box> :
       <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: '65vh' }}><Table stickyHeader size="small">
         <TableHead><TableRow>
-          <TableCell width={70}>ID</TableCell><TableCell>Post time</TableCell><TableCell>Facebook group</TableCell>
-          <TableCell>Product</TableCell><TableCell>Status</TableCell><TableCell>By</TableCell><TableCell width={90} />
+          {columns.map(c => <TableCell key={c.key} width={c.width} sortDirection={sort.key === c.key ? sort.dir : false}>
+            <TableSortLabel active={sort.key === c.key} direction={sort.key === c.key ? sort.dir : 'asc'} onClick={() => sortBy(c.key)}>
+              {c.label}
+            </TableSortLabel>
+          </TableCell>)}
+          <TableCell width={90} />
         </TableRow></TableHead>
         <TableBody>{visible.map(row => <TableRow key={row.id} hover>
           <TableCell>{row.id}</TableCell>
@@ -364,7 +406,11 @@ export default function PortalGroupPostPanel({ tenant, onNotice, onError }) {
           <TableCell>{row.createdBy}</TableCell>
           <TableCell>{row.status === 'pending' &&
             <Button size="small" color="error" onClick={() => cancel(row)} disabled={busyId === row.id}>Cancel</Button>}</TableCell>
-        </TableRow>)}</TableBody>
+        </TableRow>)}
+        {!visible.length && <TableRow><TableCell colSpan={columns.length + 1} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+          {rows.length ? 'Không có bài đăng nào khớp bộ lọc.' : 'Chưa có bài đăng nhóm.'}
+        </TableCell></TableRow>}
+        </TableBody>
       </Table></TableContainer>}
     <AddFacebookGroupsDialog open={adding} tenant={tenant} groups={marketingGroups} onClose={() => setAdding(false)}
       onSaved={r => onNotice(`${(r.created?.length || 0) + (r.linked?.length || 0)} Facebook group(s) saved in “${r.marketingGroupName}”.`)} />

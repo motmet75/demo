@@ -266,14 +266,14 @@ export default function PortalLazyCreateDialog({ open, tenant, brands, catalogs,
         <Typography variant="subtitle2">2 · Ảnh và video</Typography>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} flexWrap="wrap" useFlexGap>
           <Button component="label" variant="outlined" startIcon={<AddPhotoAlternateIcon />}>
-            Ảnh bìa{thumbnail ? `: ${thumbnail.name}` : ''}
-            <input hidden type="file" accept="image/*" onChange={e => setThumbnail(e.target.files?.[0] || null)} />
-          </Button>
-          <Button component="label" variant="outlined" startIcon={<AddPhotoAlternateIcon />}>
             Thêm ảnh ({images.length})
             <input hidden multiple type="file" accept="image/*"
               onChange={e => { const list = Array.from(e.target.files || []); setImages(cur => [...cur, ...list].slice(0, 35)); e.target.value = '' }} />
           </Button>
+          {images.length > 0 && <Button component="label" variant="outlined" startIcon={<AddPhotoAlternateIcon />}>
+            Ảnh bìa{thumbnail ? `: ${thumbnail.name}` : ''}
+            <input hidden type="file" accept="image/*" onChange={e => { setThumbnail(e.target.files?.[0] || null); e.target.value = '' }} />
+          </Button>}
           <Button component="label" variant="outlined" startIcon={<VideoFileIcon />}>
             {video ? `Video: ${video.name} (${mb(video.size)})` : 'Chọn video'}
             <input hidden type="file" accept="video/*" onChange={e => setVideo(e.target.files?.[0] || null)} />

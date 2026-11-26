@@ -14,7 +14,7 @@ import {
 } from '../../api/portalContentApi'
 import { usePhone } from '../../components/usePhone'
 import GridFilterPick from './GridFilterPick'
-import { countedOptions, matchesWords, nextSort, sortRows } from './gridFilterUtils'
+import { WHEN_FILTERS, countedOptions, matchesWords, nextSort, sortRows, vietnamNowPlus } from './gridFilterUtils'
 
 const ACTIONS = [
   { value: 'post_facebook_multi_image', label: 'Facebook · images', video: false, facebook: true },
@@ -29,23 +29,8 @@ const PRIVACY = [
   { value: 'FOLLOWER_OF_CREATOR', label: 'Followers' },
   { value: 'SELF_ONLY', label: 'Only me' },
 ]
-// Post-time windows; startTime is a Vietnam-time "YYYY-MM-DDTHH:mm…" string, so plain string compare works.
-const WHEN_FILTERS = [
-  { value: '', label: 'Mọi thời gian' },
-  { value: 'upcoming', label: 'Sắp đăng', test: (t, now) => t >= now },
-  { value: 'today', label: 'Hôm nay', test: (t, now) => t.slice(0, 10) === now.slice(0, 10) },
-  { value: 'next7', label: '7 ngày tới', test: (t, now) => t >= now && t <= vietnamNowPlus(7 * 24 * 60) },
-  { value: 'last7', label: '7 ngày qua', test: (t, now) => t < now && t >= vietnamNowPlus(-7 * 24 * 60) },
-  { value: 'past', label: 'Đã qua', test: (t, now) => t < now },
-]
 const STATUS_COLOR = { pending: 'info', running: 'warning', retrying: 'warning', fired: 'success', done: 'success', failed: 'error', cancelled: 'default' }
 
-const pad = n => String(n).padStart(2, '0')
-/** Current time in Asia/Ho_Chi_Minh (UTC+7, no DST) as a datetime-local value. */
-const vietnamNowPlus = minutes => {
-  const d = new Date(Date.now() + (7 * 60 + minutes) * 60000)
-  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`
-}
 const showTime = value => value ? value.replace('T', ' ').slice(0, 16) : '—'
 const lines = text => (text || '').split('\n').map(s => s.trim()).filter(s => s && s.toLowerCase() !== 'none')
 const videoIdOf = url => (url || '').match(/(?:video=|\/video\/|dai\.ly\/)([A-Za-z0-9]+)/)?.[1] || ''
