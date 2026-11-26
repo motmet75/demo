@@ -38,7 +38,8 @@ const videoIdOf = url => (url || '').match(/(?:video=|\/video\/|dai\.ly\/)([A-Za
 function defaultMessage(product, page, tenant) {
   const parts = [product?.name || '']
   if (page?.contactLine && page.contactLine !== 'none') parts.push(page.contactLine)
-  parts.push(`https://${tenant}/${product?.path || ''}`)
+  // Same link as legacy ProductScheduleMediaPostForm: host + /product/ + path (served by ProductDynamicController).
+  if (product?.path) parts.push(`https://${tenant}/product/${product.path}`)
   return parts.filter(Boolean).join('\n')
 }
 
