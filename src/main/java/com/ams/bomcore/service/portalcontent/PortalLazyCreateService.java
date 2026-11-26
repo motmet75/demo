@@ -54,7 +54,7 @@ public class PortalLazyCreateService {
     static final String PRODUCT_CODE = "{{PRODUCT_CODE}}";
     private static final String ZONE = PortalScheduleService.DEFAULT_ZONE;
     private static final Set<String> ACTIONS = Set.of("post_facebook_multi_image", "post_facebook_video",
-            "post_tiktok_image", "post_tiktok_video", "post_youtube_video");
+            "post_tiktok_image", "post_tiktok_video", "post_youtube_video", "post_linkedin_multi_image", "post_linkedin_video");
     private static final List<String> TIKTOK_PRIVACY =
             List.of("PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR", "SELF_ONLY");
 
@@ -89,7 +89,7 @@ public class PortalLazyCreateService {
         List<String> actions = form.actions() == null ? List.of() : form.actions().stream().distinct().toList();
         for (String a : actions) if (!ACTIONS.contains(a)) throw new IllegalArgumentException("Unsupported platform: " + a);
 
-        for (String typed : new String[]{form.facebookMessage(), form.tiktokMessage(), form.youtubeDescription()})
+        for (String typed : new String[]{form.facebookMessage(), form.tiktokMessage(), form.youtubeDescription(), form.linkedinMessage()})
             if (typed != null && typed.length() > 4500) throw new IllegalArgumentException("Nội dung bài đăng tối đa 4500 ký tự.");
 
         // ---- legacy validation, same order and messages ----
@@ -195,6 +195,16 @@ public class PortalLazyCreateService {
                             tiktokPhotoTitle(msg, name), "", tt);
                     if (actions.contains("post_tiktok_video")) count += post.insert("post_tiktok_video", "TikTok", "video", msg,
                             img ? scheduleAt.plusMinutes(1) : scheduleAt, cut(msg, 255), "", tt);
+                }
+                if (actions.stream().anyMatch(a -> a.startsWith("post_linkedin"))) {
+                    // Legacy scheduleLinkedInPost: images, then video a minute later; blank account = site's author URN.
+                    String url = trackedUrl(db, productUrl, name, "LAZY_LI_TRACK", createdBy);
+                    String msg = message(form.linkedinMessage(), form.linkedinSequence(), "1267", name, product.code(), url, catalogName, brandName, hashtag, pageLine);
+                    boolean img = actions.contains("post_linkedin_multi_image") && !gallery.isEmpty();
+                    if (img) count += post.insert("post_linkedin_multi_image", "LinkedIn", "multi_image", msg, scheduleAt,
+                            cut(name, 255), "", null);
+                    if (actions.contains("post_linkedin_video")) count += post.insert("post_linkedin_video", "LinkedIn", "video", msg,
+                            img ? scheduleAt.plusMinutes(1) : scheduleAt, cut(name, 255), "", null);
                 }
                 if (actions.contains("post_youtube_video")) {
                     String url = trackedUrl(db, productUrl, name, "LAZY_YT_TRACK", createdBy);
@@ -483,6 +493,7 @@ public class PortalLazyCreateService {
                        String facebookPageId, String facebookMessage, String facebookSequence,
                        String tiktokMessage, String tiktokSequence, String tiktokPrivacy, boolean tiktokAllowComment,
                        boolean tiktokAllowDuet, boolean tiktokAllowStitch, boolean tiktokAutoAddMusic,
-                       boolean tiktokMusicConsent, String youtubeDescription, String youtubeSequence, String code) {}
+                       boolean tiktokMusicConsent, String youtubeDescription, String youtubeSequence, String code,
+                       String linkedinMessage, String linkedinSequence) {}
     public record Result(int productId, String code, String path, String host, int postsQueued, String warning) {}
 }

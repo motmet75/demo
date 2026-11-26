@@ -70,7 +70,7 @@ class PortalLazyCreateServiceDbIT {
                                                      String fbMessage, boolean consent) {
         return new PortalLazyCreateService.Form("Ghế sofa", "noi-that", "hoa-phat", List.of("sale"), null, "",
                 actions, immediate, at, "PAGE1", fbMessage, null, "", null, "PUBLIC_TO_EVERYONE", true, false, false,
-                true, consent, "", null, null);
+                true, consent, "", null, null, "", null);
     }
 
     private static PortalLazyCreateService.Form withCode(PortalLazyCreateService.Form f, String catalog, String brand, String code) {
@@ -78,7 +78,7 @@ class PortalLazyCreateServiceDbIT {
                 f.actions(), f.immediate(), f.scheduledAt(), f.facebookPageId(), f.facebookMessage(), f.facebookSequence(),
                 f.tiktokMessage(), f.tiktokSequence(), f.tiktokPrivacy(), f.tiktokAllowComment(), f.tiktokAllowDuet(),
                 f.tiktokAllowStitch(), f.tiktokAutoAddMusic(), f.tiktokMusicConsent(), f.youtubeDescription(),
-                f.youtubeSequence(), code);
+                f.youtubeSequence(), code, f.linkedinMessage(), f.linkedinSequence());
     }
 
     @Test
@@ -129,10 +129,11 @@ class PortalLazyCreateServiceDbIT {
         LocalDateTime at = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")).plusHours(2).withSecond(0).withNano(0);
 
         var result = service.create("shop.test", form(List.of("post_facebook_multi_image", "post_facebook_video",
-                "post_tiktok_image", "post_tiktok_video", "post_youtube_video"), false, at, "", true), images, null, video, "tester");
+                "post_tiktok_image", "post_tiktok_video", "post_youtube_video", "post_linkedin_multi_image", "post_linkedin_video"),
+                false, at, "", true), images, null, video, "tester");
 
         assertEquals("ghe-sofa", result.code());
-        assertEquals(5, result.postsQueued());
+        assertEquals(7, result.postsQueued());
         assertTrue(calls.get(0).endsWith("/shop.test/media token=true"), calls.toString());
         assertTrue(bodies.get(0).contains("name=\"queueVideo\"\r\n\r\ntrue"));
         assertTrue(bodies.get(0).contains("filename=\"a.jpg\"") && bodies.get(0).contains("filename=\"v.mp4\""));
@@ -148,8 +149,18 @@ class PortalLazyCreateServiceDbIT {
         assertEquals(1, db.queryForObject("SELECT count(*) FROM productgroupitemtb WHERE productcode='ghe-sofa'", Integer.class));
 
         List<Map<String, Object>> logs = db.queryForList("SELECT * FROM schedulelogtb ORDER BY id");
-        assertEquals(List.of("Facebook", "Facebook", "TikTok", "TikTok", "YouTube"), logs.stream().map(l -> l.get("platform")).toList());
-        Map<String, Object> fbImg = logs.get(0), fbVid = logs.get(1), ttVid = logs.get(3), yt = logs.get(4);
+        assertEquals(List.of("Facebook", "Facebook", "TikTok", "TikTok", "LinkedIn", "LinkedIn", "YouTube"),
+                logs.stream().map(l -> l.get("platform")).toList());
+        Map<String, Object> fbImg = logs.get(0), fbVid = logs.get(1), ttVid = logs.get(3), yt = logs.get(6);
+        Map<String, Object> liImg = logs.get(4), liVid = logs.get(5);
+        assertEquals("multi_image", liImg.get("mediatype"));
+        assertEquals("https://shop.test/image/a.jpg\nhttps://shop.test/image/b.jpg", liImg.get("imageurls"));
+        assertEquals("", liImg.get("targetaccountid"));                  // dispatcher uses the site's linkedin_author_urn
+        assertTrue(((String) liVid.get("videodmid")).startsWith("server:"));
+        assertEquals(java.sql.Timestamp.valueOf(at.plusMinutes(1)), liVid.get("scheduledtime"));
+        // LinkedIn sequence 1267: hashtag line, #brand, tracked link (code 7 skipped, already in the link)
+        assertTrue(((String) liImg.get("postmessage")).startsWith("Ghế sofa\n#nncminhchau #hoa_phat\nhttps://shop.test/san-pham/ghe-sofa.html?t="),
+                (String) liImg.get("postmessage"));
         assertEquals("facebook-page:PAGE1", fbImg.get("targetusername"));
         assertEquals("PAGE1", fbImg.get("targetaccountid"));
         assertEquals("https://shop.test/image/a.jpg\nhttps://shop.test/image/b.jpg", fbImg.get("imageurls"));
@@ -163,13 +174,14 @@ class PortalLazyCreateServiceDbIT {
         assertEquals(true, logs.get(2).get("tiktokautoaddmusic"));
         assertEquals("Ghế sofa", yt.get("targetusername"));
 
-        assertEquals(5, db.queryForObject("SELECT count(*) FROM appscheduletb WHERE scheduletype='SOCIAL_POST' AND isenable", Integer.class));
-        assertEquals(List.of("post_facebook_multi_image", "post_facebook_video", "post_tiktok_image", "post_tiktok_video", "post_youtube_video"),
+        assertEquals(7, db.queryForObject("SELECT count(*) FROM appscheduletb WHERE scheduletype='SOCIAL_POST' AND isenable", Integer.class));
+        assertEquals(List.of("post_facebook_multi_image", "post_facebook_video", "post_tiktok_image", "post_tiktok_video",
+                        "post_linkedin_multi_image", "post_linkedin_video", "post_youtube_video"),
                 db.queryForList("SELECT actionname FROM appscheduletb ORDER BY id", String.class));
         assertEquals(String.valueOf(fbImg.get("id")), db.queryForObject("SELECT actionvalue FROM appscheduletb ORDER BY id LIMIT 1", String.class));
         assertEquals("FB Images: Ghế sofa", db.queryForObject("SELECT schedulename FROM appscheduletb ORDER BY id LIMIT 1", String.class));
-        // one tracking token per platform used (FB, TikTok, YouTube)
-        assertEquals(List.of("LAZY_FB_TRACK", "LAZY_TT_TRACK", "LAZY_YT_TRACK"),
+        // one tracking token per platform used (FB, TikTok, LinkedIn, YouTube)
+        assertEquals(List.of("LAZY_FB_TRACK", "LAZY_TT_TRACK", "LAZY_LI_TRACK", "LAZY_YT_TRACK"),
                 db.queryForList("SELECT token_type FROM access_tokens ORDER BY id", String.class));
     }
 

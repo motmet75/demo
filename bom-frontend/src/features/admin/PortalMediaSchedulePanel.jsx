@@ -22,6 +22,8 @@ const ACTIONS = [
   { value: 'post_youtube_video', label: 'YouTube · video', video: true },
   { value: 'post_tiktok_video', label: 'TikTok · video', video: true, tiktok: true },
   { value: 'post_tiktok_image', label: 'TikTok · images', video: false, tiktok: true },
+  { value: 'post_linkedin_multi_image', label: 'LinkedIn · images', video: false },
+  { value: 'post_linkedin_video', label: 'LinkedIn · video', video: true },
 ]
 const PRIVACY = [
   { value: 'PUBLIC_TO_EVERYONE', label: 'Public' },
@@ -38,8 +40,8 @@ const videoIdOf = url => (url || '').match(/(?:video=|\/video\/|dai\.ly\/)([A-Za
 function defaultMessage(product, page, tenant) {
   const parts = [product?.name || '']
   if (page?.contactLine && page.contactLine !== 'none') parts.push(page.contactLine)
-  // Same link as legacy ProductScheduleMediaPostForm: host + /product/ + path (served by ProductDynamicController).
-  if (product?.path) parts.push(`https://${tenant}/product/${product.path}`)
+  // Product page link, same /san-pham/ form as group posts and lazy create.
+  if (product?.path) parts.push(`https://${tenant}/san-pham/${product.path}`)
   return parts.filter(Boolean).join('\n')
 }
 

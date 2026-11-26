@@ -22,6 +22,8 @@ const PLATFORMS = [
   { value: 'post_tiktok_image', label: 'TikTok · ảnh', image: true },
   { value: 'post_tiktok_video', label: 'TikTok · video', video: true },
   { value: 'post_youtube_video', label: 'YouTube · video', video: true },
+  { value: 'post_linkedin_multi_image', label: 'LinkedIn · ảnh', image: true },
+  { value: 'post_linkedin_video', label: 'LinkedIn · video', video: true },
 ]
 const PRIVACY = [
   { value: 'PUBLIC_TO_EVERYONE', label: 'Công khai' },
@@ -41,7 +43,7 @@ const nameFor = (list, code) => list.find(o => o.code === code)?.name || code ||
 // Last-used choices, per signed-in user and website (several people share one browser/app),
 // kept in a cookie so that user's next form starts from them.
 const REMEMBER = ['catalog', 'brand', 'groupCodes', 'actions', 'immediate', 'facebookPageId', 'facebookSequence',
-  'tiktokSequence', 'youtubeSequence', 'tiktokPrivacy', 'tiktokAllowComment', 'tiktokAllowDuet', 'tiktokAllowStitch', 'tiktokAutoAddMusic']
+  'tiktokSequence', 'youtubeSequence', 'linkedinSequence', 'tiktokPrivacy', 'tiktokAllowComment', 'tiktokAllowDuet', 'tiktokAllowStitch', 'tiktokAutoAddMusic']
 const cookieName = scope => `lazy_create_${String(scope).replace(/[^A-Za-z0-9]/g, '_')}`
 const readChoices = scope => {
   try {
@@ -119,7 +121,7 @@ export default function PortalLazyCreateDialog({ open, tenant, brands, catalogs,
         name: '', code: '', codeEdited: false, price: '', catalog: '', brand: '', groupCodes: [], dailymotionVideoAddress: '',
         actions: ['post_facebook_multi_image'], immediate: false, scheduledAt: vietnamNowPlus(30), facebookPageId: '',
         facebookMessage: '', facebookSequence: '51267', tiktokMessage: '', tiktokSequence: '127',
-        youtubeDescription: '', youtubeSequence: '5127', tiktokPrivacy: 'PUBLIC_TO_EVERYONE',
+        youtubeDescription: '', youtubeSequence: '5127', linkedinMessage: '', linkedinSequence: '1267', tiktokPrivacy: 'PUBLIC_TO_EVERYONE',
         tiktokAllowComment: true, tiktokAllowDuet: false, tiktokAllowStitch: false, tiktokAutoAddMusic: true,
         tiktokMusicConsent: true,
       }, { catalogs, brands, groups })))
@@ -179,6 +181,7 @@ export default function PortalLazyCreateDialog({ open, tenant, brands, catalogs,
   const wantsFacebook = f.actions.some(a => a.startsWith('post_facebook'))
   const wantsTikTok = f.actions.some(a => a.startsWith('post_tiktok'))
   const wantsYouTube = f.actions.includes('post_youtube_video')
+  const wantsLinkedIn = f.actions.some(a => a.startsWith('post_linkedin'))
 
   // Catalog and brand first; the button puts "<catalog> <brand>" at the start of the name, only when asked.
   const namePrefix = [nameFor(catalogs, f.catalog), nameFor(brands, f.brand)].filter(Boolean).join(' ')
@@ -191,6 +194,7 @@ export default function PortalLazyCreateDialog({ open, tenant, brands, catalogs,
   const notConnected = channels && !channelUnknown ? [
     wantsTikTok && channels.tiktok && !channels.tiktok.connected && 'TikTok',
     wantsYouTube && channels.youtube && !channels.youtube.connected && 'YouTube',
+    wantsLinkedIn && channels.linkedin && !channels.linkedin.connected && 'LinkedIn',
   ].filter(Boolean) : []
 
   const problems = []
@@ -347,6 +351,8 @@ export default function PortalLazyCreateDialog({ open, tenant, brands, catalogs,
           </>}
           {wantsYouTube && <MessageField label="Mô tả YouTube" message={f.youtubeDescription} onMessage={set('youtubeDescription')}
             sequence={f.youtubeSequence} onSequence={set('youtubeSequence')} />}
+          {wantsLinkedIn && <MessageField label="Nội dung LinkedIn" message={f.linkedinMessage} onMessage={set('linkedinMessage')}
+            sequence={f.linkedinSequence} onSequence={set('linkedinSequence')} />}
           <Typography variant="caption" color="text.secondary">{SEQUENCE_HELP}</Typography>
         </>}
         {problems.length > 0 && (f.catalog || f.brand) && <Alert severity="info">{problems.join(' · ')}</Alert>}

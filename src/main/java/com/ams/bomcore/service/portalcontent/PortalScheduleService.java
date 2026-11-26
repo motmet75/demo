@@ -46,7 +46,10 @@ public class PortalScheduleService {
             "post_facebook_video", new Action("Facebook", "video", "Facebook Video", true, true),
             "post_youtube_video", new Action("YouTube", "video", "YouTube Video", true, false),
             "post_tiktok_video", new Action("TikTok", "video", "TikTok Video", true, false),
-            "post_tiktok_image", new Action("TikTok", "multi_image", "TikTok Images", false, false));
+            "post_tiktok_image", new Action("TikTok", "multi_image", "TikTok Images", false, false),
+            // LinkedIn: blank targetaccountid -> the Portal dispatcher posts as the site's connected linkedin_author_urn.
+            "post_linkedin_multi_image", new Action("LinkedIn", "multi_image", "LinkedIn Images", false, false),
+            "post_linkedin_video", new Action("LinkedIn", "video", "LinkedIn Video", true, false));
 
     private final PortalTenantDataSourceRegistry tenants;
 
