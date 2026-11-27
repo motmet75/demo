@@ -9,6 +9,8 @@ import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import SaveIcon from '@mui/icons-material/Save'
+import ScheduleSendIcon from '@mui/icons-material/ScheduleSend'
+import { BulkScheduleDialog, ScheduledBatches } from './PortalBulkSchedule'
 import {
   fetchPortalArticles, fetchPortalProducts, fetchPortalTenants,
   savePortalArticle, savePortalProduct
@@ -109,6 +111,9 @@ export default function PortalContentPage() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [draft, setDraft] = useState(null)
+  const [selected, setSelected] = useState({})
+  const [scheduleOpen, setScheduleOpen] = useState(false)
+  const [batchesKey, setBatchesKey] = useState(0)
 
   const loadTenants = useCallback(async () => {
     setLoading(true); setError('')
@@ -141,11 +146,11 @@ export default function PortalContentPage() {
 
   const switchTenant = event => {
     const value = event.target.value
-    setTenant(value); setSearch(''); setRows([]); setDraft(null)
+    setTenant(value); setSearch(''); setRows([]); setDraft(null); setSelected({})
     loadRows(value, tab, '')
   }
   const switchTab = (_, value) => {
-    setTab(value); setSearch(''); setRows([]); setDraft(null)
+    setTab(value); setSearch(''); setRows([]); setDraft(null); setSelected({})
     loadRows(tenant, value, '')
   }
   const edit = row => setDraft({ ...row })
@@ -164,6 +169,25 @@ export default function PortalContentPage() {
 
   const title = tab === 0 ? 'Articles' : 'Products'
   const visibleRows = useMemo(() => rows, [rows])
+  // Selection survives searches: the chosen product rows are kept, not just looked up in the current list.
+  const selectedProducts = useMemo(() => (tab === 1 ? Object.values(selected) : []), [tab, selected])
+  const isSelected = id => Boolean(selected[id])
+  const toggleRow = row => setSelected(prev => {
+    const next = { ...prev }
+    if (next[row.id]) delete next[row.id]; else next[row.id] = row
+    return next
+  })
+  const allVisibleSelected = visibleRows.length > 0 && visibleRows.every(row => selected[row.id])
+  const toggleAll = () => setSelected(prev => {
+    const next = { ...prev }
+    visibleRows.forEach(row => { if (allVisibleSelected) delete next[row.id]; else next[row.id] = row })
+    return next
+  })
+  const scheduled = result => {
+    setScheduleOpen(false); setSelected({}); setBatchesKey(key => key + 1)
+    setNotice(`${result.queued} Facebook post(s) queued in ${tenant}` + (result.rounds > 1 ? `, ${result.rounds} rounds` : '')
+      + ` · batch ${result.batchId}. The Portal posts them at the chosen times.`)
+  }
 
   return <Box sx={{ p: { xs: 1, md: 3 } }}>
     <Typography variant="h4" fontWeight={800}>Website Content</Typography>
@@ -181,19 +205,31 @@ export default function PortalContentPage() {
         <TextField label={`Search ${title.toLowerCase()}`} value={search} onChange={event => setSearch(event.target.value)} onKeyDown={event => event.key === 'Enter' && loadRows()} sx={{ flex: 1 }} />
         <Button startIcon={<RefreshIcon />} onClick={() => loadRows()} disabled={!tenant || loading}>Load</Button>
         <Button variant="contained" startIcon={<AddIcon />} onClick={create} disabled={!tenant}>New {tab === 0 ? 'article' : 'product'}</Button>
+        {tab === 1 && <Button variant="contained" color="secondary" startIcon={<ScheduleSendIcon />}
+          onClick={() => setScheduleOpen(true)} disabled={!tenant || !selectedProducts.length}>
+          Schedule posts{selectedProducts.length ? ` (${selectedProducts.length})` : ''}
+        </Button>}
       </Stack>
       <Tabs value={tab} onChange={switchTab} sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
         <Tab label="Articles" /><Tab label="Products" />
       </Tabs>
-      {tenant && <Typography variant="body2" sx={{ mb: 1 }}>Database: <strong>{tenant}</strong> · {visibleRows.length} {title.toLowerCase()}</Typography>}
+      {tab === 1 && tenant && <ScheduledBatches tenant={tenant} reloadKey={batchesKey} />}
+      {tenant && <Typography variant="body2" sx={{ mb: 1 }}>Database: <strong>{tenant}</strong> · {visibleRows.length} {title.toLowerCase()}
+        {tab === 1 && selectedProducts.length > 0 && <> · <strong>{selectedProducts.length} selected</strong> <Button size="small" onClick={() => setSelected({})}>Clear</Button></>}
+      </Typography>}
       {loading ? <Box sx={{ py: 6, textAlign: 'center' }}><CircularProgress /></Box> :
         <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: '65vh' }}><Table stickyHeader size="small">
           <TableHead><TableRow>
+            {tab === 1 && <TableCell padding="checkbox"><Checkbox size="small" checked={allVisibleSelected}
+              indeterminate={!allVisibleSelected && visibleRows.some(row => isSelected(row.id))}
+              onChange={toggleAll} inputProps={{ 'aria-label': 'Select all products' }} /></TableCell>}
             <TableCell width={70}>ID</TableCell><TableCell>{tab === 0 ? 'Title' : 'Product'}</TableCell>
             <TableCell>{tab === 0 ? 'Link' : 'Code'}</TableCell><TableCell>{tab === 0 ? 'Category' : 'Catalog'}</TableCell>
             {tab === 1 && <TableCell align="right">Price</TableCell>}<TableCell>Status</TableCell><TableCell>Modified</TableCell><TableCell width={80} />
           </TableRow></TableHead>
-          <TableBody>{visibleRows.map(row => <TableRow key={row.id} hover>
+          <TableBody>{visibleRows.map(row => <TableRow key={row.id} hover selected={tab === 1 && isSelected(row.id)}>
+            {tab === 1 && <TableCell padding="checkbox"><Checkbox size="small" checked={isSelected(row.id)}
+              onChange={() => toggleRow(row)} inputProps={{ 'aria-label': `Select ${row.name}` }} /></TableCell>}
             <TableCell>{row.id}</TableCell><TableCell sx={{ fontWeight: 700 }}>{tab === 0 ? row.title : row.name}</TableCell>
             <TableCell>{tab === 0 ? row.articleLink : row.code}</TableCell><TableCell>{tab === 0 ? row.category : row.catalog}</TableCell>
             {tab === 1 && <TableCell align="right">{Number(row.price || 0).toLocaleString('vi-VN')} {row.currency}</TableCell>}
@@ -203,6 +239,8 @@ export default function PortalContentPage() {
         </Table></TableContainer>}
     </CardContent></Card>
     <ArticleEditor open={tab === 0 && Boolean(draft)} value={draft || emptyArticle} onChange={setDraft} onClose={() => setDraft(null)} onSave={save} saving={saving} />
+    {scheduleOpen && <BulkScheduleDialog tenant={tenant} products={selectedProducts}
+      onClose={() => setScheduleOpen(false)} onScheduled={scheduled} />}
     <ProductEditor open={tab === 1 && Boolean(draft)} value={draft || emptyProduct} onChange={setDraft} onClose={() => setDraft(null)} onSave={save} saving={saving} />
   </Box>
 }

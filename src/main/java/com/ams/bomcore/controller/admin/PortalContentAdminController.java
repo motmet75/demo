@@ -2,6 +2,7 @@ package com.ams.bomcore.controller.admin;
 
 import com.ams.bomcore.service.portalcontent.PortalContentService;
 import com.ams.bomcore.service.portalcontent.PortalContentAccessService;
+import com.ams.bomcore.service.portalcontent.PortalSocialScheduleService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -25,9 +26,11 @@ import java.util.Map;
 public class PortalContentAdminController {
     private final PortalContentService service;
     private final PortalContentAccessService access;
+    private final PortalSocialScheduleService social;
 
-    public PortalContentAdminController(PortalContentService service, PortalContentAccessService access) {
-        this.service = service; this.access = access;
+    public PortalContentAdminController(PortalContentService service, PortalContentAccessService access,
+                                        PortalSocialScheduleService social) {
+        this.service = service; this.access = access; this.social = social;
     }
 
     @GetMapping("/tenants")
@@ -76,6 +79,35 @@ public class PortalContentAdminController {
             @RequestBody PortalContentService.ProductWrite request, Authentication authentication) {
         access.require(authentication, tenantId);
         return service.updateProduct(tenantId, id, request);
+    }
+
+    @GetMapping("/{tenantId}/social/facebook-pages")
+    public List<PortalSocialScheduleService.FacebookPage> facebookPages(@PathVariable String tenantId,
+                                                                        Authentication authentication) {
+        access.require(authentication, tenantId);
+        return social.facebookPages(tenantId);
+    }
+
+    @GetMapping("/{tenantId}/social/schedules")
+    public List<PortalSocialScheduleService.BatchView> scheduleBatches(@PathVariable String tenantId,
+                                                                       Authentication authentication) {
+        access.require(authentication, tenantId);
+        return social.batches(tenantId);
+    }
+
+    @PostMapping("/{tenantId}/social/schedules")
+    public ResponseEntity<PortalSocialScheduleService.ScheduleResult> schedulePosts(@PathVariable String tenantId,
+            @RequestBody PortalSocialScheduleService.BulkRequest request, Authentication authentication) {
+        access.require(authentication, tenantId);
+        String actor = authentication == null ? "admin" : authentication.getName();
+        return ResponseEntity.status(HttpStatus.CREATED).body(social.schedule(tenantId, request, actor));
+    }
+
+    @PostMapping("/{tenantId}/social/schedules/{batchId}/cancel")
+    public Map<String, Integer> cancelBatch(@PathVariable String tenantId, @PathVariable String batchId,
+                                            Authentication authentication) {
+        access.require(authentication, tenantId);
+        return Map.of("cancelled", social.cancel(tenantId, batchId));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

@@ -19,3 +19,17 @@ export const savePortalProduct = (tenant, product) => request(
   `/${encodeURIComponent(tenant)}/products${product.id ? `/${product.id}` : ''}`,
   { method: product.id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(product) }
 )
+
+// ── Social schedule (Facebook posts for many products, optional repeat rounds) ──
+export const fetchPortalFacebookPages = tenant =>
+  request(`/${encodeURIComponent(tenant)}/social/facebook-pages`)
+export const fetchPortalScheduleBatches = tenant =>
+  request(`/${encodeURIComponent(tenant)}/social/schedules`)
+export const schedulePortalPosts = (tenant, payload) => request(
+  `/${encodeURIComponent(tenant)}/social/schedules`,
+  { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }
+)
+export const cancelPortalScheduleBatch = (tenant, batchId) => request(
+  `/${encodeURIComponent(tenant)}/social/schedules/${encodeURIComponent(batchId)}/cancel`,
+  { method: 'POST' }
+)
