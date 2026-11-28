@@ -1,25 +1,26 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import {
   Alert, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
-  DialogTitle, FormControlLabel, ListItemText, MenuItem, Paper, Stack, Table, TableBody, TableCell,
+  DialogTitle, ListItemText, MenuItem, Paper, Stack, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, TextField, Typography
 } from '@mui/material'
 import EventRepeatIcon from '@mui/icons-material/EventRepeat'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import ScheduleSendIcon from '@mui/icons-material/ScheduleSend'
 import {
-  cancelPortalScheduleBatch, fetchPortalFacebookPages, fetchPortalScheduleBatches, schedulePortalPosts
+  cancelPortalScheduleBatch, composePortalPosts, fetchPortalFacebookPages, fetchPortalScheduleBatches, schedulePortalPosts
 } from '../../api/portalContentApi'
 
 import {
-  MAX_POSTS, MAX_PRODUCTS, MAX_ROUNDS, PARTS, arrangeTimes, browserZone, buildMessage, fmt, fromLocalInput,
+  MAX_POSTS, MAX_PRODUCTS, MAX_ROUNDS, SEQUENCE_HELP, arrangeTimes, browserZone, fmt, fromLocalInput,
   imageCount, parseDayTimes, shiftRound, toLocalInput
 } from './portalScheduleUtils'
 
-const DEFAULT_PARTS = { name: true, description: true, price: true, code: false, link: true }
+const DEFAULT_SEQUENCE = '51267'
+const MEDIA = [['IMAGE', 'Images'], ['VIDEO', 'Video'], ['BOTH', 'Both (video 1 min after images)']]
 
 /** Initial state for one opening of the dialog: first post in one hour, then 30 minutes apart. */
-function initialState(products, tenant) {
+function initialState(products) {
   const first = new Date(Date.now() + 60 * 60e3); first.setSeconds(0, 0)
   return {
     now: Date.now(),
@@ -27,14 +28,16 @@ function initialState(products, tenant) {
     rows: products.slice(0, MAX_PRODUCTS).map((product, i) => ({
       product,
       time: toLocalInput(new Date(first.getTime() + i * 30 * 60e3)),
-      message: buildMessage(product, DEFAULT_PARTS, tenant, ''),
+      message: '',
+      images: imageCount(product),
+      hasVideo: null, // known once the server composes the message
     })),
   }
 }
 
 /** Mount only while open (the parent renders it conditionally), so every opening starts fresh. */
 export function BulkScheduleDialog({ tenant, products, onClose, onScheduled }) {
-  const [init] = useState(() => initialState(products, tenant))
+  const [init] = useState(() => initialState(products))
   const [now, setNow] = useState(init.now)
   const [pages, setPages] = useState([])
   const [pageIds, setPageIds] = useState([])
@@ -46,8 +49,10 @@ export function BulkScheduleDialog({ tenant, products, onClose, onScheduled }) {
   const [repeatTimes, setRepeatTimes] = useState(1)
   const [repeatEvery, setRepeatEvery] = useState(7)
   const [repeatUnit, setRepeatUnit] = useState('DAYS')
-  const [parts, setParts] = useState(DEFAULT_PARTS)
-  const [hashtags, setHashtags] = useState('')
+  const [sequence, setSequence] = useState(DEFAULT_SEQUENCE)
+  const [extraLine, setExtraLine] = useState('')
+  const [mediaType, setMediaType] = useState('IMAGE')
+  const [composing, setComposing] = useState(false)
   const [rows, setRows] = useState(init.rows)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -77,8 +82,27 @@ export function BulkScheduleDialog({ tenant, products, onClose, onScheduled }) {
     setRows(prev => prev.map((row, i) => ({ ...row, time: toLocalInput(times[i]) })))
     setError('')
   }
-  const rebuildMessages = () =>
-    setRows(prev => prev.map(row => ({ ...row, message: buildMessage(row.product, parts, tenant, hashtags) })))
+  /** Same digit sequence as the Portal's bulk dialog; composed on the server from producttb + tokentb. */
+  const applySequence = useCallback(async (seq, extra) => {
+    if (!/^[0-7]+$/.test(seq)) { setError('Sequence may only contain digits 0-7, e.g. 51267.'); return }
+    setComposing(true); setError('')
+    try {
+      const composed = await composePortalPosts(tenant, { sequence: seq, productIds: init.rows.map(row => row.product.id) })
+      const byId = new Map((Array.isArray(composed) ? composed : []).map(post => [post.productId, post]))
+      const tail = extra.trim()
+      setRows(prev => prev.map(row => {
+        const post = byId.get(row.product.id)
+        if (!post) return row
+        const message = [post.message, tail].filter(Boolean).join('\n')
+        return { ...row, message, images: post.imageCount, hasVideo: post.hasVideo }
+      }))
+    } catch (e) { setError(e.message || 'Could not compose post messages') }
+    finally { setComposing(false) }
+  }, [tenant, init.rows])
+  useEffect(() => {
+    const timer = window.setTimeout(() => applySequence(DEFAULT_SEQUENCE, ''), 0)
+    return () => window.clearTimeout(timer)
+  }, [applySequence])
   const setRow = (index, key) => event => {
     const value = event.target.value
     setRows(prev => prev.map((row, i) => (i === index ? { ...row, [key]: value } : row)))
@@ -86,7 +110,8 @@ export function BulkScheduleDialog({ tenant, products, onClose, onScheduled }) {
 
   const rounds = Math.min(MAX_ROUNDS, Math.max(1, Number(repeatTimes) || 1))
   const every = Math.max(1, Number(repeatEvery) || 1)
-  const total = rows.length * pageIds.length * rounds
+  const perPage = mediaType === 'BOTH' ? 2 : 1
+  const total = rows.length * pageIds.length * rounds * perPage
   const times = rows.map(row => fromLocalInput(row.time)).filter(Boolean)
   const firstTime = times.length ? new Date(Math.min(...times)) : null
   const lastTime = times.length ? new Date(Math.max(...times)) : null
@@ -100,11 +125,12 @@ export function BulkScheduleDialog({ tenant, products, onClose, onScheduled }) {
       const at = fromLocalInput(row.time)
       if (!at || at.getTime() <= now) found.push(`${name}: choose a future time.`)
       if (!row.message.trim()) found.push(`${name}: post message is empty.`)
-      if (!imageCount(row.product)) found.push(`${name}: has no image (Facebook image post needs at least one).`)
+      if (mediaType !== 'VIDEO' && !row.images) found.push(`${name}: has no image (Facebook image post needs at least one).`)
+      if (mediaType !== 'IMAGE' && row.hasVideo === false) found.push(`${name}: has no video (set Video in the product).`)
     })
     if (total > MAX_POSTS) found.push(`${total} posts is over the ${MAX_POSTS} limit.`)
     if (rounds > 1 && firstTime && lastTime) {
-      const roundEnd = lastTime.getTime() + pageIds.length * 60e3
+      const roundEnd = lastTime.getTime() + pageIds.length * perPage * 60e3
       if (shiftRound(firstTime, 1, every, repeatUnit).getTime() <= roundEnd)
         found.push('Repeat period is shorter than one round of posts; increase "Repeat every".')
     }
@@ -116,7 +142,7 @@ export function BulkScheduleDialog({ tenant, products, onClose, onScheduled }) {
     setSaving(true); setError('')
     try {
       const result = await schedulePortalPosts(tenant, {
-        pageIds, timezone: browserZone(),
+        pageIds, timezone: browserZone(), mediaType,
         repeat: { times: rounds, every, unit: repeatUnit },
         items: rows.map(row => ({ productId: row.product.id, scheduledTime: `${row.time}:00`, message: row.message })),
       })
@@ -143,15 +169,23 @@ export function BulkScheduleDialog({ tenant, products, onClose, onScheduled }) {
               <ListItemText primary={page.name} secondary={page.name === page.id ? null : page.id} />
             </MenuItem>)}
           </TextField>
-          <TextField label="Hashtags / extra line" value={hashtags} onChange={e => setHashtags(e.target.value)} fullWidth placeholder="#migiatruyen #monngon" />
+          <TextField select label="Media" value={mediaType} onChange={e => setMediaType(e.target.value)} sx={{ minWidth: 260 }}
+            helperText="Facebook cannot mix video and images in one post; Both queues two posts.">
+            {MEDIA.map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
+          </TextField>
         </Stack>
 
         <Paper variant="outlined" sx={{ p: 1.5 }}>
           <Typography variant="subtitle2" sx={{ mb: 1 }}>Post message</Typography>
-          <Stack direction="row" useFlexGap flexWrap="wrap" alignItems="center">
-            {PARTS.map(([key, label]) => <FormControlLabel key={key} label={label}
-              control={<Checkbox size="small" checked={parts[key]} onChange={e => setParts(p => ({ ...p, [key]: e.target.checked }))} />} />)}
-            <Button size="small" variant="outlined" onClick={rebuildMessages}>Apply to all</Button>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems={{ md: 'flex-start' }}>
+            <TextField label="Append sequence" value={sequence} sx={{ width: 180 }} placeholder={DEFAULT_SEQUENCE}
+              onChange={e => setSequence(e.target.value.replace(/[^0-7]/g, ''))} helperText="Facebook = 51267" />
+            <TextField label="Extra line (optional)" value={extraLine} onChange={e => setExtraLine(e.target.value)} fullWidth
+              placeholder="#migiatruyen #monngon" helperText={SEQUENCE_HELP} />
+            <Button variant="outlined" onClick={() => applySequence(sequence, extraLine)} disabled={composing || !sequence}
+              startIcon={composing ? <CircularProgress size={14} /> : null} sx={{ whiteSpace: 'nowrap', mt: { md: 1 } }}>
+              Apply to all
+            </Button>
           </Stack>
         </Paper>
 
@@ -192,15 +226,17 @@ export function BulkScheduleDialog({ tenant, products, onClose, onScheduled }) {
           <Table stickyHeader size="small">
             <TableHead><TableRow>
               <TableCell width={40}>#</TableCell><TableCell width={220}>Product</TableCell>
-              <TableCell width={90}>Images</TableCell><TableCell width={230}>Time (round 1)</TableCell><TableCell>Message</TableCell>
+              <TableCell width={120}>Media</TableCell><TableCell width={230}>Time (round 1)</TableCell><TableCell>Message</TableCell>
             </TableRow></TableHead>
             <TableBody>{rows.map((row, i) => <TableRow key={row.product.id}>
               <TableCell>{i + 1}</TableCell>
               <TableCell><Typography variant="body2" fontWeight={700}>{row.product.name}</Typography>
                 <Typography variant="caption" color="text.secondary">{row.product.code}</Typography></TableCell>
-              <TableCell>{imageCount(row.product)
-                ? <Chip size="small" label={imageCount(row.product)} color="success" variant="outlined" />
-                : <Chip size="small" label="none" color="error" />}</TableCell>
+              <TableCell><Stack direction="row" spacing={0.5}>
+                <Chip size="small" label={`${row.images} img`} color={row.images ? 'success' : 'error'} variant={row.images ? 'outlined' : 'filled'} />
+                {row.hasVideo !== null && <Chip size="small" label={row.hasVideo ? 'video' : 'no video'}
+                  color={row.hasVideo ? 'success' : 'default'} variant="outlined" />}
+              </Stack></TableCell>
               <TableCell><TextField type="datetime-local" size="small" value={row.time} onChange={setRow(i, 'time')} /></TableCell>
               <TableCell><TextField multiline minRows={2} maxRows={8} fullWidth size="small" value={row.message} onChange={setRow(i, 'message')} /></TableCell>
             </TableRow>)}</TableBody>
@@ -216,7 +252,7 @@ export function BulkScheduleDialog({ tenant, products, onClose, onScheduled }) {
     <DialogActions>
       <Button onClick={onClose} disabled={saving}>Cancel</Button>
       <Button variant="contained" startIcon={saving ? <CircularProgress size={16} /> : <ScheduleSendIcon />}
-        onClick={submit} disabled={saving || problems.length > 0 || !rows.length}>
+        onClick={submit} disabled={saving || composing || problems.length > 0 || !rows.length}>
         {saving ? 'Scheduling…' : `Schedule ${total} post${total === 1 ? '' : 's'}`}
       </Button>
     </DialogActions>

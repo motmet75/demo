@@ -13,7 +13,6 @@ export const fromLocalInput = value => (value ? new Date(value) : null)
 export const browserZone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Ho_Chi_Minh' } catch { return 'Asia/Ho_Chi_Minh' } }
 export const fmt = value => value ? new Date(value).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' }) : '—'
 
-const plain = html => String(html || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim()
 const usable = value => value && String(value).trim() && String(value).trim().toLowerCase() !== 'none'
 export const imageCount = product =>
   String(product.imageUrl || '').split(/\r?\n/).filter(line => usable(line)).length
@@ -57,26 +56,4 @@ export function arrangeTimes(count, start, interval, unit, dayTimes) {
   return Array.from({ length: count }, (_, i) => new Date(start.getTime() + i * interval * UNIT_MS[unit]))
 }
 
-export const PARTS = [
-  ['name', 'Name'], ['description', 'Short description'], ['price', 'Price'], ['code', 'Code'], ['link', 'Product link'],
-]
-
-export function buildMessage(product, parts, tenant, hashtags) {
-  const lines = []
-  if (parts.name && usable(product.name)) lines.push(product.name.trim())
-  if (parts.description && usable(plain(product.shortDescription))) lines.push(plain(product.shortDescription))
-  if (parts.price && Number(product.price) > 0) {
-    const price = Number(product.price)
-    const discount = Number(product.discount) || 0
-    const final = discount > 0 ? Math.round(price * (100 - discount) / 100) : price
-    lines.push(`Giá: ${final.toLocaleString('vi-VN')} ${product.currency || 'VND'}${discount > 0 ? ` (-${discount}%)` : ''}`)
-  }
-  if (parts.code && usable(product.code)) lines.push(`Mã: ${product.code.trim()}`)
-  if (parts.link && usable(product.path)) {
-    const path = product.path.trim()
-    lines.push(path.startsWith('http') ? path : `https://${tenant}/san-pham/${path.replace(/^\/+/, '').replace(/^san-pham\//, '')}`)
-  }
-  if (hashtags.trim()) lines.push(hashtags.trim())
-  return lines.join('\n')
-}
-
+export const SEQUENCE_HELP = '0 = name first · 1 = hashtag campaign · 2 = #brand · 3 = #catalog · 4 = #subcatalog · 5 = Facebook campaign text · 6 = product link · 7 = code (short description is always the base)'

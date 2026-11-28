@@ -88,6 +88,13 @@ public class PortalContentAdminController {
         return social.facebookPages(tenantId);
     }
 
+    @PostMapping("/{tenantId}/social/compose")
+    public List<PortalSocialScheduleService.ComposedPost> composePosts(@PathVariable String tenantId,
+            @RequestBody PortalSocialScheduleService.ComposeRequest request, Authentication authentication) {
+        access.require(authentication, tenantId);
+        return social.compose(tenantId, request);
+    }
+
     @GetMapping("/{tenantId}/social/schedules")
     public List<PortalSocialScheduleService.BatchView> scheduleBatches(@PathVariable String tenantId,
                                                                        Authentication authentication) {

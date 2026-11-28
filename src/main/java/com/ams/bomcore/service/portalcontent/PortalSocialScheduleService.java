@@ -33,6 +33,8 @@ public class PortalSocialScheduleService {
     static final int MAX_ROUNDS = 52;
     static final int MAX_POSTS = 2000;
     static final int MAX_IMAGES = 30;
+    static final String DEFAULT_SEQUENCE = "51267";
+    static final List<String> MEDIA_TYPES = List.of("IMAGE", "VIDEO", "BOTH");
 
     private final PortalTenantDataSourceRegistry tenants;
 
@@ -61,6 +63,78 @@ public class PortalSocialScheduleService {
         return new ArrayList<>(unique.values());
     }
 
+    // ── Post message composer (same digit sequence as the Portal's bulk dialog) ──
+
+    /**
+     * Builds each product's post message from the Portal's append-sequence, e.g. "51267":
+     * the short description is the base, then 0 = prepend name, 1 = hashtag campaign, 2 = #brand,
+     * 3 = #catalog, 4 = #subcatalog, 5 = Facebook campaign text, 6 = product link, 7 = product code.
+     */
+    public List<ComposedPost> compose(String tenantId, ComposeRequest request) {
+        String tenant = PortalTenantDataSourceRegistry.normalizeTenantId(tenantId);
+        List<Integer> ids = request == null || request.productIds() == null ? List.of()
+                : request.productIds().stream().filter(java.util.Objects::nonNull).distinct().toList();
+        if (ids.isEmpty()) throw new IllegalArgumentException("Select at least one product");
+        if (ids.size() > MAX_PRODUCTS) throw new IllegalArgumentException("At most " + MAX_PRODUCTS + " products per batch");
+        String sequence = request.sequence() == null || request.sequence().isBlank() ? DEFAULT_SEQUENCE : request.sequence().trim();
+        if (!sequence.matches("[0-7]{1,20}")) throw new IllegalArgumentException("Sequence may only contain digits 0-7");
+        Campaigns campaigns = campaigns(tenant);
+        List<ComposedPost> result = new ArrayList<>();
+        for (Integer id : ids) {
+            ProductContent product = product(tenant, id);
+            if (product == null) continue;
+            result.add(new ComposedPost(id, buildMessage(product, sequence, campaigns, tenant),
+                    product.imageUrls().size(), !product.videoId().isEmpty()));
+        }
+        return result;
+    }
+
+    static String buildMessage(ProductContent product, String sequence, Campaigns campaigns, String tenant) {
+        StringBuilder sb = new StringBuilder(product.shortDes());
+        for (char c : sequence.toCharArray()) {
+            switch (c) {
+                case '0' -> {
+                    if (!product.name().isEmpty()) {
+                        String current = sb.toString();
+                        sb = new StringBuilder(product.name() + (current.isBlank() ? "" : "\n") + current);
+                    }
+                }
+                case '1' -> { if (!campaigns.hashtag().isEmpty()) appendIfAbsent(sb, "\n" + campaigns.hashtag()); }
+                case '2' -> { if (!product.brand().isEmpty()) appendIfAbsent(sb, " #" + tag(product.brand())); }
+                case '3' -> { if (!product.catalog().isEmpty()) appendIfAbsent(sb, " #" + tag(product.catalog())); }
+                case '4' -> { if (!product.subCatalog().isEmpty()) appendIfAbsent(sb, "\n#" + tag(product.subCatalog())); }
+                case '5' -> { if (!campaigns.facebook().isEmpty()) appendIfAbsent(sb, "\n" + campaigns.facebook()); }
+                case '6' -> { if (!product.path().isEmpty()) appendIfAbsent(sb, "\n" + productUrl(product.path(), tenant)); }
+                case '7' -> { if (!product.code().isEmpty()) appendIfAbsent(sb, "\n" + product.code()); }
+                default -> { }
+            }
+        }
+        return sb.toString().trim();
+    }
+
+    private static void appendIfAbsent(StringBuilder sb, String text) {
+        if (!sb.toString().contains(text.trim())) sb.append(text);
+    }
+
+    private static String tag(String value) { return value.toLowerCase().replace(" ", "_"); }
+
+    static String productUrl(String path, String tenant) {
+        if (path.startsWith("http://") || path.startsWith("https://")) return path;
+        return "https://" + tenant + "/san-pham/" + path.replaceAll("^/+", "").replaceFirst("^san-pham/", "");
+    }
+
+    private Campaigns campaigns(String tenant) {
+        return new Campaigns(campaign(tenant, "hashtag_token"), campaign(tenant, FACEBOOK_PAGE_TOKEN_TYPE));
+    }
+
+    /** Same as the Portal's getTokenByIdName(type).getMarketingCampaign(): newest visible row of that type. */
+    private String campaign(String tenant, String tokenType) {
+        List<String> rows = access(tenant, db -> db.queryForList(
+                "SELECT marketingcampaign FROM tokentb WHERE isvisible = true AND tokentype = ? ORDER BY createdtime DESC LIMIT 1",
+                String.class, tokenType));
+        return rows.isEmpty() ? "" : usable(rows.get(0));
+    }
+
     // ── Bulk schedule ─────────────────────────────────────────────────────────
 
     public ScheduleResult schedule(String tenantId, BulkRequest request, String actor) {
@@ -85,7 +159,12 @@ public class PortalSocialScheduleService {
         if (rounds > 1 && repeat.every() < 1) throw new IllegalArgumentException("Repeat period must be at least 1");
         String unit = repeat.unit() == null ? "DAYS" : repeat.unit().trim().toUpperCase();
         if (!List.of("HOURS", "DAYS", "WEEKS").contains(unit)) throw new IllegalArgumentException("Repeat unit must be HOURS, DAYS or WEEKS");
-        int total = items.size() * pages.size() * rounds;
+        String media = request.mediaType() == null || request.mediaType().isBlank() ? "IMAGE" : request.mediaType().trim().toUpperCase();
+        if (!MEDIA_TYPES.contains(media)) throw new IllegalArgumentException("Media type must be IMAGE, VIDEO or BOTH");
+        boolean postImages = !media.equals("VIDEO");
+        boolean postVideo = !media.equals("IMAGE");
+        int perPage = postImages && postVideo ? 2 : 1;
+        int total = items.size() * pages.size() * rounds * perPage;
         if (total > MAX_POSTS) throw new IllegalArgumentException(total + " posts would be queued; the limit is " + MAX_POSTS);
 
         // Validate every product before writing anything.
@@ -100,7 +179,8 @@ public class PortalSocialScheduleService {
             if (item.scheduledTime() == null || !item.scheduledTime().isAfter(now)) errors.add(label + ": choose a future time");
             if (item.message() == null || item.message().isBlank()) errors.add(label + ": post message is empty");
             else if (item.message().length() > 10000) errors.add(label + ": post message is longer than 10000 characters");
-            if (product.imageUrls().isEmpty()) errors.add(label + ": has no image");
+            if (postImages && product.imageUrls().isEmpty()) errors.add(label + ": has no image");
+            if (postVideo && product.videoId().isEmpty()) errors.add(label + ": has no video");
             if (item.scheduledTime() != null) {
                 if (first == null || item.scheduledTime().isBefore(first)) first = item.scheduledTime();
                 if (last == null || item.scheduledTime().isAfter(last)) last = item.scheduledTime();
@@ -109,7 +189,7 @@ public class PortalSocialScheduleService {
         if (!errors.isEmpty())
             throw new IllegalArgumentException(errors.size() + " problem(s): " + String.join("; ", errors.subList(0, Math.min(5, errors.size()))));
         if (rounds > 1) {
-            LocalDateTime roundEnd = last.plusMinutes(pages.size());
+            LocalDateTime roundEnd = last.plusMinutes((long) pages.size() * perPage);
             if (!shift(first, 1, repeat.every(), unit).isAfter(roundEnd))
                 throw new IllegalArgumentException("Repeat period is shorter than one round of posts; increase \"Repeat every\"");
         }
@@ -130,11 +210,20 @@ public class PortalSocialScheduleService {
                         LocalDateTime base = shift(item.scheduledTime(), round, repeat.every(), unit);
                         int offset = 0;
                         for (String page : pages) {
-                            // One minute apart per Page so the Graph API is not hit at the same instant.
-                            LocalDateTime at = base.plusMinutes(offset++);
-                            long logId = insertLog(db, product, page, item.message().trim(), at, zone, createdBy);
-                            insertSchedule(db, tenant, product, logId, at, zone, repeatLabel, round + 1, batchId);
-                            if (latest == null || at.isAfter(latest)) latest = at;
+                            // One minute apart per post so the Graph API is not hit at the same instant;
+                            // with BOTH the video follows its image post a minute later, like the Portal.
+                            if (postImages) {
+                                LocalDateTime at = base.plusMinutes(offset++);
+                                long logId = insertLog(db, product, page, item.message().trim(), false, at, zone, createdBy);
+                                insertSchedule(db, tenant, product, false, logId, at, zone, repeatLabel, round + 1, batchId);
+                                if (latest == null || at.isAfter(latest)) latest = at;
+                            }
+                            if (postVideo) {
+                                LocalDateTime at = base.plusMinutes(offset++);
+                                long logId = insertLog(db, product, page, item.message().trim(), true, at, zone, createdBy);
+                                insertSchedule(db, tenant, product, true, logId, at, zone, repeatLabel, round + 1, batchId);
+                                if (latest == null || at.isAfter(latest)) latest = at;
+                            }
                         }
                     }
                 }
@@ -196,7 +285,7 @@ public class PortalSocialScheduleService {
 
     // ── Rows ──────────────────────────────────────────────────────────────────
 
-    private long insertLog(JdbcTemplate db, ProductContent product, String pageId, String message,
+    private long insertLog(JdbcTemplate db, ProductContent product, String pageId, String message, boolean video,
                            LocalDateTime at, ZoneId zone, String createdBy) {
         String sql = """
                 INSERT INTO schedulelogtb
@@ -204,20 +293,21 @@ public class PortalSocialScheduleService {
                      postmessage, imageurls, videodmid, tiktokautoaddmusic, tiktokallowrepost, tiktokallowcomment,
                      tiktokallowduet, tiktokallowstitch, tiktokprivacylevel, scheduledtime, timezone, scheduledtimeutc,
                      status, createdby, attemptcount, lasterror, createdtime, modifiedtime, visible)
-                VALUES (?, ?, 'product', 'Facebook', 'multi_image', '', ?, ?, ?, '', false, false, true,
+                VALUES (?, ?, 'product', 'Facebook', ?, '', ?, ?, ?, ?, false, false, true,
                         false, false, 'SELF_ONLY', ?, ?, ?, 'pending', ?, 0, '', ?, ?, true)
                 RETURNING id
                 """;
         LocalDateTime now = nowUtc();
-        Long id = db.queryForObject(sql, Long.class, product.path(), product.code(), pageId, message,
-                String.join("\n", product.imageUrls()), at, zone.getId(), toUtc(at, zone), createdBy, now, now);
+        Long id = db.queryForObject(sql, Long.class, product.path(), product.code(), video ? "video" : "multi_image",
+                pageId, message, video ? "" : String.join("\n", product.imageUrls()), video ? product.videoId() : "",
+                at, zone.getId(), toUtc(at, zone), createdBy, now, now);
         if (id == null) throw new IllegalStateException("Portal did not return a schedule log id");
         return id;
     }
 
-    private void insertSchedule(JdbcTemplate db, String tenant, ProductContent product, long logId, LocalDateTime at,
-                                ZoneId zone, String repeatLabel, int round, String batchId) {
-        String name = "Facebook Images: " + product.name() + (repeatLabel.equals("none") ? "" : " (round " + round + ")");
+    private void insertSchedule(JdbcTemplate db, String tenant, ProductContent product, boolean video, long logId,
+                                LocalDateTime at, ZoneId zone, String repeatLabel, int round, String batchId) {
+        String name = (video ? "Facebook Video: " : "Facebook Images: ") + product.name() + (repeatLabel.equals("none") ? "" : " (round " + round + ")");
         if (name.length() > 250) name = name.substring(0, 250);
         LocalDateTime now = nowUtc();
         db.update("""
@@ -225,17 +315,21 @@ public class PortalSocialScheduleService {
                     (schedulename, schedulecode, schedulestringid, scheduletype, relatedcode, actionname, actionvalue,
                      repeatingrange, recure, recurevalue, starttime, endtime, timezone, starttimeutc, endtimeutc,
                      createdtime, modifiedtime, isenable, islocked, isvisible)
-                VALUES (?, 'none', ?, 'SOCIAL_POST', ?, 'post_facebook_multi_image', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, true, false, true)
-                """, name, tenant, product.code(), String.valueOf(logId), repeatLabel, round, batchId,
+                VALUES (?, 'none', ?, 'SOCIAL_POST', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, true, false, true)
+                """, name, tenant, product.code(), video ? "post_facebook_video" : "post_facebook_multi_image", String.valueOf(logId), repeatLabel, round, batchId,
                 at, at, zone.getId(), toUtc(at, zone), toUtc(at, zone), now, now);
     }
 
     private ProductContent product(String tenant, int id) {
-        List<ProductContent> rows = access(tenant, db -> db.query(
-                "SELECT id, productname, productcode, productimageurl1, path FROM producttb WHERE id = ?",
-                (row, i) -> new ProductContent(row.getInt("id"), text(row.getString("productname")),
-                        text(row.getString("productcode")), text(row.getString("path")),
-                        imageUrls(row.getString("productimageurl1"), tenant)), id));
+        List<ProductContent> rows = access(tenant, db -> db.query("""
+                SELECT id, productname, productcode, productimageurl1, path, productshortdes, productbrand,
+                       productcatalog, productsubcatalog, productvideoadd
+                  FROM producttb WHERE id = ?
+                """, (row, i) -> new ProductContent(row.getInt("id"), usable(row.getString("productname")),
+                        usable(row.getString("productcode")), usable(row.getString("path")),
+                        imageUrls(row.getString("productimageurl1"), tenant), usable(row.getString("productshortdes")),
+                        usable(row.getString("productbrand")), usable(row.getString("productcatalog")),
+                        usable(row.getString("productsubcatalog")), videoId(row.getString("productvideoadd"))), id));
         return rows.isEmpty() ? null : rows.get(0);
     }
 
@@ -253,6 +347,31 @@ public class PortalSocialScheduleService {
             if (urls.size() >= MAX_IMAGES) break;
         }
         return new ArrayList<>(urls);
+    }
+
+    /**
+     * Video reference the Portal's Facebook video job understands: the Dailymotion id parsed from
+     * productVideoAdd (video=x, /video/x, dai.ly/x), or productVideoAdd itself when it is a bare id.
+     */
+    static String videoId(String raw) {
+        String value = usable(raw);
+        if (value.isEmpty()) return "";
+        String id = null;
+        int at;
+        if ((at = value.indexOf("video=")) >= 0) id = value.substring(at + 6);
+        else if ((at = value.indexOf("/video/")) >= 0) id = beforeSlash(value.substring(at + 7));
+        else if ((at = value.indexOf("dai.ly/")) >= 0) id = beforeSlash(value.substring(at + 7));
+        if (id == null) return value.contains("://") ? "" : value;
+        for (char stop : new char[]{'&', '?', '_'}) {
+            int cut = id.indexOf(stop);
+            if (cut > 0) id = id.substring(0, cut);
+        }
+        return id.replaceAll("[^A-Za-z0-9]", "");
+    }
+
+    private static String beforeSlash(String value) {
+        int slash = value.indexOf('/');
+        return slash >= 0 ? value.substring(0, slash) : value;
     }
 
     static LocalDateTime shift(LocalDateTime time, int round, int every, String unit) {
@@ -276,6 +395,11 @@ public class PortalSocialScheduleService {
     private static LocalDateTime nowUtc() { return LocalDateTime.now(ZoneOffset.UTC); }
     private static LocalDateTime time(java.sql.Timestamp value) { return value == null ? null : value.toLocalDateTime(); }
     private static String text(String value) { return value == null ? "" : value.trim(); }
+    /** Trimmed text, with the Portal's "none" placeholder treated as empty. */
+    static String usable(String value) {
+        String trimmed = text(value);
+        return "none".equalsIgnoreCase(trimmed) ? "" : trimmed;
+    }
 
     private <T> T access(String tenantId, Work<T> work) {
         try { return work.run(new JdbcTemplate(tenants.dataSource(tenantId))); }
@@ -288,12 +412,17 @@ public class PortalSocialScheduleService {
 
     @FunctionalInterface private interface Work<T> { T run(JdbcTemplate db); }
 
-    private record ProductContent(int id, String name, String code, String path, List<String> imageUrls) {}
+    record ProductContent(int id, String name, String code, String path, List<String> imageUrls, String shortDes,
+                          String brand, String catalog, String subCatalog, String videoId) {}
+    record Campaigns(String hashtag, String facebook) {}
+
+    public record ComposeRequest(String sequence, List<Integer> productIds) {}
+    public record ComposedPost(int productId, String message, int imageCount, boolean hasVideo) {}
 
     public record FacebookPage(String id, String name) {}
     public record Repeat(int times, int every, String unit) {}
     public record ItemRequest(int productId, LocalDateTime scheduledTime, String message) {}
-    public record BulkRequest(List<String> pageIds, String timezone, Repeat repeat, List<ItemRequest> items) {}
+    public record BulkRequest(List<String> pageIds, String timezone, Repeat repeat, String mediaType, List<ItemRequest> items) {}
     public record ScheduleResult(String batchId, int queued, int rounds, int pages, LocalDateTime firstPost, LocalDateTime lastPost) {}
     public record BatchView(String batchId, String repeating, int total, int waiting, int posted, int failed,
                             LocalDateTime firstTime, LocalDateTime lastTime, LocalDateTime nextTime, String productCodes) {}

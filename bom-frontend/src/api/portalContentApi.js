@@ -23,6 +23,10 @@ export const savePortalProduct = (tenant, product) => request(
 // ── Social schedule (Facebook posts for many products, optional repeat rounds) ──
 export const fetchPortalFacebookPages = tenant =>
   request(`/${encodeURIComponent(tenant)}/social/facebook-pages`)
+export const composePortalPosts = (tenant, payload) => request(
+  `/${encodeURIComponent(tenant)}/social/compose`,
+  { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }
+)
 export const fetchPortalScheduleBatches = tenant =>
   request(`/${encodeURIComponent(tenant)}/social/schedules`)
 export const schedulePortalPosts = (tenant, payload) => request(
