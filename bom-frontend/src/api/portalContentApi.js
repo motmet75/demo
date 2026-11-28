@@ -33,6 +33,10 @@ export const schedulePortalPosts = (tenant, payload) => request(
   `/${encodeURIComponent(tenant)}/social/schedules`,
   { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }
 )
+export const firePortalScheduleBatch = (tenant, batchId) => request(
+  `/${encodeURIComponent(tenant)}/social/schedules/${encodeURIComponent(batchId)}/fire`,
+  { method: 'POST' }
+)
 export const cancelPortalScheduleBatch = (tenant, batchId) => request(
   `/${encodeURIComponent(tenant)}/social/schedules/${encodeURIComponent(batchId)}/cancel`,
   { method: 'POST' }

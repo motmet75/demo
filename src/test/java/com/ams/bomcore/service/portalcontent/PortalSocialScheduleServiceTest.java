@@ -56,6 +56,14 @@ class PortalSocialScheduleServiceTest {
     }
 
     @Test
+    void firedTimesAreStoredInTheRowsZone() {
+        LocalDateTime utc = LocalDateTime.of(2026, 11, 28, 3, 15);
+        assertEquals(LocalDateTime.of(2026, 11, 28, 10, 15), PortalSocialScheduleService.fromUtc(utc, "Asia/Ho_Chi_Minh"));
+        assertEquals(LocalDateTime.of(2026, 11, 28, 10, 15), PortalSocialScheduleService.fromUtc(utc, null));
+        assertEquals(utc, PortalSocialScheduleService.fromUtc(utc, "UTC"));
+    }
+
+    @Test
     void repeatRoundsShiftTheWholeGroup() {
         LocalDateTime at = LocalDateTime.of(2026, 11, 28, 9, 30);
         assertEquals(at, PortalSocialScheduleService.shift(at, 0, 7, "DAYS"));

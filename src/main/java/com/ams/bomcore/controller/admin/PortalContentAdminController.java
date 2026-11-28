@@ -110,6 +110,13 @@ public class PortalContentAdminController {
         return ResponseEntity.status(HttpStatus.CREATED).body(social.schedule(tenantId, request, actor));
     }
 
+    @PostMapping("/{tenantId}/social/schedules/{batchId}/fire")
+    public Map<String, Integer> fireBatch(@PathVariable String tenantId, @PathVariable String batchId,
+                                          Authentication authentication) {
+        access.require(authentication, tenantId);
+        return Map.of("fired", social.fireNow(tenantId, batchId));
+    }
+
     @PostMapping("/{tenantId}/social/schedules/{batchId}/cancel")
     public Map<String, Integer> cancelBatch(@PathVariable String tenantId, @PathVariable String batchId,
                                             Authentication authentication) {

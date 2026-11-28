@@ -7,8 +7,9 @@ import {
 import EventRepeatIcon from '@mui/icons-material/EventRepeat'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import ScheduleSendIcon from '@mui/icons-material/ScheduleSend'
+import SendIcon from '@mui/icons-material/Send'
 import {
-  cancelPortalScheduleBatch, composePortalPosts, fetchPortalFacebookPages, fetchPortalScheduleBatches, schedulePortalPosts
+  cancelPortalScheduleBatch, composePortalPosts, fetchPortalFacebookPages, firePortalScheduleBatch, fetchPortalScheduleBatches, schedulePortalPosts
 } from '../../api/portalContentApi'
 
 import {
@@ -264,6 +265,7 @@ export function ScheduledBatches({ tenant, reloadKey }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState('')
+  const [notice, setNotice] = useState('')
 
   const load = useCallback(async () => {
     if (!tenant) return
@@ -285,12 +287,28 @@ export function ScheduledBatches({ tenant, reloadKey }) {
     finally { setBusy('') }
   }
 
+  const fire = async batch => {
+    const rounds = batch.repeating && batch.repeating !== 'none'
+    if (!window.confirm(`Post the next waiting ${rounds ? 'round' : 'posts'} of batch ${batch.batchId} now?`
+      + (rounds ? ' Later rounds keep their scheduled times.' : ''))) return
+    setBusy(batch.batchId); setError(''); setNotice('')
+    try {
+      const result = await firePortalScheduleBatch(tenant, batch.batchId)
+      const fired = result?.fired || 0
+      setNotice(`${fired} post${fired === 1 ? '' : 's'} of ${batch.batchId} will go out within a minute`
+        + (fired > 1 ? ` (1 minute apart, last in about ${fired} minutes).` : '.'))
+      await load()
+    } catch (e) { setError(e.message || 'Cannot post now') }
+    finally { setBusy('') }
+  }
+
   return <Paper variant="outlined" sx={{ p: 1.5, mb: 2 }}>
     <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
       <Typography variant="subtitle1" fontWeight={800} sx={{ flex: 1 }}>Scheduled posts</Typography>
       <Button size="small" startIcon={<RefreshIcon />} onClick={load} disabled={loading}>Refresh</Button>
     </Stack>
     {error && <Alert severity="error" sx={{ mb: 1 }}>{error}</Alert>}
+    {notice && <Alert severity="success" sx={{ mb: 1 }} onClose={() => setNotice('')}>{notice}</Alert>}
     {loading ? <Box sx={{ py: 2, textAlign: 'center' }}><CircularProgress size={24} /></Box>
       : rows.length === 0 ? <Typography variant="body2" color="text.secondary">No batches scheduled from here yet.</Typography>
         : <TableContainer sx={{ maxHeight: 260 }}><Table size="small" stickyHeader>
@@ -306,7 +324,10 @@ export function ScheduledBatches({ tenant, reloadKey }) {
             <TableCell align="right">{batch.waiting}</TableCell><TableCell align="right">{batch.posted}</TableCell>
             <TableCell align="right" sx={{ color: batch.failed ? 'error.main' : undefined }}>{batch.failed}</TableCell>
             <TableCell>{fmt(batch.nextTime)}</TableCell><TableCell>{fmt(batch.lastTime)}</TableCell>
-            <TableCell>{batch.waiting > 0 && <Button size="small" color="error" disabled={busy === batch.batchId} onClick={() => cancel(batch)}>Cancel</Button>}</TableCell>
+            <TableCell sx={{ whiteSpace: 'nowrap' }}>{batch.waiting > 0 && <>
+              <Button size="small" startIcon={<SendIcon />} disabled={busy === batch.batchId} onClick={() => fire(batch)}>Post now</Button>
+              <Button size="small" color="error" disabled={busy === batch.batchId} onClick={() => cancel(batch)}>Cancel</Button>
+            </>}</TableCell>
           </TableRow>)}</TableBody>
         </Table></TableContainer>}
   </Paper>

@@ -283,6 +283,51 @@ public class PortalSocialScheduleService {
         }
     }
 
+    /**
+     * Makes the batch's next waiting round due now, so the Portal dispatcher (every minute) posts it.
+     * Posts stay one minute apart, as when scheduled; later rounds keep their times.
+     */
+    public int fireNow(String tenantId, String batchId) {
+        if (batchId == null || !batchId.matches("^demo-[0-9a-f]{8}$")) throw new IllegalArgumentException("Invalid batch");
+        String tenant = PortalTenantDataSourceRegistry.normalizeTenantId(tenantId);
+        DataSource source = tenants.dataSource(tenant);
+        JdbcTemplate db = new JdbcTemplate(source);
+        TransactionTemplate tx = new TransactionTemplate(new DataSourceTransactionManager(source));
+        try {
+            Integer fired = tx.execute(status -> {
+                List<Map<String, Object>> due = db.queryForList("""
+                        SELECT id, actionvalue, timezone FROM appscheduletb
+                         WHERE recurevalue = ? AND isenable = true AND isvisible = true
+                           AND recure = (SELECT recure FROM appscheduletb
+                                          WHERE recurevalue = ? AND isenable = true AND isvisible = true
+                                          ORDER BY starttime, id LIMIT 1)
+                         ORDER BY starttime, id
+                         FOR UPDATE
+                        """, batchId, batchId);
+                LocalDateTime start = nowUtc().withSecond(0).withNano(0);
+                LocalDateTime now = nowUtc();
+                int i = 0;
+                for (Map<String, Object> row : due) {
+                    LocalDateTime utc = start.plusMinutes(i++);
+                    LocalDateTime local = fromUtc(utc, (String) row.get("timezone"));
+                    db.update("""
+                            UPDATE appscheduletb SET starttime = ?, endtime = ?, starttimeutc = ?, endtimeutc = ?, modifiedtime = ?
+                             WHERE id = ?
+                            """, local, local, utc, utc, now, row.get("id"));
+                    String logId = String.valueOf(row.get("actionvalue"));
+                    if (logId.matches("^[0-9]+$"))
+                        db.update("UPDATE schedulelogtb SET scheduledtime = ?, scheduledtimeutc = ?, modifiedtime = ? WHERE id = ?",
+                                local, utc, now, Long.parseLong(logId));
+                }
+                return due.size();
+            });
+            if (fired == null || fired == 0) throw new IllegalArgumentException("Batch " + batchId + " has no waiting posts");
+            return fired;
+        } catch (DataAccessException exception) {
+            throw new IllegalStateException("Could not fire batch in Portal tenant " + tenant, exception);
+        }
+    }
+
     // ── Rows ──────────────────────────────────────────────────────────────────
 
     private long insertLog(JdbcTemplate db, ProductContent product, String pageId, String message, boolean video,
@@ -390,6 +435,13 @@ public class PortalSocialScheduleService {
 
     private static LocalDateTime toUtc(LocalDateTime local, ZoneId zone) {
         return local.atZone(zone).withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
+    }
+
+    static LocalDateTime fromUtc(LocalDateTime utc, String zone) {
+        ZoneId id;
+        try { id = ZoneId.of(zone == null || zone.isBlank() ? "Asia/Ho_Chi_Minh" : zone.trim()); }
+        catch (DateTimeException exception) { id = ZoneId.of("Asia/Ho_Chi_Minh"); }
+        return utc.atOffset(ZoneOffset.UTC).atZoneSameInstant(id).toLocalDateTime();
     }
 
     private static LocalDateTime nowUtc() { return LocalDateTime.now(ZoneOffset.UTC); }
